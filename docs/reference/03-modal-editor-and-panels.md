@@ -37,7 +37,7 @@ at the bottom right; the page keeps the keyboard, and `?` again closes it.
 
 ![AutoDoc's Leader Keys on SPC's Card, by Group](leader-keys-by-group.chart.json)
 
-The chart counts the keys SPC's card lists (§3.4), as `tui/keys.go` binds them.
+The chart counts the keys SPC's card lists (§3.4), as `tui/feature/keys.go` binds them.
 
 ---
 
@@ -130,7 +130,7 @@ badges it `[no workspace]`. It stays open when the workspace changes. `File › 
 
 ## 3.4 Leader (`SPC`) Chords and Command Pickers
 
-In Normal mode, pressing the **Spacebar (`SPC`)** opens SPC's card, listing every leader key by group. A capital is the key with Shift (`SPC O` is Shift+O). The keys, as `tui/keys.go` and AutoDoc's features bind them:
+In Normal mode, pressing the **Spacebar (`SPC`)** opens SPC's card, listing every leader key by group. A capital is the key with Shift (`SPC O` is Shift+O). The keys, as `tui/feature/keys.go` and AutoDoc's features bind them:
 
 - **Find:** `SPC /` (or `SPC SPC`) searches the workspace; `SPC o` opens a document (a filter over the workspace's files, with a preview); `SPC f` opens a file anywhere; `SPC r` lists recent files; `SPC j` goes to the link under the cursor; `SPC b` the buffer card (§3.3), where `SPC b b` goes back.
 - **File:** `SPC n` a new file; `SPC O` the file's outline; `SPC d` views the diagram; `SPC H` previews HTML.

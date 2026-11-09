@@ -8,6 +8,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 
 	"github.com/yongjohnlee80/autodoc/core/export"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // A CARD'S PAGE IN A TERMINAL (docs/decisions/editor.md#lua-cards): a
@@ -39,9 +40,9 @@ var _ editor.DocumentView = (*cardPageView)(nil)
 
 func newCardPage(h *Host) *cardPage { return &cardPage{h: h} }
 
-func (*cardPage) Name() string                 { return "cardpage" }
-func (*cardPage) State() map[string]any        { return map[string]any{} }
-func (*cardPage) Commands() map[string]Command { return map[string]Command{} }
+func (*cardPage) Name() string                         { return "cardpage" }
+func (*cardPage) State() map[string]any                { return map[string]any{} }
+func (*cardPage) Commands() map[string]feature.Command { return map[string]feature.Command{} }
 
 // LanguageChanged and ThemeChanged give the page the words and the code colours of now, as the
 // note's page does: its notice, and its charts' series (the page's code colours).
@@ -50,7 +51,7 @@ func (p *cardPage) ThemeChanged()    { p.give() }
 
 // cardPage is the host's card page, nil when it has none.
 func (h *Host) cardPage() *cardPage {
-	for _, f := range h.reg.features {
+	for _, f := range h.reg.Features {
 		if p, ok := f.(*cardPage); ok {
 			return p
 		}
@@ -107,18 +108,18 @@ func (p *cardPage) give() {
 // unless a later render came first.
 func (p *cardPage) render(text []byte) {
 	h := p.h
-	tk := h.ticket(&p.gen, TicketLocal)
+	tk := h.ticket(&p.gen, feature.TicketLocal)
 	source, theme := append([]byte(nil), text...), h.exportTheme()
-	do(h, func(context.Context) answerOf[[]byte] {
-		return answered(export.RenderWith(source, export.HTML, theme, export.Options{}))
-	}, func(a answerOf[[]byte]) {
+	do(h, func(context.Context) feature.AnswerOf[[]byte] {
+		return feature.Answered(export.RenderWith(source, export.HTML, theme, export.Options{}))
+	}, func(a feature.AnswerOf[[]byte]) {
 		if !tk.Current() || p.view == nil {
 			return
 		}
-		if a.err != nil {
-			h.failed(h.tr("autodoc.notice.htmlpane.html_preview"), a.err)
+		if a.Err() != nil {
+			h.failed(h.tr("autodoc.notice.htmlpane.html_preview"), a.Err())
 			return
 		}
-		p.view.SetHTML(a.v)
+		p.view.SetHTML(a.Value)
 	})
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/inbox"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // A crew Claude agent is past its startup once Claude Code ran its SessionStart hook, which
@@ -114,7 +115,7 @@ func TestTheUsersSendToAClaudeThatHasntStartedWaitsAsMail(t *testing.T) {
 		return map[string]any{"message": "m"}, nil
 	}
 	var heard []error
-	if err := a.SendText(AgentRef{Codename: "cl"}, "hello cl", func(err error) { heard = append(heard, err) }); err != nil {
+	if err := a.SendText(feature.AgentRef{Codename: "cl"}, "hello cl", func(err error) { heard = append(heard, err) }); err != nil {
 		t.Fatal(err)
 	}
 	settleMessaging(c, w)
@@ -241,7 +242,7 @@ func TestAWindowWithNoScopeTypesNothingIntoItsClaude(t *testing.T) {
 	a, c, w, _ := claudeRig(t)
 	a.crew.scope = "" // the scope lost; the agent's session is still the window's record of it
 	var heard []error
-	if err := a.SendText(AgentRef{Codename: "cl"}, "hello cl", func(err error) { heard = append(heard, err) }); err != nil {
+	if err := a.SendText(feature.AgentRef{Codename: "cl"}, "hello cl", func(err error) { heard = append(heard, err) }); err != nil {
 		t.Fatal(err)
 	}
 	settleMessaging(c, w)

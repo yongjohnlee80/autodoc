@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
@@ -65,7 +66,7 @@ type inboxCore interface {
 	Set(name string, v any)
 	Open(id string)
 	Focus(id string)
-	Ask(q Question) Asked
+	Ask(q feature.Question) feature.Asked
 	Notify(msg string)
 	Tr(id string) string
 	Trf(id string, args ...any) string
@@ -104,7 +105,7 @@ type inboxList struct {
 type inboxView struct {
 	c       inboxCore
 	replies inboxReplies
-	rows    *rows[inboxItem]
+	rows    *feature.Rows[inboxItem]
 	now     func() time.Time
 	isOpen  bool   // the dialog is open
 	gen     uint64 // bumped by each open and close: an earlier opening's answers are dropped
@@ -119,7 +120,7 @@ type inboxView struct {
 
 func newInboxView(c inboxCore, replies inboxReplies) *inboxView {
 	v := &inboxView{c: c, replies: replies, now: time.Now}
-	v.rows = newRows(tuidecl.NewListModel("key", "mark", "kind", "from", "subject", "state", "when"), v.rowOf)
+	v.rows = feature.NewRows(tuidecl.NewListModel("key", "mark", "kind", "from", "subject", "state", "when"), v.rowOf)
 	return v
 }
 
@@ -134,36 +135,36 @@ func (v *inboxView) State() map[string]any {
 	return st
 }
 
-func (v *inboxView) Commands() map[string]Command {
-	return map[string]Command{
-		"App.openInbox":          none(v.open),
-		"App.inboxClosed":        none(v.closed),
-		"App.inboxMore":          none(v.more),
-		"App.inboxTab":           oneNumber("a tab", v.tab),
-		"App.inboxShown":         oneNumber("a row", v.shown),
-		"App.inboxOpen":          oneNumber("a row", v.openItem),
-		"App.inboxMarkRead":      oneNumber("a row", v.markRead),
-		"App.inboxReply":         oneNumber("a row", v.reply),
-		"App.inboxDismiss":       oneNumber("a row", v.dismiss),
-		"App.inboxSender":        oneNumber("a row", v.sender),
-		"App.inboxMessageClosed": none(v.messageClosed),
+func (v *inboxView) Commands() map[string]feature.Command {
+	return map[string]feature.Command{
+		"App.openInbox":          feature.None(v.open),
+		"App.inboxClosed":        feature.None(v.closed),
+		"App.inboxMore":          feature.None(v.more),
+		"App.inboxTab":           feature.OneNumber("a tab", v.tab),
+		"App.inboxShown":         feature.OneNumber("a row", v.shown),
+		"App.inboxOpen":          feature.OneNumber("a row", v.openItem),
+		"App.inboxMarkRead":      feature.OneNumber("a row", v.markRead),
+		"App.inboxReply":         feature.OneNumber("a row", v.reply),
+		"App.inboxDismiss":       feature.OneNumber("a row", v.dismiss),
+		"App.inboxSender":        feature.OneNumber("a row", v.sender),
+		"App.inboxMessageClosed": feature.None(v.messageClosed),
 	}
 }
 
 // Catalog is the inbox's user command, :inbox: it runs what App.openInbox runs.
-func (v *inboxView) Catalog() []Entry {
-	e := builtin("crew.inbox", "the inbox: your mail (SPC a i)", "App.openInbox()", v.open)
+func (v *inboxView) Catalog() []feature.Entry {
+	e := feature.Builtin("crew.inbox", "the inbox: your mail (SPC a i)", "App.openInbox()", v.open)
 	e.Verb = "inbox"
-	return []Entry{e}
+	return []feature.Entry{e}
 }
 
 // Keys: SPC a i, on the agents' card.
-func (*inboxView) Keys() []Key {
-	return []Key{{Card: agentsCard, Seq: "i", Show: "i", Does: "the inbox: your mail", Run: "App.openInbox()"}}
+func (*inboxView) Keys() []feature.Key {
+	return []feature.Key{{Card: agentsCard, Seq: "i", Show: "i", Does: "the inbox: your mail", Run: "App.openInbox()"}}
 }
 
 // Cards: none of its own; its key is on the agents' card.
-func (*inboxView) Cards() []Card { return nil }
+func (*inboxView) Cards() []feature.Card { return nil }
 
 // open reads the first page of the tab shown, afresh, and opens the dialog.
 func (v *inboxView) open() {
@@ -283,15 +284,15 @@ func (v *inboxView) read(first bool) {
 			return err
 		}
 		var page inboxPageRead
-		if more, ok := asMap(res)["more"].(bool); ok { // since protocol 53: the daemon says
+		if more, ok := feature.AsMap(res)["more"].(bool); ok { // since protocol 53: the daemon says
 			page.more, page.said = more, true
 		}
-		for _, x := range asList(asMap(res)["items"]) {
-			m := asMap(x)
-			page.items = append(page.items, inboxItem{message: str(m, "message"), kind: str(m, "kind"), from: str(m, "from"),
-				scope: str(m, "scope"), session: str(m, "session"), subject: str(m, "subject"), body: str(m, "body"),
-				replyTo: str(m, "reply_to"), state: str(m, "state"), created: str(m, "created"), status: str(m, "status"),
-				why: str(m, "why"), seq: num(m, "seq")})
+		for _, x := range feature.AsList(feature.AsMap(res)["items"]) {
+			m := feature.AsMap(x)
+			page.items = append(page.items, inboxItem{message: feature.Str(m, "message"), kind: feature.Str(m, "kind"), from: feature.Str(m, "from"),
+				scope: feature.Str(m, "scope"), session: feature.Str(m, "session"), subject: feature.Str(m, "subject"), body: feature.Str(m, "body"),
+				replyTo: feature.Str(m, "reply_to"), state: feature.Str(m, "state"), created: feature.Str(m, "created"), status: feature.Str(m, "status"),
+				why: feature.Str(m, "why"), seq: feature.Num(m, "seq")})
 		}
 		return page
 	}, func(res any) {
@@ -300,7 +301,7 @@ func (v *inboxView) read(first bool) {
 		}
 		l.busy = false
 		if err, ok := res.(error); ok {
-			v.c.Set("App.inboxStatus", v.c.Trf("autodoc.text.inbox.not_listed", wireMessage(err)))
+			v.c.Set("App.inboxStatus", v.c.Trf("autodoc.text.inbox.not_listed", feature.WireMessage(err)))
 			return
 		}
 		page, _ := res.(inboxPageRead)
@@ -404,7 +405,7 @@ func (v *inboxView) title() {
 }
 
 // rowOf is a message as the list shows it: ● marks a report not read, ? an open request.
-func (v *inboxView) rowOf(_ int, it inboxItem) rowOf {
+func (v *inboxView) rowOf(_ int, it inboxItem) feature.RowOf {
 	mark := ""
 	switch {
 	case it.unread():
@@ -416,7 +417,7 @@ func (v *inboxView) rowOf(_ int, it inboxItem) rowOf {
 	if subject == "" {
 		subject, _, _ = strings.Cut(strings.TrimSpace(it.body), "\n")
 	}
-	return rowOf{"key": it.message, "mark": mark, "kind": it.kind, "from": it.from, "subject": subject,
+	return feature.RowOf{"key": it.message, "mark": mark, "kind": it.kind, "from": it.from, "subject": subject,
 		"state": it.state, "when": v.when(it.created)}
 }
 
@@ -538,7 +539,7 @@ func (v *inboxView) ack(it inboxItem) {
 	}, func(res any) {
 		err, _ := res.(error)
 		if err != nil {
-			v.c.Notify(v.c.Trf("autodoc.text.inbox.not_marked", it.subject, wireMessage(err)))
+			v.c.Notify(v.c.Trf("autodoc.text.inbox.not_marked", it.subject, feature.WireMessage(err)))
 		}
 		if !v.isOpen || v.gen != gen {
 			return
@@ -594,7 +595,7 @@ func (v *inboxView) dismiss(i int) {
 		return
 	}
 	gen := v.gen
-	v.c.Ask(Question{Title: v.c.Tr("autodoc.question.inbox.dismiss"), Text: v.c.Trf("autodoc.question.inbox.dismiss_text", it.from, it.subject),
+	v.c.Ask(feature.Question{Title: v.c.Tr("autodoc.question.inbox.dismiss"), Text: v.c.Trf("autodoc.question.inbox.dismiss_text", it.from, it.subject),
 		Yes: v.c.Tr("autodoc.question.inbox.dismiss_yes"), OnYes: func() {
 			if v.isOpen && v.gen == gen {
 				v.setState(it.seq, "dismissed") // listed so at once: the Yes never waits on the daemon
@@ -605,7 +606,7 @@ func (v *inboxView) dismiss(i int) {
 			}, func(res any) {
 				err, _ := res.(error)
 				if err != nil {
-					v.c.Notify(v.c.Trf("autodoc.text.inbox.not_dismissed", it.subject, wireMessage(err)))
+					v.c.Notify(v.c.Trf("autodoc.text.inbox.not_dismissed", it.subject, feature.WireMessage(err)))
 				}
 				if !v.isOpen || v.gen != gen {
 					return

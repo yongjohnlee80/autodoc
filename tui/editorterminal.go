@@ -8,6 +8,7 @@ import (
 	"unicode"
 
 	"github.com/yongjohnlee80/autodoc/core/mail"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
@@ -152,7 +153,7 @@ func (h *Host) editorTerminalRun(ctx context.Context, req *golibrpc.Request) (an
 		if ws, ok := h.activeWorkspaceInfo(); ok {
 			dir = termDir(h.seams.env, ws.root)
 		}
-		h.asker.askWhenFree(Question{ // behind an open card, never in its place
+		h.asker.AskWhenFree(feature.Question{ // behind an open card, never in its place
 			Title: h.trf("autodoc.question.editorterminal.let_the_agent_run_this_in_the_terminal", agent),
 			Text:  h.trf("autodoc.question.editorterminal.it_runs_in_a_new_tab_in", line, cutMiddle(dir, maxCardFolderRunes)),
 			Yes:   h.tr("autodoc.question.editorterminal.run"), No: h.tr("autodoc.question.editorterminal.dont_run"),
@@ -225,7 +226,7 @@ func (t *terminals) runFor(agent, line, dir string, exited func(int)) (string, e
 		t.c.Keep(t.c.CallView("terminal", "open"))
 	}
 	label := agentRunLabel(panel, agent)
-	id, err := panel.Add(label, t.inOwnEnv(TerminalConfig{Command: "/bin/sh", Args: []string{"-c", line}, Dir: dir, Exited: exited}))
+	id, err := panel.Add(label, t.inOwnEnv(feature.TerminalConfig{Command: "/bin/sh", Args: []string{"-c", line}, Dir: dir, Exited: exited}))
 	if err != nil {
 		return "", err
 	}
@@ -238,7 +239,7 @@ func (t *terminals) runFor(agent, line, dir string, exited func(int)) (string, e
 
 // agentRunLabel names an agent's command tab: "<agent>: run", then "<agent>: run 2", …, the first
 // not on panel.
-func agentRunLabel(panel TerminalPanel, agent string) string {
+func agentRunLabel(panel feature.TerminalPanel, agent string) string {
 	taken := map[string]bool{}
 	for _, tab := range panel.Tabs() {
 		taken[tab.Label] = true

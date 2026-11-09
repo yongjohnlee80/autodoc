@@ -16,6 +16,7 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE WINDOW'S CREW IDENTITY (docs/decisions/crew.md#scopes-and-fenced-ownership).
@@ -45,7 +46,7 @@ type crewCore interface {
 	// DaemonAddress and StoreID are the daemon a session context names: its socket and its store
 	DaemonAddress() string
 	StoreID() string
-	AskWhenFree(q Question)
+	AskWhenFree(q feature.Question)
 }
 
 // crewHost holds the window's scope. Its fields are the loop's: work off it answers through Go.
@@ -131,9 +132,9 @@ func newCrewHost(c crewCore, env procenv.Env, agentDir string) *crewHost {
 	return h
 }
 
-func (*crewHost) Name() string                 { return "crew" }
-func (*crewHost) State() map[string]any        { return map[string]any{} }
-func (*crewHost) Commands() map[string]Command { return map[string]Command{} }
+func (*crewHost) Name() string                         { return "crew" }
+func (*crewHost) State() map[string]any                { return map[string]any{} }
+func (*crewHost) Commands() map[string]feature.Command { return map[string]feature.Command{} }
 
 // held is the scope this window holds and its epoch; ok is false before a claim has succeeded.
 func (h *crewHost) held() (scope string, epoch int64, ok bool) {
@@ -168,7 +169,7 @@ func (h *crewHost) claim() {
 		h.claiming = false
 		r, ok := v.(claimed)
 		if !ok || r.none {
-			return // panicked (kept and said where it happened, work.go), or a daemon with no crew
+			return // panicked (kept and said where it happened, feature/work.go), or a daemon with no crew
 		}
 		if r.err != nil {
 			if !h.claimFailing { // told once an outage: the retries say nothing new
@@ -201,7 +202,7 @@ func (h *crewHost) claim() {
 // claimOff reattaches held when it is set, else claims a listed scope or a new one. Off the loop.
 func (h *crewHost) claimOff(ctx context.Context, held string) claimed {
 	r := h.claimAny(ctx, held)
-	if code(r.err) == golibrpc.CodeMethodNotFound {
+	if feature.Code(r.err) == golibrpc.CodeMethodNotFound {
 		return claimed{none: true} // the next connection, perhaps to a newer daemon, asks again
 	}
 	return r
@@ -214,7 +215,7 @@ func (h *crewHost) claimAny(ctx context.Context, held string) claimed {
 		if err == nil {
 			return claimed{scope: held, epoch: epoch}
 		}
-		if code(err) != crew.CodeScopeBusy {
+		if feature.Code(err) != crew.CodeScopeBusy {
 			return claimed{err: err}
 		}
 		// another owner holds it now (this window was away past the lease): claim one afresh
@@ -231,7 +232,7 @@ func (h *crewHost) claimScope(ctx context.Context) claimed {
 		switch {
 		case err == nil:
 			return claimed{scope: id, epoch: epoch}
-		case code(err) == crew.CodeScopeBusy:
+		case feature.Code(err) == crew.CodeScopeBusy:
 			continue
 		default:
 			return claimed{err: err}
@@ -259,7 +260,7 @@ func (h *crewHost) claimOne(ctx context.Context, scope string) (int64, error) {
 		return 0, err
 	}
 	m, _ := v.(map[string]any)
-	return num(m, "epoch"), nil
+	return feature.Num(m, "epoch"), nil
 }
 
 // listed is the scope ids in the folder, oldest first: a crashed window's scope comes back before a
@@ -308,7 +309,7 @@ func (h *crewHost) renewLater(gen uint64) {
 			if gen != h.gen {
 				return
 			}
-			if err, _ := v.(error); err != nil && code(err) == crew.CodeStaleEpoch {
+			if err, _ := v.(error); err != nil && feature.Code(err) == crew.CodeStaleEpoch {
 				h.claim()
 				return
 			}
@@ -350,7 +351,7 @@ var (
 // effect, and sending it again changes nothing. Any other failure (a lost connection, a timeout, a
 // store failure) may have committed, or may pass, so the verb stays owed.
 func crewRefused(err error) bool {
-	switch code(err) {
+	switch feature.Code(err) {
 	case crew.CodeScopeBusy, crew.CodeStaleEpoch, crew.CodeCodenameBusy, crew.CodeInstanceReused, crew.CodeBadCredential,
 		golibrpc.CodeMethodNotFound, golibrpc.CodeInvalidParams:
 		return true
@@ -417,7 +418,7 @@ func (h *crewHost) send(ctx context.Context, r *crewRegistration) any {
 		return err
 	}
 	m, _ := v.(map[string]any)
-	return crewSession{ID: str(m, "session"), Profile: str(m, "profile"), Scope: r.scope, Epoch: r.epoch, Dir: r.dir, reg: r}
+	return crewSession{ID: feature.Str(m, "session"), Profile: feature.Str(m, "profile"), Scope: r.scope, Epoch: r.epoch, Dir: r.dir, reg: r}
 }
 
 // registered is r's answer v, on the loop: a session, now counted live, or why there is none. r

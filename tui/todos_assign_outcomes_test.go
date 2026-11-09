@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
@@ -42,7 +43,7 @@ func TestTheHandOverSaysHowItWent(t *testing.T) {
 // picker answer) asks for no Instructions: line and sets nothing.
 func TestAnAgentChosenWithNoAssignOpenIsNothing(t *testing.T) {
 	s := newScripted("kb")
-	newTodos(s).assignTo(AgentEntry{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe"})
+	newTodos(s).assignTo(feature.AgentEntry{Ref: feature.AgentRef{Codename: "scribe"}, Name: "Scribe"})
 	if len(s.opened) != 0 || s.set["App.todoAssignTitle"] != nil {
 		t.Errorf("opened %v, title %v: want nothing asked, nothing set", s.opened, s.set["App.todoAssignTitle"])
 	}
@@ -53,9 +54,9 @@ func TestAnAgentChosenWithNoAssignOpenIsNothing(t *testing.T) {
 func TestAnOrphansPaneSaysItsProfileIsGone(t *testing.T) {
 	const gone = "Its profile is gone; it takes the task while it runs."
 	s := newScripted("kb")
-	orphan := agentPane(s, AgentEntry{Ref: AgentRef{Codename: "old"}, Name: "Old", Command: "old", Running: true, Orphan: true})
-	kept := agentPane(s, AgentEntry{Ref: AgentRef{Codename: "one"}, Name: "One", Command: "one", Running: true})
-	if !strings.Contains(orphan.text, gone) || strings.Contains(kept.text, gone) {
-		t.Errorf("the orphan's pane %q, a profiled agent's %q: want the profile gone said for the orphan alone", orphan.text, kept.text)
+	orphan := agentPane(s, feature.AgentEntry{Ref: feature.AgentRef{Codename: "old"}, Name: "Old", Command: "old", Running: true, Orphan: true})
+	kept := agentPane(s, feature.AgentEntry{Ref: feature.AgentRef{Codename: "one"}, Name: "One", Command: "one", Running: true})
+	if !strings.Contains(orphan.Text, gone) || strings.Contains(kept.Text, gone) {
+		t.Errorf("the orphan's pane %q, a profiled agent's %q: want the profile gone said for the orphan alone", orphan.Text, kept.Text)
 	}
 }

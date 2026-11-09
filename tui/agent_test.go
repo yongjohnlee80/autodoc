@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 )
@@ -117,8 +118,8 @@ func (r *running) agentRunningNow() bool {
 
 func (r *running) noticed(text string) bool {
 	return onLoop(r, func() bool {
-		for _, n := range r.h.noticeLog.items {
-			if strings.Contains(n.text, text) {
+		for _, n := range r.h.noticeLog.Items {
+			if strings.Contains(n.Text, text) {
 				return true
 			}
 		}
@@ -371,7 +372,7 @@ func TestRemoveAgentOnlyRemovesTheConfirmedProfile(t *testing.T) {
 	}
 	onLoop(r, func() bool {
 		r.h.agents.removeAgent(1)
-		r.h.ask(Question{Title: "another question?", Text: "Nothing is removed."})
+		r.h.ask(feature.Question{Title: "another question?", Text: "Nothing is removed."})
 		return true
 	})
 	r.s.WaitForText(t, "another question?")
@@ -446,13 +447,13 @@ func TestUsingAnotherAgentKeepsBothInstancesRunning(t *testing.T) {
 	onLoop(r, func() bool { r.h.agents.openAgentProfiles(); r.h.agents.useAgent(1); return true })
 	r.s.WaitForText(t, "agent · two")
 	r.s.WaitForText(t, "started second")
-	entries := onLoop(r, func() []AgentEntry { return r.h.agents.AgentEntries() })
+	entries := onLoop(r, func() []feature.AgentEntry { return r.h.agents.AgentEntries() })
 	if len(entries) != 2 || !entries[0].Running || !entries[1].Running || entries[0].Ref.Instance == entries[1].Ref.Instance {
 		t.Fatalf("independent live instances lost: %+v", entries)
 	}
 	delivered := make(chan error, 1)
 	onLoop(r, func() bool {
-		if err := (core{r.h}).HandTask(entries[0].Ref, TaskRef{Title: "only-first", Path: "/tasks/first.md", ID: "first"}, "inspect", func(err error) { delivered <- err }); err != nil {
+		if err := (core{r.h}).HandTask(entries[0].Ref, feature.TaskRef{Title: "only-first", Path: "/tasks/first.md", ID: "first"}, "inspect", func(err error) { delivered <- err }); err != nil {
 			t.Error(err)
 		}
 		return true

@@ -11,6 +11,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/internal/userdirs"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
@@ -127,10 +128,10 @@ func storeRoot(path string) string {
 
 // todos is the feature.
 type todos struct {
-	c Core
+	c feature.Core
 	// stores are the dropdown's, in its order; cur is the one shown
 	stores    []*todoStore
-	storeRows *rows[*todoStore]
+	storeRows *feature.Rows[*todoStore]
 	cur       *todoStore
 	// storeIndex is the dropdown's row as last set (-2 before the first)
 	storeIndex int
@@ -141,8 +142,8 @@ type todos struct {
 	month string
 	// tasks are each tab's rows; months the Archived tab's; cursors each tab's row under the
 	// cursor, -1 for none; stale the tabs whose rows a change has outdated, read again when shown
-	tasks   [5]*rows[map[string]any]
-	months  *rows[map[string]any]
+	tasks   [5]*feature.Rows[map[string]any]
+	months  *feature.Rows[map[string]any]
 	cursors [5]int
 	stale   [5]bool
 	// monthCursor is the months' row under their cursor
@@ -157,10 +158,10 @@ type todos struct {
 	// labelling is the store L is labelling, while its prompt is open
 	labelling *todoStore
 	// assignPick is A's picker of AutoDoc's agents; assigning the A in progress (todos_assign.go)
-	assignPick *pick[AgentEntry]
+	assignPick *feature.Pick[feature.AgentEntry]
 	assigning  *todoAssign
 	// statusPick is s's picker of the statuses; statusing is the task it is for, while it is open
-	statusPick *pick[todoStatusChoice]
+	statusPick *feature.Pick[todoStatusChoice]
 	statusing  *todoStatusing
 	follow     todoFollow
 	detail     bool // the details show (i, o)
@@ -169,22 +170,22 @@ type todos struct {
 	malformed map[string]int
 	// vars are the Variables tab's rows (todos_vars.go), varCursor its row under the cursor, varsSeq
 	// its latest read, varEditing the variable its prompt is for
-	vars       *rows[map[string]any]
+	vars       *feature.Rows[map[string]any]
 	varCursor  int
 	varsSeq    uint64
 	varEditing *todoVarEdit
 }
 
-func newTodos(c Core) *todos {
+func newTodos(c feature.Core) *todos {
 	t := &todos{c: c, detail: true, malformed: map[string]int{}, storeIndex: -2,
-		storeRows: newRows(tuidecl.NewListModel("key", "label"), func(_ int, s *todoStore) rowOf {
-			return rowOf{"key": s.id, "label": s.title()}
+		storeRows: feature.NewRows(tuidecl.NewListModel("key", "label"), func(_ int, s *todoStore) feature.RowOf {
+			return feature.RowOf{"key": s.id, "label": s.title()}
 		}),
-		months: newRows(tuidecl.NewListModel("key", "month", "count"), func(_ int, m map[string]any) rowOf {
-			return rowOf{"key": str(m, "month"), "month": str(m, "month"), "count": fmt.Sprint(m["files"])}
+		months: feature.NewRows(tuidecl.NewListModel("key", "month", "count"), func(_ int, m map[string]any) feature.RowOf {
+			return feature.RowOf{"key": feature.Str(m, "month"), "month": feature.Str(m, "month"), "count": fmt.Sprint(m["files"])}
 		})}
 	for i := range t.tasks {
-		t.tasks[i] = newRows(tuidecl.NewListModel("key", "n", "title"), taskRowOf)
+		t.tasks[i] = feature.NewRows(tuidecl.NewListModel("key", "n", "title"), taskRowOf)
 		t.cursors[i] = -1
 	}
 	t.vars, t.varCursor = newVarRows(c), -1
@@ -194,12 +195,12 @@ func newTodos(c Core) *todos {
 }
 
 // taskRowOf is a task as its tab's row: numbered, its title marked ⚠ when its file has errors.
-func taskRowOf(i int, x map[string]any) rowOf {
-	title := str(x, "title")
-	if len(asList(x["errors"])) > 0 {
+func taskRowOf(i int, x map[string]any) feature.RowOf {
+	title := feature.Str(x, "title")
+	if len(feature.AsList(x["errors"])) > 0 {
 		title = "⚠ " + title
 	}
-	return rowOf{"key": str(x, "id"), "n": strconv.Itoa(i + 1), "title": title}
+	return feature.RowOf{"key": feature.Str(x, "id"), "n": strconv.Itoa(i + 1), "title": title}
 }
 
 func (*todos) Name() string { return "todos" }
@@ -213,9 +214,9 @@ func (t *todos) State() map[string]any {
 		"App.todoFolder": "", "App.todoLabelText": "",
 		"App.todoReadOnly": false, "App.todoActAdd": false,
 		"App.todoActStatus": false, "App.todoActAssign": false, "App.todoActRemove": false,
-		"App.todoStatusRows": t.statusPick.list.Model(), "App.todoStatusField": "", "App.todoStatusList": "statuses",
+		"App.todoStatusRows": t.statusPick.List.Model(), "App.todoStatusField": "", "App.todoStatusList": "statuses",
 		"App.todoStatusPreviewTitle": "", "App.todoStatusPreviewText": "", "App.todoStatusPreviewAt": 0,
-		"App.agentAssignRows": t.assignPick.list.Model(), "App.agentAssignField": "", "App.agentAssignStatus": "agents",
+		"App.agentAssignRows": t.assignPick.List.Model(), "App.agentAssignField": "", "App.agentAssignStatus": "agents",
 		"App.agentAssignPreviewTitle": "", "App.agentAssignPreviewText": "", "App.agentAssignPreviewAt": 0,
 		"App.todoAssignTitle": "assign", "App.todoAssignText": "",
 		"App.todoVarsRows": t.vars.Model(), "App.todoVarsIndex": -1, "App.todoOnVars": false,
@@ -230,70 +231,70 @@ func (t *todos) State() map[string]any {
 }
 
 // twoNumbers takes two whole numbers: a tab and a row of its table.
-func twoNumbers(what string, fn func(int, int)) Command {
-	return Command{Args: []qml.SpecValueKind{argNum, argNum}, What: what, Run: func(a []qml.SpecValue) error {
+func twoNumbers(what string, fn func(int, int)) feature.Command {
+	return feature.Command{Args: []qml.SpecValueKind{feature.ArgNum, feature.ArgNum}, What: what, Run: func(a []qml.SpecValue) error {
 		x, err1 := strconv.Atoi(a[0].Raw)
 		y, err2 := strconv.Atoi(a[1].Raw)
 		if err1 != nil || err2 != nil {
-			return argError(fmt.Sprintf("takes %s, not %s and %s", what, a[0].Raw, a[1].Raw))
+			return feature.ArgError(fmt.Sprintf("takes %s, not %s and %s", what, a[0].Raw, a[1].Raw))
 		}
 		fn(x, y)
 		return nil
 	}}
 }
 
-func (t *todos) Commands() map[string]Command {
-	return map[string]Command{
-		"App.openTodos":        none(t.toggle),
-		"App.todosTab":         oneNumber("a tab", t.showTab),
-		"App.todoTabShown":     oneNumber("a tab", t.tabShown),
-		"App.todoTabBefore":    none(func() { t.stepTab(-1) }),
-		"App.todoTabAfter":     none(func() { t.stepTab(1) }),
-		"App.todoStoreChosen":  oneNumber("a store", t.storeChosen),
-		"App.todoFocusStore":   none(func() { t.c.Post(func() { t.focus("todoStore") }) }),
+func (t *todos) Commands() map[string]feature.Command {
+	return map[string]feature.Command{
+		"App.openTodos":        feature.None(t.toggle),
+		"App.todosTab":         feature.OneNumber("a tab", t.showTab),
+		"App.todoTabShown":     feature.OneNumber("a tab", t.tabShown),
+		"App.todoTabBefore":    feature.None(func() { t.stepTab(-1) }),
+		"App.todoTabAfter":     feature.None(func() { t.stepTab(1) }),
+		"App.todoStoreChosen":  feature.OneNumber("a store", t.storeChosen),
+		"App.todoFocusStore":   feature.None(func() { t.c.Post(func() { t.focus("todoStore") }) }),
 		"App.todoMoved":        twoNumbers("a tab and a row", t.moved),
 		"App.todoActivated":    twoNumbers("a tab and a row", t.activated),
-		"App.todoMonthChosen":  oneNumber("a month", t.monthChosen),
-		"App.todoMonthMoved":   oneNumber("a month", t.monthMoved),
-		"App.todoMonthsBack":   none(t.monthsBack),
-		"App.todoEnter":        none(t.enter),
-		"App.todoAdd":          none(t.add),
-		"App.todoAddTitle":     oneString("a title", t.addTitle),
-		"App.todoRemove":       none(t.remove),
-		"App.todoChooseStatus": none(t.chooseStatus),
-		"App.todoLabel":        none(t.label),
-		"App.todoLabelSet":     oneString("a label", t.labelSet),
-		"App.todoAssign":       none(t.assign),
-		"App.todoAssignSet":    oneString("an instruction", t.assignSet),
-		"App.todoRefresh":      none(t.refresh),
-		"App.todoToggleDetail": none(t.toggleDetail),
-		"App.todoLoad":         none(t.chooseLoad),
-		"App.todoNew":          none(t.chooseNew),
-		"App.todoMove":         none(func() { t.chooseFolder("move") }),
-		"App.todoFolderChosen": oneString("a folder", t.folderChosen),
-		"App.todoVarMoved":     oneNumber("a variable", t.varMoved),
-		"App.todoVarEdit":      none(t.varEdit),
-		"App.todoVarMachine":   none(t.varMachine),
-		"App.todoVarSet":       oneString("a value", t.varSet),
+		"App.todoMonthChosen":  feature.OneNumber("a month", t.monthChosen),
+		"App.todoMonthMoved":   feature.OneNumber("a month", t.monthMoved),
+		"App.todoMonthsBack":   feature.None(t.monthsBack),
+		"App.todoEnter":        feature.None(t.enter),
+		"App.todoAdd":          feature.None(t.add),
+		"App.todoAddTitle":     feature.OneString("a title", t.addTitle),
+		"App.todoRemove":       feature.None(t.remove),
+		"App.todoChooseStatus": feature.None(t.chooseStatus),
+		"App.todoLabel":        feature.None(t.label),
+		"App.todoLabelSet":     feature.OneString("a label", t.labelSet),
+		"App.todoAssign":       feature.None(t.assign),
+		"App.todoAssignSet":    feature.OneString("an instruction", t.assignSet),
+		"App.todoRefresh":      feature.None(t.refresh),
+		"App.todoToggleDetail": feature.None(t.toggleDetail),
+		"App.todoLoad":         feature.None(t.chooseLoad),
+		"App.todoNew":          feature.None(t.chooseNew),
+		"App.todoMove":         feature.None(func() { t.chooseFolder("move") }),
+		"App.todoFolderChosen": feature.OneString("a folder", t.folderChosen),
+		"App.todoVarMoved":     feature.OneNumber("a variable", t.varMoved),
+		"App.todoVarEdit":      feature.None(t.varEdit),
+		"App.todoVarMachine":   feature.None(t.varMachine),
+		"App.todoVarSet":       feature.OneString("a value", t.varSet),
 	}
 }
 
-// Catalog is the todos' user commands (catalog.go): each runs what its App.* twin runs.
-func (t *todos) Catalog() []Entry {
-	return []Entry{
+// Catalog is the todos' user commands (feature/catalog.go): each runs what its App.* twin runs.
+func (t *todos) Catalog() []feature.Entry {
+	return []feature.Entry{
 		{ID: "todos.open", Title: "todos", Verb: "todos", Help: "the todos panel, open or closed (SPC x)", Twin: "App.openTodos()",
-			Run: func(Invocation) error { t.toggle(); return nil }},
-		builtin("todos.new_store", "a new todo store", "App.todoNew()", t.chooseNew),
-		builtin("todos.load_store", "load a todo store", "App.todoLoad()", t.chooseLoad),
-		builtin("todos.label_store", "label the todo store", "App.todoLabel()", t.label),
+			Run: func(feature.Invocation) error { t.toggle(); return nil }},
+		feature.Builtin("todos.new_store", "a new todo store", "App.todoNew()", t.chooseNew),
+		feature.Builtin("todos.load_store", "load a todo store", "App.todoLoad()", t.chooseLoad),
+		feature.Builtin("todos.label_store", "label the todo store", "App.todoLabel()", t.label),
 	}
 }
 
 // todosPanelSpec is the todos panel: at the left edge by default, its geometry kept per edge like
 // the side panels', and large until the user sizes it (todosDefault). It shares the left edge with
 // the explorer as two drawers do: each opens over the page, the later on top.
-func todosPanelSpec() PanelSpec {
-	s := sidePanelSpec("todos", "todoOpenTable", 60, func(p PrefsView) string { return p.Value(prefTodosEdge) })
+func todosPanelSpec() feature.PanelSpec {
+	s := feature.SidePanelSpec("todos", "todoOpenTable", 60, func(p feature.PrefsView) string { return p.Value(prefTodosEdge) })
 	s.Icon = "✓"
 	s.Default = todosDefault
 	return s
@@ -311,14 +312,14 @@ func todosDefault(edge string) (size, length int) {
 }
 
 // Panels: the panel, its stores listed afresh each time it opens, the keyboard in the tab shown.
-func (t *todos) Panels() []PanelSpec {
+func (t *todos) Panels() []feature.PanelSpec {
 	s := todosPanelSpec()
-	s.Opened = func(PanelHost) { t.list(); t.focusTab() }
-	return []PanelSpec{s}
+	s.Opened = func(feature.PanelHost) { t.list(); t.focusTab() }
+	return []feature.PanelSpec{s}
 }
 
 // todoKeysCard is ? in the todos panel: its keys by purpose, on the floating card of keys SPC's is
-// (keys.go). A key on it runs, the card closing first; ? again, q or Esc closes it.
+// (feature/keys.go). A key on it runs, the card closing first; ? again, q or Esc closes it.
 const todoKeysCard = "todoKeys"
 
 // The headings of the todos' card of keys, by purpose.
@@ -334,8 +335,8 @@ const (
 // Keys are the panel's, live while the keyboard is in the store's dropdown, the tabs or the action
 // row, not in the details pane (a read-only Editor that lets the edit keys it refuses bubble): Enter
 // is a table's own (activated). 1–5 and [ ] change the tab. ? opens their card, by purpose.
-func (*todos) Keys() []Key {
-	keys := []Key{
+func (*todos) Keys() []feature.Key {
+	keys := []feature.Key{
 		{Scope: "todos", Seq: "a", Show: "a", Run: "App.todoAdd()"},
 		{Scope: "todos", Seq: "d", Show: "d", Run: "App.todoRemove()"},
 		{Scope: "todos", Seq: "s", Show: "s", Run: "App.todoChooseStatus()"},
@@ -354,17 +355,17 @@ func (*todos) Keys() []Key {
 		{Scope: "todos", Seq: "?", Show: "?", Opens: todoKeysCard},
 	}
 	for i := range varsTab + 1 {
-		keys = append(keys, Key{Scope: "todos", Seq: fmt.Sprint(i + 1), Show: "1–6", Run: fmt.Sprintf("App.todosTab(%d)", i)})
+		keys = append(keys, feature.Key{Scope: "todos", Seq: fmt.Sprint(i + 1), Show: "1–6", Run: fmt.Sprintf("App.todosTab(%d)", i)})
 	}
-	keys = append(keys, Key{Scope: "todos", Seq: "e", Show: "e", Run: "App.todoVarEdit()"},
-		Key{Scope: "todos", Seq: "m", Show: "m", Run: "App.todoVarMachine()"})
+	keys = append(keys, feature.Key{Scope: "todos", Seq: "e", Show: "e", Run: "App.todoVarEdit()"},
+		feature.Key{Scope: "todos", Seq: "m", Show: "m", Run: "App.todoVarMachine()"})
 	card := slices.Concat(
-		inGroup(todoGroupMove, []Key{
+		feature.InGroup(todoGroupMove, []feature.Key{
 			{Seq: "Return", Show: "Enter", Does: "open the task's file, or a month", Run: "App.todoEnter()"},
 			{Seq: "Backspace", Show: "Backspace", Does: "the months (Archived)", Run: "App.todoMonthsBack()"},
 			{Seq: "i", Also: []string{"o"}, Show: "i o", Does: "the details, shown or hidden", Run: "App.todoToggleDetail()"},
 		}),
-		inGroup(todoGroupTabs, []Key{
+		feature.InGroup(todoGroupTabs, []feature.Key{
 			{Seq: "[", Show: "[ ]", Does: "the tab before, after", Run: "App.todoTabBefore()"},
 			{Seq: "]", Run: "App.todoTabAfter()"},
 			{Seq: "1", Show: "1–6", Does: "a tab", Run: "App.todosTab(0)"},
@@ -372,19 +373,19 @@ func (*todos) Keys() []Key {
 			{Seq: "4", Run: "App.todosTab(3)"}, {Seq: "5", Run: "App.todosTab(4)"},
 			{Seq: "6", Run: "App.todosTab(5)"},
 		}),
-		inGroup(todoGroupStatus, []Key{
+		feature.InGroup(todoGroupStatus, []feature.Key{
 			{Seq: "s", Show: "s", Does: "status…: move the task", Run: "App.todoChooseStatus()"},
 		}),
-		inGroup(todoGroupTask, []Key{
+		feature.InGroup(todoGroupTask, []feature.Key{
 			{Seq: "a", Show: "a", Does: "add a task", Run: "App.todoAdd()"},
 			{Seq: "d", Show: "d", Does: "remove the task", Run: "App.todoRemove()"},
 			{Seq: "Shift+A", Show: "A", Does: "assign it to an agent", Run: "App.todoAssign()"},
 		}),
-		inGroup(todoGroupVars, []Key{
+		feature.InGroup(todoGroupVars, []feature.Key{
 			{Seq: "e", Show: "e", Does: "set (file), a adds, d clears", Run: "App.todoVarEdit()"},
 			{Seq: "m", Show: "m", Does: "set for this machine only", Run: "App.todoVarMachine()"},
 		}),
-		inGroup(todoGroupStore, []Key{
+		feature.InGroup(todoGroupStore, []feature.Key{
 			{Seq: "Shift+S", Show: "S", Does: "choose the store", Run: "App.todoFocusStore()"},
 			{Seq: "Shift+N", Show: "N", Does: "a new store", Run: "App.todoNew()"},
 			{Seq: "Shift+O", Show: "O", Does: "load a store", Run: "App.todoLoad()"},
@@ -393,17 +394,17 @@ func (*todos) Keys() []Key {
 			{Seq: "Shift+M", Show: "M", Does: "move the store", Run: "App.todoMove()"},
 		}),
 	)
-	return append(keys, onCard(todoKeysCard, card)...)
+	return append(keys, feature.OnCard(todoKeysCard, card)...)
 }
 
 // Picks: A's picker of AutoDoc's agents (todos_assign.go), and s's of the statuses.
-func (t *todos) Picks() map[string]picker {
-	return map[string]picker{"agentAssign": t.assignPick, "todoStatus": t.statusPick}
+func (t *todos) Picks() map[string]feature.Picker {
+	return map[string]feature.Picker{"agentAssign": t.assignPick, "todoStatus": t.statusPick}
 }
 
 // Cards: ?'s card of the panel's keys.
-func (*todos) Cards() []Card {
-	return []Card{{ID: todoKeysCard, View: "TodoKeys", Title: "todos — keys", Toggle: "?",
+func (*todos) Cards() []feature.Card {
+	return []feature.Card{{ID: todoKeysCard, View: "TodoKeys", Title: "todos — keys", Toggle: "?",
 		Note:   "↑ ↓ or j k move · q closes the panel",
 		Help:   "THE TODOS PANEL'S KEYS (? in the todos panel)",
 		Groups: [][]string{{todoGroupMove, todoGroupTabs, todoGroupStatus}, {todoGroupTask, todoGroupVars, todoGroupStore}}}}
@@ -460,9 +461,9 @@ func (t *todos) call(verb string, params []any, seq *uint64, then func(any)) {
 
 // callOr is call whose failure, once told, runs failed (nil for nothing more).
 func (t *todos) callOr(verb string, params []any, seq *uint64, then func(any), failed func()) {
-	tk := Ticket{}
+	tk := feature.Ticket{}
 	if seq != nil {
-		tk = t.c.Ticket(seq, TicketSession)
+		tk = t.c.Ticket(seq, feature.TicketSession)
 	}
 	t.c.Go(func(ctx context.Context) any {
 		v, err := t.c.Call(ctx, verb, params...)
@@ -494,16 +495,16 @@ func (t *todos) list() {
 	t.call("todos.stores", nil, &t.rootsSeq, func(v any) {
 		var stores []*todoStore
 		ids := map[string]string{} // store path → the daemon's id
-		for _, x := range asList(v) {
-			m := asMap(x)
-			ids[str(m, "path")] = str(m, "id")
-			roots := asList(m["roots"])
+		for _, x := range feature.AsList(v) {
+			m := feature.AsMap(x)
+			ids[feature.Str(m, "path")] = feature.Str(m, "id")
+			roots := feature.AsList(m["roots"])
 			if len(roots) == 0 {
 				continue // a store with no project root is not one the verbs can reach
 			}
 			root, _ := roots[0].(string)
-			stores = append(stores, &todoStore{id: "root:" + root, at: map[string]any{"root": root}, sid: str(m, "id"),
-				name: storeName(root), path: str(m, "path"), released: m["released"] == true})
+			stores = append(stores, &todoStore{id: "root:" + root, at: map[string]any{"root": root}, sid: feature.Str(m, "id"),
+				name: storeName(root), path: feature.Str(m, "path"), released: m["released"] == true})
 		}
 		t.labels(func(labels map[string]string) {
 			for _, s := range stores {
@@ -515,8 +516,8 @@ func (t *todos) list() {
 				return
 			}
 			t.call("todos.resolve", []any{ws}, &t.rootsSeq, func(v any) {
-				r := asMap(v)
-				path := str(r, "store")
+				r := feature.AsMap(v)
+				path := feature.Str(r, "store")
 				w := &todoStore{id: "ws:" + ws, at: ws, ws: ws, sid: ids[path], name: storeName(storeRoot(path)), path: path,
 					released: r["released"] == true}
 				if path == "" {
@@ -534,13 +535,13 @@ func (t *todos) list() {
 // labels reads the stores' labels, by their preference: none when the daemon keeps no
 // preferences, so the stores still list, by their derived names.
 func (t *todos) labels(then func(map[string]string)) {
-	tk := t.c.Ticket(&t.rootsSeq, TicketSession)
+	tk := t.c.Ticket(&t.rootsSeq, feature.TicketSession)
 	t.c.Go(func(ctx context.Context) any {
 		v, err := t.c.Call(ctx, "preference.list")
 		if err != nil {
 			return map[string]any{}
 		}
-		return asMap(v)
+		return feature.AsMap(v)
 	}, func(v any) {
 		if !tk.Current() {
 			return
@@ -667,12 +668,12 @@ func (t *todos) read() {
 			return
 		}
 		var months []map[string]any
-		for _, p := range asList(asMap(v)["partitions"]) {
-			months = append(months, asMap(p))
+		for _, p := range feature.AsList(feature.AsMap(v)["partitions"]) {
+			months = append(months, feature.AsMap(p))
 		}
 		t.months.Reset(months)
 		t.stale[archivedTab] = false
-		if !slices.ContainsFunc(months, func(m map[string]any) bool { return str(m, "month") == t.month }) {
+		if !slices.ContainsFunc(months, func(m map[string]any) bool { return feature.Str(m, "month") == t.month }) {
 			t.month = "" // the month is gone
 		}
 		t.selectMonth()
@@ -699,18 +700,18 @@ func (t *todos) readMonth() {
 // applyTasks puts a read's tasks in tab's table, errored ones first, and keeps the cursor on the
 // task it was on, or on the task the cursor follows.
 func (t *todos) applyTasks(tab int, name string, v any) {
-	l := asMap(v)
+	l := feature.AsMap(v)
 	var errored, clean []map[string]any
-	for _, x := range asList(l["tasks"]) {
-		m := asMap(x)
-		if len(asList(m["errors"])) > 0 {
+	for _, x := range feature.AsList(l["tasks"]) {
+		m := feature.AsMap(x)
+		if len(feature.AsList(m["errors"])) > 0 {
 			errored = append(errored, m)
 		} else {
 			clean = append(clean, m)
 		}
 	}
 	tasks := append(errored, clean...)
-	keep := str(t.taskAt(tab, t.cursors[tab]), "id")
+	keep := feature.Str(t.taskAt(tab, t.cursors[tab]), "id")
 	if f := t.follow; f.id != "" && f.tab == tab && (tab != archivedTab || f.month == t.month) {
 		keep, t.follow = f.id, todoFollow{}
 	}
@@ -718,9 +719,9 @@ func (t *todos) applyTasks(tab int, name string, v any) {
 	if tab != archivedTab || t.month != "" {
 		t.stale[tab] = false
 	}
-	t.malformed[name] = len(asList(l["malformed"]))
+	t.malformed[name] = len(feature.AsList(l["malformed"]))
 	t.status()
-	at := slices.IndexFunc(tasks, func(x map[string]any) bool { return str(x, "id") == keep })
+	at := slices.IndexFunc(tasks, func(x map[string]any) bool { return feature.Str(x, "id") == keep })
 	if at < 0 && len(tasks) > 0 {
 		at = min(max(t.cursors[tab], 0), len(tasks)-1)
 	}
@@ -740,7 +741,7 @@ func (t *todos) selectRow(tab, i int) {
 
 // selectMonth puts the months' cursor on the month open.
 func (t *todos) selectMonth() {
-	i := slices.IndexFunc(t.months.All(), func(m map[string]any) bool { return str(m, "month") == t.month })
+	i := slices.IndexFunc(t.months.All(), func(m map[string]any) bool { return feature.Str(m, "month") == t.month })
 	t.c.Set("App.todoMonthIndex", -1)
 	t.c.Set("App.todoMonthIndex", i)
 }
@@ -926,25 +927,25 @@ func (t *todos) syncActions() {
 // todoDetail is a task's details, as autofinder's i shows them.
 func todoDetail(x map[string]any) string {
 	var b strings.Builder
-	b.WriteString("## " + str(x, "title") + "\n\n")
+	b.WriteString("## " + feature.Str(x, "title") + "\n\n")
 	for _, f := range []string{"status", "priority", "assignee", "due", "created", "updated"} {
-		if v := str(x, f); v != "" {
+		if v := feature.Str(x, f); v != "" {
 			fmt.Fprintf(&b, "- %s: %s\n", f, v)
 		}
 	}
 	for _, f := range []string{"tags", "adr", "review", "blocked"} {
-		for _, v := range asList(x[f]) {
+		for _, v := range feature.AsList(x[f]) {
 			fmt.Fprintf(&b, "- %s: %v\n", f, v)
 		}
 	}
-	if errs := asList(x["errors"]); len(errs) > 0 {
+	if errs := feature.AsList(x["errors"]); len(errs) > 0 {
 		b.WriteString("\nerrors:\n\n")
 		for _, e := range errs {
-			m := asMap(e)
-			fmt.Fprintf(&b, "- %s %s: %s\n", str(m, "field"), str(m, "code"), str(m, "message"))
+			m := feature.AsMap(e)
+			fmt.Fprintf(&b, "- %s %s: %s\n", feature.Str(m, "field"), feature.Str(m, "code"), feature.Str(m, "message"))
 		}
 	}
-	if d := strings.TrimSpace(str(x, "description")); d != "" {
+	if d := strings.TrimSpace(feature.Str(x, "description")); d != "" {
 		b.WriteString("\n" + d + "\n")
 	}
 	return b.String()
@@ -959,7 +960,7 @@ func (t *todos) activated(tab, i int) {
 	if err := t.c.View(todosPanelSpec().ID, "close"); err != nil {
 		t.c.Failed("todos: open", err)
 	}
-	t.c.OpenFile(filepath.Join(s.path, filepath.FromSlash(str(x, "path"))))
+	t.c.OpenFile(filepath.Join(s.path, filepath.FromSlash(feature.Str(x, "path"))))
 }
 
 // enter is Enter on the card of keys: the task under the cursor opens, as Enter in its table; on
@@ -982,7 +983,7 @@ func (t *todos) monthChosen(i int) {
 	if !ok {
 		return
 	}
-	t.month = str(m, "month")
+	t.month = feature.Str(m, "month")
 	t.tasks[archivedTab].Reset(nil)
 	t.cursors[archivedTab] = -1
 	t.readMonth()
@@ -1042,9 +1043,9 @@ func (t *todos) addTitle(title string) {
 		return
 	}
 	t.write(s, "todos.add", []any{s.at, map[string]any{"title": strings.TrimSpace(title)}}, func(v any) {
-		task := asMap(v)
-		t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_added", str(task, "id")))
-		t.followTask(task, cmp.Or(str(task, "status"), "open"))
+		task := feature.AsMap(v)
+		t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_added", feature.Str(task, "id")))
+		t.followTask(task, cmp.Or(feature.Str(task, "status"), "open"))
 	})
 }
 
@@ -1057,22 +1058,22 @@ func (t *todos) remove() {
 	if x == nil || t.readOnly(s) {
 		return
 	}
-	t.c.Ask(Question{Title: t.c.Tr("autodoc.question.todos.remove_the_task"), Text: t.c.Trf("autodoc.question.todos.remove_its_file", strconv.Quote(str(x, "title"))),
+	t.c.Ask(feature.Question{Title: t.c.Tr("autodoc.question.todos.remove_the_task"), Text: t.c.Trf("autodoc.question.todos.remove_its_file", strconv.Quote(feature.Str(x, "title"))),
 		OnYes: func() { t.removeConfirmed(s, x) }})
 }
 
 // removeConfirmed removes the task asked about, whatever row the cursor is on by then.
 func (t *todos) removeConfirmed(s *todoStore, x map[string]any) {
-	t.write(s, "todos.remove", []any{s.at, str(x, "id"), str(x, "rev")}, func(any) { t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_removed", str(x, "id"))) })
+	t.write(s, "todos.remove", []any{s.at, feature.Str(x, "id"), feature.Str(x, "rev")}, func(any) { t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_removed", feature.Str(x, "id"))) })
 }
 
 // moveTo gives task x of store s its next status, through todos.status so its events fire; the
 // tab of that status shows once the daemon has moved it, the cursor on the task.
 func (t *todos) moveTo(s *todoStore, x map[string]any, next string) {
-	t.write(s, "todos.status", []any{s.at, str(x, "id"), str(x, "rev"), next}, func(v any) {
-		task := asMap(v)
-		if str(task, "id") == "" {
-			task = map[string]any{"id": str(x, "id")}
+	t.write(s, "todos.status", []any{s.at, feature.Str(x, "id"), feature.Str(x, "rev"), next}, func(v any) {
+		task := feature.AsMap(v)
+		if feature.Str(task, "id") == "" {
+			task = map[string]any{"id": feature.Str(x, "id")}
 		}
 		t.followTask(task, next)
 	})
@@ -1082,12 +1083,12 @@ func (t *todos) moveTo(s *todoStore, x map[string]any, next string) {
 // lands: into Archived, the month its file went to.
 func (t *todos) followTask(task map[string]any, status string) {
 	tab := tabOf(status)
-	if tab < 0 || str(task, "id") == "" {
+	if tab < 0 || feature.Str(task, "id") == "" {
 		return
 	}
-	f := todoFollow{id: str(task, "id"), tab: tab}
+	f := todoFollow{id: feature.Str(task, "id"), tab: tab}
 	if tab == archivedTab {
-		f.month = monthOf(str(task, "path"))
+		f.month = monthOf(feature.Str(task, "path"))
 		t.month = f.month
 	}
 	t.follow = f
@@ -1141,7 +1142,7 @@ func (t *todos) refresh() {
 		return
 	}
 	t.write(s, "todos.refresh", []any{s.at}, func(v any) {
-		r := asMap(v)
+		r := feature.AsMap(v)
 		t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_refreshed_moved_archived_rewritten", r["moved"], r["archived"], r["rewritten"]))
 	})
 }
@@ -1185,7 +1186,7 @@ func (t *todos) folderChosen(dir string) {
 		t.call("todos.register", []any{dir}, nil, func(any) {
 			t.call("todos.resolve", []any{at}, nil, func(v any) {
 				t.want = "root:" + dir
-				s := &todoStore{id: "root:" + dir, at: at, name: storeName(dir), released: asMap(v)["released"] == true}
+				s := &todoStore{id: "root:" + dir, at: at, name: storeName(dir), released: feature.AsMap(v)["released"] == true}
 				if t.readOnly(s) { // the folder is loaded; a store released there takes no new buckets
 					t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_is_loaded_read_only_its_store_was_released", tildePath(t.c.Env(), dir)))
 					t.list()

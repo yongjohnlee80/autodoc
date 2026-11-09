@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 )
 
@@ -17,9 +18,9 @@ import (
 // htmlPaneCells is the pane's part as a feature: it hears the theme and the language change.
 type htmlPaneCells struct{ h *Host }
 
-func (*htmlPaneCells) Name() string                 { return "htmlpane-cells" }
-func (*htmlPaneCells) State() map[string]any        { return map[string]any{} }
-func (*htmlPaneCells) Commands() map[string]Command { return map[string]Command{} }
+func (*htmlPaneCells) Name() string                         { return "htmlpane-cells" }
+func (*htmlPaneCells) State() map[string]any                { return map[string]any{} }
+func (*htmlPaneCells) Commands() map[string]feature.Command { return map[string]feature.Command{} }
 
 // ThemeChanged gives an open pane the new theme's highlighting, and its page exported again in the
 // new theme.

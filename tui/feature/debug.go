@@ -1,4 +1,4 @@
-package tui
+package feature
 
 import (
 	"sync/atomic"
@@ -16,7 +16,7 @@ import (
 // stage "tui", the kind tui's own name for it. The records are numbered from
 // zero by this stream alone (the input path numbers its own): the file's line
 // order is the order everything happened in.
-func traceTo(rec record.Recorder) tuicore.TraceFunc {
+func TraceTo(rec record.Recorder) tuicore.TraceFunc {
 	var seq atomic.Uint64
 	return func(ev tuicore.TraceEvent) {
 		rec.Record(record.Record{

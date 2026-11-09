@@ -7,10 +7,11 @@ import (
 	"strings"
 
 	"github.com/yongjohnlee80/autodoc/plugin"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // PLUGIN CALLS (docs/decisions/plugins.md#plugin-calls) — protocol 3's host.call: a plugin asks
-// AutoDoc to run a command of its catalog (catalog.go), one its manifest's calls = [...] declares,
+// AutoDoc to run a command of its catalog (feature/catalog.go), one its manifest's calls = [...] declares,
 // and is answered plugin.result, both notifications matched by the plugin's call number. Every call
 // accepted is answered exactly once:
 //
@@ -83,7 +84,7 @@ func callOutcome(id string, err error) string {
 	switch {
 	case err == nil:
 		return ""
-	case errors.Is(err, errUnknownCommand):
+	case errors.Is(err, feature.ErrUnknownCommand):
 		return plugin.CallUnknown + " " + id
 	}
 	return plugin.CallFailed + " " + err.Error()

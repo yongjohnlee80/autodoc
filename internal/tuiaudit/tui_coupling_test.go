@@ -34,16 +34,12 @@ const (
 )
 
 // tuiExact assigns a file by its whole stem (its name less .go and _test): the host's glue files,
-// which a feature's prefix would otherwise take, and the kit's files.
+// which a feature's prefix would otherwise take. The kit is its own package, tui/feature: tui
+// imports it, and it can import nothing of tui's. The kit's tests that drive a whole program stay
+// in tui, the host's.
 var tuiExact = map[string]string{
 	"todomove": "host", "scripts": "host", "relationmap": "host",
 	"relationviews_tui": "host", "relationviews_gui": "host", "relationviews_cells": "host",
-	"feature": "feature", "command": "feature", "catalog": "feature", "keys": "feature",
-	"prefspec": "feature", "panelhost": "feature", "panelregistry": "feature",
-	"panelscope": "feature", "pick": "feature", "rows": "feature", "ask": "feature",
-	"terminalpanel": "feature", "work": "feature", "search": "feature", "menurows": "feature",
-	"notices": "feature", "noterenderer": "feature", "spawnenv": "feature", "debug": "feature",
-	"daemon_client": "feature", "tabmenus": "feature",
 	"relations": "relations",
 	"startup":   "system", "profiling": "system",
 	"explorer": "explorer", "recent": "explorer", "outline": "explorer",
@@ -346,12 +342,12 @@ func TestTuiFeaturesReachOnlyDown(t *testing.T) {
 func TestTuiGroupsAssignAsTheMapSays(t *testing.T) {
 	for base, want := range map[string]string{
 		"todomove.go": "host", "todos.go": "todos", "todos_assign_test.go": "todos",
-		"terminalpanel.go": "feature", "terminal.go": "terminals", "terminalkeymap.go": "terminals",
+		"daemon_client.go": "host", "terminal.go": "terminals", "terminalkeymap.go": "terminals",
 		"luapackages.go": "plugins", "luacard.go": "scripting", "lua.go": "scripting",
 		"relationviews_gui.go": "host", "relations.go": "relations", "relationmap.go": "host",
 		"agentserver.go": "crew", "pluginsurface_linux.go": "plugins", "notepage.go": "page",
 		"rendered_cells.go": "page", "embedsetup.go": "searchsetup", "startup.go": "system",
-		"outline.go": "explorer", "app.go": "host", "files.go": "host", "feature.go": "feature",
+		"outline.go": "explorer", "app.go": "host", "files.go": "host", "prefspec_test.go": "host",
 	} {
 		if got := tuiGroupOf(base); got != want {
 			t.Errorf("tuiGroupOf(%q) = %s, want %s", base, got, want)

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"slices"
 	"strings"
 	"testing"
@@ -13,7 +14,7 @@ type relatedTicketCore struct {
 	h *Host
 }
 
-func (c relatedTicketCore) Ticket(seq *uint64, scope TicketScope) Ticket {
+func (c relatedTicketCore) Ticket(seq *uint64, scope feature.TicketScope) feature.Ticket {
 	return c.h.ticket(seq, scope)
 }
 
@@ -40,7 +41,7 @@ func TestTheRelationsFollowThePageShown(t *testing.T) {
 	scriptedGraph(c)
 	r := newRelated(c)
 	c.deferred = true
-	a := Page{Ref: fileRef{"kb", "a.md"}}
+	a := feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}}
 	r.Shown(a)
 	if title := c.set["App.relationsTitle"]; title != "links · reading…" {
 		t.Fatalf("while a.md's relations are read the drawer says %q", title)
@@ -57,17 +58,17 @@ func TestTheRelationsFollowThePageShown(t *testing.T) {
 		t.Fatal("the same document shown again lost its rows while they were read")
 	}
 	c.deliver(0)
-	r.Shown(Page{Ref: fileRef{"kb", "z.md"}}) // another document: a.md's rows go at once
+	r.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "z.md"}}) // another document: a.md's rows go at once
 	if r.rows.Len() != 0 {
 		t.Fatalf("z.md shown with a.md's rows %q", r.labels())
 	}
 	c.deliver(0)
 
-	r.Shown(Page{})
+	r.Shown(feature.Page{})
 	if r.rows.Len() != 0 || c.set["App.relationsTitle"] != "links" {
 		t.Fatalf("the draft: rows %q, title %q", r.labels(), c.set["App.relationsTitle"])
 	}
-	r.Shown(Page{Ref: fileRef{"", "/tmp/x.md"}, Outside: true})
+	r.Shown(feature.Page{Ref: feature.FileRef{WS: "", Path: "/tmp/x.md"}, Outside: true})
 	if c.set["App.relationsTitle"] != "links · "+outsideBadge {
 		t.Fatalf("a file in no workspace: title %q", c.set["App.relationsTitle"])
 	}
@@ -78,7 +79,7 @@ func TestTheRelationsDepthAndOpen(t *testing.T) {
 	c := newScripted("kb")
 	scriptedGraph(c)
 	r := newRelated(c)
-	r.Shown(Page{Ref: fileRef{"kb", "a.md"}})
+	r.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}})
 	r.depth() // the keyboard elsewhere: d is not the drawer's
 	if r.deep || slices.ContainsFunc(c.calls, func(s string) bool { return strings.HasPrefix(s, "graph.neighborhood") }) {
 		t.Fatal("d away from the drawer showed the second ring")
@@ -107,8 +108,8 @@ func TestTheRelationsDropAStaleAnswer(t *testing.T) {
 	scriptedGraph(c)
 	r := newRelated(c)
 	c.deferred = true
-	r.Shown(Page{Ref: fileRef{"kb", "a.md"}}) // read 0, held
-	r.Shown(Page{})                           // the file kept as the draft
+	r.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}}) // read 0, held
+	r.Shown(feature.Page{})                                             // the file kept as the draft
 	c.deliver(0)
 	if r.rows.Len() != 0 || c.set["App.relationsTitle"] != "links" {
 		t.Fatalf("the draft took the gone file's relations: rows %q, title %q", r.labels(), c.set["App.relationsTitle"])
@@ -122,7 +123,7 @@ func TestTheLaterRelationsReadWins(t *testing.T) {
 	scriptedGraph(c)
 	r := newRelated(c)
 	c.deferred = true
-	r.Shown(Page{Ref: fileRef{"kb", "a.md"}})
+	r.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}})
 	c.deliver(0)
 	c.focused = true
 	r.depth() // depth 2: read 0, held
@@ -140,7 +141,7 @@ func TestRelationsCallbackKeepsRowsForStaleOrFailedAnswers(t *testing.T) {
 	defer c.h.cancel()
 	scriptedGraph(c.scriptedCore)
 	r := newRelated(c)
-	r.Shown(Page{Ref: fileRef{"kb", "a.md"}})
+	r.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}})
 	c.deferred = true
 	for _, scope := range []string{"document", "workspace", "graph.links", "graph.backlinks", "graph.unresolved", "graph.neighborhood"} {
 		before, of := slices.Clone(r.rows.All()), r.of
@@ -191,7 +192,7 @@ func TestATasksRelationsInTheDrawer(t *testing.T) {
 	}
 	c.answers["graph.unresolved"] = func([]any) (any, error) { return []any{}, nil }
 	r := newRelated(c)
-	r.Shown(Page{Ref: fileRef{"kb", ".todo-list/open/t.md"}})
+	r.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: ".todo-list/open/t.md"}})
 	want := []string{
 		"adr (1)", "  /src/p/docs/d.md  (outside the workspace)",
 		"review (1)", "  reviews/r.md",
@@ -218,7 +219,7 @@ func TestTheRelationsReadEveryPageOfTheUnresolved(t *testing.T) {
 	c.answers["graph.unresolved"] = func(params []any) (any, error) {
 		var offset int64
 		if len(params) > 1 {
-			offset, _ = asMap(params[1])["offset"].(int64)
+			offset, _ = feature.AsMap(params[1])["offset"].(int64)
 		}
 		offsets = append(offsets, offset)
 		if offset == 0 {
@@ -229,7 +230,7 @@ func TestTheRelationsReadEveryPageOfTheUnresolved(t *testing.T) {
 			"count": int64(2)}, nil
 	}
 	r := newRelated(c)
-	r.Shown(Page{Ref: fileRef{"kb", "a.md"}})
+	r.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}})
 	if !slices.ContainsFunc(r.labels(), func(l string) bool { return strings.Contains(l, "loop.md") }) {
 		t.Fatalf("a.md's loop on the second page is not shown: %q", r.labels())
 	}
@@ -252,13 +253,13 @@ func TestTheRelationsReadAtMostAThousandPagesOfTheUnresolved(t *testing.T) {
 		calls++
 		var offset int64
 		if len(params) > 1 {
-			offset, _ = asMap(params[1])["offset"].(int64)
+			offset, _ = feature.AsMap(params[1])["offset"].(int64)
 		}
 		return map[string]any{"unresolved": []any{map[string]any{"src": "a.md", "raw": "loop.md", "reason": "cycle"}},
 			"count": int64(1 << 40), "next": offset + 1}, nil
 	}
 	r := newRelated(c)
-	r.Shown(Page{Ref: fileRef{"kb", "a.md"}})
+	r.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}})
 	if calls != 1000 {
 		t.Errorf("graph.unresolved asked %d times, want 1000", calls)
 	}

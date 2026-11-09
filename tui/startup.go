@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"io"
 	"net/http"
 	"os"
@@ -24,7 +25,7 @@ type release struct {
 
 // startup is the feature that runs once the program has started.
 type startup struct {
-	c        Core
+	c        feature.Core
 	seams    startupSeams
 	version  string
 	latest   func(ctx context.Context) (release, error) // the latest release; tests answer it
@@ -37,10 +38,10 @@ type startup struct {
 // agentsetup.go), read as the program starts.
 type startupSeams struct {
 	latestURL                             string
-	vimQuestionPending, agentSetupPending func(PrefsView) bool
+	vimQuestionPending, agentSetupPending func(feature.PrefsView) bool
 }
 
-func newStartup(c Core, s startupSeams, version string, scripted func() bool) *startup {
+func newStartup(c feature.Core, s startupSeams, version string, scripted func() bool) *startup {
 	url := s.latestURL
 	latest := func(ctx context.Context) (release, error) { return latestRelease(ctx, url) }
 	return &startup{c: c, seams: s, version: version, latest: latest, exe: os.Executable, scripted: scripted}
@@ -50,7 +51,7 @@ func (*startup) Name() string { return "startup" }
 func (*startup) State() map[string]any {
 	return map[string]any{"App.aboutUpdate": "", "App.aboutUpdateShown": false}
 }
-func (*startup) Commands() map[string]Command { return nil }
+func (*startup) Commands() map[string]feature.Command { return nil }
 
 // Started opens About and looks for a newer release, as the preferences say. A build that is not a
 // release (dev, a commit after a tag) looks for none: it has no release to be older than.

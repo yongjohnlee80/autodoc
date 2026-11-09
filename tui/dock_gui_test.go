@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/gui"
 )
 
@@ -23,7 +24,7 @@ func TestAGlobeMapNodeHidesItAndTheDockShowsItAsItWas(t *testing.T) {
 	onLoop(r, func() bool { g.sendView(gui.Size{W: 800, H: 600}, true); return true })
 	r.s.WaitFor(t, "the map settled", func(string) bool {
 		return onLoop(r, func() bool {
-			return slices.ContainsFunc(r.h.noticeLog.items, func(n notice) bool { return strings.HasPrefix(n.text, "GlobeMap: kb settled") })
+			return slices.ContainsFunc(r.h.noticeLog.Items, func(n feature.Notice) bool { return strings.HasPrefix(n.Text, "GlobeMap: kb settled") })
 		})
 	})
 	r.s.WaitFor(t, "the GlobeMap has the keyboard", func(string) bool { return r.focusedOn(globeMapViewID) })

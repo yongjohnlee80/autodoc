@@ -1,5 +1,7 @@
 package tui
 
+import "github.com/yongjohnlee80/autodoc/tui/feature"
+
 // AGENT PLACE — where the agent panel opens: an edge or the centre, chosen in Preferences as the
 // terminal's place is (terminal.go), at that place's size and length. A size or length is kept
 // per place, chosen in Preferences or dragged with the panel's grip (panelResized):
@@ -25,7 +27,7 @@ func agentDefault(edge string) (size, length int) {
 }
 
 // agentState is what the document reads of where the agent opens.
-func agentState(p PrefsView) map[string]any {
+func agentState(p feature.PrefsView) map[string]any {
 	size, length := p.PanelGeometry("agent", p.Value(prefAgentEdge))
 	return map[string]any{
 		"App.agentEdge":   p.Value(prefAgentEdge),

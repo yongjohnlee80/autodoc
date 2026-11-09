@@ -13,6 +13,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/derived"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // runHTML is the TUI on a managed daemon that derives HTML, as every build's does (the test
@@ -215,7 +216,7 @@ func TestCancellingAnHTMLFileInAnotherWorkspaceStaysPut(t *testing.T) {
 	r, kb, _, _ := runOutside(t)
 	r.h.p.Post(func() { r.h.openAbsolute(filepath.Join(kb, "a.md")) })
 	r.waitOpen(t, "kb", "a.md")
-	r.h.p.Post(func() { r.h.openRef(fileRef{"notes", "page.html"}, true, nil) })
+	r.h.p.Post(func() { r.h.openRef(feature.FileRef{WS: "notes", Path: "page.html"}, true, nil) })
 	r.s.WaitForText(t, "open an HTML file")
 	if ws := onLoop(r, func() string { return r.h.ws }); ws != "kb" {
 		t.Fatalf("the question was asked in %q, after entering the other workspace", ws)
@@ -247,8 +248,8 @@ func TestAPagesResourcesComeFromItsWorkspace(t *testing.T) {
 	said := func(part string) int {
 		return onLoop(r, func() int {
 			c := 0
-			for _, m := range r.h.noticeLog.items {
-				if strings.Contains(m.text, part) {
+			for _, m := range r.h.noticeLog.Items {
+				if strings.Contains(m.Text, part) {
 					c++
 				}
 			}

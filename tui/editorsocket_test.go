@@ -99,7 +99,7 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 		t.Fatalf("an ungranted read: %v", re)
 	}
 	r.s.WaitForText(t, "let the agent zen use editor.read?")
-	onLoop(r, func() bool { r.h.asker.accepted(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); return true })
 	r.s.WaitFor(t, "the read granted", func(string) bool {
 		return onLoop(r, func() bool { return r.h.prefs.luaGrants["agent:zen"]["editor.read"] })
 	})
@@ -178,7 +178,7 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 	}
 	ch := ask("hi", `autodoc.command{ name = "hi-agent", run = function(ed) ed:insert("from the agent") end }`)
 	r.s.WaitForText(t, "let the agent zen add the Lua command file hi.lua?")
-	onLoop(r, func() bool { r.h.asker.accepted(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); return true })
 	select {
 	case a := <-ch:
 		if a.re != nil || a.res["installed"] != true {
@@ -212,7 +212,7 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(luaDir, "deep.lua"), []byte("-- the user's"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	onLoop(r, func() bool { r.h.asker.accepted(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); return true })
 	if a := <-ch; a.re == nil || a.re.Code != codeEditorRefused {
 		t.Fatalf("Yes over a file made meanwhile: %v %v", a.res, a.re)
 	}
@@ -229,7 +229,7 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 	r.s.WaitFor(t, "the second card", func(string) bool {
 		return strings.Contains(askText(r), `"two"`)
 	})
-	onLoop(r, func() bool { r.h.asker.accepted(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); return true })
 	if a := <-second; a.re != nil {
 		t.Fatalf("the second card's Yes: %v", a.re)
 	}
@@ -239,7 +239,7 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 
 	ch = ask("nope", `autodoc.notify("never")`)
 	r.s.WaitForText(t, "let the agent zen add the Lua command file nope.lua?")
-	onLoop(r, func() bool { r.h.asker.rejected(); return true })
+	onLoop(r, func() bool { r.h.asker.Rejected(); return true })
 	if a := <-ch; a.re == nil || a.re.Code != codeEditorRefused {
 		t.Fatalf("a refused add_command: %v %v", a.res, a.re)
 	}

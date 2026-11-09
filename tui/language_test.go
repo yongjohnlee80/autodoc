@@ -15,6 +15,7 @@ import (
 	"testing/fstest"
 
 	"github.com/yongjohnlee80/autodoc/docs"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
@@ -204,11 +205,11 @@ func TestALanguageSwitchRelabelsTheScreen(t *testing.T) {
 // A stored language the build does not offer is English, and the store keeps it.
 func TestAStoredLanguageTheBuildDoesNotOfferIsEnglish(t *testing.T) {
 	var p prefs
-	ReadRows(&p, map[string]any{prefLanguage: "fr"}, legacyPrefRows(nil, false))
+	feature.ReadRows(&p, map[string]any{prefLanguage: "fr"}, legacyPrefRows(nil, false))
 	if p.language != "en" {
 		t.Errorf("a stored %q reads as %q, want English", "fr", p.language)
 	}
-	ReadRows(&p, map[string]any{prefLanguage: "ko_KR"}, legacyPrefRows(nil, false))
+	feature.ReadRows(&p, map[string]any{prefLanguage: "ko_KR"}, legacyPrefRows(nil, false))
 	if p.language != "ko_KR" {
 		t.Errorf("a stored ko_KR reads as %q", p.language)
 	}
@@ -307,7 +308,7 @@ func TestASwitchLeavesNoEnglishOnScreen(t *testing.T) {
 	r := &running{h: h, s: s}
 	runs := englishRuns(t)
 	onLoop(r, func() bool { // a row a model composes in Go: a todo variable set per machine, none here
-		for _, f := range h.reg.features {
+		for _, f := range h.reg.Features {
 			if td, ok := f.(*todos); ok {
 				td.vars.Reset([]map[string]any{{"name": "owner", "machine": true}})
 			}
@@ -321,13 +322,13 @@ func TestASwitchLeavesNoEnglishOnScreen(t *testing.T) {
 		// a script's or a plugin's command is in its own words, shown as written (trOr): AutoDoc's
 		// bundled scripts' too
 		var own []string
-		for _, e := range h.cat.entries() {
-			if e.Source != SourceBuiltin && e.Source != SourceFeature {
+		for _, e := range h.cat.Entries() {
+			if e.Source != feature.SourceBuiltin && e.Source != feature.SourceFeature {
 				own = append(own, e.Title, e.Help)
 			}
 		}
 		out := map[string][]string{}
-		for name := range h.reg.state {
+		for name := range h.reg.State {
 			if notCatalogText[name] {
 				continue
 			}
@@ -371,7 +372,7 @@ func TestASwitchLeavesNoEnglishOnScreen(t *testing.T) {
 func TestCardColumnsLineUpInCells(t *testing.T) {
 	left := []string{"f  파일", "g  줄로 이동", "s  保存する", "x  打开"}
 	right := []string{"a  one", "b  two", "c  three", "d  four"}
-	text := sideBySide([][]string{left, right})
+	text := feature.SideBySide([][]string{left, right})
 	want := 0
 	for _, l := range left {
 		want = max(want, tuicore.StringWidth(l))
@@ -392,20 +393,20 @@ func TestCardColumnsLineUpInCells(t *testing.T) {
 // its lines measured in cells.
 func TestEveryCardFitsInEveryLanguage(t *testing.T) {
 	h := newHost(NewSession("unused", nil), Options{GUI: wholeTables})
-	k := keyCatalog(h.features())
+	k := feature.KeyCatalog(h.features())
 	s := &i18n.Set{}
 	if err := s.LoadDir(qmlFiles, "i18n", "autodoc"); err != nil {
 		t.Fatal(err)
 	}
 	for _, lang := range s.Languages() {
-		k.tr = func(id, english string) string {
+		k.Tr = func(id, english string) string {
 			if t, ok := s.Lookup(lang, id); ok {
 				return t
 			}
 			return english
 		}
-		for _, c := range k.cards {
-			text := k.cardText(c.Groups, k.on(c.ID))
+		for _, c := range k.Cards {
+			text := k.CardText(c.Groups, k.On(c.ID))
 			for _, line := range strings.Split(text, "\n") {
 				if n := tuicore.StringWidth(line); n > 76 {
 					t.Errorf("%s: %s's card has a line of %d cells, wider than the 80 × 20 screen's card:\n%s", lang, c.ID, n, line)

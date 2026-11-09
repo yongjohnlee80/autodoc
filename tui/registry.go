@@ -12,6 +12,7 @@ import (
 	"time"
 
 	regindex "github.com/yongjohnlee80/autodoc/core/registry"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE REGISTRY — AutoDoc's list of plugins, Lua packages and KB types
@@ -193,9 +194,9 @@ func isRegistryName(arg string) bool {
 // resolveRegistry calls then, on the loop, with the repo of the registry's entry of kind named name,
 // the index fetched as a list's is; or why there is none. loaded, when set, takes the list too (the
 // host's KB type field).
-func resolveRegistry(c Core, src registrySource, kind, name string, loaded func(registryList), then func(repo string, err error)) {
+func resolveRegistry(c feature.Core, src registrySource, kind, name string, loaded func(registryList), then func(repo string, err error)) {
 	name = strings.TrimSpace(name)
-	coreDo(c, func(ctx context.Context) registryList { return src.fetch(ctx, time.Now()) }, func(l registryList) {
+	feature.CoreDo(c, func(ctx context.Context) registryList { return src.fetch(ctx, time.Now()) }, func(l registryList) {
 		l = l.usable()
 		if loaded != nil {
 			loaded(l)

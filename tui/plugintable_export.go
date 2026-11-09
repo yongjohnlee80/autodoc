@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget/table"
 )
@@ -160,7 +161,7 @@ func (pl *plugins) exportResults(path string) {
 		path += "." + string(pl.exportFormat)
 	}
 	if _, err := os.Stat(path); err == nil {
-		pl.c.Ask(Question{Title: pl.c.Trf("autodoc.question.plugintable_export.replace", filepath.Base(path)),
+		pl.c.Ask(feature.Question{Title: pl.c.Trf("autodoc.question.plugintable_export.replace", filepath.Base(path)),
 			Text: pl.c.Trf("autodoc.question.plugintable_export.exists_export_the_results_over_it_it_is_replaced", path),
 			Yes:  pl.c.Tr("autodoc.question.plugintable_export.replace_2"), No: pl.c.Tr("autodoc.question.plugintable_export.cancel"), OnYes: func() { pl.beginExport(path) }})
 		return

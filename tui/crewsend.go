@@ -11,6 +11,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/inbox"
 	"github.com/yongjohnlee80/autodoc/core/mail"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // The user's own sends to the window's agents go through the crew when the agent's doorbell rings
@@ -53,7 +54,7 @@ func (h *crewHost) userSend(codename, kind, subject, body string, then func(erro
 			switch {
 			case err == nil:
 				then(nil)
-			case code(err) == inbox.CodeHandedOver: // its fallback job brings it back: never asked again, never typed here
+			case feature.Code(err) == inbox.CodeHandedOver: // its fallback job brings it back: never asked again, never typed here
 				then(errHandedOver)
 			case doorbellNotSent(err):
 				then(fmt.Errorf("%w: %v", errDoorbellNotSent, err))
@@ -70,7 +71,7 @@ func (h *crewHost) userSend(codename, kind, subject, body string, then func(erro
 // doorbellNotSent reports whether err is the daemon's certain refusal of a user's send: nothing was
 // stored, so nothing can arrive.
 func doorbellNotSent(err error) bool {
-	switch code(err) {
+	switch feature.Code(err) {
 	case inbox.CodeUnreachable, inbox.CodeTooLarge, mail.CodeNoRecipient, mail.CodeTooLarge,
 		crew.CodeStaleEpoch, crew.CodeScopeBusy, golibrpc.CodeInvalidParams, golibrpc.CodeMethodNotFound:
 		return true
@@ -80,7 +81,7 @@ func doorbellNotSent(err error) bool {
 
 // peerAgents answers, on the loop, the live crew agents of every scope but the window's (peersOf):
 // none while it holds no scope, or when the crew can't be asked.
-func (h *crewHost) peerAgents(then func([]AgentEntry)) {
+func (h *crewHost) peerAgents(then func([]feature.AgentEntry)) {
 	scope, _, ok := h.held()
 	if !ok {
 		then(nil)
@@ -152,11 +153,11 @@ func (h *crewHost) startedOf(codename string, then func(started bool)) {
 		}
 		return v
 	}, func(v any) {
-		for _, e := range asList(v) {
-			m := asMap(e)
-			if str(m, "scope") == scope && str(m, "codename") == codename {
+		for _, e := range feature.AsList(v) {
+			m := feature.AsMap(e)
+			if feature.Str(m, "scope") == scope && feature.Str(m, "codename") == codename {
 				reachable, _ := m["reachable"].(bool)
-				why := str(m, "why")
+				why := feature.Str(m, "why")
 				then(reachable || strings.HasPrefix(why, crew.WhyWakesFailing) || strings.HasPrefix(why, crew.WhyBackoffUntil))
 				return
 			}
@@ -182,9 +183,9 @@ func (h *crewHost) promptsReported(codename string, then func(reported bool)) {
 		}
 		return v
 	}, func(v any) {
-		for _, e := range asList(v) {
-			m := asMap(e)
-			if str(m, "scope") == scope && str(m, "codename") == codename {
+		for _, e := range feature.AsList(v) {
+			m := feature.AsMap(e)
+			if feature.Str(m, "scope") == scope && feature.Str(m, "codename") == codename {
 				reported, _ := m["prompts_reported"].(bool)
 				then(reported)
 				return

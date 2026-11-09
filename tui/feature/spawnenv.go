@@ -1,4 +1,4 @@
-package tui
+package feature
 
 import (
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
@@ -37,7 +37,7 @@ var spawnerIdentityNames = []string{
 
 // spawnerIdentity are the names in environ (os.Environ's form) that name the agent host that
 // started AutoDoc.
-func spawnerIdentity(environ []string) []string {
+func SpawnerIdentity(environ []string) []string {
 	var out []string
 	for _, kv := range environ {
 		name, _, _ := strings.Cut(kv, "=")
@@ -50,9 +50,9 @@ func spawnerIdentity(environ []string) []string {
 
 // ownEnviron is the program's environment (env, nil for AutoDoc's own), without its spawner's
 // identity: what a process AutoDoc starts on its own behalf inherits.
-func ownEnviron(env procenv.Env) []string {
+func OwnEnviron(env procenv.Env) []string {
 	environ := env.Environ()
-	drop := spawnerIdentity(environ)
+	drop := SpawnerIdentity(environ)
 	return slices.DeleteFunc(environ, func(kv string) bool {
 		name, _, _ := strings.Cut(kv, "=")
 		return slices.Contains(drop, name)

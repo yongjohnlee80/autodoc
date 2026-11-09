@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/gui"
 	guiwidget "github.com/yongjohnlee80/golib/gui/widget"
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -16,7 +17,7 @@ import (
 
 func TestNoteReadingViewHidesMetadataWithoutChangingTheBuffer(t *testing.T) {
 	source := "---\ntitle: hidden title\ntags: [private]\n---\n<!-- hidden comment\n![not-an-embed](secret.png)\n-->\n# Visible body\n"
-	r := noteRenderer(&NoteEmbeds{})(NoteRendererSpec{})
+	r := noteRenderer(&NoteEmbeds{})(feature.NoteRendererSpec{})
 	e := guiwidget.NewEditor(guiwidget.WithRenderer(r))
 	e.Core().SetValue(source)
 	before := e.Core().Value()
@@ -75,7 +76,7 @@ func (r *metadataObserver) LayOut(b guiwidget.Block, lines []string, width float
 }
 
 func TestLaterCommentCloseReflowsTheActualNoteEditor(t *testing.T) {
-	r := &metadataObserver{Renderer: noteRenderer(&NoteEmbeds{})(NoteRendererSpec{})}
+	r := &metadataObserver{Renderer: noteRenderer(&NoteEmbeds{})(feature.NoteRendererSpec{})}
 	editor := guiwidget.NewEditor(guiwidget.WithRenderer(r), guiwidget.WithView(widgeteditor.ViewRendered))
 	editor.SetValue("before <!-- note\nstill note\nend\n\nlast")
 	backend := &nativeBackend{TestBackend: tuicore.NewTestBackend(100, 50, tuicore.WithTestCapabilities(tuicore.Capabilities{NativeViews: true}))}
