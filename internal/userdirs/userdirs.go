@@ -30,6 +30,11 @@ func Cache(env procenv.Env) (string, error) {
 	return cache(env)
 }
 
+// State is the folder for what the user's programs keep between runs and the user would not edit:
+// $XDG_STATE_HOME when it is an absolute path, else ~/.local/state on Unix; %LocalAppData% on
+// Windows. The Go library has no call for it, so nil reads the process's own variables here.
+func State(env procenv.Env) (string, error) { return state(env) }
+
 // Temp is the folder for temporary files, as os.TempDir finds it.
 func Temp(env procenv.Env) string {
 	if env == nil {

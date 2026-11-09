@@ -61,3 +61,13 @@ func TestTheWindowsTempIsGetTempPaths(t *testing.T) {
 		})
 	}
 }
+
+// The state folder is %LocalAppData%, whatever XDG's variable says, and none is an error.
+func TestTheWindowsStateFolderIsLocalAppData(t *testing.T) {
+	if got, err := State(procenv.Env{`LOCALAPPDATA=C:\Users\u\AppData\Local`, `XDG_STATE_HOME=C:\xdg`}); err != nil || got != `C:\Users\u\AppData\Local` {
+		t.Errorf("State = %q, %v", got, err)
+	}
+	if got, err := State(procenv.Env{}); err == nil {
+		t.Errorf("State with no LocalAppData = %q, want an error", got)
+	}
+}

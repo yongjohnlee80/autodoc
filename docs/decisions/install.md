@@ -96,7 +96,13 @@ Update is hidden while the start's look for a newer release is out, and when it 
 latest. It stays when that look had no answer (offline, the preference off, a build that is not a
 release): AutoDoc can't say then that there is nothing to update to.
 
-In the code: `internal/install`, `tui/update.go`, `tui/startup.go`, `app/relaunch.go`
+On Windows, Update runs the record's `update.ps1` the same way, with PowerShell
+(`-NoProfile -ExecutionPolicy Bypass -File`). Windows has no exec, so the restart starts the new
+binary on the same console and handles, waits for it, and exits with its exit code. The old process
+stays until the new one ends, and whoever waits on it sees the new binary's exit code.
+
+In the code: `internal/install`, `tui/update.go`, `tui/startup.go`, `app/relaunch.go`,
+`internal/proctree` (`Replace`)
 
 ## Windows
 

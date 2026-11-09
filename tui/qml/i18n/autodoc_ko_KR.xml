@@ -5525,8 +5525,8 @@ WHAT A KEY NEEDS
         <translation>업데이트: 이 AutoDoc은 install-autodoc.sh로 설치되지 않았습니다. 설치한 방법으로 업데이트하세요</translation>
     </message>
     <message id="autodoc.notice.update.the_update_exited">
-        <source>Update: update.sh exited %1; its tab in the terminal panel says why</source>
-        <translation>업데이트: update.sh가 %1(으)로 종료되었습니다. 이유는 터미널 패널의 탭에 있습니다</translation>
+        <source>Update: %2 exited %1; its tab in the terminal panel says why</source>
+        <translation>업데이트: %2가 %1(으)로 종료되었습니다. 이유는 터미널 패널의 탭에 있습니다</translation>
     </message>
     <message id="autodoc.notice.update.update">
         <source>Update</source>
