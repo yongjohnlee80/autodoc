@@ -18,16 +18,16 @@ func detach(cmd *exec.Cmd) {
 	cmd.SysProcAttr.CreationFlags |= windows.CREATE_NEW_PROCESS_GROUP | windows.DETACHED_PROCESS | windows.CREATE_NO_WINDOW
 }
 
-// stillActive is GetExitCodeProcess's code for a process that has not ended (STILL_ACTIVE).
-const stillActive = 259
-
-// alive is whether pid exists and has not ended: its handle opened for a query, its exit code read.
+// alive is whether pid exists and has not ended: its handle, opened to wait on, is not yet
+// signalled (a zero-time wait). The exit code cannot tell: STILL_ACTIVE (259) is also the code of a
+// process that ended with 259, which a handle held anywhere keeps, pid and all. A pid that cannot be
+// opened (none, or another user's) is not alive, as signal 0's error makes it on Unix.
 func alive(pid int) bool {
-	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
+	h, err := windows.OpenProcess(windows.SYNCHRONIZE, false, uint32(pid))
 	if err != nil {
 		return false
 	}
 	defer windows.CloseHandle(h)
-	var code uint32
-	return windows.GetExitCodeProcess(h, &code) == nil && code == stillActive
+	ev, err := windows.WaitForSingleObject(h, 0)
+	return err == nil && ev == uint32(windows.WAIT_TIMEOUT)
 }
