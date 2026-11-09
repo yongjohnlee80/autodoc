@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // PREFERENCES — what the TUI keeps between runs, in the daemon's store (preference.list and
@@ -147,14 +148,28 @@ type prefs struct {
 	agentEdge string
 	// values are the features' own preferences (ValuePref), by name: read with Value
 	values map[string]string
-	// rows are the declared rows by name, so Value reads any of them; nil before the store is read
-	rows map[string]PrefSpec
 }
 
-// Value is the preference name as stored: a row's value (a typed row's from its field), or a
-// feature's own (ValuePref); "" for a name no row declares. PrefsView's.
+// hostRows are the host's own rows, bound to prefs' fields (BoundPref), by name: every one of them,
+// whichever program asks, so Value reads a field-bound preference from any prefs, a store's or a
+// cell's own. They are built once and never change.
+var hostRows = sync.OnceValue(func() map[string]PrefSpec {
+	m := map[string]PrefSpec{}
+	for _, rows := range [][]PrefSpec{legacyPrefRows(nil, false), legacyPrefRows(nil, true), terminalPrefRows(nil),
+		{panelKeysRow()}, agentPrefRows(nil), agentBellRows()} {
+		for _, s := range rows {
+			if !s.byName {
+				m[s.Name] = s
+			}
+		}
+	}
+	return m
+})
+
+// Value is the preference name as stored: a host's row's from its field, or a feature's own
+// (ValuePref); "" for a name no row declares. PrefsView's.
 func (p prefs) Value(name string) string {
-	if s, ok := p.rows[name]; ok && !s.byName && s.value != nil {
+	if s, ok := hostRows()[name]; ok {
 		return s.value(p)
 	}
 	return p.values[name]
@@ -171,16 +186,6 @@ func (p *prefs) SetValue(name, v string) {
 		p.values = map[string]string{}
 	}
 	p.values[name] = v
-}
-
-// keepRows lets Value read every one of rows by its name.
-func (p *prefs) keepRows(rows ...[]PrefSpec) {
-	p.rows = map[string]PrefSpec{}
-	for _, rs := range rows {
-		for _, s := range rs {
-			p.rows[s.Name] = s
-		}
-	}
 }
 
 // asPrefs is the host's preferences a row's closure was given (a prefs, or the *prefs being read).
@@ -200,7 +205,6 @@ func defaultPrefsFor(gui bool) prefs {
 	readRows(&p, nil, legacyPrefRows(nil, gui))
 	readRows(&p, nil, terminalPrefRows(nil))
 	readRows(&p, nil, agentPrefRows(nil))
-	p.keepRows(legacyPrefRows(nil, gui), terminalPrefRows(nil), agentPrefRows(nil))
 	return p
 }
 
@@ -404,7 +408,6 @@ func (h *Host) loadPrefs() {
 		values = migrateLinksPanel(values) // readRows reads the explorer's edge from it too
 		p := prefsForPanels(values, h.gui, h.panelSpecs())
 		readRows(&p, values, h.prefRows) // the features' own rows too
-		p.keepRows(h.prefRows)
 		h.applyPrefs(p)
 		h.startOnce()
 		h.luaPrefsRead = true
