@@ -17,7 +17,7 @@ import (
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
-	"github.com/yongjohnlee80/autodoc/internal/peercred"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // THE EDITOR SOCKET (docs/decisions/crew.md#the-editor-socket): the page's functions as tools for
@@ -101,7 +101,7 @@ func (h *Host) startEditorSocket(dir string) {
 	}
 	// another user's process is closed unanswered, as at the daemon's socket; the folder already
 	// keeps it out, so this is the second lock
-	srv := golibrpc.New(msgpackrpc.New(nil), golibrpc.WithListener(peercred.Listener(ln, nil)))
+	srv := golibrpc.New(msgpackrpc.New(nil), golibrpc.WithListener(ipc.Listener(ln, nil)))
 	for verb, handler := range h.editorVerbs() {
 		srv.Handle(verb, handler)
 	}

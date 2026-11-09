@@ -64,7 +64,7 @@ func bindPrivate(path string) (net.Listener, error) {
 
 // ownSocket makes the bound socket 0600 (the file is the access control: no login locally), keeps
 // closing the listener from unlinking it by name, and takes its identity. The mode is a second
-// lock: the daemon also refuses a connection from another user (peercred.Listener).
+// lock: the daemon also refuses a connection from another user (ipc.Listener).
 func ownSocket(ln net.Listener, path string) (socketIdentity, error) {
 	if err := os.Chmod(path, 0o600); err != nil {
 		return socketIdentity{}, fmt.Errorf("chmod %s: %w", path, err)

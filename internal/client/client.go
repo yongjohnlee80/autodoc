@@ -12,7 +12,7 @@ import (
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
-	"github.com/yongjohnlee80/autodoc/internal/peercred"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -222,7 +222,7 @@ func (s *Session) heldBack(since time.Time) bool {
 // handoff stands (heldBack), it only dials, the probe window suspended, and connects as soon as
 // that restart's daemon answers; once the handoff ends, dies, lapses or reaches this Connect's
 // cap, a full window starts, with the spawn allowed. ctx ends it at any point, and so does a socket
-// another user's process listens on (peercred.ErrOtherUser), at once.
+// another user's process listens on (ipc.ErrOtherUser), at once.
 func (s *Session) Connect(ctx context.Context) error {
 	s.mu.Lock()
 	old := s.client
@@ -246,7 +246,7 @@ func (s *Session) Connect(ctx context.Context) error {
 		if err == nil {
 			break
 		}
-		if errors.Is(err, peercred.ErrOtherUser) {
+		if errors.Is(err, ipc.ErrOtherUser) {
 			return err // another user's process holds the socket: no wait or spawn makes it this user's
 		}
 		switch {
@@ -359,9 +359,9 @@ func (s *Session) mismatch(ctx context.Context) error {
 }
 
 // dial connects to the daemon's socket, refusing one another user's process listens on
-// (peercred.ErrOtherUser): every connection of the session's is dialled here.
+// (ipc.ErrOtherUser): every connection of the session's is dialled here.
 func (s *Session) dial(ctx context.Context) (*golibrpc.Client, error) {
-	return golibrpc.Dial(ctx, s.address(), msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"), golibrpc.WithConnDialer(peercred.Dial))
+	return golibrpc.Dial(ctx, s.address(), msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"), golibrpc.WithConnDialer(ipc.Dial))
 }
 
 func (s *Session) probe(ctx context.Context) (OlderServer, error) {

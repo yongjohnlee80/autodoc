@@ -16,7 +16,7 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
-	"github.com/yongjohnlee80/autodoc/internal/peercred"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // TestAgentsReachThePageThroughTheEditorSocket: an agent's call is refused until the user allows
@@ -283,7 +283,7 @@ func TestTheTokenRegistryIsTheLoops(t *testing.T) {
 }
 
 // TestTheEditorSocketServesOnlyItsUsersProcesses: the editor socket closes, unanswered, a
-// connection from another user's process (played: peercred.PlayUser), as the daemon's does; the
+// connection from another user's process (played: ipc.PlayUser), as the daemon's does; the
 // control, this user's, is answered.
 func TestTheEditorSocketServesOnlyItsUsersProcesses(t *testing.T) {
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
@@ -294,7 +294,7 @@ func TestTheEditorSocketServesOnlyItsUsersProcesses(t *testing.T) {
 	r.connected(t)
 	path := onLoop(r, r.h.editorSocketPath)
 
-	restore := peercred.PlayUser(os.Getuid() + 1)
+	restore := ipc.PlayUser(os.Getuid() + 1)
 	defer restore()
 	c, err := net.Dial("unix", path)
 	if err != nil {

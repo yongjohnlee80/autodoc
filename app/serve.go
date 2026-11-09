@@ -40,8 +40,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/workspace"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/internal/localfs"
-	"github.com/yongjohnlee80/autodoc/internal/peercred"
 	"github.com/yongjohnlee80/autodoc/internal/profiling"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
@@ -139,7 +139,7 @@ func (d *process) bind() error {
 	if err := d.e.MakeDataDir(); err != nil {
 		return err
 	}
-	if err := peercred.CheckDir(filepath.Dir(sock)); err != nil {
+	if err := ipc.CheckDir(filepath.Dir(sock)); err != nil {
 		return fmt.Errorf("bind %s: %w", sock, err)
 	}
 	ln, err := listen(sock)
@@ -164,7 +164,7 @@ func (d *process) bind() error {
 		_ = ln.Close()
 		return err
 	}
-	d.ln = peercred.Listener(ln, func(err error) { logger.Warning(d.log, err, "refused a connection") })
+	d.ln = ipc.Listener(ln, func(err error) { logger.Warning(d.log, err, "refused a connection") })
 	d.stops.push(func() { removeIfStillOurs(sock, id) })
 	return nil
 }
@@ -410,12 +410,12 @@ func crewWakers(m *crew.Manager) map[string]crew.Waker {
 }
 
 // peerProc is crew's PeerProc from the kernel's peer credentials: c's peer must run as this user
-// (peercred.Check), and its process (peercred.PeerPID) is answered as its reference (crew.ProcRef).
+// (ipc.Check), and its process (ipc.PeerPID) is answered as its reference (crew.ProcRef).
 func peerProc(c net.Conn) (string, error) {
-	if err := peercred.Check(c); err != nil {
+	if err := ipc.Check(c); err != nil {
 		return "", err
 	}
-	pid, err := peercred.PeerPID(c)
+	pid, err := ipc.PeerPID(c)
 	if err != nil {
 		return "", err
 	}

@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yongjohnlee80/autodoc/internal/peercred"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // TestASocketInAFolderOthersCanWriteIsRefused: a server.socket in a folder its group or others can
@@ -35,7 +35,7 @@ func TestASocketInAFolderOthersCanWriteIsRefused(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		err := runServe(ctx, writeConfig(t, sock, filepath.Join(dir, "state"), ""), io.Discard, testBuild, nil, "")
 		cancel()
-		var unsafe *peercred.UnsafeDirError
+		var unsafe *ipc.UnsafeDirError
 		if !errors.As(err, &unsafe) || unsafe.Dir != shared {
 			t.Fatalf("mode %v: %v, want an UnsafeDirError naming %s", mode, err, shared)
 		}
@@ -69,7 +69,7 @@ func TestTheSocketIsBornPrivate(t *testing.T) {
 }
 
 // TestTheDaemonServesOnlyItsUsersProcesses: the daemon closes, unanswered, a connection from
-// another user's process (played: peercred.PlayUser), and logs the refusal; the control, this
+// another user's process (played: ipc.PlayUser), and logs the refusal; the control, this
 // user's, is answered.
 func TestTheDaemonServesOnlyItsUsersProcesses(t *testing.T) {
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
@@ -79,7 +79,7 @@ func TestTheDaemonServesOnlyItsUsersProcesses(t *testing.T) {
 	sock := filepath.Join(dir, "a.sock")
 	d := start(t, writeConfig(t, sock, filepath.Join(dir, "state"), ""), sock)
 
-	restore := peercred.PlayUser(os.Getuid() + 1)
+	restore := ipc.PlayUser(os.Getuid() + 1)
 	defer restore()
 	c, err := net.Dial("unix", sock)
 	if err != nil {

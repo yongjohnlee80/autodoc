@@ -1,6 +1,6 @@
 //go:build !linux && !darwin
 
-package peercred
+package ipc
 
 import "net"
 
