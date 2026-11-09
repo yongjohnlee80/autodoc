@@ -737,10 +737,14 @@ func TestClearingAndClosingAWaitingSearchCancelsItsRequest(t *testing.T) {
 	if _, err := r.h.session.Call(context.Background(), "embedding.use", "local"); err != nil {
 		t.Fatal(err)
 	}
-	r.h.p.Post(func() {
-		r.h.showProgress(1, 0, embedProgress{on: true, semantic: "partial", texts: 1, pending: 1}, 1)
-		r.h.searchLive("unrelatedquery")
+	// The daemon's own poll, not a made-up one: the provider in use and its text pending (the
+	// provider is held). A made-up pending state lasts only until the next poll, which ends the
+	// waiting toast when it reports no work yet (progress.go), so under load the toast could
+	// close before a frame drew it.
+	r.s.WaitFor(t, "the TUI polled the provider in use, its text pending", func(string) bool {
+		return onLoop(r, func() bool { return r.h.prog.emb.on && r.h.prog.emb.model != "" && r.h.prog.emb.working() > 0 })
 	})
+	r.h.p.Post(func() { r.h.searchLive("unrelatedquery") })
 	r.s.WaitForText(t, "search in kb is waiting: 1 texts still embedding")
 	r.h.p.Post(func() { r.h.searchLive("") })
 	r.s.WaitForText(t, "search cleared")
