@@ -159,13 +159,6 @@ func TestAnAgentIsToldOfAWorkspaceSwitch(t *testing.T) {
 	}
 }
 
-// switchTo enters ws and waits for it.
-func (r *running) switchTo(t *testing.T, ws string) {
-	t.Helper()
-	r.h.p.Post(func() { r.h.enter(ws) })
-	r.s.WaitFor(t, ws+" entered", func(string) bool { return onLoop(r, func() bool { return r.h.ws == ws }) })
-}
-
 // TestTheSwitchIsCoalesced (docs/decisions/crew.md#one-coalesced-switch-per-agent): an agent is
 // told one switch from the workspace it last saw to the one in use, however many came between. kb →
 // notes → other is one, kb → other; back to the one it saw is none; a rename (the same root) is

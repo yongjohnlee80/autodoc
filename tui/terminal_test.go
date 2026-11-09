@@ -81,43 +81,6 @@ func TestTerminalExistingGeometryPreferencesReadBack(t *testing.T) {
 	}
 }
 
-// shellTabs are the terminal panel's tabs, a snapshot taken on the loop.
-func (r *running) shellTabs() []terminal.TerminalTab {
-	return onLoop(r, func() []terminal.TerminalTab {
-		c, _ := r.h.p.Find("terminalView")
-		tabs, ok := tuidecl.TerminalTabsOf(c)
-		if !ok {
-			return nil
-		}
-		return tabs.Tabs()
-	})
-}
-
-// shellsRunning is how many of the terminal's shells run.
-func (r *running) shellsRunning() int {
-	n := 0
-	for _, tab := range r.shellTabs() {
-		if tab.Running {
-			n++
-		}
-	}
-	return n
-}
-
-func (r *running) termShown() bool {
-	return onLoop(r, func() bool { return r.h.panelOpen["terminal"] })
-}
-
-// frameAt is the row and column of the terminal's frame corner, -1s when it is not on screen.
-func frameAt(screen string) (row, column int) {
-	for y, l := range strings.Split(screen, "\n") {
-		if c := col(l, "┌ terminal"); c >= 0 {
-			return y, c
-		}
-	}
-	return -1, -1
-}
-
 func TestTheTerminalTogglesFromTheLeaderAndGivesTheKeyboardBack(t *testing.T) {
 	t.Parallel()
 	_, r := runShellTUI(t, nil)
@@ -880,10 +843,6 @@ func TestF11WorksWithTheKeyboardInTheShell(t *testing.T) {
 	}
 	r.keys(t, decltest.Type("echo f11-never-sent-$((40+6))\r")...)
 	r.s.WaitForText(t, "f11-never-sent-46")
-}
-
-func maximizedNow(maximized func() bool, want bool) func(string) bool {
-	return func(string) bool { return maximized() == want }
 }
 
 // clickMenuRow opens the open panel's ≡ menu with the pointer and clicks its row label.

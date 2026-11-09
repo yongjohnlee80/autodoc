@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"unicode/utf8"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
@@ -15,18 +14,6 @@ import (
 // hintProbe is the start of the normal-mode hint as the strip draws it (terminalkeymap.go): the mode
 // key's name, which a narrow strip keeps when it cuts the rest.
 const hintProbe = "Ctrl+T or i"
-
-// cellOf is where text first shows on the screen sc: its column and row.
-func cellOf(t *testing.T, sc, text string) (x, y int) {
-	t.Helper()
-	for row, line := range strings.Split(sc, "\n") {
-		if i := strings.Index(line, text); i >= 0 {
-			return utf8.RuneCountInString(line[:i]), row
-		}
-	}
-	t.Fatalf("%q is not on the screen:\n%s", text, sc)
-	return 0, 0
-}
 
 // catInTheTerminal opens the terminal panel on a shell with a page of output, then runs cat -v, which
 // prints every line it reads: a key typed reaches the program when its line comes back from cat.
@@ -118,16 +105,6 @@ func TestATextUsersAgentNormalModeSaysHowToGetBack(t *testing.T) {
 	r.s.WaitForText(t, hintProbe)
 	r.keys(t, ctrlKey('t'))
 	r.s.WaitFor(t, "back to typing", func(sc string) bool { return !strings.Contains(sc, hintProbe) })
-}
-
-// windowControl presses a panel's strip control, "_", "+" or "x", at the strip's right end: the first
-// strip on screen with them.
-func windowControl(t *testing.T, r *running, which string) {
-	t.Helper()
-	x, y := cellOf(t, r.s.String(), "_  +  x") // side by side, three cells apart
-	x += map[string]int{"_": 0, "+": 3, "x": 6}[which]
-	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y},
-		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x, Y: y})
 }
 
 // The terminal's strip ends in _ and x: _ hides the panel with its shell running on; x asks once while

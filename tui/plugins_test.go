@@ -29,6 +29,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/style"
 
+	"github.com/yongjohnlee80/autodoc/internal/proctree"
 	"github.com/yongjohnlee80/autodoc/plugin"
 )
 
@@ -223,9 +224,7 @@ func runTestPlugin(mode string) int {
 
 // testStdio is the plugin's stdin and stdout, pollable, as plugin.Serve makes them.
 func testStdio() net.Conn {
-	for _, fd := range []int{0, 1} {
-		_ = syscall.SetNonblock(fd, true)
-	}
+	setStdioPollable()
 	return plugin.FileConn(os.NewFile(0, "stdin"), os.NewFile(1, "stdout"))
 }
 
@@ -588,7 +587,7 @@ func (r *running) waitNotice(t *testing.T, text string) {
 	}
 }
 
-func pidAlive(pid int) bool { return syscall.Kill(pid, 0) == nil }
+func pidAlive(pid int) bool { return proctree.Alive(pid) }
 
 // TestThePluginsMenuListsThePluginsFolder: each plugin is an entry, one that cannot run is listed
 // disabled with why, and a directory with no plugin.toml, or a clone being added, is not listed.

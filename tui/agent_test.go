@@ -50,9 +50,6 @@ done
 	return p, report
 }
 
-// agentConfig is the config the agent tests' TUI runs on: not the default, and one word only quoted.
-const agentConfig = "/a config's dir/autodoc.toml"
-
 // runAgentTUI runs the TUI with the profiles given, the default named def, its agent folder dir, on
 // agentConfig, with no autodoc installed: the autodoc it hands its agent is a fake that writes the
 // arguments it is called with to calls.
@@ -102,28 +99,6 @@ func runAgentTUIIn(t *testing.T, dir string, profiles []agentProfile, def string
 		})
 	})
 	return d, r, calls
-}
-
-func (r *running) agentRunningNow() bool {
-	return onLoop(r, func() bool {
-		for _, entry := range r.h.agents.AgentEntries() {
-			if entry.Ref.Codename == r.h.agents.selectedAgent {
-				return entry.Running
-			}
-		}
-		return false
-	})
-}
-
-func (r *running) noticed(text string) bool {
-	return onLoop(r, func() bool {
-		for _, n := range r.h.noticeLog.items {
-			if strings.Contains(n.text, text) {
-				return true
-			}
-		}
-		return false
-	})
 }
 
 func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.T) {
