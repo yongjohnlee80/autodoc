@@ -13,6 +13,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/export"
 	"github.com/yongjohnlee80/autodoc/core/lab"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // A NOTE'S EMBEDS IN THE RENDERED VIEW, under --gui. In the note editor (NoteRenderer), a line that
@@ -67,7 +68,7 @@ func (n *NoteEmbeds) file() string {
 // note editor declares NoteRenderer, which golib's style alone has no renderer for: a window
 // running AutoDoc's layout takes its style from here, or its note editor has no Rendered view.
 func GUIStyle(notes *NoteEmbeds, opts ...guidecl.NativeOption) tuidecl.Style {
-	note := guidecl.WithRendererFor(NoteRendererKind, noteRenderer(notes))
+	note := guidecl.WithRendererFor(feature.NoteRendererKind, noteRenderer(notes))
 	return guidecl.Native(append([]guidecl.NativeOption{note, guidecl.WithMarkdownOptions(guiwidget.WithHideMetadata())}, opts...)...)
 }
 
@@ -84,7 +85,7 @@ func (n *NoteEmbeds) Renderer(chain guiwidget.Diagrammer) func(tuidecl.RendererS
 	return func(s tuidecl.RendererSpec) guiwidget.Renderer {
 		var m tuidecl.MarkdownSpec
 		switch spec := s.(type) {
-		case NoteRendererSpec:
+		case feature.NoteRendererSpec:
 			m = spec.MarkdownSpec
 		case tuidecl.MarkdownSpec:
 			m = spec

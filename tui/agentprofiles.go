@@ -9,6 +9,7 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE AGENT PROFILES — System › Agent profiles…: the profiles, each a name and a command, the
@@ -24,7 +25,7 @@ func (h *agents) openAgentProfiles() {
 // listAgents shows the profiles, the default marked, and keeps the cursor on a row that exists.
 func (h *agents) listAgents() {
 	profiles, def := h.profiles(), h.defaultProfile()
-	rows := make([]rowOf, len(profiles))
+	rows := make([]feature.RowOf, len(profiles))
 	for i, a := range profiles {
 		mark := ""
 		if a.Codename == def {
@@ -33,7 +34,7 @@ func (h *agents) listAgents() {
 		if instance := h.instances[a.Codename]; instance != nil && instance.running {
 			mark += "▶"
 		}
-		rows[i] = rowOf{"key": a.Codename, "default": mark, "name": a.Name, "codename": a.Codename,
+		rows[i] = feature.RowOf{"key": a.Codename, "default": mark, "name": a.Name, "codename": a.Codename,
 			"command": a.Command}
 	}
 	h.agentRows.Reset(rows)
@@ -120,14 +121,14 @@ func (h *agents) kindList() *tuidecl.ListModel {
 }
 
 // kindChoices are the dropdown's rows, agentKinds' order: the command's first, then each CLI by name.
-func (h *agents) kindChoices() []rowOf {
-	rows := make([]rowOf, len(agentKinds))
+func (h *agents) kindChoices() []feature.RowOf {
+	rows := make([]feature.RowOf, len(agentKinds))
 	for i, k := range agentKinds {
 		label := agentKindLabel(k)
 		if k == "" {
 			label = h.c.Tr("autodoc.text.agentprofiles.kind_from_the_command")
 		}
-		rows[i] = rowOf{"key": k, "label": label}
+		rows[i] = feature.RowOf{"key": k, "label": label}
 	}
 	return rows
 }
@@ -287,7 +288,7 @@ func (h *agents) removeAgent(i int) {
 	if !ok {
 		return
 	}
-	h.c.Ask(Question{
+	h.c.Ask(feature.Question{
 		Title: h.c.Tr("autodoc.question.agentprofiles.remove_the_agent_profile"),
 		Text:  h.c.Trf("autodoc.question.agentprofiles.remove_the_saved_profile", strconv.Quote(a.Name)),
 		Yes:   h.c.Tr("autodoc.question.agentprofiles.yes_remove_it"),

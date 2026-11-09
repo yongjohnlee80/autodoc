@@ -32,6 +32,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE WRITING SCREEN — the page alone until asked for more, centred at the ruler; the panels as
@@ -212,7 +213,7 @@ func TestAToastClickedOpensTheNotificationsHistory(t *testing.T) {
 	}
 	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y},
 		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x, Y: y})
-	r.s.WaitFor(t, "the history open", func(string) bool { return onLoop(r, func() bool { return r.h.noticeLog.shown }) })
+	r.s.WaitFor(t, "the history open", func(string) bool { return onLoop(r, func() bool { return r.h.noticeLog.Shown }) })
 	r.s.WaitForText(t, "TIME")
 }
 
@@ -329,7 +330,10 @@ func TestThePanelsAreDrawersOverAStillPage(t *testing.T) {
 	r.s.WaitFor(t, "the bar hidden, the page back", func(string) bool { x, y := where(); return x == x0 && y == y0 })
 
 	// at the bottom now, SPC l opens it on its Links tab, the heading the tab's
-	onLoop(r, func() bool { r.h.choosePrefNamed(prefExplorer, slices.Index(edges, "bottom")); return true })
+	onLoop(r, func() bool {
+		r.h.choosePrefNamed(feature.PrefExplorer, slices.Index(feature.Edges, "bottom"))
+		return true
+	})
 	r.leader(t, 'l')
 	r.s.WaitForText(t, "links (1) · d depth")
 	for i, row := range strings.Split(r.s.String(), "\n") {
@@ -749,7 +753,7 @@ func TestClearingAndClosingAWaitingSearchCancelsItsRequest(t *testing.T) {
 	r.s.WaitForText(t, "search in kb is waiting: 1 texts still embedding")
 	r.h.p.Post(func() { r.h.searchLive("") })
 	r.s.WaitForText(t, "search cleared")
-	if count := onLoop(r, func() int { return r.h.searchPick.list.Len() }); count != 0 {
+	if count := onLoop(r, func() int { return r.h.searchPick.List.Len() }); count != 0 {
 		t.Errorf("clearing search left %d hits", count)
 	}
 	r.h.p.Post(func() { r.h.searchLive("unrelatedquery") })
@@ -789,7 +793,7 @@ func TestSemanticQueryErrorNotifiesOfWordsOnlyFallback(t *testing.T) {
 				r.h.lastSearchError == "semantic search could not answer in kb; results are by words only"
 		})
 	})
-	if hits := onLoop(r, func() int { return r.h.searchPick.list.Len() }); hits == 0 {
+	if hits := onLoop(r, func() int { return r.h.searchPick.List.Len() }); hits == 0 {
 		t.Error("query error dropped lexical results")
 	}
 }
@@ -893,7 +897,7 @@ func TestSearchFailureClearsStaleHitsAndSaysWhy(t *testing.T) {
 	r.s.WaitForText(t, "hits (1) · lexical")
 	r.h.p.Post(func() { r.h.ws = "missing"; r.h.searchLive("zebra") })
 	r.s.WaitForText(t, "search in missing is unavailable")
-	if count := onLoop(r, func() int { return r.h.searchPick.list.Len() }); count != 0 {
+	if count := onLoop(r, func() int { return r.h.searchPick.List.Len() }); count != 0 {
 		t.Fatalf("%d hits survived a failed search", count)
 	}
 }
@@ -1099,7 +1103,7 @@ func TestEveryCommandRefusesArgumentsNotItsOwn(t *testing.T) {
 	// each list is one no command takes: a Host with no program would panic running any
 	bad := [][]qml.SpecValue{{s, b}, {b, b}, {b, b, b, b}, {frac}, {frac, s}, {s, s, s, b}, {s, s, s, s, b}}
 	for name, c := range h.commands() {
-		fn := c.handler(name)
+		fn := c.Handler(name)
 		for _, args := range bad {
 			if err := fn(args); err == nil {
 				t.Errorf("%s accepted %v", name, args)
@@ -1142,11 +1146,11 @@ func TestAListingThatFailsSaysSo(t *testing.T) {
 func TestAHitOpensWhereItIsAfterJoinedCharacters(t *testing.T) {
 	t.Parallel()
 	joined := "# A\r\n\r\ncafé \U0001F468‍\U0001F469‍\U0001F467 x\r\n\r\n## Birds\r\n\r\nkestrel notes\r\n"
-	if got, want := cursorAt(joined, strings.Index(joined, "## Birds")), 3+1+1+8+1+1; got != want {
+	if got, want := feature.CursorAt(joined, strings.Index(joined, "## Birds")), 3+1+1+8+1+1; got != want {
 		t.Errorf("cursorAt before ## Birds = %d, want %d (3, a break, a break, 8 characters, a break, a break)", got, want)
 	}
 	// a byte inside a character is that character: the one after e starts the accent, which is é's
-	if got := cursorAt("xe\u0301y", strings.Index("xe\u0301y", "\u0301")); got != 1 {
+	if got := feature.CursorAt("xe\u0301y", strings.Index("xe\u0301y", "\u0301")); got != 1 {
 		t.Errorf("cursorAt inside é = %d, want 1 (é's start)", got)
 	}
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", joined}})
@@ -1482,7 +1486,7 @@ func TestEveryPreferenceIsKept(t *testing.T) {
 	stored("tui.menu.autohide", "true")
 	post(func() { r.h.choosePrefNamed(prefStatus, 1) }) // no: hidden
 	stored("tui.status.shown", "false")
-	post(func() { r.h.choosePrefNamed(prefExplorer, 2) })
+	post(func() { r.h.choosePrefNamed(feature.PrefExplorer, 2) })
 	stored("tui.explorer.edge", "top")
 	// light by name: its place is golib's order, which moves as golib ships more themes
 	post(func() { r.h.choosePrefNamed(themePref(r.h.gui), slices.Index(r.h.themeNames(), "light")) })
@@ -1713,8 +1717,8 @@ func TestVectorsListsTheModelsAndPurgesAnUnusedOne(t *testing.T) {
 	// (docs/decisions/store.md#when-a-model-is-reclaimed)
 	r.s.WaitFor(t, "other active, embedder reclaimed", func(string) bool {
 		v, _ := r.h.session.Call(ctx, "index.models", "kb")
-		ms := asList(v)
-		return len(ms) == 1 && str(asMap(ms[0]), "name") == "other" && str(asMap(ms[0]), "state") == "active"
+		ms := feature.AsList(v)
+		return len(ms) == 1 && feature.Str(feature.AsMap(ms[0]), "name") == "other" && feature.Str(feature.AsMap(ms[0]), "state") == "active"
 	})
 	settled("other covering the notes")
 	r.h.p.Post(r.h.cancelIndexing)
@@ -2172,8 +2176,8 @@ func TestNotificationsAndTheStatusLine(t *testing.T) {
 	})
 	kept := onLoop(r, func() []string {
 		var out []string
-		for _, n := range r.h.noticeLog.items {
-			out = append(out, n.text)
+		for _, n := range r.h.noticeLog.Items {
+			out = append(out, n.Text)
 		}
 		return out
 	})
@@ -2393,8 +2397,8 @@ func TestASearchWaitingOnEmbeddingSaysWhenItFinishes(t *testing.T) {
 	// read on the loop after the post: a done toast may already be gone from the screen, the
 	// history keeps it
 	said, waiting := onLoop(r, func() (n int) {
-		for _, m := range r.h.noticeLog.items {
-			if m.text == "embedding finished; search is refreshing in kb" {
+		for _, m := range r.h.noticeLog.Items {
+			if m.Text == "embedding finished; search is refreshing in kb" {
 				n++
 			}
 		}

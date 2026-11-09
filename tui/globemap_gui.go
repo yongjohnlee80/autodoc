@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/gio/f32"
 	graphlayout "github.com/yongjohnlee80/golib/graph/layout"
 	"github.com/yongjohnlee80/golib/gui"
@@ -452,7 +453,7 @@ var closedChan = func() chan struct{} { c := make(chan struct{}); close(c); retu
 // globeMap is the GlobeMap feature: its loads, fenced and paced by what the window presents (load),
 // and the viewer's pan and zoom.
 type globeMap struct {
-	c         Core
+	c         feature.Core
 	page      int                   // documents per page of the map (seams.go: globeMapPage); 0 is the daemon's
 	present   func() globePublisher // the publisher, made when the panel first opens
 	pres      *globeStream
@@ -490,7 +491,7 @@ type globeDrag struct {
 	moved     bool
 }
 
-func newGlobeMap(c Core, present func() globePublisher, page int) *globeMap {
+func newGlobeMap(c feature.Core, present func() globePublisher, page int) *globeMap {
 	g := &globeMap{c: c, page: page, present: present, hover: -1}
 	g.editor = &groupEditor{c: c, view: viewGlobeMap, name: "globe", changed: g.groupsEdited,
 		ground: func() color.NRGBA { return g.currentLook().pal.background }}
@@ -523,14 +524,14 @@ func (g *globeMap) groupsEdited(list []relGroup) {
 
 func (*globeMap) Name() string { return "globemap" }
 
-func (g *globeMap) Panels() []PanelSpec {
-	return []PanelSpec{{ID: globeMapPanelID, View: globeMapViewID, Priority: 70, Icon: "❂",
-		Edge: func(PrefsView) string { return "center" },
-		Opened: func(PanelHost) {
+func (g *globeMap) Panels() []feature.PanelSpec {
+	return []feature.PanelSpec{{ID: globeMapPanelID, View: globeMapViewID, Priority: 70, Icon: "❂",
+		Edge: func(feature.PrefsView) string { return "center" },
+		Opened: func(feature.PanelHost) {
 			g.open, g.filter = true, g.prefFilter() // it opens following the links its settings choose
 			g.load()
 		},
-		Closed: func(c PanelHost) {
+		Closed: func(c feature.PanelHost) {
 			g.open, g.drag = false, nil // a gesture ends with its panel (its capture is lost as it hides)
 			g.stop()                    // the load under way ends, and what it still hands over is dropped
 			g.told(g.c.Tr("autodoc.notice.globemap_gui.globemap_closed_before_it_settled"))
@@ -544,15 +545,15 @@ func (g *globeMap) State() map[string]any {
 	return st
 }
 
-func (g *globeMap) Commands() map[string]Command {
+func (g *globeMap) Commands() map[string]feature.Command {
 	m := g.settingsCommands()
-	m["App.toggleGlobeMap"] = none(g.toggle)
+	m["App.toggleGlobeMap"] = feature.None(g.toggle)
 	return m
 }
 
-func (g *globeMap) Catalog() []Entry {
-	return []Entry{builtin("globemap.toggle", "the GlobeMap", "App.toggleGlobeMap()", g.toggle),
-		builtin("globemap.settings", "the GlobeMap's settings", "App.openGlobeSettings()", g.openSettings)}
+func (g *globeMap) Catalog() []feature.Entry {
+	return []feature.Entry{feature.Builtin("globemap.toggle", "the GlobeMap", "App.toggleGlobeMap()", g.toggle),
+		feature.Builtin("globemap.settings", "the GlobeMap's settings", "App.openGlobeSettings()", g.openSettings)}
 }
 
 func (g *globeMap) toggle() { g.c.TogglePanel(globeMapPanelID) }
@@ -624,7 +625,7 @@ func (g *globeMap) sendView(size gui.Size, force bool) {
 func (g *globeMap) load() {
 	g.stop()
 	ws, filter := g.c.Workspace(), g.filter
-	tk := g.c.Ticket(&g.seq, TicketWorkspace)
+	tk := g.c.Ticket(&g.seq, feature.TicketWorkspace)
 	if ws == "" {
 		g.cur, g.status = nil, "autodoc.text.globemap_gui.no_workspace_enter_one_to_see_its_map"
 		g.title()

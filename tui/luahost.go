@@ -11,6 +11,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 
 	"github.com/yongjohnlee80/autodoc/script"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -51,10 +52,10 @@ import (
 type luaHost interface {
 	copyText(text string) bool
 	readText(done func(text string, err error)) error
-	agentEntries() []AgentEntry
-	sendText(to AgentRef, text string, done func(error)) error
-	sendRequest(to AgentRef, subject, body string, done func(error)) error
-	resumeAgent(to AgentRef) error
+	agentEntries() []feature.AgentEntry
+	sendText(to feature.AgentRef, text string, done func(error)) error
+	sendRequest(to feature.AgentRef, subject, body string, done func(error)) error
+	resumeAgent(to feature.AgentRef) error
 	post(fn func())
 }
 
@@ -159,27 +160,29 @@ func clipErr(err error) string {
 }
 
 // newLuaPick is the picker autodoc.ui.pick opens (LuaPick.qml).
-func (s *scripting) newLuaPick() *pick[luaItem] {
-	return &pick[luaItem]{c: s.c, dialog: "luaPicker", name: "luaPick",
-		list:   newRows(tuidecl.NewListModel("key", "label"), func(i int, x luaItem) rowOf { return rowOf{"key": fmt.Sprint(i), "label": x.label} }),
-		field:  "App.luaPickField",
-		status: "App.luaPickStatus", noun: "items",
-		match: func(x luaItem) string { return x.label },
-		preview: func(x luaItem) func(context.Context) answerOf[pane] {
-			pn := pane{title: x.label, text: x.detail}
-			return func(context.Context) answerOf[pane] { return answerOf[pane]{v: pn} }
+func (s *scripting) newLuaPick() *feature.Pick[luaItem] {
+	return &feature.Pick[luaItem]{Core: s.c, Dialog: "luaPicker", Name: "luaPick",
+		List:   feature.NewRows(tuidecl.NewListModel("key", "label"), func(i int, x luaItem) feature.RowOf { return feature.RowOf{"key": fmt.Sprint(i), "label": x.label} }),
+		Field:  "App.luaPickField",
+		Status: "App.luaPickStatus", Noun: "items",
+		Match: func(x luaItem) string { return x.label },
+		Preview: func(x luaItem) func(context.Context) feature.AnswerOf[feature.Pane] {
+			pn := feature.Pane{Title: x.label, Text: x.detail}
+			return func(context.Context) feature.AnswerOf[feature.Pane] { return feature.AnswerOf[feature.Pane]{Value: pn} }
 		},
-		scope:  TicketSession,
-		choose: func(x luaItem) { s.picked(x.value, "") },
-		cancel: s.dismissed,
-		lost:   s.dismissed,
+		Scope:  feature.TicketSession,
+		Choose: func(x luaItem) { s.picked(x.value, "") },
+		Cancel: s.dismissed,
+		Lost:   s.dismissed,
 	}
 }
 
 // Picks is autodoc.ui.pick's picker, for Picker.qml's handlers.
-func (s *scripting) Picks() map[string]picker { return map[string]picker{"luaPick": s.luaPicker()} }
+func (s *scripting) Picks() map[string]feature.Picker {
+	return map[string]feature.Picker{"luaPick": s.luaPicker()}
+}
 
-func (s *scripting) luaPicker() *pick[luaItem] {
+func (s *scripting) luaPicker() *feature.Pick[luaItem] {
 	if s.pick == nil {
 		s.pick = s.newLuaPick()
 	}
@@ -234,8 +237,8 @@ func (s *scripting) luaPick(L *lua.LState) int {
 	p := s.luaPicker()
 	s.pickCB = cb
 	s.c.Set("App.luaPickTitle", title)
-	p.setAll(all)
-	p.open()
+	p.SetAll(all)
+	p.Open()
 	return 0
 }
 
@@ -336,19 +339,19 @@ func (s *scripting) luaAgentsList(L *lua.LState) int {
 
 // luaAgentRef is argument n as an agent: a codename, or {codename=, instance=}; with optional, none
 // is the zero ref.
-func luaAgentRef(L *lua.LState, n int, verb string, optional bool) AgentRef {
+func luaAgentRef(L *lua.LState, n int, verb string, optional bool) feature.AgentRef {
 	switch r := L.Get(n).(type) {
 	case lua.LString:
-		return AgentRef{Codename: string(r)}
+		return feature.AgentRef{Codename: string(r)}
 	case *lua.LTable:
-		return AgentRef{Codename: lua.LVAsString(r.RawGetString("codename")), Instance: lua.LVAsString(r.RawGetString("instance"))}
+		return feature.AgentRef{Codename: lua.LVAsString(r.RawGetString("codename")), Instance: lua.LVAsString(r.RawGetString("instance"))}
 	case *lua.LNilType:
 		if optional {
-			return AgentRef{}
+			return feature.AgentRef{}
 		}
 	}
 	L.ArgError(n, verb+" needs an agent: a codename, or {codename=, instance=}")
-	return AgentRef{}
+	return feature.AgentRef{}
 }
 
 func (s *scripting) luaAgentsSend(L *lua.LState) int {

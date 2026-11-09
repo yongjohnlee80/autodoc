@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
@@ -133,7 +134,7 @@ func TestTheTitleNeedsNoBreadcrumbFeature(t *testing.T) {
 		return onLoop(r, func() bool { return r.h.kinds.Readable("manual.pdf") })
 	})
 	onLoop(r, func() bool {
-		r.h.reg.features = slices.DeleteFunc(r.h.reg.features, func(f Feature) bool { return f.Name() == "outline" })
+		r.h.reg.Features = slices.DeleteFunc(r.h.reg.Features, func(f feature.Feature) bool { return f.Name() == "outline" })
 		return true
 	})
 	r.h.p.Post(func() { r.h.openPath("manual.pdf") })

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
@@ -258,9 +259,9 @@ func (h *Host) bufferChord(kc editor.KeyChord) bool {
 // in its middle, its file's name kept), and no row for a slot with no buffer; then the card's other
 // keys, as cardText lists them. F1 lists the card's keys as declared (helpCards).
 func (h *Host) bufferCardText() string {
-	slot := map[string]Key{}
-	var rest []Key
-	for _, key := range h.keys.on(bufferCard) {
+	slot := map[string]feature.Key{}
+	var rest []feature.Key
+	for _, key := range h.keys.On(feature.BufferCard) {
 		if strings.HasPrefix(key.Run, "App.showBufferAt(") {
 			slot[key.Run] = key
 			continue
@@ -269,26 +270,26 @@ func (h *Host) bufferCardText() string {
 	}
 	var rows []string
 	labels := map[int]map[*openBuffer]string{} // by width: one unless a scheme gives slot keys of other widths
-	for i, b := range h.buffers[:min(len(h.buffers), bufferSlots)] {
-		key, ok := slot[bufferSlotRun(i+1)]
+	for i, b := range h.buffers[:min(len(h.buffers), feature.BufferSlots)] {
+		key, ok := slot[feature.BufferSlotRun(i+1)]
 		if !ok {
 			continue // a test's catalog of features alone declares no buffer card
 		}
-		shown := h.keys.shown(key)
-		w := cardBodyWidth - tuicore.StringWidth(shown) - 2
+		shown := h.keys.Shown(key)
+		w := feature.CardBodyWidth - tuicore.StringWidth(shown) - 2
 		if labels[w] == nil {
 			labels[w] = h.bufferTabLabels(w)
 		}
 		rows = append(rows, shown+"  "+labels[w][b])
 	}
-	return strings.Join(append(rows, h.keys.cardText(nil, rest)), "\n")
+	return strings.Join(append(rows, h.keys.CardText(nil, rest)), "\n")
 }
 
 // cardState is every card's body, as the document reads it: the catalog's (keyset.cardState), SPC
 // b's as the buffers are now.
 func (h *Host) cardState() map[string]any {
-	m := h.keys.cardState()
-	m[textSource(bufferCard)] = h.bufferCardText()
+	m := h.keys.CardState()
+	m[feature.TextSource(feature.BufferCard)] = h.bufferCardText()
 	return m
 }
 
@@ -366,7 +367,7 @@ func (h *Host) bufferTabRows(id string) []widgetcore.MenuItemModel {
 		target := o
 		goTo = append(goTo, bufferTabRow("buffer.tabs.goto."+strconv.Itoa(o.n), bufferLabel(o), func() { h.showBuffer(target) }))
 	}
-	sub := withLabelMessage(widgetcore.NewSubmenu("buffer.tabs.goto", "Go to", goTo), "Go to")
+	sub := feature.WithLabelMessage(widgetcore.NewSubmenu("buffer.tabs.goto", "Go to", goTo), "Go to")
 	sub.Enabled = len(goTo) > 0
 	rows := []widgetcore.MenuItemModel{
 		bufferTabRow("buffer.tabs.new", "&New buffer", h.newEmptyBuffer),
@@ -392,7 +393,7 @@ func bufferTabRow(id, label string, run func()) widgetcore.MenuItemModel {
 	text, key, at := tuicore.ParseMnemonic(label)
 	row := widgetcore.NewCommand(widgetcore.ItemID(id), text, widgetcore.TabStripMenuAction{ID: tuicore.ActionID(id), Run: func(string) { run() }})
 	row.Hotkey, row.HotkeyIdx = key, at
-	return withLabelMessage(row, label)
+	return feature.WithLabelMessage(row, label)
 }
 
 // saveBuffer is a tab's Save: b shown, then saved as Ctrl+S saves it (a draft is named first).

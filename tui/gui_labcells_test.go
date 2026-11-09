@@ -17,6 +17,7 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
 	"github.com/yongjohnlee80/autodoc/core/lab"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // pngOf is a w×h PNG.
@@ -60,7 +61,7 @@ func TestALabCellDrawsItsOutputsUnderItsFence(t *testing.T) {
 		"plan.lab/out/" + key + "/01.txt": []byte("1\n"),
 		"plan.lab/out/" + key + "/02.png": pngOf(t, 40, 20),
 	})
-	r := notes.Renderer(nil)(NoteRendererSpec{})
+	r := notes.Renderer(nil)(feature.NoteRendererSpec{})
 	_, bl := layOut(r, labLines, 0, false, nil)
 	stack, ok := bl.Picture.(cellStack)
 	if !ok || len(stack.items) != 2 {
@@ -96,7 +97,7 @@ var _ relayouter = (*guiwidget.Editor)(nil)
 // editor, painted natively.
 func TestARunsOutputsAreDrawnOnceTheViewIsLaidOutAgain(t *testing.T) {
 	notes := labNote(t, "plan.lab.md", nil)
-	r := &countingRenderer{Renderer: notes.Renderer(nil)(NoteRendererSpec{}), picture: map[int]bool{}}
+	r := &countingRenderer{Renderer: notes.Renderer(nil)(feature.NoteRendererSpec{}), picture: map[int]bool{}}
 	editor, onApp, paint := paintedEditor(t, r, "# Plan\n\n```python\nprint(1)\n```\n")
 	onApp(paint)
 	onApp(func() {
@@ -126,14 +127,14 @@ func TestARunsOutputsAreDrawnOnceTheViewIsLaidOutAgain(t *testing.T) {
 
 // plainRenderer is the renderer of a plain note with nothing beside it: golib's layout of a fence.
 func plainRenderer(t *testing.T) guiwidget.Renderer {
-	return labNote(t, "plain.md", nil).Renderer(nil)(NoteRendererSpec{})
+	return labNote(t, "plain.md", nil).Renderer(nil)(feature.NoteRendererSpec{})
 }
 
 // A note that is not a lab note draws no outputs, though its folder holds some for the same key.
 func TestAPlainNoteDrawsNoCellOutputs(t *testing.T) {
 	key := lab.CellKey("python", "print(1)")
 	notes := labNote(t, "plan.md", map[string][]byte{"plan/out/" + key + "/01.txt": []byte("1\n")})
-	if _, bl := layOut(notes.Renderer(nil)(NoteRendererSpec{}), labLines, 0, false, nil); bl.Picture != nil {
+	if _, bl := layOut(notes.Renderer(nil)(feature.NoteRendererSpec{}), labLines, 0, false, nil); bl.Picture != nil {
 		t.Errorf("a plain note's fence drew %T", bl.Picture)
 	}
 }
@@ -142,7 +143,7 @@ func TestAPlainNoteDrawsNoCellOutputs(t *testing.T) {
 // block's width at most; on the cursor it is its source.
 func TestAnEmbeddedImageIsDrawn(t *testing.T) {
 	notes := labNote(t, "note.md", map[string][]byte{"note/pic.png": pngOf(t, 900, 300)})
-	r := notes.Renderer(nil)(NoteRendererSpec{})
+	r := notes.Renderer(nil)(feature.NoteRendererSpec{})
 	lines := []string{"# Note", "", "![a picture](pic.png)"}
 	_, bl := layOut(r, lines, 2, false, nil)
 	pic, ok := bl.Picture.(imagePicture)
@@ -200,7 +201,7 @@ func TestEveryDiagramOfACellIsDrawn(t *testing.T) {
 		out + "04.chart.json": []byte(`{"mark": "bar"}`),
 	})
 	d, host := &partsDiagrammer{}, &forwardHost{}
-	r := notes.Renderer(d)(NoteRendererSpec{tuidecl.MarkdownSpec{Mermaid: true}})
+	r := notes.Renderer(d)(feature.NoteRendererSpec{MarkdownSpec: tuidecl.MarkdownSpec{Mermaid: true}})
 	_, bl := layOut(r, labLines, 0, false, host)
 	if len(host.asked) != 1 || host.asked[0].Lang != cellDiagramLang {
 		t.Fatalf("the host was asked %+v; want the cell's one request", host.asked)

@@ -10,6 +10,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/mail"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // TestTheCrewHostListsOtherScopesLiveAgents (item 17): the window's crew host answers A's peer
@@ -26,7 +27,7 @@ func TestTheCrewHostListsOtherScopesLiveAgents(t *testing.T) {
 		}, nil
 	}
 	var got []string
-	a.crew.peerAgents(func(peers []AgentEntry) {
+	a.crew.peerAgents(func(peers []feature.AgentEntry) {
 		for _, e := range peers {
 			got = append(got, e.Ref.Codename+"@"+e.Peer.Scope)
 		}
@@ -37,7 +38,7 @@ func TestTheCrewHostListsOtherScopesLiveAgents(t *testing.T) {
 
 	w.crewList = func() (any, error) { return nil, io.ErrUnexpectedEOF }
 	asked := false
-	a.crew.peerAgents(func(peers []AgentEntry) {
+	a.crew.peerAgents(func(peers []feature.AgentEntry) {
 		asked = true
 		if len(peers) != 0 {
 			t.Errorf("a failed crew.list answered peers %v", peers)
@@ -49,7 +50,7 @@ func TestTheCrewHostListsOtherScopesLiveAgents(t *testing.T) {
 
 	h := newCrewHost(&crewWindow{d: newCrewDaemonForHost()}, nil, t.TempDir()) // never connected: no scope
 	asked = false
-	h.peerAgents(func(peers []AgentEntry) { asked = len(peers) == 0 })
+	h.peerAgents(func(peers []feature.AgentEntry) { asked = len(peers) == 0 })
 	if !asked {
 		t.Error("a window holding no scope didn't answer no peers")
 	}
@@ -62,7 +63,7 @@ func TestTheCrewHostListsOtherScopesLiveAgents(t *testing.T) {
 		return []any{map[string]any{"codename": "jarvis", "scope": "autovim:plugins", "presence": crew.PresenceLive}}, nil
 	}
 	asked = false
-	a.crew.peerAgents(func(peers []AgentEntry) { asked = len(peers) == 0 })
+	a.crew.peerAgents(func(peers []feature.AgentEntry) { asked = len(peers) == 0 })
 	if !asked || listed != 0 {
 		t.Errorf("a connected window holding no scope: answered none %v, crew.list asked %d times; want none, never asked", asked, listed)
 	}
@@ -113,16 +114,16 @@ func TestTodosAssignPreviewsAnotherHostsAgent(t *testing.T) {
 	c, _ := newPeerCore("autodoc:0123456789abcdef", peer("zen", "autovim:mcat", "mcat", false, "no_endpoint"))
 	v := newTodos(c)
 	e := c.peers[0]
-	pn := v.assignPick.preview(e)(context.Background()).v
-	if pn.title != "zen@mcat" || !strings.Contains(pn.text, "autovim:mcat") || !strings.Contains(pn.text, runState(c, e)) {
-		t.Errorf("the preview %q / %q: want zen@mcat, its scope and its state", pn.title, pn.text)
+	pn := v.assignPick.Preview(e)(context.Background()).Value
+	if pn.Title != "zen@mcat" || !strings.Contains(pn.Text, "autovim:mcat") || !strings.Contains(pn.Text, runState(c, e)) {
+		t.Errorf("the preview %q / %q: want zen@mcat, its scope and its state", pn.Title, pn.Text)
 	}
 }
 
 // TestTodosAssignSendsNoPeerTaskFromAWindowWithoutACrew: a hand-over to another host's agent on a
 // window that can't reach the crew sends nothing and says nothing.
 func TestTodosAssignSendsNoPeerTaskFromAWindowWithoutACrew(t *testing.T) {
-	ac, _ := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
+	ac, _ := assigningStore(feature.AgentEntry{Ref: feature.AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
 	v := newTodos(ac)
 	v.list()
 	s, _ := v.cursor()

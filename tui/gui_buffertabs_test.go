@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	guiwidget "github.com/yongjohnlee80/golib/gui/widget"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
@@ -190,10 +191,12 @@ func TestAGUITabsCloseButton(t *testing.T) {
 		})
 	}
 	pressX(1) // b.md's ×: clean, closed at once
-	r.s.WaitFor(t, "b.md closed", func(string) bool { return onLoop(r, func() bool { return r.h.bufferOf(fileRef{"kb", "b.md"}) == nil }) })
+	r.s.WaitFor(t, "b.md closed", func(string) bool {
+		return onLoop(r, func() bool { return r.h.bufferOf(feature.FileRef{WS: "kb", Path: "b.md"}) == nil })
+	})
 	pressX(0) // a.md's ×: modified, asked first
 	r.s.WaitForText(t, "unsaved file")
-	if onLoop(r, func() bool { return r.h.bufferOf(fileRef{"kb", "a.md"}) == nil }) {
+	if onLoop(r, func() bool { return r.h.bufferOf(feature.FileRef{WS: "kb", Path: "a.md"}) == nil }) {
 		t.Fatal("a.md, modified, closed without the question")
 	}
 }

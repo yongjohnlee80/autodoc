@@ -9,6 +9,7 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
 	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE RELATIONS DRAWER — SPC l (docs/decisions/editor.md#the-relations-drawer): what the open
@@ -152,21 +153,23 @@ func relationRows(t wording, ws, p string, rl relations) ([]relRow, int) {
 }
 
 // relationRowOf is a row of the drawer: a document, a heading, or what could not be resolved.
-func relationRowOf(i int, r relRow) rowOf { return rowOf{"key": fmt.Sprint(i), "label": r.label} }
+func relationRowOf(i int, r relRow) feature.RowOf {
+	return feature.RowOf{"key": fmt.Sprint(i), "label": r.label}
+}
 
 // related is the Links drawer (Relations › Links): the shown page's relations, as rows.
 type related struct {
-	c    Core
-	rows *rows[relRow]
-	page Page    // the page shown
-	of   fileRef // the document the rows are of; the zero fileRef when they are of none
-	deep bool    // the drawer shows the second ring (d)
-	at   int     // the drawer's row under its cursor (FindPane reads it)
-	seq  uint64  // numbers the reads: only the latest is shown, and a clear drops any in flight
+	c    feature.Core
+	rows *feature.Rows[relRow]
+	page feature.Page    // the page shown
+	of   feature.FileRef // the document the rows are of; the zero fileRef when they are of none
+	deep bool            // the drawer shows the second ring (d)
+	at   int             // the drawer's row under its cursor (FindPane reads it)
+	seq  uint64          // numbers the reads: only the latest is shown, and a clear drops any in flight
 }
 
-func newRelated(c Core) *related {
-	return &related{c: c, rows: newRows(tuidecl.NewListModel("key", "label"), relationRowOf)}
+func newRelated(c feature.Core) *related {
+	return &related{c: c, rows: feature.NewRows(tuidecl.NewListModel("key", "label"), relationRowOf)}
 }
 
 func (*related) Name() string { return "relations" }
@@ -179,38 +182,38 @@ func (r *related) State() map[string]any {
 	}
 }
 
-func (r *related) Commands() map[string]Command {
-	return map[string]Command{
-		"App.toggleRelations": none(r.toggle),
-		"App.relationsMoved":  oneNumber("a row", r.moved),
-		"App.openRelation":    oneNumber("a row", r.open),
-		"App.relationsDepth":  none(r.depth),
+func (r *related) Commands() map[string]feature.Command {
+	return map[string]feature.Command{
+		"App.toggleRelations": feature.None(r.toggle),
+		"App.relationsMoved":  feature.OneNumber("a row", r.moved),
+		"App.openRelation":    feature.OneNumber("a row", r.open),
+		"App.relationsDepth":  feature.None(r.depth),
 	}
 }
 
-// Catalog is the drawer's user command (catalog.go).
-func (r *related) Catalog() []Entry {
-	return []Entry{
-		builtin("links.toggle", "the links", "App.toggleRelations()", r.toggle),
+// Catalog is the drawer's user command (feature/catalog.go).
+func (r *related) Catalog() []feature.Entry {
+	return []feature.Entry{
+		feature.Builtin("links.toggle", "the links", "App.toggleRelations()", r.toggle),
 	}
 }
 
 // Shown reads the relations of the page shown. The rest of the page's lifecycle changes none:
 // a page's links are the ones indexed, read when it is shown or the drawer opens.
-func (r *related) Shown(p Page) {
+func (r *related) Shown(p feature.Page) {
 	r.page = p
 	r.ofPage()
 }
-func (*related) Edited(Page)    {}
-func (*related) Moved(int, int) {}
-func (*related) Reread(Page)    {}
-func (*related) Closed()        {}
+func (*related) Edited(feature.Page) {}
+func (*related) Moved(int, int)      {}
+func (*related) Reread(feature.Page) {}
+func (*related) Closed()             {}
 
 // toggle is SPC l: the explorer's drawer opened on its Links tab, or switched to it, or closed when
 // it shows it already (panels.go: togglePanelTab). Showing the tab reads the relations again.
 func (r *related) toggle() {
 	r.ofPage()
-	r.c.TogglePanelTab(explorerPanelSpec().ID, linksTab)
+	r.c.TogglePanelTab(feature.ExplorerPanelSpec().ID, linksTab)
 }
 
 // moved is the drawer's cursor moving.
@@ -219,7 +222,7 @@ func (r *related) moved(i int) { r.at = i }
 // ofPage reads the page's relations, or says why it has none.
 func (r *related) ofPage() {
 	switch ref := r.page.Ref; {
-	case ref.path == "":
+	case ref.Path == "":
 		r.clear(r.c.Tr("autodoc.text.relations.title_links"))
 	case r.page.Outside:
 		r.clear(r.c.Trf("autodoc.text.relations.title_links_outside", outsideBadge)) // it is in no workspace's graph
@@ -229,34 +232,34 @@ func (r *related) ofPage() {
 		if r.of != ref {
 			r.clear(r.c.Tr("autodoc.text.relations.title_links_reading"))
 		}
-		r.load(ref.ws, ref.path)
+		r.load(ref.WS, ref.Path)
 	}
 }
 
 // clear empties the drawer, saying why; a read still in flight is of rows it no longer shows.
 func (r *related) clear(why string) {
 	r.seq++
-	r.of = fileRef{}
+	r.of = feature.FileRef{}
 	r.rows.Reset(nil)
 	r.c.Set("App.relationsTitle", why)
 }
 
 // load reads the relations of p in workspace ws and shows them in the drawer.
 func (r *related) load(ws, p string) {
-	tk, deep := r.c.Ticket(&r.seq, TicketFile), r.deep
+	tk, deep := r.c.Ticket(&r.seq, feature.TicketFile), r.deep
 	r.c.Go(func(ctx context.Context) any {
 		var rl relations
 		edges := func(verb string) ([]relEdge, error) {
 			res, err := r.c.Call(ctx, verb, ws, p)
-			if code(err) == rpc.CodeNotFound {
+			if feature.Code(err) == rpc.CodeNotFound {
 				return nil, nil // not indexed yet (just created or written): no link is known
 			}
 			var out []relEdge
-			for _, l := range asList(res) {
-				m := asMap(l)
+			for _, l := range feature.AsList(res) {
+				m := feature.AsMap(l)
 				resolved, _ := m["resolved"].(bool)
-				out = append(out, relEdge{path: str(m, "path"), raw: str(m, "raw"), kind: str(m, "kind"), resolved: resolved,
-					external: str(m, "external")})
+				out = append(out, relEdge{path: feature.Str(m, "path"), raw: feature.Str(m, "raw"), kind: feature.Str(m, "kind"), resolved: resolved,
+					external: feature.Str(m, "external")})
 			}
 			return out, err
 		}
@@ -280,8 +283,8 @@ func (r *related) load(ws, p string) {
 			}
 			rows, next, more := unresolvedPageOf(res)
 			for _, u := range rows {
-				if m := asMap(u); str(m, "src") == p && str(m, "reason") == "cycle" {
-					rl.cycles = append(rl.cycles, str(m, "raw"))
+				if m := feature.AsMap(u); feature.Str(m, "src") == p && feature.Str(m, "reason") == "cycle" {
+					rl.cycles = append(rl.cycles, feature.Str(m, "raw"))
 				}
 			}
 			if !more || next <= offset || pages >= maxUnresolvedPages {
@@ -291,13 +294,13 @@ func (r *related) load(ws, p string) {
 		}
 		if deep {
 			res, err := r.c.Call(ctx, "graph.neighborhood", ws, p, 2)
-			if code(err) != rpc.CodeNotFound && err != nil {
+			if feature.Code(err) != rpc.CodeNotFound && err != nil {
 				rl.err = err
 				return rl
 			}
-			for _, e := range asList(asMap(res)["edges"]) {
-				m := asMap(e)
-				rl.edges = append(rl.edges, [3]string{str(m, "src"), str(m, "dst"), str(m, "kind")})
+			for _, e := range feature.AsList(feature.AsMap(res)["edges"]) {
+				m := feature.AsMap(e)
+				rl.edges = append(rl.edges, [3]string{feature.Str(m, "src"), feature.Str(m, "dst"), feature.Str(m, "kind")})
 			}
 		}
 		return rl
@@ -323,10 +326,10 @@ func (r *related) show(ws, p string, rl relations) {
 	// already, and the cursor may have moved since): the cursor stays on its row, when it is still
 	// there. Another document's: the cursor on the first document, not a heading: Enter opens it.
 	at := -1
-	if was, ok := r.rows.At(r.at); ok && r.of == (fileRef{ws, p}) {
+	if was, ok := r.rows.At(r.at); ok && r.of == (feature.FileRef{WS: ws, Path: p}) {
 		at = slices.Index(rows, was)
 	}
-	r.of = fileRef{ws, p}
+	r.of = feature.FileRef{WS: ws, Path: p}
 	r.rows.Reset(rows)
 	if at < 0 {
 		at = slices.IndexFunc(rows, func(r relRow) bool { return r.path != "" })
@@ -353,8 +356,8 @@ func (r *related) moveTo(i int) {
 }
 
 // FindPane is the drawer's rows for find, as it shows them.
-func (r *related) FindPane() FindPane {
-	return FindPane{Name: "links", View: relationsView, Scope: "links", Rows: func() ([]string, int, func(int, int) error) {
+func (r *related) FindPane() feature.FindPane {
+	return feature.FindPane{Name: "links", View: feature.RelationsView, Scope: "links", Rows: func() ([]string, int, func(int, int) error) {
 		return r.labels(), r.at, func(row, _ int) error { r.moveTo(row); return nil }
 	}}
 }
@@ -376,7 +379,7 @@ func (r *related) open(i int) {
 	if !ok || row.external == "" && row.path == "" {
 		return // a heading, or a relation that names nothing: the drawer stays
 	}
-	r.c.HidePanel(explorerPanelSpec().ID)
+	r.c.HidePanel(feature.ExplorerPanelSpec().ID)
 	switch {
 	case row.external != "":
 		r.c.OpenAbsolute(row.external) // its workspace's file when one indexes it, else outside them all
@@ -387,7 +390,7 @@ func (r *related) open(i int) {
 
 // depth is d: the drawer shows the second ring, or no longer does. Only the drawer answers it.
 func (r *related) depth() {
-	if !r.c.HasFocus(relationsView) {
+	if !r.c.HasFocus(feature.RelationsView) {
 		return
 	}
 	r.deep = !r.deep
@@ -404,8 +407,8 @@ const maxUnresolvedPages = 1000
 func unresolvedPageOf(res any) (rows []any, next int64, more bool) {
 	m, ok := res.(map[string]any)
 	if !ok {
-		return asList(res), 0, false
+		return feature.AsList(res), 0, false
 	}
 	next, more = m["next"].(int64)
-	return asList(m["unresolved"]), next, more
+	return feature.AsList(m["unresolved"]), next, more
 }

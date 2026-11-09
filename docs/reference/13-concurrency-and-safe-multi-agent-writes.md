@@ -95,14 +95,14 @@ All workspaces, document chunks, link graphs, embedding vectors, preferences, an
 
 ## 4. UI Async Ticket Invalidation (`TicketSession`, `TicketWorkspace`, `TicketFile`, `TicketLocal`)
 
-Concurrency hazards do not stop at the daemon socket. In the AutoDoc TUI and GUI (`tui/`), **no daemon RPC ever runs on the UI render loop** (`tui/work.go`). Every feature dispatches background work via `Core.Go(fn, then)` and receives the result back on the single UI event loop via `h.p.Post`.
+Concurrency hazards do not stop at the daemon socket. In the AutoDoc TUI and GUI (`tui/`), **no daemon RPC ever runs on the UI render loop** (`tui/feature/work.go`). Every feature dispatches background work via `Core.Go(fn, then)` and receives the result back on the single UI event loop via `h.p.Post`.
 
 Suppose a user opens Workspace A, triggers a slow query or task load, and immediately switches to Workspace B (`Ctrl+W`) before Workspace A's RPC finishes. If Workspace A's callback blindly updates `App.*` state when it arrives 50ms later, the screen will display Workspace A's files inside Workspace B.
 
-AutoDoc solves this uniformly across every UI feature using `Core.Ticket(seq, scope)` (`tui/feature.go:438-537`):
+AutoDoc solves this uniformly across every UI feature using `Core.Ticket(seq, scope)` (`tui/feature/feature.go:438-537`):
 
 ```go
-// tui/feature.go — Host.ticket
+// tui/feature/feature.go — Host.ticket
 gen, epoch, file, page := h.session.Gen(), h.epoch, h.file.gen, h.active
 return Ticket{current: func() bool {
     if scope == TicketLocal {

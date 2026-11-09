@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"strings"
 	"testing"
 )
@@ -19,8 +20,8 @@ func TestAKeptErrorIsNotifiedOnce(t *testing.T) {
 	r.s.WaitFor(t, "the notification", func(string) bool { return r.noticed("Something went wrong: the frobnicator jammed") })
 	n := onLoop(r, func() int { // after both keeps' notices were posted, and ran
 		n := 0
-		for _, item := range r.h.noticeLog.items {
-			if strings.Contains(item.text, "the frobnicator jammed") {
+		for _, item := range r.h.noticeLog.Items {
+			if strings.Contains(item.Text, "the frobnicator jammed") {
 				n++
 			}
 		}
@@ -45,9 +46,9 @@ func TestABackgroundErrorIsRecordedNotNotified(t *testing.T) {
 		t.Fatalf("the failed projection recorded %v", errs)
 	}
 	onLoop(r, func() bool { return true }) // anything it posted has run
-	for _, item := range onLoop(r, func() []notice { return append([]notice(nil), r.h.noticeLog.items...) }) {
-		if strings.Contains(item.text, "App.status") {
-			t.Errorf("a background error was notified: %q", item.text)
+	for _, item := range onLoop(r, func() []feature.Notice { return append([]feature.Notice(nil), r.h.noticeLog.Items...) }) {
+		if strings.Contains(item.Text, "App.status") {
+			t.Errorf("a background error was notified: %q", item.Text)
 		}
 	}
 }

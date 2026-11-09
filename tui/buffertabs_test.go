@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 )
@@ -139,7 +140,7 @@ func TestBufferTabsAreToldApart(t *testing.T) {
 	r.waitFile(t, "notes/a.md")
 	ws := r.file().ws
 	otherWS := map[string]string{"kb": "kb2", "kb2": "kb"}[ws]
-	onLoop(r, func() bool { r.h.openRef(fileRef{otherWS, "notes/a.md"}, false, nil); return true })
+	onLoop(r, func() bool { r.h.openRef(feature.FileRef{WS: otherWS, Path: "notes/a.md"}, false, nil); return true })
 	r.s.WaitFor(t, "notes/a.md of "+otherWS+" open", func(string) bool { f := r.file(); return f.open && f.ws == otherWS })
 	onLoop(r, func() bool {
 		r.h.restoreAsDraft(recovered{Text: "one\n"}, "")
@@ -331,8 +332,8 @@ func TestACancelledHTMLQuestionTakesTheNewBufferRequestWithIt(t *testing.T) {
 	empty := onLoop(r, func() *openBuffer { return r.h.active })
 	onLoop(r, func() bool {
 		r.h.openPickerNewBuffer()
-		r.h.closeDialog(r.h.openPick.dialog)
-		r.h.openPick.choose("page.html") // as Enter on it does
+		r.h.closeDialog(r.h.openPick.Dialog)
+		r.h.openPick.Choose("page.html") // as Enter on it does
 		return true
 	})
 	r.s.WaitForText(t, "open an HTML file")

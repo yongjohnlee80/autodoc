@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE PAGE AND THE LISTS A FEATURE READS — what the host shares with every feature, once.
@@ -22,14 +23,14 @@ const editPause = 150 * time.Millisecond
 
 // setFiles is the workspace's files listed: the snapshot replaced whole, and the listers told.
 func (h *Host) setFiles(paths []string) {
-	h.files = FileList{Paths: paths, Loaded: true, Gen: h.files.Gen + 1}
-	h.reg.listed()
+	h.files = feature.FileList{Paths: paths, Loaded: true, Gen: h.files.Gen + 1}
+	h.reg.Listed()
 }
 
 // resetFiles is a workspace entered, or none in use: no files until a listing answers.
 func (h *Host) resetFiles() {
-	h.files = FileList{Gen: h.files.Gen + 1}
-	h.reg.listed()
+	h.files = feature.FileList{Gen: h.files.Gen + 1}
+	h.reg.Listed()
 }
 
 // showPage is a page shown, a file read or the draft started, and the one way a page is shown: its
@@ -40,13 +41,13 @@ func (h *Host) showPage() {
 	h.pageGen++ // a pause still to come was the page before's: it must not reach this one
 	h.pageVersion++
 	h.page, h.typing = h.takePage(), false
-	h.reg.shown(h.page)
+	h.reg.Shown(h.page)
 	h.showTitle() // the file's name, whether or not a feature puts a breadcrumb after it
 }
 
 // pageNow is the page as it is now, for a reader that cannot wait for the pause (a picker opened
 // while typing): snapshotted again only when typed since the last snapshot. The pause still comes.
-func (h *Host) pageNow() Page {
+func (h *Host) pageNow() feature.Page {
 	if h.typing {
 		h.page = h.takePage()
 	}
@@ -54,11 +55,11 @@ func (h *Host) pageNow() Page {
 }
 
 // takePage is the page as the editor shows it now, its text one snapshot.
-func (h *Host) takePage() Page {
+func (h *Host) takePage() feature.Page {
 	line, _ := h.core.Line()
-	p := Page{Kind: h.pageKind(), Text: []byte(h.core.Value()), Line: line, At: h.cursorBytes(), Version: h.pageVersion}
+	p := feature.Page{Kind: h.pageKind(), Text: []byte(h.core.Value()), Line: line, At: h.cursorBytes(), Version: h.pageVersion}
 	if h.file.open {
-		p.Ref, p.Outside = fileRef{h.file.ws, h.file.path}, h.file.outside()
+		p.Ref, p.Outside = feature.FileRef{WS: h.file.ws, Path: h.file.path}, h.file.outside()
 	}
 	return p
 }
@@ -82,7 +83,7 @@ func (h *Host) pageKind() kind.Kind {
 // on (pagePaused). A later keystroke supersedes it.
 func (h *Host) pageSoon() {
 	h.typing = true
-	tk := h.ticket(&h.pageGen, TicketLocal)
+	tk := h.ticket(&h.pageGen, feature.TicketLocal)
 	h.after(editPause, func() {
 		if tk.Current() {
 			h.pagePaused()
@@ -99,5 +100,5 @@ func (h *Host) pagePaused() {
 		h.renderHTMLPane()
 	}
 	h.validateSoon(validateDelay - editPause)
-	h.reg.edited(h.page)
+	h.reg.Edited(h.page)
 }

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 
 	"github.com/yongjohnlee80/autodoc/core/inbox"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE REPLY DIALOG (docs/decisions/crew.md#the-human-inbox): a request's toast opens it, in any
@@ -33,12 +34,12 @@ func (*crewInbox) replyState() map[string]any {
 	return map[string]any{"App.replyTitle": "", "App.replyText": ""}
 }
 
-func (x *crewInbox) Commands() map[string]Command {
-	return map[string]Command{
-		"App.replySend":       oneString("the reply", x.replySend),
-		"App.replyDismiss":    oneString("the answer typed", x.replyDismiss),
-		"App.replyClosed":     none(func() { x.replying = "" }),
-		"App.toggleAgentBell": none(x.toggleBell),
+func (x *crewInbox) Commands() map[string]feature.Command {
+	return map[string]feature.Command{
+		"App.replySend":       feature.OneString("the reply", x.replySend),
+		"App.replyDismiss":    feature.OneString("the answer typed", x.replyDismiss),
+		"App.replyClosed":     feature.None(func() { x.replying = "" }),
+		"App.toggleAgentBell": feature.None(x.toggleBell),
 	}
 }
 
@@ -104,12 +105,12 @@ func (x *crewInbox) replySend(body string) {
 			delete(x.drafts, id)
 			x.c.Notify(x.c.Trf("autodoc.crew.reply_too_late", r.from))
 		case !open:
-			x.c.Notify(x.c.Trf("autodoc.crew.reply_closed_meanwhile", r.from, wireMessage(err)))
+			x.c.Notify(x.c.Trf("autodoc.crew.reply_closed_meanwhile", r.from, feature.WireMessage(err)))
 		case !latest:
-			x.c.Notify(x.c.Trf("autodoc.crew.reply_earlier_failed", r.from, wireMessage(err)))
+			x.c.Notify(x.c.Trf("autodoc.crew.reply_earlier_failed", r.from, feature.WireMessage(err)))
 		default:
 			x.drafts[id] = body // the dialog opens on it again
-			x.c.Notify(x.c.Trf("autodoc.crew.reply_failed", r.from, wireMessage(err)))
+			x.c.Notify(x.c.Trf("autodoc.crew.reply_failed", r.from, feature.WireMessage(err)))
 		}
 	})
 }
@@ -129,7 +130,7 @@ func (x *crewInbox) replyDismiss(typed string) {
 		delete(x.drafts, id) // emptied by the user: no older draft comes back
 	}
 	r := x.requests[id]
-	x.c.Ask(Question{Title: x.c.Tr("autodoc.question.inbox.dismiss"), Text: x.c.Trf("autodoc.question.inbox.dismiss_text", r.from, r.subject),
+	x.c.Ask(feature.Question{Title: x.c.Tr("autodoc.question.inbox.dismiss"), Text: x.c.Trf("autodoc.question.inbox.dismiss_text", r.from, r.subject),
 		Yes: x.c.Tr("autodoc.question.inbox.dismiss_yes"), OnYes: func() { x.dismissRequest(id, r) }})
 }
 
@@ -147,7 +148,7 @@ func (x *crewInbox) dismissRequest(id string, r crewRequest) {
 			delete(x.drafts, id)
 			x.c.Notify(x.c.Trf("autodoc.crew.dismiss_too_late", r.from))
 		default:
-			x.c.Notify(x.c.Trf("autodoc.crew.dismiss_failed", r.from, wireMessage(err)))
+			x.c.Notify(x.c.Trf("autodoc.crew.dismiss_failed", r.from, feature.WireMessage(err)))
 		}
 	})
 }
@@ -155,7 +156,7 @@ func (x *crewInbox) dismissRequest(id string, r crewRequest) {
 // answeredElsewhere reports whether err says the request is closed: answered or dismissed first
 // (another window, another reply), expired, or none to answer. Sending again would change nothing.
 func (*crewInbox) answeredElsewhere(err error) bool {
-	switch code(err) {
+	switch feature.Code(err) {
 	case inbox.CodeAlreadyAnswered, inbox.CodeExpired, inbox.CodeNotARequest:
 		return true
 	}
@@ -173,7 +174,7 @@ func (x *crewInbox) raiseAttention(session, codename string) {
 		return err
 	}, func(v any) {
 		if err, _ := v.(error); v != nil {
-			x.c.Notify(x.c.Trf("autodoc.crew.not_shown", codename, wireMessage(err)))
+			x.c.Notify(x.c.Trf("autodoc.crew.not_shown", codename, feature.WireMessage(err)))
 			return
 		}
 		x.c.Notify(x.c.Trf("autodoc.crew.other_window", codename))
