@@ -15,7 +15,7 @@ import (
 func (r *running) menuAt(ctx menuCtx) []widgetcore.MenuItemModel {
 	return onLoop(r, func() []widgetcore.MenuItemModel {
 		s := r.h.luaFeature()
-		return s.rows.editorItems(s, ctx)
+		return editorMenuItems(&s.rows, s, ctx)
 	})
 }
 
