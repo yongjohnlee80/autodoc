@@ -313,6 +313,7 @@ func todosDefault(edge string) (size, length int) {
 // Panels: the panel, its stores listed afresh each time it opens, the keyboard in the tab shown.
 func (t *todos) Panels() []PanelSpec {
 	s := todosPanelSpec()
+	s.Focus = t.tabView
 	s.Opened = func(PanelHost) { t.list(); t.focusTab() }
 	return []PanelSpec{s}
 }
@@ -827,17 +828,22 @@ func (t *todos) stepTab(step int) {
 	t.showTab(((t.tab+step)%n + n) % n)
 }
 
-// focusTab gives the tab shown's table the keyboard, once the tab is laid out: the Archived tab's
-// months while no month is open.
+// tabView is what in the tab shown takes the keyboard: its table, or the Archived tab's months while
+// no month is open. The panel's toggle reaches for it: a table on a tab not shown takes no focus, so
+// the keyboard would never enter the panel, and a covered panel comes forward as the keyboard enters.
+func (t *todos) tabView() string {
+	switch {
+	case t.tab == varsTab:
+		return "todoVarsTable"
+	case t.tab == archivedTab && t.month == "":
+		return "todoMonths"
+	}
+	return todoTabs[t.tab].table
+}
+
+// focusTab gives the tab shown's table the keyboard, once the tab is laid out.
 func (t *todos) focusTab() {
-	if t.tab == varsTab {
-		t.c.Post(func() { t.focus("todoVarsTable") })
-		return
-	}
-	id := todoTabs[t.tab].table
-	if t.tab == archivedTab && t.month == "" {
-		id = "todoMonths"
-	}
+	id := t.tabView()
 	t.c.Post(func() { t.focus(id) })
 }
 
