@@ -4,6 +4,7 @@ go 1.26.10
 
 require (
 	github.com/BurntSushi/toml v1.6.0
+	github.com/Microsoft/go-winio v0.6.4
 	github.com/prometheus/common v0.67.2
 	github.com/yongjohnlee80/gio v0.1.6
 	github.com/yongjohnlee80/golib v0.8.41
