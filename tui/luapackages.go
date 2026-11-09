@@ -14,6 +14,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 
 	regindex "github.com/yongjohnlee80/autodoc/core/registry"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // LUA PACKAGES (M8): a package is a folder of the config's lua/, lua/<name>/, holding init.lua and
@@ -133,17 +134,18 @@ func (h *Host) installPackage(url string) error {
 	}
 	dir, own, src, env := h.luaDir, h.cands.allocs, h.seams.registry, h.seams.env
 	h.notify(h.trf("autodoc.notice.luapackages.cloning", url))
-	do(h, func(ctx context.Context) answerOf[*candidate] {
-		return answered(stagePackage(ctx, env, src, dir, url, own))
-	}, func(r answerOf[*candidate]) {
-		if r.err == nil {
-			r.err = h.cands.begin(r.v, h.askPackage, h.hidePackage)
+	do(h, func(ctx context.Context) feature.AnswerOf[*candidate] {
+		return feature.Answered(stagePackage(ctx, env, src, dir, url, own))
+	}, func(r feature.AnswerOf[*candidate]) {
+		err := r.Err()
+		if err == nil {
+			err = h.cands.begin(r.Value, h.askPackage, h.hidePackage)
 		}
-		if r.err != nil {
-			h.notify(h.trf("autodoc.notice.luapackages.lua_install_not_installed", r.err.Error()))
+		if err != nil {
+			h.notify(h.trf("autodoc.notice.luapackages.lua_install_not_installed", err.Error()))
 			return
 		}
-		h.cands.show(r.v)
+		h.cands.show(r.Value)
 	})
 	return nil
 }
@@ -189,7 +191,7 @@ func (h *Host) askPackage(c *candidate) {
 		h.trf("autodoc.question.luapackages.requires", requires), audit,
 		h.tr("autodoc.question.luapackages.a_package_s_lua_runs_in_autodoc_held_to_what_you"),
 		h.tr("autodoc.text.candidate.audit_asks_your_agent_to_read_this_code_autodoc"))
-	h.ask(Question{
+	h.ask(feature.Question{
 		Title: h.trf("autodoc.question.luapackages.install_the_lua_package", m.Name),
 		Text:  text,
 		Yes:   h.tr("autodoc.question.luapackages.install"), No: h.tr("autodoc.question.luapackages.cancel"), Other: h.tr("autodoc.question.luapackages.audit"),

@@ -3,10 +3,11 @@ package tui
 import (
 	"strconv"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/panelgeometry"
 )
 
-func (p prefs) geometrySpecs() []PanelSpec {
+func (p prefs) geometrySpecs() []feature.PanelSpec {
 	if p.panelDefs != nil {
 		return p.panelDefs
 	}
@@ -21,7 +22,7 @@ func (p prefs) geometrySpecs() []PanelSpec {
 
 // panelGeometry is a panel's size and length at a place: the kept ones, or its spec's defaults.
 func (p prefs) panelGeometry(id, edge string) (size, length int) {
-	s := findPanel(p.geometrySpecs(), id)
+	s := feature.FindPanel(p.geometrySpecs(), id)
 	if s == nil || s.Default == nil {
 		return 0, 0
 	}
@@ -75,7 +76,7 @@ func (h *Host) keepPanelGeo(panel, what string, n int) {
 	v := strconv.Itoa(n)
 	// golib's one check: the panel's places and its bounds
 	// (docs/decisions/plugins.md#shared-panels-and-their-geometry)
-	if panelgeometry.Validate([]panelgeometry.Spec{s.geometry()}, k, v) != nil {
+	if panelgeometry.Validate([]panelgeometry.Spec{s.Geometry()}, k, v) != nil {
 		return
 	}
 	h.setPref(k, v, func(p *prefs) { p.panelGeo = withEntry(p.panelGeo, k, n) })
@@ -95,7 +96,7 @@ func panelState(p prefs) map[string]any {
 // now, the one way for every panel.
 func (h *Host) panelResized(panel string, size, length int) {
 	if s := h.panelSpec(panel); s == nil || len(s.Places) == 0 ||
-		!inPercentRange(size, s.Size) || !inPercentRange(length, s.Length) {
+		!feature.InPercentRange(size, s.Size) || !feature.InPercentRange(length, s.Length) {
 		return // a panel that sizes itself keeps no geometry
 	}
 	h.keepPanelGeo(panel, "size", size)

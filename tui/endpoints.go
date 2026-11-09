@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
@@ -63,9 +64,9 @@ type endpointSpec struct {
 
 // endpoints is one list and its form.
 type endpoints struct {
-	c      Core
+	c      feature.Core
 	spec   endpointSpec
-	rows   *rows[endpointRow]
+	rows   *feature.Rows[endpointRow]
 	active string // the one in use
 	cursor int    // the row under the list's cursor: the one the dialog's shared buttons act on
 	seq    uint64 // numbers the detail's reads
@@ -76,9 +77,9 @@ type endpoints struct {
 	hasKey  bool
 }
 
-func newEndpoints(c Core, spec endpointSpec) *endpoints {
+func newEndpoints(c feature.Core, spec endpointSpec) *endpoints {
 	e := &endpoints{c: c, spec: spec}
-	e.rows = newRows(tuidecl.NewListModel(append([]string{"key"}, spec.columns...)...), e.rowOf)
+	e.rows = feature.NewRows(tuidecl.NewListModel(append([]string{"key"}, spec.columns...)...), e.rowOf)
 	return e
 }
 
@@ -111,7 +112,7 @@ func (e *endpoints) at(i int) (endpointRow, bool) { return e.rows.At(i) }
 
 // load lists the entries, the one in use, and why the one chosen is not in use, if it is not.
 func (e *endpoints) load() {
-	tk := e.c.Ticket(nil, TicketSession)
+	tk := e.c.Ticket(nil, feature.TicketSession)
 	type answer struct {
 		rows []endpointRow
 		m    map[string]any
@@ -122,12 +123,12 @@ func (e *endpoints) load() {
 		if err != nil {
 			return answer{err: err}
 		}
-		m := asMap(res)
+		m := feature.AsMap(res)
 		var rows []endpointRow
-		for _, x := range asList(m[e.spec.noun+"s"]) {
-			p := asMap(x)
+		for _, x := range feature.AsList(m[e.spec.noun+"s"]) {
+			p := feature.AsMap(x)
 			has, _ := p["has_key"].(bool)
-			rows = append(rows, endpointRow{name: str(p, "name"), kind: str(p, "kind"), base: str(p, "base_url"), model: str(p, "model"), context: num(p, "context"), hasKey: has})
+			rows = append(rows, endpointRow{name: feature.Str(p, "name"), kind: feature.Str(p, "kind"), base: feature.Str(p, "base_url"), model: feature.Str(p, "model"), context: feature.Num(p, "context"), hasKey: has})
 		}
 		return answer{rows: rows, m: m}
 	}, func(v any) {
@@ -136,12 +137,12 @@ func (e *endpoints) load() {
 			return
 		}
 		if a.err != nil {
-			e.c.Set(e.src("sStatus"), e.spec.noun+"s: "+wireMessage(a.err))
+			e.c.Set(e.src("sStatus"), e.spec.noun+"s: "+feature.WireMessage(a.err))
 			return
 		}
-		e.active = str(a.m, "active")
+		e.active = feature.Str(a.m, "active")
 		e.rows.Reset(a.rows)
-		e.c.Set(e.src("sStatus"), e.spec.listed(a.m, e.active, str(a.m, "error")))
+		e.c.Set(e.src("sStatus"), e.spec.listed(a.m, e.active, feature.Str(a.m, "error")))
 		if len(a.rows) > 0 {
 			e.detail(min(max(e.cursor, 0), len(a.rows)-1))
 		} else {
@@ -151,7 +152,7 @@ func (e *endpoints) load() {
 }
 
 // rowOf is an entry as the list shows it, the one in use marked.
-func (e *endpoints) rowOf(_ int, r endpointRow) rowOf {
+func (e *endpoints) rowOf(_ int, r endpointRow) feature.RowOf {
 	use := ""
 	if r.name == e.active {
 		use = "●"
@@ -165,7 +166,7 @@ func (e *endpoints) rowOf(_ int, r endpointRow) rowOf {
 		model = "—" // a TEI server's own, named by Check
 	}
 	k := e.spec.kinds[e.kindIndex(r.kind)]
-	row := rowOf{"key": r.name, "use": use, "name": r.name, "kind": k.label, "model": model, "apiKey": key}
+	row := feature.RowOf{"key": r.name, "use": use, "name": r.name, "kind": k.label, "model": model, "apiKey": key}
 	if slices.Contains(e.spec.columns, "context") {
 		window := "—"
 		if k.window {
@@ -184,27 +185,27 @@ func (e *endpoints) detail(i int) {
 		return
 	}
 	e.cursor = i
-	tk := e.c.Ticket(&e.seq, TicketSession)
+	tk := e.c.Ticket(&e.seq, feature.TicketSession)
 	e.c.Go(func(ctx context.Context) any {
 		us, err := e.c.Call(ctx, e.spec.verb+".usage", r.name, int64(7))
 		if err != nil {
-			return answerOf[string]{err: err}
+			return feature.AnswerFailed[string](err)
 		}
 		log, err := e.c.Call(ctx, e.spec.verb+".log", r.name, int64(30))
 		if err != nil {
-			return answerOf[string]{err: err}
+			return feature.AnswerFailed[string](err)
 		}
-		return answerOf[string]{v: usageText(r.name, asList(us), asList(log))}
+		return feature.AnswerOf[string]{Value: usageText(r.name, feature.AsList(us), feature.AsList(log))}
 	}, func(v any) {
-		a := v.(answerOf[string])
+		a := v.(feature.AnswerOf[string])
 		if !tk.Current() {
 			return
 		}
-		if a.err != nil {
-			e.c.Set(e.src("Detail"), r.name+": "+wireMessage(a.err))
+		if a.Err() != nil {
+			e.c.Set(e.src("Detail"), r.name+": "+feature.WireMessage(a.Err()))
 			return
 		}
-		e.c.Set(e.src("Detail"), a.v)
+		e.c.Set(e.src("Detail"), a.Value)
 	})
 }
 
@@ -216,12 +217,12 @@ func usageText(name string, usage, log []any) string {
 		b.WriteString(": no calls yet")
 	}
 	for _, x := range usage {
-		u := asMap(x)
-		fmt.Fprintf(&b, "\n  %s  %d requests · %d texts · %d tokens", str(u, "day"), num(u, "requests"), num(u, "texts"), num(u, "tokens"))
-		if f := num(u, "failures"); f > 0 {
+		u := feature.AsMap(x)
+		fmt.Fprintf(&b, "\n  %s  %d requests · %d texts · %d tokens", feature.Str(u, "day"), feature.Num(u, "requests"), feature.Num(u, "texts"), feature.Num(u, "tokens"))
+		if f := feature.Num(u, "failures"); f > 0 {
 			fmt.Fprintf(&b, " · %d failed", f)
 		}
-		if l := num(u, "limited"); l > 0 {
+		if l := feature.Num(u, "limited"); l > 0 {
 			fmt.Fprintf(&b, " (%d at the usage limit)", l)
 		}
 	}
@@ -229,9 +230,9 @@ func usageText(name string, usage, log []any) string {
 		b.WriteString("\nlatest calls")
 	}
 	for _, x := range log {
-		ev := asMap(x)
-		at := time.Unix(num(ev, "at"), 0).Format("01-02 15:04:05")
-		fmt.Fprintf(&b, "\n  %s  %d texts · %d tokens · %d ms · %s", at, num(ev, "texts"), num(ev, "tokens"), num(ev, "millis"), str(ev, "outcome"))
+		ev := feature.AsMap(x)
+		at := time.Unix(feature.Num(ev, "at"), 0).Format("01-02 15:04:05")
+		fmt.Fprintf(&b, "\n  %s  %d texts · %d tokens · %d ms · %s", at, feature.Num(ev, "texts"), feature.Num(ev, "tokens"), feature.Num(ev, "millis"), feature.Str(ev, "outcome"))
 	}
 	return b.String()
 }
@@ -352,23 +353,23 @@ func (e *endpoints) check(base, key string) {
 		args = []any{e.editing, spec} // its stored key, opened by the daemon
 	}
 	e.c.Set(e.src("ModelsStatus"), "asking the "+e.spec.noun+"…")
-	tk := e.c.Ticket(nil, TicketSession)
+	tk := e.c.Ticket(nil, feature.TicketSession)
 	e.c.Go(func(ctx context.Context) any {
 		res, err := e.c.Call(ctx, e.spec.verb+".models", args...)
 		if err != nil {
-			return answerOf[[]string]{err: err}
+			return feature.AnswerFailed[[]string](err)
 		}
 		var out []string
-		for _, m := range asList(res) {
+		for _, m := range feature.AsList(res) {
 			if s, ok := m.(string); ok {
 				out = append(out, s)
 			}
 		}
-		return answerOf[[]string]{v: out}
+		return feature.AnswerOf[[]string]{Value: out}
 	}, func(v any) {
-		a := v.(answerOf[[]string])
+		a := v.(feature.AnswerOf[[]string])
 		if tk.Current() && e.spec.checked != nil {
-			e.spec.checked(a.v, a.err)
+			e.spec.checked(a.Value, a.Err())
 		}
 	})
 }
@@ -401,7 +402,7 @@ func (e *endpoints) save(name, base, model, key, extra string) {
 		return err
 	}, func(v any) {
 		if err, _ := v.(error); err != nil {
-			e.refuse("not saved: " + wireMessage(err))
+			e.refuse("not saved: " + feature.WireMessage(err))
 			return
 		}
 		e.c.Notify(e.c.Trf("autodoc.notice.endpoints.saved_the", e.spec.noun, spec["name"].(string)))
@@ -418,7 +419,7 @@ func (e *endpoints) refuse(why string) {
 
 // setField writes a form field bound to name, moving it away first so the same text written twice
 // still reaches a field the user has typed in.
-func setField(c Core, name, text string) {
+func setField(c feature.Core, name, text string) {
 	c.Set(name, "\x00")
 	c.Set(name, text)
 }

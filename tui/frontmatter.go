@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"time"
 )
 
@@ -29,9 +30,9 @@ type schemaInfo struct {
 }
 
 func readSchemaInfo(v any) schemaInfo {
-	m := asMap(v)
+	m := feature.AsMap(v)
 	active, _ := m["active"].(bool)
-	return schemaInfo{path: str(m, "path"), active: active, fields: num(m, "fields"), err: str(m, "error"), line: num(m, "line")}
+	return schemaInfo{path: feature.Str(m, "path"), active: active, fields: feature.Num(m, "fields"), err: feature.Str(m, "error"), line: feature.Num(m, "line")}
 }
 
 // state is the schema's standing, a sentence for the settings dialog.
@@ -61,7 +62,7 @@ func (s schemaInfo) state(t wording) string {
 // validateSoon checks the page's text after wait; a later call supersedes it. A typing pause waits
 // the rest of validateDelay, so the check comes validateDelay after the last keystroke.
 func (h *Host) validateSoon(wait time.Duration) {
-	tk := h.ticket(&h.fmGen, TicketFile)
+	tk := h.ticket(&h.fmGen, feature.TicketFile)
 	h.after(wait, func() {
 		if tk.Current() {
 			h.validateNow(tk)
@@ -83,7 +84,7 @@ func (h *Host) checkedIn() string {
 
 // validateNow sends the editor's text to doc.validate, in the workspace checkedIn names. Only
 // Markdown has frontmatter.
-func (h *Host) validateNow(tk Ticket) {
+func (h *Host) validateNow(tk feature.Ticket) {
 	p := h.file.path
 	if !h.file.open {
 		// a draft's hint says its kind: a .sql draft has no frontmatter; a Markdown one is checked as
@@ -99,26 +100,26 @@ func (h *Host) validateNow(tk Ticket) {
 		return
 	}
 	text := h.page.Text
-	do(h, func(ctx context.Context) answerOf[[]fmDiagnostic] {
+	do(h, func(ctx context.Context) feature.AnswerOf[[]fmDiagnostic] {
 		res, err := h.call(ctx, "doc.validate", ws, p, text)
 		if err != nil {
-			return answerOf[[]fmDiagnostic]{err: err}
+			return feature.AnswerFailed[[]fmDiagnostic](err)
 		}
 		var out []fmDiagnostic
-		for _, d := range asList(asMap(res)["diagnostics"]) {
-			m := asMap(d)
-			out = append(out, fmDiagnostic{field: str(m, "field"), line: num(m, "line"), message: str(m, "message")})
+		for _, d := range feature.AsList(feature.AsMap(res)["diagnostics"]) {
+			m := feature.AsMap(d)
+			out = append(out, fmDiagnostic{field: feature.Str(m, "field"), line: feature.Num(m, "line"), message: feature.Str(m, "message")})
 		}
-		return answerOf[[]fmDiagnostic]{v: out}
-	}, func(a answerOf[[]fmDiagnostic]) {
+		return feature.AnswerOf[[]fmDiagnostic]{Value: out}
+	}, func(a feature.AnswerOf[[]fmDiagnostic]) {
 		if !tk.Current() {
 			return // later text was sent, another file opened, or another workspace or connection
 		}
-		if a.err != nil {
+		if a.Err() != nil {
 			h.showDiagnostics(nil) // a check that could not run says nothing about the file
 			return
 		}
-		h.showDiagnostics(a.v)
+		h.showDiagnostics(a.Value)
 	})
 }
 

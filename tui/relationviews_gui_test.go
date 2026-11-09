@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	graphlayout "github.com/yongjohnlee80/golib/graph/layout"
 	"github.com/yongjohnlee80/golib/gui"
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -654,12 +655,12 @@ func TestTheMindmapRootsAtThePageShown(t *testing.T) {
 			[][3]string{{"a.md", "b.md", "wikilink"}, {"b.md", "c.md", "wikilink"}, {root, root, "wikilink"}}), nil
 	}
 	m := newMindmap(c)
-	m.Shown(Page{Ref: fileRef{"kb", "a.md"}}) // closed: nothing read
+	m.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}}) // closed: nothing read
 	if len(c.calls) != 0 {
 		t.Fatalf("a closed Mindmap read %v", c.calls)
 	}
 	m.Panels()[0].Opened(nil)
-	if m.cur == nil || m.cur.root.path != "a.md" || len(c.calls) != 1 || !strings.Contains(c.calls[0], "root:a.md") {
+	if m.cur == nil || m.cur.root.Path != "a.md" || len(c.calls) != 1 || !strings.Contains(c.calls[0], "root:a.md") {
 		t.Fatalf("opened over a.md: %+v, calls %v", m.cur, c.calls)
 	}
 	p, ok := pointOf(m.cur, "b.md")
@@ -670,11 +671,11 @@ func TestTheMindmapRootsAtThePageShown(t *testing.T) {
 	if want := []string{"kb:b.md"}; !equalStrings(c.files, want) || !equalStrings(c.hidden, []string{mindmapPanelID}) || len(c.calls) != 1 {
 		t.Fatalf("the click opened %v, hid %v and read %v; want b.md opened, the Mindmap hidden, and no read", c.files, c.hidden, c.calls)
 	}
-	m.Shown(Page{Ref: fileRef{"kb", "b.md"}}) // the page the click opened
-	if m.cur.root.path != "b.md" || len(c.calls) != 2 {
-		t.Fatalf("after b.md was shown: rooted at %s, calls %v", m.cur.root.path, c.calls)
+	m.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "b.md"}}) // the page the click opened
+	if m.cur.root.Path != "b.md" || len(c.calls) != 2 {
+		t.Fatalf("after b.md was shown: rooted at %s, calls %v", m.cur.root.Path, c.calls)
 	}
-	m.Shown(Page{Ref: fileRef{"", "/tmp/x.md"}, Outside: true})
+	m.Shown(feature.Page{Ref: feature.FileRef{WS: "", Path: "/tmp/x.md"}, Outside: true})
 	if m.cur != nil || len(c.calls) != 2 {
 		t.Fatalf("a file in no workspace: %+v, calls %v", m.cur, c.calls)
 	}
@@ -792,7 +793,7 @@ func TestEachRunWritesItsOwnRelationViews(t *testing.T) {
 			onLoop(r, func() []string {
 				var out []string
 				for _, c := range []string{"App.toggleGlobeMap", "App.toggleMindmap", "App.toggleRelations"} {
-					if _, ok := r.h.reg.handlers[c]; ok {
+					if _, ok := r.h.reg.Handlers[c]; ok {
 						out = append(out, c)
 					}
 				}
@@ -903,7 +904,7 @@ func (a *asyncCore) run(t *testing.T, done func() bool) {
 
 // closeHost is a panel's host as its Closed hook uses it.
 type closeHost struct {
-	PanelHost
+	feature.PanelHost
 	restored []string
 }
 

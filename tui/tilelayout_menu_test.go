@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
@@ -236,7 +237,7 @@ func TestAPanelsEdgeIsChosenOnItsLayout(t *testing.T) {
 	}
 	wantEdgeChecked := func(edge string) {
 		t.Helper()
-		for _, e := range edges {
+		for _, e := range feature.Edges {
 			row, _ := edgeRow(rows(), e)
 			if row.Checked != (e == edge) {
 				t.Fatalf("Tiled › %s checked %v with the edge %s", e, row.Checked, edge)

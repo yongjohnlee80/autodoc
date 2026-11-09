@@ -7,16 +7,17 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // TestEveryLeaderKeyHasAGroupOfItsCard: a key SPC's card lists is under one of the card's own
 // headings, so a new key cannot fall under MORE unnoticed.
 func TestEveryLeaderKeyHasAGroupOfItsCard(t *testing.T) {
-	k := keyCatalog(nil)
-	c, _ := k.card(leader)
+	k := feature.KeyCatalog(nil)
+	c, _ := k.Card(feature.Leader)
 	headings := slices.Concat(c.Groups...)
-	for _, k := range k.on(leader) {
+	for _, k := range k.On(feature.Leader) {
 		if k.Does != "" && !slices.Contains(headings, k.Group) {
 			t.Errorf("SPC %s (%s) is in the group %q, which SPC's card does not head", k.Show, k.Does, k.Group)
 		}
@@ -27,9 +28,9 @@ func TestEveryLeaderKeyHasAGroupOfItsCard(t *testing.T) {
 // starting in its column; a column's groups are in order, a blank row between two; and the card
 // fits the smallest screen, 80 × 20 less its frame.
 func TestTheLeaderCardsGroupsAlign(t *testing.T) {
-	k := keyCatalog(nil)
-	c, _ := k.card(leader)
-	text := k.cardState()[textSource(leader)].(string)
+	k := feature.KeyCatalog(nil)
+	c, _ := k.Card(feature.Leader)
+	text := k.CardState()[feature.TextSource(feature.Leader)].(string)
 	lines := strings.Split(text, "\n")
 	if len(lines) > 16 {
 		t.Errorf("SPC's card is %d rows, more than the 16 the screen leaves it:\n%s", len(lines), text)
@@ -40,7 +41,7 @@ func TestTheLeaderCardsGroupsAlign(t *testing.T) {
 		}
 	}
 	under := map[string][]string{}
-	for _, key := range k.on(leader) {
+	for _, key := range k.On(feature.Leader) {
 		if key.Does != "" {
 			under[key.Group] = append(under[key.Group], key.Show+"  "+key.Does)
 		}
@@ -131,8 +132,8 @@ autodoc.command{ name = "term", help = "my term", run = function(ed) ed:insert("
 	type owner struct{ name, id, help string }
 	var owners []owner
 	onLoop(r, func() bool {
-		for _, e := range r.h.cat.entries() {
-			names := r.h.cat.owned(e.ID)
+		for _, e := range r.h.cat.Entries() {
+			names := r.h.cat.Owned(e.ID)
 			for i, n := range names {
 				owners = append(owners, owner{n, e.ID, e.Help})
 				names[i] = ":" + n
@@ -177,23 +178,23 @@ autodoc.command{ name = "term", help = "my term", run = function(ed) ed:insert("
 // TestAKeyOnACardIsNamedFromThePage: F1 names a card's key after the keys that open its card.
 func TestAKeyOnACardIsNamedFromThePage(t *testing.T) {
 	f := &keyedCatFake{keyedFake: keyedFake{fake: fake{name: "zz"},
-		cards: []Card{{ID: "zzCard", View: "ZzCard", Back: leader}},
-		keys: []Key{{Card: leader, Seq: "Shift+Z", Show: "Z", Opens: "zzCard"}, {Card: "zzCard", Seq: "b", Show: "b", Cmd: "zz.go"},
+		cards: []feature.Card{{ID: "zzCard", View: "ZzCard", Back: feature.Leader}},
+		keys: []feature.Key{{Card: feature.Leader, Seq: "Shift+Z", Show: "Z", Opens: "zzCard"}, {Card: "zzCard", Seq: "b", Show: "b", Cmd: "zz.go"},
 			{Seq: "F9", Cmd: "zz.go"}}},
-		entries: []Entry{{ID: "zz.go", Title: "go", Run: noRun}}}
-	r, err := newRegistry(f)
+		entries: []feature.Entry{{ID: "zz.go", Title: "go", Run: noRun}}}
+	r, err := feature.NewRegistry(f)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := helpCommands(keyCatalog([]Feature{f}), r.catalog, map[string][]string{"zz.go": {"SPC p g"}})
+	got := helpCommands(feature.KeyCatalog([]feature.Feature{f}), r.Catalog, map[string][]string{"zz.go": {"SPC p g"}})
 	if !strings.Contains(got, "zz.go  — · SPC Z b, F9, SPC p g · go") {
 		t.Errorf("F1's line:\n%s", got)
 	}
 	// a key on a card no key opens (the registry refuses that one) is named as it shows
-	if got := keyName(keyset{keys: []Key{{Card: "lone", Seq: "x"}}}, Key{Card: "lone", Seq: "x"}, 0); got != "x" {
+	if got := keyName(feature.Keyset{Keys: []feature.Key{{Card: "lone", Seq: "x"}}}, feature.Key{Card: "lone", Seq: "x"}, 0); got != "x" {
 		t.Errorf("a key on a card nothing opens: %q", got)
 	}
-	if helpText(keyset{}, nil, nil) != helpKeys+"\n\n\n\n"+helpRest+"\n\n"+helpLayout {
+	if helpText(feature.Keyset{}, nil, nil) != helpKeys+"\n\n\n\n"+helpRest+"\n\n"+helpLayout {
 		t.Error("help without a catalog has a COMMANDS section")
 	}
 }

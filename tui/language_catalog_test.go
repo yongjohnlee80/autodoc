@@ -9,11 +9,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
 )
 
 // language_catalog_test.go: the English catalog's text that AutoDoc keeps in Go tables — the keys
-// and cards (keys.go), the commands (the catalog) and help (help.go) — generated from them, as the
+// and cards (feature/keys.go), the commands (the catalog) and help (help.go) — generated from them, as the
 // cards' QML is (TestKeysAreGenerated): go test -tags gui ./tui -run TestTheEnglishCatalogHoldsTheGoTables -update.
 // The GUI build's tables are the whole of them (a terminal's relation views declare nothing), so
 // only it owns the catalog: it writes it and finds an id no table says; the terminal build checks
@@ -29,11 +30,11 @@ func goTableText(t *testing.T) map[string]string {
 	t.Helper()
 	h := newHost(NewSession("unused", nil), Options{GUI: true}) // a window's: the GUI build adds its views (relationViewFeatures)
 	fs := h.features()
-	r, err := newRegistry(fs...)
+	r, err := feature.NewRegistry(fs...)
 	if err != nil {
 		t.Fatal(err)
 	}
-	k := keyCatalog(fs)
+	k := feature.KeyCatalog(fs)
 	out := map[string]string{}
 	put := func(id, english string) {
 		if english == "" {
@@ -44,22 +45,22 @@ func goTableText(t *testing.T) map[string]string {
 		}
 		out[id] = english
 	}
-	for _, key := range k.keys {
-		put("autodoc.key."+slugOf(key.Does), key.Does)
-		if showWords.MatchString(key.Show) {
-			put(showPrefix+slugOf(key.Show), key.Show)
+	for _, key := range k.Keys {
+		put("autodoc.key."+feature.SlugOf(key.Does), key.Does)
+		if feature.ShowWords.MatchString(key.Show) {
+			put(feature.ShowPrefix+feature.SlugOf(key.Show), key.Show)
 		}
 	}
-	for _, c := range k.cards {
+	for _, c := range k.Cards {
 		put("autodoc.card."+c.ID+".title", c.Title)
 		put("autodoc.card."+c.ID+".help", c.Help)
-		put("autodoc.card."+c.ID+".keyhelp", cardKeyHelp(c))
-		for _, g := range append(slices.Concat(c.Groups...), groupMore) {
-			put("autodoc.card.group."+slugOf(g), g)
+		put("autodoc.card."+c.ID+".keyhelp", feature.CardKeyHelp(c))
+		for _, g := range append(slices.Concat(c.Groups...), feature.GroupMore) {
+			put("autodoc.card.group."+feature.SlugOf(g), g)
 		}
 	}
-	for _, e := range r.catalog.entries() {
-		if e.Source != SourceBuiltin && e.Source != SourceFeature {
+	for _, e := range r.Catalog.Entries() {
+		if e.Source != feature.SourceBuiltin && e.Source != feature.SourceFeature {
 			continue // a script's or a plugin's: its own words
 		}
 		put("autodoc.cmd."+e.ID, e.Title)
@@ -67,7 +68,7 @@ func goTableText(t *testing.T) map[string]string {
 	}
 	for _, labels := range slices.Concat(slices.Collect(maps.Values(choiceLabels)), slices.Collect(maps.Values(featureChoiceLabels))) {
 		for _, l := range labels {
-			put("autodoc.choice."+slugOf(l), l)
+			put("autodoc.choice."+feature.SlugOf(l), l)
 		}
 	}
 	for _, l := range themes.MenuLabels() {
@@ -80,7 +81,7 @@ func goTableText(t *testing.T) map[string]string {
 	put("autodoc.help.layout", helpLayout)
 	put("autodoc.help.commands", helpCommandsHead)
 	for _, g := range helpGroups {
-		put("autodoc.help.group."+slugOf(g.head), g.head)
+		put("autodoc.help.group."+feature.SlugOf(g.head), g.head)
 	}
 	return out
 }

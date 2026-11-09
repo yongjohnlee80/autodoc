@@ -18,6 +18,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
 	wsfilter "github.com/yongjohnlee80/autodoc/core/workspace"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // A WORKSPACE'S SETTINGS — one dialog, two tabs
@@ -47,14 +48,14 @@ type connInfo struct {
 }
 
 func readConnInfo(v any) *connInfo {
-	m := asMap(v)
+	m := feature.AsMap(v)
 	if m == nil {
 		return nil
 	}
 	pw, _ := m["has_password"].(bool)
 	sealed, _ := m["sealed"].(bool)
-	return &connInfo{engine: str(m, "engine"), host: str(m, "host"), database: str(m, "database"), user: str(m, "user"),
-		schema: str(m, "schema"), hasPassword: pw, sealed: sealed}
+	return &connInfo{engine: feature.Str(m, "engine"), host: feature.Str(m, "host"), database: feature.Str(m, "database"), user: feature.Str(m, "user"),
+		schema: feature.Str(m, "schema"), hasPassword: pw, sealed: sealed}
 }
 
 // where is the connection in one line: the engine, then user@host/database, its schema, and
@@ -94,8 +95,8 @@ type databasesInfo struct {
 }
 
 func readDatabasesInfo(v any) databasesInfo {
-	m := asMap(v)
-	d := databasesInfo{destination: str(m, "destination"), vectorIndex: str(m, "vector_index"), viewArgs: asMap(m["view_args"])}
+	m := feature.AsMap(v)
+	d := databasesInfo{destination: feature.Str(m, "destination"), vectorIndex: feature.Str(m, "vector_index"), viewArgs: feature.AsMap(m["view_args"])}
 	if d.destination == "" {
 		d.destination = store.DestinationLocal
 	}
@@ -603,29 +604,29 @@ func (h *Host) settingsExtras(ctx context.Context) (any, error) {
 		return nil, err
 	}
 	x := settingsExtras{providers: []string{""}}
-	for _, p := range asList(asMap(res)["providers"]) {
-		x.providers = append(x.providers, str(asMap(p), "name"))
+	for _, p := range feature.AsList(feature.AsMap(res)["providers"]) {
+		x.providers = append(x.providers, feature.Str(feature.AsMap(p), "name"))
 	}
 	if caps, err := h.call(ctx, "sys.capabilities"); err == nil {
-		x.databases, _ = asMap(caps)["databases"].(bool)
+		x.databases, _ = feature.AsMap(caps)["databases"].(bool)
 	}
 	return x, nil
 }
 
 // withSettingsExtras is settingsExtras for a dialog with no workspace yet.
 func (h *Host) withSettingsExtras(fn func(providers []string, databases bool)) {
-	tk := h.ticket(&h.dialogSeq, TicketWorkspace)
-	do(h, func(ctx context.Context) answerOf[settingsExtras] {
+	tk := h.ticket(&h.dialogSeq, feature.TicketWorkspace)
+	do(h, func(ctx context.Context) feature.AnswerOf[settingsExtras] {
 		x, err := h.settingsExtras(ctx)
 		v, _ := x.(settingsExtras)
-		return answerOf[settingsExtras]{v: v, err: err}
-	}, func(a answerOf[settingsExtras]) {
+		return feature.Answered(v, err)
+	}, func(a feature.AnswerOf[settingsExtras]) {
 		switch {
 		case !tk.Current():
-		case a.err != nil:
-			h.failed(h.tr("autodoc.notice.settings.workspace_settings"), a.err)
+		case a.Err() != nil:
+			h.failed(h.tr("autodoc.notice.settings.workspace_settings"), a.Err())
 		default:
-			fn(a.v.providers, a.v.databases)
+			fn(a.Value.providers, a.Value.databases)
 		}
 	})
 }
@@ -657,9 +658,9 @@ func (h *Host) showSettings(base settingsBase, tab int, help string, typed ...se
 	h.set("App.settingsHelp", help)
 	h.set("App.settingsSchemaState", h.trf("autodoc.text.settings.e_g", w.schema.state(core{h}), suggestedSchema))
 	// the first provider choice: none of its own, the daemon's
-	rows := []rowOf{{"key": "", "label": h.tr("autodoc.text.settings.the_daemon_s_system_search_models")}}
+	rows := []feature.RowOf{{"key": "", "label": h.tr("autodoc.text.settings.the_daemon_s_system_search_models")}}
 	for _, n := range base.providers[min(1, len(base.providers)):] {
-		rows = append(rows, rowOf{"key": n, "label": n})
+		rows = append(rows, feature.RowOf{"key": n, "label": n})
 	}
 	h.wsProviders.Reset(rows)
 	providerState := h.tr("autodoc.text.settings.uses_the_daemon_s_provider")
@@ -750,7 +751,7 @@ func (h *Host) newRootFolder(root string) {
 func (h *Host) saveSettings(f settingsForm) {
 	base := h.settings
 	refuse := func(err error) {
-		h.showSettings(base, h.settingsTabNow(), h.trf("autodoc.text.settings.not_saved", wireMessage(err)), f)
+		h.showSettings(base, h.settingsTabNow(), h.trf("autodoc.text.settings.not_saved", feature.WireMessage(err)), f)
 	}
 	if base.adding {
 		h.addWithSettings(base, f, refuse)
@@ -873,9 +874,9 @@ func (h *Host) addWithSettings(base settingsBase, f settingsForm, refuse func(er
 			h.loadWorkspaces()
 			h.showSettings(made, h.settingsTabNow(), h.trf("autodoc.text.settings.added_the_kb_type_stopped_part_way_save_finishes", applied, name), f)
 		case a.err != nil:
-			help := h.trf("autodoc.text.settings.added_with_the_defaults_not_saved", wireMessage(a.err))
+			help := h.trf("autodoc.text.settings.added_with_the_defaults_not_saved", feature.WireMessage(a.err))
 			if kb != nil {
-				help = h.trf("autodoc.text.settings.scaffolded_not_saved", a.applied.text(core{h}), wireMessage(a.err))
+				help = h.trf("autodoc.text.settings.scaffolded_not_saved", a.applied.text(core{h}), feature.WireMessage(a.err))
 			}
 			h.failed(h.trf("autodoc.notice.settings.added_workspace_but_its_settings_were_not_saved", name), a.err)
 			h.loadWorkspaces()
@@ -959,9 +960,9 @@ func (h *Host) todoGraphOnly(exclude string) {
 // types, include, exclude, the three file types, section, policy, provider, destination, its DSN
 // and schema, vector index, source, its DSN and schema, view args, the registered types on, the
 // document formats on, the graph_only patterns, todo tasks in search.
-func settingsArgs(fn func(settingsForm)) Command {
+func settingsArgs(fn func(settingsForm)) feature.Command {
 	const want = 24
-	return Command{Args: make([]qml.SpecValueKind, want), What: fmt.Sprintf("the dialog's %d fields", want), Run: func(args []qml.SpecValue) error {
+	return feature.Command{Args: make([]qml.SpecValueKind, want), What: fmt.Sprintf("the dialog's %d fields", want), Run: func(args []qml.SpecValue) error {
 		s := func(i int) string { return args[i].Raw }
 		n := func(i int) int {
 			v, err := strconv.Atoi(args[i].Raw)

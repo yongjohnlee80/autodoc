@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	"github.com/yongjohnlee80/golib/tui/widget/table"
 )
@@ -96,9 +97,9 @@ func (h *Host) newBufferWith(name, text string) error {
 }
 
 // bufferOf is the open buffer of ref's file, or nil.
-func (h *Host) bufferOf(ref fileRef) *openBuffer {
+func (h *Host) bufferOf(ref feature.FileRef) *openBuffer {
 	for _, b := range h.buffers {
-		if b.file.open && b.file.ws == ref.ws && b.file.path == ref.path {
+		if b.file.open && b.file.ws == ref.WS && b.file.path == ref.Path {
 			return b
 		}
 	}
@@ -144,14 +145,14 @@ func (h *Host) activate(b *openBuffer) {
 // been loaded again since. Neither a switch of the active buffer nor of the workspace ends it, as
 // ticket's TicketFile (h.file.gen) and TicketWorkspace (h.epoch) scopes would. load takes a new
 // generation (a load); otherwise it only reads the current one (a save, a check).
-func (h *Host) bufferTicket(b *openBuffer, load bool) Ticket {
+func (h *Host) bufferTicket(b *openBuffer, load bool) feature.Ticket {
 	if load {
 		b.file.gen++
 	}
 	gen, sess := b.file.gen, h.session.Gen()
-	return Ticket{current: func() bool {
+	return feature.NewTicket(func() bool {
 		return h.session.Gen() == sess && b.file.gen == gen && slices.Contains(h.buffers, b)
-	}}
+	})
 }
 
 // editorFor is b's editor: the widget's when b is active, else b's headless one, made once with the
@@ -262,10 +263,10 @@ func bufferLabel(b *openBuffer) string {
 // SPC b's card) the buffers as they are now.
 func (h *Host) syncBuffers() {
 	if h.bufferPick != nil {
-		h.bufferPick.setAll(h.bufferLabels())
+		h.bufferPick.SetAll(h.bufferLabels())
 	}
 	h.syncBufferTabs()
-	h.set(textSource(bufferCard), h.bufferCardText())
+	h.set(feature.TextSource(feature.BufferCard), h.bufferCardText())
 }
 
 // bufferLabels are the buffers' labels in opening order.

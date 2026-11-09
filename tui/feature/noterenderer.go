@@ -1,4 +1,4 @@
-package tui
+package feature
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 
 // THE NOTE EDITOR'S RENDERER: main.qml's document Editor declares NoteRenderer, not golib's
 // MarkdownRenderer. It is golib's Markdown renderer, with the same settings, and a window build
-// draws the open note's embeds with it (embeds_gui.go): the note is the one the host tells it
+// draws the open note's embeds with it (tui/embeds_gui.go): the note is the one the host tells it
 // (Options.NoteFile). Every other Editor (the search preview, a todo's details, the tutorial)
 // declares golib's MarkdownRenderer and draws no embeds: its text is not the open note's, so the
 // note's folder is not where its embeds are. A terminal's Editor has no Rendered view and ignores it.
@@ -25,7 +25,7 @@ func (NoteRendererSpec) RendererKind() string { return NoteRendererKind }
 
 // noteRendererType is NoteRenderer, declared as MarkdownRenderer is: its settings are taken at
 // construction.
-var noteRendererType = tuidecl.Type{Name: "NoteRenderer", Build: buildNoteRenderer, Ctor: []string{"headingScale", "mermaid"}}
+var NoteRendererType = tuidecl.Type{Name: "NoteRenderer", Build: buildNoteRenderer, Ctor: []string{"headingScale", "mermaid"}}
 
 func buildNoteRenderer(b tuidecl.Build) (tuicore.Component, []string, error) {
 	if len(b.Children) != 0 {

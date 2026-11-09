@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/yongjohnlee80/autodoc/internal/client"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 func (h *Host) showMismatch(mismatch *MismatchError) {
@@ -83,18 +84,18 @@ func (h *Host) startRestart() {
 		h.notify(h.tr("autodoc.notice.restart.restart_not_connected_to_a_backend"))
 		return
 	}
-	do(h, func(context.Context) answerOf[string] {
+	do(h, func(context.Context) feature.AnswerOf[string] {
 		if h.installed == nil {
-			return answered("", nil)
+			return feature.Answered("", nil)
 		}
 		v, err := h.installed()
 		if err != nil {
-			return answered("?", nil)
+			return feature.Answered("?", nil)
 		}
-		return answered(v, nil)
-	}, func(a answerOf[string]) {
-		installed := a.v
-		if a.err != nil {
+		return feature.Answered(v, nil)
+	}, func(a feature.AnswerOf[string]) {
+		installed := a.Value
+		if a.Err() != nil {
 			installed = "?" // reading it failed (it panicked): not known, as when it errs
 		}
 		var q string
@@ -106,7 +107,7 @@ func (h *Host) startRestart() {
 		default:
 			q = h.trf("autodoc.text.restart.restart_the_backend_autodoc_it_stops_and_starts_as", running, installed)
 		}
-		h.ask(Question{Title: h.tr("autodoc.question.restart.restart_the_backend"), Text: q, OnYes: h.restartConfirmed})
+		h.ask(feature.Question{Title: h.tr("autodoc.question.restart.restart_the_backend"), Text: q, OnYes: h.restartConfirmed})
 	})
 }
 

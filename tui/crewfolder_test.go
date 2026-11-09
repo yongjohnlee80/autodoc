@@ -3,6 +3,7 @@ package tui
 import (
 	"encoding/json"
 	"errors"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"os"
 	"path/filepath"
 	"slices"
@@ -135,7 +136,7 @@ func TestClaudeSettingsTakeOutAutoDocsOldHooks(t *testing.T) {
 // TestAgentsNeverInheritACrewContext: an AutoDoc started by a crew agent doesn't hand that agent's
 // session context to the agents it starts.
 func TestAgentsNeverInheritACrewContext(t *testing.T) {
-	if got := spawnerIdentity([]string{"AUTODOC_CREW_CONTEXT=/x", "HOME=/h"}); !slices.Contains(got, "AUTODOC_CREW_CONTEXT") {
+	if got := feature.SpawnerIdentity([]string{"AUTODOC_CREW_CONTEXT=/x", "HOME=/h"}); !slices.Contains(got, "AUTODOC_CREW_CONTEXT") {
 		t.Fatalf("spawnerIdentity: %v, want AUTODOC_CREW_CONTEXT stripped", got)
 	}
 }

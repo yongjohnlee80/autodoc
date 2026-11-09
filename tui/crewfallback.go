@@ -11,6 +11,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/mail"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // The window's part in the crew's fallback (docs/decisions/crew.md#the-fallback-exactly-once): mail
@@ -57,7 +58,7 @@ func (h *crewHost) pollFallbacks(gen uint64) {
 			return
 		}
 		if err, _ := v.(error); err != nil {
-			switch code(err) {
+			switch feature.Code(err) {
 			case golibrpc.CodeMethodNotFound: // a daemon before protocol 42: no jobs, ever, from it
 				return
 			case crew.CodeStaleEpoch: // the scope changed hands: the renewal claims again, and that claim polls
@@ -76,10 +77,10 @@ func (h *crewHost) pollFallbacks(gen uint64) {
 // fallbackJobsOf is mail.fallbacks' jobs, as the wire decodes them.
 func fallbackJobsOf(v any) []fallbackJob {
 	var out []fallbackJob
-	for _, e := range asList(asMap(v)["jobs"]) {
-		m := asMap(e)
-		out = append(out, fallbackJob{ID: str(m, "id"), Lease: str(m, "lease"), Codename: str(m, "codename"),
-			From: str(m, "from"), Text: str(m, "text"), Tries: num(m, "tries")})
+	for _, e := range feature.AsList(feature.AsMap(v)["jobs"]) {
+		m := feature.AsMap(e)
+		out = append(out, fallbackJob{ID: feature.Str(m, "id"), Lease: feature.Str(m, "lease"), Codename: feature.Str(m, "codename"),
+			From: feature.Str(m, "from"), Text: feature.Str(m, "text"), Tries: feature.Num(m, "tries")})
 	}
 	return out
 }

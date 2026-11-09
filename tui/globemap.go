@@ -1,6 +1,9 @@
 package tui
 
-import graphlayout "github.com/yongjohnlee80/golib/graph/layout"
+import (
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	graphlayout "github.com/yongjohnlee80/golib/graph/layout"
+)
 
 // THE GLOBEMAP'S MODEL, in either build: the links it follows (f), its links' classes, and the
 // simulation that places a workspace's documents (golib graph/layout), which a window's GlobeMap
@@ -14,7 +17,7 @@ const (
 )
 
 // globeFilterPref is the filter the preferences open the map with: globeFilters' index.
-func globeFilterPref(c Core) int {
+func globeFilterPref(c feature.Core) int {
 	for i, f := range globeFilters {
 		if f.key == c.Prefs().Value(prefGlobeFilter) {
 			return i

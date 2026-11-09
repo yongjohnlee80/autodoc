@@ -11,6 +11,7 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // bridgesWindow is Crew Bridges' program: crew.bridges answers rows, crew.bridge_kill is recorded
@@ -25,7 +26,7 @@ type bridgesWindow struct {
 	timers    []func()
 	state     map[string]any
 	opened    []string
-	asked     []Question
+	asked     []feature.Question
 	notices   []string
 	copied    string
 }
@@ -47,10 +48,13 @@ func (w *bridgesWindow) Call(_ context.Context, verb string, p ...any) (any, err
 func (w *bridgesWindow) Go(fn func(context.Context) any, then func(any)) {
 	then(fn(context.Background()))
 }
-func (w *bridgesWindow) After(_ time.Duration, fn func())  { w.timers = append(w.timers, fn) }
-func (w *bridgesWindow) Set(name string, v any)            { w.state[name] = v }
-func (w *bridgesWindow) Open(id string)                    { w.opened = append(w.opened, id) }
-func (w *bridgesWindow) Ask(q Question) Asked              { w.asked = append(w.asked, q); return Asked{} }
+func (w *bridgesWindow) After(_ time.Duration, fn func()) { w.timers = append(w.timers, fn) }
+func (w *bridgesWindow) Set(name string, v any)           { w.state[name] = v }
+func (w *bridgesWindow) Open(id string)                   { w.opened = append(w.opened, id) }
+func (w *bridgesWindow) Ask(q feature.Question) feature.Asked {
+	w.asked = append(w.asked, q)
+	return feature.Asked{}
+}
 func (w *bridgesWindow) Notify(msg string)                 { w.notices = append(w.notices, msg) }
 func (w *bridgesWindow) Tr(id string) string               { return w.Trf(id) }
 func (w *bridgesWindow) Trf(id string, args ...any) string { return fill(englishText(id), args...) }
@@ -105,7 +109,7 @@ func TestCrewBridgesKillAnOrphanAtOnceAndAskForALiveOne(t *testing.T) {
 	if got := w.state["App.crewBridgesStatus"]; !strings.Contains(got.(string), "4 helper(s), 2 orphaned") {
 		t.Fatalf("the status %q", got)
 	}
-	if row := b.rowOf(0, b.rows.items[0]); row["state"] != "orphan, ends in 7 min" || row["owner"] != "—" {
+	if row := b.rowOf(0, b.rows.Items[0]); row["state"] != "orphan, ends in 7 min" || row["owner"] != "—" {
 		t.Fatalf("an orphan's row %v, want when it is reclaimed", row)
 	}
 	scope, epoch, _ := host.held()
@@ -216,7 +220,7 @@ func TestCrewBridgesSayWhatTheKillsLeftRunning(t *testing.T) {
 	b, _ := newBridgesCell(t, w)
 	b.now = func() time.Time { return now }
 	b.open()
-	if row := b.rowOf(0, b.rows.items[0]); row["state"] != "orphan, 2 still running: the daemon stopped trying, it's yours to end" {
+	if row := b.rowOf(0, b.rows.Items[0]); row["state"] != "orphan, 2 still running: the daemon stopped trying, it's yours to end" {
 		t.Fatalf("the orphan the daemon gave up on: %v", row)
 	}
 	b.kill(0)

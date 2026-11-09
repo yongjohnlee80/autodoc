@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/yongjohnlee80/autodoc/internal/install"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // UPDATE — About's Update (docs/decisions/install.md#abouts-update-and-the-restart). When the
@@ -59,19 +60,19 @@ func (h *Host) updateExited(script string, code int) {
 		return
 	}
 	running := h.aboutInfo.Version
-	do(h, func(context.Context) answerOf[string] {
+	do(h, func(context.Context) feature.AnswerOf[string] {
 		if h.installed == nil {
-			return answered("", nil)
+			return feature.Answered("", nil)
 		}
-		return answered(h.installed())
-	}, func(a answerOf[string]) {
-		if a.err != nil || a.v == "" || a.v == running {
+		return feature.Answered(h.installed())
+	}, func(a feature.AnswerOf[string]) {
+		if a.Err() != nil || a.Value == "" || a.Value == running {
 			h.notify(h.trf("autodoc.notice.update.autodoc_is_up_to_date", running))
 			return
 		}
-		h.ask(Question{
+		h.ask(feature.Question{
 			Title: h.tr("autodoc.question.update.restart_autodoc"),
-			Text:  h.trf("autodoc.text.update.autodoc_is_installed_restart_now", a.v, running),
+			Text:  h.trf("autodoc.text.update.autodoc_is_installed_restart_now", a.Value, running),
 			Yes:   h.tr("autodoc.question.update.restart_now"),
 			No:    h.tr("autodoc.question.update.later"),
 			OnYes: h.restartUpdated,

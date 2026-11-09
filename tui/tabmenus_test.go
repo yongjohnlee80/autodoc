@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
@@ -40,7 +41,7 @@ func runRow(t *testing.T, rows []widgetcore.MenuItemModel, id string) {
 // Resume and Hide alone, and Hide is the panel's own toggle.
 func TestPanelRowsOfferOnlyWhatTheHostHas(t *testing.T) {
 	hid := 0
-	rows := panelRows(struct{}{}, "terminal", &modelPanel{}, "", func() { hid++ })
+	rows := feature.PanelRows(struct{}{}, "terminal", &modelPanel{}, "", func() { hid++ })
 	if got := rowIDs(rows); !slices.Equal(got, []string{"tabs.panel", "tabs.resume", "tabs.hide"}) {
 		t.Fatalf("a bare host's rows: %v", got)
 	}
@@ -54,7 +55,7 @@ func TestPanelRowsOfferOnlyWhatTheHostHas(t *testing.T) {
 // Restore (s); a toggle that fails is kept, not lost, named for what failed.
 func TestPanelRowsMaximizeTheirOwnPanel(t *testing.T) {
 	m := &maximizeHost{}
-	rows := panelRows(m, "agent", &modelPanel{}, "", func() {})
+	rows := feature.PanelRows(m, "agent", &modelPanel{}, "", func() {})
 	if row, _ := menuRow(rows, "tabs.maximize"); row.Label != "Maximize" || row.Hotkey != 'm' {
 		t.Errorf("restored, the row reads %q (%q)", row.Label, row.Hotkey)
 	}
@@ -64,7 +65,7 @@ func TestPanelRowsMaximizeTheirOwnPanel(t *testing.T) {
 	}
 
 	m.maximized, m.err = true, errors.New("no such drawer")
-	rows = panelRows(m, "agent", &modelPanel{}, "", func() {})
+	rows = feature.PanelRows(m, "agent", &modelPanel{}, "", func() {})
 	if row, _ := menuRow(rows, "tabs.maximize"); row.Label != "Restore" || row.Hotkey != 's' {
 		t.Errorf("maximized, the row reads %q (%q)", row.Label, row.Hotkey)
 	}
@@ -88,12 +89,12 @@ func (l *lookHost) Keep(err error)          { l.kept = append(l.kept, err) }
 // kept, named for what failed, not lost.
 func TestPanelRowsKeepARefusedLook(t *testing.T) {
 	l := &lookHost{}
-	runRow(t, panelRows(l, "terminal", &modelPanel{}, "", func() {}), "tabs.look")
+	runRow(t, feature.PanelRows(l, "terminal", &modelPanel{}, "", func() {}), "tabs.look")
 	if l.opened != 1 || len(l.kept) != 0 {
 		t.Fatalf("opened %d, kept %v", l.opened, l.kept)
 	}
 	l.err = errors.New("views are not attached")
-	runRow(t, panelRows(l, "terminal", &modelPanel{}, "", func() {}), "tabs.look")
+	runRow(t, feature.PanelRows(l, "terminal", &modelPanel{}, "", func() {}), "tabs.look")
 	if len(l.kept) != 1 || !errors.Is(l.kept[0], l.err) || !strings.HasPrefix(l.kept[0].Error(), "Theme and font… for the terminal panel: ") {
 		t.Errorf("a refused look kept %v, not naming what failed", l.kept)
 	}
@@ -113,7 +114,7 @@ func (s *scaleHost) StepPanelTextScale(dir int) error {
 	if s.err != nil {
 		return s.err
 	}
-	s.pct = agentScales[slices.Index(agentScales, s.pct)+dir]
+	s.pct = feature.AgentScales[slices.Index(feature.AgentScales, s.pct)+dir]
 	return nil
 }
 func (s *scaleHost) Keep(err error) { s.kept = append(s.kept, err) }
@@ -122,11 +123,11 @@ func (s *scaleHost) Keep(err error) { s.kept = append(s.kept, err) }
 // then Smaller (s) and Larger (r), a step of 10% each, each disabled at its end of 50–150%; a
 // terminal's has none (its host's font is its own); a refused step is kept, named for what failed.
 func TestPanelRowsStepTheShellsTextSize(t *testing.T) {
-	if _, ok := menuRow(panelRows(&scaleHost{pct: 90}, "agent", &modelPanel{}, "", func() {}), "tabs.text"); ok {
+	if _, ok := menuRow(feature.PanelRows(&scaleHost{pct: 90}, "agent", &modelPanel{}, "", func() {}), "tabs.text"); ok {
 		t.Fatal("a terminal's panel menu offers Text size")
 	}
 	s := &scaleHost{pct: 90, drawn: true}
-	rows := panelRows(s, "terminal", &modelPanel{}, "", func() {})
+	rows := feature.PanelRows(s, "terminal", &modelPanel{}, "", func() {})
 	sub, ok := menuRow(rows, "tabs.text")
 	if !ok || sub.Label != "Text size" || sub.Hotkey != 'x' {
 		t.Fatalf("the window's rows %v: Text size %q (%q)", rowIDs(rows), sub.Label, sub.Hotkey)
@@ -150,12 +151,12 @@ func TestPanelRowsStepTheShellsTextSize(t *testing.T) {
 	}
 	for pct, id := range map[int]string{50: "tabs.text.smaller", 150: "tabs.text.larger"} {
 		s.pct = pct
-		if row, _ := menuRow(panelRows(s, "agent", &modelPanel{}, "", func() {}), id); row.Enabled {
+		if row, _ := menuRow(feature.PanelRows(s, "agent", &modelPanel{}, "", func() {}), id); row.Enabled {
 			t.Errorf("at %d%%, %s is enabled", pct, id)
 		}
 	}
 	s.pct, s.err = 90, errors.New("views are not attached")
-	runRow(t, panelRows(s, "agent", &modelPanel{}, "", func() {}), "tabs.text.smaller")
+	runRow(t, feature.PanelRows(s, "agent", &modelPanel{}, "", func() {}), "tabs.text.smaller")
 	if len(s.kept) != 1 || !errors.Is(s.kept[0], s.err) || !strings.HasPrefix(s.kept[0].Error(), "Text size › Smaller for the agent panel: ") {
 		t.Errorf("a refused step kept %v, not naming what failed", s.kept)
 	}
@@ -165,7 +166,7 @@ func TestPanelRowsStepTheShellsTextSize(t *testing.T) {
 // no tab (an empty panel's menu) it is disabled; a refusal is kept, named for what failed.
 func TestPanelRowsResumeTheirTab(t *testing.T) {
 	p := &modelPanel{}
-	row, ok := menuRow(panelRows(struct{}{}, "agent", p, "t2", func() {}), "tabs.resume")
+	row, ok := menuRow(feature.PanelRows(struct{}{}, "agent", p, "t2", func() {}), "tabs.resume")
 	if !ok || row.Label != "Resume" || row.Hotkey != 'u' || !row.Enabled {
 		t.Fatalf("with a tab, the row is %q (%q), enabled %v", row.Label, row.Hotkey, row.Enabled)
 	}
@@ -173,12 +174,12 @@ func TestPanelRowsResumeTheirTab(t *testing.T) {
 	if !slices.Equal(p.resumed, []terminal.TerminalTabID{"t2"}) {
 		t.Fatalf("Resume asked the panel for %v, want t2", p.resumed)
 	}
-	if row, _ := menuRow(panelRows(struct{}{}, "agent", p, "", func() {}), "tabs.resume"); row.Enabled {
+	if row, _ := menuRow(feature.PanelRows(struct{}{}, "agent", p, "", func() {}), "tabs.resume"); row.Enabled {
 		t.Error("an empty panel's Resume is enabled")
 	}
 	k := &maximizeHost{}
 	failing := &resumeRefused{}
-	r, _ := menuRow(panelRows(k, "terminal", failing, "t1", func() {}), "tabs.resume")
+	r, _ := menuRow(feature.PanelRows(k, "terminal", failing, "t1", func() {}), "tabs.resume")
 	r.Action.(terminal.TerminalTabsMenuAction).Run("t1")
 	if len(k.kept) != 1 || !strings.Contains(k.kept[0].Error(), "Resume a tab of the terminal panel") {
 		t.Fatalf("a refused resume kept %v", k.kept)
@@ -188,4 +189,4 @@ func TestPanelRowsResumeTheirTab(t *testing.T) {
 // resumeRefused is a panel whose Resume says no.
 type resumeRefused struct{ modelPanel }
 
-func (*resumeRefused) Resume(terminal.TerminalTabID) error { return ErrResumeUnsupported }
+func (*resumeRefused) Resume(terminal.TerminalTabID) error { return feature.ErrResumeUnsupported }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
@@ -19,26 +20,26 @@ import (
 var varsTab = len(todoBuckets)
 
 // varRowOf is a variable as the tab's row, in c's language.
-func varRowOf(c Core, v map[string]any) rowOf {
-	value := str(v, "value")
+func varRowOf(c feature.Core, v map[string]any) feature.RowOf {
+	value := feature.Str(v, "value")
 	switch {
-	case v["conflict"] == true && str(v, "source") == "conflict":
+	case v["conflict"] == true && feature.Str(v, "source") == "conflict":
 		value = c.Tr("autodoc.text.todos_vars.conflict_set_it_in_the_kb_s_file_or_machine_only")
 	case value == "" && v["machine"] == true:
 		value = c.Tr("autodoc.text.todos_vars.set_per_machine_none_here")
 	case value == "":
 		value = c.Tr("autodoc.text.todos_vars.unset")
 	}
-	from := str(v, "source")
+	from := feature.Str(v, "source")
 	if v["machine"] == true && from == "" {
 		from = "machine"
 	}
-	return rowOf{"key": str(v, "name"), "name": "$" + str(v, "name"), "value": value, "from": from}
+	return feature.RowOf{"key": feature.Str(v, "name"), "name": "$" + feature.Str(v, "name"), "value": value, "from": from}
 }
 
 // newVarRows is the tab's model, its rows in c's language.
-func newVarRows(c Core) *rows[map[string]any] {
-	return newRows(tuidecl.NewListModel("key", "name", "value", "from"), func(_ int, v map[string]any) rowOf { return varRowOf(c, v) })
+func newVarRows(c feature.Core) *feature.Rows[map[string]any] {
+	return feature.NewRows(tuidecl.NewListModel("key", "name", "value", "from"), func(_ int, v map[string]any) feature.RowOf { return varRowOf(c, v) })
 }
 
 // pointVarsAt moves the Variables tab's list to row at: away first, so the same row twice still
@@ -59,14 +60,14 @@ func (t *todos) readVars() {
 			return
 		}
 		var vars []map[string]any
-		for _, x := range asList(v) {
-			vars = append(vars, asMap(x))
+		for _, x := range feature.AsList(v) {
+			vars = append(vars, feature.AsMap(x))
 		}
-		keep := str(t.varAt(t.varCursor), "name")
+		keep := feature.Str(t.varAt(t.varCursor), "name")
 		t.vars.Reset(vars)
 		at := -1
 		for i, x := range vars {
-			if str(x, "name") == keep {
+			if feature.Str(x, "name") == keep {
 				at = i
 			}
 		}
@@ -99,15 +100,15 @@ func (t *todos) varMoved(i int) {
 }
 
 // varDetail is the details of the variable under the cursor, in c's language.
-func varDetail(c Core, v map[string]any) string {
+func varDetail(c feature.Core, v map[string]any) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "## $%s\n\n", str(v, "name"))
-	if val := str(v, "value"); val != "" {
-		b.WriteString(c.Trf("autodoc.text.todos_vars.value_from", val, str(v, "source")) + "\n")
+	fmt.Fprintf(&b, "## $%s\n\n", feature.Str(v, "name"))
+	if val := feature.Str(v, "value"); val != "" {
+		b.WriteString(c.Trf("autodoc.text.todos_vars.value_from", val, feature.Str(v, "source")) + "\n")
 	} else {
 		b.WriteString(c.Tr("autodoc.text.todos_vars.value_none_here") + "\n")
 	}
-	if d := str(v, "derived"); d != "" {
+	if d := feature.Str(v, "derived"); d != "" {
 		b.WriteString(c.Trf("autodoc.text.todos_vars.derived_from_the_workspace", d) + "\n")
 	}
 	if v["builtin"] == true {
@@ -128,7 +129,7 @@ func (t *todos) syncVarActions() {
 	s := t.cur
 	writable := !t.readOnly(s)
 	v := t.varAt(t.varCursor)
-	src := str(v, "source")
+	src := feature.Str(v, "source")
 	t.c.Set("App.todoActVarSet", writable && v != nil)
 	t.c.Set("App.todoActVarAdd", writable)
 	t.c.Set("App.todoActVarClear", writable && v != nil && clearable(src))
@@ -160,9 +161,9 @@ func (t *todos) askVar(scope string) {
 	if scope == "machine" {
 		title = "autodoc.text.todos_vars.kept_in_this_machine"
 	}
-	t.varEditing = &todoVarEdit{store: s, name: str(v, "name"), scope: scope}
-	t.c.Set("App.todoVarTitle", t.c.Trf(title, str(v, "name")))
-	t.c.Set("App.todoVarText", str(v, "value"))
+	t.varEditing = &todoVarEdit{store: s, name: feature.Str(v, "name"), scope: scope}
+	t.c.Set("App.todoVarTitle", t.c.Trf(title, feature.Str(v, "name")))
+	t.c.Set("App.todoVarText", feature.Str(v, "value"))
 	t.c.Open("todoVar")
 }
 
@@ -212,14 +213,14 @@ func (t *todos) varClear() {
 	if t.readOnly(s) || v == nil {
 		return
 	}
-	scope, name := str(v, "source"), str(v, "name")
+	scope, name := feature.Str(v, "source"), feature.Str(v, "name")
 	if !clearable(scope) {
 		return
 	}
 	if scope == "kb" {
 		scope = "store" // todos.set_var's name for the store's workspace's file, at every protocol
 	}
-	t.c.Ask(Question{Title: t.c.Tr("autodoc.question.todos_vars.clear_the_variable"), Text: t.c.Trf("autodoc.question.todos_vars.clear_s_value_set_in", name, scope),
+	t.c.Ask(feature.Question{Title: t.c.Tr("autodoc.question.todos_vars.clear_the_variable"), Text: t.c.Trf("autodoc.question.todos_vars.clear_s_value_set_in", name, scope),
 		OnYes: func() { t.setVar(s, name, "", scope) }})
 }
 

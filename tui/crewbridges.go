@@ -10,6 +10,7 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // CREW BRIDGES — System › Crew Bridges…, a feature of its own: the crew's helper processes on this
@@ -30,7 +31,7 @@ type bridgesCore interface {
 	After(d time.Duration, fn func())
 	Set(name string, v any)
 	Open(id string)
-	Ask(q Question) Asked
+	Ask(q feature.Question) feature.Asked
 	Notify(msg string)
 	Tr(id string) string
 	Trf(id string, args ...any) string
@@ -49,7 +50,7 @@ type crewBridgeRow struct {
 type crewBridges struct {
 	c      bridgesCore
 	host   *crewHost // the scope the window holds, whose run token a kill is sent with
-	rows   *rows[crewBridgeRow]
+	rows   *feature.Rows[crewBridgeRow]
 	shown  bool   // the dialog is open
 	gen    uint64 // bumped by each open and close: an earlier opening's refreshes stop
 	cursor int
@@ -58,7 +59,7 @@ type crewBridges struct {
 
 func newCrewBridges(c bridgesCore, host *crewHost) *crewBridges {
 	b := &crewBridges{c: c, host: host, now: time.Now}
-	b.rows = newRows(tuidecl.NewListModel("key", "kind", "owner", "host", "pid", "started", "state"), b.rowOf)
+	b.rows = feature.NewRows(tuidecl.NewListModel("key", "kind", "owner", "host", "pid", "started", "state"), b.rowOf)
 	return b
 }
 
@@ -72,20 +73,20 @@ func (b *crewBridges) State() map[string]any {
 	}
 }
 
-func (b *crewBridges) Commands() map[string]Command {
-	return map[string]Command{
-		"App.openCrewBridges":        none(b.open),
-		"App.crewBridgesClosed":      none(b.closed),
-		"App.crewBridgeShown":        oneNumber("a row", b.showDetail),
-		"App.crewBridgeKill":         oneNumber("a row", b.kill),
-		"App.crewBridgesKillOrphans": none(b.killOrphans),
-		"App.crewBridgeCopy":         oneNumber("a row", b.copy),
+func (b *crewBridges) Commands() map[string]feature.Command {
+	return map[string]feature.Command{
+		"App.openCrewBridges":        feature.None(b.open),
+		"App.crewBridgesClosed":      feature.None(b.closed),
+		"App.crewBridgeShown":        feature.OneNumber("a row", b.showDetail),
+		"App.crewBridgeKill":         feature.OneNumber("a row", b.kill),
+		"App.crewBridgesKillOrphans": feature.None(b.killOrphans),
+		"App.crewBridgeCopy":         feature.OneNumber("a row", b.copy),
 	}
 }
 
-// Catalog is the dialog's user command (catalog.go): it runs what App.openCrewBridges runs.
-func (b *crewBridges) Catalog() []Entry {
-	return []Entry{builtin("crew.bridges", "crew bridges", "App.openCrewBridges()", b.open)}
+// Catalog is the dialog's user command (feature/catalog.go): it runs what App.openCrewBridges runs.
+func (b *crewBridges) Catalog() []feature.Entry {
+	return []feature.Entry{feature.Builtin("crew.bridges", "crew bridges", "App.openCrewBridges()", b.open)}
 }
 
 // open lists the helpers, opens the dialog, and lists them again every crewBridgesEvery while it
@@ -126,14 +127,14 @@ func (b *crewBridges) load() {
 			return err
 		}
 		var out []crewBridgeRow
-		for _, x := range asList(res) {
-			m := asMap(x)
-			r := crewBridgeRow{kind: str(m, "kind"), start: str(m, "start"), socket: str(m, "socket"), session: str(m, "session"),
-				owner: str(m, "owner"), host: str(m, "host"), state: str(m, "state"), why: str(m, "why"),
-				pid: num(m, "pid"), started: num(m, "started"), reclaimAt: num(m, "reclaim_at"),
-				survivors: num(m, "survivors")}
+		for _, x := range feature.AsList(res) {
+			m := feature.AsMap(x)
+			r := crewBridgeRow{kind: feature.Str(m, "kind"), start: feature.Str(m, "start"), socket: feature.Str(m, "socket"), session: feature.Str(m, "session"),
+				owner: feature.Str(m, "owner"), host: feature.Str(m, "host"), state: feature.Str(m, "state"), why: feature.Str(m, "why"),
+				pid: feature.Num(m, "pid"), started: feature.Num(m, "started"), reclaimAt: feature.Num(m, "reclaim_at"),
+				survivors: feature.Num(m, "survivors")}
 			r.reclaimStopped, _ = m["reclaim_stopped"].(bool)
-			for _, a := range asList(m["argv"]) {
+			for _, a := range feature.AsList(m["argv"]) {
 				if s, ok := a.(string); ok {
 					r.argv = append(r.argv, s)
 				}
@@ -161,13 +162,13 @@ func (b *crewBridges) load() {
 // listFailed says why crew.bridges listed nothing: a daemon that can't read the machine's processes
 // (only Linux can yet) or one older than the verb, in words; any other failure as the daemon put it.
 func (b *crewBridges) listFailed(err error) string {
-	switch code(err) {
+	switch feature.Code(err) {
 	case crew.CodeNoBridges:
 		return b.c.Tr("autodoc.text.crew_bridges.unsupported")
 	case golibrpc.CodeMethodNotFound:
 		return b.c.Tr("autodoc.text.crew_bridges.older_daemon")
 	}
-	return b.c.Trf("autodoc.text.crew_bridges.not_listed", wireMessage(err))
+	return b.c.Trf("autodoc.text.crew_bridges.not_listed", feature.WireMessage(err))
 }
 
 // statusOf is the line under the list: how many helpers, and how many orphans.
@@ -185,7 +186,7 @@ func (b *crewBridges) statusOf(rows []crewBridgeRow) string {
 }
 
 // rowOf is a helper as the list shows it: an orphan's state says when the daemon reclaims it.
-func (b *crewBridges) rowOf(_ int, r crewBridgeRow) rowOf {
+func (b *crewBridges) rowOf(_ int, r crewBridgeRow) feature.RowOf {
 	state := r.state
 	switch {
 	case r.state == "orphan" && r.reclaimStopped: // the daemon's kills left processes running: the user's now
@@ -198,7 +199,7 @@ func (b *crewBridges) rowOf(_ int, r crewBridgeRow) rowOf {
 	if owner == "" {
 		owner = "—"
 	}
-	return rowOf{"key": fmt.Sprint(r.pid) + "@" + r.start, "kind": r.kind, "owner": owner, "host": r.host,
+	return feature.RowOf{"key": fmt.Sprint(r.pid) + "@" + r.start, "kind": r.kind, "owner": owner, "host": r.host,
 		"pid": fmt.Sprint(r.pid), "started": time.Unix(r.started, 0).Format("Jan 2 15:04"), "state": state}
 }
 
@@ -244,7 +245,7 @@ func (b *crewBridges) kill(i int) {
 	}
 	switch r.state {
 	case "live":
-		b.c.Ask(Question{Title: b.c.Tr("autodoc.question.crew_bridges.kill_title"),
+		b.c.Ask(feature.Question{Title: b.c.Tr("autodoc.question.crew_bridges.kill_title"),
 			Text:  b.c.Trf("autodoc.question.crew_bridges.kill_live", r.kind, r.pid, r.owner),
 			OnYes: func() { b.killRow(r, true) }})
 	case "foreign":
@@ -252,7 +253,7 @@ func (b *crewBridges) kill(i int) {
 		if r.why == crew.ForeignUnowned { // not this store's: perhaps another AutoDoc's agent's
 			text = b.c.Trf("autodoc.question.crew_bridges.kill_unowned", r.kind, r.pid)
 		}
-		b.c.Ask(Question{Title: b.c.Tr("autodoc.question.crew_bridges.kill_title"), Text: text,
+		b.c.Ask(feature.Question{Title: b.c.Tr("autodoc.question.crew_bridges.kill_title"), Text: text,
 			OnYes: func() { b.killRow(r, true) }})
 	default:
 		b.killRow(r, false)
@@ -266,7 +267,7 @@ type crewBridgeSurvivors int
 // checks each again as it ends it.
 func (b *crewBridges) killOrphans() {
 	var orphans []crewBridgeRow
-	for _, r := range b.rows.items {
+	for _, r := range b.rows.Items {
 		if r.state == "orphan" {
 			orphans = append(orphans, r)
 		}
@@ -275,7 +276,7 @@ func (b *crewBridges) killOrphans() {
 		b.c.Set("App.crewBridgesStatus", b.c.Tr("autodoc.text.crew_bridges.no_orphans"))
 		return
 	}
-	b.c.Ask(Question{Title: b.c.Tr("autodoc.question.crew_bridges.kill_orphans_title"),
+	b.c.Ask(feature.Question{Title: b.c.Tr("autodoc.question.crew_bridges.kill_orphans_title"),
 		Text: b.c.Trf("autodoc.question.crew_bridges.kill_orphans", len(orphans)),
 		OnYes: func() {
 			for _, r := range orphans {
@@ -298,11 +299,11 @@ func (b *crewBridges) killRow(r crewBridgeRow, confirmed bool) {
 		if err != nil {
 			return err
 		}
-		m := asMap(res)
-		if o := str(m, "outcome"); o != crew.KilledIncomplete {
+		m := feature.AsMap(res)
+		if o := feature.Str(m, "outcome"); o != crew.KilledIncomplete {
 			return o
 		}
-		return crewBridgeSurvivors(num(m, "survivors"))
+		return crewBridgeSurvivors(feature.Num(m, "survivors"))
 	}, func(v any) {
 		if n, ok := v.(crewBridgeSurvivors); ok { // some of it still ran after SIGKILL: said, never claimed ended
 			b.c.Notify(b.c.Trf("autodoc.notice.crew_bridges.incomplete", r.kind, r.pid, int(n)))
@@ -323,7 +324,7 @@ func (b *crewBridges) killRow(r crewBridgeRow, confirmed bool) {
 			if !ok {
 				err = fmt.Errorf("the daemon answered %v", v)
 			}
-			b.c.Notify(b.c.Trf("autodoc.notice.crew_bridges.not_killed", r.kind, r.pid, wireMessage(err)))
+			b.c.Notify(b.c.Trf("autodoc.notice.crew_bridges.not_killed", r.kind, r.pid, feature.WireMessage(err)))
 		}
 		if b.shown {
 			b.load()

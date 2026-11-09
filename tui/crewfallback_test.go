@@ -10,6 +10,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/inbox"
 	"github.com/yongjohnlee80/autodoc/core/mail"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // fallbackRig is messagingRig with the window taking fallback jobs: mail.fallbacks answers jobs
@@ -152,7 +153,7 @@ func TestAHandedOverSendTypesNothing(t *testing.T) {
 		return nil, &golibrpc.Error{Code: inbox.CodeHandedOver, Message: "its host carries it as a fallback job"}
 	}
 	var heard []error
-	if err := a.SendText(AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
+	if err := a.SendText(feature.AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
 		t.Fatal(err)
 	}
 	settleMessaging(c, w)

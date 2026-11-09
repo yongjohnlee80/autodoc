@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/gui"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
@@ -298,7 +299,7 @@ func TestAWithdrawnNativeViewDiagramStaysWithdrawn(t *testing.T) {
 		withdraw func(h *Host)
 	}{
 		{"the dialog closed", func(h *Host) { h.previewClosed() }},
-		{"a newer preview", func(h *Host) { h.ticket(&h.previewGen, TicketLocal) }},
+		{"a newer preview", func(h *Host) { h.ticket(&h.previewGen, feature.TicketLocal) }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, browser := range []bool{true, false} { // the chosen engine; no browser to draw with

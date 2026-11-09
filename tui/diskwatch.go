@@ -14,6 +14,7 @@ import (
 	"github.com/yongjohnlee80/golib/vfs/local"
 
 	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // OPEN FILES FOLLOW THE DISK (docs/decisions/editor.md#open-files-follow-the-disk). The TUI watches
@@ -345,15 +346,15 @@ type diskRead struct {
 // readDisk reads snap's file as a load does.
 func readDisk(ctx context.Context, h *Host, snap diskSnap) diskRead {
 	res, err := h.readFile(ctx, snap.ws, snap.path, snap.raw)
-	if code(err) == rpc.CodeNotFound {
+	if feature.Code(err) == rpc.CodeNotFound {
 		return diskRead{missing: true, fate: h.taskFateOf(ctx, snap.ws, snap.path, snap.abs, snap.raw, snap.hint)}
 	}
 	if err != nil {
 		return diskRead{err: err}
 	}
-	m := asMap(res)
+	m := feature.AsMap(res)
 	content, _ := m["content"].([]byte)
-	return diskRead{content: string(content), version: str(m, "version")}
+	return diskRead{content: string(content), version: feature.Str(m, "version")}
 }
 
 // diskCheck reads b's file through the daemon and settles what changed. Held while b's save is in

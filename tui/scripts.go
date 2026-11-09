@@ -19,12 +19,13 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/procstat"
 	"github.com/yongjohnlee80/autodoc/plugin"
 	"github.com/yongjohnlee80/autodoc/script"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // LUA COMMANDS — the editor's command line extended with scripts (package script): AutoDoc's own,
 // embedded here (table, mermaid), then the user's, every *.lua in the config folder's lua/, in
 // name order. Scripts register through the global table "autodoc": autodoc.command{…}, which is a
-// command catalog entry (catalog.go), lua.<name> unless it names its own lua.* id; autodoc.run(id,
+// command catalog entry (feature/catalog.go), lua.<name> unless it names its own lua.* id; autodoc.run(id,
 // …), which runs any entry but a plugin's; autodoc.notify(…); and call the daemon through it:
 // autodoc.call(…), autodoc.search.query(…) (scripting.go). A command takes its name on the command
 // line from whatever has it, and only that name; a later one of the same id replaces an earlier,
@@ -86,13 +87,13 @@ func (h *Host) reloadScripts() error {
 		return errors.New("lua-reload: this editor has no command catalog")
 	}
 	var lua []string
-	for _, e := range h.cat.entries() {
-		if e.Source == SourceLua {
+	for _, e := range h.cat.Entries() {
+		if e.Source == feature.SourceLua {
 			lua = append(lua, e.ID)
 		}
 	}
 	for _, id := range lua {
-		h.cat.remove(id)
+		h.cat.Remove(id)
 	}
 	oldRoots := h.luaRoots
 	h.luaRoots = nil
@@ -144,9 +145,9 @@ func (h *Host) reloadOnSave(ws, p string) {
 // plugin's host.call), as one undo step.
 func (h *Host) registerLua(r script.Registration) error {
 	cmd := r.Command
-	return h.cat.add(Entry{ID: r.ID, Source: SourceLua, Owner: cmp.Or(r.File, "a script"), Title: r.Title,
+	return h.cat.Add(feature.Entry{ID: r.ID, Source: feature.SourceLua, Owner: cmp.Or(r.File, "a script"), Title: r.Title,
 		Verb: cmd.Name, Aliases: cmd.Aliases, Args: cmd.Args, Help: cmd.Help, Complete: cmd.Complete,
-		Run: func(inv Invocation) error {
+		Run: func(inv feature.Invocation) error {
 			core := cmp.Or(inv.Core, h.core)
 			return core.Batch(func() error {
 				return cmd.Run(editor.CommandContext{Core: core, Name: cmp.Or(inv.Name, cmd.Name), Bang: inv.Bang, Args: inv.Args, Line: inv.Line})
@@ -161,9 +162,9 @@ func (h *Host) runFromLua(id string, args []string) error {
 		return fmt.Errorf("refused: %s is a plugin's command, which Lua cannot run", id)
 	}
 	if h.cat == nil {
-		return fmt.Errorf("%w: %s", errUnknownCommand, id)
+		return fmt.Errorf("%w: %s", feature.ErrUnknownCommand, id)
 	}
-	return h.cat.run(id, args)
+	return h.cat.Run(id, args)
 }
 
 // luaHostOf is the program as the script functions reach it (luahost.go).
@@ -174,15 +175,15 @@ func (l luaHostOf) readText(done func(string, error)) error {
 	_, err := l.h.p.App().ReadClipboard(0, func(_ tuicore.ClipboardRead, text string, err error) { done(text, err) })
 	return err
 }
-func (l luaHostOf) agentEntries() []AgentEntry { return l.h.agents.AgentEntries() }
-func (l luaHostOf) sendText(to AgentRef, text string, done func(error)) error {
+func (l luaHostOf) agentEntries() []feature.AgentEntry { return l.h.agents.AgentEntries() }
+func (l luaHostOf) sendText(to feature.AgentRef, text string, done func(error)) error {
 	return l.h.agents.SendText(to, text, done)
 }
-func (l luaHostOf) sendRequest(to AgentRef, subject, body string, done func(error)) error {
+func (l luaHostOf) sendRequest(to feature.AgentRef, subject, body string, done func(error)) error {
 	return l.h.agents.SendRequest(to, subject, body, done)
 }
-func (l luaHostOf) resumeAgent(to AgentRef) error { return l.h.agents.Resume(to) }
-func (l luaHostOf) post(fn func())                { l.h.p.Post(fn) }
+func (l luaHostOf) resumeAgent(to feature.AgentRef) error { return l.h.agents.Resume(to) }
+func (l luaHostOf) post(fn func())                        { l.h.p.Post(fn) }
 
 // the card's (luacard.go): its panel opened without taking the keyboard, which stays where it is
 func (l luaHostOf) openPanel(id string)              { l.h.keep(l.h.p.Call(id, "open")) }

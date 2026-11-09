@@ -13,6 +13,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
@@ -233,8 +234,8 @@ func (h *Host) recovery(answer string) {
 //     copy stays for the next start.
 func (h *Host) restoreRecovered(r recovered) {
 	switch {
-	case r.Path != "" && h.bufferOf(fileRef{r.WS, r.Path}) != nil:
-		b := h.bufferOf(fileRef{r.WS, r.Path})
+	case r.Path != "" && h.bufferOf(feature.FileRef{WS: r.WS, Path: r.Path}) != nil:
+		b := h.bufferOf(feature.FileRef{WS: r.WS, Path: r.Path})
 		h.activate(b)
 		h.applyRecovered(b, r)
 		h.askRecoveryNext()
@@ -242,7 +243,7 @@ func (h *Host) restoreRecovered(r recovered) {
 		h.restoreAsDraft(r, "restore the kept draft")
 	default:
 		h.pendingRestore, h.restoreWaiting = &r, true
-		h.openRef(fileRef{r.WS, r.Path}, true, nil)
+		h.openRef(feature.FileRef{WS: r.WS, Path: r.Path}, true, nil)
 	}
 }
 

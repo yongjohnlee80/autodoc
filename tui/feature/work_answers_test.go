@@ -1,4 +1,4 @@
-package tui
+package feature
 
 import (
 	"go/ast"
@@ -11,7 +11,7 @@ import (
 )
 
 // TestEveryBackgroundAnswerCanCarryAFailure: a background job's panic reaches its caller as a
-// failure in the job's own answer (failed, crash.go), so every do and coreDo in this package answers
+// failure in the job's own answer (failed, tui/crash.go), so every do and coreDo in this package answers
 // in a shape that can carry one: an error, any, an answerOf, or a struct with an err field of type
 // error. A job answering a bool, a string or a slice would leave its caller waiting on a panic, or
 // read a zero answer as a success; this test names it.
@@ -94,7 +94,7 @@ func isBackgroundCall(fun ast.Expr) bool {
 	return false
 }
 
-// carriesFailure is whether an answer of type e can carry an error (failed, crash.go).
+// carriesFailure is whether an answer of type e can carry an error (failed, tui/crash.go).
 func carriesFailure(e ast.Expr, local, pkg map[string]ast.Expr) bool {
 	switch x := e.(type) {
 	case *ast.Ident:

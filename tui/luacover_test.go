@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,7 +15,7 @@ import (
 func TestLuaHostEdges(t *testing.T) {
 	s := &scripting{}
 	for _, e := range s.Catalog() {
-		if err := e.Run(Invocation{}); err == nil || !strings.Contains(err.Error(), "have not started") {
+		if err := e.Run(feature.Invocation{}); err == nil || !strings.Contains(err.Error(), "have not started") {
 			t.Errorf("%s before the scripts start: %v", e.ID, err)
 		}
 	}
@@ -28,7 +29,7 @@ func TestLuaHostEdges(t *testing.T) {
 	if err := h.reloadScripts(); err == nil || !strings.Contains(err.Error(), "no command catalog") {
 		t.Errorf("a reload with no catalog: %v", err)
 	}
-	if err := h.runFromLua("file.save", nil); !errors.Is(err, errUnknownCommand) {
+	if err := h.runFromLua("file.save", nil); !errors.Is(err, feature.ErrUnknownCommand) {
 		t.Errorf("autodoc.run with no catalog: %v", err)
 	}
 	if err := h.runFromLua("plugin.x.y", nil); err == nil || !strings.Contains(err.Error(), "plugin's command") {

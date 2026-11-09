@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"slices"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
@@ -55,13 +56,13 @@ func withRecent(docs []recentDoc, d recentDoc) []recentDoc {
 // recent is File › Recent files…, a feature of its own: its list is its preference (tui.recent),
 // noted on every file shown and listed again whenever the workspaces or their files are.
 type recent struct {
-	c    Core
-	rows *rows[recentDoc]
+	c    feature.Core
+	rows *feature.Rows[recentDoc]
 }
 
-func newRecent(c Core) *recent {
-	return &recent{c: c, rows: newRows(tuidecl.NewListModel("key", "workspace", "path"),
-		func(_ int, d recentDoc) rowOf { return recentRowOf(c, d) })}
+func newRecent(c feature.Core) *recent {
+	return &recent{c: c, rows: feature.NewRows(tuidecl.NewListModel("key", "workspace", "path"),
+		func(_ int, d recentDoc) feature.RowOf { return recentRowOf(c, d) })}
 }
 
 func (*recent) Name() string { return "recent" }
@@ -70,37 +71,39 @@ func (r *recent) State() map[string]any {
 	return map[string]any{"App.recentFiles": r.rows.Model(), "App.recentStatus": ""}
 }
 
-func (r *recent) Commands() map[string]Command {
-	return map[string]Command{
-		"App.openRecent":   none(r.open),
-		"App.recentSelect": oneNumber("a row", r.choose),
-		"App.clearRecent":  none(r.clear),
+func (r *recent) Commands() map[string]feature.Command {
+	return map[string]feature.Command{
+		"App.openRecent":   feature.None(r.open),
+		"App.recentSelect": feature.OneNumber("a row", r.choose),
+		"App.clearRecent":  feature.None(r.clear),
 	}
 }
 
 // Prefs is the list, as the store keeps it: no chooser, the feature sets it (SetPref).
-// Catalog is the recent files' user command (catalog.go): it runs what App.openRecent runs.
-func (r *recent) Catalog() []Entry {
-	return []Entry{builtin("file.open_recent", "recent files", "App.openRecent()", r.open)}
+// Catalog is the recent files' user command (feature/catalog.go): it runs what App.openRecent runs.
+func (r *recent) Catalog() []feature.Entry {
+	return []feature.Entry{feature.Builtin("file.open_recent", "recent files", "App.openRecent()", r.open)}
 }
 
-func (r *recent) Prefs() []PrefSpec { return []PrefSpec{ValuePref(prefRecent, "[]", nil)} }
+func (r *recent) Prefs() []feature.PrefSpec {
+	return []feature.PrefSpec{feature.ValuePref(prefRecent, "[]", nil)}
+}
 
 // docs are the recent files the preference holds, newest first.
 func (r *recent) docs() []recentDoc { return recentOf(r.c.Prefs().Value(prefRecent)) }
 
 // Shown notes a file shown: first among the recent files. The draft is none.
-func (r *recent) Shown(p Page) {
-	if p.Ref.path == "" {
+func (r *recent) Shown(p feature.Page) {
+	if p.Ref.Path == "" {
 		return
 	}
-	r.c.SetPref(prefRecent, recentJSON(withRecent(r.docs(), recentDoc{Workspace: p.Ref.ws, Path: p.Ref.path})))
+	r.c.SetPref(prefRecent, recentJSON(withRecent(r.docs(), recentDoc{Workspace: p.Ref.WS, Path: p.Ref.Path})))
 }
 
-func (*recent) Edited(Page)    {}
-func (*recent) Moved(int, int) {}
-func (*recent) Reread(Page)    {}
-func (*recent) Closed()        {}
+func (*recent) Edited(feature.Page) {}
+func (*recent) Moved(int, int)      {}
+func (*recent) Reread(feature.Page) {}
+func (*recent) Closed()             {}
 
 // Listed lists the recent files again: a workspace's files, or the workspaces, listed anew decide
 // which are still there.
@@ -136,7 +139,7 @@ func (r *recent) listed(d recentDoc) bool {
 	if d.Workspace == "" {
 		return true // a file outside every workspace: opening it says when it is gone
 	}
-	if !slices.ContainsFunc(r.c.Workspaces(), func(w Workspace) bool { return w.Name == d.Workspace }) {
+	if !slices.ContainsFunc(r.c.Workspaces(), func(w feature.Workspace) bool { return w.Name == d.Workspace }) {
 		return false
 	}
 	return d.Workspace != r.c.Workspace() || slices.Contains(r.c.Files().Paths, d.Path)
@@ -160,10 +163,10 @@ func (r *recent) clear() {
 }
 
 // recentRowOf is a recent file as the list shows it, in c's language.
-func recentRowOf(c Core, d recentDoc) rowOf {
+func recentRowOf(c feature.Core, d recentDoc) feature.RowOf {
 	label := d.Workspace
 	if label == "" {
 		label = c.Tr("autodoc.text.recent.no_workspace")
 	}
-	return rowOf{"key": d.Workspace + "\x00" + d.Path, "workspace": label, "path": d.Path}
+	return feature.RowOf{"key": d.Workspace + "\x00" + d.Path, "workspace": label, "path": d.Path}
 }

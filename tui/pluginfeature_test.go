@@ -3,6 +3,7 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"slices"
 	"strings"
 	"testing"
@@ -70,13 +71,13 @@ func TestThePluginHostRefusesWhatIsNotThePlugins(t *testing.T) {
 	r := runTUI(t, NewSession("unused", nil), Options{})
 	onLoop(r, func() bool {
 		c := core{r.h}
-		if err := c.AddPluginEntry(Entry{ID: "file.sneaky", Source: SourcePlugin, Owner: "x", Title: "x", Run: noRun}); !errors.Is(err, ErrNotPluginEntry) {
+		if err := c.AddPluginEntry(feature.Entry{ID: "file.sneaky", Source: feature.SourcePlugin, Owner: "x", Title: "x", Run: noRun}); !errors.Is(err, ErrNotPluginEntry) {
 			t.Errorf("a file.* id: %v, want ErrNotPluginEntry", err)
 		}
-		if err := c.AddPluginEntry(Entry{ID: "plugin.x.y", Source: SourceBuiltin, Owner: "x", Title: "x", Run: noRun}); !errors.Is(err, ErrNotPluginEntry) {
+		if err := c.AddPluginEntry(feature.Entry{ID: "plugin.x.y", Source: feature.SourceBuiltin, Owner: "x", Title: "x", Run: noRun}); !errors.Is(err, ErrNotPluginEntry) {
 			t.Errorf("a plugin.* id from another source: %v, want ErrNotPluginEntry", err)
 		}
-		if err := c.AddPluginEntry(Entry{ID: "plugin.x.y", Source: SourcePlugin, Owner: "x", Title: "x: y", Run: noRun}); err != nil {
+		if err := c.AddPluginEntry(feature.Entry{ID: "plugin.x.y", Source: feature.SourcePlugin, Owner: "x", Title: "x: y", Run: noRun}); err != nil {
 			t.Errorf("a plugin's own entry was refused: %v", err)
 		}
 		if ids := slices.Collect(func(yield func(string) bool) {
@@ -89,7 +90,7 @@ func TestThePluginHostRefusesWhatIsNotThePlugins(t *testing.T) {
 			t.Errorf("the plugin entries: %v", ids)
 		}
 		c.RemovePluginEntries()
-		if len(c.PluginEntries()) != 0 || r.h.cat.lookup("file.open") == nil {
+		if len(c.PluginEntries()) != 0 || r.h.cat.Lookup("file.open") == nil {
 			t.Error("RemovePluginEntries left a plugin entry, or took another's")
 		}
 		if err := c.SetPluginPref("tui.theme", "dark"); !errors.Is(err, ErrNotPluginPref) {
@@ -114,12 +115,12 @@ func (s *stopsAndThemes) ThemeChanged() { s.themes++ }
 func TestTheRegistryTellsStopsAndThemes(t *testing.T) {
 	t.Parallel()
 	f := &stopsAndThemes{fake: fake{name: "f"}}
-	r, err := newRegistry(f)
+	r, err := feature.NewRegistry(f)
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.themeChanged()
-	r.stopped()
+	r.ThemeChanged()
+	r.Stopped()
 	if f.stops != 1 || f.themes != 1 {
 		t.Fatalf("stopped %d, themes %d: want one each", f.stops, f.themes)
 	}

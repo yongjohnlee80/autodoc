@@ -10,6 +10,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // TestRegisteredTypesOnTheEditTab: the Edit tab offers the daemon's registered types beside the
@@ -76,7 +77,7 @@ func TestRegisteredTypesOnTheEditTab(t *testing.T) {
 
 func anyToStrings(v any) []string {
 	var out []string
-	for _, x := range asList(v) {
+	for _, x := range feature.AsList(v) {
 		s, _ := x.(string)
 		out = append(out, s)
 	}

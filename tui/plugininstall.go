@@ -18,6 +18,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/plugin"
 
 	regindex "github.com/yongjohnlee80/autodoc/core/registry"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // ADDING AND MANAGING PLUGINS — Plugins › Add from a git URL… clones a repository whose top holds a
@@ -86,18 +87,19 @@ func (pl *plugins) addPlugin(url string) {
 	pl.c.Close("pluginAdd")
 	pl.c.NotifyOngoing(toastPlugin, pl.c.Trf("autodoc.notice.plugininstall.cloning", url))
 	dir, own, src, env := pl.pluginOpt.Dir, pl.cands.allocs, pl.seams.registry, pl.seams.env
-	coreDo(pl.c, func(ctx context.Context) answerOf[*candidate] {
-		return answered(stagePlugin(ctx, env, src, dir, url, nil, own))
-	}, func(r answerOf[*candidate]) {
-		if r.err == nil {
-			r.err = pl.cands.begin(r.v, pl.askPlugin, pl.hidePlugin)
+	feature.CoreDo(pl.c, func(ctx context.Context) feature.AnswerOf[*candidate] {
+		return feature.Answered(stagePlugin(ctx, env, src, dir, url, nil, own))
+	}, func(r feature.AnswerOf[*candidate]) {
+		err := r.Err()
+		if err == nil {
+			err = pl.cands.begin(r.Value, pl.askPlugin, pl.hidePlugin)
 		}
-		if r.err != nil {
-			pl.c.NotifyDone(toastPlugin, pl.c.Trf("autodoc.notice.plugininstall.not_added", r.err.Error()))
+		if err != nil {
+			pl.c.NotifyDone(toastPlugin, pl.c.Trf("autodoc.notice.plugininstall.not_added", err.Error()))
 			return
 		}
-		pl.c.NotifyDone(toastPlugin, pl.c.Trf("autodoc.notice.plugininstall.cloned_at", r.v.name, regindex.Short(r.v.commit)))
-		pl.cands.show(r.v)
+		pl.c.NotifyDone(toastPlugin, pl.c.Trf("autodoc.notice.plugininstall.cloned_at", r.Value.name, regindex.Short(r.Value.commit)))
+		pl.cands.show(r.Value)
 	})
 }
 
@@ -253,7 +255,7 @@ func (pl *plugins) pluginAudit() {
 func (pl *plugins) installCandidate(c *candidate) {
 	pl.c.NotifyOngoing(toastPlugin, pl.c.Trf("autodoc.notice.plugininstall.building", c.name))
 	dir, logs, fsys := pl.pluginOpt.Dir, pl.pluginOpt.LogDir, pl.seams.installFS
-	coreDo(pl.c, func(ctx context.Context) error {
+	feature.CoreDo(pl.c, func(ctx context.Context) error {
 		if err := pristine(ctx, c); err != nil {
 			return err
 		}
@@ -272,7 +274,7 @@ func (pl *plugins) installCandidate(c *candidate) {
 		if r := pl.running[c.name]; r != nil {
 			r.stopFor(plugin.CloseUpdate, "") // it is replaced under itself otherwise; its slot stays
 		}
-		coreDo(pl.c, func(context.Context) error { return swapIn(fsys, dir, c.stage, c.name) }, func(err error) { pl.installed(c, err) })
+		feature.CoreDo(pl.c, func(context.Context) error { return swapIn(fsys, dir, c.stage, c.name) }, func(err error) { pl.installed(c, err) })
 	})
 }
 
@@ -343,7 +345,7 @@ func buildPlugin(ctx context.Context, env procenv.Env, logs string, m *manifest,
 	cmd := exec.CommandContext(ctx, procenv.Resolve(env, m.Install.Build[0]), m.Install.Build[1:]...)
 	cmd.Dir = dir
 	cmd.Stdout, cmd.Stderr = log, log
-	cmd.Env = append(ownEnviron(env), "AUTODOC_PLUGIN_DIR="+dir)
+	cmd.Env = append(feature.OwnEnviron(env), "AUTODOC_PLUGIN_DIR="+dir)
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
 			return fmt.Errorf("its build did not finish in %s", pluginBuildTimeout)
@@ -364,7 +366,7 @@ func git(ctx context.Context, env procenv.Env, timeout time.Duration, dir string
 	defer cancel()
 	cmd := exec.CommandContext(ctx, procenv.Resolve(env, "git"), args...)
 	cmd.Dir = dir
-	cmd.Env = append(ownEnviron(env), "GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS=", "SSH_ASKPASS=") // git may run configured helpers
+	cmd.Env = append(feature.OwnEnviron(env), "GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS=", "SSH_ASKPASS=") // git may run configured helpers
 	var out, errOut bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errOut
 	if err := cmd.Run(); err != nil {
@@ -400,7 +402,7 @@ func (pl *plugins) managePlugins() {
 func (pl *plugins) loadManaged() {
 	pl.c.Set("App.pluginsHelp", pl.c.Trf("autodoc.text.plugininstall.add_from_a_git_url_update_or_remove_the_one_unde", pl.pluginOpt.Dir))
 	entries, env := discoverPlugins(pl.pluginOpt.Dir), pl.seams.env
-	coreDo(pl.c, func(ctx context.Context) answerOf[[]managedPlugin] {
+	feature.CoreDo(pl.c, func(ctx context.Context) feature.AnswerOf[[]managedPlugin] {
 		out := make([]managedPlugin, len(entries))
 		for i, e := range entries {
 			out[i] = managedPlugin{e: e}
@@ -410,17 +412,17 @@ func (pl *plugins) loadManaged() {
 			out[i].source, _ = git(ctx, env, pluginCloneTimeout, e.dir, "remote", "get-url", "origin")
 			out[i].commit, _ = git(ctx, env, pluginCloneTimeout, e.dir, "rev-parse", "--short", "HEAD")
 		}
-		return answered(out, nil)
-	}, func(a answerOf[[]managedPlugin]) {
-		if a.err != nil {
-			pl.c.Failed(pl.c.Tr("autodoc.notice.plugininstall.the_installed_plugins"), a.err) // it panicked: an empty list, said
+		return feature.Answered(out, nil)
+	}, func(a feature.AnswerOf[[]managedPlugin]) {
+		if a.Err() != nil {
+			pl.c.Failed(pl.c.Tr("autodoc.notice.plugininstall.the_installed_plugins"), a.Err()) // it panicked: an empty list, said
 		}
-		pl.managedPlugins.Reset(a.v)
+		pl.managedPlugins.Reset(a.Value)
 	})
 }
 
 // managedPluginRowOf is an installed plugin as the manager shows it.
-func (pl *plugins) managedPluginRowOf(_ int, m managedPlugin) rowOf {
+func (pl *plugins) managedPluginRowOf(_ int, m managedPlugin) feature.RowOf {
 	source := m.source
 	if source == "" {
 		source = pl.c.Tr("autodoc.text.plugininstall.local_put_in_the_folder_by_hand")
@@ -433,7 +435,7 @@ func (pl *plugins) managedPluginRowOf(_ int, m managedPlugin) rowOf {
 		}
 		name += " — " + strings.Join(claims, " · ")
 	}
-	return rowOf{"key": m.e.dir, "name": name, "place": pl.placement(m.e), "commit": m.commit, "source": source}
+	return feature.RowOf{"key": m.e.dir, "name": name, "place": pl.placement(m.e), "commit": m.commit, "source": source}
 }
 
 // managedRow is the manager's row i, as listed.
@@ -483,7 +485,7 @@ func (pl *plugins) fetchAndAsk(m managedPlugin) {
 		head string
 		err  error
 	}
-	coreDo(pl.c, func(ctx context.Context) staged {
+	feature.CoreDo(pl.c, func(ctx context.Context) staged {
 		if m.source == "" {
 			if _, err := os.Stat(filepath.Join(m.e.dir, ".git")); err != nil {
 				return staged{err: errors.New("it was put in the folder by hand: update it there")}
@@ -551,7 +553,7 @@ func (pl *plugins) startRemovePlugin(i int) {
 		return
 	}
 	dir := m.e.dir
-	pl.c.Ask(Question{Title: pl.c.Tr("autodoc.question.plugininstall.remove_the_plugin"), Text: pl.c.Trf("autodoc.question.plugininstall.remove_its_directory_goes_with_what_its_build_ma", m.e.label(), dir), No: pl.c.Tr("autodoc.question.plugininstall.no_keep_it"), Yes: pl.c.Tr("autodoc.question.plugininstall.yes_remove_it"), OnYes: func() { pl.removePluginConfirmed(dir) }})
+	pl.c.Ask(feature.Question{Title: pl.c.Tr("autodoc.question.plugininstall.remove_the_plugin"), Text: pl.c.Trf("autodoc.question.plugininstall.remove_its_directory_goes_with_what_its_build_ma", m.e.label(), dir), No: pl.c.Tr("autodoc.question.plugininstall.no_keep_it"), Yes: pl.c.Tr("autodoc.question.plugininstall.yes_remove_it"), OnYes: func() { pl.removePluginConfirmed(dir) }})
 }
 
 // removePluginConfirmed removes the plugin asked about: closed first when it is open, and only a
@@ -575,7 +577,7 @@ func (pl *plugins) removePluginConfirmed(dir string) {
 	}
 	name := filepath.Base(dir)
 	prev := filepath.Join(filepath.Dir(dir), previousDir, name)
-	coreDo(pl.c, func(context.Context) error {
+	feature.CoreDo(pl.c, func(context.Context) error {
 		if err := os.RemoveAll(dir); err != nil {
 			return err
 		}
