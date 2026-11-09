@@ -29,7 +29,7 @@ func (h *Host) assembleFeatures(fs ...Feature) error {
 		return err
 	}
 	h.reg = r
-	if err := r.panels.bind(core{h}); err != nil {
+	if err := bindPanels(r.panels, core{h}); err != nil {
 		h.reg, h.prefs.panelDefs = previous, defs
 		return err
 	}
@@ -73,7 +73,8 @@ func (h *Host) features() []Feature {
 // legacy is the host as it is: everything not yet a feature of its own.
 type legacy struct{ h *Host }
 
-func (legacy) hostOwn() {}
+// HostOwned marks legacy as the host's own (feature.go).
+func (legacy) HostOwned() {}
 
 func (legacy) Name() string { return "legacy" }
 

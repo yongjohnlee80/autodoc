@@ -97,7 +97,7 @@ func TestPanelScopesArePerContributorNotFeatureLabel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := r.bind(core{}); err != nil {
+	if err := bindPanels(r, core{}); err != nil {
 		t.Fatal(err)
 	}
 	if r.hosts["first"] == r.hosts["second"] {
@@ -141,7 +141,7 @@ func TestPanelScopeBindingUsesValidatedContributionsAndReportsRefusal(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := r.bind(core{}); err != nil {
+	if err := bindPanels(r, core{}); err != nil {
 		t.Fatal(err)
 	}
 	if f.bound == nil || f.bound != r.hosts["custom"] || f.bound != r.hosts["other"] {
@@ -152,7 +152,7 @@ func TestPanelScopeBindingUsesValidatedContributionsAndReportsRefusal(t *testing
 		t.Errorf("foreign access reached a tree lookup: %v", err)
 	}
 	f.err = errs.ErrUnsupported
-	if err := r.bind(core{}); !errors.Is(err, errs.ErrUnsupported) {
+	if err := bindPanels(r, core{}); !errors.Is(err, errs.ErrUnsupported) {
 		t.Errorf("binding refusal lost its error: %v", err)
 	}
 }
