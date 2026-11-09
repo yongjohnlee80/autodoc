@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -21,15 +22,18 @@ type grantsWindow struct {
 	state   map[string]any
 	opened  []string
 	focused string
-	asked   []Question
+	asked   []feature.Question
 	notices []string
 }
 
-func (w *grantsWindow) Prefs() PrefsView                  { return prefs{luaGrants: w.grants} }
-func (w *grantsWindow) Set(name string, v any)            { w.state[name] = v }
-func (w *grantsWindow) Open(id string)                    { w.opened = append(w.opened, id) }
-func (w *grantsWindow) Focus(id string)                   { w.focused = id }
-func (w *grantsWindow) Ask(q Question) Asked              { w.asked = append(w.asked, q); return Asked{} }
+func (w *grantsWindow) Prefs() feature.PrefsView { return prefs{luaGrants: w.grants} }
+func (w *grantsWindow) Set(name string, v any)   { w.state[name] = v }
+func (w *grantsWindow) Open(id string)           { w.opened = append(w.opened, id) }
+func (w *grantsWindow) Focus(id string)          { w.focused = id }
+func (w *grantsWindow) Ask(q feature.Question) feature.Asked {
+	w.asked = append(w.asked, q)
+	return feature.Asked{}
+}
 func (w *grantsWindow) Notify(msg string)                 { w.notices = append(w.notices, msg) }
 func (w *grantsWindow) Tr(id string) string               { return w.Trf(id) }
 func (w *grantsWindow) Trf(id string, args ...any) string { return fill(englishText(id), args...) }
@@ -231,7 +235,7 @@ func TestARevokedCapabilityIsRefusedAndAskedForAgain(t *testing.T) {
 	}
 	r.s.WaitForText(t, "let the agent zen use editor.read?")
 	r.s.WaitForText(t, "read your open documents")
-	onLoop(r, func() bool { r.h.asker.accepted(); r.h.closeDialog("confirm"); return true }) // as Allow does: the card closes
+	onLoop(r, func() bool { r.h.asker.Accepted(); r.h.closeDialog("confirm"); return true }) // as Allow does: the card closes
 	r.s.WaitFor(t, "the read granted", func(string) bool { return granted() })
 	if re := read(); re != nil {
 		t.Fatalf("a granted read: %v", re)
@@ -250,7 +254,7 @@ func TestARevokedCapabilityIsRefusedAndAskedForAgain(t *testing.T) {
 		return true
 	})
 	r.s.WaitForText(t, "revoke editor.read from zen?")
-	onLoop(r, func() bool { r.h.asker.accepted(); r.h.closeDialog("confirm"); return true }) // as Allow does: the card closes
+	onLoop(r, func() bool { r.h.asker.Accepted(); r.h.closeDialog("confirm"); return true }) // as Allow does: the card closes
 	r.s.WaitFor(t, "the read revoked", func(string) bool { return !granted() })
 	r.s.WaitForText(t, "Nothing is granted.")
 
@@ -258,7 +262,7 @@ func TestARevokedCapabilityIsRefusedAndAskedForAgain(t *testing.T) {
 		t.Fatalf("a read after the revoke: %v, want needs editor.read", re)
 	}
 	r.s.WaitForText(t, "let the agent zen use editor.read?")
-	onLoop(r, func() bool { r.h.asker.accepted(); r.h.closeDialog("confirm"); return true }) // as Allow does: the card closes
+	onLoop(r, func() bool { r.h.asker.Accepted(); r.h.closeDialog("confirm"); return true }) // as Allow does: the card closes
 	r.s.WaitFor(t, "the read granted again", func(string) bool { return granted() })
 	if re := read(); re != nil {
 		t.Fatalf("a read granted again: %v", re)

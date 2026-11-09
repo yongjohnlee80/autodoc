@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
@@ -17,21 +18,23 @@ import (
 
 // newBufferPick is the Buffers picker: a filter over the open buffers' labels (bufferLabel), the
 // buffer under the cursor previewed from its text as it is, unsaved edits and all.
-func (h *Host) newBufferPick() *pick[string] {
-	return &pick[string]{c: core{h}, dialog: "bufferPick", name: "buffers",
-		list:   newRows(tuidecl.NewListModel("key", "label"), labelRowOf),
-		field:  "App.buffersField",
-		status: "App.pickerStatus", noun: "buffers",
-		match: func(label string) string { return label },
-		preview: func(label string) func(context.Context) answerOf[pane] {
+func (h *Host) newBufferPick() *feature.Pick[string] {
+	return &feature.Pick[string]{Core: core{h}, Dialog: "bufferPick", Name: "buffers",
+		List:   feature.NewRows(tuidecl.NewListModel("key", "label"), labelRowOf),
+		Field:  "App.buffersField",
+		Status: "App.pickerStatus", Noun: "buffers",
+		Match: func(label string) string { return label },
+		Preview: func(label string) func(context.Context) feature.AnswerOf[feature.Pane] {
 			title, text := label, "" // read on the loop: the work below only hands them back
 			if b := h.bufferOfLabel(label); b != nil && b.buf != nil {
 				text = b.buf.Value()
 			}
-			return func(context.Context) answerOf[pane] { return answerOf[pane]{v: pane{title: title, text: text}} }
+			return func(context.Context) feature.AnswerOf[feature.Pane] {
+				return feature.AnswerOf[feature.Pane]{Value: feature.Pane{Title: title, Text: text}}
+			}
 		},
-		scope: TicketSession,
-		choose: func(label string) {
+		Scope: feature.TicketSession,
+		Choose: func(label string) {
 			if b := h.bufferOfLabel(label); b != nil {
 				h.activate(b)
 				h.keep(h.p.Call("editor", "forceActiveFocus"))
@@ -41,12 +44,14 @@ func (h *Host) newBufferPick() *pick[string] {
 }
 
 // labelRowOf is a buffer's row in the Buffers picker.
-func labelRowOf(_ int, label string) rowOf { return rowOf{"key": label, "label": label} }
+func labelRowOf(_ int, label string) feature.RowOf {
+	return feature.RowOf{"key": label, "label": label}
+}
 
 // openBuffers is Go › Buffers…, SPC b s and :b alone: the picker over the open buffers.
 func (h *Host) openBuffers() {
 	h.syncBuffers()
-	h.bufferPick.open()
+	h.bufferPick.Open()
 }
 
 // closeShownBuffer is File › Close buffer, SPC b d and :bd: the shown buffer closed, asked about first
@@ -92,18 +97,18 @@ func (h *Host) bufferNamed(arg string) (*openBuffer, error) {
 
 // bufferSlotEntries are buffer.show_1 to buffer.show_10, SPC b 1 to 9 and 0's: the nth buffer in
 // the tabs' order shown (showBufferAt), none past the last.
-func (h *Host) bufferSlotEntries() []Entry {
-	out := make([]Entry, bufferSlots)
-	for n := 1; n <= bufferSlots; n++ {
-		out[n-1] = builtin("buffer.show_"+strconv.Itoa(n), bufferSlotTitle(n), bufferSlotRun(n), func() { h.showBufferAt(n) })
+func (h *Host) bufferSlotEntries() []feature.Entry {
+	out := make([]feature.Entry, feature.BufferSlots)
+	for n := 1; n <= feature.BufferSlots; n++ {
+		out[n-1] = feature.Builtin("buffer.show_"+strconv.Itoa(n), feature.BufferSlotTitle(n), feature.BufferSlotRun(n), func() { h.showBufferAt(n) })
 	}
 	return out
 }
 
-// bufferEntries are :b and :bd, as catalog entries (catalog.go), and buffer.new, which has no ':'
+// bufferEntries are :b and :bd, as catalog entries (feature/catalog.go), and buffer.new, which has no ':'
 // name: a key, autodoc.run or a plugin's host.call runs it.
-func (h *Host) bufferEntries() []Entry {
-	return []Entry{
+func (h *Host) bufferEntries() []feature.Entry {
+	return []feature.Entry{
 		{ID: "buffer.go", Title: "show a buffer", Verb: "b", Args: "<number|name>",
 			Help: "show the buffer of that number, or whose name holds the text; Tab lists them",
 			Complete: func(editor.CompleteContext) []string {
@@ -113,7 +118,7 @@ func (h *Host) bufferEntries() []Entry {
 				}
 				return out
 			},
-			Run: func(x Invocation) error {
+			Run: func(x feature.Invocation) error {
 				if x.Line == "" {
 					h.openBuffers()
 					return nil
@@ -127,7 +132,7 @@ func (h *Host) bufferEntries() []Entry {
 				return nil
 			}},
 		{ID: "buffer.delete", Title: "close the buffer", Verb: "bd", Help: "close the shown buffer; unsaved changes are asked about",
-			Run: func(x Invocation) error {
+			Run: func(x feature.Invocation) error {
 				if x.Line != "" {
 					return errors.New("bd: closes the shown buffer; :b <n> shows another first")
 				}
@@ -136,7 +141,7 @@ func (h *Host) bufferEntries() []Entry {
 			}},
 		{ID: "buffer.new", Title: "new buffer with text",
 			Help: "a new buffer, an unsaved draft: its arguments are its suggested name, then its text",
-			Run: func(x Invocation) error {
+			Run: func(x feature.Invocation) error {
 				if len(x.Args) > 2 {
 					return fmt.Errorf("buffer.new: takes a name and a text, not %d arguments", len(x.Args))
 				}

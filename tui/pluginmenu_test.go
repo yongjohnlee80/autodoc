@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
@@ -17,7 +18,7 @@ import (
 const menuCommands = "[[commands]]\nid = \"ping\"\ntitle = \"Ping\"\n[[commands]]\nid = \"menuwith\"\ntitle = \"Menu\"\n"
 
 // rowAt is the added row labelled label ("Sub>Row" in a submenu), as the menu opens for ctx.
-func (r *running) rowAt(ctx menuCtx, label string) (widgetcore.MenuItemModel, bool) {
+func (r *running) rowAt(ctx feature.MenuCtx, label string) (widgetcore.MenuItemModel, bool) {
 	for _, it := range r.menuAt(ctx) {
 		for _, ch := range it.Children {
 			if it.Label+">"+ch.Label == label {
@@ -42,9 +43,9 @@ func TestAPluginsMenuRows(t *testing.T) {
 		"[[menu]]\ncommand = \"ping\"\nwhere = \"editor\"\nfiles = [\"*.sql\"]\ntitle = \"&Execute\"\n", 11)
 	installPluginAt(t, dir, "old", "service", "rawcalls", menuCommands, 10)
 	r, logs := pluginTUIWith(t, dir, nil)
-	sql := menuCtx{path: "q.sql"}
+	sql := feature.MenuCtx{Path: "q.sql"}
 
-	if got := labelsOf(r.menuAt(menuCtx{path: "a.md"})); len(got) != 0 {
+	if got := labelsOf(r.menuAt(feature.MenuCtx{Path: "a.md"})); len(got) != 0 {
 		t.Fatalf("a.md shows %q; the row is *.sql's", got)
 	}
 	row, ok := r.rowAt(sql, "Db>Execute")

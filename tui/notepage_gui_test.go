@@ -8,7 +8,7 @@ import "testing"
 func notePageOf(t *testing.T, r *running) *cellNotePage {
 	t.Helper()
 	return onLoop(r, func() *cellNotePage {
-		for _, f := range r.h.reg.features {
+		for _, f := range r.h.reg.Features {
 			if p, ok := f.(*cellNotePage); ok {
 				return p
 			}
@@ -24,12 +24,12 @@ func notePageOf(t *testing.T, r *running) *cellNotePage {
 func TestAWindowNeverMakesTheTerminalsNotePage(t *testing.T) {
 	r := runGUINote(t, notePageNote, func(*Host) {})
 	// the note was shown to the features: the page's Shown ran, and must have done nothing
-	r.s.WaitFor(t, "the note shown to the features", func(string) bool { return onLoop(r, func() bool { return r.h.reg.pageShown }) })
+	r.s.WaitFor(t, "the note shown to the features", func(string) bool { return onLoop(r, func() bool { return r.h.reg.PageShown }) })
 	p := notePageOf(t, r)
 	if p == nil {
 		t.Fatal("the host has no note page registered")
 	}
-	if made := onLoop(r, func() bool { return p.view != nil || p.shown.path != "" }); made {
+	if made := onLoop(r, func() bool { return p.view != nil || p.shown.Path != "" }); made {
 		t.Fatal("a window made the terminal's note page")
 	}
 	if given := onLoop(r, func() bool { return p.md != nil }); given {

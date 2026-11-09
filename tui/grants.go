@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
@@ -19,11 +20,11 @@ import (
 
 // grantsCore is what Agent permissions needs of the program.
 type grantsCore interface {
-	Prefs() PrefsView
+	Prefs() feature.PrefsView
 	Set(name string, v any)
 	Open(id string)
 	Focus(id string)
-	Ask(q Question) Asked
+	Ask(q feature.Question) feature.Asked
 	Notify(msg string)
 	Tr(id string) string
 	Trf(id string, args ...any) string
@@ -42,7 +43,7 @@ func (r grantRow) key() string { return r.holder + "\x00" + r.capability }
 // grantsView is the dialog. Its fields are the loop's.
 type grantsView struct {
 	c      grantsCore
-	rows   *rows[grantRow]
+	rows   *feature.Rows[grantRow]
 	shown  bool // the dialog is open
 	cursor int
 	key    string // the row under the cursor, kept when the list is read again
@@ -50,7 +51,7 @@ type grantsView struct {
 
 func newGrantsView(c grantsCore) *grantsView {
 	g := &grantsView{c: c}
-	g.rows = newRows(tuidecl.NewListModel("key", "who", "kind", "capability", "what"), g.rowOf)
+	g.rows = feature.NewRows(tuidecl.NewListModel("key", "who", "kind", "capability", "what"), g.rowOf)
 	return g
 }
 
@@ -60,21 +61,21 @@ func (g *grantsView) State() map[string]any {
 	return map[string]any{"App.grants": g.rows.Model(), "App.grantsIndex": -1, "App.grantsDetail": "", "App.grantsStatus": ""}
 }
 
-func (g *grantsView) Commands() map[string]Command {
-	return map[string]Command{
-		"App.openGrants":     none(g.open),
-		"App.grantsClosed":   none(g.closed),
-		"App.grantShown":     oneNumber("a row", g.showDetail),
-		"App.grantRevoke":    oneNumber("a row", g.revoke),
-		"App.grantRevokeAll": oneNumber("a row", g.revokeAll),
+func (g *grantsView) Commands() map[string]feature.Command {
+	return map[string]feature.Command{
+		"App.openGrants":     feature.None(g.open),
+		"App.grantsClosed":   feature.None(g.closed),
+		"App.grantShown":     feature.OneNumber("a row", g.showDetail),
+		"App.grantRevoke":    feature.OneNumber("a row", g.revoke),
+		"App.grantRevokeAll": feature.OneNumber("a row", g.revokeAll),
 	}
 }
 
 // Catalog is the dialog's user command, :permissions: it runs what App.openGrants runs.
-func (g *grantsView) Catalog() []Entry {
-	e := builtin("agents.permissions", "agent permissions: what each agent and package was granted", "App.openGrants()", g.open)
+func (g *grantsView) Catalog() []feature.Entry {
+	e := feature.Builtin("agents.permissions", "agent permissions: what each agent and package was granted", "App.openGrants()", g.open)
 	e.Verb = "permissions"
-	return []Entry{e}
+	return []feature.Entry{e}
 }
 
 // PreferencesChanged: a grant given or taken back while the dialog is open shows at once.
@@ -167,9 +168,9 @@ func (g *grantsView) what(capability string) string {
 	return g.c.Tr(id)
 }
 
-func (g *grantsView) rowOf(_ int, r grantRow) rowOf {
+func (g *grantsView) rowOf(_ int, r grantRow) feature.RowOf {
 	name, kind := g.who(r.holder)
-	return rowOf{"key": r.key(), "who": name, "kind": kind, "capability": r.capability, "what": g.what(r.capability)}
+	return feature.RowOf{"key": r.key(), "who": name, "kind": kind, "capability": r.capability, "what": g.what(r.capability)}
 }
 
 // showDetail shows row i under the list: who holds what, and what it lets them do.
@@ -191,7 +192,7 @@ func (g *grantsView) revoke(i int) {
 		return
 	}
 	name, _ := g.who(r.holder)
-	g.c.Ask(Question{
+	g.c.Ask(feature.Question{
 		Title: g.c.Trf("autodoc.question.grants.revoke_title", r.capability, name),
 		Text:  g.c.Trf("autodoc.question.grants.revoke_text", name, r.capability, g.what(r.capability)),
 		Yes:   g.c.Tr("autodoc.question.grants.revoke"), No: g.c.Tr("autodoc.question.grants.keep"),
@@ -216,7 +217,7 @@ func (g *grantsView) revokeAll(i int) {
 	}
 	name, _ := g.who(r.holder)
 	all := strings.Join(caps, ", ")
-	g.c.Ask(Question{
+	g.c.Ask(feature.Question{
 		Title: g.c.Trf("autodoc.question.grants.revoke_all_title", name),
 		Text:  g.c.Trf("autodoc.question.grants.revoke_all_text", name, all),
 		Yes:   g.c.Tr("autodoc.question.grants.revoke"), No: g.c.Tr("autodoc.question.grants.keep"),

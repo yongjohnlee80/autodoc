@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
@@ -32,8 +33,8 @@ import (
 // words. So a log never holds the page's text, what was typed, a preference or the environment.
 
 const (
-	crashKeep       = 20           // crash logs kept; the oldest go as a new one is written
-	crashMessageMax = panicTextMax // characters of a panic's message a log and a notice keep (work.go)
+	crashKeep       = 20                   // crash logs kept; the oldest go as a new one is written
+	crashMessageMax = feature.PanicTextMax // characters of a panic's message a log and a notice keep (feature/work.go)
 	lastFatalFile   = "last-fatal"
 )
 
@@ -42,8 +43,8 @@ var crashSeq atomic.Uint64
 
 // panicSource is what failed and the panic itself: the command named on the way up, or fallback.
 func panicSource(rec any, fallback string) (string, any) {
-	if p, ok := rec.(namedPanic); ok {
-		return p.name, p.value
+	if p, ok := rec.(feature.NamedPanic); ok {
+		return p.Name, p.Value
 	}
 	return fallback, rec
 }
@@ -57,9 +58,9 @@ func (h *Host) contained(hp tuicore.HandlerPanic) {
 	name, value := panicSource(hp.Value, where)
 	path, err := h.writeCrash(crashReport{name: name, phase: hp.Phase, value: value, stack: hp.Stack})
 	if err != nil {
-		h.notify(h.trf("autodoc.notice.crash.failed_the_crash_log_could_not_be_written", name, panicText(value), err.Error()))
+		h.notify(h.trf("autodoc.notice.crash.failed_the_crash_log_could_not_be_written", name, feature.PanicText(value), err.Error()))
 	} else {
-		h.notify(h.trf("autodoc.notice.crash.failed_details_in", name, panicText(value), path))
+		h.notify(h.trf("autodoc.notice.crash.failed_details_in", name, feature.PanicText(value), path))
 	}
 }
 
@@ -89,7 +90,7 @@ func (h *Host) writeCrash(r crashReport) (string, error) {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "AutoDoc crash report\n\nwhen:    %s\nautodoc: %s\ngolib:   %s\nended:   %s\n", now.Format(time.RFC3339), cmp.Or(h.aboutInfo.Version, "unknown"), golibVersion(), ended)
-	fmt.Fprintf(&b, "where:   %s (%s)\npanic:   %s\n\n%s\n", r.name, cmp.Or(r.phase, "the loop"), panicText(r.value), r.stack)
+	fmt.Fprintf(&b, "where:   %s (%s)\npanic:   %s\n\n%s\n", r.name, cmp.Or(r.phase, "the loop"), feature.PanicText(r.value), r.stack)
 	b.WriteString("\nThis log holds the panic's type, its message only when the Go runtime wrote it, and the stack:\n" +
 		"never the page's text, what was typed, a preference or the environment. To reproduce it for a\n" +
 		"report, run autodoc with --debug, which records the input and events to a file (that file does\n" +
@@ -174,8 +175,8 @@ func (h *Host) keepRecoverySafely() (err error) {
 // failure (failed), so whatever waits on the answer ends as on any failure.
 func backgroundPanicked[T any](h *Host, rec any, stack []byte, then func(T)) {
 	path, _ := h.writeCrash(crashReport{name: "a background job", phase: "background", value: rec, stack: stack})
-	err := errPanicked{value: rec, path: path}
-	if v, ok := failed[T](err); ok {
+	err := feature.ErrPanicked{Value: rec, Path: path}
+	if v, ok := feature.Failed[T](err); ok {
 		then(v)
 		return
 	}

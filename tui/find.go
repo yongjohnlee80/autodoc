@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/style"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
@@ -39,18 +40,18 @@ type findState struct {
 }
 
 // findPanes are the panes find searches, in the registry's order: the page first.
-func (h *Host) findPanes() []FindPane {
+func (h *Host) findPanes() []feature.FindPane {
 	if h.reg == nil {
 		return nil // a host built without its options (tests)
 	}
-	return h.reg.finds
+	return h.reg.Finds
 }
 
 // findPane is the pane named name.
-func (h *Host) findPane(name string) (FindPane, bool) {
-	i := slices.IndexFunc(h.findPanes(), func(p FindPane) bool { return p.Name == name })
+func (h *Host) findPane(name string) (feature.FindPane, bool) {
+	i := slices.IndexFunc(h.findPanes(), func(p feature.FindPane) bool { return p.Name == name })
 	if i < 0 {
-		return FindPane{}, false
+		return feature.FindPane{}, false
 	}
 	return h.findPanes()[i], true
 }
@@ -77,7 +78,7 @@ func (h *Host) openFind() {
 }
 
 // findPaneList names the panes as the hint does: "the page, the explorer or the links".
-func findPaneList(panes []FindPane) string {
+func findPaneList(panes []feature.FindPane) string {
 	var names []string
 	for _, p := range panes {
 		names = append(names, "the "+p.Name)
@@ -266,15 +267,15 @@ func (h *Host) findJump(dir int, includeCurrent bool) {
 // find's order.
 type pageFind struct{ h *Host }
 
-func (pageFind) Name() string                 { return "page find" }
-func (pageFind) State() map[string]any        { return nil }
-func (pageFind) Commands() map[string]Command { return nil }
-func (p pageFind) FindPane() FindPane         { return p.h.pageFindPane() }
+func (pageFind) Name() string                         { return "page find" }
+func (pageFind) State() map[string]any                { return nil }
+func (pageFind) Commands() map[string]feature.Command { return nil }
+func (p pageFind) FindPane() feature.FindPane         { return p.h.pageFindPane() }
 
 // pageFindPane is the page's pane, the host's own: a hit puts the cursor on it, highlights it and
 // gives the page the keyboard.
-func (h *Host) pageFindPane() FindPane {
-	return FindPane{Name: findPage, View: "editor", Scope: "page", Rows: func() ([]string, int, func(int, int) error) {
+func (h *Host) pageFindPane() feature.FindPane {
+	return feature.FindPane{Name: findPage, View: "editor", Scope: "page", Rows: func() ([]string, int, func(int, int) error) {
 		cur, _ := h.core.Line()
 		return h.core.Lines(), cur, func(row, col int) error {
 			h.core.SetLine(row, col)

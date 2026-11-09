@@ -18,6 +18,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
 
 	"github.com/yongjohnlee80/autodoc/script"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -25,7 +26,7 @@ import (
 // (docs/decisions/contract.md#scripts-call-the-daemon-through-its-contracts).
 //
 //	autodoc.call(verb, params, cb)   any verb but the protocol's own; params a list, as the wire's
-//	autodoc.run(id, args…)           a command catalog entry, by id (catalog.go): ok, err; never
+//	autodoc.run(id, args…)           a command catalog entry, by id (feature/catalog.go): ok, err; never
 //	                                 raises. err is "unknown: <id>", the entry's own, or a refusal:
 //	                                 a plugin's command (plugin.*) is never Lua's to run
 //	autodoc.current_workspace()      the workspace in use; nil before one is entered
@@ -47,7 +48,7 @@ import (
 
 // scripting is the feature binding the daemon's verbs into the Lua engine.
 type scripting struct {
-	c   Core
+	c   feature.Core
 	eng *script.Engine
 	// verbs are the daemon's contracts, by verb, as sys.contracts last answered; nil before it has.
 	// Replaced, never changed in place: a call's goroutine reads the one it was given.
@@ -62,7 +63,7 @@ type scripting struct {
 	reload  func() error
 	install func(url string) error // :lua-install's (Host.installPackage)
 	// line runs a key's or a menu row's command line (Host: core.RunCommand); ui is the running
-	// engine's keys; rows the menu rows, scripts' and plugins' (menurows.go), and menuRows the
+	// engine's keys; rows the menu rows, scripts' and plugins' (feature/menurows.go), and menuRows the
 	// Plugins menu's model of those it shows (luakeys.go)
 	line func(string) error
 	// who is who the invocation beginning now acts for (Host.authorityNow), and as runs fn as a's
@@ -70,14 +71,14 @@ type scripting struct {
 	who      func() authority
 	as       func(a authority, fn func() error) error
 	ui       luaUI
-	rows     menuRows
+	rows     feature.MenuRows
 	menuRows *tuidecl.ListModel
 	// host is the clipboard and the agents for the host functions (luahost.go); pick is
 	// autodoc.ui.pick's picker, pickCB the callback of the one open; inputCB is the callback of
 	// autodoc.ui.input's line while it is open (LuaInput.qml); inputAnswered, that Esc answered it,
 	// so its dialog's closed, which follows the callback, is notification only (inputClosed)
 	host          luaHost
-	pick          *pick[luaItem]
+	pick          *feature.Pick[luaItem]
 	pickCB        *lua.LFunction
 	inputCB       *lua.LFunction
 	inputAnswered bool
@@ -93,11 +94,11 @@ type scripting struct {
 	oneShotOf *script.Engine
 }
 
-// Catalog is :lua-reload (catalog.go).
-func (s *scripting) Catalog() []Entry {
-	return []Entry{{ID: "scripts.reload", Title: "reload the Lua scripts", Verb: "lua-reload",
+// Catalog is :lua-reload (feature/catalog.go).
+func (s *scripting) Catalog() []feature.Entry {
+	return []feature.Entry{{ID: "scripts.reload", Title: "reload the Lua scripts", Verb: "lua-reload",
 		Help: "load every Lua script again: AutoDoc's, then the config folder's lua/",
-		Run: func(Invocation) error {
+		Run: func(feature.Invocation) error {
 			if s.reload == nil {
 				return errors.New("lua-reload: the scripts have not started")
 			}
@@ -105,7 +106,7 @@ func (s *scripting) Catalog() []Entry {
 		}},
 		{ID: "scripts.shell", Title: "a Lua shell, or run Lua", Verb: "lua", Args: "[chunk]", UserOnly: true,
 			Help: "alone, a Lua shell in the terminal; with a chunk, run it and show its values",
-			Run: func(inv Invocation) error {
+			Run: func(inv feature.Invocation) error {
 				if inv.Line == "" {
 					if s.shell == nil {
 						return errors.New("lua: the scripts have not started")
@@ -117,7 +118,7 @@ func (s *scripting) Catalog() []Entry {
 			}},
 		{ID: "scripts.install", Title: "install a Lua package", Verb: "lua-install", Args: "<name or git-url>",
 			Help: "clone a Lua package into the config folder's lua/, once you agree",
-			Run: func(inv Invocation) error {
+			Run: func(inv feature.Invocation) error {
 				if s.install == nil {
 					return errors.New("lua-install: the scripts have not started")
 				}
@@ -150,7 +151,7 @@ func (h *Host) luaFeature() *scripting {
 
 func (*scripting) Name() string { return "scripting" }
 func (s *scripting) State() map[string]any {
-	st := map[string]any{"App.luaPickRows": s.luaPicker().list.Model(), "App.luaPickField": "",
+	st := map[string]any{"App.luaPickRows": s.luaPicker().List.Model(), "App.luaPickField": "",
 		"App.luaKeysText": s.luaKeysText(), "App.luaMenus": s.luaMenuRows(),
 		"App.luaPickStatus": "items", "App.luaPickTitle": "choose",
 		"App.luaPickPreviewTitle": "", "App.luaPickPreviewText": "", "App.luaPickPreviewAt": 0,
@@ -158,24 +159,24 @@ func (s *scripting) State() map[string]any {
 	maps.Copy(st, s.cardState())
 	return st
 }
-func (s *scripting) Commands() map[string]Command {
-	return map[string]Command{
-		"App.luaKey":         oneString("a Lua key's letter", s.luaKey),
-		"App.luaMenu":        oneString("a Lua menu row", s.luaMenu),
-		"App.luaInputSet":    oneString("a script's answer", s.inputSet),
-		"App.luaInputCancel": none(s.inputCancel),
-		"App.luaInputClosed": none(s.inputClosed),
+func (s *scripting) Commands() map[string]feature.Command {
+	return map[string]feature.Command{
+		"App.luaKey":         feature.OneString("a Lua key's letter", s.luaKey),
+		"App.luaMenu":        feature.OneString("a Lua menu row", s.luaMenu),
+		"App.luaInputSet":    feature.OneString("a script's answer", s.inputSet),
+		"App.luaInputCancel": feature.None(s.inputCancel),
+		"App.luaInputClosed": feature.None(s.inputClosed),
 	}
 }
 
 // Keys is SPC u, the Lua keys' card (views/LuaKeys.qml): its letters are the scripts', bound as
 // they load, so it is not a key card of the catalog's.
-func (*scripting) Keys() []Key {
-	return []Key{{Card: leader, Seq: "u", Show: "u", Does: "your Lua keys", Run: "luaKeys.open()", Group: groupWindow}}
+func (*scripting) Keys() []feature.Key {
+	return []feature.Key{{Card: feature.Leader, Seq: "u", Show: "u", Does: "your Lua keys", Run: "luaKeys.open()", Group: feature.GroupWindow}}
 }
 
 // Cards is none: SPC u's card is the scripts' own (views/LuaKeys.qml).
-func (*scripting) Cards() []Card { return nil }
+func (*scripting) Cards() []feature.Card { return nil }
 
 // bind gives the engine autodoc.call and autodoc.run, which runs through run; the namespaces follow
 // once the daemon says its contracts.
@@ -213,7 +214,7 @@ func (s *scripting) bind(eng *script.Engine, run func(id string, args []string) 
 
 // Connected fetches the daemon's contracts and makes the namespaces from them.
 func (s *scripting) Connected() {
-	t := s.c.Ticket(&s.seq, TicketSession)
+	t := s.c.Ticket(&s.seq, feature.TicketSession)
 	s.c.Go(func(ctx context.Context) any {
 		verbs, err := fetchVerbs(ctx, s.c)
 		if err != nil {
@@ -234,7 +235,7 @@ func (s *scripting) Connected() {
 }
 
 // fetchVerbs asks the daemon for its contracts.
-func fetchVerbs(ctx context.Context, c Core) (map[string]luaVerb, error) {
+func fetchVerbs(ctx context.Context, c feature.Core) (map[string]luaVerb, error) {
 	res, err := c.Call(ctx, "sys.contracts")
 	if err != nil {
 		return nil, err
@@ -245,14 +246,14 @@ func fetchVerbs(ctx context.Context, c Core) (map[string]luaVerb, error) {
 // decodeVerbs reads sys.contracts' answer as it comes off the wire.
 func decodeVerbs(res any) map[string]luaVerb {
 	out := map[string]luaVerb{}
-	for _, raw := range asList(asMap(res)["verbs"]) {
-		m := asMap(raw)
-		v := luaVerb{verb: str(m, "verb"), audience: str(m, "audience"), effect: str(m, "effect")}
-		ps := asList(m["params"])
+	for _, raw := range feature.AsList(feature.AsMap(res)["verbs"]) {
+		m := feature.AsMap(raw)
+		v := luaVerb{verb: feature.Str(m, "verb"), audience: feature.Str(m, "audience"), effect: feature.Str(m, "effect")}
+		ps := feature.AsList(m["params"])
 		v.required = len(ps)
 		for i, rp := range ps {
-			pm := asMap(rp)
-			p := luaParam{name: str(pm, "name"), typ: str(pm, "type")}
+			pm := feature.AsMap(rp)
+			p := luaParam{name: feature.Str(pm, "name"), typ: feature.Str(pm, "type")}
 			p.optional, _ = pm["optional"].(bool)
 			if p.optional && v.required == len(ps) {
 				v.required = i
@@ -564,8 +565,8 @@ func (s *scripting) answer(verb string, cb *lua.LFunction, a luaAnswer) {
 
 // luaErr is a failed call as a script reads it: the daemon's code and message, or the error.
 func luaErr(err error) string {
-	if c := code(err); c != 0 {
-		return fmt.Sprintf("%d %s", c, wireMessage(err))
+	if c := feature.Code(err); c != 0 {
+		return fmt.Sprintf("%d %s", c, feature.WireMessage(err))
 	}
 	return err.Error()
 }
@@ -597,22 +598,22 @@ func (s *scripting) evalOnce(chunk string) error {
 // menuRowsShown is a menu's rows as it opens: each row that shows, with its title, in serial order.
 // An error, or the budget running out, leaves that row out; said is the open's one notice, "" for
 // none.
-func menuRowsShown(m *menuRows, s *scripting, where string, ctx menuCtx) (shown []shownRow, said string) {
-	end := time.Now().Add(menuBudget)
+func menuRowsShown(m *feature.MenuRows, s *scripting, where string, ctx feature.MenuCtx) (shown []shownRow, said string) {
+	end := time.Now().Add(feature.MenuBudget)
 	var first error
 	skipped := 0
 	// the rows as the open began: a when or a title may add, remove or replace rows as it runs, and
 	// a row one took out (or put another in place of) doesn't show this time, nor run its own
-	for _, r := range slices.Clone(m.rows) {
-		if !slices.Contains(m.rows, r) || r.where != where || !matches(r.files, path.Base(ctx.path)) {
+	for _, r := range slices.Clone(m.Rows) {
+		if !slices.Contains(m.Rows, r) || r.Where != where || !feature.Matches(r.Files, path.Base(ctx.Path)) {
 			continue
 		}
-		if (r.when != nil || (r.titleFn != nil && r.pushed == nil)) && !time.Now().Before(end) {
+		if (r.When != nil || (r.TitleFn != nil && r.Pushed == nil)) && !time.Now().Before(end) {
 			skipped++
 			continue
 		}
-		if r.when != nil {
-			v, err := s.rowAnswer(end, r, "when", r.when, ctx)
+		if r.When != nil {
+			v, err := s.rowAnswer(end, r, "when", r.When, ctx)
 			if err != nil {
 				first = cmp.Or(first, err)
 				continue
@@ -620,21 +621,21 @@ func menuRowsShown(m *menuRows, s *scripting, where string, ctx menuCtx) (shown 
 			if !lua.LVAsBool(v) {
 				continue
 			}
-			if !slices.Contains(m.rows, r) {
+			if !slices.Contains(m.Rows, r) {
 				continue // its own when took it out, or put another in its place: its title never runs
 			}
 		}
-		title := r.title
+		title := r.Title
 		switch {
-		case r.pushed != nil:
-			title = *r.pushed
-		case r.titleFn != nil:
-			v, err := s.rowAnswer(end, r, "title", r.titleFn, ctx)
+		case r.Pushed != nil:
+			title = *r.Pushed
+		case r.TitleFn != nil:
+			v, err := s.rowAnswer(end, r, "title", r.TitleFn, ctx)
 			if err == nil {
 				if t, ok := v.(lua.LString); ok && t != "" {
 					title = string(t)
 				} else {
-					err = fmt.Errorf("%s's title: answered a %s, not a string", r.name(), v.Type())
+					err = fmt.Errorf("%s's title: answered a %s, not a string", r.Name(), v.Type())
 				}
 			}
 			if err != nil {
@@ -645,25 +646,25 @@ func menuRowsShown(m *menuRows, s *scripting, where string, ctx menuCtx) (shown 
 		shown = append(shown, shownRow{r, title})
 	}
 	// a row withdrawn by its own when or title, or by a later row's, after it was reached
-	shown = slices.DeleteFunc(shown, func(x shownRow) bool { return !slices.Contains(m.rows, x.r) })
+	shown = slices.DeleteFunc(shown, func(x shownRow) bool { return !slices.Contains(m.Rows, x.r) })
 	switch {
 	case first != nil:
 		said = first.Error()
 	case skipped > 0:
-		said = s.c.Trf("autodoc.notice.menurows.menu_rows_left_out_their_scripts_took_longer_tha", skipped, menuBudget)
+		said = s.c.Trf("autodoc.notice.menurows.menu_rows_left_out_their_scripts_took_longer_tha", skipped, feature.MenuBudget)
 	}
 	return shown, said
 }
 
 // shownRow is a row as one open shows it.
 type shownRow struct {
-	r     *addedRow
+	r     *feature.AddedRow
 	title string
 }
 
 // editorMenuItems are the right-click menu's rows for ctx, after a separator; none without one. A
 // script's words are its own: a row's label is only its & parsed, never a catalog translation.
-func editorMenuItems(m *menuRows, s *scripting, ctx menuCtx) []widgetcore.MenuItemModel {
+func editorMenuItems(m *feature.MenuRows, s *scripting, ctx feature.MenuCtx) []widgetcore.MenuItemModel {
 	shown, said := menuRowsShown(m, s, "editor", ctx)
 	if said != "" {
 		s.c.Notify(said)
@@ -676,20 +677,20 @@ func editorMenuItems(m *menuRows, s *scripting, ctx menuCtx) []widgetcore.MenuIt
 	for _, x := range shown {
 		r := x.r
 		label, key, idx := tuicore.ParseMnemonic(x.title)
-		item := widgetcore.NewCommand(widgetcore.ItemID("menu.row."+strconv.Itoa(r.serial)), label,
-			editor.CoreMenuAction{ID: tuicore.ActionID("menu.row." + strconv.Itoa(r.serial)), Run: func(*editor.EditorCore) { r.run() }})
-		item.Hotkey, item.HotkeyIdx, item.Enabled = key, idx, !r.disabled
-		if r.menu == "" {
+		item := widgetcore.NewCommand(widgetcore.ItemID("menu.row."+strconv.Itoa(r.Serial)), label,
+			editor.CoreMenuAction{ID: tuicore.ActionID("menu.row." + strconv.Itoa(r.Serial)), Run: func(*editor.EditorCore) { r.Run() }})
+		item.Hotkey, item.HotkeyIdx, item.Enabled = key, idx, !r.Disabled
+		if r.Menu == "" {
 			items = append(items, item)
 			continue
 		}
-		i, ok := at[r.menu]
+		i, ok := at[r.Menu]
 		if !ok {
-			sub := widgetcore.NewSubmenu(widgetcore.ItemID("menu.group."+strconv.Itoa(m.group(r.menu))), r.menu, nil)
-			sub.Label, sub.Hotkey, sub.HotkeyIdx = tuicore.ParseMnemonic(r.menu)
+			sub := widgetcore.NewSubmenu(widgetcore.ItemID("menu.group."+strconv.Itoa(m.Group(r.Menu))), r.Menu, nil)
+			sub.Label, sub.Hotkey, sub.HotkeyIdx = tuicore.ParseMnemonic(r.Menu)
 			items = append(items, sub)
 			i = len(items) - 1
-			at[r.menu] = i
+			at[r.Menu] = i
 		}
 		items[i].Children = append(items[i].Children, item)
 	}
@@ -698,22 +699,22 @@ func editorMenuItems(m *menuRows, s *scripting, ctx menuCtx) []widgetcore.MenuIt
 
 // pluginsMenuRowsOf is the Plugins menu's rows of scripts, as App.luaMenus lists them: each row,
 // or a submenu of them, in serial order.
-func pluginsMenuRowsOf(m *menuRows, s *scripting) []tuidecl.Row {
-	shown, _ := menuRowsShown(m, s, "plugins", menuCtx{})
+func pluginsMenuRowsOf(m *feature.MenuRows, s *scripting) []tuidecl.Row {
+	shown, _ := menuRowsShown(m, s, "plugins", feature.MenuCtx{})
 	var rows []tuidecl.Row
 	subs := map[string]*tuidecl.ListModel{}
 	var subRows = map[string][]tuidecl.Row{}
 	for _, x := range shown {
-		row := tuidecl.Row{"kind": "item", "label": x.title, "target": strconv.Itoa(x.r.serial), "enabled": !x.r.disabled}
-		if x.r.menu == "" {
+		row := tuidecl.Row{"kind": "item", "label": x.title, "target": strconv.Itoa(x.r.Serial), "enabled": !x.r.Disabled}
+		if x.r.Menu == "" {
 			rows = append(rows, row)
 			continue
 		}
-		if _, ok := subs[x.r.menu]; !ok {
-			subs[x.r.menu] = tuidecl.NewListModel("label", "target", "enabled")
-			rows = append(rows, tuidecl.Row{"kind": "submenu", "label": x.r.menu, "rows": subs[x.r.menu], "target": "", "enabled": true})
+		if _, ok := subs[x.r.Menu]; !ok {
+			subs[x.r.Menu] = tuidecl.NewListModel("label", "target", "enabled")
+			rows = append(rows, tuidecl.Row{"kind": "submenu", "label": x.r.Menu, "rows": subs[x.r.Menu], "target": "", "enabled": true})
 		}
-		subRows[x.r.menu] = append(subRows[x.r.menu], row)
+		subRows[x.r.Menu] = append(subRows[x.r.Menu], row)
 	}
 	for name, l := range subs {
 		l.Reset(subRows[name])
@@ -722,15 +723,15 @@ func pluginsMenuRowsOf(m *menuRows, s *scripting) []tuidecl.Row {
 }
 
 // rowAnswer is a row's when or title, answered by the engine before end.
-func (s *scripting) rowAnswer(end time.Time, r *addedRow, part string, fn *lua.LFunction, ctx menuCtx) (lua.LValue, error) {
+func (s *scripting) rowAnswer(end time.Time, r *feature.AddedRow, part string, fn *lua.LFunction, ctx feature.MenuCtx) (lua.LValue, error) {
 	if s.eng == nil {
-		return lua.LNil, fmt.Errorf("%s's %s: no scripts are running", r.name(), part)
+		return lua.LNil, fmt.Errorf("%s's %s: no scripts are running", r.Name(), part)
 	}
 	L := s.eng.L
 	t := L.CreateTable(0, 4)
-	L.SetField(t, "path", lua.LString(ctx.path))
-	L.SetField(t, "workspace", lua.LString(ctx.workspace))
-	L.SetField(t, "kind", lua.LString(ctx.kind))
-	L.SetField(t, "selection", lua.LBool(ctx.selection))
-	return s.eng.Answer(end, r.name()+"'s "+part, fn, t)
+	L.SetField(t, "path", lua.LString(ctx.Path))
+	L.SetField(t, "workspace", lua.LString(ctx.Workspace))
+	L.SetField(t, "kind", lua.LString(ctx.Kind))
+	L.SetField(t, "selection", lua.LBool(ctx.Selection))
+	return s.eng.Answer(end, r.Name()+"'s "+part, fn, t)
 }

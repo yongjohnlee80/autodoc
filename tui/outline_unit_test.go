@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // at is where line (0-based) of text starts, plus col bytes: the cursor as Moved hands it.
@@ -23,7 +24,7 @@ func at(text string, line, col int) int {
 func TestTheOutlineFollowsThePageAndItsCursor(t *testing.T) {
 	c := newScripted("kb")
 	o := newOutline(c)
-	guide := Page{Ref: fileRef{"kb", "guide.md"}, Kind: kind.Markdown, Text: []byte(guideFile), Line: 10, At: at(guideFile, 10, 0)}
+	guide := feature.Page{Ref: feature.FileRef{WS: "kb", Path: "guide.md"}, Kind: kind.Markdown, Text: []byte(guideFile), Line: 10, At: at(guideFile, 10, 0)}
 	crumbs := func(want ...string) {
 		t.Helper()
 		if !slices.Equal(c.crumbs, want) {
@@ -42,10 +43,10 @@ func TestTheOutlineFollowsThePageAndItsCursor(t *testing.T) {
 	if o.doc != nil {
 		t.Fatal("the outline outlived its page")
 	}
-	o.Shown(Page{Ref: fileRef{"kb", "notes.txt"}, Kind: kind.Text, Text: []byte("# not a heading\n")})
+	o.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "notes.txt"}, Kind: kind.Text, Text: []byte("# not a heading\n")})
 	crumbs()
 	conf := "server:\n  database:\n    host: db\n"
-	o.Shown(Page{Ref: fileRef{"kb", "conf.yaml"}, Kind: kind.YAML, Text: []byte(conf), Line: 2, At: at(conf, 2, 6)})
+	o.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "conf.yaml"}, Kind: kind.YAML, Text: []byte(conf), Line: 2, At: at(conf, 2, 6)})
 	crumbs("server", "database", "host")
 }
 
@@ -54,17 +55,17 @@ func TestTheOutlineFollowsThePageAndItsCursor(t *testing.T) {
 func TestTheOutlinePickerOpensAndJumps(t *testing.T) {
 	c := newScripted("kb")
 	o := newOutline(c)
-	c.page = Page{Ref: fileRef{"kb", "conf.yaml"}, Kind: kind.YAML, Text: []byte("a: 1\n")}
+	c.page = feature.Page{Ref: feature.FileRef{WS: "kb", Path: "conf.yaml"}, Kind: kind.YAML, Text: []byte("a: 1\n")}
 	o.open()
 	if len(c.opened) != 0 || len(c.notes) != 1 || !strings.Contains(c.notes[0], "conf.yaml has no headings to navigate: the breadcrumb shows its key path") {
 		t.Fatalf("a YAML page's outline: opened %v, said %q", c.opened, c.notes)
 	}
-	c.page = Page{Ref: fileRef{"kb", "guide.md"}, Kind: kind.Markdown, Text: []byte(guideFile)}
+	c.page = feature.Page{Ref: feature.FileRef{WS: "kb", Path: "guide.md"}, Kind: kind.Markdown, Text: []byte(guideFile)}
 	o.open()
-	if !slices.Equal(c.opened, []string{"outlinePicker"}) || len(o.pick.all) != 4 {
-		t.Fatalf("opened %v over %d headings, want the picker over 4", c.opened, len(o.pick.all))
+	if !slices.Equal(c.opened, []string{"outlinePicker"}) || len(o.pick.All) != 4 {
+		t.Fatalf("opened %v over %d headings, want the picker over 4", c.opened, len(o.pick.All))
 	}
-	o.jump(o.pick.all[3]) // Usage, line 13
+	o.jump(o.pick.All[3]) // Usage, line 13
 	if !slices.Equal(c.views, []string{"editor.line 12"}) {
 		t.Fatalf("the jump moved the editor by %v", c.views)
 	}

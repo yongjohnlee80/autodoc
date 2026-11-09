@@ -1,4 +1,4 @@
-package tui
+package feature
 
 import (
 	"errors"
@@ -16,7 +16,7 @@ func TestACommandIsCheckedAndNamedByTheRegistry(t *testing.T) {
 	b := qml.SpecValue{Kind: qml.SpecValueBool, Raw: "true"}
 
 	var got []any
-	row := numberAndString("a row and an action", func(i int, a string) { got = []any{i, a} }).handler("App.rowAction")
+	row := NumberAndString("a row and an action", func(i int, a string) { got = []any{i, a} }).Handler("App.rowAction")
 	if err := row([]qml.SpecValue{n("2"), s("open")}); err != nil || got[0] != 2 || got[1] != "open" {
 		t.Fatalf("(2, open): %v %v", got, err)
 	}
@@ -34,32 +34,32 @@ func TestACommandIsCheckedAndNamedByTheRegistry(t *testing.T) {
 		}
 	}
 
-	if err := none(func() {}).handler("App.save")([]qml.SpecValue{b}); err == nil || err.Error() != "App.save takes no arguments, and was given 1" {
+	if err := None(func() {}).Handler("App.save")([]qml.SpecValue{b}); err == nil || err.Error() != "App.save takes no arguments, and was given 1" {
 		t.Errorf("an argument to none: %v", err)
 	}
-	if err := oneBool(func(bool) {}).handler("App.wrote")([]qml.SpecValue{s("yes")}); err == nil || err.Error() != "App.wrote takes true or false" {
+	if err := OneBool(func(bool) {}).Handler("App.wrote")([]qml.SpecValue{s("yes")}); err == nil || err.Error() != "App.wrote takes true or false" {
 		t.Errorf("a string for a bool: %v", err)
 	}
 
 	own := errors.New("the row is gone")
-	pick := oneIndex(func(tuidecl.Index) error { return own }).handler("App.picked")
+	pick := OneIndex(func(tuidecl.Index) error { return own }).Handler("App.picked")
 	if err := pick([]qml.SpecValue{{Obj: tuidecl.Index{}}}); !errors.Is(err, own) || err.Error() != own.Error() {
 		t.Errorf("the command's own error: %v", err)
 	}
 	if err := pick([]qml.SpecValue{n("3")}); err == nil || err.Error() != "App.picked takes a row's index, not 3" {
 		t.Errorf("a number for an index: %v", err)
 	}
-	place := stringAndFourNumbers("a panel and its place", func(string, float64, float64, float64, float64) {}).handler("App.placed")
+	place := StringAndFourNumbers("a panel and its place", func(string, float64, float64, float64, float64) {}).Handler("App.placed")
 	if err := place([]qml.SpecValue{s("agent"), n("1"), n("2"), n("x"), n("4")}); err == nil || err.Error() != "App.placed takes a panel and its place, not x" {
 		t.Errorf("a malformed fraction: %v", err)
 	}
-	for _, c := range []Command{oneString("a", func(string) {}), twoStrings("b", func(string, string) {}),
-		fourStrings("c", func(_, _, _, _ string) {}), fiveStrings("d", func(_, _, _, _, _ string) {})} {
+	for _, c := range []Command{OneString("a", func(string) {}), TwoStrings("b", func(string, string) {}),
+		FourStrings("c", func(_, _, _, _ string) {}), FiveStrings("d", func(_, _, _, _, _ string) {})} {
 		args := make([]qml.SpecValue, len(c.Args))
 		for i := range args {
 			args[i] = s("x")
 		}
-		if err := c.handler("App.x")(args); err != nil {
+		if err := c.Handler("App.x")(args); err != nil {
 			t.Errorf("%s: %v", c.What, err)
 		}
 	}

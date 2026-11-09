@@ -1,4 +1,4 @@
-package tui
+package feature
 
 import (
 	"cmp"
@@ -25,16 +25,16 @@ type Question struct {
 	// OnNo, when set, runs once, on the loop, when the card's own No answers it: the No button or
 	// Escape (the dialog's reject), and a Yes before Arm. Never on a close, a replacement or the
 	// host stopping. OnCancel runs after it, as for every way out but Yes: OnNo is for an answer
-	// remembered (a plugin's launch, pluginlaunch.go), OnCancel for the request it ends.
+	// remembered (a plugin's launch, tui/pluginlaunch.go), OnCancel for the request it ends.
 	OnNo func()
 	// Other, when set, is a third button between No and Yes, its mnemonic marked ("&Audit…"):
 	// OnOther runs once when it is chosen, and neither OnYes nor OnCancel does, so what was asked
-	// lives on (a candidate's Audit…, candidate.go).
+	// lives on (a candidate's Audit…, tui/candidate.go).
 	Other   string
 	OnOther func()
 	// Arm, when set, is how long after the card shows that its Yes counts: a Yes sooner (a key
 	// typed ahead, a double click that answered the card before it) is a No, and OnTooSoon hears
-	// it. For a card whose Yes runs something the user must have read (editorterminal.go).
+	// it. For a card whose Yes runs something the user must have read (tui/editorterminal.go).
 	Arm       time.Duration
 	OnTooSoon func()
 }
@@ -51,82 +51,82 @@ func (a Asked) Say(text string) {
 }
 
 // asker is the feature that owns the card.
-type asker struct {
+type Asker struct {
 	c             Core
 	seq           uint64 // the question asked: a newer one, or an answer, moves it
 	yes           func() // the asked question's OnYes; nil once answered
 	no            func() // its OnNo
 	cancel        func()
 	other         func() // its OnOther
-	pending       bool
+	Pending       bool
 	answerClosing bool // accepted/rejected already answered; its following closed is notification only
 	stopped       bool
 	// onIdle hears that the card is free again, once an answer left no question open: a queue of
-	// questions waiting their turn (the Lua grants, luagate.go) asks its next one then
-	onIdle func()
+	// questions waiting their turn (the Lua grants, tui/luagate.go) asks its next one then
+	OnIdle func()
 	// waiting is the questions asked to wait for a free card (askWhenFree), oldest first. polite is
 	// whether the open question is one of them, current: another question displaces it back to the
 	// head of waiting, its callbacks not run, rather than cancelling it.
-	waiting []Question
+	Waiting []Question
 	polite  bool
-	current Question
+	Current Question
 	// armedAt is when the open question's Yes starts to count (Question.Arm); tooSoon its OnTooSoon
 	armedAt time.Time
 	tooSoon func()
 }
 
-func newAsker(c Core) *asker { return &asker{c: c} }
+func NewAsker(c Core) *Asker { return &Asker{c: c} }
 
-func (*asker) Name() string { return "ask" }
+func (*Asker) Name() string { return "ask" }
 
-func (*asker) State() map[string]any {
+func (*Asker) State() map[string]any {
 	return map[string]any{"App.askTitle": "", "App.askText": "", "App.askYes": "&Yes", "App.askNo": "&No",
 		"App.askOther": "", "App.askOtherShown": false}
 }
 
-func (a *asker) Commands() map[string]Command {
+func (a *Asker) Commands() map[string]Command {
 	return map[string]Command{
-		"App.askAccepted":    none(a.accepted),
-		"App.askRejected":    none(a.rejected),
-		"App.askClosed":      none(a.closed),
-		"App.askOtherChosen": none(a.otherChosen),
+		"App.askAccepted":    None(a.Accepted),
+		"App.askRejected":    None(a.Rejected),
+		"App.askClosed":      None(a.Closed),
+		"App.askOtherChosen": None(a.OtherChosen),
 	}
 }
 
 // ask shows q, replacing any question still open.
-func (a *asker) ask(q Question) Asked { return a.show(q, false) }
+func (a *Asker) Ask(q Question) Asked { return a.Show(q, false) }
 
 // askWhenFree asks q once the card is free: at once when no question is open, else after the open
 // one and those waiting before it are answered. It never displaces a question; one that displaces
 // it puts it back at the head of the wait, and it is asked again when the card is next free. A
 // stopping host cancels it (OnCancel), asked or waiting.
-func (a *asker) askWhenFree(q Question) {
+func (a *Asker) AskWhenFree(q Question) {
 	if a.stopped {
 		if q.OnCancel != nil {
 			q.OnCancel()
 		}
 		return
 	}
-	a.waiting = append(a.waiting, q)
+	a.Waiting = append(a.Waiting, q)
 	a.drain()
 }
 
 // drain asks the first waiting question while the card is free.
-func (a *asker) drain() {
-	if a.pending || a.stopped || len(a.waiting) == 0 {
+func (a *Asker) drain() {
+	if a.Pending || a.stopped || len(a.Waiting) == 0 {
 		return
 	}
-	q := a.waiting[0]
-	a.waiting = a.waiting[1:]
-	a.show(q, true)
+	q := a.Waiting[0]
+	a.Waiting = a.Waiting[1:]
+	a.Show(q, true)
 }
 
 // show shows q, polite when it waited for the card (askWhenFree), replacing any question still
 // open: a polite one goes back to wait, the rest are cancelled.
-func (a *asker) show(q Question, polite bool) Asked {
+func (a *Asker) Show(q Question, polite bool) Asked {
 	previous := a.cancel
-	if a.pending && a.polite {
-		a.waiting = append([]Question{a.current}, a.waiting...) // displaced, not answered: it waits again
+	if a.Pending && a.polite {
+		a.Waiting = append([]Question{a.Current}, a.Waiting...) // displaced, not answered: it waits again
 		previous = nil
 	}
 	a.answered() // retire the old question before its callback may re-enter Ask
@@ -141,8 +141,8 @@ func (a *asker) show(q Question, polite bool) Asked {
 		return Asked{}
 	}
 	a.yes, a.no, a.other = q.OnYes, q.OnNo, q.OnOther
-	a.cancel, a.pending = q.OnCancel, true
-	a.polite, a.current = polite, q
+	a.cancel, a.Pending = q.OnCancel, true
+	a.polite, a.Current = polite, q
 	a.armedAt, a.tooSoon = time.Now().Add(q.Arm), q.OnTooSoon
 	a.c.Set("App.askTitle", q.Title)
 	a.c.Set("App.askText", q.Text)
@@ -160,15 +160,15 @@ func (a *asker) show(q Question, polite bool) Asked {
 
 // accepted runs the question's OnYes, once; a Yes before the question is armed (Question.Arm) is
 // its No instead.
-func (a *asker) accepted() {
-	if !a.pending {
+func (a *Asker) Accepted() {
+	if !a.Pending {
 		return
 	}
 	if time.Now().Before(a.armedAt) {
 		if a.tooSoon != nil {
 			a.tooSoon()
 		}
-		a.rejected()
+		a.Rejected()
 		return
 	}
 	yes := a.yes
@@ -182,8 +182,8 @@ func (a *asker) accepted() {
 
 // otherChosen runs the question's OnOther, once; the card closes without OnCancel. A question
 // with no third button has nothing to choose, and stays asked.
-func (a *asker) otherChosen() {
-	if !a.pending || a.other == nil {
+func (a *Asker) OtherChosen() {
+	if !a.Pending || a.other == nil {
 		return
 	}
 	other := a.other
@@ -197,16 +197,16 @@ func (a *asker) otherChosen() {
 
 // idle asks the next waiting question, when the answer's callback asked nothing new, and else
 // tells onIdle the card is free.
-func (a *asker) idle() {
+func (a *Asker) idle() {
 	a.drain()
-	if !a.pending && !a.stopped && a.onIdle != nil {
-		a.onIdle()
+	if !a.Pending && !a.stopped && a.OnIdle != nil {
+		a.OnIdle()
 	}
 }
 
 // rejected is the card's own No: OnNo, then OnCancel, as cancelCurrent runs it.
-func (a *asker) rejected() {
-	if !a.pending {
+func (a *Asker) Rejected() {
+	if !a.Pending {
 		return
 	}
 	a.answerClosing = true
@@ -224,7 +224,7 @@ func (a *asker) rejected() {
 // closed also covers programmatic close, which raises no rejected signal.
 // An accepted/rejected signal's following closed must not cancel a question
 // its callback opened in the meantime.
-func (a *asker) closed() {
+func (a *Asker) Closed() {
 	if a.answerClosing {
 		a.answerClosing = false
 		return
@@ -232,7 +232,7 @@ func (a *asker) closed() {
 	a.cancelCurrent()
 }
 
-func (a *asker) cancelCurrent() {
+func (a *Asker) cancelCurrent() {
 	cancel := a.cancel
 	a.answered()
 	if cancel != nil {
@@ -243,23 +243,23 @@ func (a *asker) cancelCurrent() {
 
 // Stopping retires pending work while the host is stopping. Stopped is the
 // existing post-loop fallback; a loop-owned stopping hook can call this earlier.
-func (a *asker) Stopping() {
+func (a *Asker) Stopping() {
 	a.stopped = true
 	a.cancelCurrent()
-	waiting := a.waiting
-	a.waiting = nil
+	waiting := a.Waiting
+	a.Waiting = nil
 	for _, q := range waiting {
 		if q.OnCancel != nil {
 			q.OnCancel()
 		}
 	}
 }
-func (a *asker) Stopped() { a.Stopping() }
+func (a *Asker) Stopped() { a.Stopping() }
 
 // answered ends the question: a late Say, or a second accept, does nothing.
-func (a *asker) answered() {
+func (a *Asker) answered() {
 	a.seq++
 	a.yes, a.no, a.other = nil, nil, nil
-	a.cancel, a.pending = nil, false
-	a.polite, a.current = false, Question{}
+	a.cancel, a.Pending = nil, false
+	a.polite, a.Current = false, Question{}
 }

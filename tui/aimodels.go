@@ -1,6 +1,9 @@
 package tui
 
-import "maps"
+import (
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"maps"
+)
 
 // THE AI MODELS — System › Search models… (SPC a), a feature of its own: the embedding providers
 // (providers.go) and the rankers (rankers.go), a tab each, both over one list-and-form core
@@ -15,14 +18,14 @@ const (
 
 // aiModels is the dialog: its two lists and the tab showing.
 type aiModels struct {
-	c         Core
+	c         feature.Core
 	providers *providers
 	rankers   *rankers
 	setup     *embedSetup // Set up… (embedsetup.go)
 	tab       int
 }
 
-func newAIModels(c Core) *aiModels {
+func newAIModels(c feature.Core) *aiModels {
 	a := &aiModels{c: c, providers: newProviders(c), setup: newEmbedSetup(c)}
 	a.rankers = newRankers(c, a.syncButtons)
 	return a
@@ -44,14 +47,14 @@ func (a *aiModels) State() map[string]any {
 	return s
 }
 
-func (a *aiModels) Commands() map[string]Command {
-	cmds := map[string]Command{
-		"App.openAIModels": none(a.open),
-		"App.aiTabMoved":   oneNumber("a tab", a.tabMoved),
-		"App.aiAdd":        none(a.add),
-		"App.aiEdit":       oneNumber("a row", a.edit),
-		"App.aiUse":        oneNumber("a row", a.use),
-		"App.aiRemove":     oneNumber("a row", a.remove),
+func (a *aiModels) Commands() map[string]feature.Command {
+	cmds := map[string]feature.Command{
+		"App.openAIModels": feature.None(a.open),
+		"App.aiTabMoved":   feature.OneNumber("a tab", a.tabMoved),
+		"App.aiAdd":        feature.None(a.add),
+		"App.aiEdit":       feature.OneNumber("a row", a.edit),
+		"App.aiUse":        feature.OneNumber("a row", a.use),
+		"App.aiRemove":     feature.OneNumber("a row", a.remove),
 	}
 	maps.Copy(cmds, a.providers.Commands())
 	maps.Copy(cmds, a.rankers.Commands())
@@ -59,10 +62,10 @@ func (a *aiModels) Commands() map[string]Command {
 	return cmds
 }
 
-// Catalog is the dialog's user command (catalog.go): it runs what App.openAIModels runs.
-func (a *aiModels) Catalog() []Entry {
-	return []Entry{builtin("prefs.search_models", "search models", "App.openAIModels()", a.open),
-		builtin("prefs.set_up_semantic_search", "set up semantic search", "App.openEmbeddingSetup()", a.setup.open)}
+// Catalog is the dialog's user command (feature/catalog.go): it runs what App.openAIModels runs.
+func (a *aiModels) Catalog() []feature.Entry {
+	return []feature.Entry{feature.Builtin("prefs.search_models", "search models", "App.openAIModels()", a.open),
+		feature.Builtin("prefs.set_up_semantic_search", "set up semantic search", "App.openEmbeddingSetup()", a.setup.open)}
 }
 
 // open opens the AI models: the providers listed, and the rankers when their tab is the one showing.

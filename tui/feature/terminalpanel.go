@@ -1,4 +1,4 @@
-package tui
+package feature
 
 import (
 	"context"
@@ -16,7 +16,7 @@ type TerminalConfig struct {
 	Args, Env    []string
 	Exited       func(int)
 	// Start, when set, runs the tab's program instead of a child on a PTY: golib's WithStarter (a
-	// Lua shell, luashell.go). Command and Args are then only its name.
+	// Lua shell, tui/luashell.go). Command and Args are then only its name.
 	Start func(pty.Cmd) (terminal.TerminalProcess, error)
 }
 
@@ -49,7 +49,7 @@ type TerminalPanel interface {
 	// (docs/decisions/todos.md#text-reaches-an-agent-only-as-a-bracketed-paste).
 	SendBracketedPaste(terminal.TerminalTabID, string) error
 	// SendText sends literal keys to the tab's program: the Enter that submits a message the
-	// messaging base pasted (agentmessaging.go), never text a user didn't decide to send.
+	// messaging base pasted (tui/agentmessaging.go), never text a user didn't decide to send.
 	SendText(terminal.TerminalTabID, string) error
 	// SetMode puts the tab in a mode; Input needs no program.
 	SetMode(terminal.TerminalTabID, terminal.TerminalMode) error
@@ -76,7 +76,7 @@ type terminalPanel struct {
 
 // newTerminalPanel is tabs as a TerminalPanel; resume is how the host wakes a tab's stopped
 // program (SIGCONT where the platform has it), nil where it has none.
-func newTerminalPanel(tabs *terminal.TerminalTabs, resume func(*terminal.TerminalTabs, terminal.TerminalTabID) error) TerminalPanel {
+func NewTerminalPanel(tabs *terminal.TerminalTabs, resume func(*terminal.TerminalTabs, terminal.TerminalTabID) error) TerminalPanel {
 	return terminalPanel{tabs: tabs, resume: resume}
 }
 

@@ -1,4 +1,4 @@
-package tui
+package feature
 
 import (
 	"errors"
@@ -16,7 +16,7 @@ import (
 // Lua's autodoc.run all read it, so a command declared once is reachable from each.
 //
 // Only what a person would invoke is here: a menu row, a key, a verb. The App.* handlers stay the
-// document's wiring (commands.go); an entry's Run calls the same function as its App.* twin.
+// document's wiring (tui/commands.go); an entry's Run calls the same function as its App.* twin.
 //
 // An id is <subject>.<action>, lower-case and dotted:
 //
@@ -94,14 +94,14 @@ type Invocation struct {
 type Cataloged interface{ Catalog() []Entry }
 
 // errUnknownCommand is catalog.run's answer to an id no entry has: "unknown: <id>".
-var errUnknownCommand = errors.New("unknown")
+var ErrUnknownCommand = errors.New("unknown")
 
 // commandID is an id's shape: a lower-case first word, then dotted words.
 var commandID = manifests.CommandID
 
 // takenOver are golib's verbs AutoDoc's own entries replace: find and nohl are the page's find
-// (find.go), so ':' and / share one.
-var takenOver = map[string]bool{"find": true, "nohl": true}
+// (tui/find.go), so ':' and / share one.
+var TakenOver = map[string]bool{"find": true, "nohl": true}
 
 // golibVerbs are the names of golib's own verbs an entry may not take (a Lua command excepted).
 var golibVerbs = func() map[string]bool {
@@ -116,30 +116,30 @@ var golibVerbs = func() map[string]bool {
 
 // catalog is the program's entries: the features' at start, then Lua's and plugins' as they
 // register.
-type catalog struct {
+type Catalog struct {
 	byID  map[string]*Entry
-	order []string
-	names map[string]string // ':' name → the id of the entry owning it
+	Order []string
+	Names map[string]string // ':' name → the id of the entry owning it
 	// the editor's registry, kept in step, and the core every run outside ':' is given; nil before
 	// attach
-	cmds   *editor.Commands
+	Cmds   *editor.Commands
 	core   *editor.EditorCore
 	synced map[string][]string // the names each entry is registered under in cmds
 	// tr is an entry's English in the UI's language (Host.trOr); nil keeps English
-	tr func(id, english string) string
+	Tr func(id, english string) string
 	// changed hears every add and remove: F1 is made from the catalog
-	changed func()
+	Changed func()
 	// gated is whether a run beginning now acts for a gated script, not the user (the host's
 	// authorityNow); nil runs everything as the user's
-	gated func() bool
+	Gated func() bool
 }
 
-func newCatalog() *catalog {
-	return &catalog{byID: map[string]*Entry{}, names: map[string]string{}, synced: map[string][]string{}}
+func NewCatalog() *Catalog {
+	return &Catalog{byID: map[string]*Entry{}, Names: map[string]string{}, synced: map[string][]string{}}
 }
 
 // declared are e's ':' names: its verb, then its aliases.
-func (e *Entry) declared() []string {
+func (e *Entry) Declared() []string {
 	if e.Verb == "" {
 		return nil
 	}
@@ -166,9 +166,9 @@ func validVerb(n string) bool {
 }
 
 // check is why e cannot be added, nil when it can. A Lua entry replaces its own id.
-func (c *catalog) check(e *Entry) error {
+func (c *Catalog) Check(e *Entry) error {
 	// the names first: a Lua command's id is made from its name, so a bad name is said as one
-	for _, n := range e.declared() {
+	for _, n := range e.Declared() {
 		if !validVerb(n) {
 			return fmt.Errorf("tui: %q is not a ':' name: letters, digits, - and _, and not all digits", n)
 		}
@@ -204,12 +204,12 @@ func (c *catalog) check(e *Entry) error {
 		return fmt.Errorf("tui: the command %s has aliases and no verb", e.ID)
 	}
 	seen := map[string]bool{}
-	for _, n := range e.declared() {
-		switch owner := c.names[n]; {
+	for _, n := range e.Declared() {
+		switch owner := c.Names[n]; {
 		case seen[n]:
 			return fmt.Errorf("tui: the command %s names :%s twice", e.ID, n)
 		case e.Source == SourceLua:
-		case golibVerbs[n] && !(e.Source == SourceBuiltin && takenOver[n]):
+		case golibVerbs[n] && !(e.Source == SourceBuiltin && TakenOver[n]):
 			return fmt.Errorf("tui: the command %s: :%s is the editor's own", e.ID, n)
 		case owner != "" && owner != e.ID:
 			return fmt.Errorf("tui: :%s is both %s (%s) and %s (%s)", n, c.byID[owner].who(), owner, e.who(), e.ID)
@@ -221,21 +221,21 @@ func (c *catalog) check(e *Entry) error {
 
 // add adds e, or refuses it whole: its id, its verb and every alias are checked before any is
 // taken. A Lua entry replaces the Lua entry with its id.
-func (c *catalog) add(e Entry) error {
-	if err := c.check(&e); err != nil {
+func (c *Catalog) Add(e Entry) error {
+	if err := c.Check(&e); err != nil {
 		return err
 	}
 	affected := map[string]bool{e.ID: true}
 	if c.byID[e.ID] != nil {
-		c.drop(e.ID, affected)
+		c.Drop(e.ID, affected)
 	}
 	c.byID[e.ID] = &e
-	c.order = append(c.order, e.ID)
-	for _, n := range e.declared() {
-		if prev := c.names[n]; prev != "" {
+	c.Order = append(c.Order, e.ID)
+	for _, n := range e.Declared() {
+		if prev := c.Names[n]; prev != "" {
 			affected[prev] = true // a Lua command takes the name, and only it
 		}
-		c.names[n] = e.ID
+		c.Names[n] = e.ID
 	}
 	c.sync(affected)
 	return nil
@@ -243,30 +243,30 @@ func (c *catalog) add(e Entry) error {
 
 // remove takes the entry of id out: a plugin uninstalled. Its names go back to the first entry
 // still declaring them.
-func (c *catalog) remove(id string) {
+func (c *Catalog) Remove(id string) {
 	if c.byID[id] == nil {
 		return
 	}
 	affected := map[string]bool{id: true}
-	c.drop(id, affected)
+	c.Drop(id, affected)
 	c.sync(affected)
 }
 
 // drop forgets id, giving its names back, and notes the entries that changed.
-func (c *catalog) drop(id string, affected map[string]bool) {
+func (c *Catalog) Drop(id string, affected map[string]bool) {
 	delete(c.byID, id)
-	c.order = slices.DeleteFunc(c.order, func(o string) bool { return o == id })
+	c.Order = slices.DeleteFunc(c.Order, func(o string) bool { return o == id })
 	var freed []string
-	for n, owner := range c.names {
+	for n, owner := range c.Names {
 		if owner == id {
 			freed = append(freed, n)
 		}
 	}
 	for _, n := range freed {
-		delete(c.names, n)
-		for _, o := range c.order {
-			if slices.Contains(c.byID[o].declared(), n) {
-				c.names[n] = o
+		delete(c.Names, n)
+		for _, o := range c.Order {
+			if slices.Contains(c.byID[o].Declared(), n) {
+				c.Names[n] = o
 				affected[o] = true
 				break
 			}
@@ -275,25 +275,25 @@ func (c *catalog) drop(id string, affected map[string]bool) {
 }
 
 // owned are the names id owns now, in the order it declares them.
-func (c *catalog) owned(id string) []string {
+func (c *Catalog) Owned(id string) []string {
 	e := c.byID[id]
 	if e == nil {
 		return nil
 	}
-	return slices.DeleteFunc(e.declared(), func(n string) bool { return c.names[n] != id })
+	return slices.DeleteFunc(e.Declared(), func(n string) bool { return c.Names[n] != id })
 }
 
 // entries are every entry, in the order they were added.
-func (c *catalog) entries() []*Entry {
-	out := make([]*Entry, len(c.order))
-	for i, id := range c.order {
+func (c *Catalog) Entries() []*Entry {
+	out := make([]*Entry, len(c.Order))
+	for i, id := range c.Order {
 		out[i] = c.byID[id]
 	}
 	return out
 }
 
 // lookup is the entry of id, nil for none.
-func (c *catalog) lookup(id string) *Entry {
+func (c *Catalog) Lookup(id string) *Entry {
 	if c == nil {
 		return nil
 	}
@@ -302,13 +302,13 @@ func (c *catalog) lookup(id string) *Entry {
 
 // attach registers the entries' names in core's command line, and gives every run outside ':'
 // core.
-func (c *catalog) attach(core *editor.EditorCore) {
+func (c *Catalog) Attach(core *editor.EditorCore) {
 	if c == nil {
 		return // a host built without its options (tests)
 	}
-	c.core, c.cmds = core, core.Commands()
+	c.core, c.Cmds = core, core.Commands()
 	all := map[string]bool{}
-	for _, id := range c.order {
+	for _, id := range c.Order {
 		all[id] = true
 	}
 	c.sync(all)
@@ -318,35 +318,35 @@ func (c *catalog) attach(core *editor.EditorCore) {
 // and tells changed. Every old registration goes before any new one is made, so a name moving
 // from one entry to another is never removed with its new owner.
 // syncAll registers every entry again: the command line's help in the UI's language, after a change of it.
-func (c *catalog) syncAll() {
+func (c *Catalog) SyncAll() {
 	if c == nil {
 		return
 	}
-	all := make(map[string]bool, len(c.order))
-	for _, id := range c.order {
+	all := make(map[string]bool, len(c.Order))
+	for _, id := range c.Order {
 		all[id] = true
 	}
 	c.sync(all)
 }
 
-func (c *catalog) sync(affected map[string]bool) {
-	if c.cmds != nil {
+func (c *Catalog) sync(affected map[string]bool) {
+	if c.Cmds != nil {
 		for id := range affected {
-			c.cmds.Remove(c.synced[id]...)
+			c.Cmds.Remove(c.synced[id]...)
 			delete(c.synced, id)
 		}
-		for _, id := range c.order {
-			own := c.owned(id)
+		for _, id := range c.Order {
+			own := c.Owned(id)
 			if !affected[id] || len(own) == 0 {
 				continue
 			}
 			e := c.byID[id]
 			// Set: a Lua command replaces golib's verb of its name, as it always has
 			help := e.Help
-			if c.tr != nil && help != "" {
-				help = c.tr("autodoc.cmd."+id+".help", help)
+			if c.Tr != nil && help != "" {
+				help = c.Tr("autodoc.cmd."+id+".help", help)
 			}
-			_ = c.cmds.Set(editor.Command{Name: own[0], Aliases: own[1:], Args: e.Args, Help: help, Complete: e.Complete,
+			_ = c.Cmds.Set(editor.Command{Name: own[0], Aliases: own[1:], Args: e.Args, Help: help, Complete: e.Complete,
 				Run: func(x editor.CommandContext) error {
 					if err := c.userOnly(e); err != nil {
 						return err
@@ -356,19 +356,19 @@ func (c *catalog) sync(affected map[string]bool) {
 			c.synced[id] = own
 		}
 	}
-	if c.changed != nil {
-		c.changed()
+	if c.Changed != nil {
+		c.Changed()
 	}
 }
 
 // run runs the entry of id with args, as a key, autodoc.run or a plugin's host.call does: on the
 // attached editor, its line the arguments joined.
-func (c *catalog) run(id string, args []string) error {
-	e := c.lookup(id)
+func (c *Catalog) Run(id string, args []string) error {
+	e := c.Lookup(id)
 	if e == nil {
-		return fmt.Errorf("%w: %s", errUnknownCommand, id)
+		return fmt.Errorf("%w: %s", ErrUnknownCommand, id)
 	}
-	defer renamePanic(id) // a panic says which command it came out of (crash.go)
+	defer renamePanic(id) // a panic says which command it came out of (tui/crash.go)
 	if err := c.userOnly(e); err != nil {
 		return err
 	}
@@ -377,14 +377,14 @@ func (c *catalog) run(id string, args []string) error {
 
 // userOnly refuses a UserOnly entry to a run that a gated script's invocation makes: the one place
 // every route to an entry (':', a key, autodoc.run, a plugin's host.call) goes through.
-func (c *catalog) userOnly(e *Entry) error {
-	if !e.UserOnly || c.gated == nil || !c.gated() {
+func (c *Catalog) userOnly(e *Entry) error {
+	if !e.UserOnly || c.Gated == nil || !c.Gated() {
 		return nil
 	}
 	return fmt.Errorf("%s is the user's to run: a script may not", e.ID)
 }
 
 // builtin is an entry that runs fn, the function its twin's App.* command runs.
-func builtin(id, title, twin string, fn func()) Entry {
+func Builtin(id, title, twin string, fn func()) Entry {
 	return Entry{ID: id, Title: title, Help: title, Twin: twin, Run: func(Invocation) error { fn(); return nil }}
 }

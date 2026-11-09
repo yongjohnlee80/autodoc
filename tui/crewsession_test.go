@@ -17,6 +17,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // crewAgents is modelAgents whose window holds a crew scope on a real crew.Manager, in a workspace
@@ -478,7 +479,7 @@ func TestADeliveryWaitsForItsAgentsRegistration(t *testing.T) {
 	w.hold = true
 	calls := 0
 	var outcome error
-	if err := a.HandTask(AgentRef{Codename: "one"}, TaskRef{Title: "task", Path: "/task.md"}, "work", func(err error) { calls++; outcome = err }); err != nil {
+	if err := a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "task", Path: "/task.md"}, "work", func(err error) { calls++; outcome = err }); err != nil {
 		t.Fatal(err)
 	}
 	c.questions[0].OnYes()

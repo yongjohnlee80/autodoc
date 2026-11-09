@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/i18n"
@@ -160,7 +161,7 @@ func (h *Host) trOr(id, english string) string {
 // menuLabelID is a menu row's catalog id: its words and, when it has one, its key, so "&Close" and
 // "Close" are two rows.
 func menuLabelID(label string) string {
-	id := "autodoc.gomenu." + slugOf(label)
+	id := "autodoc.gomenu." + feature.SlugOf(label)
 	if _, key, _ := tuicore.ParseMnemonic(label); key != 0 {
 		id += "_" + strings.ToLower(string(key))
 	}
@@ -171,7 +172,7 @@ func menuLabelID(label string) string {
 // are text, so they are composed in the UI's language (choiceState), their keys English.
 var choiceLabels = map[string][]string{
 	"App.keymaps":           keymapLabels,
-	"App.edges":             edges,
+	"App.edges":             feature.Edges,
 	"App.yesNo":             {"yes", "no"},
 	"App.openAsChoices":     openAsLabels,
 	"App.diskReloadChoices": diskReloadLabels,
@@ -205,9 +206,9 @@ func choiceModel(w wording, src string) *tuidecl.ListModel {
 	if !ok {
 		labels = featureChoiceLabels[src]
 	}
-	rows := make([]rowOf, len(labels))
+	rows := make([]feature.RowOf, len(labels))
 	for i, l := range labels {
-		rows[i] = rowOf{"key": l, "label": w.Tr("autodoc.choice." + slugOf(l))}
+		rows[i] = feature.RowOf{"key": l, "label": w.Tr("autodoc.choice." + feature.SlugOf(l))}
 	}
 	model := tuidecl.NewListModel("key", "label")
 	model.Reset(rows)
@@ -229,7 +230,7 @@ func (h *Host) languageChanged() {
 		h.set(name, model)
 	}
 	h.commandsChanged()
-	h.cat.syncAll()
+	h.cat.SyncAll()
 	for name, text := range h.languageState() {
 		h.set(name, text)
 	}
@@ -240,7 +241,7 @@ func (h *Host) languageChanged() {
 	h.showSemantic()
 	h.syncStages(false) // the Rerank box names its ranker
 	h.showDiagnostics(h.fmDiagnostics)
-	h.reg.languageChanged()
+	h.reg.LanguageChanged()
 	if len(tutorialPages) > 0 {
 		h.showTutorialPage() // its title and Next, should it be open
 	}

@@ -3,6 +3,7 @@
 package tui
 
 import (
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"strings"
 	"testing"
 )
@@ -25,7 +26,7 @@ func TestRelationsGlobeMapSettingsOpensTheTerminals(t *testing.T) {
 
 	// a host whose relation views hold no GlobeMap
 	onLoop(r, func() bool {
-		var others []Feature
+		var others []feature.Feature
 		for _, f := range r.h.relationViewFeatures() {
 			if _, globe := f.(*cellGlobeMap); !globe {
 				others = append(others, f)

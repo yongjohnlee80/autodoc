@@ -1,6 +1,6 @@
 package tui
 
-// THE HOST'S PANEL HOSTS (panelscope.go): each panel feature's PanelHost, scoped to the views it
+// THE HOST'S PANEL HOSTS (feature/panelscope.go): each panel feature's PanelHost, scoped to the views it
 // contributes, over the host's core.
 
 import (
@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/errs"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
@@ -35,10 +36,10 @@ func (s *scopedPanelHost) Trf(id string, args ...any) string {
 	return s.core.Trf(id, args...)
 }
 
-func (s *scopedPanelHost) Ask(q Question) Asked { return s.core.Ask(q) }
+func (s *scopedPanelHost) Ask(q feature.Question) feature.Asked { return s.core.Ask(q) }
 
-func (s *scopedPanelHost) Prefs() PrefsView { return s.core.Prefs() }
-func (s *scopedPanelHost) Env() procenv.Env { return s.core.Env() }
+func (s *scopedPanelHost) Prefs() feature.PrefsView { return s.core.Prefs() }
+func (s *scopedPanelHost) Env() procenv.Env         { return s.core.Env() }
 
 func (s *scopedPanelHost) Keep(err error) { s.core.Keep(err) }
 
@@ -54,7 +55,9 @@ func (s *scopedPanelHost) DockPanel(id string) { s.core.DockPanel(id) }
 
 func (s *scopedPanelHost) SetPref(name, value string) { s.core.SetPref(name, value) }
 
-func (s *scopedPanelHost) ActiveWorkspace() (Workspace, bool) { return s.core.ActiveWorkspace() }
+func (s *scopedPanelHost) ActiveWorkspace() (feature.Workspace, bool) {
+	return s.core.ActiveWorkspace()
+}
 func (s *scopedPanelHost) ActiveWorkspaceInfo() (wsInfo, bool) {
 	return s.core.ActiveWorkspaceInfo()
 }
@@ -119,7 +122,7 @@ func (s *scopedPanelHost) ToggleMaximize(id string) error {
 	return s.core.h.toggleMaximize(id)
 }
 
-func newScopedPanelHost(c core, f Feature, specs []PanelSpec) *scopedPanelHost {
+func newScopedPanelHost(c core, f feature.Feature, specs []feature.PanelSpec) *scopedPanelHost {
 	s := &scopedPanelHost{core: c, owner: f.Name(), ids: map[string]bool{}}
 	for _, p := range specs {
 		s.ids[p.ID], s.ids[p.View] = true, true
@@ -133,7 +136,7 @@ func unboundPanelHost(c core) *scopedPanelHost {
 
 func (s *scopedPanelHost) owns(id string) error {
 	if !s.ids[id] {
-		return fmt.Errorf("feature %s, view %q: %w", s.owner, id, ErrPanelViewAccess)
+		return fmt.Errorf("feature %s, view %q: %w", s.owner, id, feature.ErrPanelViewAccess)
 	}
 	return nil
 }
@@ -199,27 +202,27 @@ func (s *scopedPanelHost) RestoreKeyboardHome() error {
 
 // bindPanels gives each feature that contributed panels its own host, scoped to its panels, and
 // binds the features that hold one.
-func bindPanels(r *panelRegistry, c core) error {
-	r.hosts = map[string]PanelHost{}
-	for _, contribution := range r.contributions {
-		s := newScopedPanelHost(c, contribution.feature, contribution.specs)
-		for _, p := range contribution.specs {
-			r.hosts[p.ID] = s
+func bindPanels(r *feature.PanelRegistry, c core) error {
+	r.Hosts = map[string]feature.PanelHost{}
+	for _, contribution := range r.Contributions {
+		s := newScopedPanelHost(c, contribution.Feature, contribution.Specs)
+		for _, p := range contribution.Specs {
+			r.Hosts[p.ID] = s
 		}
-		if f, ok := contribution.feature.(PanelBound); ok {
+		if f, ok := contribution.Feature.(feature.PanelBound); ok {
 			if err := f.BindPanelHost(s); err != nil {
-				return fmt.Errorf("bind panel feature %s: %w", contribution.feature.Name(), err)
+				return fmt.Errorf("bind panel feature %s: %w", contribution.Feature.Name(), err)
 			}
 		}
 	}
 	return nil
 }
 
-func (h *Host) panelHost(id string) PanelHost { return h.reg.panels.hosts[id] }
+func (h *Host) panelHost(id string) feature.PanelHost { return h.reg.Panels.Hosts[id] }
 
 // Terminals resolves only a parent registered by this contributor. A fresh
 // lookup is required after reload; a rebuilt parent has different runtime IDs.
-func (s *scopedPanelHost) Terminals(id string) (TerminalPanel, error) {
+func (s *scopedPanelHost) Terminals(id string) (feature.TerminalPanel, error) {
 	if err := s.owns(id); err != nil {
 		return nil, err
 	}
@@ -234,7 +237,7 @@ func (s *scopedPanelHost) Terminals(id string) (TerminalPanel, error) {
 	if !ok {
 		return nil, fmt.Errorf("view %q is not TerminalTabs: %w", id, errs.ErrPrecondition)
 	}
-	return newTerminalPanel(tabs, resumeTab), nil
+	return feature.NewTerminalPanel(tabs, resumeTab), nil
 }
 
 func (s *scopedPanelHost) Post(fn func()) { s.core.Post(fn) }
@@ -245,7 +248,7 @@ func (s *scopedPanelHost) After(d time.Duration, fn func()) { s.core.After(d, fn
 // scoped host lacks a build error instead of agents that never start.
 var _ agentRuntimeHost = (*scopedPanelHost)(nil)
 
-func (s *scopedPanelHost) Ticket(seq *uint64, scope TicketScope) Ticket {
+func (s *scopedPanelHost) Ticket(seq *uint64, scope feature.TicketScope) feature.Ticket {
 	return s.core.Ticket(seq, scope)
 }
 
@@ -254,28 +257,28 @@ func (s *scopedPanelHost) Ticket(seq *uint64, scope TicketScope) Ticket {
 // for a feature that contributes panels and is not PanelBound: a PanelBound feature holds its host,
 // and a rebuilt one would leave it holding the old
 // (docs/decisions/plugins.md#card-panels-made-at-runtime).
-func stagePanels(r *panelRegistry, c core, f Feature, own []PanelSpec) (specs []PanelSpec, commit func(), err error) {
-	i := slices.IndexFunc(r.contributions, func(p panelContribution) bool { return p.feature == f })
+func stagePanels(r *feature.PanelRegistry, c core, f feature.Feature, own []feature.PanelSpec) (specs []feature.PanelSpec, commit func(), err error) {
+	i := slices.IndexFunc(r.Contributions, func(p feature.PanelContribution) bool { return p.Feature == f })
 	if i < 0 {
 		return nil, nil, fmt.Errorf("tui: %s contributes no panels", f.Name())
 	}
-	if _, bound := f.(PanelBound); bound {
+	if _, bound := f.(feature.PanelBound); bound {
 		return nil, nil, fmt.Errorf("tui: %s holds its panel host, so its panels are fixed", f.Name())
 	}
-	next := slices.Clone(r.contributions)
-	next[i] = panelContribution{feature: f, specs: own}
-	all, checked, err := checkSpecs(next)
+	next := slices.Clone(r.Contributions)
+	next[i] = feature.PanelContribution{Feature: f, Specs: own}
+	all, checked, err := feature.CheckSpecs(next)
 	if err != nil {
 		return nil, nil, err
 	}
 	return all, func() {
-		for _, s := range r.contributions[i].specs {
-			delete(r.hosts, s.ID)
+		for _, s := range r.Contributions[i].Specs {
+			delete(r.Hosts, s.ID)
 		}
-		host := newScopedPanelHost(c, f, checked[i].specs)
-		for _, s := range checked[i].specs {
-			r.hosts[s.ID] = host
+		host := newScopedPanelHost(c, f, checked[i].Specs)
+		for _, s := range checked[i].Specs {
+			r.Hosts[s.ID] = host
 		}
-		r.contributions, r.specs = checked, all
+		r.Contributions, r.Specs = checked, all
 	}, nil
 }

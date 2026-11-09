@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
@@ -168,7 +169,7 @@ func TestTheSwitchIsCoalesced(t *testing.T) {
 	h := &Host{agents: &agents{instances: map[string]*agentInstance{
 		"zen": {token: "t1", workspace: wsInfo{name: "kb", root: "/k"}},
 	}}}
-	h.workspaces = newRows(tuidecl.NewListModel("key", "label"), workspaceRowOf)
+	h.workspaces = feature.NewRows(tuidecl.NewListModel("key", "label"), workspaceRowOf)
 	list := func(ws ...wsInfo) { h.workspaces.Reset(ws) }
 	list(wsInfo{name: "kb", root: "/k"}, wsInfo{name: "notes", root: "/n"}, wsInfo{name: "other", root: "/o"})
 	take := func(ws string) (wsSwitch, bool) { h.ws = ws; return h.takeSwitch("zen") }

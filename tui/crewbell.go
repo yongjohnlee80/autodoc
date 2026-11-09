@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE CREW BELL (docs/decisions/crew.md#the-human-inbox): off unless the user turns it on
@@ -28,14 +29,14 @@ const crewBellSound = "/usr/share/sounds/freedesktop/stereo/message-new-instant.
 // crewBellWait bounds one sound's player: a stuck player must not linger.
 const crewBellWait = 5 * time.Second
 
-func (x *crewInbox) Prefs() []PrefSpec {
+func (x *crewInbox) Prefs() []feature.PrefSpec {
 	return agentBellRows()
 }
 
-func (x *crewInbox) Catalog() []Entry {
-	e := builtin("agent.bell", "ring a bell when an agent asks you or waits on you", "App.toggleAgentBell()", x.toggleBell)
+func (x *crewInbox) Catalog() []feature.Entry {
+	e := feature.Builtin("agent.bell", "ring a bell when an agent asks you or waits on you", "App.toggleAgentBell()", x.toggleBell)
 	e.Verb = "agent-bell"
-	return []Entry{e}
+	return []feature.Entry{e}
 }
 
 // toggleBell turns the bell on or off, and says which.
@@ -106,6 +107,6 @@ func bellPlayer(look func(string) (string, error), exists func(string) bool) (pa
 }
 
 // agentBellRows are the bell's preference, bound to the host's field (hostRows reads it by name).
-func agentBellRows() []PrefSpec {
-	return []PrefSpec{boolPref(prefAgentBell, false, func(p *prefs) *bool { return &p.agentBell })}
+func agentBellRows() []feature.PrefSpec {
+	return []feature.PrefSpec{boolPref(prefAgentBell, false, func(p *prefs) *bool { return &p.agentBell })}
 }

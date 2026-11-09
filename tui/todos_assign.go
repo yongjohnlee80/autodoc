@@ -12,6 +12,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/mail"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // ASSIGN — A in the todos panel hands the task under the cursor to one of AutoDoc's own agents, as
@@ -34,45 +35,45 @@ const assigneePrefix = "autodoc:"
 type todoAssign struct {
 	store *todoStore
 	task  map[string]any
-	agent AgentEntry
-	ws    Ticket
+	agent feature.AgentEntry
+	ws    feature.Ticket
 }
 
 // newAssignPick is the picker of AutoDoc's agents that A opens.
-func newAssignPick(t *todos) *pick[AgentEntry] {
+func newAssignPick(t *todos) *feature.Pick[feature.AgentEntry] {
 	p := newAgentPick(t.c, "agentAssignPicker", "agentAssign", t.assignTo)
-	p.scope = TicketWorkspace
+	p.Scope = feature.TicketWorkspace
 	return p
 }
 
 // newAgentPick is a picker of AutoDoc's agents, by name and codename, each previewed with what it
 // runs: A's (todos_assign.go) and Audit…'s (candidate.go). Its sources are App.<name>Rows, Field,
 // Status and Preview*.
-func newAgentPick(c Core, dialog, name string, choose func(AgentEntry)) *pick[AgentEntry] {
-	return &pick[AgentEntry]{c: c, dialog: dialog, name: name,
-		list:   newRows(tuidecl.NewListModel("key", "agent", "state"), func(_ int, e AgentEntry) rowOf { return agentRowOf(c, e) }),
-		field:  "App." + name + "Field",
-		status: "App." + name + "Status", noun: "agents",
-		match: func(e AgentEntry) string { return e.Name + " " + e.Ref.Codename },
-		preview: func(e AgentEntry) func(context.Context) answerOf[pane] {
+func newAgentPick(c feature.Core, dialog, name string, choose func(feature.AgentEntry)) *feature.Pick[feature.AgentEntry] {
+	return &feature.Pick[feature.AgentEntry]{Core: c, Dialog: dialog, Name: name,
+		List:   feature.NewRows(tuidecl.NewListModel("key", "agent", "state"), func(_ int, e feature.AgentEntry) feature.RowOf { return agentRowOf(c, e) }),
+		Field:  "App." + name + "Field",
+		Status: "App." + name + "Status", Noun: "agents",
+		Match: func(e feature.AgentEntry) string { return e.Name + " " + e.Ref.Codename },
+		Preview: func(e feature.AgentEntry) func(context.Context) feature.AnswerOf[feature.Pane] {
 			pn := agentPane(c, e)
-			return func(context.Context) answerOf[pane] { return answerOf[pane]{v: pn} }
+			return func(context.Context) feature.AnswerOf[feature.Pane] { return feature.AnswerOf[feature.Pane]{Value: pn} }
 		},
-		choose: choose}
+		Choose: choose}
 }
 
 // agentRowOf is an agent's row, in c's language.
-func agentRowOf(c Core, e AgentEntry) rowOf {
+func agentRowOf(c feature.Core, e feature.AgentEntry) feature.RowOf {
 	if e.Peer != nil { // another host's: keyed by its address, labelled by its project
-		return rowOf{"key": e.Ref.Codename + "@" + e.Peer.Scope, "agent": peerLabel(e), "state": runState(c, e)}
+		return feature.RowOf{"key": e.Ref.Codename + "@" + e.Peer.Scope, "agent": peerLabel(e), "state": runState(c, e)}
 	}
-	return rowOf{"key": e.Ref.Codename, "agent": e.Name + "  (" + e.Ref.Codename + ")", "state": runState(c, e)}
+	return feature.RowOf{"key": e.Ref.Codename, "agent": e.Name + "  (" + e.Ref.Codename + ")", "state": runState(c, e)}
 }
 
 // peerLabel is another host's agent as the user knows it: codename@project.
-func peerLabel(e AgentEntry) string { return e.Ref.Codename + "@" + e.Peer.Project }
+func peerLabel(e feature.AgentEntry) string { return e.Ref.Codename + "@" + e.Peer.Project }
 
-func runState(c Core, e AgentEntry) string {
+func runState(c feature.Core, e feature.AgentEntry) string {
 	if e.Peer != nil {
 		if e.Peer.Reachable {
 			return c.Tr("autodoc.text.todos_assign.peer_can_be_woken")
@@ -87,11 +88,11 @@ func runState(c Core, e AgentEntry) string {
 
 // agentPane is an agent's preview: who it is, what it runs, and what A does to a stopped one, in c's
 // language.
-func agentPane(c Core, e AgentEntry) pane {
+func agentPane(c feature.Core, e feature.AgentEntry) feature.Pane {
 	var b strings.Builder
 	if e.Peer != nil {
 		fmt.Fprintf(&b, "## %s\n\n%s\n", peerLabel(e), c.Trf("autodoc.text.todos_assign.peer_pane", e.Peer.Scope, runState(c, e)))
-		return pane{title: peerLabel(e), text: b.String()}
+		return feature.Pane{Title: peerLabel(e), Text: b.String()}
 	}
 	fmt.Fprintf(&b, "## %s\n\n%s\n", e.Name, c.Trf("autodoc.text.todos_assign.codename_assignee_command",
 		e.Ref.Codename, assigneePrefix+e.Ref.Codename, e.Command, runState(c, e)))
@@ -101,13 +102,13 @@ func agentPane(c Core, e AgentEntry) pane {
 	if e.Orphan {
 		b.WriteString("\n" + c.Tr("autodoc.text.todos_assign.its_profile_is_gone_it_takes_the_task_while_it_r") + "\n")
 	}
-	return pane{title: e.Name, text: b.String()}
+	return feature.Pane{Title: e.Name, Text: b.String()}
 }
 
 // assignable are the agents A lists: none closing (HandTask refuses one), and an orphan only while
 // it runs (with its profile gone, a stopped one cannot be started).
-func assignable(entries []AgentEntry) []AgentEntry {
-	var out []AgentEntry
+func assignable(entries []feature.AgentEntry) []feature.AgentEntry {
+	var out []feature.AgentEntry
 	for _, e := range entries {
 		if !e.Closing && (!e.Orphan || e.Running) {
 			out = append(out, e)
@@ -125,8 +126,8 @@ func (t *todos) assign() {
 		return
 	}
 	own := assignable(t.c.AgentEntries())
-	tk := t.c.Ticket(nil, TicketWorkspace) // taken before the crew is asked: its answer may come late
-	open := func(agents []AgentEntry) {
+	tk := t.c.Ticket(nil, feature.TicketWorkspace) // taken before the crew is asked: its answer may come late
+	open := func(agents []feature.AgentEntry) {
 		if !tk.Current() {
 			return // the workspace changed while the crew answered: this task's picker is stale
 		}
@@ -135,8 +136,8 @@ func (t *todos) assign() {
 			return
 		}
 		t.assigning = &todoAssign{store: s, task: x, ws: tk}
-		t.assignPick.setAll(agents)
-		t.assignPick.open()
+		t.assignPick.SetAll(agents)
+		t.assignPick.Open()
 	}
 	p, ok := t.c.(crewPeers)
 	if !ok {
@@ -144,11 +145,11 @@ func (t *todos) assign() {
 		return
 	}
 	// every other host's live agent too (item 17), read as A opens
-	p.peerAgents(func(peers []AgentEntry) { open(append(own, peers...)) })
+	p.peerAgents(func(peers []feature.AgentEntry) { open(append(own, peers...)) })
 }
 
 // assignTo is the agent chosen: the Instructions: line is asked for, emptied.
-func (t *todos) assignTo(e AgentEntry) {
+func (t *todos) assignTo(e feature.AgentEntry) {
 	if t.assigning == nil {
 		return
 	}
@@ -183,8 +184,8 @@ func (t *todos) assignSet(text string) {
 		assignee = a.agent.Ref.Codename
 	}
 	s, x := a.store, a.task
-	from := str(x, "status")
-	params := []any{s.at, str(x, "id"), str(x, "rev"), assignee, instruction}
+	from := feature.Str(x, "status")
+	params := []any{s.at, feature.Str(x, "id"), feature.Str(x, "rev"), assignee, instruction}
 	if w, ok := t.c.(windowScoped); ok {
 		if scope := w.windowScope(); scope != "" { // the window's own: its assignment feed leaves this one to handOver (crewtodos.go)
 			params = append(params, scope)
@@ -195,8 +196,8 @@ func (t *todos) assignSet(text string) {
 			t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_but_not_delivered_the_workspac", assignee))
 			return
 		}
-		task := asMap(v)
-		if to := str(task, "status"); to != "" && to != from && t.shows(s) { // an open task is in progress now (D1)
+		task := feature.AsMap(v)
+		if to := feature.Str(task, "status"); to != "" && to != from && t.shows(s) { // an open task is in progress now (D1)
 			t.followTask(task, to)
 		}
 		if a.agent.Peer != nil {
@@ -217,10 +218,10 @@ func (t *todos) sendToPeer(a *todoAssign, s *todoStore, task map[string]any, ins
 	if !ok {
 		return
 	}
-	ref := TaskRef{Title: str(task, "title"), Path: filepath.Join(s.path, filepath.FromSlash(str(task, "path"))), ID: str(task, "id")}
+	ref := feature.TaskRef{Title: feature.Str(task, "title"), Path: filepath.Join(s.path, filepath.FromSlash(feature.Str(task, "path"))), ID: feature.Str(task, "id")}
 	m := taskMessage(ref, instruction)
 	e := a.agent
-	p.sendTask(e.Ref.Codename, e.Peer.Scope, m.Subject, m.Body, "assign:"+str(task, "id")+":"+str(task, "rev"), func(err error) {
+	p.sendTask(e.Ref.Codename, e.Peer.Scope, m.Subject, m.Body, "assign:"+feature.Str(task, "id")+":"+feature.Str(task, "rev"), func(err error) {
 		switch {
 		case err != nil:
 			t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_peer_not_sent", peerLabel(e), err.Error()))
@@ -237,17 +238,17 @@ func (t *todos) sendToPeer(a *todoAssign, s *todoStore, task map[string]any, ins
 // sendTask sends codename@scope the task as the user's request (inbox.send from the window's
 // scope, never rung: queued and woken as any mail).
 type crewPeers interface {
-	peerAgents(then func([]AgentEntry))
+	peerAgents(then func([]feature.AgentEntry))
 	sendTask(codename, scope, subject, body, key string, then func(error))
 }
 
 // peersOf are crew.list's rows (rows) A may hand a task to beside the window's own agents: every
 // live agent of a scope other than own.
-func peersOf(rows any, own string) []AgentEntry {
-	var out []AgentEntry
-	for _, r := range asList(rows) {
-		m := asMap(r)
-		code, scope, presence := str(m, "codename"), str(m, "scope"), str(m, "presence")
+func peersOf(rows any, own string) []feature.AgentEntry {
+	var out []feature.AgentEntry
+	for _, r := range feature.AsList(rows) {
+		m := feature.AsMap(r)
+		code, scope, presence := feature.Str(m, "codename"), feature.Str(m, "scope"), feature.Str(m, "presence")
 		if code == "" || scope == "" || scope == own || scope == mail.GlobalScope || // the user's and the daemon's own
 			(presence != crew.PresenceLive && presence != crew.PresenceReconnecting) {
 			continue
@@ -257,8 +258,8 @@ func peersOf(rows any, own string) []AgentEntry {
 			project = name
 		}
 		reachable, _ := m["reachable"].(bool)
-		out = append(out, AgentEntry{Ref: AgentRef{Codename: code}, Name: code,
-			Peer: &PeerAgent{Scope: scope, Project: project, Reachable: reachable, Why: str(m, "why")}})
+		out = append(out, feature.AgentEntry{Ref: feature.AgentRef{Codename: code}, Name: code,
+			Peer: &feature.PeerAgent{Scope: scope, Project: project, Reachable: reachable, Why: feature.Str(m, "why")}})
 	}
 	return out
 }
@@ -271,10 +272,10 @@ type windowScoped interface{ windowScope() string }
 // the assign left it (in-progress/ once an open task is assigned), so the path is the answer's, not
 // the row's.
 func (t *todos) handOver(a *todoAssign, s *todoStore, task map[string]any, assignee, instruction string) {
-	ref := TaskRef{Title: str(task, "title"), Path: filepath.Join(s.path, filepath.FromSlash(str(task, "path"))), ID: str(task, "id")}
+	ref := feature.TaskRef{Title: feature.Str(task, "title"), Path: filepath.Join(s.path, filepath.FromSlash(feature.Str(task, "path"))), ID: feature.Str(task, "id")}
 	name := a.agent.Name
 	done := func(err error) { t.handedOver(name, assignee, err) }
-	if err := t.c.HandTask(AgentRef{Codename: a.agent.Ref.Codename}, ref, instruction, done); err != nil {
+	if err := t.c.HandTask(feature.AgentRef{Codename: a.agent.Ref.Codename}, ref, instruction, done); err != nil {
 		done(err)
 	}
 }

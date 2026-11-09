@@ -83,7 +83,7 @@ autodoc.on("ping", function(ed) ed:insert("second ran") end)`)
 		return true
 	})
 	r.s.WaitForText(t, "install the Lua package x?")
-	onLoop(r, func() bool { r.h.asker.rejected(); return true })
+	onLoop(r, func() bool { r.h.asker.Rejected(); return true })
 	r.s.WaitFor(t, "the stage removed", func(string) bool { _, err := os.Stat(stage); return os.IsNotExist(err) })
 
 	if err := onLoop(r, func() error { return r.h.installPackage("https://example.invalid/x.git") }); err == nil ||

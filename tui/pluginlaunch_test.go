@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"maps"
 	"strings"
 	"testing"
@@ -49,7 +50,7 @@ func TestAPluginStartingWithAutoDocAsksOnceAndAYesIsKept(t *testing.T) {
 	if onLoop(r, func() bool { return r.h.plugins.running["atstart"] != nil }) {
 		t.Fatal("atstart runs before it was allowed")
 	}
-	onLoop(r, func() bool { r.h.asker.accepted(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); return true })
 	waitSaid(t, logs, "atstart", "open 0x0")
 	r.waitWithin(t, "the grant in the store", daemonWait, func() bool {
 		return strings.Contains(launchPref(t, d, prefLuaGrants), `"plugin:atstart":{"launch":true}`)
@@ -75,7 +76,7 @@ func TestAPluginRefusedDoesNotStartWithAutoDocButStartsByHand(t *testing.T) {
 	d, dir := launchStore(t)
 	r, _ := pluginTUIOn(t, d, dir, "")
 	r.s.WaitForText(t, launchQuestion)
-	onLoop(r, func() bool { r.h.asker.rejected(); return true })
+	onLoop(r, func() bool { r.h.asker.Rejected(); return true })
 	r.waitWithin(t, "the refusal in the store", daemonWait, func() bool {
 		return launchPref(t, d, prefPluginLaunchDeclined) == `["atstart"]`
 	})
@@ -88,7 +89,7 @@ func TestAPluginRefusedDoesNotStartWithAutoDocButStartsByHand(t *testing.T) {
 
 	again, logs2 := pluginTUIOn(t, d, dir, "")
 	decided(t, again)
-	if onLoop(again, func() bool { return again.h.plugins.running["atstart"] != nil || again.h.asker.pending }) {
+	if onLoop(again, func() bool { return again.h.plugins.running["atstart"] != nil || again.h.asker.Pending }) {
 		t.Fatalf("refused before: started, or asked again:\n%s", again.s)
 	}
 	onLoop(again, func() bool { again.h.plugins.runPluginCommand("atstart", "run"); return true })
@@ -102,18 +103,18 @@ func TestALaunchQuestionDisplacedReturnsAndClosedRemembersNothing(t *testing.T) 
 	d, dir := launchStore(t)
 	r, _ := pluginTUIOn(t, d, dir, "")
 	r.s.WaitForText(t, launchQuestion)
-	onLoop(r, func() bool { r.h.asker.ask(Question{Title: "something else?"}); return true })
+	onLoop(r, func() bool { r.h.asker.Ask(feature.Question{Title: "something else?"}); return true })
 	r.s.WaitForText(t, "something else?")
 	if onLoop(r, func() bool { return !r.h.launchAsking["atstart"] }) {
 		t.Fatal("displaced, and no longer asked")
 	}
 	// the other question's No, then its card's closed, as the card sends them
-	onLoop(r, func() bool { r.h.asker.rejected(); r.h.asker.closed(); return true })
+	onLoop(r, func() bool { r.h.asker.Rejected(); r.h.asker.Closed(); return true })
 	r.s.WaitForText(t, launchQuestion) // the launch question again, when the card is free
 	if got := launchPref(t, d, prefPluginLaunchDeclined); got != "" && got != "[]" {
 		t.Fatalf("the other question's No was taken for the launch's: %s", got)
 	}
-	onLoop(r, func() bool { r.h.asker.closed(); return true }) // gone, unanswered
+	onLoop(r, func() bool { r.h.asker.Closed(); return true }) // gone, unanswered
 	decided(t, r)
 	if onLoop(r, func() bool { return r.h.plugins.running["atstart"] != nil }) {
 		t.Fatal("unanswered, and started")

@@ -248,7 +248,7 @@ answer a select prompt one key at a time. Such a program gets nothing, and the u
 - The same rule covers every text AutoDoc sends a terminal the user did not type, including Lua's
   `autodoc.agents.send`: its refusal is the script's error.
 
-In the code: `tui/agentinstances.go`, `tui/terminalpanel.go`, `tui/luahost_test.go`
+In the code: `tui/agentinstances.go`, `tui/feature/terminalpanel.go`, `tui/luahost_test.go`
 
 ## A message to an agent is sent, never left for Enter
 

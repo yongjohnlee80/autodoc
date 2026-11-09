@@ -14,6 +14,7 @@ import (
 	"time"
 
 	regindex "github.com/yongjohnlee80/autodoc/core/registry"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 const (
@@ -188,7 +189,7 @@ func TestAFailedRegistryReadIsTheBuiltins(t *testing.T) {
 	if got := ok.usable(); got.note != "x" {
 		t.Errorf("a read that did not fail changed: %+v", got)
 	}
-	if l, ok := failed[registryList](errPanicked{value: "boom"}); !ok || l.err == nil {
+	if l, ok := feature.Failed[registryList](feature.ErrPanicked{Value: "boom"}); !ok || l.err == nil {
 		t.Errorf("a panicked read does not carry its failure: %+v %v", l, ok)
 	}
 }
@@ -289,7 +290,7 @@ func TestALuaPackageIsInstalledByItsRegistryName(t *testing.T) {
 	if !strings.Contains(text, "from "+url+" at ") || !strings.Contains(text, "never audited\n\n"+packageRisk+"\n\n"+auditNote) {
 		t.Errorf("the card:\n%s", text)
 	}
-	onLoop(r, func() bool { r.h.asker.rejected(); return true })
+	onLoop(r, func() bool { r.h.asker.Rejected(); return true })
 
 	r.clearNotices()
 	r.mustRun(t, "lua-install nope")
@@ -337,7 +338,7 @@ func TestBrowsingTheRegistryListsPluginsAndPackages(t *testing.T) {
 		testEntry("kb-type", "team.kb", "https://github.com/example/team.kb")))
 	r, _ := pluginTUI(t, t.TempDir())
 	b := onLoop(r, func() *registryBrowse {
-		for _, f := range r.h.reg.features {
+		for _, f := range r.h.reg.Features {
 			if b, ok := f.(*registryBrowse); ok {
 				return b
 			}
@@ -359,7 +360,7 @@ func TestBrowsingTheRegistryListsPluginsAndPackages(t *testing.T) {
 	if p := source("App.registryPreviewText"); !strings.Contains(p, "- audited by claude-opus-5-5, 2026-10-10, at 1111111") {
 		t.Errorf("the preview:\n%s", p)
 	}
-	r.h.p.Post(func() { b.pick.accept(0, "") })
+	r.h.p.Post(func() { b.pick.Accept(0, "") })
 	q := r.question(t)
 	if !strings.Contains(q, "not audited at this commit (last audited: 1111111, 2026-10-10)\n\n"+pluginRisk) || !strings.Contains(q, full[:7]) {
 		t.Errorf("the card:\n%s", q)
@@ -384,7 +385,7 @@ func TestARegistryEntrysPreviewNamesItsKindAndAudits(t *testing.T) {
 	}{{regindex.KindPlugin, "plugin echo, by jo"}, {regindex.KindLua, "Lua package echo, by jo"}, {regindex.KindKBType, "KB type echo, by jo"}} {
 		e := regindex.IndexEntry{Kind: c.kind, Name: "echo", Title: "Echo", Author: "jo", Repo: "https://example.com/echo",
 			Declares: regindex.Declares{Items: []string{"workspace.read"}}}
-		text := registryPane(inEnglish{}.Trf, e).text
+		text := registryPane(inEnglish{}.Trf, e).Text
 		for _, want := range []string{c.by + "\nhttps://example.com/echo\n", "### Declares, at HEAD\n\n- workspace.read\n", "### Audits\n\nnever audited\n",
 			"Install asks first, as any install does: the card names the commit it would install, and whether that commit is audited."} {
 			if !strings.Contains(text, want) {
@@ -394,7 +395,7 @@ func TestARegistryEntrysPreviewNamesItsKindAndAudits(t *testing.T) {
 	}
 	e := regindex.IndexEntry{Kind: regindex.KindPlugin, Name: "echo", Declares: regindex.Declares{Commit: full, Items: []string{"x"}},
 		Audits: []regindex.IndexAudit{{Commit: full, Model: "claude-opus-5-5", Date: "2026-10-10", Report: "https://r.example/a%2Fb"}}}
-	text := registryPane(inEnglish{}.Trf, e).text
+	text := registryPane(inEnglish{}.Trf, e).Text
 	for _, want := range []string{"### Declares, at " + regindex.Short(full) + "\n", "- audited by claude-opus-5-5, 2026-10-10, at " + regindex.Short(full) + " (https://r.example/a%2Fb)\n"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("the audited entry's preview lacks %q:\n%s", want, text)

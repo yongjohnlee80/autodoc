@@ -8,6 +8,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/procstat"
 	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -240,12 +241,12 @@ func (s *scripting) luaAppStats(L *lua.LState) int {
 
 // Panels is the Lua card's panel: at the right edge, its size kept as every panel's is. Opening it
 // arms the card's chain; closing it ends that opening's chain and keeps the card for the next.
-func (s *scripting) Panels() []PanelSpec {
-	return []PanelSpec{{ID: luaCardPanel, View: luaCardView, Priority: 75, Icon: "☾",
-		Edge: func(PrefsView) string { return "right" }, Places: []string{"right"},
-		Size: [2]int{sidePanelMin, 90}, Length: [2]int{20, 100}, Default: sideDefault,
-		Opened: func(PanelHost) { s.armCard() },
-		Closed: func(h PanelHost) {
+func (s *scripting) Panels() []feature.PanelSpec {
+	return []feature.PanelSpec{{ID: luaCardPanel, View: luaCardView, Priority: 75, Icon: "☾",
+		Edge: func(feature.PrefsView) string { return "right" }, Places: []string{"right"},
+		Size: [2]int{feature.SidePanelMin, 90}, Length: [2]int{20, 100}, Default: feature.SideDefault,
+		Opened: func(feature.PanelHost) { s.armCard() },
+		Closed: func(h feature.PanelHost) {
 			s.cardEpoch++
 			h.Keep(h.RestoreKeyboardHome())
 		}}}

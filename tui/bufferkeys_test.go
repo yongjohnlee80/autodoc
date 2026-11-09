@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
@@ -69,27 +70,27 @@ func TestSPCbIsTheBufferCard(t *testing.T) {
 	t.Parallel()
 	h := newHost(NewSession("unused", nil), Options{})
 	fs := h.features()
-	reg, err := newRegistry(fs...)
+	reg, err := feature.NewRegistry(fs...)
 	if err != nil {
 		t.Fatal(err)
 	}
-	k := keyCatalog(fs)
-	if err := k.check(mainIDs, reg.catalog); err != nil {
+	k := feature.KeyCatalog(fs)
+	if err := k.Check(feature.MainIDs, reg.Catalog); err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range k.on(leader) {
+	for _, key := range k.On(feature.Leader) {
 		if key.Seq == "Shift+B" || key.Seq == "Shift+C" {
 			t.Errorf("SPC %s is still on SPC's card: %s", key.Show, key.Does)
 		}
-		if key.Seq == "b" && key.Opens != bufferCard {
+		if key.Seq == "b" && key.Opens != feature.BufferCard {
 			t.Errorf("SPC b opens %q, runs %q: want the buffer card", key.Opens, key.Run)
 		}
 	}
-	c, ok := k.card(bufferCard)
-	if !ok || c.Back != leader {
+	c, ok := k.Card(feature.BufferCard)
+	if !ok || c.Back != feature.Leader {
 		t.Fatalf("the buffer card %+v: want one, Backspace going back to SPC's", c)
 	}
-	text := k.cardState()[textSource(bufferCard)].(string)
+	text := k.CardState()[feature.TextSource(feature.BufferCard)].(string)
 	for _, want := range []string{"1  show the 1st buffer", "2  show the 2nd buffer", "3  show the 3rd buffer",
 		"9  show the 9th buffer", "0  show the 10th buffer", "d  close the buffer", "s  switch buffer",
 		"r  close the buffers to the right", "l  close the buffers to the left", "b  back"} {
@@ -102,7 +103,7 @@ func TestSPCbIsTheBufferCard(t *testing.T) {
 		"buffer.close": "SPC b d", "buffer.pick": "SPC b s", "file.back": "SPC b b",
 		"buffer.close_right": "SPC b r", "buffer.close_left": "SPC b l",
 	} {
-		e := reg.catalog.lookup(id)
+		e := reg.Catalog.Lookup(id)
 		if e == nil {
 			t.Errorf("no entry %s", id)
 			continue
@@ -270,7 +271,7 @@ func TestTheBufferEntriesRunAsTheirKeys(t *testing.T) {
 	}
 	run := func(id string) {
 		t.Helper()
-		if err := onLoop(r, func() error { return r.h.cat.run(id, nil) }); err != nil {
+		if err := onLoop(r, func() error { return r.h.cat.Run(id, nil) }); err != nil {
 			t.Fatalf("%s: %v", id, err)
 		}
 	}
@@ -349,8 +350,8 @@ func TestTheBufferCardNamesEachSlotsBuffer(t *testing.T) {
 
 	h = bufferCardHost(func(n int) string { return fmt.Sprintf("%s-%d.md", strings.Repeat("long-name-", 12), n) })
 	for i, l := range strings.Split(h.bufferCardText(), "\n")[:10] {
-		if w := tuicore.StringWidth(l); w > cardBodyWidth {
-			t.Errorf("row %d is %d cells, wider than the card's %d: %q", i+1, w, cardBodyWidth, l)
+		if w := tuicore.StringWidth(l); w > feature.CardBodyWidth {
+			t.Errorf("row %d is %d cells, wider than the card's %d: %q", i+1, w, feature.CardBodyWidth, l)
 		}
 		if !strings.Contains(l, "…") || !strings.Contains(l, fmt.Sprintf("-%d.md", i+1)) {
 			t.Errorf("row %d is not cut in the middle with its file's name kept: %q", i+1, l)

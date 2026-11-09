@@ -1,4 +1,4 @@
-package tui
+package feature
 
 import (
 	"fmt"
@@ -13,39 +13,39 @@ import (
 // them as card plugins come and go (docs/decisions/plugins.md#card-panels-made-at-runtime).
 type Panel interface{ Panels() []PanelSpec }
 
-type panelRegistry struct {
-	specs         []PanelSpec
-	contributions []panelContribution
-	hosts         map[string]PanelHost
+type PanelRegistry struct {
+	Specs         []PanelSpec
+	Contributions []PanelContribution
+	Hosts         map[string]PanelHost
 }
 
-func newPanelRegistry(fs []Feature) (*panelRegistry, error) {
-	var contributions []panelContribution
+func NewPanelRegistry(fs []Feature) (*PanelRegistry, error) {
+	var contributions []PanelContribution
 	for _, f := range fs {
 		if p, ok := f.(Panel); ok {
-			contributions = append(contributions, panelContribution{feature: f, specs: p.Panels()})
+			contributions = append(contributions, PanelContribution{Feature: f, Specs: p.Panels()})
 		}
 	}
-	specs, checked, err := checkSpecs(contributions)
+	specs, checked, err := CheckSpecs(contributions)
 	if err != nil {
 		return nil, err
 	}
-	return &panelRegistry{specs: specs, contributions: checked}, nil
+	return &PanelRegistry{Specs: specs, Contributions: checked}, nil
 }
 
 // checkSpecs validates every contribution's specs as one program's panel set: ids, views and
 // components unique across them, geometry within bounds. It returns the set in focus order and the
 // contributions with their validated copies (places cloned).
-func checkSpecs(contributions []panelContribution) ([]PanelSpec, []panelContribution, error) {
+func CheckSpecs(contributions []PanelContribution) ([]PanelSpec, []PanelContribution, error) {
 	specs := []PanelSpec{}
-	out := make([]panelContribution, 0, len(contributions))
+	out := make([]PanelContribution, 0, len(contributions))
 	owners := map[string]string{}
 	views := map[string]string{}
 	components := map[string]string{}
 	for _, in := range contributions {
-		f := in.feature
-		contribution := panelContribution{feature: f}
-		for _, s := range in.specs {
+		f := in.Feature
+		contribution := PanelContribution{Feature: f}
+		for _, s := range in.Specs {
 			if s.ID == "" || s.View == "" {
 				return nil, nil, fmt.Errorf("tui: %s contributes a panel without an id or view", f.Name())
 			}
@@ -71,7 +71,7 @@ func checkSpecs(contributions []panelContribution) ([]PanelSpec, []panelContribu
 					}
 					places[place] = true
 					size, length := s.Default(place)
-					if !inPercentRange(size, s.Size) || !inPercentRange(length, s.Length) {
+					if !InPercentRange(size, s.Size) || !InPercentRange(length, s.Length) {
 						return nil, nil, fmt.Errorf("tui: panel %s defaults at %s are outside its bounds", s.ID, place)
 					}
 				}
@@ -80,7 +80,7 @@ func checkSpecs(contributions []panelContribution) ([]PanelSpec, []panelContribu
 			components[s.ID], components[s.View] = s.ID, s.ID
 			s.Places = slices.Clone(s.Places)
 			specs = append(specs, s)
-			contribution.specs = append(contribution.specs, s)
+			contribution.Specs = append(contribution.Specs, s)
 		}
 		out = append(out, contribution)
 	}
@@ -99,9 +99,9 @@ func checkSpecs(contributions []panelContribution) ([]PanelSpec, []panelContribu
 }
 
 func validPercentRange(r [2]int) bool     { return r[0] > 0 && r[0] <= r[1] && r[1] <= 100 }
-func inPercentRange(n int, r [2]int) bool { return n >= r[0] && n <= r[1] }
+func InPercentRange(n int, r [2]int) bool { return n >= r[0] && n <= r[1] }
 
-func findPanel(specs []PanelSpec, id string) *PanelSpec {
+func FindPanel(specs []PanelSpec, id string) *PanelSpec {
 	for i := range specs {
 		if specs[i].ID == id {
 			return &specs[i]
@@ -110,8 +110,8 @@ func findPanel(specs []PanelSpec, id string) *PanelSpec {
 	return nil
 }
 
-// relationsView is the Links tab's list, the relations feature's (relations.go).
-const relationsView = "relationsList"
+// relationsView is the Links tab's list, the relations feature's (tui/relations.go).
+const RelationsView = "relationsList"
 
 // PanelSpec is one drawer over the page: everything the host's panel code asks of it, in one place,
 // so a list of panels cannot disagree with another.
@@ -126,7 +126,7 @@ type PanelSpec struct {
 	Tab     func() int
 	ShowTab func(tab int)
 	// GoTabs are :go names of its tabs, by tab, "" for none: the explorer's Links tab keeps the name
-	// its own drawer had, relations (widgets.go).
+	// its own drawer had, relations (tui/widgets.go).
 	GoTabs []string
 	// Priority orders focus targets across features; ties keep contribution order.
 	Priority int
@@ -149,7 +149,7 @@ type PanelSpec struct {
 	// Opened and Closed follow the drawer, however it was opened or closed (Escape inside one
 	// closes it): what it shows and where the keyboard goes. nil Closed: the editor.
 	Opened, Closed func(PanelHost)
-	// Icon is the panel's dock icon: one cell, East Asian Width neutral (dock.go)
+	// Icon is the panel's dock icon: one cell, East Asian Width neutral (tui/dock.go)
 	Icon string
 	// Alive reports that the panel lives on with its drawer closed (a plugin card's running
 	// plugin); nil: only a TerminalTabs view's running tab keeps a closed panel in the dock
@@ -157,7 +157,7 @@ type PanelSpec struct {
 }
 
 // focusView is what in s takes the keyboard now.
-func (s PanelSpec) focusView() string {
+func (s PanelSpec) FocusView() string {
 	if s.Focus != nil {
 		return s.Focus()
 	}
@@ -166,33 +166,33 @@ func (s PanelSpec) focusView() string {
 
 // geometry is s as golib's panel geometry check reads it: its id, the places it opens from and its
 // bounds (tui/panelgeometry, docs/decisions/plugins.md#shared-panels-and-their-geometry).
-func (s PanelSpec) geometry() panelgeometry.Spec {
+func (s PanelSpec) Geometry() panelgeometry.Spec {
 	return panelgeometry.Spec{ID: s.ID, Edges: s.Places, Size: s.Size, Length: s.Length}
 }
 
 // These fresh descriptors are also the schema for standalone preference
 // readers. They have no runtime hooks, feature instances or package state.
-func sidePanelSpec(id, view string, priority int, edge func(PrefsView) string) PanelSpec {
-	return PanelSpec{ID: id, View: view, Priority: priority, Edge: edge, Places: slices.Clone(edges),
-		Keyboard: true, Size: [2]int{sidePanelMin, 90}, Length: [2]int{20, 100}, Default: sideDefault}
+func SidePanelSpec(id, view string, priority int, edge func(PrefsView) string) PanelSpec {
+	return PanelSpec{ID: id, View: view, Priority: priority, Edge: edge, Places: slices.Clone(Edges),
+		Keyboard: true, Size: [2]int{SidePanelMin, 90}, Length: [2]int{20, 100}, Default: SideDefault}
 }
 
 // explorerPanelSpec is the explorer: one drawer of two tabs, the workspaces' files (explorerTree)
 // and the page's links (relationsView). The links' own panel, with its tui.links.* preferences,
 // became its tab (migrateLinksPanel).
-func explorerPanelSpec() PanelSpec {
-	s := sidePanelSpec("explorer", "explorerTree", 10, func(p PrefsView) string { return p.Value(prefExplorer) })
+func ExplorerPanelSpec() PanelSpec {
+	s := SidePanelSpec("explorer", "explorerTree", 10, func(p PrefsView) string { return p.Value(PrefExplorer) })
 	s.Icon, s.Default = "☰", explorerDefault
 	return s
 }
 
 // sidePanelMin is the explorer's and the relations' smallest size across their edge, in percent: their
 // trees stay readable.
-const sidePanelMin = 15
+const SidePanelMin = 15
 
 // sideDefault is the explorer's and the relations' size and length before the user drags them: a
 // third across, and 85% along a side or 80% along the top or bottom.
-func sideDefault(edge string) (size, length int) { return 30, panelLength(edge) }
+func SideDefault(edge string) (size, length int) { return 30, panelLength(edge) }
 
 // explorerDefault is the explorer's size and length before the user drags it: 35% across, so its
 // tabs have room, and its length a side panel's.
@@ -209,7 +209,7 @@ func panelLength(edge string) int {
 }
 
 // edges are the four a panel opens from, in the order the Preferences dialog offers them.
-var edges = []string{"left", "right", "top", "bottom"}
+var Edges = []string{"left", "right", "top", "bottom"}
 
 // prefExplorer is the explorer's edge, with its Links tab (migrateLinksPanel).
-const prefExplorer = "tui.explorer.edge"
+const PrefExplorer = "tui.explorer.edge"

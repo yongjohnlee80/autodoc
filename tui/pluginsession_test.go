@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/plugin"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // The cells of docs/decisions/plugins.md#plugin-sessions: a plugin's session slot, the reason it is
@@ -82,10 +83,10 @@ func noLeak(t *testing.T, r *running, logs string, values ...string) {
 			}
 		}
 	}
-	for _, n := range onLoop(r, func() []notice { return r.h.noticeLog.items }) {
+	for _, n := range onLoop(r, func() []feature.Notice { return r.h.noticeLog.Items }) {
 		for _, v := range values {
-			if strings.Contains(n.text, v) {
-				t.Errorf("a notice holds the value %q: %s", v, n.text)
+			if strings.Contains(n.Text, v) {
+				t.Errorf("a notice holds the value %q: %s", v, n.Text)
 			}
 		}
 	}
@@ -460,7 +461,7 @@ func TestAPluginsPackageIsGated(t *testing.T) {
 	r.page("", 1, 1)
 	r.mustRun(t, "gated-read")
 	r.wantText(t, ":gated-read ungranted", "nil needs workspace.read: not granted") // ok, err as autodoc.doc.read answers
-	onLoop(r, func() bool { r.h.asker.accepted(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); return true })
 	r.s.WaitFor(t, "the grant", func(string) bool {
 		return onLoop(r, func() bool { return r.h.prefs.luaGrants["plugin:gated"]["workspace.read"] })
 	})
@@ -589,9 +590,9 @@ func TestABrokenPluginPackageIsSaidAndNotRecorded(t *testing.T) {
 	} {
 		r.waitNotice(t, want)
 	}
-	for _, n := range onLoop(r, func() []notice { return r.h.noticeLog.items }) {
-		if strings.Contains(n.text, "bare") || strings.Contains(n.text, "never run") {
-			t.Fatalf("a lua/ with no package.toml was read: %s", n.text)
+	for _, n := range onLoop(r, func() []feature.Notice { return r.h.noticeLog.Items }) {
+		if strings.Contains(n.Text, "bare") || strings.Contains(n.Text, "never run") {
+			t.Fatalf("a lua/ with no package.toml was read: %s", n.Text)
 		}
 	}
 	if got := onLoop(r, func() int { return len(r.h.pluginPackages) }); got != 0 {

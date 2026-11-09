@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -10,20 +11,20 @@ import (
 // HELP — the keys, the commands, and what each needs (a key that silently needs something reads as
 // broken).
 
-// helpText is Help › Keys: the Window's keys, each card as it lists its keys (keys.go), every
-// command of the catalog (catalog.go) with its ':' names and its keys, more naming keys the key
+// helpText is Help › Keys: the Window's keys, each card as it lists its keys (feature/keys.go), every
+// command of the catalog (feature/catalog.go) with its ':' names and its keys, more naming keys the key
 // catalog does not hold (a plugin's SPC p letter), then the page, the panels and what a key needs.
-func helpText(k keyset, cat *catalog, more map[string][]string) string {
+func helpText(k feature.Keyset, cat *feature.Catalog, more map[string][]string) string {
 	cmds := helpCommands(k, cat, more)
 	if cmds != "" {
 		cmds += "\n\n"
 	}
-	moved := k.helpMoved()
+	moved := k.HelpMoved()
 	if moved != "" {
 		moved += "\n\n"
 	}
-	return k.textID("autodoc.help.keys", helpKeys) + "\n\n" + moved + k.helpCards() + "\n\n" + cmds + k.textID("autodoc.help.rest", helpRest) +
-		"\n\n" + k.textID("autodoc.help.layout", helpLayout)
+	return k.TextID("autodoc.help.keys", helpKeys) + "\n\n" + moved + k.HelpCards() + "\n\n" + cmds + k.TextID("autodoc.help.rest", helpRest) +
+		"\n\n" + k.TextID("autodoc.help.layout", helpLayout)
 }
 
 // commandsChanged is the catalog changed: F1 is made anew once the loop is free, however many
@@ -45,39 +46,39 @@ const helpCommandsHead = "COMMANDS (each by its id, which Lua's autodoc.run(id) 
 
 // helpGroups are the catalog's sources as F1 heads them, in its order.
 var helpGroups = []struct {
-	source Source
+	source feature.Source
 	head   string
-}{{SourceBuiltin, "AutoDoc's"}, {SourceFeature, "the features'"}, {SourceLua, "yours, in Lua (autodoc.command)"}, {SourcePlugin, "the plugins' (SPC p)"}}
+}{{feature.SourceBuiltin, "AutoDoc's"}, {feature.SourceFeature, "the features'"}, {feature.SourceLua, "yours, in Lua (autodoc.command)"}, {feature.SourcePlugin, "the plugins' (SPC p)"}}
 
 // helpCommands is F1's COMMANDS: every entry by its source, each line its id, its ':' names, its
 // keys and its title. The names are the ones it owns now, so F1, ':' and its completion name the
 // same owner. "" with no catalog.
-func helpCommands(k keyset, cat *catalog, more map[string][]string) string {
+func helpCommands(k feature.Keyset, cat *feature.Catalog, more map[string][]string) string {
 	if cat == nil {
 		return ""
 	}
 	width := 0
-	for _, e := range cat.entries() {
+	for _, e := range cat.Entries() {
 		width = max(width, utf8.RuneCountInString(e.ID))
 	}
 	var b strings.Builder
-	b.WriteString(k.textID("autodoc.help.commands", helpCommandsHead))
+	b.WriteString(k.TextID("autodoc.help.commands", helpCommandsHead))
 	for _, g := range helpGroups {
 		var lines []string
-		for _, e := range cat.entries() {
+		for _, e := range cat.Entries() {
 			if e.Source != g.source {
 				continue
 			}
-			names := cat.owned(e.ID)
+			names := cat.Owned(e.ID)
 			for i, n := range names {
 				names[i] = ":" + n
 			}
 			keys := append(keysOf(k, e), more[e.ID]...)
 			lines = append(lines, fmt.Sprintf("    %s%s  %s · %s · %s", e.ID, strings.Repeat(" ", width-utf8.RuneCountInString(e.ID)),
-				orDash(strings.Join(names, " ")), orDash(strings.Join(keys, ", ")), k.textID("autodoc.cmd."+e.ID, e.Title)))
+				orDash(strings.Join(names, " ")), orDash(strings.Join(keys, ", ")), k.TextID("autodoc.cmd."+e.ID, e.Title)))
 		}
 		if len(lines) > 0 {
-			b.WriteString("\n  " + k.text("autodoc.help.group.", g.head) + "\n" + strings.Join(lines, "\n"))
+			b.WriteString("\n  " + k.Text("autodoc.help.group.", g.head) + "\n" + strings.Join(lines, "\n"))
 		}
 	}
 	return b.String()
@@ -91,9 +92,9 @@ func orDash(s string) string {
 }
 
 // keysOf are the keys that run e, as help names them: its Cmd's, and its twin's.
-func keysOf(k keyset, e *Entry) []string {
+func keysOf(k feature.Keyset, e *feature.Entry) []string {
 	var out []string
-	for _, key := range k.keys {
+	for _, key := range k.Keys {
 		if key.Cmd == e.ID || e.Twin != "" && key.Run == e.Twin {
 			if n := keyName(k, key, 0); !slices.Contains(out, n) {
 				out = append(out, n)
@@ -105,19 +106,19 @@ func keysOf(k keyset, e *Entry) []string {
 
 // keyName is key as typed from the page: a Window key's own name, a leader key after SPC, a key
 // on a card after the keys that open the card.
-func keyName(k keyset, key Key, depth int) string {
-	show := k.shown(key)
-	if key.Card == leader {
+func keyName(k feature.Keyset, key feature.Key, depth int) string {
+	show := k.Shown(key)
+	if key.Card == feature.Leader {
 		return "SPC " + show
 	}
-	if key.Card == "" || depth > len(k.cards) {
+	if key.Card == "" || depth > len(k.Cards) {
 		return show
 	}
-	i := slices.IndexFunc(k.keys, func(o Key) bool { return o.Opens == key.Card })
+	i := slices.IndexFunc(k.Keys, func(o feature.Key) bool { return o.Opens == key.Card })
 	if i < 0 {
 		return show
 	}
-	return keyName(k, k.keys[i], depth+1) + " " + show
+	return keyName(k, k.Keys[i], depth+1) + " " + show
 }
 
 const helpKeys = `KEYS
