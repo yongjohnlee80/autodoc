@@ -1,5 +1,7 @@
 package tui
 
+import "github.com/yongjohnlee80/autodoc/internal/procenv"
+
 // PanelHost is the UI service boundary a panel feature uses. It exposes view
 // operations and preference persistence, not Host fields or the program tree.
 // Every method runs on the UI loop.
@@ -13,6 +15,8 @@ type PanelHost interface {
 	Notify(msg string)
 	Ask(q Question) Asked
 	Prefs() PrefsView
+	// Env is Core's: the program's environment, nil the process's own.
+	Env() procenv.Env
 	CallView(id, method string, args ...any) error
 	Keep(err error)
 	Focus(id string) error

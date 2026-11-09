@@ -111,7 +111,7 @@ func TestTheCrewHostSendsAnotherHostsAgentATaskUnrung(t *testing.T) {
 // codename@project and names its scope and whether a wake reaches it.
 func TestTodosAssignPreviewsAnotherHostsAgent(t *testing.T) {
 	c, _ := newPeerCore("autodoc:0123456789abcdef", peer("zen", "autovim:mcat", "mcat", false, "no_endpoint"))
-	v := newTodos(c, nil)
+	v := newTodos(c)
 	e := c.peers[0]
 	pn := v.assignPick.preview(e)(context.Background()).v
 	if pn.title != "zen@mcat" || !strings.Contains(pn.text, "autovim:mcat") || !strings.Contains(pn.text, runState(c, e)) {
@@ -123,7 +123,7 @@ func TestTodosAssignPreviewsAnotherHostsAgent(t *testing.T) {
 // window that can't reach the crew sends nothing and says nothing.
 func TestTodosAssignSendsNoPeerTaskFromAWindowWithoutACrew(t *testing.T) {
 	ac, _ := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
-	v := newTodos(ac, nil)
+	v := newTodos(ac)
 	v.list()
 	s, _ := v.cursor()
 	before := len(ac.notes)

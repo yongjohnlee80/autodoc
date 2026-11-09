@@ -66,7 +66,7 @@ func TestTodosStatusLineSaysOnlyWhatNeedsTheUser(t *testing.T) {
 		}
 		return map[string]any{"tasks": []any{map[string]any{"id": "t1", "rev": "r1", "title": "Ship", "status": "open"}}}, nil
 	}
-	v := newTodos(s, nil)
+	v := newTodos(s)
 	quiet := func(when string) {
 		t.Helper()
 		if s.set["App.todosStatus"] != "" || s.set["App.todosStatusShown"] != false || len(s.notes) != 0 {
@@ -112,7 +112,7 @@ func TestTodosStatusLineSaysOnlyWhatNeedsTheUser(t *testing.T) {
 func TestTodosAReadOnlyStoreTakesNoKeyAsAnError(t *testing.T) {
 	writes := []string{"todos.add", "todos.remove", "todos.status", "todos.assign", "todos.move_store", "todos.scaffold", "todos.refresh"}
 	s := &agentCore{scriptedCore: scriptedStore(false), entries: []AgentEntry{{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true}}}
-	v := newTodos(s, nil)
+	v := newTodos(s)
 	v.list()
 	cmds := v.Commands()
 	for _, where := range []struct {
@@ -169,7 +169,7 @@ func TestTodosAReadOnlyStoreTakesNoKeyAsAnError(t *testing.T) {
 // nothing. A write asked of a released store is never sent.
 func TestTodosEnterOnTheCardOfKeysOpensTheRow(t *testing.T) {
 	s := scriptedStore(true)
-	v := newTodos(s, nil)
+	v := newTodos(s)
 	v.list()
 	if err := v.Commands()["App.todoEnter"].handler("App.todoEnter")(nil); err != nil {
 		t.Fatal(err)
@@ -197,7 +197,7 @@ func TestTodosEnterOnTheCardOfKeysOpensTheRow(t *testing.T) {
 	}
 
 	ro := scriptedStore(false)
-	w := newTodos(ro, nil)
+	w := newTodos(ro)
 	w.list()
 	n = len(ro.calls)
 	w.write(w.stores[0], "todos.add", []any{"kb", map[string]any{"title": "x"}}, nil)

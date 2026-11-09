@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/golib/decl"
 )
 
@@ -356,6 +357,9 @@ type Core interface {
 	Workspace() string
 	// Prefs are the preferences in effect.
 	Prefs() PrefsView
+	// Env is the program's environment: its HOME, PATH and the like, and what a process it starts
+	// inherits. nil is the process's own (internal/procenv).
+	Env() procenv.Env
 	// OpenFile opens a file by its absolute path in the editor, asking first over unsaved changes.
 	OpenFile(abs string)
 	// Failed tells what failed and why, in the words a daemon error carries.

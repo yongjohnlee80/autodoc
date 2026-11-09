@@ -40,7 +40,7 @@ func varRows(v *todos) []string {
 // a adds NAME=value to the file, d clears a value set here (asked first). [ ] reach it round.
 func TestTheVariablesTab(t *testing.T) {
 	s := varsStore(true)
-	v := newTodos(s, nil)
+	v := newTodos(s)
 	v.Panels()[0].Opened(nil)
 	v.showTab(varsTab)
 	if !s.called("todos.vars[") {
@@ -119,7 +119,7 @@ func TestTheVariablesTab(t *testing.T) {
 	}
 
 	ro := varsStore(false)
-	w := newTodos(ro, nil)
+	w := newTodos(ro)
 	w.Panels()[0].Opened(nil)
 	w.showTab(varsTab)
 	w.varEdit()

@@ -22,7 +22,6 @@ import (
 // only its PanelHost services; none of this state is shared between programs.
 type terminals struct {
 	c       PanelHost
-	seams   *seams // the program's (Host.seams)
 	restore bool
 	// startLua is a Lua shell's program (Host.startLuaShell, luashell.go); nil: no Lua shells
 	startLua func(pty.Cmd) (terminal.TerminalProcess, error)
@@ -34,8 +33,8 @@ type terminalRuntimeHost interface {
 	Terminals(string) (TerminalPanel, error)
 }
 
-func newTerminals(c PanelHost, s *seams) *terminals {
-	return &terminals{c: c, seams: s, restore: true}
+func newTerminals(c PanelHost) *terminals {
+	return &terminals{c: c, restore: true}
 }
 
 // inOwnEnv is config to run in the program's environment when a test gave it one of its own: the
@@ -43,7 +42,7 @@ func newTerminals(c PanelHost, s *seams) *terminals {
 // otherwise starts the process's $SHELL, with the process's environment under the tab's). In
 // AutoDoc's own (env nil), config is as it was.
 func (t *terminals) inOwnEnv(config TerminalConfig) TerminalConfig {
-	env := t.seams.env
+	env := t.c.Env()
 	if env == nil {
 		return config
 	}
@@ -485,7 +484,7 @@ func (t *terminals) newShell() {
 	if ws, ok := t.c.ActiveWorkspace(); ok {
 		root = ws.Root
 	}
-	t.startTab(shellLabel, t.inOwnEnv(TerminalConfig{Dir: termDir(t.seams.env, root)}),
+	t.startTab(shellLabel, t.inOwnEnv(TerminalConfig{Dir: termDir(t.c.Env(), root)}),
 		func(err error) string {
 			return t.c.Trf("autodoc.notice.terminal.the_terminal_could_not_add_a_shell", err.Error())
 		},
