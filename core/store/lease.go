@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/yongjohnlee80/golib/errs"
 
+	"github.com/yongjohnlee80/autodoc/internal/fileid"
 	"github.com/yongjohnlee80/autodoc/internal/filelock"
 )
 
@@ -52,8 +52,8 @@ func leaseLockPath(path string) (string, error) {
 	return filepath.Join(dir, ".autodoc-lease-"+id), nil
 }
 
-// identity is the store at path's directory and identity, its device and inode, as the lease names
-// it: the store, a symlink to it and a hardlink to it are one store. A missing store is created when
+// identity is the store at path's directory and identity (internal/fileid: its device and inode on
+// Unix), as the lease names it: the store, a symlink to it and a hardlink to it are one store. A missing store is created when
 // create is set (the lease's case), and is an os.ErrNotExist otherwise (a client's: no daemon can
 // hold a store that is not there).
 func identity(path string, create bool) (dir, id string, err error) {
@@ -74,15 +74,11 @@ func identity(path string, create bool) (dir, id string, err error) {
 	if err != nil {
 		return "", "", fmt.Errorf("store: resolving %s: %w", abs, err)
 	}
-	fi, err := os.Stat(resolved)
+	id, err = fileid.ID(resolved)
 	if err != nil {
 		return "", "", fmt.Errorf("store: reading %s: %w", resolved, err)
 	}
-	st, ok := fi.Sys().(*syscall.Stat_t)
-	if !ok {
-		return "", "", fmt.Errorf("store: no inode for %s on this platform", resolved)
-	}
-	return filepath.Dir(resolved), fmt.Sprintf("%d-%d", st.Dev, st.Ino), nil
+	return filepath.Dir(resolved), id, nil
 }
 
 // Identity is the store at path's identity, its device and inode: the name its lease is taken
