@@ -43,7 +43,7 @@ func (*registryBrowse) Name() string { return "registry" }
 
 func (b *registryBrowse) State() map[string]any {
 	return map[string]any{
-		"App.registryRows": b.pick.List.Model, "App.registryField": "", "App.registryList": "",
+		"App.registryRows": b.pick.List.Model(), "App.registryField": "", "App.registryList": "",
 		"App.registryPreviewTitle": "", "App.registryPreviewText": "", "App.registryPreviewAt": 0,
 		"App.registryNote": "", "App.registryNoteShown": false,
 	}
