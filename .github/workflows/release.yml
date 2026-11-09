@@ -21,7 +21,9 @@ jobs:
   # the SDK, so its one build carries the GUI too, and needs only macOS itself to run. The Ubuntu
   # runners are pinned to 24.04, not ubuntu-latest (whose move to Ubuntu 26 begins 2026-10-19): the
   # GUI build needs the glibc it was built against, and the apt names below are 24.04's, so a release
-  # moves to a new Ubuntu only when someone chooses to.
+  # moves to a new Ubuntu only when someone chooses to. Windows cross-builds on Ubuntu without cgo,
+  # as a zip holding the .exe: the GUI needs no cgo there, and the name and layout are what
+  # install-autodoc.ps1 fetches and unpacks (docs/decisions/install.md#windows).
   build:
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -35,6 +37,7 @@ jobs:
           - { goos: linux,  goarch: arm64, runner: ubuntu-24.04-arm, cgo: "1", tags: "gui", suffix: "" }
           - { goos: darwin, goarch: amd64, runner: macos-latest,     cgo: "1", tags: "gui", suffix: "" }
           - { goos: darwin, goarch: arm64, runner: macos-latest,     cgo: "1", tags: "gui", suffix: "" }
+          - { goos: windows, goarch: amd64, runner: ubuntu-24.04,    cgo: "0", tags: "gui", suffix: "" }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
@@ -55,17 +58,21 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME}"
           OUT="autodoc-${VERSION}-${GOOS}-${GOARCH}${{ matrix.suffix }}"
+          EXE=""; if [ "${GOOS}" = windows ]; then EXE=".exe"; fi
           # -s -w: no symbol table or DWARF; stack traces keep their function
           # names. -trimpath keeps the runner's paths out of the binary.
-          go build -tags "${{ matrix.tags }}" -trimpath -ldflags "-s -w -X main.version=${VERSION} -X main.buildDate=$(date -u +%F)" -o "${OUT}" ./cmd/autodoc
-          tar czf "${OUT}.tar.gz" "${OUT}"
-          shasum -a 256 "${OUT}.tar.gz" > "${OUT}.tar.gz.sha256" # on Ubuntu and macOS alike
+          go build -tags "${{ matrix.tags }}" -trimpath -ldflags "-s -w -X main.version=${VERSION} -X main.buildDate=$(date -u +%F)" -o "${OUT}${EXE}" ./cmd/autodoc
+          if [ "${GOOS}" = windows ]; then ARCHIVE="${OUT}.zip"; zip -q "${ARCHIVE}" "${OUT}${EXE}"
+          else ARCHIVE="${OUT}.tar.gz"; tar czf "${ARCHIVE}" "${OUT}"; fi
+          shasum -a 256 "${ARCHIVE}" > "${ARCHIVE}.sha256" # on Ubuntu and macOS alike
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dist-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }}
           path: |
             *.tar.gz
             *.tar.gz.sha256
+            *.zip
+            *.zip.sha256
 
   publish:
     needs: build
@@ -76,19 +83,20 @@ jobs:
         with:
           merge-multiple: true
           path: dist
-      # The installer's files (docs/decisions/install.md#scripts-over-the-releases-tarballs): its two
-      # scripts, the launcher assets (the icon, the macOS app bundle) and the source, for a system
+      # The installer's files (docs/decisions/install.md#scripts-over-the-releases-tarballs): its
+      # scripts (the shell and the PowerShell pair), the launcher assets (the icon, the macOS app bundle) and the source, for a system
       # with no prebuilt build. Each gets a checksum, as the binaries do: the scripts check every
       # file they fetch.
       - name: the installer's files
         run: |
           set -euo pipefail
           V="${GITHUB_REF_NAME}"
-          cp scripts/install/install-autodoc.sh scripts/install/update.sh dist/
+          cp scripts/install/install-autodoc.sh scripts/install/update.sh \
+            scripts/install/install-autodoc.ps1 scripts/install/update.ps1 dist/
           tar czf "dist/autodoc-${V}-assets.tar.gz" assets/icon assets/macos
           git archive --format=tar.gz --prefix="autodoc-${V}/" -o "dist/autodoc-${V}-src.tar.gz" HEAD
           cd dist
-          for f in install-autodoc.sh update.sh "autodoc-${V}-assets.tar.gz" "autodoc-${V}-src.tar.gz"; do
+          for f in install-autodoc.sh update.sh install-autodoc.ps1 update.ps1 "autodoc-${V}-assets.tar.gz" "autodoc-${V}-src.tar.gz"; do
             sha256sum "$f" > "$f.sha256"
           done
 
@@ -109,17 +117,17 @@ jobs:
               --generate-notes
           fi
           gh release upload "${GITHUB_REF_NAME}" \
-            dist/*.tar.gz dist/*.sh dist/*.sha256 \
+            dist/*.tar.gz dist/*.zip dist/*.sh dist/*.ps1 dist/*.sha256 \
             --clobber
 
       # An upload of a glob that matched nothing, or a partial upload, exits 0,
-      # so the count is asserted: a tarball and a checksum per platform built, and the installer's files.
+      # so the count is asserted: an archive and a checksum per platform built, and the installer's files.
       - name: verify every artifact reached the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          want=$(ls -1 dist/*.tar.gz dist/*.sh dist/*.sha256 | wc -l)
+          want=$(ls -1 dist/*.tar.gz dist/*.zip dist/*.sh dist/*.ps1 dist/*.sha256 | wc -l)
           got=$(gh release view "${GITHUB_REF_NAME}" --json assets --jq '.assets | length')
           echo "artifacts built: ${want}; assets on the release: ${got}"
           if [ "${got}" -lt "${want}" ]; then
