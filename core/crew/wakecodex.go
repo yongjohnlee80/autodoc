@@ -11,8 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/yongjohnlee80/autodoc/internal/fileowner"
 )
 
 // CodexWaker wakes a Codex session through its app-server's persistent queue
@@ -23,14 +21,17 @@ import (
 // socket folder for that user, owned by it, in a folder only it can enter. Each value is passed as
 // --flag=value, so a thread id can never be read as a flag.
 type CodexWaker struct {
-	bin   string   // the codex CLI
-	uid   int      // the daemon's user, who must own the server and its folder
-	roots []string // the socket folders a locator must lie in
+	bin   string                  // the codex CLI
+	uid   int                     // the daemon's user, whose socket folders the server must lie in
+	owned func(path string) error // whether an entry is the daemon's user's (NewCodexWaker)
+	roots []string                // the socket folders a locator must lie in
 }
 
-// NewCodexWaker is the Codex waker for the daemon's user uid, running the codex CLI at bin.
-func NewCodexWaker(uid int, bin string) *CodexWaker {
-	return &CodexWaker{bin: bin, uid: uid, roots: CodexSocketDirs(uid)}
+// NewCodexWaker is the Codex waker for the daemon's user uid, running the codex CLI at bin. owned
+// says whether the entry at a path, a symlink not followed, is that user's (nil when it is; AutoDoc
+// passes internal/fileowner.OwnedBy): the module keeps no OS call of its own, so it stays extractable.
+func NewCodexWaker(uid int, bin string, owned func(path string) error) *CodexWaker {
+	return &CodexWaker{bin: bin, uid: uid, owned: owned, roots: CodexSocketDirs(uid)}
 }
 
 func (w *CodexWaker) Wake(ctx context.Context, ep Endpoint, notice string) error {
@@ -78,7 +79,7 @@ func (w *CodexWaker) bound(server string) error {
 	if fi.Mode()&os.ModeSocket == 0 {
 		return fmt.Errorf("crew: codex's app-server %s is not a socket (%s)", server, fi.Mode().Type())
 	}
-	if err := fileowner.OwnedBy(server); err != nil {
+	if err := w.owned(server); err != nil {
 		return fmt.Errorf("crew: codex's app-server %s: %w", server, err)
 	}
 	dir := filepath.Dir(server)
@@ -89,7 +90,7 @@ func (w *CodexWaker) bound(server string) error {
 	if !di.IsDir() || di.Mode().Perm()&0o077 != 0 {
 		return fmt.Errorf("crew: codex's socket folder %s is not a folder only its user can enter (%s)", dir, di.Mode())
 	}
-	if err := fileowner.OwnedBy(dir); err != nil {
+	if err := w.owned(dir); err != nil {
 		return fmt.Errorf("crew: codex's socket folder %s: %w", dir, err)
 	}
 	return nil
