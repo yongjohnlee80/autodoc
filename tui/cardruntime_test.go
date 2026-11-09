@@ -92,15 +92,18 @@ func runACardAddedWhileRunningOpensAtOnce(t *testing.T, gui bool) {
 
 // A card plugin added while AutoDoc runs opens at once, docked at its placement, in both builds.
 func TestACardAddedWhileRunningOpensAtOnce(t *testing.T) {
+	t.Parallel()
 	runACardAddedWhileRunningOpensAtOnce(t, false)
 }
 func TestACardAddedWhileRunningOpensAtOnceGUI(t *testing.T) {
+	t.Parallel()
 	runACardAddedWhileRunningOpensAtOnce(t, true)
 }
 
 // An open, focused card keeps its plugin, its panel and the keys while another card is added and
 // removed: the reload patches the document around it.
 func TestAnOpenCardSurvivesAnotherCardsAddAndRemoval(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "first", "dialog", "echo", rightCard+toggleCmd)
 	_, r, logs := liveCardTUI(t, dir, nil, false)
@@ -134,6 +137,7 @@ func TestAnOpenCardSurvivesAnotherCardsAddAndRemoval(t *testing.T) {
 // there: its Closed hook gives the keys back to the page. Then its panel, its dock icon and its
 // Plugins menu row go, and its panel can no longer be opened.
 func TestRemovingACardTakesItsPanelAway(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "echo", rightCard+toggleCmd)
 	_, r, logs := liveCardTUI(t, dir, nil, false)
@@ -177,6 +181,7 @@ func TestRemovingACardTakesItsPanelAway(t *testing.T) {
 // The same card added again opens with its kept geometry (tui.card_<name>.*, read again once it has
 // a panel), and nothing is declared twice.
 func TestACardAddedAgainKeepsItsGeometry(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	id := cardPanelID("card")
 	_, r, _ := liveCardTUI(t, dir, map[string]string{panelgeometry.SizeKey(id, "right"): "60"}, false)
@@ -205,6 +210,7 @@ func TestACardAddedAgainKeepsItsGeometry(t *testing.T) {
 // The registry stages a contributor's panels under the build's checks and changes nothing until
 // commit: a duplicate id, a feature with no panels and a PanelBound feature are refused.
 func TestTheRegistryStagesThenCommits(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "echo", rightCard)
 	_, r, _ := liveCardTUI(t, dir, nil, false)
@@ -256,6 +262,7 @@ func TestTheRegistryStagesThenCommits(t *testing.T) {
 // has no spec for the card, the dock does not list it, the plugins' host is the one it was, and the
 // document has no Drawer for it. Opening it says why.
 func TestAReloadRefusedAfterAStageChangesNothing(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "first", "dialog", "echo", rightCard)
 	_, r, _ := liveCardTUI(t, dir, nil, false)
@@ -294,6 +301,7 @@ func TestAReloadRefusedAfterAStageChangesNothing(t *testing.T) {
 // A theme switch after a card was added writes the card set as it is: the added card keeps its
 // panel, and its running plugin its run.
 func TestAThemeSwitchKeepsAnAddedCard(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	_, r, _ := liveCardTUI(t, dir, nil, false)
 	installPlugin2(t, dir, "card", "dialog", "echo", rightCard)
@@ -323,6 +331,7 @@ func TestAThemeSwitchKeepsAnAddedCard(t *testing.T) {
 // before the tree is touched: the tree is not latched, the registry, the card set and the document
 // are as they were, and the card already there and the page still work.
 func TestARefusedCardConstructorChangesNothing(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "first", "dialog", "echo", rightCard)
 	_, r, _ := liveCardTUI(t, dir, nil, false)
@@ -361,6 +370,7 @@ func TestARefusedCardConstructorChangesNothing(t *testing.T) {
 // widgets): it says it must restart and puts the card set back. Once latched, a later change tries no
 // reload and says the same.
 func TestALatchedTreeAsksForARestart(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "first", "dialog", "echo", rightCard)
 	_, r, _ := liveCardTUI(t, dir, nil, false)

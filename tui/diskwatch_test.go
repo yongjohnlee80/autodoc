@@ -65,6 +65,7 @@ type noWatch struct{ vfs.FS }
 // new text, clean, the cursor still on its line; it is one undo step. The same with no native
 // watcher, by polling.
 func TestACleanFileFollowsTheDisk(t *testing.T) {
+	t.Parallel()
 	for _, poll := range []bool{false, true} {
 		t.Run(map[bool]string{false: "watch", true: "poll"}[poll], func(t *testing.T) {
 			if poll {
@@ -100,6 +101,7 @@ func TestACleanFileFollowsTheDisk(t *testing.T) {
 // TestTheTUIsOwnSaveIsNoChange: saving a buffer reloads nothing and badges nothing, though its
 // folder's event arrives while the save is out.
 func TestTheTUIsOwnSaveIsNoChange(t *testing.T) {
+	t.Parallel()
 	r, root := onDisk(t, Options{})
 	r.openOnDisk(t, "a.md")
 	r.typeInEditor(t, "X")
@@ -122,6 +124,7 @@ func TestTheTUIsOwnSaveIsNoChange(t *testing.T) {
 // is badged at once, asked about nothing while it is typed in; shown again, it asks keep / reload /
 // overwrite, and Reload is one u from the edits.
 func TestAModifiedFileIsAskedAboutOnEnter(t *testing.T) {
+	t.Parallel()
 	r, root := onDisk(t, Options{})
 	r.openOnDisk(t, "a.md")
 	r.typeInEditor(t, "X")
@@ -150,6 +153,7 @@ func TestAModifiedFileIsAskedAboutOnEnter(t *testing.T) {
 // TestAFileDeletedOnDiskKeepsItsBuffer: an open file deleted on disk keeps its buffer and text,
 // badged; a save creates it again; a save after someone else made it again is refused.
 func TestAFileDeletedOnDiskKeepsItsBuffer(t *testing.T) {
+	t.Parallel()
 	r, root := onDisk(t, Options{})
 	r.openOnDisk(t, "a.md")
 	if err := os.Remove(filepath.Join(root, "a.md")); err != nil {
@@ -186,6 +190,7 @@ func TestAFileDeletedOnDiskKeepsItsBuffer(t *testing.T) {
 // TestABackgroundBufferFollowsTheDisk: a clean buffer not shown reloads through its own editor;
 // the one shown is untouched.
 func TestABackgroundBufferFollowsTheDisk(t *testing.T) {
+	t.Parallel()
 	r, root := onDisk(t, Options{})
 	r.openOnDisk(t, "a.md")
 	r.openOnDisk(t, "b.md")
@@ -207,6 +212,7 @@ func bufferOn2(r *running, p string) *openBuffer {
 // TestAskFirstBadgesACleanFile: with tui.disk_reload = ask, a clean file changed on disk is badged
 // and kept, as a modified one is.
 func TestAskFirstBadgesACleanFile(t *testing.T) {
+	t.Parallel()
 	r, root := onDisk(t, Options{})
 	onLoop(r, func() bool { r.h.prefs.diskReload = diskReloadAsk; return true })
 	r.openOnDisk(t, "a.md")
@@ -219,6 +225,7 @@ func TestAskFirstBadgesACleanFile(t *testing.T) {
 
 // TestBuffersInOneFolderShareAWatch: two buffers in a folder share its watch; closing both ends it.
 func TestBuffersInOneFolderShareAWatch(t *testing.T) {
+	t.Parallel()
 	r, _ := onDisk(t, Options{})
 	r.openOnDisk(t, "a.md")
 	r.openOnDisk(t, "b.md")
@@ -240,6 +247,7 @@ func TestBuffersInOneFolderShareAWatch(t *testing.T) {
 // badged deleted; made again, the watch starts again, and a change in it is picked up. The same
 // with no native watcher: a poll's overflow (its listing failed) starts its run again.
 func TestAFolderThatGoesAndComesBack(t *testing.T) {
+	t.Parallel()
 	for _, poll := range []bool{false, true} {
 		t.Run(map[bool]string{false: "watch", true: "poll"}[poll], func(t *testing.T) {
 			if poll {
@@ -294,6 +302,7 @@ func folderGoesAndComesBack(t *testing.T, poll bool) {
 // TestACheckOverlappingASaveIsStale: a check whose read is out while a save starts and lands is
 // stale when it answers: it changes nothing, and one fresh check runs.
 func TestACheckOverlappingASaveIsStale(t *testing.T) {
+	t.Parallel()
 	root := fileDir(t, "a.md", "one\n")
 	d := startManaged(t, map[string]string{"alpha": root})
 	sess := NewSession(d.sock, nil)
@@ -336,6 +345,7 @@ func TestACheckOverlappingASaveIsStale(t *testing.T) {
 // TestACheckWaitsForASave: a check asked for while the buffer's save is out reads nothing until the
 // save answers, then runs once.
 func TestACheckWaitsForASave(t *testing.T) {
+	t.Parallel()
 	root := fileDir(t, "a.md", "one\n")
 	d := startManaged(t, map[string]string{"alpha": root})
 	sess := NewSession(d.sock, nil)
@@ -388,6 +398,7 @@ func unwatched(r *running) {
 // TestAWatchLeavesNoHandleBehind: a folder's watch started and ended over and over leaves no file
 // descriptor behind: each run closes its driver's handle on the folder.
 func TestAWatchLeavesNoHandleBehind(t *testing.T) {
+	t.Parallel()
 	if _, err := os.ReadDir("/proc/self/fd"); err != nil {
 		t.Skipf("no /proc/self/fd: %v", err)
 	}
@@ -419,6 +430,7 @@ func TestAWatchLeavesNoHandleBehind(t *testing.T) {
 // cache file is outside every workspace): clean, it reloads from disk; with unsaved edits, it is
 // badged and keeps them, never reloaded under the user.
 func TestAFileOutsideEveryWorkspaceFollowsTheDisk(t *testing.T) {
+	t.Parallel()
 	r, _ := onDisk(t, Options{})
 	out := t.TempDir()
 	abs := filepath.Join(out, "note.sql")

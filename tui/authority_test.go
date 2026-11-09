@@ -120,6 +120,7 @@ func (g *gatedRig) probeIs(t *testing.T, want string) {
 // kbtype.apply): the chunk never runs, nothing reaches the opener. A delegated entry still runs,
 // and the user's own :lua does (the probe is seen).
 func TestAGatedScriptsUserOnlyRunsAreRefused(t *testing.T) {
+	t.Parallel()
 	g := newGatedRig(t)
 	for cmd, want := range map[string]string{
 		"shellrun": "[false scripts.shell is the user's to run: a script may not]",
@@ -154,6 +155,7 @@ func TestAGatedScriptsUserOnlyRunsAreRefused(t *testing.T) {
 // TestAGatedScriptCannotWriteItsRights: granted settings, a gated script is refused lua.grants and
 // tui.agent.profiles, both unchanged in the store; another preference it sets lands.
 func TestAGatedScriptCannotWriteItsRights(t *testing.T) {
+	t.Parallel()
 	g := newGatedRig(t)
 	before, err := g.d.db.Preferences(context.Background())
 	if err != nil {
@@ -188,6 +190,7 @@ func TestAGatedScriptCannotWriteItsRights(t *testing.T) {
 // TestAGatedOpenIsHeldToTheWorkspace: file.open_path, :e and a followed file: link of a path
 // outside every workspace open nothing, and say why; a followed https link reaches the browser.
 func TestAGatedOpenIsHeldToTheWorkspace(t *testing.T) {
+	t.Parallel()
 	for _, cmd := range []string{"openit", "openline"} {
 		g := newGatedRig(t) // its own: the refusal on screen is this command's
 		g.mustRun(t, cmd)
@@ -218,6 +221,7 @@ func TestAGatedOpenIsHeldToTheWorkspace(t *testing.T) {
 // was, however long after it bound the key; the user's own :w then lands. A gated save of a
 // document of the workspace lands.
 func TestAGatedSaveIsHeldToTheWorkspace(t *testing.T) {
+	t.Parallel()
 	g := newGatedRig(t)
 	g.mustRun(t, "bind")
 	onLoop(g.running, func() bool { g.h.openAbsolute(g.probe); return true })
@@ -289,6 +293,7 @@ func TestAGatedSaveLeftBehindIsDropped(t *testing.T) {
 // the gate's: a script's extra argument (a within of its own) is cut before them, a missing one
 // padded.
 func TestAGatedCallCarriesItsBounds(t *testing.T) {
+	t.Parallel()
 	g := newGatedRig(t)
 	g.page("", 1, 1)
 	g.mustRun(t, "peek")
@@ -311,6 +316,7 @@ func TestAGatedCallCarriesItsBounds(t *testing.T) {
 // TestAGatedFollowLaunchesNothing: a link of a scheme the desktop's opener would launch reaches no
 // opener when a gated script follows it.
 func TestAGatedFollowLaunchesNothing(t *testing.T) {
+	t.Parallel()
 	g := newGatedRig(t)
 	g.openByPicker(t, "a.md")
 	g.waitFile(t, "a.md")
@@ -325,6 +331,7 @@ func TestAGatedFollowLaunchesNothing(t *testing.T) {
 // TestAGatedSaveOfAnotherWorkspaceIsRefused: a document of a workspace other than the one the
 // script's invocation began in is not saved, here, before anything is sent.
 func TestAGatedSaveOfAnotherWorkspaceIsRefused(t *testing.T) {
+	t.Parallel()
 	g := newGatedRig(t)
 	onLoop(g.running, func() bool { g.h.openIn("kb2", "b.md"); return true })
 	g.waitFile(t, "b.md")
@@ -345,6 +352,7 @@ func TestAGatedSaveOfAnotherWorkspaceIsRefused(t *testing.T) {
 // saves, on the user's Save, as the script acted, so a buffer outside every workspace stays as it
 // was; and a gated save's conflict, answered Overwrite after the workspace changed, is dropped.
 func TestAQuestionsAnswerContinuesTheScriptsStep(t *testing.T) {
+	t.Parallel()
 	g := newGatedRig(t)
 	onLoop(g.running, func() bool { g.h.openAbsolute(g.probe); return true })
 	g.waitFile(t, g.probe)
@@ -372,6 +380,7 @@ func TestAQuestionsAnswerContinuesTheScriptsStep(t *testing.T) {
 // TestACallWithoutAuthorityIsRefused: h.call refuses work whose authority is no one's, and a gated
 // one's call it cannot bound (the daemon's contracts not known), before anything is sent.
 func TestACallWithoutAuthorityIsRefused(t *testing.T) {
+	t.Parallel()
 	r := runTUI(t, NewSession("unused", nil), Options{})
 	ctx := context.Background()
 	if _, err := r.h.call(withAuthority(ctx, authority{}), "doc.read", "kb", "a.md"); !errors.Is(err, errNoAuthority) {
@@ -386,6 +395,7 @@ func TestACallWithoutAuthorityIsRefused(t *testing.T) {
 // TestAGatedSaveHeldAcrossASwitchIsDropped: a gated save already in its worker when the TUI enters
 // another workspace is refused as it is sent, and the old workspace's file stays as it was.
 func TestAGatedSaveHeldAcrossASwitchIsDropped(t *testing.T) {
+	t.Parallel()
 	g := newGatedRig(t)
 	g.openByPicker(t, "a.md")
 	g.waitFile(t, "a.md")
@@ -424,6 +434,7 @@ func TestTheConfigFolderIsProtectedAbsolute(t *testing.T) {
 // autodoc.doc.write), already in its worker when the TUI enters another workspace, is refused as it
 // is sent, through the same send path as the work it starts; the old workspace's file stays.
 func TestAGatedScriptsOwnCallHeldAcrossASwitchIsRefused(t *testing.T) {
+	t.Parallel()
 	g := newGatedRig(t)
 	held, release := make(chan struct{}), make(chan struct{})
 	var once sync.Once

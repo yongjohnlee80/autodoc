@@ -190,6 +190,7 @@ func checkPage(t *testing.T, r *running, theme string) {
 // The page's text, heading, link, and a diagram's label and box carry the theme's own base, never
 // the terminal's: switched into the theme with the page open, and started in it.
 func TestThePagesTextCarriesItsThemesBase(t *testing.T) {
+	t.Parallel()
 	for _, theme := range pageThemes {
 		t.Run(theme, func(t *testing.T) {
 			d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "page.md", pageSource)}, tableInclude)
@@ -253,6 +254,7 @@ func checkMindmap(t *testing.T, r *running, m *cellMindmap, theme string) {
 
 // The Mindmap pane's boxes carry the theme's base too, switched into it and started in it.
 func TestTheMindmapPanesBoxesCarryItsThemesBase(t *testing.T) {
+	t.Parallel()
 	for _, theme := range pageThemes {
 		t.Run(theme, func(t *testing.T) {
 			d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")}, tableInclude)

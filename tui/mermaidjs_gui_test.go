@@ -97,6 +97,7 @@ func endsIn(ctx context.Context, d time.Duration) bool {
 // The last request leaving a drawing cancels it, in the browser: a closed pane, a new page, another
 // engine leave no browser running for nobody. Its picture is not kept: the next request draws.
 func TestADrawingNobodyWaitsForIsCancelled(t *testing.T) {
+	t.Parallel()
 	b := newFakeBrowser()
 	r, m := paneDrawer(t, b)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -114,6 +115,7 @@ func TestADrawingNobodyWaitsForIsCancelled(t *testing.T) {
 
 // A drawing two requests wait for goes on when one leaves, and wakes the one still there.
 func TestADrawingSharedGoesOnWhenOneRequestLeaves(t *testing.T) {
+	t.Parallel()
 	b := newFakeBrowser()
 	r, m := paneDrawer(t, b)
 	gone, leave := context.WithCancel(context.Background())
@@ -151,6 +153,7 @@ func TestADrawingSharedGoesOnWhenOneRequestLeaves(t *testing.T) {
 
 // The program's end cancels every drawing.
 func TestTheProgramsEndCancelsTheDrawings(t *testing.T) {
+	t.Parallel()
 	b := newFakeBrowser()
 	r, m := paneDrawer(t, b)
 	parent, end := context.WithCancel(context.Background())
@@ -166,6 +169,7 @@ func TestTheProgramsEndCancelsTheDrawings(t *testing.T) {
 // A width the pane changes to fits the picture drawn: no browser again. The pictures kept are
 // bounded, by count and by their pixels, the newest kept; a failure is drawn again after a while.
 func TestThePanesPicturesAreReusedAndBounded(t *testing.T) {
+	t.Parallel()
 	b := newFakeBrowser()
 	b.immediate = true
 	r, m := paneDrawer(t, b)
@@ -227,6 +231,7 @@ func TestThePanesPicturesAreReusedAndBounded(t *testing.T) {
 // A request that ends while the drawing it waited for wakes the others is not woken: the first
 // woken holds the rest back while both requests end.
 func TestARequestEndedWhileTheOthersAreWokenIsNotWoken(t *testing.T) {
+	t.Parallel()
 	b := newFakeBrowser()
 	r, m := paneDrawer(t, b)
 	ctxs := map[string]context.CancelFunc{}
@@ -272,6 +277,7 @@ func TestARequestEndedWhileTheOthersAreWokenIsNotWoken(t *testing.T) {
 // The pane's chain answers a chart golib declines with AutoDoc's notice, not its spec: a chart is
 // never mermaid.js's, browser or not, so it goes to the native chain with the notice behind it.
 func TestThePanesDeclinedChartIsTheNotice(t *testing.T) {
+	t.Parallel()
 	r, m := paneDrawer(t, &fakeBrowser{})
 	req := guiwidget.DiagramRequest{Lang: "vega-lite", Src: `{"data":{"values":[]},"mark":"bar","transform":[]}`, Width: 400, Scale: 1}
 	ready := make(chan struct{}, 1)
@@ -295,6 +301,7 @@ func TestThePanesDeclinedChartIsTheNotice(t *testing.T) {
 // host, a chart outside golib's subset asked of the pane's chain is the Korean sentence, golib's
 // error in it as golib wrote it.
 func TestThePanesChartNoticeIsInTheUIsLanguage(t *testing.T) {
+	t.Parallel()
 	r, m := paneDrawer(t, &fakeBrowser{})
 	// chosen as the user chooses it (Options › Language): the start's preference.list, still in
 	// flight, can't put English back over it, as it could over a bare useLanguage (1 in 10, canary

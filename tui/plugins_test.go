@@ -593,6 +593,7 @@ func pidAlive(pid int) bool { return syscall.Kill(pid, 0) == nil }
 // TestThePluginsMenuListsThePluginsFolder: each plugin is an entry, one that cannot run is listed
 // disabled with why, and a directory with no plugin.toml, or a clone being added, is not listed.
 func TestThePluginsMenuListsThePluginsFolder(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "echo", "echo", 30, 6)
 	for name, toml := range map[string]string{
@@ -648,6 +649,7 @@ func TestThePluginsMenuListsThePluginsFolder(t *testing.T) {
 // shows what it draws, told the size and the theme; keys reach it in order, Esc does not; a
 // frame's colours are the theme vocabulary; a title it sets shows; Esc closes it and stops it.
 func TestAPluginsDialogShowsItsFramesAndTakesItsKeys(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "echo", "echo", 30, 6)
 	r, logs := pluginTUI(t, dir)
@@ -702,6 +704,7 @@ func TestAPluginsDialogShowsItsFramesAndTakesItsKeys(t *testing.T) {
 // TestAPluginThatFailsClosesItsDialogAndSaysWhy: a crash, silence, another protocol, a command that
 // is not there, each closes the dialog with a toast naming the cause.
 func TestAPluginThatFailsClosesItsDialogAndSaysWhy(t *testing.T) {
+	t.Parallel()
 	// the plugins that answer get a handshake longer than a loaded runner's start of this test binary
 	// (the plugin) under -race; only the one that never answers is held to the short deadline
 	shorten(t, 30*time.Second, 2*time.Second, time.Second)
@@ -739,6 +742,7 @@ func TestAPluginThatFailsClosesItsDialogAndSaysWhy(t *testing.T) {
 // TestTheCloseStopsAStubbornPluginAndWhatItStarted: a plugin that ignores plugin.close and SIGTERM
 // is killed after the deadlines, with the child it started, while it is busy — nothing of it runs.
 func TestTheCloseStopsAStubbornPluginAndWhatItStarted(t *testing.T) {
+	t.Parallel()
 	shorten(t, 5*time.Second, 200*time.Millisecond, 200*time.Millisecond)
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "stubborn", "stubborn", 30, 6)
@@ -818,6 +822,7 @@ func (r *running) dialogEdges(title string) (left, right int) {
 // left opens on the right, its first; Place moves it to the left at once and keeps the choice in the
 // store; with no placements it is centred.
 func TestADialogSitsWhereItsManifestSaysAndTheUserMovesIt(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "echo", "echo", 30, 6)
 	installTestPlugin(t, dir, "side", "echo", 30, 6)
@@ -873,6 +878,7 @@ func TestADialogSitsWhereItsManifestSaysAndTheUserMovesIt(t *testing.T) {
 // TestAStoredPlacementIsReadAtStart: the placement kept in the store is the dialog's from the
 // start; one the manifest does not offer is ignored, and the first it offers is used.
 func TestAStoredPlacementIsReadAtStart(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "side", "echo", 30, 6)
 	appendManifest(t, dir, "side", "placements = [\"right\", \"left\"]\n")
@@ -912,6 +918,7 @@ func TestAStoredPlacementIsReadAtStart(t *testing.T) {
 // TestEscHidesAPluginWithItsOwnQuit: esc = "hide" hides the dialog and tells the plugin, which
 // runs on; its menu entry shows it again and tells it so; its own close ends it.
 func TestEscHidesAPluginWithItsOwnQuit(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "game", "echo", 30, 6)
 	appendManifest(t, dir, "game", "esc = \"hide\"\n")
@@ -945,6 +952,7 @@ func TestEscHidesAPluginWithItsOwnQuit(t *testing.T) {
 // TestAHeightInPercentIsTheScreensShare: height = "80%" lays the dialog out at 80% of the rows it
 // may use, and the plugin is opened at that size.
 func TestAHeightInPercentIsTheScreensShare(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "tall", "echo", 30, 6)
 	b, _ := os.ReadFile(filepath.Join(dir, "tall", "plugin.toml"))
@@ -965,6 +973,7 @@ func TestAHeightInPercentIsTheScreensShare(t *testing.T) {
 // once re-opened fd 1 and left the original os.Stdout unreferenced, so its finalizer closed the
 // pipe at the next GC and the plugin ended some seconds in, cleanly and without a word.
 func TestAPluginOutlivesGarbageCollection(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "gc", "gc", 30, 6)
 	r, _ := pluginTUI(t, dir)
@@ -980,6 +989,7 @@ func TestAPluginOutlivesGarbageCollection(t *testing.T) {
 // TestAPluginIsToldTheThemeAndTheSizeItGot: a theme switch reaches the open plugin, and a dialog
 // larger than the screen is laid out smaller, and the plugin is opened at that size.
 func TestAPluginIsToldTheThemeAndTheSizeItGot(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "echo", "echo", 200, 60)
 	r, _ := pluginTUI(t, dir) // 100×30
@@ -1075,6 +1085,7 @@ func entries(t *testing.T, dir string) []string {
 // commit, the build and the command, with the warning; No throws the clone away; Yes builds it, puts
 // it in the folder and in the Plugins menu, and it runs.
 func TestAddingAPluginFromAGitURLAsksFirst(t *testing.T) {
+	t.Parallel()
 	repo := pluginRepo(t, "Echo", "echo built > built.txt")
 	commit := runGit(t, repo, "rev-parse", "--short", "HEAD")
 	dir := t.TempDir()
@@ -1124,6 +1135,7 @@ func TestAddingAPluginFromAGitURLAsksFirst(t *testing.T) {
 // cannot run, one already installed and a build that fails are each refused, saying why, and leave
 // nothing in the folder.
 func TestWhatIsNotAPluginIsNotAdded(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	r, logs := pluginTUI(t, dir)
 	add := func(url string) { r.h.p.Post(func() { r.h.plugins.addPlugin(url) }) }
@@ -1167,6 +1179,7 @@ func TestWhatIsNotAPluginIsNotAdded(t *testing.T) {
 // commit; Update… fetches, asks about the new commit's build, and moves to it; it says when there is
 // nothing new; Remove… asks, then takes the directory away and the menu entry with it.
 func TestAPluginIsUpdatedAndRemovedFromTheManager(t *testing.T) {
+	t.Parallel()
 	repo := pluginRepo(t, "Echo", "echo one > built.txt")
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "local", "echo", 30, 6)
@@ -1243,6 +1256,7 @@ func TestAPluginIsUpdatedAndRemovedFromTheManager(t *testing.T) {
 // plugin, naming it; each key's own rules hold. A 0209 manifest still runs, and a valid card and
 // service are listed enabled.
 func TestProtocolTwosManifestKeys(t *testing.T) {
+	t.Parallel()
 	const head = "kind = \"dialog\"\ncommand = [\"x\"]\n"
 	const svc = "kind = \"service\"\nprotocol = 2\ncommand = [\"x\"]\n"
 	for _, c := range []struct{ toml, reason string }{
@@ -1295,6 +1309,7 @@ func (r *running) textAt(text string) (x, y int) {
 // plugin.focus true, and its keys go to the plugin; Esc gives them back to the editor, plugin.focus
 // false, and closes the panel, the plugin told plugin.hide and running on.
 func TestACardTakesTheKeysOnlyWhenFocused(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 36\nheight = 8\nplacements = [\"top-right\"]\n")
 	r, logs := pluginTUI(t, dir)
@@ -1343,6 +1358,7 @@ func TestACardTakesTheKeysOnlyWhenFocused(t *testing.T) {
 // newest, at the tail of what came before it; the keys and commands all wait, in order. Documents
 // never count toward the queue's bound, and anything else past it is a plugin not reading.
 func TestTheHostKeepsOnlyTheNewestDocumentWaiting(t *testing.T) {
+	t.Parallel()
 	q := newOutQueue()
 	var want []string
 	for i := 1; i <= 50; i++ {
@@ -1402,6 +1418,7 @@ func TestTheHostKeepsOnlyTheNewestDocumentWaiting(t *testing.T) {
 // refused, a document as well as any other notification, though the queue is empty and far under
 // its bound; the sender, popping, hears it is done at once with nothing to send.
 func TestAClosedQueueTakesNothingMore(t *testing.T) {
+	t.Parallel()
 	q := newOutQueue()
 	q.close()
 	for _, n := range []outNote{
@@ -1430,6 +1447,7 @@ func TestAClosedQueueTakesNothingMore(t *testing.T) {
 // hides a shown one, its plugin running on (docs/decisions/plugins.md#plugin-sessions: Turn off
 // stops it); and it starts one that is off.
 func TestPluginCommandsOnTheSpcPCard(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "alpha", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 36\nheight = 8\n"+
 		"[[commands]]\nid = \"toggle\"\ntitle = \"Show the card\"\nkey = \"s\"\n"+
@@ -1525,6 +1543,7 @@ func TestPluginCommandsOnTheSpcPCard(t *testing.T) {
 // override, as a manifest refuses it): the first in the manifest keeps it, and the other is listed
 // unbound with why.
 func TestAPreferenceRebindsAPluginCommand(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "alpha", "dialog", "echo", "[dialog]\nwidth = 36\nheight = 8\n"+
 		"[[commands]]\nid = \"a\"\ntitle = \"Do a\"\nkey = \"s\"\n"+
@@ -1622,6 +1641,9 @@ func docsIn(lines []string) []string {
 // version rising with each edit. A note too large for the link is sent too large. A plugin that did
 // not declare the feed is never sent it.
 func TestTheDocumentFeed(t *testing.T) {
+	// Serial: it holds a 1 MiB document, which golib's editor lays out whole on SetValue (about
+	// 5 GB under -race), so two such cells at once pass a gate lane's memory. It runs in parallel
+	// again once the editor lays out only what it shows (the AM-6 memory fix in golib).
 	dir := t.TempDir()
 	installPlugin2(t, dir, "stats", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 60\nheight = 6\n[feed]\ndocument = true\n")
 	installPlugin2(t, dir, "quiet", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 30\nheight = 4\nplacements = [\"bottom-left\"]\n")
@@ -1688,6 +1710,7 @@ func version(t *testing.T, doc string) int {
 // edit's send replaces the held one, and onfeed starts with it. Asserting "not running" against the
 // real 300 ms raced the debounce, and a slow (-race, GUI) runner lost.
 func TestServicesStartOnUseOrAtLaunch(t *testing.T) {
+	t.Parallel()
 	tune(t).pluginFeed = time.Hour // before the TUI starts: its loop reads its own copy from then on
 	dir := t.TempDir()
 	installPlugin2(t, dir, "oncmd", "service", "echo", "[[commands]]\nid = \"run\"\ntitle = \"Run\"\nkey = \"r\"\n")
@@ -1722,6 +1745,7 @@ func TestServicesStartOnUseOrAtLaunch(t *testing.T) {
 // after the risk, the question says what the manifest declares: a card or a service and when it
 // starts, the feed, and the commands with their letters; a 0209 dialog declares nothing more.
 func TestTheInstallConfirmationListsWhatIsDeclared(t *testing.T) {
+	t.Parallel()
 	read := func(toml string) manifest {
 		dir := filepath.Join(t.TempDir(), "p")
 		_ = os.MkdirAll(dir, 0o755)
@@ -1759,6 +1783,7 @@ func TestTheInstallConfirmationListsWhatIsDeclared(t *testing.T) {
 // runs: it decodes, strictly, with no reason against it. One sample declares editor menu rows
 // ([[menu]], protocol 11).
 func TestThePluginReferenceKeepsUp(t *testing.T) {
+	t.Parallel()
 	doc, err := os.ReadFile("../docs/plugins.md")
 	if err != nil {
 		t.Fatal(err)
@@ -1833,6 +1858,7 @@ func TestThePluginReferenceKeepsUp(t *testing.T) {
 // command, and the feed. It needs python3 with msgpack (AUTODOC_TEST_PYTHON names another
 // interpreter); without one it is skipped, saying so.
 func TestThePythonExampleSpeaksTheProtocol(t *testing.T) {
+	t.Parallel()
 	py := os.Getenv("AUTODOC_TEST_PYTHON")
 	if py == "" {
 		py = "python3"
@@ -1875,6 +1901,7 @@ func TestThePythonExampleSpeaksTheProtocol(t *testing.T) {
 // plugin, the letter); run by id they run the plugin's command; the folder read anew without the
 // plugin takes them out, and SPC p with them. A plugin that cannot run has none.
 func TestPluginCommandsAreCatalogEntries(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "alpha", "dialog", "echo", "[dialog]\nwidth = 36\nheight = 8\n"+
 		"[[commands]]\nid = \"hello\"\ntitle = \"Say hello\"\nkey = \"h\"\n[[commands]]\nid = \"quiet\"\ntitle = \"Stay quiet\"\n")
@@ -1916,6 +1943,7 @@ func TestPluginCommandsAreCatalogEntries(t *testing.T) {
 // plugin has says so; a plugin refused when it was read says its reason. A theme golib does not
 // know is sent with no colours, its name kept.
 func TestAPluginEntryThatStartsNothingSaysWhy(t *testing.T) {
+	t.Parallel()
 	r := runTUI(t, NewSession("unused", nil), Options{})
 	refused := pluginEntry{dir: "/plugins/broken", m: manifest{Name: "broken"}, reason: "it speaks protocol 9"}
 	onLoop(r, func() bool {

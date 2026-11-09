@@ -67,6 +67,7 @@ func todoInfo() wsInfo {
 // (docs/decisions/todos.md#excluded-todo-stores-are-reported): it names the pattern, and its button
 // takes the pattern out of the exclude field, nothing saved until Save.
 func TestATodoStoreExcludedIsSaidAndOffered(t *testing.T) {
+	t.Parallel()
 	w := todoInfo()
 	w.exclude, w.todoExcluded = []string{".git/**", ".todo-list/**"}, []string{".todo-list/**"}
 	if n := todoExcludedNote(inEnglish{}, w); !strings.Contains(n, "exclude .todo-list/**") || !strings.Contains(n, "graph-only") {
@@ -87,6 +88,7 @@ func TestATodoStoreExcludedIsSaidAndOffered(t *testing.T) {
 // A save sends only what differs from the workspace as the dialog opened on it: nothing, for a
 // form left as it was; the file types and text types folded into one change of the rules.
 func TestSettingsChanges(t *testing.T) {
+	t.Parallel()
 	pg := kbInfo()
 	pg.db = databasesInfo{destination: store.DestinationPostgres, vectorIndex: store.IndexHNSW,
 		destConn: &connInfo{engine: "postgres", host: "db", database: "rag", schema: "autodoc", hasPassword: true},
@@ -143,6 +145,7 @@ func TestSettingsChanges(t *testing.T) {
 
 // What a save refuses before it is sent, with a reason a user can act on.
 func TestSettingsChangesRefused(t *testing.T) {
+	t.Parallel()
 	pg := kbInfo()
 	pg.db = databasesInfo{destination: store.DestinationPostgres, source: &connInfo{engine: "postgres", host: "src"}}
 	for name, tc := range map[string]struct {
@@ -169,6 +172,7 @@ func TestSettingsChangesRefused(t *testing.T) {
 // A workspace whose own provider is gone from the stored ones keeps it through a save of
 // something else.
 func TestAGoneProviderIsKeptBySaves(t *testing.T) {
+	t.Parallel()
 	w := kbInfo()
 	w.provider = "retired"
 	b := settingsBase{w: w, providers: withOwnProvider([]string{"", "local"}, w.provider)}
@@ -181,6 +185,7 @@ func TestAGoneProviderIsKeptBySaves(t *testing.T) {
 
 // Without the database features nothing about them is sent, whatever the form holds.
 func TestSettingsChangesWithoutDatabases(t *testing.T) {
+	t.Parallel()
 	b := baseFor(kbInfo())
 	b.databases = false
 	f := b.form()
@@ -196,6 +201,7 @@ func TestSettingsChangesWithoutDatabases(t *testing.T) {
 // Save is pressed in the dialog, and the store holds each one where it belongs. A field read into
 // another's place would show as a value stored in the wrong setting, or refused.
 func TestTheSettingsDialogSavesEveryField(t *testing.T) {
+	t.Parallel()
 	root := fileDir(t, "a.md", "# A\n")
 	schema := filepath.Join(t.TempDir(), "s.yaml") // outside the root, which indexes YAML
 	if err := os.WriteFile(schema, []byte(tuiSchema), 0o600); err != nil {
@@ -266,6 +272,7 @@ func TestTheSettingsDialogSavesEveryField(t *testing.T) {
 // on, the reason on its help line: a section out of range is refused before it is sent, and a
 // root gone from disk by the daemon, the text types with the rules (one save, not two).
 func TestARefusedSaveChangesNothing(t *testing.T) {
+	t.Parallel()
 	root := fileDir(t, "n.md", "# Notes\n")
 	d := startManaged(t, map[string]string{"kb": root})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
@@ -293,6 +300,7 @@ func TestARefusedSaveChangesNothing(t *testing.T) {
 // The Edit tab's schema: the state line says there is none and suggests a path; a schema saved
 // is active, and a broken one is reported with its line when the dialog opens again.
 func TestTheSettingsSchema(t *testing.T) {
+	t.Parallel()
 	root := fileDir(t, "a.md", "---\ntype: adr\n---\nalpha\n")
 	d := startManaged(t, map[string]string{"kb": root})
 	writeSchema(t, root)
@@ -325,6 +333,7 @@ func TestTheSettingsSchema(t *testing.T) {
 // Your own text types: declared and admitted in one save, refused for a derived format with the
 // format named, and their include dropped when removed.
 func TestTheSettingsTextTypes(t *testing.T) {
+	t.Parallel()
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", "# Notes\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
@@ -349,6 +358,7 @@ func TestTheSettingsTextTypes(t *testing.T) {
 // Advanced's provider: the daemon's first, then the stored providers; one that does not set up is
 // refused with the reason, and the workspace keeps the daemon's.
 func TestTheSettingsProvider(t *testing.T) {
+	t.Parallel()
 	ollama := newFakeOllama(t, "embedder")
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n\nalpha\n")})
 	ctx := context.Background()
@@ -384,6 +394,7 @@ func TestTheSettingsProvider(t *testing.T) {
 // Opened again at once after a save, while the save's relisting is held back, the dialog shows
 // what was saved: it reads the workspace from the daemon, not from the last listing.
 func TestTheSettingsReopenedAtOnceShowTheSave(t *testing.T) {
+	t.Parallel()
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
 	var holding atomic.Bool
 	release := make(chan struct{})
@@ -431,6 +442,7 @@ func heldFirstList(t *testing.T) (r *running, arm func(), held func() bool, rele
 // Edit… asked for, then Advanced… while Edit's read is held: the late Edit never takes the dialog
 // back to its tab.
 func TestALateSettingsOpenNeverReplacesALaterOne(t *testing.T) {
+	t.Parallel()
 	r, arm, held, release := heldFirstList(t)
 	arm()
 	r.h.p.Post(func() { r.h.startEditWorkspace(0) }) // its read is held
@@ -448,6 +460,7 @@ func TestALateSettingsOpenNeverReplacesALaterOne(t *testing.T) {
 // A dialog opened at once after a pending Edit… stays: Delete… is not replaced when the read
 // answers late.
 func TestALateSettingsOpenNeverReplacesALaterSyncDialog(t *testing.T) {
+	t.Parallel()
 	r, arm, held, release := heldFirstList(t)
 	arm()
 	r.h.p.Post(func() { r.h.startEditWorkspace(0) })
@@ -464,6 +477,7 @@ func TestALateSettingsOpenNeverReplacesALaterSyncDialog(t *testing.T) {
 
 // Closing the manager while Edit… reads leaves nothing to open over the page.
 func TestALateSettingsOpenNeverOpensAfterTheManagerCloses(t *testing.T) {
+	t.Parallel()
 	r, arm, held, release := heldFirstList(t)
 	arm()
 	r.h.p.Post(func() { r.h.startEditWorkspace(0) })
@@ -480,6 +494,7 @@ func TestALateSettingsOpenNeverOpensAfterTheManagerCloses(t *testing.T) {
 // Options › Preferences › File types… opens the workspace in use on its Edit tab, with the file
 // types and the document formats this backend does not read (a daemon with no derivers here).
 func TestFileTypesOpenTheEditTab(t *testing.T) {
+	t.Parallel()
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "a\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
@@ -494,6 +509,7 @@ func TestFileTypesOpenTheEditTab(t *testing.T) {
 // The manager lists each workspace by title and directory, and beside the list the settings of the
 // one under the cursor, moving with it.
 func TestTheManagerShowsTheSettingsBesideTheList(t *testing.T) {
+	t.Parallel()
 	d := startManaged(t, map[string]string{"alpha": fileDir(t, "a.md", "a\n"), "beta": fileDir(t, "b.md", "b\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{Workspace: "alpha"})
 	r.waitAttached(t, "alpha")
@@ -508,6 +524,7 @@ func TestTheManagerShowsTheSettingsBesideTheList(t *testing.T) {
 // Opened on Advanced, cancelled, then opened on Edit: the dialog is closed when its tab is chosen,
 // and opens on Edit (a tab chosen while the dialog was closed once took the program down).
 func TestTheSettingsOpenOnTheTabAskedForAfterACancel(t *testing.T) {
+	t.Parallel()
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
@@ -526,6 +543,7 @@ func TestTheSettingsOpenOnTheTabAskedForAfterACancel(t *testing.T) {
 
 // The manager's pane lists the database settings only where the edition offers them.
 func TestTheManagerDetail(t *testing.T) {
+	t.Parallel()
 	w := kbInfo()
 	w.db = databasesInfo{destination: store.DestinationPostgres, vectorIndex: store.IndexHNSW,
 		destConn: &connInfo{engine: "postgres", host: "db:5432", database: "rag", user: "me", hasPassword: true},
@@ -548,6 +566,7 @@ func TestTheManagerDetail(t *testing.T) {
 // new name: the list holds it at once (a delete asked for by the old name was refused as no such
 // workspace).
 func TestARenameIsInTheListBeforeTheRelisting(t *testing.T) {
+	t.Parallel()
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
 	var holding atomic.Bool
 	release := make(chan struct{})
@@ -580,6 +599,7 @@ func TestARenameIsInTheListBeforeTheRelisting(t *testing.T) {
 // in flight, whose answer, the failure, is then rightly dropped as stale. Both can come after
 // "· kb" is on the status line.
 func TestRelationsOfAWorkspaceGoneSaySo(t *testing.T) {
+	t.Parallel()
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
@@ -592,6 +612,7 @@ func TestRelationsOfAWorkspaceGoneSaySo(t *testing.T) {
 
 // Find › Find previous (its command, as the menu runs it) with nothing found yet says so.
 func TestFindPreviousWithNothingToFind(t *testing.T) {
+	t.Parallel()
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
@@ -605,6 +626,7 @@ func TestFindPreviousWithNothingToFind(t *testing.T) {
 
 // Zoom in and Zoom out with no image preview open (their buttons are a preview's) change nothing.
 func TestZoomWithNoImagePreviewDoesNothing(t *testing.T) {
+	t.Parallel()
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
@@ -629,6 +651,7 @@ func TestZoomWithNoImagePreviewDoesNothing(t *testing.T) {
 // the other text types and keeping .html's include, since HTML is still indexed, as a document
 // (docs/decisions/search.md#stored-html-text-types).
 func TestAStoredHTMLTextTypeDoesNotBlockASave(t *testing.T) {
+	t.Parallel()
 	w := kbInfo()
 	w.textExtensions = []string{".html", ".log"}
 	w.include = append(w.include, "**/*.html", "**/*.log")
@@ -654,6 +677,7 @@ func TestAStoredHTMLTextTypeDoesNotBlockASave(t *testing.T) {
 // The Documents row: the formats the daemon derives, turned on by an include alone (no code
 // excludes), off by dropping it; one the daemon does not read is refused, naming what it reads.
 func TestTheSettingsDocumentTypes(t *testing.T) {
+	t.Parallel()
 	b := baseFor(kbInfo())
 	b.derived = []string{".docx", ".htm", ".html"}
 	f := b.form()
@@ -690,6 +714,7 @@ func TestTheSettingsDocumentTypes(t *testing.T) {
 // patterns that keep the todo store out out of the exclude field, keeps the others, and says so on
 // the help line; nothing is saved.
 func TestTheTodoGraphOnlyButtonEditsTheExcludeField(t *testing.T) {
+	t.Parallel()
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 100, 60) // the stacked Edit tab whole
 	r.waitAttached(t, "kb")
@@ -713,6 +738,7 @@ func TestTheTodoGraphOnlyButtonEditsTheExcludeField(t *testing.T) {
 // A workspace whose root holds AutoDoc's own folders, or lies inside one, is badged in the
 // manager's list, and its pane names the folders and the fix.
 func TestTheManagerBadgesARootHoldingAutoDocsFolders(t *testing.T) {
+	t.Parallel()
 	w := kbInfo()
 	if row := managedRowOf(0, w); strings.Contains(fmt.Sprint(row["name"]), "⚠") {
 		t.Fatalf("a root touching none of them is badged: %v", row)

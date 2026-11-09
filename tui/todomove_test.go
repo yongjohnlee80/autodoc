@@ -62,6 +62,7 @@ func waitNoticed(t *testing.T, r *running, text string) {
 // takes the new path and the moved file's text, clean, as one undo step, with the cursor where it
 // was, and no buffer is left on the old path. A save then writes the new path, never the old one.
 func TestAnOpenTaskFollowsItsStatusMove(t *testing.T) {
+	t.Parallel()
 	r, root, m, task := onTodoDisk(t)
 	from, to := ".todo-list/"+task.Path, ".todo-list/completed/"+task.ID+".md"
 	// the cursor on a line of the body, below the frontmatter the move rewrites
@@ -109,6 +110,7 @@ func TestAnOpenTaskFollowsItsStatusMove(t *testing.T) {
 // kept and badged changed on disk; its save asks rather than writing over the moved file, and
 // nothing is written in the old folder.
 func TestAModifiedTaskFollowsItsMoveAndAsks(t *testing.T) {
+	t.Parallel()
 	r, root, m, task := onTodoDisk(t)
 	from, to := ".todo-list/"+task.Path, ".todo-list/deferred/"+task.ID+".md"
 	r.typeInEditor(t, "X")
@@ -134,6 +136,7 @@ func TestAModifiedTaskFollowsItsMoveAndAsks(t *testing.T) {
 // TestAFileThatIsNoTaskIsStillDeleted: a Markdown file deleted on disk that no store holds is badged
 // deleted, as before: following a move is for a store's tasks alone.
 func TestAFileThatIsNoTaskIsStillDeleted(t *testing.T) {
+	t.Parallel()
 	r, root, _, _ := onTodoDisk(t)
 	r.openOnDisk(t, "a.md")
 	if err := os.Remove(filepath.Join(root, "a.md")); err != nil {
@@ -149,6 +152,7 @@ func TestAFileThatIsNoTaskIsStillDeleted(t *testing.T) {
 // daemon away, say) is found by the check every open buffer gets on a new connection, which would
 // otherwise close a clean buffer whose file is gone: the buffer follows the task instead.
 func TestATaskMovedWhileUnwatchedIsFollowedOnANewConnection(t *testing.T) {
+	t.Parallel()
 	r, _, m, task := onTodoDisk(t)
 	to := ".todo-list/completed/" + task.ID + ".md"
 	onLoop(r, func() bool { r.h.unwatchFile(r.h.active); return true }) // no event will say it moved
@@ -166,6 +170,7 @@ func TestATaskMovedWhileUnwatchedIsFollowedOnANewConnection(t *testing.T) {
 // TestARemovedTasksCleanBufferCloses: another client removes the open task; its buffer, with no
 // unsaved edits, closes rather than staying badged deleted, a save away from writing the task back.
 func TestARemovedTasksCleanBufferCloses(t *testing.T) {
+	t.Parallel()
 	r, root, m, task := onTodoDisk(t)
 	from := ".todo-list/" + task.Path
 	if err := m.Remove(context.Background(), alphaTodos, task.ID, task.Rev); err != nil {
@@ -185,6 +190,7 @@ func TestARemovedTasksCleanBufferCloses(t *testing.T) {
 // refused, and nothing is written: the task never comes back from a buffer. A later check of the
 // buffer says nothing more.
 func TestARemovedTasksModifiedBufferKeepsItsEditsAndRefusesItsSave(t *testing.T) {
+	t.Parallel()
 	r, root, m, task := onTodoDisk(t)
 	from := ".todo-list/" + task.Path
 	r.typeInEditor(t, "X")
@@ -217,6 +223,7 @@ func TestARemovedTasksModifiedBufferKeepsItsEditsAndRefusesItsSave(t *testing.T)
 // TestAHandMovedTaskIsFollowedByItsID: a task's file moved by hand (no change the window read
 // names it) is found by its id: the buffer follows it.
 func TestAHandMovedTaskIsFollowedByItsID(t *testing.T) {
+	t.Parallel()
 	r, root, _, task := onTodoDisk(t)
 	from, to := ".todo-list/"+task.Path, ".todo-list/deferred/"+task.ID+".md"
 	if err := os.MkdirAll(filepath.Join(root, ".todo-list", "deferred"), 0o755); err != nil {
@@ -235,6 +242,7 @@ func TestAHandMovedTaskIsFollowedByItsID(t *testing.T) {
 // TestAMoveTheFeedReadIsFollowedWithoutTheDiskWatch: the todo feed's move of a file asks for a check
 // of the buffer on it at once, the disk watch silent, and names where it went.
 func TestAMoveTheFeedReadIsFollowedWithoutTheDiskWatch(t *testing.T) {
+	t.Parallel()
 	r, root, m, task := onTodoDisk(t)
 	to := ".todo-list/completed/" + task.ID + ".md"
 	onLoop(r, func() bool { r.h.unwatchFile(r.h.active); return true }) // no event will say it moved
@@ -255,6 +263,7 @@ func TestAMoveTheFeedReadIsFollowedWithoutTheDiskWatch(t *testing.T) {
 // (an unrelated document at deferred/<id>.md): the buffer follows its own store's move, never the
 // other's (the mutant: the hint matched by its relative path alone).
 func TestAnotherStoresMoveIsNotFollowed(t *testing.T) {
+	t.Parallel()
 	r, root, m, task := onTodoDisk(t)
 	from, to := ".todo-list/"+task.Path, ".todo-list/completed/"+task.ID+".md"
 	onLoop(r, func() bool { r.h.unwatchFile(r.h.active); return true }) // the feed alone says it moved
@@ -284,6 +293,7 @@ func TestAnotherStoresMoveIsNotFollowed(t *testing.T) {
 // same task's, by its own id: one naming another task's file (a stale hint) is passed over, and the
 // task is found by its id (the mutant: any readable file the hint names followed).
 func TestAMoveToAnotherTasksFileIsNotFollowed(t *testing.T) {
+	t.Parallel()
 	r, root, m, task := onTodoDisk(t)
 	from, to := ".todo-list/"+task.Path, ".todo-list/completed/"+task.ID+".md"
 	ctx := context.Background()

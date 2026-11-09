@@ -131,6 +131,7 @@ const rightCard = "[dialog]\nmodal = false\nwidth = 36\nheight = 8\nplacements =
 // Protocol 6 delivers left presses and wheel movement to a card, while the right press remains
 // the host's context menu. Earlier card protocols keep their old mouse behavior.
 func TestACardReceivesItsPointerAtProtocolSix(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "echo", rightCard)
 	path := filepath.Join(dir, "card", "plugin.toml")
@@ -160,6 +161,7 @@ func TestACardReceivesItsPointerAtProtocolSix(t *testing.T) {
 
 // An actual modal dialog has the same protocol-6 pointer path as a docked card.
 func TestAModalPluginReceivesItsPointerAtProtocolSix(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "echo", "[dialog]\nwidth = 36\nheight = 8\n")
 	path := filepath.Join(dir, "card", "plugin.toml")
@@ -183,6 +185,7 @@ func TestAModalPluginReceivesItsPointerAtProtocolSix(t *testing.T) {
 // A protocol-5 card still takes focus from a click but never receives plugin.pointer. The key is
 // an ordered witness: a pointer delivered before it would already be in the plugin's log.
 func TestAProtocolFiveCardReceivesNoPointer(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "echo", rightCard)
 	path := filepath.Join(dir, "card", "plugin.toml")
@@ -209,6 +212,7 @@ func TestAProtocolFiveCardReceivesNoPointer(t *testing.T) {
 // Inspect the host's outbound queue before the SDK can discard an unsupported notification.
 // A protocol-5 plugin must not be sent plugin.pointer at all, even if its SDK ignores it.
 func TestAProtocolFiveViewQueuesNoPointer(t *testing.T) {
+	t.Parallel()
 	run := &pluginRun{e: pluginEntry{m: manifest{Protocol: 5}}}
 	view := &pluginView{run: run, laidW: 20, laidH: 8}
 	for _, ev := range []tuicore.MouseEvent{
@@ -228,6 +232,7 @@ func TestAProtocolFiveViewQueuesNoPointer(t *testing.T) {
 // opens docked at the right edge, in a panel and not a float, about as wide as its manifest's width,
 // and leaves the keys with the editor; Manage › Place moves it to the left, docked there.
 func TestACardOpensAsADockedPanelAtItsFirstPlacement(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "echo", rightCard)
 	d, r, logs := cardTUI(t, dir, nil)
@@ -261,6 +266,7 @@ func TestACardOpensAsADockedPanelAtItsFirstPlacement(t *testing.T) {
 // Esc hides a focused card and tells the user how to reopen it. Its SPC p toggle shows the same
 // running plugin again and gives the card the keys.
 func TestEscHidesACardAndTheLeaderReopensIt(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "echo", rightCard+"[[commands]]\nid = \"toggle\"\ntitle = \"Show or hide the card\"\nkey = \"o\"\n")
 	_, r, logs := cardTUI(t, dir, nil)
@@ -306,6 +312,7 @@ func TestEscHidesACardAndTheLeaderReopensIt(t *testing.T) {
 // TestQTypedIntoACardIsThePlugins: AutoDoc never takes q from a focused card: a plugin typing into
 // a field of its own is sent it, and its panel stays open.
 func TestQTypedIntoACardIsThePlugins(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "typist", rightCard)
 	_, r, logs := cardTUI(t, dir, nil)
@@ -326,6 +333,7 @@ func TestQTypedIntoACardIsThePlugins(t *testing.T) {
 // TestHostCloseFromACardHidesItsPanel: a card's host.close (the test plugin's on q) closes its
 // panel as Esc does: the plugin is told plugin.hide and runs on, and its menu entry shows it again.
 func TestHostCloseFromACardHidesItsPanel(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "echo", rightCard)
 	_, r, logs := cardTUI(t, dir, nil)
@@ -355,6 +363,7 @@ func TestHostCloseFromACardHidesItsPanel(t *testing.T) {
 // TestACardsRightClickMenuClosesIt: a right press on a card opens its menu; Close (Esc) closes the
 // panel as Esc does, the plugin running on.
 func TestACardsRightClickMenuClosesIt(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "echo", rightCard)
 	_, r, logs := cardTUI(t, dir, nil)
@@ -378,6 +387,7 @@ func TestACardsRightClickMenuClosesIt(t *testing.T) {
 // keeps the rectangle under the panel's id, the panel opens there again after Esc hid it, and a TUI
 // started on the store opens it there.
 func TestACardPanelMovesAndResizesAndKeepsThem(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "echo", rightCard)
 	d, r, logs := cardTUI(t, dir, nil)
@@ -442,6 +452,7 @@ func TestACardPanelMovesAndResizesAndKeepsThem(t *testing.T) {
 // sends open together, the card docked at the right edge and the results along the bottom, each in
 // its own panel, both on the screen.
 func TestACardOnTheRightAndTheResultsAtTheBottom(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin4(t, dir, "db", "dialog", "table", rightCard+tableManifest)
 	_, r, _ := cardTUI(t, dir, nil)
@@ -472,6 +483,7 @@ func TestACardOnTheRightAndTheResultsAtTheBottom(t *testing.T) {
 // TestAModalDialogIsAFloatAsItWas: a modal dialog plugin is not a panel: it opens in a float of its
 // own, its title saying what Esc does, and Esc closes it and stops its plugin.
 func TestAModalDialogIsAFloatAsItWas(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "game", "echo", 30, 6)
 	_, r, _ := cardTUI(t, dir, nil)
@@ -492,6 +504,7 @@ func TestAModalDialogIsAFloatAsItWas(t *testing.T) {
 // reaches that panel, names it by the plugin's title, moves it by its keys, and keeps where Enter
 // leaves it under the panel's id.
 func TestArrangingACardPanelNamesItAndMovesIt(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "echo", rightCard)
 	d, r, _ := cardTUI(t, dir, nil)
@@ -520,6 +533,7 @@ func TestArrangingACardPanelNamesItAndMovesIt(t *testing.T) {
 // being open); nothing panics, nothing is reported, and no preference is kept for the panel that
 // is gone.
 func TestArrangeEndsCleanlyWhenItsCardIsRemoved(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "echo", rightCard)
 	d, r, _ := liveCardTUI(t, dir, nil, false)
@@ -583,6 +597,7 @@ func (s *cellsDrawn) SetCell(x, y int, g string, _ style.Style) { s.cells = appe
 // runs draws its frame only within the view, leaves key releases and keys it cannot name alone, and
 // sends no resize for a size the plugin already has.
 func TestACardViewBetweenRunsDrawsNothingAndTakesNothing(t *testing.T) {
+	t.Parallel()
 	v := &pluginView{card: "card"}
 	s := &cellsDrawn{w: 4, h: 1}
 	v.Render(s)
@@ -623,6 +638,7 @@ func TestACardViewBetweenRunsDrawsNothingAndTakesNothing(t *testing.T) {
 // hide is a minimize, the panel still open, and a command that brings the card up restores it, as
 // the dock's own icon does. The toggle does not close a card the dock hid.
 func TestACardTheDockHidComesBackForItsCommands(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "echo", rightCard+"[[commands]]\nid = \"toggle\"\ntitle = \"Show or hide the card\"\nkey = \"o\"\n"+
 		"[[commands]]\nid = \"again\"\ntitle = \"Run again\"\nkey = \"a\"\n")
@@ -679,6 +695,7 @@ func (r *running) pluginRowLabel(name string) (string, bool) {
 // comes forward, as a window that opens does), and the terminal closed, the card is on the screen,
 // the keyboard in it; not on the page, which would have come over the card.
 func TestTheTerminalClosedGivesTheKeyboardToTheTopmostWindowStillOpen(t *testing.T) {
+	t.Parallel()
 	tuneEnv(t, "SHELL=/bin/sh", "HOME="+t.TempDir(), "PS1=$ ")
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "echo", rightCard)

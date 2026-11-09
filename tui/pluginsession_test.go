@@ -95,6 +95,7 @@ func noLeak(t *testing.T, r *running, logs string, values ...string) {
 // hides it and shows it again, the same run all along and its slot unchanged; Turn off stops it
 // with reason off, and its next start is handed the slot.
 func TestTheToggleHidesACardSignedIn(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin7(t, dir, "card", "dialog", "session", rightCard+
 		"[[commands]]\nid = \"toggle\"\ntitle = \"Show the card\"\nkey = \"s\"\n"+sessionCommands)
@@ -139,6 +140,7 @@ func TestTheToggleHidesACardSignedIn(t *testing.T) {
 // why without a value; a protocol-6 plugin's host.session is refused, and its plugin.open carries
 // no slot.
 func TestTheSlotOutlivesARunNotItsPlugin(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin7(t, dir, "svc", "service", "session", sessionCommands+"[[commands]]\nid = \"big\"\ntitle = \"Big\"\n")
 	raw := "[[commands]]\nid = \"session\"\ntitle = \"Session\"\n[[commands]]\nid = \"bigsession\"\ntitle = \"Big\"\n" +
@@ -203,6 +205,7 @@ func TestTheSlotOutlivesARunNotItsPlugin(t *testing.T) {
 // plugin's CloseReason; a second stop keeps the first's reason. An update's old run cannot write
 // the slot after its stop began.
 func TestAPluginIsToldWhyItCloses(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin7(t, dir, "off", "service", "session", sessionCommands)
 	installPlugin7(t, dir, "gone", "service", "session", sessionCommands)
@@ -297,6 +300,7 @@ func commitSessionPlugin(t *testing.T, repo, title string) {
 // a removal none brings the slot back, and a reinstall starts with none. The posted acceptSession
 // is called in the order the cell sets: the old run's write held past its replacement.
 func TestTheSlotIsFencedToTheLiveRun(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin7(t, dir, "svc", "service", "session", sessionCommands)
 	r, logs := pluginTUI(t, dir)
@@ -337,6 +341,7 @@ func TestTheSlotIsFencedToTheLiveRun(t *testing.T) {
 // drops every slot; meanwhile a plugin writes its slot as fast as it can, turned off and started
 // again, under -race.
 func TestQuitClearsTheSlotsOfEveryRun(t *testing.T) {
+	t.Parallel()
 	shorten(t, 20*time.Second, 300*time.Millisecond, 300*time.Millisecond)
 	dir := t.TempDir()
 	installPlugin7(t, dir, "coop", "service", "session", sessionCommands)
@@ -395,6 +400,7 @@ func runInsert(name, body string) string {
 // package's; an undeclared id is unknown; a user's script or package is refused; args to a
 // protocol-6 plugin need protocol 7.
 func TestAPluginsPackageRunsItsOwnPluginOnly(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin7(t, dir, "own", "service", "session", sessionCommands)
 	installPackage(t, dir, "own", "", `autodoc.plugin.run("echo", "a", "b")
@@ -443,6 +449,7 @@ func TestAPluginsPackageRunsItsOwnPluginOnly(t *testing.T) {
 // asked naming the plugin, and until granted a gated call answers "needs …: not granted"; the grant
 // is the plugin's script's.
 func TestAPluginsPackageIsGated(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin7(t, dir, "gated", "service", "session", sessionCommands)
 	installPackage(t, dir, "gated", `"workspace.read"`, runInsert("gated-read",
@@ -467,6 +474,7 @@ func TestAPluginsPackageIsGated(t *testing.T) {
 // command reaches the plugin; no grant asked); a broken user package still reserves the name; with
 // the user's gone, the plugin's loads; and the plugin removed, its package's commands go with it.
 func TestAUsersPackageReservesItsName(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin7(t, dir, "res", "service", "session", sessionCommands)
 	installPackage(t, dir, "res", `"workspace.read"`, `autodoc.plugin.run("echo", "sentinel")
@@ -525,6 +533,7 @@ autodoc.command{ name = "plugin-res", run = function(ed) ed:insert("the plugin's
 // absolute path, as File › Open any file does, and refuses a relative one; plugins.update from a
 // plugin may name only itself (a plugin put in the folder by hand is then told to update it there).
 func TestAPluginOpensAPathAndUpdatesItself(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin7(t, dir, "opener", "service", "rawcalls",
 		"calls = [\"file.open_path\", \"plugins.update\"]\n[[commands]]\nid = \"callwith\"\ntitle = \"Call\"\n[[commands]]\nid = \"ping\"\ntitle = \"Ping\"\n")
@@ -560,6 +569,7 @@ func TestAPluginOpensAPathAndUpdatesItself(t *testing.T) {
 // is said and loads nothing; one whose init fails is said, and its identity is not kept, so
 // autodoc.plugin.run from what it registered before failing is refused.
 func TestABrokenPluginPackageIsSaidAndNotRecorded(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	for _, name := range []string{"bare", "misnamed", "badtoml", "noinit", "fails"} {
 		installPlugin7(t, dir, name, "service", "session", sessionCommands)
@@ -599,6 +609,7 @@ func TestABrokenPluginPackageIsSaidAndNotRecorded(t *testing.T) {
 // A run's shutdown is safe from any goroutine, beside the loop's stop transition: the reason it
 // sends is read under the run's lock, never raced (run under -race to observe it).
 func TestAShutdownBesideTheStopTransitionDoesNotRace(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin7(t, dir, "both", "service", "session", sessionCommands)
 	r, logs := pluginTUI(t, dir)

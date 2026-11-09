@@ -13,6 +13,7 @@ import (
 // it closes, and a file kept as the draft when its workspace goes. The document is the page shown,
 // never the snapshot read on the way to it.
 func TestEveryPageShownRaisesTheFeedsVersionOnce(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "stats", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 60\nheight = 6\n[feed]\ndocument = true\n")
 	const delay = time.Second
@@ -47,6 +48,7 @@ func TestEveryPageShownRaisesTheFeedsVersionOnce(t *testing.T) {
 
 // A plugin started mid-typing, before the pause, is sent the text as it is, with its version.
 func TestAPluginStartedMidTypingHasTheTextAsItIs(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "stats", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 60\nheight = 6\n[feed]\ndocument = true\n")
 	r, logs := pluginTUI(t, dir)
@@ -64,6 +66,7 @@ func TestAPluginStartedMidTypingHasTheTextAsItIs(t *testing.T) {
 
 // pluginHost's catalog and preference services take the plugins' own and refuse anything else.
 func TestThePluginHostRefusesWhatIsNotThePlugins(t *testing.T) {
+	t.Parallel()
 	r := runTUI(t, NewSession("unused", nil), Options{})
 	onLoop(r, func() bool {
 		c := core{r.h}
@@ -109,6 +112,7 @@ func (s *stopsAndThemes) Stopped()      { s.stops++ }
 func (s *stopsAndThemes) ThemeChanged() { s.themes++ }
 
 func TestTheRegistryTellsStopsAndThemes(t *testing.T) {
+	t.Parallel()
 	f := &stopsAndThemes{fake: fake{name: "f"}}
 	r, err := newRegistry(f)
 	if err != nil {

@@ -117,6 +117,7 @@ func f10() tuicore.Event { return tuicore.KeyEvent{Kind: tuicore.KeyPress, Code:
 // TestTheScreenIsThePageAlone: by default, nothing but the page: no menu bar until F10 brings it
 // up, no status line; Escape puts the menu bar away again.
 func TestTheScreenIsThePageAlone(t *testing.T) {
+	t.Parallel()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{"tui.toast.seconds": "1"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
@@ -141,6 +142,7 @@ func TestTheScreenIsThePageAlone(t *testing.T) {
 }
 
 func TestLeaderMenuToggleFocusesOnlyWhenShown(t *testing.T) {
+	t.Parallel()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
@@ -162,6 +164,7 @@ func TestLeaderMenuToggleFocusesOnlyWhenShown(t *testing.T) {
 // as a fast hand does), opens the File menu on the bar SPC m showed, and the Enter never reaches the
 // page: the bar takes the keyboard before any key after it is read.
 func TestSPCmEnterTypedAtOnceOpensTheMenu(t *testing.T) {
+	t.Parallel()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "aaa\n"}}, daemonOpts{prefs: map[string]string{}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -180,6 +183,7 @@ func TestSPCmEnterTypedAtOnceOpensTheMenu(t *testing.T) {
 // took every click, the menu bar's among them; golib's
 // hit-testing now lets the pointer through a non-modal float wherever its content is not.
 func TestAMenuTitleIsClickedUnderTheToasts(t *testing.T) {
+	t.Parallel()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}},
 		daemonOpts{prefs: map[string]string{"tui.menu.autohide": "false", "tui.status.shown": "true"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
@@ -195,6 +199,7 @@ func TestAMenuTitleIsClickedUnderTheToasts(t *testing.T) {
 // TestAToastClickedOpensTheNotificationsHistory: a click on a toast's card opens the history of the
 // notifications, where it and the ones before it are kept.
 func TestAToastClickedOpensTheNotificationsHistory(t *testing.T) {
+	t.Parallel()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{"tui.toast.seconds": "10"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.connected(t)
@@ -213,6 +218,7 @@ func TestAToastClickedOpensTheNotificationsHistory(t *testing.T) {
 // TestTheStatusLineShowsWhileDisconnected: the status line hidden by preference still shows while
 // the TUI is not connected, so a lost connection is never silent.
 func TestTheStatusLineShowsWhileDisconnected(t *testing.T) {
+	t.Parallel()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
@@ -237,6 +243,7 @@ func col(line, sub string) int {
 // centred; its right edge is the column past the ruler's; a line scrolled past it still shows the
 // guide.
 func TestThePageIsCentredAtTheRuler(t *testing.T) {
+	t.Parallel()
 	long := strings.Repeat("x", 80)
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "short\n" + long + "\n"}},
 		daemonOpts{prefs: map[string]string{"tui.ruler": "60", "tui.editor.wrap": "false"}}) // scrolled, not wrapped
@@ -279,6 +286,7 @@ func TestThePageIsCentredAtTheRuler(t *testing.T) {
 // closes it, and the page is back. A side panel takes the middle 85% of the rows, one at the top or
 // bottom the middle 80% of the columns: the page shows around it.
 func TestThePanelsAreDrawersOverAStillPage(t *testing.T) {
+	t.Parallel()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "still text\n", "b.md", "see [[a]]\n"}},
 		daemonOpts{prefs: map[string]string{"tui.status.shown": "true", "tui.explorer.edge": "right"}})
 	r := attached(t, d)
@@ -348,6 +356,7 @@ func TestThePanelsAreDrawersOverAStillPage(t *testing.T) {
 // opens to its folders then its files, a folder to its own; Enter on a file opens it, entering
 // its workspace when it is another, and closes the explorer.
 func TestTheExplorerIsATreeOfEveryWorkspace(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{
 		"alpha": {"a.md", "# A\n", "dir/b.md", "# B\n"},
 		"beta":  {"c.md", "# C\n"},
@@ -383,6 +392,7 @@ func TestTheExplorerIsATreeOfEveryWorkspace(t *testing.T) {
 // TestPanesMoveInNormalModeOnly: Ctrl+h/j/k/l move between the page and the panel open at that
 // edge, in Normal mode; in Insert mode they are the editor's, and the keyboard stays.
 func TestPanesMoveInNormalModeOnly(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -417,6 +427,7 @@ func TestPanesMoveInNormalModeOnly(t *testing.T) {
 // TestPreferencesAreKept: a preference changed is in the daemon's store at once, and a TUI
 // started later reads it; the page's width takes a number of columns in its range.
 func TestPreferencesAreKept(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.leader(t, 't') // the status line, shown by the tests' preferences: hidden
@@ -452,6 +463,7 @@ func TestPreferencesAreKept(t *testing.T) {
 // TestPreferencesAreStoredInTheOrderTheyChanged: a preference changed twice in a row is stored as
 // the second change, however long the first one's write takes to reach the daemon.
 func TestPreferencesAreStoredInTheOrderTheyChanged(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	var holding atomic.Bool
 	var answered atomic.Int32
@@ -504,6 +516,7 @@ func TestPreferencesAreStoredInTheOrderTheyChanged(t *testing.T) {
 // TestTheSearchMarksItsWordsWhereTheyAre: the preview marks each of the search's words, case
 // aside, over exactly its bytes, however lower-casing changes the line's length before it.
 func TestTheSearchMarksItsWordsWhereTheyAre(t *testing.T) {
+	t.Parallel()
 	h := newHost(NewSession("unused", nil), Options{})
 	hl := h.searchHighlighter()
 	marked := func(line string) []string {
@@ -539,6 +552,7 @@ func TestTheSearchMarksItsWordsWhereTheyAre(t *testing.T) {
 // writes it; the context window starts at the default and takes a number; Save keeps the
 // provider, its key sealed and never on screen.
 func TestTheProviderForm(t *testing.T) {
+	t.Parallel()
 	var mu sync.Mutex
 	var auth []string
 	ollama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -648,6 +662,7 @@ func TestTheProviderForm(t *testing.T) {
 // A provider coming into use is a new embedding model: the picker's query and hits answered by
 // words alone are cleared, the field emptied, and the clearing said, so the search starts afresh.
 func TestAModelChangeClearsTheSearch(t *testing.T) {
+	t.Parallel()
 	o := newFakeOllama(t, "embedder")
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
@@ -673,6 +688,7 @@ func TestAModelChangeClearsTheSearch(t *testing.T) {
 }
 
 func TestPartialEmbeddingExplainsEmptyHitsUntilSearchRefreshes(t *testing.T) {
+	t.Parallel()
 	o := newFakeOllama(t, "embedder")
 	release := o.hold()
 	defer release()
@@ -706,6 +722,7 @@ func TestPartialEmbeddingExplainsEmptyHitsUntilSearchRefreshes(t *testing.T) {
 }
 
 func TestClearingAndClosingAWaitingSearchCancelsItsRequest(t *testing.T) {
+	t.Parallel()
 	o := newFakeOllama(t, "embedder")
 	release := o.hold()
 	defer release()
@@ -741,6 +758,7 @@ func TestClearingAndClosingAWaitingSearchCancelsItsRequest(t *testing.T) {
 }
 
 func TestSemanticQueryErrorNotifiesOfWordsOnlyFallback(t *testing.T) {
+	t.Parallel()
 	o := newFakeOllama(t, "embedder")
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
 	if _, err := d.db.AddProvider(context.Background(), store.ProviderSpec{Name: "local", Kind: store.KindOllama, BaseURL: o.URL, Model: "embedder"}); err != nil {
@@ -772,6 +790,7 @@ func TestSemanticQueryErrorNotifiesOfWordsOnlyFallback(t *testing.T) {
 }
 
 func TestModelSwitchExplainsTemporaryWordsOnlyAndClearsSearch(t *testing.T) {
+	t.Parallel()
 	o := newFakeOllama(t, "first", "second")
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
 	for _, model := range []string{"first", "second"} {
@@ -808,6 +827,7 @@ func TestModelSwitchExplainsTemporaryWordsOnlyAndClearsSearch(t *testing.T) {
 }
 
 func TestCanceledSwitchDoesNotClaimSemanticSearchReturned(t *testing.T) {
+	t.Parallel()
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "alpha\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
@@ -821,6 +841,7 @@ func TestCanceledSwitchDoesNotClaimSemanticSearchReturned(t *testing.T) {
 // An updated model, the same name with another digest, says it refills rather than that the search
 // switches to a new model (docs/decisions/search.md#the-setup-dialog).
 func TestAnUpdatedModelSaysItRefills(t *testing.T) {
+	t.Parallel()
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "alpha\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
@@ -839,6 +860,7 @@ func TestAnUpdatedModelSaysItRefills(t *testing.T) {
 }
 
 func TestWorkspaceSwitchReplacesSearchResultsWithoutEditingQuery(t *testing.T) {
+	t.Parallel()
 	d := startManaged(t, map[string]string{
 		"alpha": fileDir(t, "a.md", "# A\n\nzebra plains\n"),
 		"bravo": fileDir(t, "b.md", "# B\n\nriver mud\n"),
@@ -856,6 +878,7 @@ func TestWorkspaceSwitchReplacesSearchResultsWithoutEditingQuery(t *testing.T) {
 }
 
 func TestSearchFailureClearsStaleHitsAndSaysWhy(t *testing.T) {
+	t.Parallel()
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n\nzebra plains\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
@@ -873,6 +896,7 @@ func TestSearchFailureClearsStaleHitsAndSaysWhy(t *testing.T) {
 // TestEveryFieldHasALabel: every TextField the QML declares has a Text over it, saying what goes
 // in it (the folder dialog's path field is its own, and labelled).
 func TestEveryFieldHasALabel(t *testing.T) {
+	t.Parallel()
 	n := 0
 	err := fs.WalkDir(qmlEmbed, "qml", func(p string, e fs.DirEntry, err error) error {
 		if err != nil || e.IsDir() || !strings.HasSuffix(p, ".qml") {
@@ -971,6 +995,7 @@ func newFakeOllama(t *testing.T, models ...string) *fakeOllama {
 // calls shown under the list; one that does not set up is refused, the one in use staying; Words
 // only turns it off; Remove asks, then removes it.
 func TestAProviderInUse(t *testing.T) {
+	t.Parallel()
 	ollama := newFakeOllama(t, "embedder")
 	root := fileDir(t, "a.md", "# A\n\nalpha\n", "b.md", "# B\n\nbeta\n")
 	d := startManaged(t, map[string]string{"kb": root})
@@ -1061,6 +1086,7 @@ func TestAProviderInUse(t *testing.T) {
 // TestEveryCommandRefusesArgumentsNotItsOwn: a command the document calls with the wrong arguments
 // (a QML edit that got a call wrong) is refused, saying what it takes, and runs nothing.
 func TestEveryCommandRefusesArgumentsNotItsOwn(t *testing.T) {
+	t.Parallel()
 	h := newHost(NewSession("unused", nil), Options{})
 	b := qml.SpecValue{Kind: qml.SpecValueBool, Raw: "true"}
 	frac := qml.SpecValue{Kind: qml.SpecValueNumber, Raw: "1.5"}
@@ -1082,6 +1108,7 @@ func TestEveryCommandRefusesArgumentsNotItsOwn(t *testing.T) {
 // TestTheFolderPickerStartsAtHome: adding a workspace starts in the home directory, or at the root
 // when there is none.
 func TestTheFolderPickerStartsAtHome(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
 	if got := homeDir(procenv.Env(nil).With("HOME=" + home)); got != home {
 		t.Errorf("with a home: %q", got)
@@ -1094,6 +1121,7 @@ func TestTheFolderPickerStartsAtHome(t *testing.T) {
 // TestAListingThatFailsSaysSo: the workspace's files not listed (a workspace gone from the daemon)
 // is on the status line, and the pickers list nothing.
 func TestAListingThatFailsSaysSo(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.h.p.Post(func() { r.h.enter("gone") })
@@ -1107,6 +1135,7 @@ func TestAListingThatFailsSaysSo(t *testing.T) {
 // the preview's too, however many runes the characters before it are made of (a combining accent,
 // a family emoji joined by ZWJs, a CRLF line break).
 func TestAHitOpensWhereItIsAfterJoinedCharacters(t *testing.T) {
+	t.Parallel()
 	joined := "# A\r\n\r\ncafé \U0001F468‍\U0001F469‍\U0001F467 x\r\n\r\n## Birds\r\n\r\nkestrel notes\r\n"
 	if got, want := cursorAt(joined, strings.Index(joined, "## Birds")), 3+1+1+8+1+1; got != want {
 		t.Errorf("cursorAt before ## Birds = %d, want %d (3, a break, a break, 8 characters, a break, a break)", got, want)
@@ -1134,6 +1163,7 @@ func TestAHitOpensWhereItIsAfterJoinedCharacters(t *testing.T) {
 // unsaved; Ctrl+S names it in the new-note picker and creates the file with its text, open, the
 // cursor where it was. Closing the picker keeps the draft.
 func TestTheBlankPageIsADraft(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.typeInEditor(t, "first thoughts\nsecond line")
@@ -1162,6 +1192,7 @@ func TestTheBlankPageIsADraft(t *testing.T) {
 // TestADraftIsGuardedLikeAFile: opening a file over an unsaved draft asks nothing, and the draft
 // keeps its text in its buffer; closing the draft asks, and Save names it and creates the file.
 func TestADraftIsGuardedLikeAFile(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	r := attached(t, d)
 	r.typeInEditor(t, "draft text")
@@ -1197,6 +1228,7 @@ func TestADraftIsGuardedLikeAFile(t *testing.T) {
 // same workspaces, the rows open stay open. A note added is a change, and is listed with nothing
 // asked.
 func TestTheExplorerStaysOpenWhenNothingChanged(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "# A\n", "dir/b.md", "# B\n"}})
 	r := attached(t, d)
 	r.leader(t, 'e')
@@ -1226,6 +1258,7 @@ func TestTheExplorerStaysOpenWhenNothingChanged(t *testing.T) {
 // TestTheOptionsMenu: the editor mode, the theme and the editor's preferences are under Options; the AI
 // models and the backend's restart under System, right of Options; File keeps the file's commands.
 func TestTheOptionsMenu(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.keys(t, decltest.Alt('o'))
@@ -1258,6 +1291,7 @@ func TestTheOptionsMenu(t *testing.T) {
 // TestTheTodosMenu: Todos opens the todos, and makes or loads a store; a store's label is the
 // store bar's Edit and L's, not the menu's.
 func TestTheTodosMenu(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.keys(t, decltest.Alt('t'))
@@ -1272,6 +1306,7 @@ func TestTheTodosMenu(t *testing.T) {
 // TestTheTextKeymap: in the Text keymap the page types as an ordinary editor does — no i, Space a
 // space — Ctrl+Space opens the leader card, and Ctrl+S saves; the keymap is kept.
 func TestTheTextKeymap(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -1298,6 +1333,7 @@ func TestTheTextKeymap(t *testing.T) {
 // TestTheLeaderCardListsACommandARow: the card's commands are on rows of their own, two columns
 // of them, not run together on one line.
 func TestTheLeaderCardListsACommandARow(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.keys(t, key(' '))
@@ -1332,6 +1368,7 @@ var prefLabels = [][]string{
 // start at one column after them; the dialog holds every row and its buttons, at the tests' screen
 // and at a small window's (the 80 × 24 a 200% zoom can leave).
 func TestEachPreferenceHasItsChooserOnItsRow(t *testing.T) {
+	t.Parallel()
 	for _, size := range [][2]int{{100, 30}, {80, 24}} {
 		t.Run(fmt.Sprintf("%dx%d", size[0], size[1]), func(t *testing.T) {
 			d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
@@ -1376,6 +1413,7 @@ func TestEachPreferenceHasItsChooserOnItsRow(t *testing.T) {
 // TestThePagesWidthAppliesAsTyped: in the editor's preferences, a width typed is the page's at
 // once, with no Enter; a width out of range says so and changes nothing.
 func TestThePagesWidthAppliesAsTyped(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 160, 30)
 	r.ready(t)
@@ -1394,6 +1432,7 @@ func TestThePagesWidthAppliesAsTyped(t *testing.T) {
 // TestTheAIModelsSideBySide: the providers on the left, the usage and calls on the right, on the
 // same rows.
 func TestTheAIModelsSideBySide(t *testing.T) {
+	t.Parallel()
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "a\n")})
 	if _, err := d.db.AddProvider(context.Background(), store.ProviderSpec{Name: "local", Kind: store.KindOllama, BaseURL: "http://127.0.0.1:1", Model: "m"}); err != nil {
 		t.Fatal(err)
@@ -1413,6 +1452,7 @@ func TestTheAIModelsSideBySide(t *testing.T) {
 // TestEveryPreferenceIsKept: each preference command changes the screen's preference and the
 // store's; a name the TUI does not know changes nothing and says so.
 func TestEveryPreferenceIsKept(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	// the daemon's store, written through a call: the daemon's clock, not a frame's
@@ -1490,6 +1530,7 @@ func TestEveryPreferenceIsKept(t *testing.T) {
 // TestThePreferencesAreReadWithTheirDefaults: what the store keeps is read over the defaults; a
 // value the TUI cannot use is the default's.
 func TestThePreferencesAreReadWithTheirDefaults(t *testing.T) {
+	t.Parallel()
 	p := prefsOf(map[string]any{"tui.editor.wrap": "false", "tui.editor.linenumbers": "true",
 		"tui.toast.corner": "top-left", "tui.toast.seconds": "7", "tui.editor.indentmarks": "cursorLine"})
 	if p.wrap || !p.lineNumbers || p.toastCorner != "top-left" || p.toastSeconds != 7 || p.indentMarks != "cursorLine" {
@@ -1563,6 +1604,7 @@ func markIn(row []tuicore.Cell, stop string) string {
 // and the one installed; yes stops the daemon, the reconnect waits for it to go, starts the
 // installed one, and says so.
 func TestRestartBringsUpTheInstalledBackend(t *testing.T) {
+	t.Parallel()
 	dir, err := os.MkdirTemp("", "adr")
 	if err != nil {
 		t.Fatal(err)
@@ -1620,6 +1662,7 @@ func TestRestartBringsUpTheInstalledBackend(t *testing.T) {
 // TestRestartNeedsASpawner: a TUI that starts no daemon offers no restart, since nothing would
 // bring one back.
 func TestRestartNeedsASpawner(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.h.p.Post(r.h.startRestart)
@@ -1636,6 +1679,7 @@ func TestRestartNeedsASpawner(t *testing.T) {
 // one is refused, on the unused one asks, then removes it. Cancel indexing with nothing embedding
 // says so.
 func TestVectorsListsTheModelsAndPurgesAnUnusedOne(t *testing.T) {
+	t.Parallel()
 	ollama := newFakeOllama(t, "embedder", "other")
 	root := fileDir(t, "a.md", "# A\n\nalpha\n", "b.md", "# B\n\nbeta\n")
 	d := startManaged(t, map[string]string{"kb": root})
@@ -1699,6 +1743,7 @@ func TestVectorsListsTheModelsAndPurgesAnUnusedOne(t *testing.T) {
 // counted across the workspaces. Another provider of the same model: its vectors kept. Another
 // provider in use: its vectors go once nothing uses them.
 func TestRemovingAProviderSaysWhatItDeletes(t *testing.T) {
+	t.Parallel()
 	ollama := newFakeOllama(t, "embedder", "other")
 	root := fileDir(t, "a.md", "# A\n\nalpha\n", "b.md", "# B\n\nbeta\n")
 	d := startManaged(t, map[string]string{"kb": root})
@@ -1827,6 +1872,7 @@ func otherDaemon(t *testing.T, sock string, proto int64) (stopped chan struct{})
 // status line says it is older and how to replace it, and Restart backend… stops it over its own
 // protocol and starts the installed one.
 func TestRestartReplacesAnOlderBackend(t *testing.T) {
+	t.Parallel()
 	dir, err := os.MkdirTemp("", "ado")
 	if err != nil {
 		t.Fatal(err)
@@ -1874,6 +1920,7 @@ func TestRestartReplacesAnOlderBackend(t *testing.T) {
 // spinner beside it that turns; a model switch shows the new model's fill and a red mark saying
 // the search is by words meanwhile; once the fill is done, the mark is green again.
 func TestTheSpinnerTurnsWhileTheModelEmbeds(t *testing.T) {
+	t.Parallel()
 	ollama := newFakeOllama(t, "embedder", "other")
 	root := fileDir(t, "a.md", "# A\n\nalpha\n", "b.md", "# B\n\nbeta\n")
 	d := startManaged(t, map[string]string{"kb": root})
@@ -1917,6 +1964,7 @@ func TestTheSpinnerTurnsWhileTheModelEmbeds(t *testing.T) {
 // TestANewerBackendSaysTheTUIIsOlder: a daemon of a newer protocol refuses this TUI, which says it
 // is the older one and offers no restart (it would start this, older, build).
 func TestANewerBackendSaysTheTUIIsOlder(t *testing.T) {
+	t.Parallel()
 	dir, err := os.MkdirTemp("", "adn")
 	if err != nil {
 		t.Fatal(err)
@@ -1939,6 +1987,7 @@ func TestANewerBackendSaysTheTUIIsOlder(t *testing.T) {
 }
 
 func TestOlderBackendWithoutSpawnOnlyOffersQuit(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	sock := filepath.Join(dir, "s.sock")
 	otherDaemon(t, sock, rpc.Protocol-1)
@@ -1952,6 +2001,7 @@ func TestOlderBackendWithoutSpawnOnlyOffersQuit(t *testing.T) {
 // the cursor goes to it, n to the next, N back, wrapping. In the explorer the cursor goes to the
 // row holding it. The workspace's search is SPC SPC (and SPC /, Ctrl+G), not /.
 func TestFindInThePanes(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "one kestrel\ntwo\nthree kestrel\nfour\n", "b.md", "see [[a]]\n",
 		"kestrels/c.md", "c\n", "x.md", "also [[a]]\n"}})
 	r := attached(t, d)
@@ -2094,6 +2144,7 @@ func noticeText(sc string) string {
 // right, kept in the history (SPC h). A find's result is the status line's alone: no toast, not
 // kept. The corner and the time a toast stays are preferences.
 func TestNotificationsAndTheStatusLine(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "kestrel one\nkestrel two\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -2168,6 +2219,7 @@ func TestNotificationsAndTheStatusLine(t *testing.T) {
 // TestThePageWrapsAndNumbersItsLines: long lines wrap by default; View › Wrap long lines turns it
 // off and on; line numbers show in a gutter when asked, the preference kept.
 func TestThePageWrapsAndNumbersItsLines(t *testing.T) {
+	t.Parallel()
 	long := strings.Repeat("word ", 40)
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "short\n" + long + "\n"}})
 	r := attached(t, d)
@@ -2196,6 +2248,7 @@ func TestThePageWrapsAndNumbersItsLines(t *testing.T) {
 // TestTheVimKeysCard: ? shows the Vim keys at the bottom right, the page keeping the keyboard;
 // ? again hides it. About names the author and the license.
 func TestTheVimKeysCard(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.keys(t, key('?'))
@@ -2229,6 +2282,7 @@ func TestTheVimKeysCard(t *testing.T) {
 // TestThePageHoldsTheRulersColumnsWithTheLineNumbers: the ruler is the page's editable columns;
 // the line numbers' gutter is added to the page, so a line as long as the ruler still fits.
 func TestThePageHoldsTheRulersColumnsWithTheLineNumbers(t *testing.T) {
+	t.Parallel()
 	line := strings.Repeat("y", 60)
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", line + "z\n"}},
 		daemonOpts{prefs: map[string]string{"tui.status.shown": "true", "tui.toast.seconds": "1", "tui.ruler": "60", "tui.editor.linenumbers": "true"}})
@@ -2259,6 +2313,7 @@ func TestThePageHoldsTheRulersColumnsWithTheLineNumbers(t *testing.T) {
 // TestTheIndentationMarksReachTheEditor: the kept choice draws a line's leading spaces as dimmed
 // marks, on every line; off, they are spaces again.
 func TestTheIndentationMarksReachTheEditor(t *testing.T) {
+	t.Parallel()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"ind.md", "flat\n    deep\n"}},
 		daemonOpts{prefs: map[string]string{"tui.editor.indentmarks": "all"}})
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 160, 20)
@@ -2274,6 +2329,7 @@ func TestTheIndentationMarksReachTheEditor(t *testing.T) {
 }
 
 func TestClosingAFileGivesThePageItsDraftWidth(t *testing.T) {
+	t.Parallel()
 	long := strings.Repeat("y\n", 10000) // five digits: a gutter one column wider
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"long.md", long}},
 		daemonOpts{prefs: map[string]string{"tui.ruler": "60", "tui.editor.linenumbers": "true"}})
@@ -2295,6 +2351,7 @@ func TestClosingAFileGivesThePageItsDraftWidth(t *testing.T) {
 // The cursor follows the theme: Options › Theme switching to sepia sends sepia's cursor colour, so
 // a light theme never keeps a dark one's cursor (or the terminal's own) on its light ground.
 func TestTheCursorFollowsAThemeSwitch(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -2316,6 +2373,7 @@ func TestTheCursorFollowsAThemeSwitch(t *testing.T) {
 // the loop, not by a poll racing the search's own answer, which clears the toast too; asserted on
 // the notifications kept, since a done toast leaves the screen.
 func TestASearchWaitingOnEmbeddingSaysWhenItFinishes(t *testing.T) {
+	t.Parallel()
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")

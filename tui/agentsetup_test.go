@@ -53,6 +53,7 @@ func heardLines(path string) []string {
 
 // The CLIs are offered in their fixed order, absent ones left out; none found is empty. Nothing runs.
 func TestDetectAgentCLIsKeepsTheOrder(t *testing.T) {
+	t.Parallel()
 	on := func(names ...string) func(string) (string, error) {
 		return func(c string) (string, error) {
 			if slices.Contains(names, c) {
@@ -78,6 +79,7 @@ func TestDetectAgentCLIsKeepsTheOrder(t *testing.T) {
 // A first run (never answered, no profile) opens the setup card in About's place; a profile, or an
 // answer, opens About as before and never the card.
 func TestTheSetupCardIsAFirstRunsOnly(t *testing.T) {
+	t.Parallel()
 	offeringSetup(t)
 	fakeClaude(t)
 	_, r, _ := runAgentTUIWith(t, t.TempDir(), nil, "", map[string]string{prefAboutAt: "true"}, Options{})
@@ -106,6 +108,7 @@ func TestTheSetupCardIsAFirstRunsOnly(t *testing.T) {
 // Set up saves Claude as an ordinary profile, the default, records the answer and starts it, typing
 // nothing into it; the menu's Set up later does the same.
 func TestSetUpSavesAndStartsTypingNothing(t *testing.T) {
+	t.Parallel()
 	offeringSetup(t)
 	heard, onPath := fakeClaude(t)
 	d, r, _ := runAgentTUIWith(t, t.TempDir(), nil, "", nil, Options{})
@@ -141,6 +144,7 @@ func TestSetUpSavesAndStartsTypingNothing(t *testing.T) {
 // A taken codename is refused by storeAgentProfile with its reason: nothing is recorded, the old
 // profile with that codename is not started, and nothing is typed.
 func TestASetupWithATakenCodenameIsRefused(t *testing.T) {
+	t.Parallel()
 	offeringSetup(t)
 	heard, onPath := fakeClaude(t)
 	old := agentProfile{Name: "Old", Command: "claude", Codename: "claude"}
@@ -166,6 +170,7 @@ func TestASetupWithATakenCodenameIsRefused(t *testing.T) {
 
 // The form's Save and storeAgentProfile refuse alike: the form is unchanged.
 func TestTheFormAndTheSetupRefuseAlike(t *testing.T) {
+	t.Parallel()
 	_, r, _ := runAgentTUI(t, t.TempDir(), nil, "")
 	onLoop(r, func() bool { r.h.agents.saveAgentProfile("", "claude", ""); return true })
 	r.s.WaitForText(t, "not saved: a profile is a name and the command that starts the agent")
@@ -176,6 +181,7 @@ func TestTheFormAndTheSetupRefuseAlike(t *testing.T) {
 
 // No records the answer: the next start opens neither the card nor a prompt.
 func TestNoIsRemembered(t *testing.T) {
+	t.Parallel()
 	offeringSetup(t)
 	fakeClaude(t)
 	d, r, _ := runAgentTUIWith(t, t.TempDir(), nil, "", nil, Options{})
@@ -193,6 +199,7 @@ func TestNoIsRemembered(t *testing.T) {
 // The card opens later from the catalog (agent.setup) and from System › Set up an agent…
 // (App.openAgentSetup).
 func TestTheSetupOpensFromTheCatalogAndTheMenu(t *testing.T) {
+	t.Parallel()
 	fakeClaude(t)
 	_, r, _ := runAgentTUIWith(t, t.TempDir(), nil, "", nil, Options{})
 	r.s.WaitFor(t, "started", func(string) bool { return onLoop(r, func() bool { return r.h.started }) })
@@ -212,6 +219,7 @@ func TestTheSetupOpensFromTheCatalogAndTheMenu(t *testing.T) {
 // With no CLI found, the card says which to install and why, and offers only Close, which records
 // nothing: the next start asks again.
 func TestNoneFoundSaysWhichAndRecordsNothing(t *testing.T) {
+	t.Parallel()
 	offeringSetup(t)
 	tune(t).lookAgentCLI = func(string) (string, error) { return "", errors.New("not found") }
 	d, r, _ := runAgentTUIWith(t, t.TempDir(), nil, "", nil, Options{})
@@ -228,6 +236,7 @@ func TestNoneFoundSaysWhichAndRecordsNothing(t *testing.T) {
 
 // AGENTS.md says what an agent can do for the user; the generated guide no longer has its own list.
 func TestTheAgentsGuideHasTheJobs(t *testing.T) {
+	t.Parallel()
 	if !strings.Contains(autodoc.AgentsGuide, "## What you can do for the user") ||
 		!strings.Contains(autodoc.AgentsGuide, "Proof-read as a professional editor") {
 		t.Fatal("AGENTS.md has no \"What you can do for the user\" section")

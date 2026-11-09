@@ -66,6 +66,7 @@ func hex2(v uint32) string {
 // the theme's colours, placed over the dialog's cells; turning image previews off shows its source
 // and says why; a terminal that did not confirm graphics says that.
 func TestTheDiagramPreviewIsAnImageWhereItCanBe(t *testing.T) {
+	t.Parallel()
 	skipWithoutUsableBrowser(t)
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "f.md", flowFile)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
@@ -111,6 +112,7 @@ func TestTheDiagramPreviewIsAnImageWhereItCanBe(t *testing.T) {
 // What the hand-written renderer refused — edge text written "A -- yes --> B", quoted labels with
 // line breaks, a state diagram — is drawn, not shown as its source.
 func TestTheDiagramsItCouldNotDrawAreDrawn(t *testing.T) {
+	t.Parallel()
 	skipWithoutUsableBrowser(t)
 	for name, block := range map[string]string{
 		"flowchart": "flowchart TD\n  A[\"event arrives<br/>at node N\"] --> B{\"pointer<br/>disabled?\"}\n  B -- yes --> P[\"skip N\"]\n  B -- no --> C[resolve]\n",
@@ -138,6 +140,7 @@ func TestTheDiagramsItCouldNotDrawAreDrawn(t *testing.T) {
 // fake rendering a page three dialogs tall at the scale asked: the scroll and the zoom are
 // AutoDoc's, whatever renders the page.
 func TestTheDiagramPreviewScrollsAndZooms(t *testing.T) {
+	t.Parallel()
 	tuneEnv(t, "XDG_CACHE_HOME="+t.TempDir())
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "f.md", flowFile)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
@@ -206,6 +209,7 @@ func TestTheDiagramPreviewScrollsAndZooms(t *testing.T) {
 // strips are AutoDoc's to place, whatever renders the page, and a CI runner's Chrome has no sandbox
 // to run in.
 func TestATallDiagramIsPlacedInStrips(t *testing.T) {
+	t.Parallel()
 	tuneEnv(t, "XDG_CACHE_HOME="+t.TempDir())
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "f.md", flowFile)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
@@ -276,6 +280,7 @@ func pngSize(t *testing.T, b []byte) (int, int) {
 // Restart Now tries the start again (docs/decisions/search.md#protocol-mismatch-recovery: a failed
 // restart remains actionable).
 func TestAFailedRecoveryRestartStaysActionable(t *testing.T) {
+	t.Parallel()
 	dir, err := os.MkdirTemp("", "adf")
 	if err != nil {
 		t.Fatal(err)
@@ -339,6 +344,7 @@ func tinyPreview(t *testing.T, w, h int) (*running, chan string) {
 // On a screen too small for an image the Mermaid preview falls back to the source, saying why,
 // rather than staying a blank image area.
 func TestATinyScreenDiagramFallsBackToItsSource(t *testing.T) {
+	t.Parallel()
 	if _, ok := htmlview.HTMLRasterizer(); !ok {
 		t.Skip("no headless browser: image mode is never entered")
 	}
@@ -358,6 +364,7 @@ func TestATinyScreenDiagramFallsBackToItsSource(t *testing.T) {
 
 // A screen resized to a usable size before the wait ends renders the image after all.
 func TestAPreviewRendersOnceAResizeGivesItRoom(t *testing.T) {
+	t.Parallel()
 	skipWithoutUsableBrowser(t)
 	r, _ := tinyPreview(t, 12, 3)
 	r.h.p.Post(func() { r.h.previewDiagram() })
@@ -401,6 +408,7 @@ func skipWithoutUsableBrowser(t *testing.T) {
 // connected session there is nothing to recover; a stop that does not complete stays in the dialog
 // with the reason and a retry.
 func TestTheMismatchDialogsEdges(t *testing.T) {
+	t.Parallel()
 	t.Run("no spawner, then Quit", func(t *testing.T) {
 		sock := filepath.Join(t.TempDir(), "s.sock")
 		otherDaemon(t, sock, rpc.Protocol-1)
@@ -468,6 +476,7 @@ func tallPage(t *testing.T, w, h int) []byte {
 // While the diagram renders, the preview's Image says so with a spinner and "drawing the
 // diagram…"; the picture, when it comes, ends it.
 func TestThePreviewSpinsWhileTheDiagramRenders(t *testing.T) {
+	t.Parallel()
 	tuneEnv(t, "XDG_CACHE_HOME="+t.TempDir())
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "f.md", flowFile)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
