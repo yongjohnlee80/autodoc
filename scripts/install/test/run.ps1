@@ -84,7 +84,7 @@ try {
 	$code = Run $h $installer @("-BaseUrl", $base, "-Yes")
 	$bin = Join-Path $h "Local\Programs\AutoDoc\autodoc.exe"
 	$rec = Join-Path $h "Local\autodoc\install.toml"
-	if ($code -ne 0) { Bad "a fresh install" "exit $code: $(Get-Content -Raw (Join-Path $h 'out.txt'))" }
+	if ($code -ne 0) { Bad "a fresh install" "exit ${code}: $(Get-Content -Raw (Join-Path $h 'out.txt'))" }
 	elseif (-not (Test-Path $bin)) { Bad "a fresh install" "no $bin" }
 	elseif ((& $bin --version) -ne "autodoc v1.0.0") { Bad "a fresh install" "the binary says $(& $bin --version)" }
 	elseif (-not (Test-Path $rec)) { Bad "a fresh install" "no install record" }
@@ -100,7 +100,7 @@ try {
 	# run again: nothing to do
 	$code = Run $h $installer @("-BaseUrl", $base, "-Yes")
 	if ($code -eq 0 -and (Get-Content -Raw (Join-Path $h 'out.txt')) -match "installed already") { Ok "run again, it says AutoDoc is installed already" }
-	else { Bad "run again" "exit $code: $(Get-Content -Raw (Join-Path $h 'out.txt'))" }
+	else { Bad "run again" "exit ${code}: $(Get-Content -Raw (Join-Path $h 'out.txt'))" }
 
 	# a checksum that doesn't match installs nothing
 	$h2 = Join-Path $work "home2"
@@ -120,7 +120,7 @@ try {
 	else { Bad "update.ps1 installs the newer release" "exit $code, binary $(& $bin --version): $(Get-Content -Raw (Join-Path $h 'out.txt'))" }
 	$code = Run $h $upd @("-BaseUrl", $base, "-Yes")
 	if ($code -eq 0 -and (Get-Content -Raw (Join-Path $h 'out.txt')) -match "up to date") { Ok "update.ps1 run again says AutoDoc is up to date" }
-	else { Bad "update.ps1 run again" "exit $code: $(Get-Content -Raw (Join-Path $h 'out.txt'))" }
+	else { Bad "update.ps1 run again" "exit ${code}: $(Get-Content -Raw (Join-Path $h 'out.txt'))" }
 
 	# update.ps1 refuses an AutoDoc it didn't install
 	$h3 = Join-Path $work "home3"
