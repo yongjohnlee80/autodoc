@@ -31,7 +31,7 @@ The packages, the planned seams (their design is pending):
 | The default shell | `internal/usershell` |
 | The environment, and the programs on its PATH | `internal/procenv` |
 
-`internal/userdirs` and `internal/procenv` exist; the others are made as their code moves behind
+`internal/filelock`, `internal/userdirs` and `internal/procenv` exist; the others are made as their code moves behind
 them.
 
 A guard reads every non-test Go file of the module, whatever its build tags, and lists each such use
