@@ -19,7 +19,7 @@ import (
 // store-wide preference (tui.language) chooses. A switch relabels everything in one frame
 // (App.ApplyLanguage); the text AutoDoc composes in Go is composed again (languageChanged). A
 // stored language this build does not offer is English, and the store keeps it (prefspec's
-// readRows).
+// ReadRows).
 
 // prefLanguage is the UI's language: store-wide, as the theme is, and the same in both builds.
 const prefLanguage = "tui.language"

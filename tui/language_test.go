@@ -204,11 +204,11 @@ func TestALanguageSwitchRelabelsTheScreen(t *testing.T) {
 // A stored language the build does not offer is English, and the store keeps it.
 func TestAStoredLanguageTheBuildDoesNotOfferIsEnglish(t *testing.T) {
 	var p prefs
-	readRows(&p, map[string]any{prefLanguage: "fr"}, legacyPrefRows(nil, false))
+	ReadRows(&p, map[string]any{prefLanguage: "fr"}, legacyPrefRows(nil, false))
 	if p.language != "en" {
 		t.Errorf("a stored %q reads as %q, want English", "fr", p.language)
 	}
-	readRows(&p, map[string]any{prefLanguage: "ko_KR"}, legacyPrefRows(nil, false))
+	ReadRows(&p, map[string]any{prefLanguage: "ko_KR"}, legacyPrefRows(nil, false))
 	if p.language != "ko_KR" {
 		t.Errorf("a stored ko_KR reads as %q", p.language)
 	}

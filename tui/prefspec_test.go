@@ -16,11 +16,11 @@ func TestPrefRowsReadOverTheirDefaults(t *testing.T) {
 		ValuePref("t.font", "mono", nil),
 		ValuePref("t.size", "small", []string{"small", "large"}),
 	}
-	readRows(&p, map[string]any{"t.bool": "yes", "t.choice": "middle", "t.int": "39", "t.font": "", "t.size": "huge"}, rows)
+	ReadRows(&p, map[string]any{"t.bool": "yes", "t.choice": "middle", "t.int": "39", "t.font": "", "t.size": "huge"}, rows)
 	if !p.wrap || p.todosEdge != "left" || p.ruler != 120 || p.Value("t.font") != "mono" || p.Value("t.size") != "small" {
 		t.Fatalf("values it cannot use: %+v %v", p, p.values)
 	}
-	readRows(&p, map[string]any{"t.bool": "false", "t.choice": "top", "t.int": "400", "t.font": "Iosevka", "t.size": "large"}, rows)
+	ReadRows(&p, map[string]any{"t.bool": "false", "t.choice": "top", "t.int": "400", "t.font": "Iosevka", "t.size": "large"}, rows)
 	if p.wrap || p.todosEdge != "top" || p.ruler != 400 || p.Value("t.font") != "Iosevka" || p.Value("t.size") != "large" {
 		t.Fatalf("values it uses: %+v %v", p, p.values)
 	}
@@ -29,7 +29,7 @@ func TestPrefRowsReadOverTheirDefaults(t *testing.T) {
 	if p.Value("t.font") != "Iosevka" || copied.Value("t.font") != "Fira" {
 		t.Errorf("a copy's change reached the original: %q %q", p.Value("t.font"), copied.Value("t.font"))
 	}
-	st := rowState(p, []PrefSpec{rows[1].chooser("App.tIndex", "App.setT"), rows[4].chooser("App.sizeIndex", "")})
+	st := RowState(p, []PrefSpec{rows[1].chooser("App.tIndex", "App.setT"), rows[4].chooser("App.sizeIndex", "")})
 	if st["App.tIndex"] != 2 || st["App.sizeIndex"] != 1 {
 		t.Errorf("the choosers' rows: %v", st)
 	}

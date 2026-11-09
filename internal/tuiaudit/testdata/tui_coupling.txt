@@ -387,7 +387,6 @@ gui	terminals	host	Host.set	method
 gui	terminals	host	Host.setPref	method
 gui	terminals	host	Host.tr	method
 gui	terminals	host	Host.trf	method
-gui	terminals	host	asPrefs	func
 gui	terminals	host	boolPref	func
 gui	terminals	host	choicePref	func
 gui	terminals	host	choices	func
@@ -749,7 +748,6 @@ term	terminals	host	Host.set	method
 term	terminals	host	Host.setPref	method
 term	terminals	host	Host.tr	method
 term	terminals	host	Host.trf	method
-term	terminals	host	asPrefs	func
 term	terminals	host	boolPref	func
 term	terminals	host	choicePref	func
 term	terminals	host	choices	func
