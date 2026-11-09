@@ -24,3 +24,6 @@ func alive(pid int) bool {
 	}
 	return p.Signal(syscall.Signal(0)) == nil
 }
+
+// releaseConsoleIfAlone has no console to give up.
+func releaseConsoleIfAlone() bool { return false }

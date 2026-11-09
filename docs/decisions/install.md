@@ -105,7 +105,7 @@ On Windows, AutoDoc installs with `install-autodoc.ps1` and updates with `update
 - **Where it goes, per user:**
   - the binary: `%LOCALAPPDATA%\Programs\AutoDoc\autodoc.exe` (`-Prefix` moves it);
   - the install record and `update.ps1`: `%LOCALAPPDATA%\autodoc`, Windows' counterpart of `~/.local/state/autodoc`. The record has the same keys, `update` naming `update.ps1`;
-  - the launcher: a Start menu shortcut, `AutoDoc`, that runs `autodoc.exe --gui`.
+  - the launcher: a Start menu shortcut, `AutoDoc`, that runs `autodoc.exe --gui`, minimized. AutoDoc is one console-subsystem binary: with `--gui`, it gives up its console at startup when it is the only process attached, so the shortcut leaves no console window. Started from a shell, it keeps the console, so its output and exit code stay.
 - **The swap:** a running `autodoc.exe` can't be replaced, but it can be renamed. The old binary moves aside, the new one takes its name in one move, and the old one is deleted when it no longer runs: then, or at the next install.
 - **The PATH:** changed only with `-AddToPath`; otherwise the script prints the command that would.
 - **Unsigned:** the build is unsigned, so the first run can show Windows' unknown-publisher warning.

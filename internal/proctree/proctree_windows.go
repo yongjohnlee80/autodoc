@@ -5,6 +5,7 @@ package proctree
 import (
 	"os/exec"
 	"syscall"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
@@ -30,4 +31,24 @@ func alive(pid int) bool {
 	defer windows.CloseHandle(h)
 	ev, err := windows.WaitForSingleObject(h, 0)
 	return err == nil && ev == uint32(windows.WAIT_TIMEOUT)
+}
+
+// kernel32's console calls, which x/sys/windows does not wrap.
+var (
+	kernel32              = windows.NewLazySystemDLL("kernel32.dll")
+	getConsoleProcessList = kernel32.NewProc("GetConsoleProcessList")
+	freeConsole           = kernel32.NewProc("FreeConsole")
+)
+
+// releaseConsoleIfAlone frees the console when GetConsoleProcessList counts this process alone on
+// it. It answers 0 with no console, and the whole count however short the list given it, so a list
+// of two is enough to tell one from more.
+func releaseConsoleIfAlone() bool {
+	var pids [2]uint32
+	n, _, _ := getConsoleProcessList.Call(uintptr(unsafe.Pointer(&pids[0])), uintptr(len(pids)))
+	if n != 1 {
+		return false
+	}
+	ok, _, _ := freeConsole.Call()
+	return ok != 0
 }
