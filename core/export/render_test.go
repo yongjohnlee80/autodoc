@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 
 	"github.com/yongjohnlee80/autodoc/core/export"
 	"github.com/yongjohnlee80/autodoc/core/export/mermaid"
@@ -93,7 +93,7 @@ func digest(s string) string {
 // diagram. The page as the browser leaves it holds each one's SVG, in the page's theme, and no
 // error.
 func TestMermaidDrawsInABrowser(t *testing.T) {
-	browser, ok := widget.HTMLRasterizer()
+	browser, ok := htmlview.HTMLRasterizer()
 	if !ok {
 		t.Skip("no headless Chromium or Chrome")
 	}
@@ -291,7 +291,7 @@ func TestARelativeBaseIsReadFromTheWorkingDirectory(t *testing.T) {
 // test's own page frames the export, clicks its link and writes down where the frame went and what
 // it shows.
 func TestAResolvedLinkIsFollowedInABrowser(t *testing.T) {
-	browser, ok := widget.HTMLRasterizer()
+	browser, ok := htmlview.HTMLRasterizer()
 	if !ok {
 		t.Skip("no headless Chromium or Chrome")
 	}
