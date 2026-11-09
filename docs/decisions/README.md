@@ -232,6 +232,10 @@ the code ever disagree, the code is right and the page is fixed.
 - [update.sh runs the newest installer](install.md#updatesh-runs-the-newest-installer)
 - [About's Update and the restart](install.md#abouts-update-and-the-restart)
 
+## [Platforms](platforms.md)
+
+- [Each OS concern is one package](platforms.md#each-os-concern-is-one-package)
+
 ## [The enterprise search server](server.md)
 
 - [A headless server mode](server.md#a-headless-server-mode)
