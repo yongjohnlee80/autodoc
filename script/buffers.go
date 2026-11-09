@@ -1,7 +1,7 @@
 package script
 
 import (
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -24,7 +24,7 @@ type BufferSource interface {
 	// Buffers are the open buffers, in opening order.
 	Buffers() []BufferInfo
 	// Editor is buffer n's editor: the shown one, or a headless one; ok is false with no buffer n.
-	Editor(n int) (*widget.EditorCore, bool)
+	Editor(n int) (*editor.EditorCore, bool)
 	// Edited tells the host buffer n's text changed through a handle: dirty, its change event.
 	Edited(n int)
 }

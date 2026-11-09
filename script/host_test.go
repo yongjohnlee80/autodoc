@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // print says what it prints where notify does, tostring's way and tab-joined; the sandbox has no
@@ -28,7 +28,7 @@ end }`, "p")
 func TestNowAndDate(t *testing.T) {
 	at := time.Date(2026, 3, 7, 21, 5, 9, 250e6, time.UTC) // a Saturday
 	zone := time.FixedZone("KST", 9*3600)
-	core := widget.NewEditorCore()
+	core := editor.NewEditorCore()
 	var said []string
 	e := New(core, WithNotify(func(s string) { said = append(said, s) }), WithClock(func() time.Time { return at }, zone))
 	t.Cleanup(e.Close)
@@ -109,7 +109,7 @@ editor.command{ name = "same", run = function(ed) editor.notify(tostring(ed:revi
 		want string
 	}{
 		{func() {}, "true"},
-		{func() { _, _ = core.Insert(widget.TextPos{}, "x") }, "false"},
+		{func() { _, _ = core.Insert(editor.TextPos{}, "x") }, "false"},
 		{func() { undo(core) }, "true"},
 		{func() { core.SetValue("one") }, "false"}, // the same text as a new document
 	}

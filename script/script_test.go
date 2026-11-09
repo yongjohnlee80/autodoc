@@ -8,20 +8,20 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	lua "github.com/yuin/gopher-lua"
 )
 
-func engine(t *testing.T, text string) (*Engine, *widget.EditorCore, *[]string) {
+func engine(t *testing.T, text string) (*Engine, *editor.EditorCore, *[]string) {
 	t.Helper()
-	core := widget.NewEditorCore(widget.CoreInitialText(text))
+	core := editor.NewEditorCore(editor.CoreInitialText(text))
 	var said []string
 	e := New(core, WithNotify(func(s string) { said = append(said, s) }), WithTimeout(300*time.Millisecond))
 	t.Cleanup(e.Close)
 	return e, core, &said
 }
 
-func undo(c *widget.EditorCore) { c.HandleKey(tui.KeyEvent{Code: 'u', Text: "u"}) }
+func undo(c *editor.EditorCore) { c.HandleKey(tui.KeyEvent{Code: 'u', Text: "u"}) }
 
 // A user's script reaches the editor through ed, replaces a built-in of the same name, and is one
 // undo step.
@@ -136,7 +136,7 @@ end }`)},
 
 // A host names the global table and adds functions of its own to it.
 func TestAHostNamesTheGlobalAndAddsFunctions(t *testing.T) {
-	core := widget.NewEditorCore(widget.CoreInitialText("x"))
+	core := editor.NewEditorCore(editor.CoreInitialText("x"))
 	e := New(core, WithGlobal("autodoc"))
 	defer e.Close()
 	e.SetFunction("workspace", func(L *lua.LState) int { L.Push(lua.LString("kb")); return 1 })
@@ -182,11 +182,11 @@ editor.command{ name = "x", id = "lua.mine", title = "my x", run = function(ed) 
 		t.Fatal("the editor's registry got a command the registrar took")
 	}
 	// run with no core, as a host's key would: the engine's editor
-	if err := got[0].Command.Run(widget.CommandContext{Line: "x y"}); err != nil || core.Value() != "x y!abc" {
+	if err := got[0].Command.Run(editor.CommandContext{Line: "x y"}); err != nil || core.Value() != "x y!abc" {
 		t.Fatalf("run with no core: %v, %q", err, core.Value())
 	}
-	other := widget.NewEditorCore()
-	if err := got[0].Command.Run(widget.CommandContext{Core: other, Line: "z"}); err != nil || other.Value() != "z!" {
+	other := editor.NewEditorCore()
+	if err := got[0].Command.Run(editor.CommandContext{Core: other, Line: "z"}); err != nil || other.Value() != "z!" {
 		t.Fatalf("run on another core: %v, %q", err, other.Value())
 	}
 }

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -182,7 +182,7 @@ editor.command{ name = "odd", run = function(ed) local a, b = editor.odd(); edit
 func TestAGatedEdRunNeedsCommands(t *testing.T) {
 	e, g, said := gatedEngine(t)
 	ran := 0
-	if err := e.core.Commands().Set(widget.Command{Name: "boom", Run: func(widget.CommandContext) error { ran++; return nil }}); err != nil {
+	if err := e.core.Commands().Set(editor.Command{Name: "boom", Run: func(editor.CommandContext) error { ran++; return nil }}); err != nil {
 		t.Fatal(err)
 	}
 	if err := e.LoadGated("pkg", "pkg.lua", []byte(`
