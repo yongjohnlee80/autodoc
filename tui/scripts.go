@@ -14,7 +14,7 @@ import (
 	"time"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 
 	"github.com/yongjohnlee80/autodoc/core/procstat"
 	"github.com/yongjohnlee80/autodoc/plugin"
@@ -62,7 +62,7 @@ func (h *Host) startScripts() []error {
 	h.luaFeature().who, h.luaFeature().as = h.authorityNow, h.actingAs // authority.go
 	// a script's chords, through golib (luakeys.go), then H and L between the buffers (buffertabs.go):
 	// a script's own H or L wins
-	h.core.SetChordHook(func(kc widget.KeyChord) bool { return h.luaFeature().chord(kc) || h.bufferChord(kc) })
+	h.core.SetChordHook(func(kc editor.KeyChord) bool { return h.luaFeature().chord(kc) || h.bufferChord(kc) })
 	errs := h.scripts.LoadDir(ownScripts, "lua")
 	if h.luaDir != "" {
 		errs = append(errs, h.scripts.LoadDir(os.DirFS(h.luaDir), ".")...)
@@ -149,7 +149,7 @@ func (h *Host) registerLua(r script.Registration) error {
 		Run: func(inv Invocation) error {
 			core := cmp.Or(inv.Core, h.core)
 			return core.Batch(func() error {
-				return cmd.Run(widget.CommandContext{Core: core, Name: cmp.Or(inv.Name, cmd.Name), Bang: inv.Bang, Args: inv.Args, Line: inv.Line})
+				return cmd.Run(editor.CommandContext{Core: core, Name: cmp.Or(inv.Name, cmd.Name), Bang: inv.Bang, Args: inv.Args, Line: inv.Line})
 			})
 		}})
 }

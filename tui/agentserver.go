@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // A crew agent's server (its setup's Server: a Codex agent's own app-server, the crew MCP server on
@@ -141,11 +141,11 @@ func stopStaleServer(pidFile, socket string) {
 // serverBound is the agent CLI's process bound to its server: the CLI's end stops the server, and
 // the server's end closes the CLI's terminal, so the CLI ends (and its session with it).
 type serverBound struct {
-	widget.TerminalProcess
+	terminal.TerminalProcess
 	server *agentServer
 }
 
-func bindServer(proc widget.TerminalProcess, s *agentServer) widget.TerminalProcess {
+func bindServer(proc terminal.TerminalProcess, s *agentServer) terminal.TerminalProcess {
 	b := &serverBound{TerminalProcess: proc, server: s}
 	go func() { <-s.done; _ = proc.Close() }()
 	return b

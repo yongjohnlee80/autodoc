@@ -10,7 +10,9 @@ import (
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
+	"github.com/yongjohnlee80/golib/tui/widget/table"
 
 	"github.com/yongjohnlee80/autodoc/plugin"
 )
@@ -128,11 +130,11 @@ func (m *resultsModel) addKinds(n int, kinds []string) {
 }
 
 // kind is a cell's kind: text when the table, the row or the field has none.
-func (m *resultsModel) kind(row, col int) widget.TableCellKind {
+func (m *resultsModel) kind(row, col int) table.TableCellKind {
 	if row < 0 || row >= len(m.kinds) || col < 0 || col >= len(m.kinds[row]) {
-		return widget.TableCellText
+		return table.TableCellText
 	}
-	return widget.TableCellKind(m.kinds[row][col])
+	return table.TableCellKind(m.kinds[row][col])
 }
 
 // rowKinds is a row's kinds as the table holds them: "" without.
@@ -230,9 +232,9 @@ var _ tuidecl.Fetcher = (*resultsModel)(nil)
 // table of strings always has been read: as numbers where both cells are numbers.
 type kindedResults struct{ *resultsModel }
 
-func (k kindedResults) Kind(row, col int) widget.TableCellKind { return k.kind(row, col) }
+func (k kindedResults) Kind(row, col int) table.TableCellKind { return k.kind(row, col) }
 
-var _ widget.TableKinds = kindedResults{}
+var _ table.TableKinds = kindedResults{}
 
 // oneLine is a cell's text as a table row shows it.
 var oneLine = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ", "\t", " ").Replace
@@ -539,7 +541,7 @@ func (pl *plugins) whereResults(text string) { pl.applyWhere(text, false) }
 func (pl *plugins) applyWhere(text string, newTable bool) {
 	pl.resultsFilter, pl.resultsHint = text, ""
 	pl.resultsWhereErr = ""
-	if _, err := widget.ParseTableWhere(text, pl.resultsFields()); err != nil {
+	if _, err := table.ParseTableWhere(text, pl.resultsFields()); err != nil {
 		pl.resultsWhereErr = err.Error()
 		if newTable {
 			pl.whereOn = false
@@ -576,7 +578,7 @@ var whereKeywords = map[string]bool{"AND": true, "OR": true, "NOT": true, "IS": 
 // whereHint is what the bar offers for WHERE text: the fields the word being typed may name, while
 // it is where a field goes (at the start, or after "(", AND, OR or NOT); after an operator, a
 // literal or a field, nothing.
-func whereHint(text string, fields []widget.TableField) string {
+func whereHint(text string, fields []widgetcore.TableField) string {
 	start := len(text)
 	for start > 0 && !strings.ContainsRune(whereStops, rune(text[start-1])) {
 		start--
@@ -618,7 +620,7 @@ const whereStops = " \t\n\r()=!<>',;\""
 // whereFieldName is field col as WHERE reads it back: its bare name, its "quoted name" when a bare
 // one would not read as it (a space, an operator's character, a keyword's spelling), or #position
 // when two fields share the name.
-func whereFieldName(fields []widget.TableField, col int) string {
+func whereFieldName(fields []widgetcore.TableField, col int) string {
 	name := fields[col].Title
 	shared := 0
 	for _, f := range fields {
@@ -641,7 +643,7 @@ func whereFieldName(fields []widget.TableField, col int) string {
 func (pl *plugins) orderResults(text string) {
 	pl.resultsOrder, pl.resultsHint = text, ""
 	pl.resultsOrderErr = ""
-	if _, err := widget.ParseTableOrder(text, pl.resultsFields()); err != nil {
+	if _, err := table.ParseTableOrder(text, pl.resultsFields()); err != nil {
 		pl.resultsOrderErr = err.Error()
 	}
 	pl.showOrderText(text)
@@ -673,7 +675,7 @@ func (pl *plugins) showOrderText(text string) {
 
 // orderHint is what the bar offers for text: "fields: name, 3, …" for the field the last key is
 // naming, "" once its name is followed by a space (a direction comes next) or nothing matches.
-func orderHint(text string, fields []widget.TableField) string {
+func orderHint(text string, fields []widgetcore.TableField) string {
 	word := text[strings.LastIndexByte(text, ',')+1:]
 	word = strings.TrimLeft(word, " \t")
 	if strings.ContainsAny(word, " \t") || len(fields) == 0 {
@@ -683,7 +685,7 @@ func orderHint(text string, fields []widget.TableField) string {
 	var offer []string
 	for col, f := range fields {
 		if strings.HasPrefix(strings.ToLower(f.Title), strings.ToLower(word)) {
-			offer = append(offer, strings.TrimSuffix(widget.FormatTableOrder([]widget.TableSortKey{{Col: col}}, fields), " ASC"))
+			offer = append(offer, strings.TrimSuffix(table.FormatTableOrder([]table.TableSortKey{{Col: col}}, fields), " ASC"))
 		}
 	}
 	if len(offer) == 0 {
@@ -707,8 +709,8 @@ func (pl *plugins) showSortLine() {
 }
 
 // resultsFields are the table's fields as the view has them.
-func (pl *plugins) resultsFields() []widget.TableField {
-	out := make([]widget.TableField, len(pl.results.model.fields))
+func (pl *plugins) resultsFields() []widgetcore.TableField {
+	out := make([]widgetcore.TableField, len(pl.results.model.fields))
 	for i, f := range pl.results.model.fields {
 		out[i].Title = f
 	}
@@ -735,7 +737,7 @@ func (pl *plugins) sortResults(how string, args []string) error {
 		}
 		col = n - 1
 	}
-	pl.orderResults(widget.FormatTableOrder([]widget.TableSortKey{{Col: col, Desc: how == "desc"}}, core.Fields()))
+	pl.orderResults(table.FormatTableOrder([]table.TableSortKey{{Col: col, Desc: how == "desc"}}, core.Fields()))
 	return nil
 }
 
@@ -751,8 +753,8 @@ func (pl *plugins) selectAllResults() {
 // bindResultsMenu gives the table's right-click menu its rows: built each time it opens, so the
 // sorts name the field under the pointer.
 func (pl *plugins) bindResultsMenu() {
-	order := widget.TableFieldCompleter(widget.TableOrderBar, pl.resultsFields)
-	where := widget.TableFieldCompleter(widget.TableWhereBar, pl.resultsFields)
+	order := table.TableFieldCompleter(table.TableOrderBar, pl.resultsFields)
+	where := table.TableFieldCompleter(table.TableWhereBar, pl.resultsFields)
 	pl.c.BindResultsCompleter(func(text string, cursor int) (int, []string) {
 		if pl.resultsClause == clauseWhere {
 			return where(text, cursor)
@@ -770,7 +772,7 @@ func (pl *plugins) bindResultsMenu() {
 // resultsMenuRows are the menu's rows, each a results command of the catalog, then the panel's
 // Layout › (its only menu: the panel has no strip). The sorts take the field the right press was on
 // (MenuAt), not the cursor's.
-func (pl *plugins) resultsMenuRows() []widget.MenuItemModel {
+func (pl *plugins) resultsMenuRows() []widgetcore.MenuItemModel {
 	t := pl.c.ResultsTable(resultsView)
 	if t == nil {
 		return nil
@@ -779,7 +781,7 @@ func (pl *plugins) resultsMenuRows() []widget.MenuItemModel {
 	have := core.Len() > 0
 	at, hit := t.MenuAt()
 	field := []string{}
-	onField := hit == widget.TableHitCell || hit == widget.TableHitHeader
+	onField := hit == table.TableHitCell || hit == table.TableHitHeader
 	if onField {
 		field = []string{strconv.Itoa(at.Col + 1)}
 	}
@@ -788,27 +790,27 @@ func (pl *plugins) resultsMenuRows() []widget.MenuItemModel {
 		asc = pl.c.Trf("autodoc.text.plugintable.sort_ascending_by", f[at.Col].Title)
 		desc = pl.c.Trf("autodoc.text.plugintable.sort_descending_by", f[at.Col].Title)
 	}
-	row := func(id, label, entry string, args []string, enabled bool) widget.MenuItemModel {
-		m := widget.NewCommand(widget.ItemID("results.menu."+id), label, widget.CoreMenuAction{ID: tuicore.ActionID("results.menu." + id),
-			Run: func(*widget.EditorCore) { pl.runResultsEntry(entry, args) }})
+	row := func(id, label, entry string, args []string, enabled bool) widgetcore.MenuItemModel {
+		m := widgetcore.NewCommand(widgetcore.ItemID("results.menu."+id), label, editor.CoreMenuAction{ID: tuicore.ActionID("results.menu." + id),
+			Run: func(*editor.EditorCore) { pl.runResultsEntry(entry, args) }})
 		m.Enabled = enabled
 		return withLabelMessage(m, label) // a row with a field's name is composed in the UI's language
 	}
-	rows := []widget.MenuItemModel{
+	rows := []widgetcore.MenuItemModel{
 		row("copy", "Copy", "results.copy", nil, have),
 		row("copy_csv", "Copy as CSV", "results.copy_csv", nil, have),
 		row("copy_json", "Copy as JSON", "results.copy_json", nil, have),
 		row("copy_markdown", "Copy as Markdown", "results.copy_markdown", nil, have),
-		widget.NewSeparator("results.menu.selecting"),
+		widgetcore.NewSeparator("results.menu.selecting"),
 		row("select_all", "Select all", "results.select_all", nil, have),
-		widget.NewSeparator("results.menu.sorting"),
+		widgetcore.NewSeparator("results.menu.sorting"),
 		row("sort_asc", asc, "results.sort_asc", field, onField),
 		row("sort_desc", desc, "results.sort_desc", field, onField),
 		row("unsort", "Unsort", "results.unsort", nil, pl.resultsOrder != ""),
-		widget.NewSeparator("results.menu.leaving"),
+		widgetcore.NewSeparator("results.menu.leaving"),
 		row("export", "Export loaded rows…", "results.export", nil, have),
 		row("markdown", "Insert as Markdown", "results.markdown", nil, have),
-		widget.NewSeparator("results.menu.panel"),
+		widgetcore.NewSeparator("results.menu.panel"),
 	}
 	return append(rows, layoutRows(pl.c, "results", coreRowOf)...)
 }
@@ -889,7 +891,7 @@ func sizeOf(n int) string {
 // as shown, no header. CSV and Markdown are the selected fields, a header first, a row for each row
 // the selection is in; a cell of those fields outside the selection (vim's charwise v, ragged at
 // its ends) is empty. JSON is an object per row holding its selected cells.
-func (pl *plugins) selectionText(core *widget.TableCore, format copyFormat) (string, error) {
+func (pl *plugins) selectionText(core *table.TableCore, format copyFormat) (string, error) {
 	if format == formatTSV {
 		return core.CopyText(), nil
 	}
@@ -904,7 +906,7 @@ func (pl *plugins) selectionText(core *widget.TableCore, format copyFormat) (str
 		kb := make([]byte, len(cols))
 		cells = make([]string, len(cols))
 		for i, c := range cols {
-			kb[i] = byte(widget.TableCellText)
+			kb[i] = byte(table.TableCellText)
 			if c < len(k) {
 				kb[i] = k[c]
 			}
@@ -969,7 +971,7 @@ func (pl *plugins) selectionText(core *widget.TableCore, format copyFormat) (str
 // selectedCells is the selection over the loaded rows as shown: the fields any selected cell is in
 // (in field order), the display rows holding one (in the order shown), and whether a cell is
 // selected. With no selection it is the cursor's cell.
-func selectedCells(core *widget.TableCore) (cols, rows []int, in func(d, col int) bool) {
+func selectedCells(core *table.TableCore) (cols, rows []int, in func(d, col int) bool) {
 	from, to, ok := core.Selection()
 	if !ok {
 		cur := core.Cursor()

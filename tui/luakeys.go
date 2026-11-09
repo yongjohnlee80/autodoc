@@ -8,7 +8,7 @@ import (
 	"unicode/utf8"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/yongjohnlee80/autodoc/script"
@@ -68,7 +68,7 @@ type luaChord struct {
 
 // luaUI is one engine's keys and rows.
 type luaUI struct {
-	chords map[widget.KeyChord]luaChord
+	chords map[editor.KeyChord]luaChord
 	leader []luaKey
 }
 
@@ -79,7 +79,7 @@ const luaLetters = "abcdefghijklmnoprstuvwxyz0123456789"
 func (s *scripting) mapUI(eng interface {
 	SetFunction(string, lua.LGFunction)
 }) {
-	s.ui = luaUI{chords: map[widget.KeyChord]luaChord{}}
+	s.ui = luaUI{chords: map[editor.KeyChord]luaChord{}}
 	s.rows.drop(func(r *addedRow) bool { return r.source == fromLua }) // the old engine's; a plugin's [[menu]] stays
 	s.refreshLuaUI()
 	eng.SetFunction("map", s.luaMap)
@@ -126,21 +126,21 @@ func (s *scripting) luaMap(L *lua.LState) int {
 }
 
 // chordOf reads a map's keys: one character ("Q"), or a control chord ("<C-k>").
-func chordOf(mode, keys string) (widget.KeyChord, error) {
-	m := widget.ModeNormal
+func chordOf(mode, keys string) (editor.KeyChord, error) {
+	m := editor.ModeNormal
 	if mode == "visual" {
-		m = widget.ModeVisual
+		m = editor.ModeVisual
 	}
 	if inner, ok := strings.CutPrefix(keys, "<C-"); ok && strings.HasSuffix(inner, ">") {
 		inner = strings.TrimSuffix(inner, ">")
 		if r, n := utf8.DecodeRuneInString(inner); n == len(inner) && n > 0 {
-			return widget.KeyChord{Mode: m, Code: r, Ctrl: true}, nil
+			return editor.KeyChord{Mode: m, Code: r, Ctrl: true}, nil
 		}
 	}
 	if r, n := utf8.DecodeRuneInString(keys); n == len(keys) && n > 0 && r != ' ' {
-		return widget.KeyChord{Mode: m, Code: r}, nil
+		return editor.KeyChord{Mode: m, Code: r}, nil
 	}
-	return widget.KeyChord{}, fmt.Errorf("a %s key is one character, \"Q\", or a control chord, \"<C-k>\", not %q; a sequence is a leader key", mode, keys)
+	return editor.KeyChord{}, fmt.Errorf("a %s key is one character, \"Q\", or a control chord, \"<C-k>\", not %q; a sequence is a leader key", mode, keys)
 }
 
 // luaMenuFields are the fields autodoc.menu takes: any other is refused.
@@ -280,7 +280,7 @@ func (s *scripting) luaMenu(target string) {
 }
 
 // chord is the page's chord hook: a script's Normal or Visual chord runs its command line.
-func (s *scripting) chord(kc widget.KeyChord) bool {
+func (s *scripting) chord(kc editor.KeyChord) bool {
 	ch, ok := s.ui.chords[kc]
 	if !ok {
 		return false

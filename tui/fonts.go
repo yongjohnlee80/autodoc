@@ -6,7 +6,8 @@ import (
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // FONTS AND ZOOM — the GUI's window draws in fonts it can change while it runs: the cell font (the
@@ -359,17 +360,17 @@ func (h *Host) zoomStep(dir int) {
 }
 
 // zoomMenu is the right-click menu's Zoom: the steps, the current one checked. The GUI's only.
-func (h *Host) zoomMenu() widget.MenuItemModel {
-	rows := make([]widget.MenuItemModel, len(zoomSteps))
+func (h *Host) zoomMenu() widgetcore.MenuItemModel {
+	rows := make([]widgetcore.MenuItemModel, len(zoomSteps))
 	for i, pct := range zoomSteps {
 		label := "&" + strconv.Itoa(i+1) + ". " + strconv.Itoa(pct) + "%" // a digit each, as Editor mode's rows
 		if pct == zoomOf(h.prefs) {
 			label += " •"
 		}
-		rows[i] = menuCommand(widget.ItemID("autodoc.zoom."+strconv.Itoa(pct)), label,
-			widget.CoreMenuAction{ID: "autodoc.zoom", Run: func(*widget.EditorCore) { h.setZoom(pct) }})
+		rows[i] = menuCommand(widgetcore.ItemID("autodoc.zoom."+strconv.Itoa(pct)), label,
+			editor.CoreMenuAction{ID: "autodoc.zoom", Run: func(*editor.EditorCore) { h.setZoom(pct) }})
 	}
-	zoom := widget.NewSubmenu("autodoc.zoom", "Zoom", rows)
+	zoom := widgetcore.NewSubmenu("autodoc.zoom", "Zoom", rows)
 	zoom.Label, zoom.Hotkey, zoom.HotkeyIdx = tuicore.ParseMnemonic("&Zoom")
 	zoom = withLabelMessage(zoom, "&Zoom")
 	return zoom
@@ -394,14 +395,14 @@ func zoomLabels() []string {
 // menuCommand is a right-click row whose text marks its access key with &, as the menu bar's do.
 // Its key is never h, j, k or l: in the menu those move as the arrows do, and a row's own key
 // would win over them.
-func menuCommand(id widget.ItemID, text string, action tuicore.Action) widget.MenuItemModel {
+func menuCommand(id widgetcore.ItemID, text string, action tuicore.Action) widgetcore.MenuItemModel {
 	label, key, at := tuicore.ParseMnemonic(text)
-	row := widget.NewCommand(id, label, action)
+	row := widgetcore.NewCommand(id, label, action)
 	row.Hotkey, row.HotkeyIdx = key, at
 	return withLabelMessage(row, text)
 }
 
 // coreRowOf is a row of an EditorMenu (a table's or the page's) as a rowMaker (Layout ›).
-func coreRowOf(id, label string, run func()) widget.MenuItemModel {
-	return menuCommand(widget.ItemID(id), label, widget.CoreMenuAction{ID: tuicore.ActionID(id), Run: func(*widget.EditorCore) { run() }})
+func coreRowOf(id, label string, run func()) widgetcore.MenuItemModel {
+	return menuCommand(widgetcore.ItemID(id), label, editor.CoreMenuAction{ID: tuicore.ActionID(id), Run: func(*editor.EditorCore) { run() }})
 }

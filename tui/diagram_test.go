@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 func TestMermaidBlockUsesTheOneUnderTheCursor(t *testing.T) {
@@ -68,7 +68,7 @@ func TestTheDiagramViewShowsTheEmbedUnderTheCursor(t *testing.T) {
 	r.h.p.Post(func() { r.h.openAbsolute(abs) })
 	r.waitOpen(t, "", abs)
 	enabled := onLoop(r, func() bool {
-		r.h.core.SetCursor(widget.TextPos{Line: 2, Col: 3})
+		r.h.core.SetCursor(editor.TextPos{Line: 2, Col: 3})
 		_, ok := mermaidBlock([]byte(r.h.core.Value()), r.h.cursorBytes(), r.h.diagramReader())
 		r.h.previewDiagram()
 		return ok

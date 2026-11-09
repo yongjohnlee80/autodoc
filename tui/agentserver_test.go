@@ -17,7 +17,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/golib/tui/pty"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
@@ -323,7 +323,7 @@ func TestTheServerIsStartedWithTheCLIsEnvironment(t *testing.T) {
 	awaitStart(t, c, instance)
 	cfg := c.panel.configs[instance.tab]
 	var spawned pty.Cmd // the CLI, as runAgent gives it
-	a.spawn = func(c pty.Cmd) (widget.TerminalProcess, error) { spawned = c; return newFakeTerminal(), nil }
+	a.spawn = func(c pty.Cmd) (terminal.TerminalProcess, error) { spawned = c; return newFakeTerminal(), nil }
 	proc, err := cfg.Start(pty.Cmd{Path: cfg.Command, Args: cfg.Args, Dir: cfg.Dir})
 	if err != nil {
 		t.Fatal(err)
@@ -389,7 +389,7 @@ func TestAPlainAgentsVariablesAreInItsEnvironment(t *testing.T) {
 	}
 	cfg := c.panel.configs[instance.tab]
 	var spawned pty.Cmd
-	a.spawn = func(c pty.Cmd) (widget.TerminalProcess, error) { spawned = c; return newFakeTerminal(), nil }
+	a.spawn = func(c pty.Cmd) (terminal.TerminalProcess, error) { spawned = c; return newFakeTerminal(), nil }
 	proc, err := cfg.Start(pty.Cmd{Path: cfg.Command, Args: cfg.Args, Dir: cfg.Dir})
 	if err != nil {
 		t.Fatal(err)
@@ -430,7 +430,7 @@ func environMap(environ []string) map[string]string {
 
 // fakeTerminal is an agent CLI's process: Wait returns once ended, Close records the terminal closed.
 type fakeTerminal struct {
-	widget.TerminalProcess
+	terminal.TerminalProcess
 	ended  chan struct{}
 	closed chan struct{}
 	once   sync.Once
@@ -493,7 +493,7 @@ func TestTheWindowStopsTheServerWhenItsCLIFailsToStart(t *testing.T) {
 	}
 	awaitStart(t, c, instance)
 	cfg := c.panel.configs[instance.tab]
-	a.spawn = func(pty.Cmd) (widget.TerminalProcess, error) { return nil, errors.New("no such program") }
+	a.spawn = func(pty.Cmd) (terminal.TerminalProcess, error) { return nil, errors.New("no such program") }
 	if _, err := cfg.Start(pty.Cmd{Path: cfg.Command, Args: cfg.Args, Dir: cfg.Dir}); err == nil {
 		t.Fatal("a CLI that failed to start: started")
 	}

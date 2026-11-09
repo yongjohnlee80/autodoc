@@ -8,7 +8,8 @@ import (
 	"time"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // relations_test.go: the Relations drawer (docs/decisions/editor.md#the-relations-drawer) — each
@@ -234,8 +235,8 @@ func TestRelationsEdges(t *testing.T) {
 
 	// the page itself on top (old.md, then doc.md): back goes to old.md, past it
 	r.h.p.Post(func() {
-		r.h.jumps.Push(widget.JumpPos{Doc: docKey(fileRef{"kb", "old.md"})})
-		r.h.jumps.Push(widget.JumpPos{Doc: docKey(fileRef{"kb", "doc.md"}), Line: 1})
+		r.h.jumps.Push(editor.JumpPos{Doc: docKey(fileRef{"kb", "old.md"})})
+		r.h.jumps.Push(editor.JumpPos{Doc: docKey(fileRef{"kb", "doc.md"}), Line: 1})
 		r.h.goBack()
 	})
 	r.waitFile(t, "old.md")
@@ -332,7 +333,7 @@ func TestGoToLinkOpensTheLinkedDocument(t *testing.T) {
 	if !onLoop(r, func() bool {
 		for _, item := range r.h.editorMenu(r.h.core) {
 			if item.ID == "autodoc.link" {
-				item.Action.(widget.CoreMenuAction).Run(r.h.core)
+				item.Action.(editor.CoreMenuAction).Run(r.h.core)
 				return true
 			}
 		}
@@ -388,7 +389,7 @@ func TestTheLinksRowsAreAHand(t *testing.T) {
 		view, _ := r.h.p.Adapter().Component(n)
 		ctx := view.(interface{ Context() *tuicore.Context }).Context()
 		for _, c := range ctx.Children(view) {
-			if l, ok := c.(*widget.List[int]); ok {
+			if l, ok := c.(*widgetcore.List[int]); ok {
 				return l.PointerShapes(nil)
 			}
 		}

@@ -9,7 +9,7 @@ import (
 
 	"github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // recordingShell is a user's shell that, its tty raw, appends every byte it is sent to report: every
@@ -52,25 +52,25 @@ func TestCtrlTabMovesBetweenTheTerminalsTabs(t *testing.T) {
 		t.Fatal("Ctrl+Tab with one shell moved the tab or the keyboard")
 	}
 	onLoop(r, func() bool { r.h.terminals.newShell(); r.h.terminals.newShell(); return true })
-	tabs := func() []widget.TerminalTabID {
-		return onLoop(r, func() []widget.TerminalTabID {
+	tabs := func() []terminal.TerminalTabID {
+		return onLoop(r, func() []terminal.TerminalTabID {
 			p, _ := r.h.terminals.panel()
-			var ids []widget.TerminalTabID
+			var ids []terminal.TerminalTabID
 			for _, tab := range p.Tabs() {
 				ids = append(ids, tab.ID)
 			}
 			return ids
 		})
 	}
-	active := func() widget.TerminalTabID {
-		return onLoop(r, func() widget.TerminalTabID { p, _ := r.h.terminals.panel(); return p.Active() })
+	active := func() terminal.TerminalTabID {
+		return onLoop(r, func() terminal.TerminalTabID { p, _ := r.h.terminals.panel(); return p.Active() })
 	}
 	r.s.WaitFor(t, "three shells, the newest showing", func(string) bool {
 		ids := tabs()
 		return len(ids) == 3 && active() == ids[2] && r.focused("terminalView")
 	})
 	ids := tabs()
-	to := func(key tui.KeyEvent, want widget.TerminalTabID, what string) {
+	to := func(key tui.KeyEvent, want terminal.TerminalTabID, what string) {
 		t.Helper()
 		r.keys(t, key)
 		r.s.WaitFor(t, what, func(string) bool { return active() == want && r.focused("terminalView") })
@@ -121,12 +121,12 @@ func TestCtrlTabMovesBetweenTheAgentsTabs(t *testing.T) {
 // TestNextTabGoesRoundPastClosingTabs: the tab a step away, round both ways; a tab closing is passed
 // over; with fewer than two open, or the active one closing, none.
 func TestNextTabGoesRoundPastClosingTabs(t *testing.T) {
-	tab := func(id string, closing bool) widget.TerminalTab {
-		return widget.TerminalTab{ID: widget.TerminalTabID(id), Closing: closing}
+	tab := func(id string, closing bool) terminal.TerminalTab {
+		return terminal.TerminalTab{ID: terminal.TerminalTabID(id), Closing: closing}
 	}
-	abc := []widget.TerminalTab{tab("a", false), tab("b", true), tab("c", false), tab("d", false)}
+	abc := []terminal.TerminalTab{tab("a", false), tab("b", true), tab("c", false), tab("d", false)}
 	for _, c := range []struct {
-		tabs   []widget.TerminalTab
+		tabs   []terminal.TerminalTab
 		active string
 		step   int
 		want   string
@@ -137,10 +137,10 @@ func TestNextTabGoesRoundPastClosingTabs(t *testing.T) {
 		{abc, "c", -1, "a"}, // back past b
 		{abc, "b", 1, ""},   // the active one closing: none
 		{abc, "z", 1, ""},   // the active one gone: none
-		{[]widget.TerminalTab{tab("a", false)}, "a", 1, ""},                 // one tab
-		{[]widget.TerminalTab{tab("a", false), tab("b", true)}, "a", 1, ""}, // one open
+		{[]terminal.TerminalTab{tab("a", false)}, "a", 1, ""},                 // one tab
+		{[]terminal.TerminalTab{tab("a", false), tab("b", true)}, "a", 1, ""}, // one open
 	} {
-		got, ok := tabAfter(c.tabs, widget.TerminalTabID(c.active), c.step)
+		got, ok := tabAfter(c.tabs, terminal.TerminalTabID(c.active), c.step)
 		if string(got) != c.want || ok != (c.want != "") {
 			t.Errorf("tabAfter(%s, %+d) = %q %v, want %q", c.active, c.step, got, ok, c.want)
 		}

@@ -2,7 +2,8 @@ package tui
 
 import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
+	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
 )
@@ -32,7 +33,7 @@ type cellNotePage struct {
 	dirSet bool
 	// md draws a note's Rendered view in the editor (renderNote); imgKey is the folder its images
 	// load from, as last given to the editor
-	md     *widget.MarkdownCellRenderer
+	md     *editor.MarkdownCellRenderer
 	imgKey string
 	imgSet bool
 	// embeds answers md for the note's embedded diagrams, charts and tables (noteembeds.go), the
@@ -43,7 +44,7 @@ type cellNotePage struct {
 // notePageView is the page as the editor's document view: shown, it lays out the HTML file's
 // text, which is what the editor hands it.
 type notePageView struct {
-	*widget.HTMLView
+	*htmlview.HTMLView
 	page *cellNotePage
 }
 
@@ -93,8 +94,8 @@ func (v *notePageView) HandleEvent(ev tuicore.Event) bool {
 
 // vimKeys reports whether the editor reads keys by Vim's keyset: Space is then the app's leader.
 func (p *cellNotePage) vimKeys() bool {
-	e, ok := p.h.editor.(*widget.Editor)
-	return !ok || e.Core().Keyset() == widget.KeysetVim
+	e, ok := p.h.editor.(*editor.Editor)
+	return !ok || e.Core().Keyset() == editor.KeysetVim
 }
 
 // editingKey reports whether k, a key the page doesn't read, edits: Esc, or a key that types (its
@@ -106,7 +107,7 @@ func editingKey(k tuicore.KeyEvent) bool {
 // inEditor is at, a point in the page's frame, in the editor's: the page lies under the editor's
 // Raw | Rendered row when it shows one, so the two frames differ by where the page was placed.
 func (v *notePageView) inEditor(at tuicore.Point) tuicore.Point {
-	e, ok := v.page.h.editor.(*widget.Editor)
+	e, ok := v.page.h.editor.(*editor.Editor)
 	pc := v.Context()
 	if !ok || pc == nil || e.Context() == nil {
 		return at
@@ -121,21 +122,21 @@ func (v *notePageView) inEditor(at tuicore.Point) tuicore.Point {
 
 // menu opens the editor's menu at at, in the editor's frame.
 func (p *cellNotePage) menu(at tuicore.Point) bool {
-	e, ok := p.h.editor.(*widget.Editor)
+	e, ok := p.h.editor.(*editor.Editor)
 	return ok && e.ContextMenu().OpenAt(at)
 }
 
 // edit opens the text at its cursor and gives it k, the editing key that left the page.
 func (p *cellNotePage) edit(k tuicore.KeyEvent) bool {
-	e, ok := p.h.editor.(*widget.Editor)
+	e, ok := p.h.editor.(*editor.Editor)
 	if !ok {
 		return false
 	}
-	e.SetView(widget.ViewRaw)
+	e.SetView(editor.ViewRaw)
 	return e.HandleEvent(k)
 }
 
-var _ widget.DocumentView = (*notePageView)(nil)
+var _ editor.DocumentView = (*notePageView)(nil)
 
 func newCellNotePage(h *Host) *cellNotePage { return &cellNotePage{h: h} }
 
@@ -153,9 +154,9 @@ func (*cellNotePage) Moved(int, int) {}
 // toText opens the file's text at its cursor, as an editing key does: for a find the page can't
 // show. False when there is no terminal editor.
 func (p *cellNotePage) toText() bool {
-	e, ok := p.h.editor.(*widget.Editor)
+	e, ok := p.h.editor.(*editor.Editor)
 	if ok {
-		e.SetView(widget.ViewRaw)
+		e.SetView(editor.ViewRaw)
 	}
 	return ok
 }
@@ -165,7 +166,7 @@ func (p *cellNotePage) shownHere() bool { return p.isShown() && p.onATerminal() 
 
 // firstMarkFromTop is the first of the page's n marks at or after its top; the first when none is.
 func (p *cellNotePage) firstMarkFromTop(n int) int {
-	l, ok := p.view.BoundLayout().(widget.HTMLLayoutMarks)
+	l, ok := p.view.BoundLayout().(htmlview.HTMLLayoutMarks)
 	if !ok {
 		return 0
 	}
@@ -179,7 +180,7 @@ func (p *cellNotePage) firstMarkFromTop(n int) int {
 
 // currentMark makes the page's i-th mark the current one, where the page is: no scroll.
 func (p *cellNotePage) currentMark(i int) {
-	if l, ok := p.view.BoundLayout().(widget.HTMLLayoutMarks); ok {
+	if l, ok := p.view.BoundLayout().(htmlview.HTMLLayoutMarks); ok {
 		l.SetCurrentMark(i)
 		p.view.MarkDirty()
 	}
@@ -198,7 +199,7 @@ func (h *Host) notePage() *cellNotePage {
 // onATerminal reports whether the program draws in a terminal's cells: not a window's native views,
 // and the editor the terminal's (preview.go's showDiagram decides the same way).
 func (p *cellNotePage) onATerminal() bool {
-	_, ok := p.h.editor.(*widget.Editor)
+	_, ok := p.h.editor.(*editor.Editor)
 	return ok && !p.h.native()
 }
 func (p *cellNotePage) LanguageChanged() { p.giveNotice(); p.giveSyntax() }
@@ -216,7 +217,7 @@ func (p *cellNotePage) giveNotice() {
 	if p.view == nil {
 		return
 	}
-	widget.WithDiagramNotice(p.notice)(p.view.HTMLView)
+	htmlview.WithDiagramNotice(p.notice)(p.view.HTMLView)
 }
 
 // giveSyntax gives the page the highlighting its Editor has — the same catalog and the same
@@ -228,7 +229,7 @@ func (p *cellNotePage) giveSyntax() {
 	if p.view == nil || p.h.p == nil {
 		return
 	}
-	widget.WithSyntax(p.h.p.SourceLanguages(), p.h.p.SyntaxStyles())(p.view.HTMLView)
+	htmlview.WithSyntax(p.h.p.SourceLanguages(), p.h.p.SyntaxStyles())(p.view.HTMLView)
 }
 
 // diagramNoticeID is what a diagram the terminal doesn't draw shows: "⟨kind⟩ diagram: not drawn in
@@ -253,7 +254,7 @@ func (h *Host) pageNotice(kind string) string {
 // doesn't draw is said in the UI's language.
 func (p *cellNotePage) viewOf() *notePageView {
 	if p.view == nil {
-		hv := widget.NewHTMLView(widget.WithOnLink(p.h.htmlLink))
+		hv := htmlview.NewHTMLView(htmlview.WithOnLink(p.h.htmlLink))
 		hv.SetOnRefused(p.h.resourceRefused)
 		p.view = &notePageView{HTMLView: hv, page: p}
 		p.giveNotice()
@@ -296,9 +297,9 @@ func (p *cellNotePage) Shown(pg Page) {
 // renderNote draws note pg's Rendered view in the editor: its Markdown cell renderer, highlighting
 // code in the program's languages, its images loading from the note's folder, and no page over it.
 func (p *cellNotePage) renderNote(pg Page) {
-	e := p.h.editor.(*widget.Editor) // on a terminal (onATerminal)
+	e := p.h.editor.(*editor.Editor) // on a terminal (onATerminal)
 	if p.md == nil {
-		p.md = &widget.MarkdownCellRenderer{MarkdownBlocks: widget.MarkdownBlocks{HideMetadata: true}}
+		p.md = &editor.MarkdownCellRenderer{MarkdownBlocks: editor.MarkdownBlocks{HideMetadata: true}}
 	}
 	if p.h.p != nil {
 		p.md.Languages = p.h.p.SourceLanguages() // the program may have attached since
@@ -318,7 +319,7 @@ func (p *cellNotePage) renderNote(pg Page) {
 	if key := root + "\x00" + base; !p.imgSet || key != p.imgKey {
 		p.imgKey, p.imgSet = key, true
 		if p.h.diskPath() != "" {
-			e.SetImages(widget.DirResources(root, base))
+			e.SetImages(htmlview.DirResources(root, base))
 		} else {
 			e.SetImages(nil)
 		}
@@ -330,7 +331,7 @@ func (p *cellNotePage) renderNote(pg Page) {
 // an HTML file's page.
 func (p *cellNotePage) noRenderer() {
 	p.closeEmbeds()
-	if e, ok := p.h.editor.(*widget.Editor); ok && p.md != nil && e.Renderer() == p.md {
+	if e, ok := p.h.editor.(*editor.Editor); ok && p.md != nil && e.Renderer() == p.md {
 		e.SetRenderer(nil)
 	}
 }
@@ -347,7 +348,7 @@ func (p *cellNotePage) closeEmbeds() {
 // embedsChanged lays the note's Rendered view out again when an embedded file changed on disk,
 // while the note's renderer is the editor's.
 func (p *cellNotePage) embedsChanged() {
-	if e, ok := p.h.editor.(*widget.Editor); ok && p.md != nil && e.Renderer() == p.md {
+	if e, ok := p.h.editor.(*editor.Editor); ok && p.md != nil && e.Renderer() == p.md {
 		e.RelayRendered()
 	}
 }
@@ -367,7 +368,7 @@ func (p *cellNotePage) images(pg Page) {
 	if key := root + "\x00" + base; !p.dirSet || key != p.dirKey {
 		p.dirKey, p.dirSet = key, true
 		if p.h.diskPath() != "" {
-			p.view.SetImageResolver(widget.DirResources(root, base))
+			p.view.SetImageResolver(htmlview.DirResources(root, base))
 		} else {
 			p.view.SetImageResolver(nil)
 		}

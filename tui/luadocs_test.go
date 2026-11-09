@@ -12,7 +12,7 @@ import (
 	"time"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -73,7 +73,7 @@ func luaDocBlocks(t *testing.T) []luaBlock {
 func (r *running) page(text string, line, col int) {
 	onLoop(r, func() bool {
 		r.h.core.SetValue(text)
-		r.h.core.SetCursor(widget.TextPos{Line: line - 1, Col: col - 1})
+		r.h.core.SetCursor(editor.TextPos{Line: line - 1, Col: col - 1})
 		return true
 	})
 }
@@ -81,7 +81,7 @@ func (r *running) page(text string, line, col int) {
 // selectText selects from l1, c1 up to l2, c2 (1-based), as v does.
 func (r *running) selectText(l1, c1, l2, c2 int) {
 	onLoop(r, func() bool {
-		r.h.core.Select(widget.TextRange{From: widget.TextPos{Line: l1 - 1, Col: c1 - 1}, To: widget.TextPos{Line: l2 - 1, Col: c2 - 1}})
+		r.h.core.Select(editor.TextRange{From: editor.TextPos{Line: l1 - 1, Col: c1 - 1}, To: editor.TextPos{Line: l2 - 1, Col: c2 - 1}})
 		return true
 	})
 }
@@ -149,7 +149,7 @@ var luaDocChecks = map[string]func(t *testing.T, r *running){
 		r.waitNotice(t, "shape: 2 args, line 'one  two' (as :sh)")
 		r.mustRun(t, "shape! x")
 		r.waitNotice(t, "shape: 1 args, line 'x' (as :shape!)")
-		cmd := onLoop(r, func() widget.Command { c, _ := r.h.core.Commands().Lookup("shape"); return c })
+		cmd := onLoop(r, func() editor.Command { c, _ := r.h.core.Commands().Lookup("shape"); return c })
 		if cmd.Args != "[words]" || cmd.Help != "show what run gets" || !slices.Equal(cmd.Aliases, []string{"sh"}) {
 			t.Fatalf(":shape registered as %+v", cmd)
 		}
@@ -186,8 +186,8 @@ var luaDocChecks = map[string]func(t *testing.T, r *running){
 		r.mustRun(t, "hello")
 		r.waitNotice(t, "Hello, world (0 words)")
 		// what Tab offers for "he": hello, with its arguments and help
-		got := onLoop(r, func() []widget.Command { return r.h.core.Commands().Complete("he") })
-		if i := slices.IndexFunc(got, func(c widget.Command) bool { return c.Name == "hello" }); i < 0 ||
+		got := onLoop(r, func() []editor.Command { return r.h.core.Commands().Complete("he") })
+		if i := slices.IndexFunc(got, func(c editor.Command) bool { return c.Name == "hello" }); i < 0 ||
 			got[i].Args != "[name]" || got[i].Help != "say hello to someone" {
 			t.Fatalf("Tab on he: %+v", got)
 		}
@@ -269,7 +269,7 @@ var luaDocChecks = map[string]func(t *testing.T, r *running){
 			if c.Complete == nil {
 				return nil
 			}
-			return c.Complete(widget.CompleteContext{Core: r.h.core, Name: "heading", Word: "In"})
+			return c.Complete(editor.CompleteContext{Core: r.h.core, Name: "heading", Word: "In"})
 		})
 		if strings.Join(got, " ") != "Plan Install-it Use" {
 			t.Fatalf(":heading's complete gave %q", got)
@@ -373,10 +373,10 @@ var luaDocChecks = map[string]func(t *testing.T, r *running){
 			if err := r.h.core.RunCommand("link kestrel"); err != nil {
 				return err
 			}
-			if _, err := r.h.core.Insert(widget.TextPos{}, ">> "); err != nil {
+			if _, err := r.h.core.Insert(editor.TextPos{}, ">> "); err != nil {
 				return err
 			}
-			r.h.core.SetCursor(widget.TextPos{})
+			r.h.core.SetCursor(editor.TextPos{})
 			return nil
 		}); err != nil {
 			t.Fatal(err)

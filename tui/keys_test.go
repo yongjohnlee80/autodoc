@@ -14,7 +14,7 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	tuikey "github.com/yongjohnlee80/golib/tui/key"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // binds reports whether a generated block's Shortcuts take seq: a keyId's command holding it (the
@@ -315,7 +315,7 @@ func TestAKeyRunsACatalogEntryByItsID(t *testing.T) {
 // entry has says so.
 func TestAFeaturesKeyRunsItsEntryInTheProgram(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
-	ran := make(chan *widget.EditorCore, 1)
+	ran := make(chan *editor.EditorCore, 1)
 	f := &keyedCatFake{keyedFake: keyedFake{fake: fake{name: "zz"}, keys: []Key{{Seq: "F12", Show: "F12", Cmd: "zz.mark"}}},
 		entries: []Entry{{ID: "zz.mark", Title: "mark", Run: func(inv Invocation) error { ran <- inv.Core; return nil }}}}
 	h := newHost(NewSession(d.sock, nil), Options{seams: seamsFor(t)})
@@ -332,7 +332,7 @@ func TestAFeaturesKeyRunsItsEntryInTheProgram(t *testing.T) {
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyF12})
 	select {
 	case core := <-ran:
-		if core != onLoop(r, func() *widget.EditorCore { return r.h.core }) {
+		if core != onLoop(r, func() *editor.EditorCore { return r.h.core }) {
 			t.Fatal("the entry ran on another core than the attached editor's")
 		}
 	case <-time.After(5 * time.Second):

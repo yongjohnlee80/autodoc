@@ -14,7 +14,7 @@ import (
 	"time"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
@@ -144,7 +144,7 @@ func TestTheDiagramPreviewScrollsAndZooms(t *testing.T) {
 	r.waitAttached(t, "kb")
 	onLoop(r, func() bool {
 		r.h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
-		r.h.rasterizeOverride = func(_ context.Context, _ []byte, p widget.Page) ([]byte, error) {
+		r.h.rasterizeOverride = func(_ context.Context, _ []byte, p htmlview.Page) ([]byte, error) {
 			return tallPage(t, p.Width, int(float64(3*p.MinHeight)*p.Scale)), nil
 		}
 		return true
@@ -162,14 +162,14 @@ func TestTheDiagramPreviewScrollsAndZooms(t *testing.T) {
 	}
 	p0 := placed()
 	w, h := pngSize(t, first)
-	if w != p0.Cols*widget.CellPixelsW || h <= p0.Rows*widget.CellPixelsH {
+	if w != p0.Cols*htmlview.CellPixelsW || h <= p0.Rows*htmlview.CellPixelsH {
 		t.Fatalf("the page is %d×%d for %d×%d cells: not the whole page at the dialog's width", w, h, p0.Cols, p0.Rows)
 	}
-	if p0.Clip != (tuicore.Rect{W: w, H: p0.Rows * widget.CellPixelsH}) {
+	if p0.Clip != (tuicore.Rect{W: w, H: p0.Rows * htmlview.CellPixelsH}) {
 		t.Fatalf("the first view is %+v, want the top of the page", p0.Clip)
 	}
 	r.keys(t, key('j'), tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageDown})
-	r.s.WaitFor(t, "scrolled", func(string) bool { return placed().Clip.Y == p0.Rows*widget.CellPixelsH })
+	r.s.WaitFor(t, "scrolled", func(string) bool { return placed().Clip.Y == p0.Rows*htmlview.CellPixelsH })
 	if p := placed(); p.Version != p0.Version {
 		t.Fatal("a scroll made a new image")
 	}
@@ -186,7 +186,7 @@ func TestTheDiagramPreviewScrollsAndZooms(t *testing.T) {
 	r.keys(t, key('o')) // Zoom out: back to 100%, the page as first drawn
 	r.waitPlaced(t, "the page zoomed out", func(p tuicore.ImagePlacement) bool {
 		w, h2 := pngSize(t, p.PNG)
-		return w == p0.Cols*widget.CellPixelsW && h2 == h
+		return w == p0.Cols*htmlview.CellPixelsW && h2 == h
 	})
 	if got := onLoop(r, func() int { return r.h.imagePreview.zoom }); got != zoomDefault {
 		t.Fatalf("zoomed out to step %d, want %d (100%%)", got, zoomDefault)
@@ -213,8 +213,8 @@ func TestATallDiagramIsPlacedInStrips(t *testing.T) {
 	onLoop(r, func() bool {
 		r.h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
 		r.h.browser = func(context.Context, string) error { return nil }
-		r.h.rasterizeOverride = func(_ context.Context, _ []byte, p widget.Page) ([]byte, error) {
-			return tallPage(t, p.Width, widget.MaxImagePixels+2000), nil
+		r.h.rasterizeOverride = func(_ context.Context, _ []byte, p htmlview.Page) ([]byte, error) {
+			return tallPage(t, p.Width, htmlview.MaxImagePixels+2000), nil
 		}
 		return true
 	})
@@ -236,14 +236,14 @@ func TestATallDiagramIsPlacedInStrips(t *testing.T) {
 			return h
 		})
 	}
-	if h := whole(); h <= widget.MaxImagePixels {
+	if h := whole(); h <= htmlview.MaxImagePixels {
 		t.Fatalf("the page is %d tall: not longer than a terminal takes, so it tests nothing", h)
 	}
 	fits := func(where string, p tuicore.ImagePlacement) {
 		t.Helper()
 		w, h := pngSize(t, p.PNG)
-		if w > widget.MaxImagePixels || h > widget.MaxImagePixels {
-			t.Fatalf("%s: an image %d×%d was placed, past the terminal's %d", where, w, h, widget.MaxImagePixels)
+		if w > htmlview.MaxImagePixels || h > htmlview.MaxImagePixels {
+			t.Fatalf("%s: an image %d×%d was placed, past the terminal's %d", where, w, h, htmlview.MaxImagePixels)
 		}
 		if p.Clip.Y < 0 || p.Clip.Y+p.Clip.H > h {
 			t.Fatalf("%s: the clip %+v is outside the image placed (%d tall)", where, p.Clip, h)
@@ -339,7 +339,7 @@ func tinyPreview(t *testing.T, w, h int) (*running, chan string) {
 // On a screen too small for an image the Mermaid preview falls back to the source, saying why,
 // rather than staying a blank image area.
 func TestATinyScreenDiagramFallsBackToItsSource(t *testing.T) {
-	if _, ok := widget.HTMLRasterizer(); !ok {
+	if _, ok := htmlview.HTMLRasterizer(); !ok {
 		t.Skip("no headless browser: image mode is never entered")
 	}
 	r, _ := tinyPreview(t, 12, 3)
@@ -379,15 +379,15 @@ func TestAPreviewRendersOnceAResizeGivesItRoom(t *testing.T) {
 // link: golib's own browser test says so the same way). Any other failure of the probe is a failure.
 func skipWithoutUsableBrowser(t *testing.T) {
 	t.Helper()
-	if _, ok := widget.HTMLRasterizer(); !ok {
+	if _, ok := htmlview.HTMLRasterizer(); !ok {
 		t.Skip("no headless Chromium or Chrome")
 	}
-	_, err := widget.RasterizeHTML(context.Background(), []byte("<p>probe</p>"), 64, 32)
+	_, err := htmlview.RasterizeHTML(context.Background(), []byte("<p>probe</p>"), 64, 32)
 	for try := 1; err != nil && strings.Contains(err.Error(), "signal: killed") && try <= 2; try++ {
 		if try == 2 {
-			t.Skipf("the browser did not finish within %v, twice: too slow a host to tell", widget.RasterTimeout)
+			t.Skipf("the browser did not finish within %v, twice: too slow a host to tell", htmlview.RasterTimeout)
 		}
-		_, err = widget.RasterizeHTML(context.Background(), []byte("<p>probe</p>"), 64, 32)
+		_, err = htmlview.RasterizeHTML(context.Background(), []byte("<p>probe</p>"), 64, 32)
 	}
 	if err != nil && strings.Contains(err.Error(), "No usable sandbox") {
 		t.Skip("the installed browser has no usable sandbox here")
@@ -476,7 +476,7 @@ func TestThePreviewSpinsWhileTheDiagramRenders(t *testing.T) {
 	onLoop(r, func() bool {
 		r.h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
 		r.h.browser = func(context.Context, string) error { return nil }
-		r.h.rasterizeOverride = func(_ context.Context, _ []byte, p widget.Page) ([]byte, error) {
+		r.h.rasterizeOverride = func(_ context.Context, _ []byte, p htmlview.Page) ([]byte, error) {
 			<-release // the headless browser, taking its moment
 			return tallPage(t, p.Width, p.MinHeight), nil
 		}

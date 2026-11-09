@@ -6,24 +6,25 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	lua "github.com/yuin/gopher-lua"
 )
 
 // menuAt is the right-click menu's added rows for ctx, as one open builds them.
-func (r *running) menuAt(ctx menuCtx) []widget.MenuItemModel {
-	return onLoop(r, func() []widget.MenuItemModel {
+func (r *running) menuAt(ctx menuCtx) []widgetcore.MenuItemModel {
+	return onLoop(r, func() []widgetcore.MenuItemModel {
 		s := r.h.luaFeature()
 		return s.rows.editorItems(s, ctx)
 	})
 }
 
 // labelsOf is items' labels, a submenu's rows as "Sub>Row", separators left out.
-func labelsOf(items []widget.MenuItemModel) []string {
+func labelsOf(items []widgetcore.MenuItemModel) []string {
 	var out []string
 	for _, it := range items {
 		switch {
-		case it.Kind == widget.ItemKindSeparator:
+		case it.Kind == widgetcore.ItemKindSeparator:
 		case len(it.Children) > 0:
 			for _, ch := range it.Children {
 				out = append(out, it.Label+">"+ch.Label)
@@ -110,9 +111,9 @@ autodoc.menu{ where = "editor", menu = "`+long+`two", title = "L2", command = "m
 	if got := labelsOf(items); !same(got, want) {
 		t.Fatalf("the rows: %q; want %q", got, want)
 	}
-	ids := map[widget.ItemID]bool{}
-	var walk func([]widget.MenuItemModel)
-	walk = func(items []widget.MenuItemModel) {
+	ids := map[widgetcore.ItemID]bool{}
+	var walk func([]widgetcore.MenuItemModel)
+	walk = func(items []widgetcore.MenuItemModel) {
 		for _, it := range items {
 			if ids[it.ID] {
 				t.Errorf("item id %s twice", it.ID)
@@ -273,7 +274,7 @@ func TestAGatedScriptsRowNeedsCommandsWhenItRuns(t *testing.T) {
 	items := r.menuAt(menuCtx{path: "a.md"})
 	run := func() {
 		onLoop(r, func() bool {
-			items[1].Action.(widget.CoreMenuAction).Run(r.h.core)
+			items[1].Action.(editor.CoreMenuAction).Run(r.h.core)
 			return true
 		})
 	}
@@ -307,7 +308,7 @@ autodoc.menu{ where = "editor", id = "d", title = "D1", command = "mark d" }`)
 		onLoop(r, func() bool {
 			items := r.h.editorMenu(r.h.core)
 			labels = labelsOf(items[len(items)-len(want)-1:])
-			err = widget.NewMenu().SetModel(items)
+			err = widgetcore.NewMenu().SetModel(items)
 			return true
 		})
 		if !same(labels, want) || err != nil {

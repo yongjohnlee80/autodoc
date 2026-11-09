@@ -8,7 +8,7 @@ import (
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 
 	"github.com/yongjohnlee80/autodoc/script"
 	lua "github.com/yuin/gopher-lua"
@@ -432,7 +432,7 @@ func agentErr(err error) string {
 		return "unavailable"
 	case errors.Is(err, ErrAgentShuttingDown):
 		return "closed"
-	case errors.Is(err, widget.ErrTerminalPasteUnbracketed):
+	case errors.Is(err, terminal.ErrTerminalPasteUnbracketed):
 		return "unbracketed"
 	}
 	return err.Error()

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 )
 
 // diagramHelp is the diagram dialog's help line, as the preview last set it.
@@ -76,7 +76,7 @@ func TestATerminalsPreviewOptionChoosesTheEngine(t *testing.T) {
 	r.waitAttached(t, "kb")
 	onLoop(r, func() bool {
 		r.h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
-		r.h.rasterizeOverride = func(_ context.Context, _ []byte, p widget.Page) ([]byte, error) {
+		r.h.rasterizeOverride = func(_ context.Context, _ []byte, p htmlview.Page) ([]byte, error) {
 			return tallPage(t, p.Width, int(float64(p.MinHeight)*p.Scale)), nil
 		}
 		return true

@@ -11,7 +11,9 @@ import (
 	"github.com/yongjohnlee80/golib/errs"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
+	"github.com/yongjohnlee80/golib/tui/widget/table"
 )
 
 // THE PLUGINS, A FEATURE — the Plugins menu, its dialogs and services, their commands on SPC p and
@@ -291,7 +293,7 @@ type pluginHost interface {
 	// Attached reports whether the program runs: a plugin's dialog and the card's text need it
 	Attached() bool
 	// Overlay is where a dialog plugin's float attaches
-	Overlay() (*widget.OverlayHost, bool)
+	Overlay() (*widgetcore.OverlayHost, bool)
 	// HasCatalog reports whether the catalog is built (the registry is assembled)
 	HasCatalog() bool
 	PluginEntries() []*Entry                 // the catalog's plugin.* entries
@@ -330,15 +332,15 @@ type pluginHost interface {
 	// panel is sized from it until the user sizes it
 	PageSize() (w, h int)
 	// TableCore is the table behind a cell-cursor TableView, by its id; nil when there is none
-	TableCore(id string) *widget.TableCore
+	TableCore(id string) *table.TableCore
 	// ResultsTable is the cell-cursor TableView's DataTable, by its id: its menu; nil when none
-	ResultsTable(id string) *widget.DataTable
+	ResultsTable(id string) *table.DataTable
 	// CopyText puts text on the clipboard, reporting whether there is one
 	CopyText(text string) bool
 	// SetEditorRegister makes a table yank available to the editor's p/P commands.
 	SetEditorRegister(text string)
 	// BindResultsCompleter installs the loaded table's field-name completion in the results bar.
-	BindResultsCompleter(widget.TextCompleter)
+	BindResultsCompleter(widgetcore.TextCompleter)
 	// InsertBlock puts text into the page at the cursor, on lines of its own: one undo step
 	InsertBlock(text string) error
 	// BrowseFolder is where a file dialog starts: the open file's folder, the workspace's, or home
@@ -358,17 +360,17 @@ var (
 
 // The host's pluginHost: core's, with these.
 
-func (c core) Attached() bool                          { return c.h.p != nil }
-func (c core) Overlay() (*widget.OverlayHost, bool)    { return c.h.p.Overlay() }
-func (c core) SurfaceBackend() tuicore.Backend         { return c.h.backend }
-func (c core) TerminalPictures() bool                  { return c.h.terminalPictures() }
-func (c core) HasCatalog() bool                        { return c.h.cat != nil }
-func (c core) CardPanelsChanged(undo func())           { c.h.cardPanelsChanged(undo) }
-func (c core) CommandsChanged()                        { c.h.commandsChanged() }
-func (c core) RunEntry(id string, args []string) error { return c.h.cat.run(id, args) }
-func (c core) Context() context.Context                { return c.h.ctx }
-func (c core) After(d time.Duration, fn func())        { c.h.after(d, fn) }
-func (c core) Theme() string                           { return c.h.theme }
+func (c core) Attached() bool                           { return c.h.p != nil }
+func (c core) Overlay() (*widgetcore.OverlayHost, bool) { return c.h.p.Overlay() }
+func (c core) SurfaceBackend() tuicore.Backend          { return c.h.backend }
+func (c core) TerminalPictures() bool                   { return c.h.terminalPictures() }
+func (c core) HasCatalog() bool                         { return c.h.cat != nil }
+func (c core) CardPanelsChanged(undo func())            { c.h.cardPanelsChanged(undo) }
+func (c core) CommandsChanged()                         { c.h.commandsChanged() }
+func (c core) RunEntry(id string, args []string) error  { return c.h.cat.run(id, args) }
+func (c core) Context() context.Context                 { return c.h.ctx }
+func (c core) After(d time.Duration, fn func())         { c.h.after(d, fn) }
+func (c core) Theme() string                            { return c.h.theme }
 
 // ReadAbsolute and WriteAbsolute are a file anywhere on the daemon's disk, by its absolute path:
 // the host's readFile and writeFile (file.read, file.write) for a feature, as {content, version}.
@@ -395,7 +397,7 @@ func (c core) ThemeLabels() []string        { return c.h.themeLabels() }
 func (c core) NotifyOngoing(id, msg string) { c.h.notifyOngoing(id, msg) }
 func (c core) NotifyDone(id, msg string)    { c.h.notifyDone(id, msg) }
 func (c core) NotifyOngoingClick(id, msg string, onClick func()) {
-	c.h.post(widget.Toast{ID: id, Text: msg, Ongoing: true, OnClick: onClick})
+	c.h.post(widgetcore.Toast{ID: id, Text: msg, Ongoing: true, OnClick: onClick})
 }
 func (c core) NotifyAs(ns, id, msg string, ongoing bool) {
 	c.h.notifyAs(ns, noticeReq{id: id, text: msg, ongoing: ongoing})
@@ -418,14 +420,14 @@ func (c core) PageSize() (w, h int) {
 	return r.W, r.H
 }
 
-func (c core) TableCore(id string) *widget.TableCore {
+func (c core) TableCore(id string) *table.TableCore {
 	if t := c.ResultsTable(id); t != nil {
 		return t.Core()
 	}
 	return nil
 }
 
-func (c core) ResultsTable(id string) *widget.DataTable {
+func (c core) ResultsTable(id string) *table.DataTable {
 	if c.h.p == nil {
 		return nil
 	}
@@ -444,11 +446,11 @@ func (c core) SetEditorRegister(text string) {
 	}
 }
 
-func (c core) BindResultsCompleter(complete widget.TextCompleter) {
+func (c core) BindResultsCompleter(complete widgetcore.TextCompleter) {
 	if c.h.p == nil {
 		return
 	}
-	if input, ok := tuidecl.FindAs[*widget.TextInput](c.h.p, "resultsText"); ok {
+	if input, ok := tuidecl.FindAs[*widgetcore.TextInput](c.h.p, "resultsText"); ok {
 		input.SetCompleter(complete)
 	}
 }
@@ -463,12 +465,12 @@ func (c core) InsertBlock(text string) error {
 		return errors.New("no page is open")
 	}
 	if ed.ReadOnly() {
-		return widget.ErrReadOnly
+		return editor.ErrReadOnly
 	}
 	blank := func(ln int) bool { return strings.TrimSpace(ed.LineAt(ln)) == "" }
 	line, _ := ed.Line()
 	text = strings.TrimSuffix(text, "\n")
-	at := widget.TextPos{Line: line}
+	at := editor.TextPos{Line: line}
 	if blank(line) {
 		if line > 0 && !blank(line-1) {
 			text = "\n" + text

@@ -13,7 +13,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // keyAgent is an agent CLI that, its tty raw, prints the code of every byte it is sent, key-<n>: a
@@ -106,38 +106,42 @@ func TestThePreferenceOffGivesTheProgramTheMoveKeys(t *testing.T) {
 func TestAMoveArrivesReadyToType(t *testing.T) {
 	r := runKeyAgent(t)
 	var mu sync.Mutex
-	var modes []widget.TerminalMode
+	var modes []terminal.TerminalMode
 	onLoop(r, func() bool {
 		c, _ := r.h.p.Find("agentView")
 		tabs, _ := tuidecl.TerminalTabsOf(c)
-		tabs.SetOnMode(func(_ widget.TerminalTabID, m widget.TerminalMode) { mu.Lock(); modes = append(modes, m); mu.Unlock() })
+		tabs.SetOnMode(func(_ terminal.TerminalTabID, m terminal.TerminalMode) {
+			mu.Lock()
+			modes = append(modes, m)
+			mu.Unlock()
+		})
 		return true
 	})
-	last := func() (widget.TerminalMode, int) {
+	last := func() (terminal.TerminalMode, int) {
 		mu.Lock()
 		defer mu.Unlock()
 		if len(modes) == 0 {
-			return widget.TerminalInput, 0
+			return terminal.TerminalInput, 0
 		}
 		return modes[len(modes)-1], len(modes)
 	}
 	r.keys(t, decltest.Ctrl('t')) // the mode key: Normal mode
-	r.s.WaitFor(t, "normal mode", func(string) bool { m, _ := last(); return m == widget.TerminalNormal })
+	r.s.WaitFor(t, "normal mode", func(string) bool { m, _ := last(); return m == terminal.TerminalNormal })
 	r.keys(t, decltest.Ctrl('k'))
 	r.s.WaitFor(t, "the keyboard on the page", func(string) bool { return !r.focused("agentView") })
 	r.keys(t, decltest.Ctrl('j'))
-	r.s.WaitFor(t, "arrived in input mode", func(string) bool { m, _ := last(); return m == widget.TerminalInput && r.focused("agentView") })
+	r.s.WaitFor(t, "arrived in input mode", func(string) bool { m, _ := last(); return m == terminal.TerminalInput && r.focused("agentView") })
 	r.keys(t, decltest.Type("z")...)
 	r.got(t, 'z')
 
 	r.keys(t, decltest.Ctrl('t'))
-	r.s.WaitFor(t, "normal mode again", func(string) bool { m, _ := last(); return m == widget.TerminalNormal })
+	r.s.WaitFor(t, "normal mode again", func(string) bool { m, _ := last(); return m == terminal.TerminalNormal })
 	_, n := last()
 	onLoop(r, func() bool { r.h.focusEditor(); return true })
 	r.s.WaitFor(t, "the keyboard on the page", func(string) bool { return !r.focused("agentView") })
 	onLoop(r, func() bool { r.h.focusWindow("agent"); return true })
 	r.s.WaitFor(t, "the agent focused", func(string) bool { return r.focused("agentView") })
-	if m, after := last(); m != widget.TerminalNormal || after != n {
+	if m, after := last(); m != terminal.TerminalNormal || after != n {
 		t.Errorf("arriving by focusWindow changed the mode: %v (%d changes, %d before)", m, after, n)
 	}
 }

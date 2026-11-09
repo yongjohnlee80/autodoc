@@ -9,7 +9,7 @@ import (
 	"github.com/yongjohnlee80/golib/gui"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/table"
 )
 
 // guiResultsTUI is a TUI under --gui's style whose plugin "kinds" has shown the kinds table, its
@@ -32,7 +32,7 @@ func guiResultsTUI(t *testing.T) *running {
 	r.waitResults(t, "k1", len(kindsRows))
 	if bound := onLoop(r, func() bool {
 		dt := r.h.plugins.c.ResultsTable(resultsView)
-		return dt != nil && dt.BoundLayout() != widget.TableLayout(dt)
+		return dt != nil && dt.BoundLayout() != table.TableLayout(dt)
 	}); !bound {
 		t.Fatal("the results' table is not laid out natively under the GUI style")
 	}
@@ -80,14 +80,14 @@ func newNativePointer(t *testing.T, r *running) *nativePointer {
 }
 
 // point is the pixel over (row, col, hit), and what the layout says is there.
-func (p *nativePointer) point(row, col int, hit widget.TableHit) (x, y float32, at widget.TablePos) {
+func (p *nativePointer) point(row, col int, hit table.TableHit) (x, y float32, at table.TablePos) {
 	p.t.Helper()
 	var ok bool
 	onLoop(p.r, func() bool {
-		hitter := p.r.h.plugins.c.ResultsTable(resultsView).BoundLayout().(widget.TableLayoutHitter)
+		hitter := p.r.h.plugins.c.ResultsTable(resultsView).BoundLayout().(table.TableLayoutHitter)
 		rowY := func() (float32, bool) {
 			for y := float32(1); y < nativeH; y++ {
-				if at, got := hitter.HitAt(2, y); got == widget.TableHitGutter && at.Row == row {
+				if at, got := hitter.HitAt(2, y); got == table.TableHitGutter && at.Row == row {
 					return y + 4, true
 				}
 			}
@@ -95,7 +95,7 @@ func (p *nativePointer) point(row, col int, hit widget.TableHit) (x, y float32, 
 		}
 		colX := func() (float32, bool) {
 			for x := float32(1); x < nativeW; x++ {
-				if at, got := hitter.HitAt(x, 2); got == widget.TableHitHeader && at.Col == col {
+				if at, got := hitter.HitAt(x, 2); got == table.TableHitHeader && at.Col == col {
 					return x + 4, true
 				}
 			}
@@ -103,17 +103,17 @@ func (p *nativePointer) point(row, col int, hit widget.TableHit) (x, y float32, 
 		}
 		var okx, oky bool
 		switch hit {
-		case widget.TableHitGutter:
+		case table.TableHitGutter:
 			x, okx = 2, true
 			y, oky = rowY()
-		case widget.TableHitHeader:
+		case table.TableHitHeader:
 			y, oky = 2, true
 			x, okx = colX()
 		default:
 			y, oky = rowY()
 			x, okx = colX()
 		}
-		var got widget.TableHit
+		var got table.TableHit
 		at, got = hitter.HitAt(x, y)
 		ok = okx && oky && got == hit
 		return true
@@ -124,12 +124,12 @@ func (p *nativePointer) point(row, col int, hit widget.TableHit) (x, y float32, 
 	return x, y, at
 }
 
-func (p *nativePointer) press(row, col int, hit widget.TableHit) {
+func (p *nativePointer) press(row, col int, hit table.TableHit) {
 	_, _, at := p.point(row, col, hit)
 	onLoop(p.r, func() bool { return p.r.resultsCore().PressAt(at, hit) })
 }
 
-func (p *nativePointer) dragTo(row, col int, hit widget.TableHit) {
+func (p *nativePointer) dragTo(row, col int, hit table.TableHit) {
 	_, _, at := p.point(row, col, hit)
 	onLoop(p.r, func() bool { p.r.resultsCore().DragTo(at); return true })
 }
@@ -138,7 +138,7 @@ func (p *nativePointer) release() {
 	onLoop(p.r, func() bool { p.r.resultsCore().EndDrag(); return true })
 }
 
-func (p *nativePointer) rightPress(row, col int, hit widget.TableHit) {
+func (p *nativePointer) rightPress(row, col int, hit table.TableHit) {
 	x, y, _ := p.point(row, col, hit)
 	onLoop(p.r, func() bool {
 		dt := p.r.h.plugins.c.ResultsTable(resultsView)
@@ -148,7 +148,7 @@ func (p *nativePointer) rightPress(row, col int, hit widget.TableHit) {
 		return dt.HandleEvent(tuicore.MouseEvent{Kind: tuicore.MousePress,
 			Button: tuicore.MouseRight, X: int(x), Y: int(y), SubX: x - float32(int(x)), SubY: y - float32(int(y))})
 	})
-	waitHandled(p.t, p.r, "the right press", func(*widget.TableCore) bool {
+	waitHandled(p.t, p.r, "the right press", func(*table.TableCore) bool {
 		return p.r.h.plugins.c.ResultsTable(resultsView).Menu().IsOpen()
 	})
 }

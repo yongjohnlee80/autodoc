@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // eventsLua records every event as a line of the global events; the first change's handler edits
@@ -96,7 +96,7 @@ func TestARegistrationRefreshKeepsAPendingChange(t *testing.T) {
 	r.waitFile(t, "a.md")
 	r.s.WaitFor(t, "open", func(string) bool { return strings.Contains(events(), "open path=a.md") })
 	onLoop(r, func() bool {
-		_, _ = r.h.core.Insert(widget.TextPos{}, "x") // an edit: change pending
+		_, _ = r.h.core.Insert(editor.TextPos{}, "x") // an edit: change pending
 		r.h.edited()
 		r.h.readPage() // registrations arriving within the pause
 		return true

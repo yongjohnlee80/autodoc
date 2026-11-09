@@ -11,7 +11,7 @@ import (
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // luahost_test.go: the host functions scripts reach — the clipboard, a picker, AutoDoc's agents —
@@ -251,7 +251,7 @@ end }`)
 	// :agent-forward: the selection, with its lines, in a request
 	onLoop(r, func() bool { r.h.core.SetValue("ignored selected-part ignored"); return true })
 	onLoop(r, func() bool {
-		r.h.core.Select(widget.TextRange{From: widget.TextPos{Col: 8}, To: widget.TextPos{Col: 21}})
+		r.h.core.Select(editor.TextRange{From: editor.TextPos{Col: 8}, To: editor.TextPos{Col: 21}})
 		return true
 	})
 	if err := r.luaRun("agent-forward"); err != nil {
@@ -545,7 +545,7 @@ func TestTheAgentsCardSendsThePage(t *testing.T) {
 	// f: the selection
 	onLoop(r, func() bool { r.h.core.SetValue("ignored card-selected ignored"); return true })
 	onLoop(r, func() bool {
-		r.h.core.Select(widget.TextRange{From: widget.TextPos{Col: 8}, To: widget.TextPos{Col: 21}})
+		r.h.core.Select(editor.TextRange{From: editor.TextPos{Col: 8}, To: editor.TextPos{Col: 21}})
 		return r.h.p.Call("editor", "forceActiveFocus") == nil
 	})
 	r.leader(t, 'a')

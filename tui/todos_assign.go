@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/mail"
@@ -291,7 +291,7 @@ func (t *todos) handedOver(name, assignee string, err error) {
 		t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_typed_into_its_input", name))
 		return
 	}
-	if errors.Is(err, widget.ErrTerminalPasteUnbracketed) {
+	if errors.Is(err, terminal.ErrTerminalPasteUnbracketed) {
 		t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_its_program_takes_no_bracketed_paste", name))
 		return
 	}

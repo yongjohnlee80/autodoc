@@ -14,7 +14,7 @@ import (
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	tuivegalite "github.com/yongjohnlee80/golib/tui/vegalite"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // luacard_test.go: autodoc.ui.card, its tick, and :usage (docs/decisions/editor.md#lua-cards,
@@ -346,12 +346,12 @@ end }`)
 		if !ok {
 			return false
 		}
-		e, ok := c.(*widget.Editor)
+		e, ok := c.(*editor.Editor)
 		if !ok {
 			return false
 		}
 		_, page := e.DocumentView().(*cardPageView)
-		return page && e.ShownView() == widget.ViewRendered
+		return page && e.ShownView() == editor.ViewRendered
 	})
 	if !page {
 		t.Fatal("the card's editor shows no page, Rendered")

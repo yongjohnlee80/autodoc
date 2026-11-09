@@ -45,7 +45,10 @@ import (
 	"github.com/yongjohnlee80/golib/highlight"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
+	"github.com/yongjohnlee80/golib/tui/widget/files"
+	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 	"github.com/yongjohnlee80/golib/vfs"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
@@ -68,7 +71,7 @@ type Host struct {
 	keys     keyset             // the keys and their cards, the host's and the features' (keys.go)
 	started  bool               // the first preferences were applied: the program has started (applyPrefs)
 	editor   editorWidget       // main.qml's Editor, terminal or native (editor.go)
-	core     *widget.EditorCore // its core: the text, the cursor and the modes
+	core     *editor.EditorCore // its core: the text, the cursor and the modes
 	gui      bool               // in a window (Options.GUI): the theme kept is gui.theme
 	ctx      context.Context
 	cancel   context.CancelFunc
@@ -116,7 +119,7 @@ type Host struct {
 	// the Relations drawer (relations.go), a feature of its own; the jump list across the
 	// documents (navigation.go)
 	rel   *related
-	jumps *widget.JumpList
+	jumps *editor.JumpList
 
 	// the preferences (prefs.go), and the panels open now (panels.go)
 	prefs      prefs
@@ -209,7 +212,7 @@ type Host struct {
 	imagePreview      previewing    // the image preview open, to zoom it (preview.go)
 	htmlPane          htmlPaneState // the native HTML preview beside the editor, under --gui (htmlpane.go)
 	graphicsOverride  func() tuicore.Tri
-	rasterizeOverride func(context.Context, []byte, widget.Page) ([]byte, error)
+	rasterizeOverride func(context.Context, []byte, htmlview.Page) ([]byte, error)
 	// the outline and the breadcrumb (outline.go), a feature of its own; crumbs is the breadcrumb
 	// it puts after the file's name (Core.Crumbs)
 	outline   *outliner
@@ -236,10 +239,10 @@ type Host struct {
 	noteFile             func(string)        // told the open note's file (Options.NoteFile); nil: none
 	// browserOverride stands in for finding a headless browser in tests; nil: golib's HTMLRasterizer
 	browserOverride func() bool
-	paneMermaid     any              // the GUI pane's mermaid.js Diagrammer (mermaidjs_gui.go); nil until the pane opens
-	htmlAsk         *htmlOpen        // the HTML file the open question is about (OpenHTML.qml)
-	pageDir         string           // the root and base the page's resources load from (htmldoc.go)
-	pageDoc         *widget.HTMLView // the editor's own page view, kept while a table takes its place (htmldoc.go)
+	paneMermaid     any                // the GUI pane's mermaid.js Diagrammer (mermaidjs_gui.go); nil until the pane opens
+	htmlAsk         *htmlOpen          // the HTML file the open question is about (OpenHTML.qml)
+	pageDir         string             // the root and base the page's resources load from (htmldoc.go)
+	pageDoc         *htmlview.HTMLView // the editor's own page view, kept while a table takes its place (htmldoc.go)
 	// refusedNoted: the open page's refused resource was said (resourceRefused)
 	refusedNoted bool
 	// awaitExit waits for a stopped daemon's process to go (waitGone); a test's daemon shares the
@@ -272,11 +275,11 @@ type Host struct {
 	dockRows   *rows[widgetTarget] // App.dock, the menu bar's corner (dock.go)
 	// minimized are the panels the dock hid (golib's window minimize: hidden, not closed), the decl
 	// program's window collector; dockHidden are those the editor's icon hid, to show again (dock.go)
-	minimized  *widget.MinimizedWindows
+	minimized  *widgetcore.MinimizedWindows
 	dockHidden []string
 	dockFlash  map[string]*dockFlash // by panel: its icon flashing as it hides (dock.go)
 	widgetAt   int
-	tabStrip   *widget.TabStrip // the GUI editor's buffer tabs, once wired; nil in the TUI (buffertabs.go)
+	tabStrip   *widgetcore.TabStrip // the GUI editor's buffer tabs, once wired; nil in the TUI (buffertabs.go)
 	// the folders watched for the open files (diskwatch.go), and the driver a folder is opened with
 	watches map[string]*diskWatch
 	diskFS  func(dir string) (vfs.FS, error)
@@ -335,13 +338,13 @@ type Host struct {
 	prog           progress   // the daemon's work left (progress.go)
 	// the notifications (notify.go): the toasts over the page, what was posted before they were,
 	// and the history
-	toasts     *widget.Toasts
-	early      []widget.Toast
+	toasts     *widgetcore.Toasts
+	early      []widgetcore.Toast
 	noticeLog  *notices          // the notifications kept (notices.go)
-	vimKeys    *widget.Float     // the Vim keys' card (vimkeys.go)
-	findCard   *widget.Box       // "finding …" and its ✕, at the page window's top right (find.go)
+	vimKeys    *widgetcore.Float // the Vim keys' card (vimkeys.go)
+	findCard   *widgetcore.Box   // "finding …" and its ✕, at the page window's top right (find.go)
 	findCardOn tuicore.Component // the page's window the card was put in: a rebuilt one gets it again
-	findLabel  *widget.Text
+	findLabel  *widgetcore.Text
 	// the plugins (pluginfeature.go), a feature of its own: the host syncs their catalog entries
 	// when the registry is built, launches their services when the program runs, and F1 names their
 	// letters (help.go), at the moments the host decides
@@ -496,7 +499,7 @@ func newHost(session *Session, opt Options) *Host {
 		chart:           opt.Chart,
 		noteFile:        opt.NoteFile,
 		vectors:         newRows(tuidecl.NewListModel("key", "state", "model", "dims", "vectors", "f32", "bits", "keys", "total"), vectorRowOf),
-		jumps:           widget.NewJumpList(0),
+		jumps:           editor.NewJumpList(0),
 		prefs:           defaultPrefsFor(opt.GUI),
 		gui:             opt.GUI,
 		backend:         opt.Backend,
@@ -526,7 +529,7 @@ func newHost(session *Session, opt Options) *Host {
 	h.bufferPick = h.newBufferPick()
 	h.widgetRows = newWidgetRows()
 	h.dockRows = h.newDockRows()
-	h.minimized = widget.NewMinimizedWindows()
+	h.minimized = widgetcore.NewMinimizedWindows()
 	h.reloadCards = func(src []byte, sources map[string]any) (decl.Result, error) {
 		return h.p.ReloadWithSources(src, sources)
 	}
@@ -671,7 +674,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		// The file dialogs read the local disk, not the daemon's: same machine, so the daemon adds
 		// nothing to a listing. Off the loop, so a slow mount cannot hold it; os.DirFS, not
 		// vfs/local, whose root refuses an absolute link and lists every link as a file.
-		tuidecl.Files(widget.FileSource{FS: os.DirFS("/"), Root: "/", Async: true}),
+		tuidecl.Files(files.FileSource{FS: os.DirFS("/"), Root: "/", Async: true}),
 		// The too-small screen's Quit is AutoDoc's own, which asks before unsaved changes are lost;
 		// the caller's options come after, and may set another.
 		tuidecl.AppOptions(append([]tuicore.AppOption{tuicore.WithQuit(h.quit), tuicore.WithOnStopping(h.reg.stopping),

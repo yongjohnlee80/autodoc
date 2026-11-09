@@ -13,7 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/yongjohnlee80/golib/tui/pty"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 
 	"github.com/yongjohnlee80/autodoc/script"
 )
@@ -128,7 +128,7 @@ func newLuaShell(h *Host, post func(func())) *luaShell {
 
 // startLuaShell is a Lua shell tab's TerminalConfig.Start: a new shell each start (a tab started
 // again after its end is a new incarnation).
-func (h *Host) startLuaShell(pty.Cmd) (widget.TerminalProcess, error) {
+func (h *Host) startLuaShell(pty.Cmd) (terminal.TerminalProcess, error) {
 	s := newLuaShell(h, h.p.Post)
 	go s.run()
 	return s, nil

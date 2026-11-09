@@ -3,7 +3,7 @@ package tui
 import (
 	"errors"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // THE COMMAND LINE — the editor's own ':' prompt (golib's VIM Commands), with AutoDoc's half:
@@ -68,7 +68,7 @@ func (h *Host) editorEntries() []Entry {
 				return nil
 			}},
 		{ID: "find.clear", Title: "clear the find", Verb: "nohl", Help: "clear the find", Run: func(Invocation) error {
-			h.core.SetFind("", widget.FindOptions{})
+			h.core.SetFind("", editor.FindOptions{})
 			h.clearFind()
 			return nil
 		}},
@@ -79,7 +79,7 @@ func (h *Host) editorEntries() []Entry {
 // from the cursor. The editor's own active find (replace leaves one) is cleared so n and N are the
 // page find's.
 func (h *Host) findInPage(pattern string) {
-	h.core.SetFind("", widget.FindOptions{})
+	h.core.SetFind("", editor.FindOptions{})
 	h.find.pending = findPage
 	h.startFind(pattern)
 }

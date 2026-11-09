@@ -15,7 +15,7 @@ import (
 	"github.com/yongjohnlee80/golib/gui"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 )
 
 // runGUINote is the TUI in the GUI's style, standing in for a window, with a.md, a note of one
@@ -56,7 +56,7 @@ func TestTheHTMLPaneDrawsDiagramsByMermaidJS(t *testing.T) {
 	var pages []string
 	r := runGUINote(t, fencedNote, func(h *Host) {
 		h.browserOverride = func() bool { return true }
-		h.rasterizeOverride = func(_ context.Context, page []byte, p widget.Page) ([]byte, error) {
+		h.rasterizeOverride = func(_ context.Context, page []byte, p htmlview.Page) ([]byte, error) {
 			mu.Lock()
 			pages = append(pages, string(page))
 			mu.Unlock()
@@ -101,7 +101,7 @@ func TestViewDiagramInTheGUIIsMermaidJSsImage(t *testing.T) {
 	r := runGUINote(t, fencedNote, func(h *Host) {
 		h.browserOverride = func() bool { return true }
 		h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
-		h.rasterizeOverride = func(_ context.Context, _ []byte, p widget.Page) ([]byte, error) {
+		h.rasterizeOverride = func(_ context.Context, _ []byte, p htmlview.Page) ([]byte, error) {
 			calls <- struct{}{}
 			return tallPage(t, p.Width, 300), nil
 		}
@@ -134,7 +134,7 @@ func TestViewDiagramInTheGUIWithoutABrowser(t *testing.T) {
 	r.s.WaitFor(t, "the diagram drawn natively in the dialog", func(string) bool {
 		return onLoop(r, func() bool {
 			native, _ := r.h.p.Tree().Source("App.diagramNativeShown")
-			v, ok := componentUnder[*widget.HTMLView](r.h.p, "diagram")
+			v, ok := componentUnder[*htmlview.HTMLView](r.h.p, "diagram")
 			if native.Raw != "true" || !ok {
 				return false
 			}
@@ -164,7 +164,7 @@ func TestTheNativeEngineDrawsViewDiagram(t *testing.T) {
 	r := runGUINote(t, fencedNote, func(h *Host) {
 		h.browserOverride = func() bool { return true }
 		h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
-		h.rasterizeOverride = func(_ context.Context, _ []byte, p widget.Page) ([]byte, error) {
+		h.rasterizeOverride = func(_ context.Context, _ []byte, p htmlview.Page) ([]byte, error) {
 			calls <- struct{}{}
 			return tallPage(t, p.Width, 300), nil
 		}
@@ -206,7 +206,7 @@ func TestTheNativeEngineLeavesAnUndrawnTypeToMermaidJS(t *testing.T) {
 	r := runGUINote(t, "# P\n\n```mermaid\nkanban\n  Todo\n    [Write the docs]\n  Done\n    [Ship it]\n```\n", func(h *Host) {
 		h.browserOverride = func() bool { return true }
 		h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
-		h.rasterizeOverride = func(_ context.Context, _ []byte, p widget.Page) ([]byte, error) {
+		h.rasterizeOverride = func(_ context.Context, _ []byte, p htmlview.Page) ([]byte, error) {
 			return tallPage(t, p.Width, 300), nil
 		}
 		h.setMermaidEngine("native")
@@ -225,7 +225,7 @@ func TestTheNativeEngineLeavesAnUndrawnTypeToMermaidJS(t *testing.T) {
 func TestTheHTMLPaneFollowsTheMermaidEngine(t *testing.T) {
 	r := runGUINote(t, fencedNote, func(h *Host) {
 		h.browserOverride = func() bool { return true }
-		h.rasterizeOverride = func(_ context.Context, _ []byte, p widget.Page) ([]byte, error) {
+		h.rasterizeOverride = func(_ context.Context, _ []byte, p htmlview.Page) ([]byte, error) {
 			return tallPage(t, 300, 200), nil
 		}
 	})
@@ -252,7 +252,7 @@ func TestViewDiagramAgainDropsTheLastPicture(t *testing.T) {
 	r := runGUINote(t, fencedNote, func(h *Host) {
 		h.browserOverride = func() bool { return true }
 		h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
-		h.rasterizeOverride = func(_ context.Context, _ []byte, p widget.Page) ([]byte, error) {
+		h.rasterizeOverride = func(_ context.Context, _ []byte, p htmlview.Page) ([]byte, error) {
 			mu.Lock()
 			calls++
 			n := calls
@@ -296,7 +296,7 @@ func TestAWithdrawnNativeViewDiagramStaysWithdrawn(t *testing.T) {
 				r := runGUINote(t, fencedNote, func(h *Host) {
 					h.browserOverride = func() bool { return browser }
 					h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
-					h.rasterizeOverride = func(_ context.Context, _ []byte, p widget.Page) ([]byte, error) {
+					h.rasterizeOverride = func(_ context.Context, _ []byte, p htmlview.Page) ([]byte, error) {
 						return tallPage(t, p.Width, 300), nil
 					}
 					if browser {
@@ -317,7 +317,7 @@ func TestAWithdrawnNativeViewDiagramStaysWithdrawn(t *testing.T) {
 	r := runGUINote(t, fencedNote, func(h *Host) {
 		h.browserOverride = func() bool { return true }
 		h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
-		h.rasterizeOverride = func(_ context.Context, _ []byte, p widget.Page) ([]byte, error) {
+		h.rasterizeOverride = func(_ context.Context, _ []byte, p htmlview.Page) ([]byte, error) {
 			return tallPage(t, p.Width, 300), nil
 		}
 		h.setMermaidEngine("native")

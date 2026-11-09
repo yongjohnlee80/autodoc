@@ -3,7 +3,7 @@ package tui
 import (
 	"strings"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
@@ -36,7 +36,7 @@ func refOf(doc string) fileRef {
 // so it never lands on another document, or on a later open of the same one.
 type landing struct {
 	at   int              // a byte offset, when step is nil; -1 leaves the cursor where the open puts it
-	step *widget.JumpStep // a jump's
+	step *editor.JumpStep // a jump's
 }
 
 // jumpView is the page's view, as the jump list records it: "rendered" in the GUI's Rendered view.
@@ -44,7 +44,7 @@ func (h *Host) jumpView() string { return editorView(h.editor) }
 
 // jumpTo is the editor's step into another document or view: it opens the document, the step
 // landing when it is shown (a document shown already lands at once).
-func (h *Host) jumpTo(step widget.JumpStep) {
+func (h *Host) jumpTo(step editor.JumpStep) {
 	h.openRefTo(refOf(step.To.Doc), false, nil, &landing{step: &step})
 }
 
@@ -76,12 +76,12 @@ func (h *Host) missedLanding(land *landing, err error) {
 }
 
 // backToDocument is the nearest step back to another document, and whether there is one.
-func (h *Host) backToDocument() (widget.JumpStep, bool) {
+func (h *Host) backToDocument() (editor.JumpStep, bool) {
 	at := h.core.JumpHere()
 	for n := 1; ; n++ {
 		step, ok := h.jumps.Back(at, n)
 		if !ok {
-			return widget.JumpStep{}, false
+			return editor.JumpStep{}, false
 		}
 		if step.To.Doc != at.Doc {
 			return step, true

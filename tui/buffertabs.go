@@ -7,7 +7,8 @@ import (
 	"strings"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // THE BUFFER TABS — the open buffers on the GUI editor's title bar (golib's Editor.Tabs,
@@ -35,10 +36,10 @@ const terminalTabWidth = 20
 
 // tabStripper is an editor with buffer tabs: the window's on its title bar, the terminal's on its
 // frame's bottom border (golib's Editor.Tabs, in either).
-type tabStripper interface{ Tabs() *widget.TabStrip }
+type tabStripper interface{ Tabs() *widgetcore.TabStrip }
 
 // bufferStrip is the editor's strip for the buffers, nil for an editor with none.
-func (h *Host) bufferStrip() *widget.TabStrip {
+func (h *Host) bufferStrip() *widgetcore.TabStrip {
 	if t, ok := h.editor.(tabStripper); ok {
 		return t.Tabs()
 	}
@@ -48,7 +49,7 @@ func (h *Host) bufferStrip() *widget.TabStrip {
 // tabWidth is a buffer tab's widest on the editor's strip: terminalTabWidth on the terminal's (a
 // cell Editor's), bufferTabWidth on the window's.
 func (h *Host) tabWidth() int {
-	if _, cells := h.editor.(*widget.Editor); cells {
+	if _, cells := h.editor.(*editor.Editor); cells {
 		return terminalTabWidth
 	}
 	return bufferTabWidth
@@ -64,14 +65,14 @@ func (h *Host) syncBufferTabs() {
 // buffers are open: one buffer's name is the title row's already, and the page reads as it did
 // before there were tabs. The window's editor has its tabs on its title bar always, and isn't one.
 func (h *Host) showTerminalTabs() {
-	if e, ok := h.editor.(*widget.Editor); ok {
+	if e, ok := h.editor.(*editor.Editor); ok {
 		e.SetTabsInFrame(len(h.buffers) > 1)
 	}
 }
 
 // feedBufferTabs gives strip a tab per buffer and the shown one active, wiring it the first time
 // it is seen (a new editor, after a reload, is a new strip); nil, an editor with none, is left.
-func (h *Host) feedBufferTabs(strip *widget.TabStrip) {
+func (h *Host) feedBufferTabs(strip *widgetcore.TabStrip) {
 	if strip == nil {
 		return
 	}
@@ -88,9 +89,9 @@ func (h *Host) feedBufferTabs(strip *widget.TabStrip) {
 		strip.SetOnClose(h.closeBufferTab)
 	}
 	labels := h.bufferTabLabels(h.tabWidth() - 2) // 2: the padding
-	tabs := make([]widget.StripTab, len(h.buffers))
+	tabs := make([]widgetcore.StripTab, len(h.buffers))
 	for i, b := range h.buffers {
-		tabs[i] = widget.StripTab{ID: strconv.Itoa(b.n), Label: labels[b]}
+		tabs[i] = widgetcore.StripTab{ID: strconv.Itoa(b.n), Label: labels[b]}
 	}
 	strip.SetTabs(tabs)
 	if h.active != nil {
@@ -232,8 +233,8 @@ func (h *Host) bufferOfTab(id string) *openBuffer {
 // and in the TUI alike. It overrides vim's H and L (the screen's top and bottom line) in Normal mode
 // only: Visual mode keeps them, and Insert mode, a text field or a terminal never sees them (the
 // chord hook runs for the editor's keys, in Normal or Visual mode, with nothing pending).
-func (h *Host) bufferChord(kc widget.KeyChord) bool {
-	if kc.Mode != widget.ModeNormal || kc.Ctrl {
+func (h *Host) bufferChord(kc editor.KeyChord) bool {
+	if kc.Mode != editor.ModeNormal || kc.Ctrl {
 		return false
 	}
 	step := 0
@@ -359,15 +360,15 @@ func (h *Host) newEmptyBuffer() {
 // bufferTabRows is the menu of the tab id ("" off a tab, with none active): New buffer, Open file
 // in a new buffer…, the editor's Layout › and Go to › every buffer; then, for its buffer, Save
 // (while it is modified), Close and Close others.
-func (h *Host) bufferTabRows(id string) []widget.MenuItemModel {
-	goTo := make([]widget.MenuItemModel, 0, len(h.buffers))
+func (h *Host) bufferTabRows(id string) []widgetcore.MenuItemModel {
+	goTo := make([]widgetcore.MenuItemModel, 0, len(h.buffers))
 	for _, o := range h.buffers {
 		target := o
 		goTo = append(goTo, bufferTabRow("buffer.tabs.goto."+strconv.Itoa(o.n), bufferLabel(o), func() { h.showBuffer(target) }))
 	}
-	sub := withLabelMessage(widget.NewSubmenu("buffer.tabs.goto", "Go to", goTo), "Go to")
+	sub := withLabelMessage(widgetcore.NewSubmenu("buffer.tabs.goto", "Go to", goTo), "Go to")
 	sub.Enabled = len(goTo) > 0
-	rows := []widget.MenuItemModel{
+	rows := []widgetcore.MenuItemModel{
 		bufferTabRow("buffer.tabs.new", "&New buffer", h.newEmptyBuffer),
 		// File › Open, the file chosen in a buffer of its own, even over an empty one shown
 		bufferTabRow("buffer.tabs.open", "&Open file in a new buffer…", h.openPickerNewBuffer),
@@ -381,15 +382,15 @@ func (h *Host) bufferTabRows(id string) []widget.MenuItemModel {
 	save.Enabled = b.file.dirty
 	others := bufferTabRow("buffer.tabs.closeothers", "Close &others", func() { h.closeOtherBuffers(b) })
 	others.Enabled = len(h.buffers) > 1
-	return append(rows, widget.NewSeparator("buffer.tabs.sep"), save,
+	return append(rows, widgetcore.NewSeparator("buffer.tabs.sep"), save,
 		bufferTabRow("buffer.tabs.close", "&Close", func() { h.closeBuffer(b) }), others)
 }
 
 // bufferTabRow is a row of a buffer tab's menu: run when chosen. An & in label marks its key; never
 // h, j, k or l, which move in the menu.
-func bufferTabRow(id, label string, run func()) widget.MenuItemModel {
+func bufferTabRow(id, label string, run func()) widgetcore.MenuItemModel {
 	text, key, at := tuicore.ParseMnemonic(label)
-	row := widget.NewCommand(widget.ItemID(id), text, widget.TabStripMenuAction{ID: tuicore.ActionID(id), Run: func(string) { run() }})
+	row := widgetcore.NewCommand(widgetcore.ItemID(id), text, widgetcore.TabStripMenuAction{ID: tuicore.ActionID(id), Run: func(string) { run() }})
 	row.Hotkey, row.HotkeyIdx = key, at
 	return withLabelMessage(row, label)
 }

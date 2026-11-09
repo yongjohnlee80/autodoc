@@ -8,7 +8,7 @@ import (
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 const notePageNote = "# Pantry\n\nSome **bold** words.\n\n| Item | Qty |\n| --- | ---: |\n| apple | 3 |\n\n" +
@@ -19,10 +19,10 @@ const notePageNote = "# Pantry\n\nSome **bold** words.\n\n| Item | Qty |\n| --- 
 // table file's table, kept from an earlier file) is drawn over it.
 func renderedByTheEditor(r *running) bool {
 	return onLoop(r, func() bool {
-		e := r.h.editor.(*widget.Editor)
-		_, md := e.Renderer().(*widget.MarkdownCellRenderer)
+		e := r.h.editor.(*editor.Editor)
+		_, md := e.Renderer().(*editor.MarkdownCellRenderer)
 		dv := e.DocumentView()
-		return md && (dv == nil || !dv.Visible()) && e.ShownView() == widget.ViewRendered
+		return md && (dv == nil || !dv.Visible()) && e.ShownView() == editor.ViewRendered
 	})
 }
 
@@ -42,7 +42,7 @@ func TestATerminalNoteOpensRenderedByTheEditor(t *testing.T) {
 	r.s.WaitFor(t, "the note Rendered by the editor", func(string) bool { return renderedByTheEditor(r) })
 	if same := onLoop(r, func() bool {
 		p := r.h.notePage()
-		return p != nil && p.md != nil && r.h.editor.(*widget.Editor).Renderer() == p.md
+		return p != nil && p.md != nil && r.h.editor.(*editor.Editor).Renderer() == p.md
 	}); !same {
 		t.Fatal("the editor's renderer is not the note page's")
 	}
@@ -65,7 +65,7 @@ func TestATerminalNoteOpensRenderedByTheEditor(t *testing.T) {
 	})
 
 	r.keys(t, ctrlT)
-	r.s.WaitFor(t, "the note's text after Ctrl+T", func(string) bool { return shownView(r) == widget.ViewRaw })
+	r.s.WaitFor(t, "the note's text after Ctrl+T", func(string) bool { return shownView(r) == editor.ViewRaw })
 	r.s.WaitForText(t, "**bold**")
 	r.keys(t, ctrlT)
 	r.s.WaitFor(t, "Rendered again", func(sc string) bool { return renderedByTheEditor(r) && !strings.Contains(sc, "**bold**") })
@@ -73,7 +73,7 @@ func TestATerminalNoteOpensRenderedByTheEditor(t *testing.T) {
 
 	// an edit while it is Rendered (an agent's, say): drawn at once, its markup hidden
 	onLoop(r, func() bool {
-		if _, err := r.h.core.Insert(widget.TextPos{}, "# Larder notes\n\n"); err != nil {
+		if _, err := r.h.core.Insert(editor.TextPos{}, "# Larder notes\n\n"); err != nil {
 			t.Error(err)
 		}
 		return true
@@ -108,11 +108,11 @@ func TestCtrlTKeepsTheCursorBetweenRenderedAndRaw(t *testing.T) {
 	r.s.WaitForText(t, "Paragraph 20")
 	r.keys(t, decltest.Ctrl('t'))
 	r.s.WaitFor(t, "Raw at the cursor", func(sc string) bool {
-		return shownView(r) == widget.ViewRaw && r.cursor() == [2]int{40, 3} && strings.Contains(sc, "Paragraph 20")
+		return shownView(r) == editor.ViewRaw && r.cursor() == [2]int{40, 3} && strings.Contains(sc, "Paragraph 20")
 	})
 	r.keys(t, decltest.Ctrl('t'))
 	r.s.WaitFor(t, "Rendered at the cursor", func(sc string) bool {
-		return shownView(r) == widget.ViewRendered && r.cursor() == [2]int{40, 3} && strings.Contains(sc, "Paragraph 20")
+		return shownView(r) == editor.ViewRendered && r.cursor() == [2]int{40, 3} && strings.Contains(sc, "Paragraph 20")
 	})
 }
 
@@ -221,17 +221,17 @@ func openRenderedNote(t *testing.T, note, title string) *running {
 	return r
 }
 
-func shownView(r *running) widget.EditorView {
-	return onLoop(r, func() widget.EditorView { return r.h.editor.(*widget.Editor).ShownView() })
+func shownView(r *running) editor.EditorView {
+	return onLoop(r, func() editor.EditorView { return r.h.editor.(*editor.Editor).ShownView() })
 }
 
 // asText takes the note shown from Rendered to its text (Ctrl+T), for a cell whose subject is the
 // text's own (its cursor, gutter, marks, wrap, motions): a note on a terminal opens Rendered.
 func (r *running) asText(t *testing.T) {
 	t.Helper()
-	r.s.WaitFor(t, "the note Rendered", func(string) bool { return shownView(r) == widget.ViewRendered })
+	r.s.WaitFor(t, "the note Rendered", func(string) bool { return shownView(r) == editor.ViewRendered })
 	r.keys(t, decltest.Ctrl('t'))
-	r.s.WaitFor(t, "the note's text", func(string) bool { return shownView(r) == widget.ViewRaw })
+	r.s.WaitFor(t, "the note's text", func(string) bool { return shownView(r) == editor.ViewRaw })
 }
 
 // TestTypingInAJustOpenedNoteEditsItInPlace: a note opens Rendered and is edited there: i, then the
@@ -242,9 +242,9 @@ func TestTypingInAJustOpenedNoteEditsItInPlace(t *testing.T) {
 	r.keys(t, decltest.Type("xy")...)
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyEscape})
 	r.s.WaitFor(t, "the typing in the note, back in Normal", func(string) bool {
-		return strings.HasPrefix(r.editorText(), "xy# Pantry") && onLoop(r, r.h.core.Mode) == widget.ModeNormal
+		return strings.HasPrefix(r.editorText(), "xy# Pantry") && onLoop(r, r.h.core.Mode) == editor.ModeNormal
 	})
-	if v := shownView(r); v != widget.ViewRendered {
+	if v := shownView(r); v != editor.ViewRendered {
 		t.Fatalf("after typing the note shows view %v, want Rendered", v)
 	}
 }
@@ -267,13 +267,13 @@ func TestAFindInARenderedNoteCountsItsSource(t *testing.T) {
 	r.s.WaitFor(t, "found in the source, the cursor on the first", func(string) bool {
 		return total() == 3 && r.cursor() == [2]int{2, 2}
 	})
-	if v := shownView(r); v != widget.ViewRendered {
+	if v := shownView(r); v != editor.ViewRendered {
 		t.Fatalf("the find left the Rendered view: view %v", v)
 	}
 	r.keys(t, decltest.Ctrl('t'))
-	r.s.WaitFor(t, "counted in the text", func(string) bool { return shownView(r) == widget.ViewRaw && total() == 3 })
+	r.s.WaitFor(t, "counted in the text", func(string) bool { return shownView(r) == editor.ViewRaw && total() == 3 })
 	r.keys(t, decltest.Ctrl('t'))
-	r.s.WaitFor(t, "counted Rendered again", func(string) bool { return shownView(r) == widget.ViewRendered && total() == 3 })
+	r.s.WaitFor(t, "counted Rendered again", func(string) bool { return shownView(r) == editor.ViewRendered && total() == 3 })
 	r.h.p.Post(r.h.clearFind)
 	r.s.WaitFor(t, "cleared", func(string) bool { return onLoop(r, func() string { return r.h.find.query }) == "" })
 }
@@ -311,12 +311,12 @@ func TestAFindOnlyTheSourceHasIsFoundInTheRenderedView(t *testing.T) {
 	}
 	find("zebra")
 	r.s.WaitForText(t, `find: no "zebra" in the page`)
-	if v := shownView(r); v != widget.ViewRendered {
+	if v := shownView(r); v != editor.ViewRendered {
 		t.Fatalf("a term in neither left the Rendered view: view %v", v)
 	}
 	find("x.example/target")
 	r.s.WaitFor(t, "the find on its match, Rendered", func(string) bool {
-		return shownView(r) == widget.ViewRendered && r.cursor() == [2]int{2, strings.Index(line, "x.example/target")} &&
+		return shownView(r) == editor.ViewRendered && r.cursor() == [2]int{2, strings.Index(line, "x.example/target")} &&
 			onLoop(r, func() int { return r.h.find.total }) == 1
 	})
 	moved := onLoop(r, func() bool {
@@ -398,7 +398,7 @@ func TestAnotherFileTakesTheNotesRendererOff(t *testing.T) {
 	r.waitFile(t, "b.txt")
 	r.s.WaitFor(t, "b.txt drawn with no Markdown renderer", func(sc string) bool {
 		md := onLoop(r, func() bool {
-			_, md := r.h.editor.(*widget.Editor).Renderer().(*widget.MarkdownCellRenderer)
+			_, md := r.h.editor.(*editor.Editor).Renderer().(*editor.MarkdownCellRenderer)
 			return md
 		})
 		return !md && strings.Contains(sc, "**plain** text")

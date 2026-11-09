@@ -5,7 +5,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
+	"github.com/yongjohnlee80/golib/tui/widget/table"
 )
 
 // BUFFERS — the open files, one shown in the editor (docs/decisions/editor.md#multiple-buffers).
@@ -27,11 +28,11 @@ import (
 type openBuffer struct {
 	n    int            // its number, as :b and the tabs show it; never reused in a run
 	file openedFile     // ws, path, version, open, dirty, gen, derived, raw, then
-	buf  *widget.Buffer // its text, history, marks and revision (golib)
+	buf  *editor.Buffer // its text, history, marks and revision (golib)
 	// ed is the buffer's own headless editor, made on first use (editorFor); nil until then
-	ed *widget.EditorCore
+	ed *editor.EditorCore
 	// table is a CSV or TSV buffer's Rendered view, made when it is first shown (tabledoc.go)
-	table *widget.TableDocument
+	table *table.TableDocument
 	// luaRev and luaGen are the Lua change event's baseline and debounce generation, per buffer
 	luaRev, luaGen uint64
 	// restored is the kept copy this buffer's text came from (recovery.go); pendingRestore, a copy
@@ -54,7 +55,7 @@ type openBuffer struct {
 // newBuffer is an empty buffer, added after the others. It is not shown until activate.
 func (h *Host) newBuffer() *openBuffer {
 	h.bufN++
-	b := &openBuffer{n: h.bufN, buf: widget.NewBuffer()}
+	b := &openBuffer{n: h.bufN, buf: editor.NewBuffer()}
 	b.file.gen = 1
 	h.buffers = append(h.buffers, b)
 	return b
@@ -84,7 +85,7 @@ func (h *Host) newBufferWith(name, text string) error {
 	if text != "" {
 		// an edit, as typing is: the editor's textChanged marks the draft modified (edited), and
 		// the editor's own :x sees it so
-		if _, err := h.core.Replace(widget.TextRange{}, text); err != nil {
+		if _, err := h.core.Replace(editor.TextRange{}, text); err != nil {
 			h.dropBuffer(b)
 			return fmt.Errorf("buffer.new: %w", err)
 		}
@@ -155,12 +156,12 @@ func (h *Host) bufferTicket(b *openBuffer, load bool) Ticket {
 
 // editorFor is b's editor: the widget's when b is active, else b's headless one, made once with the
 // widget's command registry and jump list, read-only for a derived document.
-func (h *Host) editorFor(b *openBuffer) *widget.EditorCore {
+func (h *Host) editorFor(b *openBuffer) *editor.EditorCore {
 	if b == h.active {
 		return h.core
 	}
 	if b.ed == nil {
-		b.ed = widget.NewEditorCore(widget.CoreBuffer(b.buf), widget.CoreCommands(h.core.Commands()))
+		b.ed = editor.NewEditorCore(editor.CoreBuffer(b.buf), editor.CoreCommands(h.core.Commands()))
 		b.ed.SetJumps(h.jumps, h.jumpTo)
 	}
 	b.ed.SetReadOnly(b.file.derived != "")

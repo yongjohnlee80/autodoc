@@ -12,7 +12,7 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/i18n"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 )
 
 // LANGUAGES — AutoDoc's UI in six languages (docs/decisions/editor.md#six-languages), on golib's
@@ -162,7 +162,7 @@ func (h *Host) trOr(id, english string) string {
 // withLabelMessage is row with its label a catalog message, when the English catalog holds label
 // as one of AutoDoc's menu rows: golib's Menu then fills it in the UI's language, its key English's.
 // A name (a buffer's, a tab's, a plugin's) is shown as written.
-func withLabelMessage(row widget.MenuItemModel, label string) widget.MenuItemModel {
+func withLabelMessage(row widgetcore.MenuItemModel, label string) widgetcore.MenuItemModel {
 	id := menuLabelID(label)
 	if t, ok := englishCatalog().Lookup(i18n.English, id); ok && t == label {
 		row.LabelMsg = tuicore.Msg(id)
