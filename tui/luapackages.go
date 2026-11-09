@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/yongjohnlee80/autodoc/core/manifests"
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 
 	regindex "github.com/yongjohnlee80/autodoc/core/registry"
 )
@@ -128,12 +128,14 @@ func (h *Host) installPackage(url string) error {
 	case h.luaDir == "":
 		return errors.New("lua-install: no Lua folder")
 	}
-	if _, err := exec.LookPath("git"); err != nil {
+	if _, err := procenv.LookPath(h.seams.env, "git"); err != nil {
 		return errors.New("lua-install needs git")
 	}
-	dir, own, src := h.luaDir, h.cands.allocs, h.seams.registry
+	dir, own, src, env := h.luaDir, h.cands.allocs, h.seams.registry, h.seams.env
 	h.notify(h.trf("autodoc.notice.luapackages.cloning", url))
-	do(h, func(ctx context.Context) answerOf[*candidate] { return answered(stagePackage(ctx, src, dir, url, own)) }, func(r answerOf[*candidate]) {
+	do(h, func(ctx context.Context) answerOf[*candidate] {
+		return answered(stagePackage(ctx, env, src, dir, url, own))
+	}, func(r answerOf[*candidate]) {
 		if r.err == nil {
 			r.err = h.cands.begin(r.v, h.askPackage, h.hidePackage)
 		}
@@ -148,8 +150,8 @@ func (h *Host) installPackage(url string) error {
 
 // stagePackage stages url as a Lua package candidate in dir, refused when that package is
 // installed already.
-func stagePackage(ctx context.Context, src registrySource, dir, url string, own *allocs) (*candidate, error) {
-	stage, commit, err := cloneStage(ctx, dir, url, own)
+func stagePackage(ctx context.Context, env procenv.Env, src registrySource, dir, url string, own *allocs) (*candidate, error) {
+	stage, commit, err := cloneStage(ctx, env, dir, url, own)
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +163,7 @@ func stagePackage(ctx context.Context, src registrySource, dir, url string, own 
 	if _, err := os.Stat(filepath.Join(dir, m.Name)); err == nil {
 		return fail(fmt.Errorf("%s is installed already: remove lua/%s first", m.Name, m.Name))
 	}
-	return &candidate{kind: regindex.KindLua, name: m.Name, repo: url, commit: commit, stage: stage,
+	return &candidate{kind: regindex.KindLua, name: m.Name, repo: url, commit: commit, stage: stage, env: env,
 		entry: src.entry(regindex.KindLua, url), pkg: m}, nil
 }
 

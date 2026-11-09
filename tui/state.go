@@ -1,8 +1,8 @@
 package tui
 
 import (
-	"os"
-
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/internal/userdirs"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
@@ -103,8 +103,8 @@ func (h *Host) state() map[string]any {
 		"App.vectorsRefusals": "",
 
 		// the workspace settings (settings.go): one dialog, Edit and Advanced, for an edit and an add
-		"App.home":                    homeDir(),
-		"App.browseFolder":            homeDir(),
+		"App.home":                    homeDir(h.seams.env),
+		"App.browseFolder":            homeDir(h.seams.env),
 		"App.settingsHelp":            "",
 		"App.settingsTab":             0,
 		"App.settingsAdding":          false,
@@ -218,9 +218,10 @@ func choices(labels ...string) *tuidecl.ListModel {
 	return m
 }
 
-// homeDir is where the folder picker starts: the home directory, or the root.
-func homeDir() string {
-	if d, err := os.UserHomeDir(); err == nil {
+// homeDir is where the folder picker starts: the home directory (env's, nil for AutoDoc's own),
+// or the root.
+func homeDir(env procenv.Env) string {
+	if d, err := userdirs.Home(env); err == nil {
 		return d
 	}
 	return "/"

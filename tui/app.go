@@ -530,10 +530,10 @@ func newHost(session *Session, opt Options) *Host {
 	h.reloadCards = func(src []byte, sources map[string]any) (decl.Result, error) {
 		return h.p.ReloadWithSources(src, sources)
 	}
-	h.terminals = newTerminals(unboundPanelHost(core{h}))
+	h.terminals = newTerminals(unboundPanelHost(core{h}), &h.seams)
 	h.terminals.startLua = h.startLuaShell
 	h.agents = newAgents(unboundPanelHost(core{h}), &h.seams, opt.AgentDir, opt.ConfigPath)
-	h.crew = newCrewHost(core{h}, opt.AgentDir)
+	h.crew = newCrewHost(core{h}, h.seams.env, opt.AgentDir)
 	h.agents.crew = h.crew
 	h.crew.deliverJob = h.agents.deliverFallback
 	h.crew.onTodoFiles = h.todoFilesChanged

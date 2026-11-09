@@ -14,6 +14,7 @@ import (
 
 	"slices"
 
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/plugin"
 
 	regindex "github.com/yongjohnlee80/autodoc/core/registry"
@@ -84,9 +85,9 @@ func (pl *plugins) addPlugin(url string) {
 	}
 	pl.c.Close("pluginAdd")
 	pl.c.NotifyOngoing(toastPlugin, pl.c.Trf("autodoc.notice.plugininstall.cloning", url))
-	dir, own, src := pl.pluginOpt.Dir, pl.cands.allocs, pl.seams.registry
+	dir, own, src, env := pl.pluginOpt.Dir, pl.cands.allocs, pl.seams.registry, pl.seams.env
 	coreDo(pl.c, func(ctx context.Context) answerOf[*candidate] {
-		return answered(stagePlugin(ctx, src, dir, url, nil, own))
+		return answered(stagePlugin(ctx, env, src, dir, url, nil, own))
 	}, func(r answerOf[*candidate]) {
 		if r.err == nil {
 			r.err = pl.cands.begin(r.v, pl.askPlugin, pl.hidePlugin)
@@ -104,7 +105,7 @@ func (pl *plugins) addPlugin(url string) {
 // full: a candidate's stage, a plugin's or a Lua package's alike. The stage is held in own from the
 // moment it exists, so the session's end removes it even if this answer never reaches the loop. A
 // failed clone leaves no stage.
-func cloneStage(ctx context.Context, parent, url string, own *allocs) (stage, commit string, err error) {
+func cloneStage(ctx context.Context, env procenv.Env, parent, url string, own *allocs) (stage, commit string, err error) {
 	if err := os.MkdirAll(parent, 0o755); err != nil {
 		return "", "", err
 	}
@@ -115,8 +116,8 @@ func cloneStage(ctx context.Context, parent, url string, own *allocs) (stage, co
 		own.remove(stage)
 		return "", "", errSessionEnded
 	}
-	if _, err = git(ctx, pluginCloneTimeout, "", "clone", "--depth", "1", "--", url, stage); err == nil {
-		commit, err = git(ctx, pluginCloneTimeout, stage, "rev-parse", "HEAD") // in full: an audit names a full commit
+	if _, err = git(ctx, env, pluginCloneTimeout, "", "clone", "--depth", "1", "--", url, stage); err == nil {
+		commit, err = git(ctx, env, pluginCloneTimeout, stage, "rev-parse", "HEAD") // in full: an audit names a full commit
 	}
 	if err != nil {
 		own.remove(stage)
@@ -131,11 +132,11 @@ func cloneStage(ctx context.Context, parent, url string, own *allocs) (stage, co
 // stagePlugin stages url as a plugin candidate: an add (installed nil), refused when that plugin is
 // installed already, or an update of installed, refused when the staged plugin is another. A stage
 // that is not a runnable plugin is thrown away.
-func stagePlugin(ctx context.Context, src registrySource, dir, url string, installed *pluginEntry, own *allocs) (*candidate, error) {
-	if _, err := exec.LookPath("git"); err != nil {
+func stagePlugin(ctx context.Context, env procenv.Env, src registrySource, dir, url string, installed *pluginEntry, own *allocs) (*candidate, error) {
+	if _, err := procenv.LookPath(env, "git"); err != nil {
 		return nil, errors.New("adding a plugin needs git")
 	}
-	stage, commit, err := cloneStage(ctx, dir, url, own)
+	stage, commit, err := cloneStage(ctx, env, dir, url, own)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +153,7 @@ func stagePlugin(ctx context.Context, src registrySource, dir, url string, insta
 	if _, err := os.Stat(filepath.Join(dir, e.m.Name)); installed == nil && err == nil {
 		return fail(fmt.Errorf("%s is installed already: Manage plugins… updates it", e.m.Name))
 	}
-	return &candidate{kind: regindex.KindPlugin, name: e.m.Name, repo: url, commit: commit, stage: stage,
+	return &candidate{kind: regindex.KindPlugin, name: e.m.Name, repo: url, commit: commit, stage: stage, env: env,
 		update: installed != nil, entry: src.entry(regindex.KindPlugin, url), m: e.m}, nil
 }
 
@@ -256,7 +257,7 @@ func (pl *plugins) installCandidate(c *candidate) {
 		if err := pristine(ctx, c); err != nil {
 			return err
 		}
-		if err := buildPlugin(ctx, logs, &c.m, c.stage); err != nil {
+		if err := buildPlugin(ctx, c.env, logs, &c.m, c.stage); err != nil {
 			return err
 		}
 		if c.update {
@@ -331,7 +332,7 @@ func swapIn(fsys installFS, dir, stage, name string) error {
 }
 
 // buildPlugin runs m's [install] build in dir, bounded, its output in the plugin's install log.
-func buildPlugin(ctx context.Context, logs string, m *manifest, dir string) error {
+func buildPlugin(ctx context.Context, env procenv.Env, logs string, m *manifest, dir string) error {
 	if len(m.Install.Build) == 0 {
 		return nil
 	}
@@ -339,10 +340,10 @@ func buildPlugin(ctx context.Context, logs string, m *manifest, dir string) erro
 	defer cancel()
 	log := openPluginLog(logs, m.Name+"-install")
 	defer log.Close()
-	cmd := exec.CommandContext(ctx, m.Install.Build[0], m.Install.Build[1:]...)
+	cmd := exec.CommandContext(ctx, procenv.Resolve(env, m.Install.Build[0]), m.Install.Build[1:]...)
 	cmd.Dir = dir
 	cmd.Stdout, cmd.Stderr = log, log
-	cmd.Env = append(ownEnviron(), "AUTODOC_PLUGIN_DIR="+dir)
+	cmd.Env = append(ownEnviron(env), "AUTODOC_PLUGIN_DIR="+dir)
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
 			return fmt.Errorf("its build did not finish in %s", pluginBuildTimeout)
@@ -357,12 +358,13 @@ func buildPlugin(ctx context.Context, logs string, m *manifest, dir string) erro
 }
 
 // git runs git, never asking for credentials or anything else, and says what it said on a failure.
-func git(ctx context.Context, timeout time.Duration, dir string, args ...string) (string, error) {
+// env is the program's environment (nil, AutoDoc's own): git is found on its PATH, and inherits it.
+func git(ctx context.Context, env procenv.Env, timeout time.Duration, dir string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := exec.CommandContext(ctx, procenv.Resolve(env, "git"), args...)
 	cmd.Dir = dir
-	cmd.Env = append(ownEnviron(), "GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS=", "SSH_ASKPASS=") // git may run configured helpers
+	cmd.Env = append(ownEnviron(env), "GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS=", "SSH_ASKPASS=") // git may run configured helpers
 	var out, errOut bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errOut
 	if err := cmd.Run(); err != nil {
@@ -397,7 +399,7 @@ func (pl *plugins) managePlugins() {
 // loadManaged lists the installed plugins in the manager, each with its source, read off the loop.
 func (pl *plugins) loadManaged() {
 	pl.c.Set("App.pluginsHelp", pl.c.Trf("autodoc.text.plugininstall.add_from_a_git_url_update_or_remove_the_one_unde", pl.pluginOpt.Dir))
-	entries := discoverPlugins(pl.pluginOpt.Dir)
+	entries, env := discoverPlugins(pl.pluginOpt.Dir), pl.seams.env
 	coreDo(pl.c, func(ctx context.Context) answerOf[[]managedPlugin] {
 		out := make([]managedPlugin, len(entries))
 		for i, e := range entries {
@@ -405,8 +407,8 @@ func (pl *plugins) loadManaged() {
 			if _, err := os.Stat(filepath.Join(e.dir, ".git")); err != nil {
 				continue
 			}
-			out[i].source, _ = git(ctx, pluginCloneTimeout, e.dir, "remote", "get-url", "origin")
-			out[i].commit, _ = git(ctx, pluginCloneTimeout, e.dir, "rev-parse", "--short", "HEAD")
+			out[i].source, _ = git(ctx, env, pluginCloneTimeout, e.dir, "remote", "get-url", "origin")
+			out[i].commit, _ = git(ctx, env, pluginCloneTimeout, e.dir, "rev-parse", "--short", "HEAD")
 		}
 		return answered(out, nil)
 	}, func(a answerOf[[]managedPlugin]) {
@@ -475,7 +477,7 @@ func (pl *plugins) updatePlugin(name string) error {
 // folder is only read: nothing is fetched into it.
 func (pl *plugins) fetchAndAsk(m managedPlugin) {
 	pl.c.NotifyOngoing(toastPlugin, pl.c.Trf("autodoc.notice.plugininstall.fetching", m.e.m.Name))
-	dir, own, reg := pl.pluginOpt.Dir, pl.cands.allocs, pl.seams.registry
+	dir, own, reg, env := pl.pluginOpt.Dir, pl.cands.allocs, pl.seams.registry, pl.seams.env
 	type staged struct {
 		c    *candidate
 		head string
@@ -486,17 +488,17 @@ func (pl *plugins) fetchAndAsk(m managedPlugin) {
 			if _, err := os.Stat(filepath.Join(m.e.dir, ".git")); err != nil {
 				return staged{err: errors.New("it was put in the folder by hand: update it there")}
 			}
-			src, err := git(ctx, pluginCloneTimeout, m.e.dir, "remote", "get-url", "origin")
+			src, err := git(ctx, env, pluginCloneTimeout, m.e.dir, "remote", "get-url", "origin")
 			if err != nil {
 				return staged{err: err}
 			}
 			m.source = src
 		}
-		head, err := git(ctx, pluginCloneTimeout, m.e.dir, "rev-parse", "HEAD") // in full, as the staged commit is
+		head, err := git(ctx, env, pluginCloneTimeout, m.e.dir, "rev-parse", "HEAD") // in full, as the staged commit is
 		if err != nil {
 			return staged{err: err}
 		}
-		c, err := stagePlugin(ctx, reg, dir, m.source, &m.e, own)
+		c, err := stagePlugin(ctx, env, reg, dir, m.source, &m.e, own)
 		if err == nil && c.commit == head {
 			own.remove(c.stage)
 		}

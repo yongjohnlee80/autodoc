@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/internal/userdirs"
 	"github.com/yongjohnlee80/golib/errs"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
@@ -19,6 +21,7 @@ import (
 // only its PanelHost services; none of this state is shared between programs.
 type terminals struct {
 	c       PanelHost
+	seams   *seams // the program's (Host.seams)
 	restore bool
 	// startLua is a Lua shell's program (Host.startLuaShell, luashell.go); nil: no Lua shells
 	startLua func(pty.Cmd) (widget.TerminalProcess, error)
@@ -30,7 +33,25 @@ type terminalRuntimeHost interface {
 	Terminals(string) (TerminalPanel, error)
 }
 
-func newTerminals(c PanelHost) *terminals { return &terminals{c: c, restore: true} }
+func newTerminals(c PanelHost, s *seams) *terminals {
+	return &terminals{c: c, seams: s, restore: true}
+}
+
+// inOwnEnv is config to run in the program's environment when a test gave it one of its own: the
+// shell it names for a tab that names none, and its variables under the tab's own (golib's terminal
+// otherwise starts the process's $SHELL, with the process's environment under the tab's). In
+// AutoDoc's own (env nil), config is as it was.
+func (t *terminals) inOwnEnv(config TerminalConfig) TerminalConfig {
+	env := t.seams.env
+	if env == nil {
+		return config
+	}
+	if config.Command == "" && config.Start == nil {
+		config.Command = env.Get("SHELL")
+	}
+	config.Env = append(env.Environ(), config.Env...)
+	return config
+}
 func (t *terminals) BindPanelHost(c PanelHost) error {
 	t.c = c
 	return nil
@@ -462,7 +483,7 @@ func (t *terminals) newShell() {
 	if ws, ok := t.c.ActiveWorkspace(); ok {
 		root = ws.root
 	}
-	t.startTab(shellLabel, TerminalConfig{Dir: termDir(root)},
+	t.startTab(shellLabel, t.inOwnEnv(TerminalConfig{Dir: termDir(t.seams.env, root)}),
 		func(err error) string {
 			return t.c.Trf("autodoc.notice.terminal.the_terminal_could_not_add_a_shell", err.Error())
 		},
@@ -630,12 +651,12 @@ func (t *terminals) openTerminal() {
 }
 
 // termDir is where the shell starts: the workspace's folder when this machine has it as a folder
-// (a daemon may serve a root only it can see), else the user's home.
-func termDir(root string) string {
+// (a daemon may serve a root only it can see), else the user's home (env's, nil for AutoDoc's own).
+func termDir(env procenv.Env, root string) string {
 	if fi, err := os.Stat(root); err == nil && fi.IsDir() {
 		return root
 	}
-	if home, err := os.UserHomeDir(); err == nil {
+	if home, err := userdirs.Home(env); err == nil {
 		return home
 	}
 	return ""

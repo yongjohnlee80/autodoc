@@ -10,6 +10,8 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/internal/userdirs"
 	"github.com/yongjohnlee80/golib/tui/widget"
 
 	"github.com/yongjohnlee80/autodoc"
@@ -36,10 +38,11 @@ const (
 
 // candidate is one install or update. Its identity is immutable; only state moves, on the loop.
 type candidate struct {
-	kind, name, repo string // kind: regindex.KindPlugin or KindLua
-	commit           string // in full; the card shows its first seven
-	stage            string // the clone, at commit: what Install builds and moves in
-	update           bool   // replaces an installed plugin, which is never this candidate's to remove
+	kind, name, repo string      // kind: regindex.KindPlugin or KindLua
+	commit           string      // in full; the card shows its first seven
+	stage            string      // the clone, at commit: what Install builds and moves in
+	env              procenv.Env // the environment it was staged in (nil, AutoDoc's own): its git's and its build's
+	update           bool        // replaces an installed plugin, which is never this candidate's to remove
 	entry            *regindex.IndexEntry
 	m                manifest         // a plugin's manifest, as the stage holds it
 	pkg              packageManifest  // a Lua package's
@@ -402,11 +405,12 @@ func defaultFirst(agents []AgentEntry, codename string) []AgentEntry {
 // its HEAD moved off c.commit. The audit copies are clones of their own, so an agent working in one
 // can't change the stage; this catches anything that touched the stage anyway.
 func pristine(ctx context.Context, c *candidate) error {
-	status, err := git(ctx, pluginCloneTimeout, c.stage, "status", "--porcelain=v1", "--ignored", "--untracked-files=all")
+	env := c.env
+	status, err := git(ctx, env, pluginCloneTimeout, c.stage, "status", "--porcelain=v1", "--ignored", "--untracked-files=all")
 	if err != nil {
 		return err
 	}
-	head, err := git(ctx, pluginCloneTimeout, c.stage, "rev-parse", "HEAD")
+	head, err := git(ctx, env, pluginCloneTimeout, c.stage, "rev-parse", "HEAD")
 	if err != nil {
 		return err
 	}
@@ -420,10 +424,11 @@ func pristine(ctx context.Context, c *candidate) error {
 // copy and, beside it (never in it), the task file. The root is held in own from the moment it
 // exists, so the session's end removes it even if this answer never reaches the loop.
 func auditCopy(ctx context.Context, c *candidate, own *allocs) (root, task string, err error) {
+	env := c.env
 	if err := pristine(ctx, c); err != nil {
 		return "", "", err
 	}
-	root, err = os.MkdirTemp("", "autodoc-audit-")
+	root, err = os.MkdirTemp(userdirs.Temp(env), "autodoc-audit-")
 	if err != nil {
 		return "", "", err
 	}
@@ -432,7 +437,7 @@ func auditCopy(ctx context.Context, c *candidate, own *allocs) (root, task strin
 		return fail(errSessionEnded)
 	}
 	dir := filepath.Join(root, c.name)
-	if _, err := git(ctx, pluginCloneTimeout, "", "clone", "--quiet", "--local", "--no-hardlinks", "--", c.stage, dir); err != nil {
+	if _, err := git(ctx, env, pluginCloneTimeout, "", "clone", "--quiet", "--local", "--no-hardlinks", "--", c.stage, dir); err != nil {
 		return fail(err)
 	}
 	task = filepath.Join(root, "audit-task.md")

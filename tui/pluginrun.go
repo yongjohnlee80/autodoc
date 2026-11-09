@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/plugin"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/style"
@@ -116,9 +117,9 @@ func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
 		return nil, err
 	}
 	log := openPluginLog(pl.pluginOpt.LogDir, e.m.Name)
-	cmd := exec.Command(e.m.Command[0], e.m.Command[1:]...)
+	cmd := exec.Command(procenv.Resolve(pl.seams.env, e.m.Command[0]), e.m.Command[1:]...)
 	cmd.Dir = e.dir
-	cmd.Env = append(ownEnviron(), fmt.Sprintf("AUTODOC_PLUGIN_PROTOCOL=%d", e.m.Protocol),
+	cmd.Env = append(ownEnviron(pl.seams.env), fmt.Sprintf("AUTODOC_PLUGIN_PROTOCOL=%d", e.m.Protocol),
 		"AUTODOC_PLUGIN_DIR="+e.dir, "AUTODOC_SOCKET="+pl.pluginOpt.Socket)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = toPlugin, fromPlugin, log
 	if surfaceChild != nil {

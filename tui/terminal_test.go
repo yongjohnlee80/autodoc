@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
@@ -33,9 +34,7 @@ func runShellTUI(t *testing.T, prefs map[string]string) (*daemon, *running) {
 // runTUIWithShell is runShellTUI with shell as the user's shell.
 func runTUIWithShell(t *testing.T, shell string, prefs map[string]string) (*daemon, *running) {
 	t.Helper()
-	t.Setenv("SHELL", shell)
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("PS1", "$ ")
+	tuneEnv(t, "SHELL="+shell, "HOME="+t.TempDir(), "PS1=$ ")
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: prefs})
 	return d, attached(t, d)
 }
@@ -349,17 +348,17 @@ func TestQuittingHangsTheShellUpWithItsJobs(t *testing.T) {
 
 func TestTheShellStartsInTheWorkspacesFolderWhenThisMachineHasIt(t *testing.T) {
 	dir := t.TempDir()
-	if got := termDir(dir); got != dir {
+	home := t.TempDir()
+	env := procenv.Env(nil).With("HOME=" + home)
+	if got := termDir(env, dir); got != dir {
 		t.Errorf("termDir(%q) = %q, want the folder itself", dir, got)
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	if got := termDir("/no/such/workspace"); got != home {
+	if got := termDir(env, "/no/such/workspace"); got != home {
 		t.Errorf("termDir of a missing root = %q, want the home %q", got, home)
 	}
 	file := dir + "/a.md"
 	os.WriteFile(file, []byte("x"), 0o644)
-	if got := termDir(file); got != home {
+	if got := termDir(env, file); got != home {
 		t.Errorf("termDir of a file = %q, want the home %q", got, home)
 	}
 }
@@ -383,8 +382,11 @@ func TestTheTerminalRetriesAShellThatFailedToStart(t *testing.T) {
 		t.Fatalf("a shell that failed to start: tabs %+v", tabs)
 	}
 	// $SHELL is fixed; the next open drops the failed tab and starts a shell with it
-	t.Setenv("SHELL", "/bin/sh")
-	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true }) // hide
+	onLoop(r, func() bool {
+		r.h.seams.env = r.h.seams.env.With("SHELL=/bin/sh")
+		r.h.terminals.toggleTerminal()
+		return true
+	}) // hide
 	r.s.WaitFor(t, "hidden", func(string) bool { return !r.termShown() })
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true }) // open again
 	r.s.WaitFor(t, "the shell started on the retry", func(string) bool {

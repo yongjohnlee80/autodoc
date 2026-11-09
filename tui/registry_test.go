@@ -369,12 +369,10 @@ func TestBrowsingTheRegistryListsPluginsAndPackages(t *testing.T) {
 }
 
 // insteadOf has git clone repo wherever it is asked for url: a registry entry's repo is on a host,
-// and the test's is a folder.
+// and the test's is a folder. It is set in t's program's environment, which its git inherits.
 func insteadOf(t *testing.T, repo, url string) {
 	t.Helper()
-	t.Setenv("GIT_CONFIG_COUNT", "1")
-	t.Setenv("GIT_CONFIG_KEY_0", "url.file://"+filepath.ToSlash(repo)+".insteadOf")
-	t.Setenv("GIT_CONFIG_VALUE_0", url)
+	tuneEnv(t, "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=url.file://"+filepath.ToSlash(repo)+".insteadOf", "GIT_CONFIG_VALUE_0="+url)
 }
 
 // An entry's preview names its kind, its declares at their commit (HEAD for none) and its audits,

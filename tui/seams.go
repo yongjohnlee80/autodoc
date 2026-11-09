@@ -2,11 +2,11 @@ package tui
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 
 	regindex "github.com/yongjohnlee80/autodoc/core/registry"
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 )
 
 // seams are the program's waits, addresses, limits and test hooks: the values a test sets for its
@@ -49,7 +49,8 @@ type seams struct {
 	// the Vim question at all; the tests of something else turn them off, as their first card would
 	// otherwise be one of these.
 	offerAgentSetup, offerVimQuestion bool
-	// lookAgentCLI is how the agent setup's card finds the CLIs.
+	// lookAgentCLI, when a test sets it, is how the agent setup's card finds the CLIs; nil is on the
+	// program's PATH (env).
 	lookAgentCLI func(string) (string, error)
 
 	// installFS is swapIn's renames and removal; a test makes each fail in turn. Read off the loop.
@@ -83,6 +84,11 @@ type seams struct {
 	// (pluginsurface_gui.go), or none in a terminal. A cell sets its own, so the host's whole surface
 	// path runs without a window.
 	surfaceSinkOf func(*plugins) (surfaceSink, any, bool)
+
+	// env, when set (tests only), is the program's environment: its HOME, PATH, cache and temporary
+	// folders, and what a process it starts inherits. nil is the process's own, read through the os
+	// calls themselves as it is needed (procenv, userdirs).
+	env procenv.Env
 }
 
 // registrySource is where the plugin registry's index is fetched from, and where it is kept between
@@ -115,7 +121,6 @@ var defaultSeams = seams{
 	latestURL:        "https://api.github.com/repos/yongjohnlee80/autodoc/releases/latest",
 	offerAgentSetup:  true,
 	offerVimQuestion: true,
-	lookAgentCLI:     exec.LookPath,
 	installFS:        installFS{rename: os.Rename, removeAll: os.RemoveAll},
 	resultsResident:  100_000,
 	resultsCopyCap:   16 << 20,

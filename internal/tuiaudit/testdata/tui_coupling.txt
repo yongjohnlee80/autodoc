@@ -15,6 +15,7 @@ gui	crew	host	Host.agents	field
 gui	crew	host	Host.crew	field
 gui	crew	host	Host.gui	field
 gui	crew	host	Host.p	field
+gui	crew	host	Host.seams	field
 gui	crew	host	Host.workspaces	field
 gui	crew	host	Host.ws	field
 gui	crew	host	PanelSpec	type
@@ -38,6 +39,7 @@ gui	crew	host	prefs.luaGrants	field
 gui	crew	host	prefs.panelGeometry	method
 gui	crew	host	schemaInfo.path	field
 gui	crew	host	seams	type
+gui	crew	host	seams.env	field
 gui	crew	host	seams.lookAgentCLI	field
 gui	crew	host	seams.offerAgentSetup	field
 gui	crew	host	seams.serverReady	field
@@ -314,6 +316,7 @@ gui	page	host	Host.reg	field
 gui	page	host	Host.resourceRefused	method
 gui	page	host	Host.resourcesFor	method
 gui	page	host	Host.say	method
+gui	page	host	Host.seams	field
 gui	page	host	Host.setRenderedDocument	method
 gui	page	host	Host.showDiagram	method
 gui	page	host	Host.tr	method
@@ -338,6 +341,7 @@ gui	page	host	openedFile.open	field
 gui	page	host	openedFile.path	field
 gui	page	host	openedFile.raw	field
 gui	page	host	openedFile.ws	field
+gui	page	host	seams.env	field
 gui	plugins	host	Host	type
 gui	plugins	host	Host.after	method
 gui	plugins	host	Host.asker	field
@@ -448,6 +452,7 @@ gui	plugins	host	registrySource.entry	method
 gui	plugins	host	registrySource.fetch	method
 gui	plugins	host	resolveRegistry	func
 gui	plugins	host	seams	type
+gui	plugins	host	seams.env	field
 gui	plugins	host	seams.exportWritten	field
 gui	plugins	host	seams.installFS	field
 gui	plugins	host	seams.pluginFeed	field
@@ -666,6 +671,8 @@ gui	terminals	host	prefs.termEdge	field
 gui	terminals	host	prefs.termFont	field
 gui	terminals	host	prefs.termPanelKeys	field
 gui	terminals	host	prefs.termTheme	field
+gui	terminals	host	seams	type
+gui	terminals	host	seams.env	field
 gui	terminals	host	themeNames	var
 gui	terminals	host	wsInfo.root	field
 gui	todos	host	PanelSpec	type
@@ -674,14 +681,18 @@ gui	todos	host	PanelSpec.ID	field
 gui	todos	host	PanelSpec.Icon	field
 gui	todos	host	PanelSpec.Opened	field
 gui	todos	host	builtin	func
+gui	todos	host	defaultSeams	var
 gui	todos	host	prefs	type
 gui	todos	host	prefs.todosEdge	field
+gui	todos	host	seams	type
+gui	todos	host	seams.env	field
 term	crew	host	Host	type
 term	crew	host	Host.active	field
 term	crew	host	Host.agents	field
 term	crew	host	Host.crew	field
 term	crew	host	Host.gui	field
 term	crew	host	Host.p	field
+term	crew	host	Host.seams	field
 term	crew	host	Host.workspaces	field
 term	crew	host	Host.ws	field
 term	crew	host	PanelSpec	type
@@ -705,6 +716,7 @@ term	crew	host	prefs.luaGrants	field
 term	crew	host	prefs.panelGeometry	method
 term	crew	host	schemaInfo.path	field
 term	crew	host	seams	type
+term	crew	host	seams.env	field
 term	crew	host	seams.lookAgentCLI	field
 term	crew	host	seams.offerAgentSetup	field
 term	crew	host	seams.serverReady	field
@@ -976,6 +988,7 @@ term	page	host	Host.reg	field
 term	page	host	Host.resourceRefused	method
 term	page	host	Host.resourcesFor	method
 term	page	host	Host.say	method
+term	page	host	Host.seams	field
 term	page	host	Host.setRenderedDocument	method
 term	page	host	Host.showDiagram	method
 term	page	host	Host.tr	method
@@ -997,6 +1010,7 @@ term	page	host	openedFile.open	field
 term	page	host	openedFile.path	field
 term	page	host	openedFile.raw	field
 term	page	host	openedFile.ws	field
+term	page	host	seams.env	field
 term	plugins	host	Host	type
 term	plugins	host	Host.after	method
 term	plugins	host	Host.asker	field
@@ -1107,6 +1121,7 @@ term	plugins	host	registrySource.entry	method
 term	plugins	host	registrySource.fetch	method
 term	plugins	host	resolveRegistry	func
 term	plugins	host	seams	type
+term	plugins	host	seams.env	field
 term	plugins	host	seams.exportWritten	field
 term	plugins	host	seams.installFS	field
 term	plugins	host	seams.pluginFeed	field
@@ -1297,6 +1312,8 @@ term	terminals	host	prefs.termEdge	field
 term	terminals	host	prefs.termFont	field
 term	terminals	host	prefs.termPanelKeys	field
 term	terminals	host	prefs.termTheme	field
+term	terminals	host	seams	type
+term	terminals	host	seams.env	field
 term	terminals	host	themeNames	var
 term	terminals	host	wsInfo.root	field
 term	todos	host	PanelSpec	type
@@ -1305,5 +1322,8 @@ term	todos	host	PanelSpec.ID	field
 term	todos	host	PanelSpec.Icon	field
 term	todos	host	PanelSpec.Opened	field
 term	todos	host	builtin	func
+term	todos	host	defaultSeams	var
 term	todos	host	prefs	type
 term	todos	host	prefs.todosEdge	field
+term	todos	host	seams	type
+term	todos	host	seams.env	field

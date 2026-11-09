@@ -8,6 +8,9 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/internal/userdirs"
 )
 
 // A profile's env (docs/decisions/crew.md#a-profiles-environment) is set on its agent's process over
@@ -101,47 +104,48 @@ func formatProfileEnv(env map[string]string) string {
 }
 
 // expandProfileValue is v at the spawn: a leading ~ is the home folder, and $NAME or ${NAME} is
-// AutoDoc's own variable (empty when unset), with no shell and nothing else evaluated.
-func expandProfileValue(v string) string {
-	if home, err := os.UserHomeDir(); err == nil && (v == "~" || strings.HasPrefix(v, "~/")) {
+// AutoDoc's own variable (empty when unset), with no shell and nothing else evaluated. env is the
+// program's environment (nil, AutoDoc's own).
+func expandProfileValue(env procenv.Env, v string) string {
+	if home, err := userdirs.Home(env); err == nil && (v == "~" || strings.HasPrefix(v, "~/")) {
 		v = filepath.Join(home, v[1:])
 	}
 	return os.Expand(v, func(name string) string {
 		if name == "HOME" {
-			if home, err := os.UserHomeDir(); err == nil {
+			if home, err := userdirs.Home(env); err == nil {
 				return home
 			}
 		}
-		return os.Getenv(name)
+		return env.Get(name)
 	})
 }
 
 // envList is p's env as the spawn sets it, NAME=value expanded, in key order, without PATH (which
 // agentPath folds into AutoDoc's own) and without a key a profile can't set.
-func (p agentProfile) envList() []string {
+func (p agentProfile) envList(env procenv.Env) []string {
 	var out []string
 	for _, k := range slices.Sorted(maps.Keys(p.Env)) {
 		if k != "PATH" && profileEnvKey(k) == nil {
-			out = append(out, k+"="+expandProfileValue(p.Env[k]))
+			out = append(out, k+"="+expandProfileValue(env, p.Env[k]))
 		}
 	}
 	return out
 }
 
 // agentPath is the PATH p's programs are found on, before AutoDoc's own folder: its env's PATH,
-// expanded, or the TUI's.
-func (p agentProfile) agentPath() string {
+// expanded, or the TUI's (env's, nil for AutoDoc's own).
+func (p agentProfile) agentPath(env procenv.Env) string {
 	if v, ok := p.Env["PATH"]; ok {
-		return expandProfileValue(v)
+		return expandProfileValue(env, v)
 	}
-	return os.Getenv("PATH")
+	return env.Get("PATH")
 }
 
-// environ is base with p's env over it (envList, and agentPath for PATH): what a program AutoDoc
-// runs for p's agent, beside its terminal, sees.
-func (p agentProfile) environ(base []string) []string {
-	set := append(p.envList(), "PATH="+p.agentPath())
-	out := slices.DeleteFunc(slices.Clone(base), func(kv string) bool {
+// environ is the program's environment (env, nil for AutoDoc's own) with p's env over it (envList,
+// and agentPath for PATH): what a program AutoDoc runs for p's agent, beside its terminal, sees.
+func (p agentProfile) environ(env procenv.Env) []string {
+	set := append(p.envList(env), "PATH="+p.agentPath(env))
+	out := slices.DeleteFunc(env.Environ(), func(kv string) bool {
 		name, _, _ := strings.Cut(kv, "=")
 		return slices.ContainsFunc(set, func(s string) bool { return strings.HasPrefix(s, name+"=") })
 	})

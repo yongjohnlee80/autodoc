@@ -25,7 +25,12 @@ func crewAgents(t *testing.T, profiles string) (*agents, *identityHost, *crewWin
 	t.Helper()
 	c := newIdentityHost(profiles)
 	c.ws = wsInfo{id: 7, name: "kb", root: t.TempDir()}
-	a := testAgents(c, t.TempDir(), "")
+	s := seamsFor(t)
+	if s == nil {
+		s = &seams{}
+		*s = defaultSeams
+	}
+	a := testAgentsWith(c, s, t.TempDir(), "")
 	// a crew start's setup, in-process from the same source `crew setup` answers from, offering no
 	// MCP server (a cell that wants one sets its own): every kind as it is without one, on CLI mail.
 	// A Codex agent still gets its own app-server (an agent folder gives one in every mail mode),
@@ -40,7 +45,7 @@ func crewAgents(t *testing.T, profiles string) (*agents, *identityHost, *crewWin
 		return s, err
 	}
 	w := &crewWindow{d: newCrewDaemonForHost()}
-	a.crew = newCrewHost(w, t.TempDir())
+	a.crew = newCrewHost(w, s.env, t.TempDir())
 	a.crew.Connected()
 	if _, _, ok := a.crew.held(); !ok {
 		t.Fatalf("the window holds no scope: %v", w.notices)
@@ -300,7 +305,7 @@ func promptsReported(t *testing.T, w *crewWindow, codename string) bool {
 func TestAClaudeSessionAcceptsWakes(t *testing.T) {
 	bin := t.TempDir()
 	fakeClaudeBin(t, bin, append(claudeHookEvents, "crossSessionInbound")...)
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	tuneEnv(t, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	a, c, w := crewAgents(t, `[{"name":"Claude","command":"claude --model haiku","codename":"cl"},{"name":"One","command":"one","codename":"one"}]`)
 	for code, wants := range map[string]bool{"cl": true, "one": false} {
 		p, _ := a.profile(code)
@@ -354,7 +359,7 @@ func TestAClaudeSessionAcceptsWakes(t *testing.T) {
 func TestAnOlderClaudeGetsOnlyTheHooksItKnows(t *testing.T) {
 	bin := t.TempDir()
 	path := fakeClaudeBin(t, bin, append(claudeHookEvents, "crossSessionInbound")...)
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	tuneEnv(t, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	a, c, w := crewAgents(t, `[{"name":"Claude","command":"claude","codename":"cl"}]`)
 	p, _ := a.profile("cl")
 	instance, err := a.startInstance(p)
@@ -399,7 +404,7 @@ func TestAWrapperClaudeGetsTheRealOnesHooks(t *testing.T) {
 	}
 	fakeClaudeBin(t, bin, append(claudeHookEvents, "crossSessionInbound")...)
 	sep := string(os.PathListSeparator)
-	t.Setenv("PATH", wrappers+sep+bin+sep+os.Getenv("PATH"))
+	tuneEnv(t, "PATH="+wrappers+sep+bin+sep+os.Getenv("PATH"))
 	a, c, w := crewAgents(t, `[{"name":"Claude","command":"claude","codename":"cl"}]`)
 	p, _ := a.profile("cl")
 	instance, err := a.startInstance(p)
@@ -759,7 +764,7 @@ func TestAnAgentHereIsRaisedWhateverItsTab(t *testing.T) {
 // agent's folder.
 func TestTheGuidesAllowanceIsMergedIntoTheFolderAlone(t *testing.T) {
 	dir, home := t.TempDir(), t.TempDir()
-	t.Setenv("HOME", home)
+	t.Setenv("HOME", home) // the process's: what this cell watches is no write into the user's own home
 	path := filepath.Join(dir, ".claude", "settings.json")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)

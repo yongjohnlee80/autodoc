@@ -275,7 +275,7 @@ func listedScopes(t *testing.T, dir string) []string {
 func TestAWindowHoldsOneScopeAcrossReconnects(t *testing.T) {
 	d, dir := newCrewDaemonForHost(), t.TempDir()
 	w := &crewWindow{d: d}
-	h := newCrewHost(w, dir)
+	h := newCrewHost(w, nil, dir)
 	h.Connected()
 	scope, epoch, ok := h.held()
 	if !ok || !strings.HasPrefix(scope, "autodoc:") || epoch != 1 {
@@ -291,7 +291,7 @@ func TestAWindowHoldsOneScopeAcrossReconnects(t *testing.T) {
 	d.clock.Advance(80 * time.Second)
 	w.fire() // a renewal
 	d.clock.Advance(80 * time.Second)
-	other := newCrewHost(&crewWindow{d: d}, dir)
+	other := newCrewHost(&crewWindow{d: d}, nil, dir)
 	other.Connected()
 	if s, _, ok := other.held(); !ok || s == scope {
 		t.Fatalf("a second window, its renewed neighbour's scope still held: %q (%v), want a scope of its own", s, ok)
@@ -307,26 +307,26 @@ func TestAWindowHoldsOneScopeAcrossReconnects(t *testing.T) {
 // releases the scope at once.
 func TestACrashedWindowsScopeComesBack(t *testing.T) {
 	d, dir := newCrewDaemonForHost(), t.TempDir()
-	crashed := newCrewHost(&crewWindow{d: d}, dir)
+	crashed := newCrewHost(&crewWindow{d: d}, nil, dir)
 	crashed.Connected()
 	scope, epoch, _ := crashed.held()
 	past := time.Now().Add(-time.Hour) // listed earlier than any other: the successor tries it first
 	if err := os.Chtimes(filepath.Join(dir, ".crew-scopes", scope), past, past); err != nil {
 		t.Fatal(err)
 	}
-	early := newCrewHost(&crewWindow{d: d}, dir)
+	early := newCrewHost(&crewWindow{d: d}, nil, dir)
 	early.Connected()
 	if s, _, _ := early.held(); s == scope {
 		t.Fatal("a window took a crashed window's scope while its lease held")
 	}
 	d.clock.Advance(91 * time.Second)
-	successor := newCrewHost(&crewWindow{d: d}, dir)
+	successor := newCrewHost(&crewWindow{d: d}, nil, dir)
 	successor.Connected()
 	if s, e, _ := successor.held(); s != scope || e != epoch+1 {
 		t.Fatalf("the successor: %s epoch %d, want the crashed window's %s at epoch %d", s, e, scope, epoch+1)
 	}
 	successor.Stopped() // a clean quit
-	next := newCrewHost(&crewWindow{d: d}, dir)
+	next := newCrewHost(&crewWindow{d: d}, nil, dir)
 	next.Connected()
 	if s, _, _ := next.held(); s != scope {
 		t.Fatalf("after a clean quit: %s, want the released %s at once", s, scope)
@@ -338,13 +338,13 @@ func TestACrashedWindowsScopeComesBack(t *testing.T) {
 // never mints an identity in place of the listed scope it could not claim.
 func TestAStoreFailureMintsNoScope(t *testing.T) {
 	d, dir := newCrewDaemonForHost(), t.TempDir()
-	crashed := newCrewHost(&crewWindow{d: d}, dir)
+	crashed := newCrewHost(&crewWindow{d: d}, nil, dir)
 	crashed.Connected()
 	scope, _, _ := crashed.held()
 	d.clock.Advance(91 * time.Second)
 	d.failing = scope
 	w := &crewWindow{d: d}
-	h := newCrewHost(w, dir)
+	h := newCrewHost(w, nil, dir)
 	h.Connected()
 	if _, _, ok := h.held(); ok || len(listedScopes(t, dir)) != 1 || len(w.notices) != 1 {
 		t.Fatalf("a failed claim: held %v, listed %v, notices %v; want none, only the crashed window's, one", ok, listedScopes(t, dir), w.notices)
@@ -372,7 +372,7 @@ func TestAStoreFailureMintsNoScope(t *testing.T) {
 func TestALostScopeIsClaimedAgain(t *testing.T) {
 	d, dir := newCrewDaemonForHost(), t.TempDir()
 	w := &crewWindow{d: d}
-	h := newCrewHost(w, dir)
+	h := newCrewHost(w, nil, dir)
 	h.Connected()
 	scope, _, _ := h.held()
 	if _, err := d.m.Takeover(context.Background(), scope, "someone-else", ""); err != nil {
@@ -394,7 +394,7 @@ func TestADaemonWithoutCrewLeavesTheWindowQuiet(t *testing.T) {
 	d, dir := newCrewDaemonForHost(), t.TempDir()
 	d.none = true
 	w := &crewWindow{d: d}
-	h := newCrewHost(w, dir)
+	h := newCrewHost(w, nil, dir)
 	h.Connected()
 	if _, _, ok := h.held(); ok || len(w.notices) != 0 || len(w.timers) != 0 || len(listedScopes(t, dir)) != 0 {
 		t.Fatalf("a daemon without crew: held %v, notices %v, %d timers, listed %v; want none of them", ok, w.notices, len(w.timers), listedScopes(t, dir))

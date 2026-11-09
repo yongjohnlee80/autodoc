@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/rpc"
 	"github.com/yongjohnlee80/golib/dao/sqlite"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
@@ -1082,12 +1083,10 @@ func TestEveryCommandRefusesArgumentsNotItsOwn(t *testing.T) {
 // when there is none.
 func TestTheFolderPickerStartsAtHome(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	if got := homeDir(); got != home {
+	if got := homeDir(procenv.Env(nil).With("HOME=" + home)); got != home {
 		t.Errorf("with a home: %q", got)
 	}
-	t.Setenv("HOME", "")
-	if got := homeDir(); got != "/" {
+	if got := homeDir(procenv.Env(nil).With("HOME=")); got != "/" {
 		t.Errorf("with none: %q, want /", got)
 	}
 }

@@ -425,8 +425,7 @@ func (f *frameRecorder) Frame(cells []tuicore.Cell, _, _ int, _ tuicore.Point, _
 // In a window the terminal panel's shells are views of their own (paneltext_gui.go), so the face is
 // read where a view is handed it: the frame each is drawn from.
 func TestTheTerminalsFontIsTheirs(t *testing.T) {
-	t.Setenv("SHELL", "/bin/sh")
-	t.Setenv("PS1", "$ ")
+	tuneEnv(t, "SHELL=/bin/sh", "PS1=$ ")
 	fonts := &fakeFonts{}
 	d, r := runWindowTUI(t, map[string]string{"gui.font.terminal": "JetBrains Mono"}, fonts)
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
