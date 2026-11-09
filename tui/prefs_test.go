@@ -15,7 +15,7 @@ func TestTheMenuBarAndTheStatusLineShowByDefault(t *testing.T) {
 			t.Errorf("gui %v: a new user's menu bar hidden %v, status line shown %v; want shown, shown", gui, p.menuHidden, p.statusOn)
 		}
 		var p prefs
-		readRows(&p, map[string]any{prefMenuHide: "true", prefStatus: "false"}, legacyPrefRows(nil, gui))
+		ReadRows(&p, map[string]any{prefMenuHide: "true", prefStatus: "false"}, legacyPrefRows(nil, gui))
 		if !p.menuHidden || p.statusOn {
 			t.Errorf("gui %v: stored autohide true and status false read as hidden %v, shown %v", gui, p.menuHidden, p.statusOn)
 		}

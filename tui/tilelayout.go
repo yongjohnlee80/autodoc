@@ -105,21 +105,18 @@ func (*tiles) Prefs() []PrefSpec {
 			def = layoutTiled
 		}
 		rows = append(rows, ValuePref(layoutKey(w.id), def, []string{layoutTiled, layoutFloat}).
-			shows(func(v PrefsView) map[string]any {
-				p := asPrefs(v)
+			shows(func(p PrefsView) map[string]any {
 				return map[string]any{"App." + w.id + "Tiled": p.Value(layoutKey(w.id)) == layoutTiled}
 			}))
 		if w.edge == "" {
 			continue // the page is the fill member: the rest of the base, wherever the tiles are
 		}
 		rows = append(rows, ValuePref(tileEdgeKey(w.id), w.edge, edges).
-			shows(func(v PrefsView) map[string]any {
-				p := asPrefs(v)
+			shows(func(p PrefsView) map[string]any {
 				return map[string]any{"App." + w.id + "TileEdge": p.Value(tileEdgeKey(w.id))}
 			}))
 		size := ValuePref(tileSizeKey(w.id), strconv.Itoa(w.size), nil).
-			shows(func(v PrefsView) map[string]any {
-				p := asPrefs(v)
+			shows(func(p PrefsView) map[string]any {
 				n, _ := strconv.Atoi(p.Value(tileSizeKey(w.id)))
 				return map[string]any{"App." + w.id + "TileSize": n}
 			})

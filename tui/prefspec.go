@@ -100,9 +100,9 @@ func ValuePref(name, def string, choices []string) PrefSpec {
 	return s
 }
 
-// readRows reads the store's values into p, over the rows' defaults; a value the TUI cannot use
+// ReadRows reads the store's values into p, over the rows' defaults; a value the TUI cannot use
 // is the default's.
-func readRows(p PrefsWriter, m map[string]any, rows []PrefSpec) {
+func ReadRows(p PrefsWriter, m map[string]any, rows []PrefSpec) {
 	for _, s := range rows {
 		s.reset(p)
 		if v, ok := m[s.Name].(string); ok && v != "" && s.admits(v) {
@@ -111,8 +111,8 @@ func readRows(p PrefsWriter, m map[string]any, rows []PrefSpec) {
 	}
 }
 
-// rowState is what the document reads of the rows' values: each chooser's row, and each row's own.
-func rowState(p PrefsView, rows []PrefSpec) map[string]any {
+// RowState is what the document reads of the rows' values: each chooser's row, and each row's own.
+func RowState(p PrefsView, rows []PrefSpec) map[string]any {
 	m := map[string]any{}
 	for _, s := range rows {
 		if s.Index != "" {

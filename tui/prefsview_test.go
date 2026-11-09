@@ -72,3 +72,35 @@ func TestARowsChangeRunsInOrder(t *testing.T) {
 		t.Errorf("the steps of a change: %v, want the State with b, then Changed with b before the store's write, then the write", got)
 	}
 }
+
+// foreignView is preferences that are not the host's: a feature's row reads through it as through any
+// view, by name.
+type foreignView map[string]string
+
+func (f foreignView) Value(name string) string                        { return f[name] }
+func (f foreignView) PanelGeometry(string, string) (size, length int) { return 30, 85 }
+
+// A feature's own row (ValuePref) answers its State through any view, not only the host's: none
+// narrows it back to the host's preferences.
+func TestAFeaturesRowReadsThroughAnyView(t *testing.T) {
+	r := runTUI(t, NewSession("unused", nil), Options{GUI: guiBuild()})
+	rows := onLoop(r, func() []PrefSpec { return slices.Clone(r.h.prefRows) })
+	n := 0
+	for _, s := range rows {
+		if !s.byName || s.State == nil {
+			continue
+		}
+		n++
+		func() {
+			defer func() {
+				if v := recover(); v != nil {
+					t.Errorf("the row %s's State panicked on a view that is not the host's: %v", s.Name, v)
+				}
+			}()
+			s.State(foreignView{s.Name: "x"})
+		}()
+	}
+	if n == 0 {
+		t.Fatal("no feature row with a State: the cell reads nothing")
+	}
+}

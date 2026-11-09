@@ -7,7 +7,7 @@ import (
 	"unicode"
 )
 
-// migrateAgentDefault examines presence in the raw store, before readRows can
+// migrateAgentDefault examines presence in the raw store, before ReadRows can
 // turn absence and an explicit empty string into the same default. Once the
 // canonical key exists, the legacy mirror never participates in resolution.
 func migrateAgentDefault(values map[string]any) (map[string]any, bool) {
