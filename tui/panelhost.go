@@ -1,7 +1,5 @@
 package tui
 
-import "fmt"
-
 // PanelHost is the UI service boundary a panel feature uses. It exposes view
 // operations and preference persistence, not Host fields or the program tree.
 // Every method runs on the UI loop.
@@ -45,34 +43,4 @@ type agentHost interface {
 	SetFormText(name, value string)
 	ConfigureTerminal(id, command, dir string, args ...string) error
 	DaemonAddress() string
-}
-
-func (c core) Keep(err error)           { c.h.keep(err) }
-func (c core) Focused(id string) bool   { return c.h.paneHasKeyboard(id) }
-func (c core) PanelOpen(id string) bool { return c.h.panelOpen[id] }
-func (c core) OpenDrawer(id string)     { c.h.openDrawer(id) }
-func (c core) CloseDrawer(id string)    { c.h.closeDrawer(id) }
-func (c core) DockPanel(id string)      { c.h.dockPanel(id) }
-func (c core) KeepPanelGeometry(id, dimension string, percent int) {
-	c.h.keepPanelGeo(id, dimension, percent)
-}
-func (c core) ActiveWorkspace() (wsInfo, bool) { return c.h.activeWorkspaceInfo() }
-func (c core) SetFormText(name, value string)  { c.h.setField(name, value) }
-func (c core) DaemonAddress() string           { return c.h.session.Address() }
-func (c core) StoreID() string                 { return c.h.session.StoreID() }
-func (c core) ConfigureTerminal(id, command, dir string, args ...string) error {
-	view, ok := c.h.p.Find(id)
-	if !ok {
-		return fmt.Errorf("no terminal view %q", id)
-	}
-	t, ok := view.(interface {
-		SetCommand(string, ...string)
-		SetDir(string)
-	})
-	if !ok {
-		return fmt.Errorf("view %q is not a configurable terminal", id)
-	}
-	t.SetCommand(command, args...)
-	t.SetDir(dir)
-	return nil
 }

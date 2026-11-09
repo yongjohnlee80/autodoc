@@ -50,9 +50,6 @@ func (a Asked) Say(text string) {
 	}
 }
 
-// ask is Core.Ask, for the host's own code that is not a feature yet.
-func (h *Host) ask(q Question) Asked { return h.asker.ask(q) }
-
 // asker is the feature that owns the card.
 type asker struct {
 	c             Core

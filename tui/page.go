@@ -20,28 +20,6 @@ import (
 // consumer that wants a longer quiet period waits the rest on top, timed from the same last edit.
 const editPause = 150 * time.Millisecond
 
-// FileList is the current workspace's files, as last listed: replaced whole on each listing, so a
-// reader may keep it, and never changes it.
-type FileList struct {
-	Paths  []string // nil until the first listing of the workspace in use answers
-	Loaded bool     // a listing has answered since the workspace was entered
-	Gen    uint64   // moves on each listing, and on entering a workspace
-}
-
-// Page is what the editor shows: a file, or the draft (Ref zero). Text is one snapshot, handed to
-// every watcher as it is: a reader never changes it.
-type Page struct {
-	Ref     fileRef
-	Kind    kind.Kind // how its text is read: derived, raw and the daemon's registrations applied
-	Text    []byte
-	Outside bool // a file in no workspace
-	// Line and At are the cursor when Text was taken: its line (0-based) and byte offset in Text
-	Line, At int
-	// Version is the page's edit count when Text was taken: it rises with every edit and with every
-	// page shown (a note opened or closed, a file kept as the draft), never with a cursor move
-	Version int
-}
-
 // More optional parts of a Feature (feature.go).
 type (
 	// Lister hears that the workspace's files or the daemon's workspaces were listed again; it

@@ -82,3 +82,11 @@ func (n *notices) show() {
 func noticeRowOf(i int, m notice) rowOf {
 	return rowOf{"key": fmt.Sprint(i), "when": m.at.Format("15:04:05"), "text": m.text}
 }
+
+// maxNotices bounds the history.
+const maxNotices = 500
+
+type notice struct {
+	at   time.Time
+	text string
+}

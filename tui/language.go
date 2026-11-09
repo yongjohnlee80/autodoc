@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"cmp"
 	"fmt"
 	"regexp"
 	"slices"
@@ -159,17 +158,6 @@ func (h *Host) trOr(id, english string) string {
 	return h.tr(id)
 }
 
-// withLabelMessage is row with its label a catalog message, when the English catalog holds label
-// as one of AutoDoc's menu rows: golib's Menu then fills it in the UI's language, its key English's.
-// A name (a buffer's, a tab's, a plugin's) is shown as written.
-func withLabelMessage(row widgetcore.MenuItemModel, label string) widgetcore.MenuItemModel {
-	id := menuLabelID(label)
-	if t, ok := englishCatalog().Lookup(i18n.English, id); ok && t == label {
-		row.LabelMsg = tuicore.Msg(id)
-	}
-	return row
-}
-
 // menuLabelID is a menu row's catalog id: its words and, when it has one, its key, so "&Close" and
 // "Close" are two rows.
 func menuLabelID(label string) string {
@@ -178,18 +166,6 @@ func menuLabelID(label string) string {
 		id += "_" + strings.ToLower(string(key))
 	}
 	return id
-}
-
-// slugOf is s as an id's last part: its words, lower-case, joined by "_", at most 48 bytes.
-func slugOf(s string) string {
-	words := strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
-		return !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9')
-	})
-	out := strings.Join(words, "_")
-	if len(out) > 48 {
-		out = strings.Trim(out[:48], "_")
-	}
-	return cmp.Or(out, "text")
 }
 
 // choiceLabels are the choosers' rows in AutoDoc's words, by their App.* source: a ComboBox's rows
@@ -269,4 +245,15 @@ func (h *Host) languageChanged() {
 	if len(tutorialPages) > 0 {
 		h.showTutorialPage() // its title and Next, should it be open
 	}
+}
+
+// withLabelMessage is row with its label a catalog message, when the English catalog holds label
+// as one of AutoDoc's menu rows: golib's Menu then fills it in the UI's language, its key English's.
+// A name (a buffer's, a tab's, a plugin's) is shown as written.
+func withLabelMessage(row widgetcore.MenuItemModel, label string) widgetcore.MenuItemModel {
+	id := menuLabelID(label)
+	if t, ok := englishCatalog().Lookup(i18n.English, id); ok && t == label {
+		row.LabelMsg = tuicore.Msg(id)
+	}
+	return row
 }

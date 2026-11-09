@@ -179,3 +179,24 @@ func oneIndex(fn func(tuidecl.Index) error) Command {
 		return fn(ix)
 	}}
 }
+
+// namedPanic is a panic and the command it came out of, named on its way up to golib's boundary.
+type namedPanic struct {
+	name  string
+	value any
+}
+
+func (p namedPanic) String() string { return fmt.Sprint(p.value) }
+
+// renamePanic, deferred in a command, names a panic coming out of it and raises it again, its stack
+// kept, for golib's boundary to contain or not: a command does not contain its own panics, since
+// only golib knows whether going on is safe (its tree part way through a change). The innermost
+// name stays: a catalog entry run by an App.* command is the entry's.
+func renamePanic(name string) {
+	if rec := recover(); rec != nil {
+		if _, named := rec.(namedPanic); !named {
+			rec = namedPanic{name: name, value: rec}
+		}
+		panic(rec)
+	}
+}

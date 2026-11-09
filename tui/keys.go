@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -987,4 +988,16 @@ func replaceBlock(s, begin, end, body string) (string, error) {
 		return "", fmt.Errorf("tui: main.qml lacks the markers %q", strings.TrimSpace(begin))
 	}
 	return s[:a+len(begin)] + body + s[b:], nil
+}
+
+// slugOf is s as an id's last part: its words, lower-case, joined by "_", at most 48 bytes.
+func slugOf(s string) string {
+	words := strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9')
+	})
+	out := strings.Join(words, "_")
+	if len(out) > 48 {
+		out = strings.Trim(out[:48], "_")
+	}
+	return cmp.Or(out, "text")
 }

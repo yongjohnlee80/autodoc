@@ -25,25 +25,6 @@ import (
 // THE EXPLORER is searched over the rows it has loaded, in the order the tree shows them, a closed
 // folder's loaded rows included: a hit there is revealed, its folders opened.
 
-// FindPane is a pane / searches: what find calls it, the view whose keyboard makes it the pane
-// searched, and its rows as they are now. Name and View are declarations, the same whenever read: a
-// panel's View is its own PanelSpec's, never one looked up.
-type FindPane struct {
-	Name string // "explorer": "find in the explorer", "n and N find again in the explorer"
-	View string // / searches the pane whose view has the keyboard
-	// Scope is the pane's keyScope (keys.go), where it answers / n N itself; "" for none, and the
-	// Window's / n N, which say where to put the keyboard, answer there
-	Scope string
-	// Rows are the pane's rows as it shows them, the row under its cursor (-1 for none), and how to put
-	// the cursor on row i, the match at col (grapheme columns). The move is bound to this same snapshot,
-	// so a pane whose rows are not plain indexes (the explorer's tree) moves to the row it listed.
-	Rows func() (rows []string, cursor int, moveTo func(row, col int) error)
-}
-
-// Findable is a feature whose pane / searches. The registry takes the panes in the features' order,
-// the page first (the host's own).
-type Findable interface{ FindPane() FindPane }
-
 // findPage is the page's pane: the host's own, which Search › Find in page, the page's marks and Esc
 // name.
 const findPage = "page"

@@ -3,6 +3,8 @@ package tui
 import (
 	"fmt"
 	"slices"
+
+	"github.com/yongjohnlee80/golib/tui/panelgeometry"
 )
 
 // Panel is the optional Feature capability contributing drawers. The registry
@@ -96,37 +98,6 @@ func checkSpecs(contributions []panelContribution) ([]PanelSpec, []panelContribu
 	return specs, out, nil
 }
 
-// stage checks f's panels replaced by own, under the same checks as at build, and changes nothing:
-// specs is the program's panel set as it would be, and commit makes it so (it cannot fail). Only
-// for a feature that contributes panels and is not PanelBound: a PanelBound feature holds its host,
-// and a rebuilt one would leave it holding the old
-// (docs/decisions/plugins.md#card-panels-made-at-runtime).
-func (r *panelRegistry) stage(c core, f Feature, own []PanelSpec) (specs []PanelSpec, commit func(), err error) {
-	i := slices.IndexFunc(r.contributions, func(p panelContribution) bool { return p.feature == f })
-	if i < 0 {
-		return nil, nil, fmt.Errorf("tui: %s contributes no panels", f.Name())
-	}
-	if _, bound := f.(PanelBound); bound {
-		return nil, nil, fmt.Errorf("tui: %s holds its panel host, so its panels are fixed", f.Name())
-	}
-	next := slices.Clone(r.contributions)
-	next[i] = panelContribution{feature: f, specs: own}
-	all, checked, err := checkSpecs(next)
-	if err != nil {
-		return nil, nil, err
-	}
-	return all, func() {
-		for _, s := range r.contributions[i].specs {
-			delete(r.hosts, s.ID)
-		}
-		host := newScopedPanelHost(c, f, checked[i].specs)
-		for _, s := range checked[i].specs {
-			r.hosts[s.ID] = host
-		}
-		r.contributions, r.specs = checked, all
-	}, nil
-}
-
 func validPercentRange(r [2]int) bool     { return r[0] > 0 && r[0] <= r[1] && r[1] <= 100 }
 func inPercentRange(n int, r [2]int) bool { return n >= r[0] && n <= r[1] }
 
@@ -137,6 +108,66 @@ func findPanel(specs []PanelSpec, id string) *PanelSpec {
 		}
 	}
 	return nil
+}
+
+// relationsView is the Links tab's list, the relations feature's (relations.go).
+const relationsView = "relationsList"
+
+// PanelSpec is one drawer over the page: everything the host's panel code asks of it, in one place,
+// so a list of panels cannot disagree with another.
+type PanelSpec struct {
+	ID   string // the Drawer's id in the document
+	View string // what in it takes the keyboard
+	// Focus is what in it takes the keyboard now, where that changes: a tabbed panel's tab shown.
+	// nil: View.
+	Focus func() string
+	// Tab and ShowTab are a tabbed panel's tab shown and the way to show another, its view given the
+	// keyboard (togglePanelTab); nil: it has no tabs.
+	Tab     func() int
+	ShowTab func(tab int)
+	// GoTabs are :go names of its tabs, by tab, "" for none: the explorer's Links tab keeps the name
+	// its own drawer had, relations (widgets.go).
+	GoTabs []string
+	// Priority orders focus targets across features; ties keep contribution order.
+	Priority int
+	// Edge is the edge it opens from now, the place its dragged size and length are kept at; a panel
+	// with Places has one.
+	Edge func(p prefs) string
+	// Places are the edges whose dragged size and length preferences keep; nil: it sizes itself.
+	Places []string
+	// Size and Length are the percent bounds a kept size or length stays within, and Default is
+	// the geometry at a place before the user sets one. A panel with Places has both.
+	Size, Length [2]int
+	Default      func(edge string) (size, length int)
+	// Keyboard: the terminal hands the keyboard back to it.
+	Keyboard bool
+	// Open and Close are the panel's own way of opening and closing, where it has one; nil, and
+	// the drawer opens and its view takes the keyboard (openDrawer), or the drawer closes. A
+	// bespoke Open opens the drawer itself when its way decides to (the agent's opens only when
+	// an agent starts).
+	Open, Close func(PanelHost)
+	// Opened and Closed follow the drawer, however it was opened or closed (Escape inside one
+	// closes it): what it shows and where the keyboard goes. nil Closed: the editor.
+	Opened, Closed func(PanelHost)
+	// Icon is the panel's dock icon: one cell, East Asian Width neutral (dock.go)
+	Icon string
+	// Alive reports that the panel lives on with its drawer closed (a plugin card's running
+	// plugin); nil: only a TerminalTabs view's running tab keeps a closed panel in the dock
+	Alive func() bool
+}
+
+// focusView is what in s takes the keyboard now.
+func (s PanelSpec) focusView() string {
+	if s.Focus != nil {
+		return s.Focus()
+	}
+	return s.View
+}
+
+// geometry is s as golib's panel geometry check reads it: its id, the places it opens from and its
+// bounds (tui/panelgeometry, docs/decisions/plugins.md#shared-panels-and-their-geometry).
+func (s PanelSpec) geometry() panelgeometry.Spec {
+	return panelgeometry.Spec{ID: s.ID, Edges: s.Places, Size: s.Size, Length: s.Length}
 }
 
 // These fresh descriptors are also the schema for standalone preference
@@ -155,31 +186,24 @@ func explorerPanelSpec() PanelSpec {
 	return s
 }
 
-// relationsView is the Links tab's list, the relations feature's (relations.go).
-const relationsView = "relationsList"
+// sidePanelMin is the explorer's and the relations' smallest size across their edge, in percent: their
+// trees stay readable.
+const sidePanelMin = 15
 
-func terminalPanelSpec() PanelSpec {
-	return PanelSpec{ID: "terminal", View: "terminalView", Priority: 30, Icon: "❯",
-		Edge: func(p prefs) string { return p.termEdge }, Places: slices.Clone(termEdges),
-		Size: [2]int{10, 90}, Length: [2]int{10, 100}, Default: termDefault}
-}
-func agentPanelSpec() PanelSpec {
-	return PanelSpec{ID: "agent", View: "agentView", Priority: 40, Icon: "✦",
-		Edge: func(p prefs) string { return p.agentEdge }, Places: slices.Clone(agentEdges),
-		Size: [2]int{sidePanelMin, 90}, Length: [2]int{20, 100}, Default: agentDefault}
-}
-func legacyPanelSpecs() []PanelSpec {
-	return []PanelSpec{
-		{ID: "htmlPane", View: "htmlView", Priority: 50, Icon: "⎙"},
-	}
-}
-func defaultPanelSpecs() []PanelSpec {
-	return []PanelSpec{
-		explorerPanelSpec(),
-		terminalPanelSpec(), agentPanelSpec(), legacyPanelSpecs()[0],
-	}
-}
+// sideDefault is the explorer's and the relations' size and length before the user drags them: a
+// third across, and 85% along a side or 80% along the top or bottom.
+func sideDefault(edge string) (size, length int) { return 30, panelLength(edge) }
 
-func (l legacy) Panels() []PanelSpec {
-	return legacyPanelSpecs()
+// explorerDefault is the explorer's size and length before the user drags it: 35% across, so its
+// tabs have room, and its length a side panel's.
+func explorerDefault(edge string) (size, length int) { return 35, panelLength(edge) }
+
+// panelLength is a side panel's share of the Window along its edge, centred: a panel at the left
+// or right takes 85% of the rows, one at the top or bottom 80% of the columns, so the page shows
+// around it rather than the panel filling the edge end to end.
+func panelLength(edge string) int {
+	if edge == "top" || edge == "bottom" {
+		return 80
+	}
+	return 85
 }

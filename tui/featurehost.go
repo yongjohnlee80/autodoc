@@ -1,0 +1,304 @@
+package tui
+
+// THE HOST'S SIDE OF THE FEATURES (feature.go): how the host assembles its features and lends
+// each the Core it reaches the host through (core{h}), and the host's own part of the program
+// (legacy). The features' side, what they implement and what they may use, is feature.go's.
+
+import (
+	"context"
+	"fmt"
+	"runtime/debug"
+
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+)
+
+// assembleFeatures is initial program construction, before views can run.
+// A failed schema or service binding must not publish the candidate registry.
+func (h *Host) assembleFeatures(fs ...Feature) error {
+	previous, defs := h.reg, h.prefs.panelDefs
+	r, err := newRegistryWithPanels(func(specs []PanelSpec) { h.prefs.panelDefs = specs }, fs...)
+	if err != nil {
+		h.prefs.panelDefs = defs
+		return err
+	}
+	h.reg = r
+	if err := r.panels.bind(core{h}); err != nil {
+		h.reg, h.prefs.panelDefs = previous, defs
+		return err
+	}
+	return nil
+}
+
+// features are the program's parts, in the order the registry merges them.
+func (h *Host) features() []Feature {
+	h.asker = newAsker(core{h})
+	h.asker.onIdle = func() { h.p.Post(h.askLuaGrants) } // a Lua grant waiting for the card (luagate.go)
+	fs := []Feature{pageFind{h}, legacy{h}, h.terminals, h.agents, h.crew, h.crewInbox, h.asker, h.noticeLog, h.recent, h.tiles, h.explorer, h.outline, h.rel, h.ai, h.plugins, newStartup(core{h}, &h.seams, h.aboutInfo.Version, h.canUpdate), newTodos(core{h}, &h.seams), h.luaFeature()}
+	fs = append(fs, newRegistryBrowse(h))                                                                                      // Plugins › Browse the registry… (registrybrowse.go)
+	fs = append(fs, h.cands)                                                                                                   // the installs' candidates, and Audit… (candidate.go)
+	fs = append(fs, newCellNotePage(h))                                                                                        // a note's Rendered view on a terminal (notepage.go)
+	fs = append(fs, newCardPage(h))                                                                                            // a card's Rendered view on a terminal (cardpage.go)
+	fs = append(fs, &htmlPaneCells{h: h})                                                                                      // the HTML preview pane on a terminal (htmlpane_cells.go)
+	fs = append(fs, h.relationViewFeatures()...)                                                                               // the GUI's GlobeMap and Mindmap (relationmap.go)
+	fs = append(fs, newProfiling(core{h}, h.profiler, func(ctx context.Context, p string) error { return h.browser(ctx, p) })) // System › Profiling (profiling.go)
+	fs = append(fs, newCrewBridges(core{h}, h.crew))                                                                           // System › Crew Bridges (crewbridges.go)
+	fs = append(fs, h.inboxView)                                                                                               // SPC a i, :inbox (crewinboxview.go)
+	fs = append(fs, h.grantsView)                                                                                              // Go › Agent permissions, :permissions (grants.go)
+	fs = append(fs, h.moreFeatures...)
+	// the preferences every feature declares, read over their defaults until the store's arrive;
+	// their choosers are one feature of their own
+	h.prefRows = nil
+	for _, f := range fs {
+		if p, ok := f.(Prefs); ok {
+			h.prefRows = append(h.prefRows, p.Prefs()...)
+		}
+	}
+	for _, s := range h.prefRows {
+		if s.value(h.prefs) == "" { // a feature's own row: the host's defaults hold the rest
+			s.reset(&h.prefs)
+		}
+	}
+	h.keys = keyCatalog(fs)
+	h.keys.tr = h.trOr // the cards and help in the UI's language (language.go)
+	return append(fs, prefChoosers{h})
+}
+
+// legacy is the host as it is: everything not yet a feature of its own.
+type legacy struct{ h *Host }
+
+func (legacy) hostOwn() {}
+
+func (legacy) Name() string { return "legacy" }
+
+func (l legacy) State() map[string]any { return l.h.state() }
+
+func (l legacy) Commands() map[string]Command { return l.h.commands() }
+
+func (l legacy) Prefs() []PrefSpec { return legacyPrefRows(l.h, l.h.gui) }
+
+// Listed is the workspace's files listed again: File › Open and the draft's name list them.
+func (l legacy) Listed() {
+	l.h.openPick.setAll(l.h.files.Paths)
+	l.h.newPick.setAll(l.h.files.Paths)
+}
+
+// Picks are the host's own pickers.
+func (l legacy) Picks() map[string]picker {
+	return map[string]picker{"search": l.h.searchPick, "open": l.h.openPick, "new": l.h.newPick, "buffers": l.h.bufferPick}
+}
+
+// core is the host as a feature sees it.
+type core struct{ h *Host }
+
+func (c core) Set(name string, v any) { c.h.set(name, v) }
+
+func (c core) Open(id string) { c.h.open(id) }
+
+func (c core) Close(id string) { c.h.closeDialog(id) }
+
+func (c core) Notify(msg string) { c.h.notify(msg) }
+
+func (c core) Tr(id string) string { return c.h.tr(id) }
+
+func (c core) Trf(id string, args ...any) string {
+	return c.h.trf(id, args...)
+}
+
+func (c core) WidgetsChanged() { c.h.refreshDock() }
+
+func (c core) HidePanel(id string) { c.h.hidePanel(id); c.h.focusEditor() }
+
+func (c core) Ask(q Question) Asked { return c.h.ask(q) }
+
+func (c core) AskWhenFree(q Question) { c.h.asker.askWhenFree(q) }
+
+func (c core) Workspace() string { return c.h.ws }
+
+func (c core) Prefs() prefs { return c.h.prefs }
+
+func (c core) OpenFile(abs string) { c.h.openAbsolute(abs) }
+
+func (c core) Failed(what string, err error) { c.h.failed(what, err) }
+
+func (c core) Focus(id string) { c.h.keep(c.h.p.Call(id, "forceActiveFocus")) }
+
+func (c core) Call(ctx context.Context, verb string, params ...any) (any, error) {
+	return c.h.call(ctx, verb, params...) // the one send path: a gated authority on ctx is bounded there
+}
+
+func (c core) Go(fn func(context.Context) any, then func(any)) { do(c.h, fn, then) }
+
+func (c core) Bell() { c.h.ringBell() }
+
+// SetText sets the text of the layout's text area id (an id inside a component's instance is
+// scoped: crewreply.go's crewReplyText). A layout without it is said, never passed over.
+func (c core) SetText(id, text string) {
+	if c.h.p == nil {
+		return
+	}
+	ta, ok := tuidecl.FindAs[*widgetcore.TextArea](c.h.p, id)
+	if !ok {
+		c.h.keep(fmt.Errorf("the layout has no text area %q", id))
+		return
+	}
+	ta.SetValue(text)
+}
+
+func (c core) Ticket(seq *uint64, scope TicketScope) Ticket { return c.h.ticket(seq, scope) }
+
+func (c core) OpenRef(ws, path string) { c.h.openIn(ws, path) }
+
+func (c core) OpenAbsolute(abs string) { c.h.openAbsolute(abs) }
+
+func (c core) Say(msg string) { c.h.say(msg) }
+
+func (c core) Files() FileList { return c.h.files }
+
+func (c core) Workspaces() []Workspace {
+	list := make([]Workspace, 0, c.h.workspaces.Len())
+	for _, w := range c.h.workspaces.All() {
+		list = append(list, Workspace{Name: w.name, Root: w.root, State: w.state, Include: w.include, Exclude: w.exclude, SectionTokens: w.sectionTokens})
+	}
+	return list
+}
+
+func (c core) View(id, method string, args ...any) error { return c.h.p.Call(id, method, args...) }
+
+func (c core) TogglePanel(id string) { c.h.togglePanel(id) }
+
+func (c core) TogglePanelTab(id string, tab int) { c.h.togglePanelTab(id, tab) }
+
+func (c core) SearchModelsChanged(ranker bool) {
+	if ranker {
+		c.h.loadStageRanker(true) // which searches again, once
+		return
+	}
+	c.h.refreshSearch()
+}
+
+func (c core) Post(fn func()) { c.h.p.Post(fn) }
+
+func (c core) HasFocus(id string) bool {
+	comp, ok := c.h.p.Find(id)
+	return ok && c.h.p.App().FocusWithin(comp)
+}
+
+func (c core) Page() Page { return c.h.pageNow() }
+
+func (c core) Crumbs(parts []string) { c.h.crumbs = parts; c.h.showTitle() }
+
+func (c core) GoToLine(line int) {
+	c.h.core.SetLine(line, 0)
+	c.h.keep(c.h.p.Call("editor", "forceActiveFocus"))
+}
+
+func (c core) SetPref(name, value string) {
+	for _, row := range c.h.prefRows {
+		if row.Name == name {
+			c.h.setRowPref(row, value)
+			return
+		}
+	}
+}
+
+// ticket is Core.Ticket, for the host's own answers too: every stale-answer guard is one.
+func (h *Host) ticket(seq *uint64, scope TicketScope) Ticket {
+	var n uint64
+	if seq != nil {
+		*seq++
+		n = *seq
+	}
+	// the page is a buffer and its generation: buffers count their generations alike, so the same
+	// number in another buffer is another page
+	gen, epoch, file, page := h.session.Gen(), h.epoch, h.file.gen, h.active
+	return Ticket{current: func() bool {
+		if scope == TicketLocal {
+			return seq == nil || *seq == n
+		}
+		if seq != nil && *seq != n || h.session.Gen() != gen {
+			return false
+		}
+		switch scope {
+		case TicketSession:
+			return true
+		case TicketWorkspace:
+			return h.epoch == epoch
+		}
+		return h.epoch == epoch && h.active == page && h.file.gen == file
+	}}
+}
+
+func (c core) Keep(err error) { c.h.keep(err) }
+
+func (c core) Focused(id string) bool { return c.h.paneHasKeyboard(id) }
+
+func (c core) PanelOpen(id string) bool { return c.h.panelOpen[id] }
+
+func (c core) OpenDrawer(id string) { c.h.openDrawer(id) }
+
+func (c core) CloseDrawer(id string) { c.h.closeDrawer(id) }
+
+func (c core) DockPanel(id string) { c.h.dockPanel(id) }
+
+func (c core) KeepPanelGeometry(id, dimension string, percent int) {
+	c.h.keepPanelGeo(id, dimension, percent)
+}
+
+func (c core) ActiveWorkspace() (wsInfo, bool) { return c.h.activeWorkspaceInfo() }
+
+func (c core) SetFormText(name, value string) { c.h.setField(name, value) }
+
+func (c core) DaemonAddress() string { return c.h.session.Address() }
+
+func (c core) StoreID() string { return c.h.session.StoreID() }
+
+func (c core) ConfigureTerminal(id, command, dir string, args ...string) error {
+	view, ok := c.h.p.Find(id)
+	if !ok {
+		return fmt.Errorf("no terminal view %q", id)
+	}
+	t, ok := view.(interface {
+		SetCommand(string, ...string)
+		SetDir(string)
+	})
+	if !ok {
+		return fmt.Errorf("view %q is not a configurable terminal", id)
+	}
+	t.SetCommand(command, args...)
+	t.SetDir(dir)
+	return nil
+}
+
+// ask is Core.Ask, for the host's own code that is not a feature yet.
+func (h *Host) ask(q Question) Asked { return h.asker.ask(q) }
+
+// MenuRows is the menus' added rows, the scripts' and the plugins' (menurows.go).
+func (c core) MenuRows() *menuRows { return &c.h.luaFeature().rows }
+
+// BACKGROUND WORK — off the loop, and back onto it.
+//
+// Nothing that talks to the daemon runs on the UI loop. do runs fn on its own goroutine under the
+// host's context and applies its result on the loop with then. The result says which generation it
+// was issued under; then decides whether it still applies. A late answer to a question nobody is
+// asking any more is dropped there, never here.
+func do[T any](h *Host, fn func(context.Context) T, then func(T)) {
+	ctx := h.ctx
+	go func() {
+		// a panic here is on a goroutine of its own, where no loop boundary reaches: kept, said, and
+		// handed to then as the failure it is where its answer can carry one (crash.go)
+		defer func() {
+			if rec := recover(); rec != nil {
+				stack := debug.Stack()
+				if ctx.Err() == nil {
+					h.p.Post(func() { backgroundPanicked(h, rec, stack, then) })
+				}
+			}
+		}()
+		v := fn(ctx)
+		if ctx.Err() != nil {
+			return // the program stopped; nobody is waiting
+		}
+		h.p.Post(func() { then(v) })
+	}()
+}

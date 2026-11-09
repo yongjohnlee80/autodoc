@@ -822,3 +822,9 @@ const editorGuide = "## The page the user is writing\n\n" +
 	"(code -32098: the user is asked by a card; wait for their answer by mail, then call again). " +
 	"Say so to the user. When the refusal says their answer comes as mail, wait for that mail rather than retrying: " +
 	"allowed, call again; not allowed, don't. Without it, try again once they have answered.\n\n"
+
+func agentPanelSpec() PanelSpec {
+	return PanelSpec{ID: "agent", View: "agentView", Priority: 40, Icon: "✦",
+		Edge: func(p prefs) string { return p.agentEdge }, Places: slices.Clone(agentEdges),
+		Size: [2]int{sidePanelMin, 90}, Length: [2]int{20, 100}, Default: agentDefault}
+}

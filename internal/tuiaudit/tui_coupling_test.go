@@ -39,7 +39,7 @@ var tuiExact = map[string]string{
 	"todomove": "host", "scripts": "host", "relationmap": "host",
 	"relationviews_tui": "host", "relationviews_gui": "host", "relationviews_cells": "host",
 	"feature": "feature", "command": "feature", "catalog": "feature", "keys": "feature",
-	"keymapcheck": "feature", "prefspec": "feature", "panelhost": "feature", "panelregistry": "feature",
+	"prefspec": "feature", "panelhost": "feature", "panelregistry": "feature",
 	"panelscope": "feature", "pick": "feature", "rows": "feature", "ask": "feature",
 	"terminalpanel": "feature", "work": "feature", "search": "feature", "menurows": "feature",
 	"notices": "feature", "noterenderer": "feature", "spawnenv": "feature", "debug": "feature",

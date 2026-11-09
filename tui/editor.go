@@ -69,3 +69,16 @@ func (h *Host) editorMenu(c *editor.EditorCore) []widgetcore.MenuItemModel {
 	s := h.luaFeature()
 	return append(items, s.rows.editorItems(s, h.menuCtxOf(c))...) // scripts' and plugins' rows (menurows.go)
 }
+
+// menuCtxOf is the open file's context for the right-click menu opening on c.
+func (h *Host) menuCtxOf(c *editor.EditorCore) menuCtx {
+	var ctx menuCtx
+	if h.file != nil {
+		ctx.path, ctx.workspace = h.file.path, h.file.ws
+	}
+	if ctx.path != "" {
+		ctx.kind = h.resolver().Of(ctx.path).String()
+	}
+	_, ctx.selection = c.Selection()
+	return ctx
+}

@@ -17,9 +17,6 @@ import (
 // (Stay at the unsaved question, an HTML file's Cancel, a failed read, a newer open) leaves the list
 // as it was. SPC b b goes back to the nearest place in another document, over the same list.
 
-// fileRef is a document opened: its workspace ("" outside every one) and its path.
-type fileRef struct{ ws, path string }
-
 // docKey is a document as the jump list knows it.
 func docKey(r fileRef) string { return r.ws + "\x00" + r.path }
 
