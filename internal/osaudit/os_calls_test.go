@@ -158,7 +158,7 @@ func osUses(t *testing.T, root string) ([]use, int) {
 // fileUses is what the file rel (its source src) does that only its OS can, each once.
 func fileUses(rel string, src []byte) ([]use, error) {
 	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, rel, src, parser.ParseComments|parser.SkipObjectResolution)
+	f, err := parser.ParseFile(fset, rel, src, parser.ParseComments) // the resolver binds each name to its declaration (strValue)
 	if err != nil {
 		return nil, err
 	}
@@ -211,21 +211,9 @@ func fileUses(rel string, src []byte) ([]use, error) {
 		}
 		names[local] = path
 	}
-	// the file's string constants, so a network named by one is read as its value
-	consts := map[string]ast.Expr{}
-	ast.Inspect(f, func(n ast.Node) bool {
-		if gd, ok := n.(*ast.GenDecl); ok && gd.Tok == token.CONST {
-			for _, sp := range gd.Specs {
-				vs := sp.(*ast.ValueSpec)
-				for i, id := range vs.Names {
-					if i < len(vs.Values) {
-						consts[id.Name] = vs.Values[i]
-					}
-				}
-			}
-		}
-		return true
-	})
+	// strValue is e's value when it is a string constant: a literal, a parenthesized one, a sum of
+	// them, or a name bound (lexically, by go/parser's resolver) to a constant declared with its value
+	// in this file. Anything else, a variable or a name declared in another file, is unknown.
 	var strValue func(e ast.Expr, depth int) (string, bool)
 	strValue = func(e ast.Expr, depth int) (string, bool) {
 		if depth > 8 {
@@ -240,8 +228,16 @@ func fileUses(rel string, src []byte) ([]use, error) {
 		case *ast.ParenExpr:
 			return strValue(x.X, depth+1)
 		case *ast.Ident:
-			if v, ok := consts[x.Name]; ok {
-				return strValue(v, depth+1)
+			obj := x.Obj
+			if obj == nil || obj.Kind != ast.Con {
+				return "", false
+			}
+			if vs, ok := obj.Decl.(*ast.ValueSpec); ok {
+				for i, n := range vs.Names {
+					if n.Name == x.Name && i < len(vs.Values) {
+						return strValue(vs.Values[i], depth+1)
+					}
+				}
 			}
 		case *ast.BinaryExpr:
 			if x.Op == token.ADD {
@@ -447,6 +443,9 @@ func f(d *net.Dialer, cmd *exec.Cmd) {
 	for _, tc := range []struct{ name, src, want string }{
 		{"a network named by a constant", "package p\n\nimport \"net\"\n\nconst network = \"unix\"\n\nfunc f() { _, _ = net.Dial((network), \"/s\") }\n", `unix-socket Dial("unix")`},
 		{"a network made of constants", "package p\n\nimport \"net\"\n\nconst u = \"un\"\n\nfunc f() { _, _ = net.Listen(u+\"ixgram\", \"/s\") }\n", `unix-socket Listen("unixgram")`},
+		{"a constant beside a local one of the same name", "package p\n\nimport \"net\"\n\nconst network = \"unix\"\n\nfunc f() { _, _ = net.Dial(network, \"/s\") }\n\nfunc g() {\n\tconst network = \"tcp\"\n\t_, _ = net.Dial(network, \":80\")\n}\n", `unix-socket Dial("unix")`},
+		{"the same, the local one first", "package p\n\nimport \"net\"\n\nfunc g() {\n\tconst network = \"tcp\"\n\t_, _ = net.Dial(network, \":80\")\n}\n\nfunc f() { _, _ = net.Dial(network, \"/s\") }\n\nconst network = \"unix\"\n", `unix-socket Dial("unix")`},
+		{"a local constant over a package one", "package p\n\nimport \"net\"\n\nconst network = \"tcp\"\n\nfunc g() { _, _ = net.Dial(network, \":80\") }\n\nfunc f() {\n\tconst network = \"unix\"\n\t_, _ = net.Dial(network, \"/s\")\n}\n", `unix-socket Dial("unix")`},
 		{"a dot-imported syscall", "package p\n\nimport . \"syscall\"\n\nfunc f() { _ = Kill(1, SIGTERM) }\n", "import . syscall"},
 		{"an older build constraint", "// +build linux\n\npackage p\n", "os-file linux"},
 	} {
@@ -460,6 +459,9 @@ func f(d *net.Dialer, cmd *exec.Cmd) {
 	}
 	if got, _ := fileUses("pkg/p/p.go", []byte("package p\n\nimport \"net\"\n\nfunc f(d *net.Dialer) {\n\t_, _ = net.Dial(\"tcp\", \"unix.example:80\")\n\t_, _ = d.DialContext(nil, \"tcp\", \"unix\")\n}\n")); len(got) != 0 {
 		t.Errorf("a TCP dial to a host named unix…: %v, want nothing (the address is not the network)", got)
+	}
+	if got, _ := fileUses("pkg/p/p.go", []byte("package p\n\nimport \"net\"\n\nconst network = \"unix\"\n\nfunc h(addr string) {\n\tnetwork := addr\n\t_, _ = net.Dial(network, \":80\")\n}\n")); len(got) != 0 {
+		t.Errorf("a variable over a Unix constant: %v, want nothing (a variable's value is unknown)", got)
 	}
 	if got, _ := fileUses("pkg/p/p.go", []byte("//go:build linux\n// +build linux\n\npackage p\n")); len(got) != 1 {
 		t.Errorf("both constraint spellings: %v, want one os-file linux", got)
