@@ -26,3 +26,6 @@ func lock(f *os.File, wait bool) (held bool, err error) {
 	}
 	return false, err
 }
+
+// unlock releases f's flock; the close after it would too.
+func unlock(f *os.File) error { return syscall.Flock(int(f.Fd()), syscall.LOCK_UN) }

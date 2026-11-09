@@ -115,7 +115,16 @@ func TestTryLockRefusesAnotherProcessAndFreesWhenItEnds(t *testing.T) {
 	if err := cmd.Wait(); err != nil {
 		t.Fatalf("the holder: %v", err)
 	}
-	unlock, err := TryLock(path)
+	// a lock its holder's end releases is freed by the OS, which on Windows may take a moment:
+	// retry briefly rather than assume it is at once (an Unlock, by contrast, is)
+	var unlock Unlock
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if unlock, err = TryLock(path); err == nil || !errors.Is(err, ErrHeld) || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 	if err != nil {
 		t.Fatalf("TryLock after the holder ended: %v", err)
 	}
