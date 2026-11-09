@@ -122,6 +122,9 @@ func TestTheTerminalsGlobeMapWearsItsGroups(t *testing.T) {
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 120, 36)
 	r.waitAttached(t, "kb")
 	r.waitListed(t, 2)
+	// the store's preferences first: they carry a theme, which applyPrefs switches to as they land,
+	// so a switch made before them would be undone under the steps below
+	r.prefsIn(t)
 	if !strings.Contains(string(withRelationViews(layout, false)), `onTriggered: App.toggleGlobeMap()`) {
 		t.Fatal("a terminal's Relations menu has no GlobeMap item")
 	}

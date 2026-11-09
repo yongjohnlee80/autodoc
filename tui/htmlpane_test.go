@@ -154,6 +154,9 @@ func TestThePaneReadsInSepiaAndDark(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", note}})
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 140, 40)
 	r.waitAttached(t, "kb")
+	// the store's preferences first: they carry a theme, which applyPrefs switches to as they land,
+	// so a switch made before them would be undone under the steps below
+	r.prefsIn(t)
 	onLoop(r, func() bool { r.h.switchTheme("sepia"); return true })
 	r.s.WaitFor(t, "sepia", func(string) bool { return onLoop(r, func() string { return r.h.theme }) == "sepia" })
 	onLoop(r, func() bool { r.h.openPath("a.md"); return true })
