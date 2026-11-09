@@ -11,7 +11,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/internal/client"
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
-	"github.com/yongjohnlee80/autodoc/internal/peercred"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // restartClientName is the name a restart's hello gives: not the TUI's, which a daemon admits only
@@ -98,7 +98,7 @@ func spawnFor(e *endpoint.Endpoints) (string, error) {
 
 // stopDaemon asks the daemon at addr to shut down, over a connection declaring its own protocol.
 func stopDaemon(ctx context.Context, addr string, protocol int64) error {
-	cli, err := golibrpc.Dial(ctx, addr, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"), golibrpc.WithConnDialer(peercred.Dial))
+	cli, err := golibrpc.Dial(ctx, addr, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"), golibrpc.WithConnDialer(ipc.Dial))
 	if err != nil {
 		return err
 	}

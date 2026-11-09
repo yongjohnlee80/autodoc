@@ -1,4 +1,4 @@
-// Package peercred keeps the daemon's unix socket between processes of one user. The socket is
+// Package ipc keeps the daemon's unix socket between processes of one user. The socket is
 // the daemon's only access control: no login, no token. Whoever connects can call every verb,
 // file.write anywhere on the user's disk among them. So both ends check who is at the other end:
 //
@@ -14,7 +14,7 @@
 //
 // Concurrency: every function is safe for concurrent use; a Listener is as safe as the listener it
 // wraps.
-package peercred
+package ipc
 
 import (
 	"context"

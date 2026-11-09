@@ -11,7 +11,7 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
-	"github.com/yongjohnlee80/autodoc/internal/peercred"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // ErrNotAutodoc is an endpoint whose occupant is not a compatible AutoDoc.
@@ -38,7 +38,7 @@ type ProbeInfo struct {
 // admits nothing), and returns what any AutoDoc answers, whatever its protocol: the caller decides
 // whether it will do. A dial error is returned as it is: nothing answers there.
 func Probe(ctx context.Context, network, addr string) (ProbeInfo, error) {
-	conn, err := peercred.Dial(ctx, network, addr)
+	conn, err := ipc.Dial(ctx, network, addr)
 	if err != nil {
 		return ProbeInfo{}, err
 	}
