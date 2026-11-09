@@ -44,6 +44,8 @@ func take(path string, wait bool) (Unlock, error) {
 			return nil
 		}
 		done = true
-		return f.Close() // closing the file releases its lock, on every OS
+		// released before the close: closing alone releases it too, but Windows may do that
+		// lazily, so a lock taken right after could still be refused
+		return errors.Join(unlock(f), f.Close())
 	}, nil
 }
