@@ -18,7 +18,7 @@ $script:fail = 0
 function Ok([string]$name) { $script:pass++; Write-Host "PASS  $name" }
 function Bad([string]$name, [string]$why) { $script:fail++; Write-Host "FAIL  ${name}: $why" }
 
-# ── the fake release ──────────────────────────────────────────────────────────────────────────
+# --- the fake release ---
 $R = Join-Path $work "release"
 $src = Join-Path $work "fake"
 New-Item -ItemType Directory -Force -Path $src | Out-Null
@@ -130,6 +130,20 @@ try {
 	$code = Run $h3 $upd @("-BaseUrl", $base, "-Yes")
 	if ($code -eq 2) { Ok "update.ps1 refuses an AutoDoc with no install record (exit 2)" }
 	else { Bad "update.ps1 with no record" "exit $code" }
+
+	# a prefix with a non-ASCII name: the record keeps it whole, and update.ps1 updates that binary,
+	# with no garbled sibling (the record is read as UTF-8, also in Windows PowerShell 5.1)
+	$h5 = Join-Path $work "home5"
+	$accent = "AutoDoc-" + [char]0x00E9 + [char]0x00FC
+	$prefix5 = Join-Path $h5 $accent
+	Publish "v1.0.0"
+	$code = Run $h5 $installer @("-BaseUrl", $base, "-Yes", "-NoLauncher", "-Prefix", $prefix5)
+	Publish "v1.1.0"
+	$code2 = Run $h5 (Join-Path $h5 "Local\autodoc\update.ps1") @("-BaseUrl", $base, "-Yes")
+	$bin5 = Join-Path $prefix5 "autodoc.exe"
+	$siblings = @(Get-ChildItem -LiteralPath $h5 -Directory | Where-Object { $_.Name -like "AutoDoc-*" -and $_.Name -ne $accent })
+	if ($code -eq 0 -and $code2 -eq 0 -and (Test-Path -LiteralPath $bin5) -and (& $bin5 --version) -eq "autodoc v1.1.0" -and $siblings.Count -eq 0) { Ok "a non-ASCII prefix is installed and updated in place" }
+	else { Bad "a non-ASCII prefix" "install $code, update $code2, binary $(if (Test-Path -LiteralPath $bin5) { & $bin5 --version }), other AutoDoc-* folders: $($siblings.Name -join ', '): $(Get-Content -Raw (Join-Path $h5 'out.txt'))" }
 
 	# -NoLauncher adds no shortcut
 	$h4 = Join-Path $work "home4"

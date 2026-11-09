@@ -108,4 +108,3 @@ On Windows, AutoDoc installs with `install-autodoc.ps1` and updates with `update
 - **Updating:** `update.ps1` runs the newest release's `install-autodoc.ps1`, fetched and verified, so there's one install path, as on Linux and macOS.
 
 In the code: `scripts/install/install-autodoc.ps1`, `scripts/install/update.ps1`, `scripts/install/test/run.ps1`
-
