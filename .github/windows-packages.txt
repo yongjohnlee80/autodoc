@@ -1,0 +1,3 @@
+# The packages that build, vet and pass their tests on Windows in CI (ci.yml's windows job):
+# the ones ported so far. The list only grows. A discover run lists the candidates:
+#   gh workflow run ci.yml --ref <branch> -f discover=true
