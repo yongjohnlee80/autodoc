@@ -213,9 +213,9 @@ func defaultPrefs() prefs { return defaultPrefsFor(false) }
 // theme alone.
 func defaultPrefsFor(gui bool) prefs {
 	p := prefs{searchStages: allStagesChecked()}
-	readRows(&p, nil, legacyPrefRows(nil, gui))
-	readRows(&p, nil, terminalPrefRows(nil))
-	readRows(&p, nil, agentPrefRows(nil))
+	ReadRows(&p, nil, legacyPrefRows(nil, gui))
+	ReadRows(&p, nil, terminalPrefRows(nil))
+	ReadRows(&p, nil, agentPrefRows(nil))
 	return p
 }
 
@@ -350,7 +350,7 @@ func prefsForPanels(m map[string]any, gui bool, specs []PanelSpec) prefs {
 	m = migrateLinksPanel(m)
 	p := defaultPrefsFor(gui)
 	p.panelDefs = specs
-	readRows(&p, m, legacyPrefRows(nil, gui))
+	ReadRows(&p, m, legacyPrefRows(nil, gui))
 	str := func(k string) (string, bool) { s, ok := m[k].(string); return s, ok && s != "" }
 	if s, ok := str(prefSearchStages); ok {
 		p.searchStages = stageChoiceOf(s)
@@ -362,8 +362,8 @@ func prefsForPanels(m map[string]any, gui bool, specs []PanelSpec) prefs {
 	for k, v := range m {
 		readPluginPref(&p, k, v)
 	}
-	readRows(&p, m, terminalPrefRows(nil))
-	readRows(&p, m, agentPrefRows(nil))
+	ReadRows(&p, m, terminalPrefRows(nil))
+	ReadRows(&p, m, agentPrefRows(nil))
 	readPanelPrefs(&p, m)
 	readPanelFloats(&p, m)
 	readFontPrefs(&p, m)
@@ -371,7 +371,7 @@ func prefsForPanels(m map[string]any, gui bool, specs []PanelSpec) prefs {
 }
 
 // prefState is what the document reads of the composite preferences: the panels', the agents',
-// the fonts'. The rows' are rowState's (prefspec.go); the status line's is statusShown's.
+// the fonts'. The rows' are RowState's (prefspec.go); the status line's is statusShown's.
 func prefState(p prefs) map[string]any {
 	m := map[string]any{}
 	for _, part := range []map[string]any{panelState(p), floatState(p.panelFloat, p.geometrySpecs()), fontState(p)} {
@@ -416,9 +416,9 @@ func (h *Host) loadPrefs() {
 			a.v[name] = value
 		}
 		values, migrated := migrateAgentDefault(a.v)
-		values = migrateLinksPanel(values) // readRows reads the explorer's edge from it too
+		values = migrateLinksPanel(values) // ReadRows reads the explorer's edge from it too
 		p := prefsForPanels(values, h.gui, h.panelSpecs())
-		readRows(&p, values, h.prefRows) // the features' own rows too
+		ReadRows(&p, values, h.prefRows) // the features' own rows too
 		h.applyPrefs(p)
 		h.startOnce()
 		h.luaPrefsRead = true
@@ -437,7 +437,7 @@ func (h *Host) applyPrefs(p prefs) {
 	}
 	h.prefs = p
 	st := prefState(p)
-	maps.Copy(st, rowState(p, h.prefRows))
+	maps.Copy(st, RowState(p, h.prefRows))
 	st["App.statusShown"] = h.statusShown()
 	h.record(h.p.SetMany(st))
 	h.syncPageWidth()
@@ -717,7 +717,7 @@ type prefChoosers struct{ h *Host }
 
 func (prefChoosers) Name() string { return "preferences" }
 
-func (c prefChoosers) State() map[string]any { return rowState(c.h.prefs, c.h.prefRows) }
+func (c prefChoosers) State() map[string]any { return RowState(c.h.prefs, c.h.prefRows) }
 
 func (c prefChoosers) Commands() map[string]Command {
 	m := map[string]Command{}
@@ -755,7 +755,7 @@ func (h *Host) setRowPref(row PrefSpec, v string) {
 	p := h.prefs
 	row.read(&p, v)
 	h.prefs = p
-	if st := rowState(p, []PrefSpec{row}); len(st) > 0 {
+	if st := RowState(p, []PrefSpec{row}); len(st) > 0 {
 		h.keep(h.p.SetMany(st)) // the chooser's row (Index) and the row's State
 	}
 	if changed && row.Changed != nil {

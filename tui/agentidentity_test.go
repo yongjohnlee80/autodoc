@@ -234,7 +234,7 @@ func TestAgentDefaultMigrationDistinguishesMissingAndExplicitEmptyAtRestart(t *t
 				t.Fatal("migration ignored canonical key presence")
 			}
 			var rows prefs
-			readRows(&rows, values, agentPrefRows(nil))
+			ReadRows(&rows, values, agentPrefRows(nil))
 			for _, p := range []prefs{rows, prefsFor(raw, false), prefsFor(raw, true)} {
 				c := newIdentityHost(`[]`)
 				c.p = p

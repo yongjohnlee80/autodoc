@@ -89,9 +89,8 @@ func terminalPrefRows(t *terminals) []PrefSpec {
 		names = t.themeNames()
 	}
 	theme := choicePref(prefTermTheme, "page", names, func(p *prefs) *string { return &p.termTheme }).
-		shows(func(v PrefsView) map[string]any {
-			p := asPrefs(v)
-			return map[string]any{"App.terminalThemeIndex": max(indexOf(names, cmp.Or(p.termTheme, "page")), 0)}
+		shows(func(p PrefsView) map[string]any {
+			return map[string]any{"App.terminalThemeIndex": max(indexOf(names, cmp.Or(p.Value(prefTermTheme), "page")), 0)}
 		})
 	if t != nil {
 		row = row.then(func(PrefsView) { t.c.DockPanel("terminal") })
@@ -110,9 +109,8 @@ const prefTermPanelKeys = "tui.terminal.panel_keys"
 // panelKeysRow is the preference: on by default; the menu's check follows it.
 func panelKeysRow() PrefSpec {
 	return boolPref(prefTermPanelKeys, true, func(p *prefs) *bool { return &p.termPanelKeys }).
-		shows(func(v PrefsView) map[string]any {
-			p := asPrefs(v)
-			return map[string]any{"App.terminalPanelKeys": p.termPanelKeys}
+		shows(func(p PrefsView) map[string]any {
+			return map[string]any{"App.terminalPanelKeys": p.Value(prefTermPanelKeys) == "true"}
 		})
 }
 
