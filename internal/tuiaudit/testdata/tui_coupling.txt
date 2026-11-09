@@ -371,9 +371,6 @@ gui	searchsetup	host	wording.Tr	method
 gui	searchsetup	host	wording.Trf	method
 gui	system	host	prefAboutAt	const
 gui	system	host	prefUpdates	const
-gui	system	host	seams	type
-gui	system	host	seams.latestURL	field
-gui	system	host	vimQuestionPending	func
 gui	terminals	host	Host	type
 gui	terminals	host	Host.fonts	field
 gui	terminals	host	Host.keep	method
@@ -400,13 +397,8 @@ gui	terminals	host	prefs.termEdge	field
 gui	terminals	host	prefs.termFont	field
 gui	terminals	host	prefs.termPanelKeys	field
 gui	terminals	host	prefs.termTheme	field
-gui	terminals	host	seams	type
-gui	terminals	host	seams.env	field
 gui	terminals	host	themeNames	var
-gui	todos	host	defaultSeams	var
 gui	todos	host	prefTodosEdge	const
-gui	todos	host	seams	type
-gui	todos	host	seams.env	field
 term	crew	host	Host	type
 term	crew	host	Host.active	field
 term	crew	host	Host.agents	field
@@ -732,9 +724,6 @@ term	searchsetup	host	wording.Tr	method
 term	searchsetup	host	wording.Trf	method
 term	system	host	prefAboutAt	const
 term	system	host	prefUpdates	const
-term	system	host	seams	type
-term	system	host	seams.latestURL	field
-term	system	host	vimQuestionPending	func
 term	terminals	host	Host	type
 term	terminals	host	Host.fonts	field
 term	terminals	host	Host.keep	method
@@ -761,10 +750,5 @@ term	terminals	host	prefs.termEdge	field
 term	terminals	host	prefs.termFont	field
 term	terminals	host	prefs.termPanelKeys	field
 term	terminals	host	prefs.termTheme	field
-term	terminals	host	seams	type
-term	terminals	host	seams.env	field
 term	terminals	host	themeNames	var
-term	todos	host	defaultSeams	var
 term	todos	host	prefTodosEdge	const
-term	todos	host	seams	type
-term	todos	host	seams.env	field
