@@ -125,12 +125,13 @@ func dirSize(dir string) (int64, error) {
 	return n, err
 }
 
-// stageKB stages url: stageKBType's clone, or a test's stager.
-func (h *Host) stageKB(ctx context.Context, url string) stagedKBType {
+// stageKB stages url in the program's environment env (read on the loop, as the worker is started):
+// stageKBType's clone, or a test's stager. Off the loop.
+func (h *Host) stageKB(ctx context.Context, env procenv.Env, url string) stagedKBType {
 	if h.kbStage != nil {
 		return h.kbStage(ctx, url)
 	}
-	return stageKBType(ctx, h.seams.env, url)
+	return stageKBType(ctx, env, url)
 }
 
 // kbTypePicked is the KB type field's choice, row i of kbTypeRows.
@@ -176,7 +177,8 @@ func (h *Host) pickKBType(url string) {
 	}
 	tk := h.ticket(&h.kbTypeSeq, TicketSession)
 	h.set("App.kbTypeSummary", h.trf("autodoc.text.kbtype.staging", url))
-	do(h, func(ctx context.Context) stagedKBType { return h.stageKB(ctx, url) }, func(s stagedKBType) {
+	env := h.seams.env
+	do(h, func(ctx context.Context) stagedKBType { return h.stageKB(ctx, env, url) }, func(s stagedKBType) {
 		if !tk.Current() {
 			if s.stage != "" {
 				_ = os.RemoveAll(s.stage)
@@ -373,8 +375,9 @@ func (h *Host) kbTypeApply(x Invocation) error {
 		a   kbApply
 		err error
 	}
+	env := h.seams.env
 	do(h, func(ctx context.Context) answer {
-		s := h.stageKB(ctx, url)
+		s := h.stageKB(ctx, env, url)
 		if s.err != nil {
 			return answer{s: s, err: s.err}
 		}
