@@ -229,17 +229,17 @@ func TestTheRegistryStagesThenCommits(t *testing.T) {
 		reg := r.h.reg.panels
 		before, host := slices.Clone(reg.specs), reg.hosts[resultsPanel]
 		dup := append(r.h.plugins.Panels(), PanelSpec{ID: "explorer", View: "elsewhere", Edge: func(PrefsView) string { return "left" }})
-		if _, _, err := reg.stage(core{r.h}, r.h.plugins, dup); err == nil || !strings.Contains(err.Error(), "explorer") {
+		if _, _, err := stagePanels(reg, core{r.h}, r.h.plugins, dup); err == nil || !strings.Contains(err.Error(), "explorer") {
 			t.Errorf("a panel id two features claim: %v", err)
 		}
-		if _, _, err := reg.stage(core{r.h}, r.h.agents, nil); err == nil || !strings.Contains(err.Error(), "holds its panel host") {
+		if _, _, err := stagePanels(reg, core{r.h}, r.h.agents, nil); err == nil || !strings.Contains(err.Error(), "holds its panel host") {
 			t.Errorf("a PanelBound feature's panels: %v, want refused for holding its host", err)
 		}
-		if _, _, err := reg.stage(core{r.h}, none, nil); err == nil || !strings.Contains(err.Error(), "contributes no panels") {
+		if _, _, err := stagePanels(reg, core{r.h}, none, nil); err == nil || !strings.Contains(err.Error(), "contributes no panels") {
 			t.Errorf("a feature contributing no panels: %v, want refused", err)
 		}
 		own := slices.DeleteFunc(r.h.plugins.Panels(), func(s PanelSpec) bool { return s.ID == cardPanelID("card") })
-		specs, commit, err := reg.stage(core{r.h}, r.h.plugins, own)
+		specs, commit, err := stagePanels(reg, core{r.h}, r.h.plugins, own)
 		if err != nil {
 			t.Error(err)
 			return nil

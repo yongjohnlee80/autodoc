@@ -442,7 +442,7 @@ func (h *Host) cardPanelsChanged(undo func()) {
 			h.failed("plugins", err)
 			h.plugins.refreshPlugins()
 		}
-		specs, commit, err := h.reg.panels.stage(core{h}, h.plugins, h.plugins.Panels())
+		specs, commit, err := stagePanels(h.reg.panels, core{h}, h.plugins, h.plugins.Panels())
 		if err != nil {
 			refused(err)
 			return

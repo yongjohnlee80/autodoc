@@ -243,7 +243,7 @@ func (s *scripting) luaKeysText() string {
 
 // refreshLuaUI shows SPC u's letters and the Plugins menu's Lua rows as they are now.
 func (s *scripting) refreshLuaUI() {
-	s.luaMenuRows().Reset(s.rows.pluginsMenuRows(s))
+	s.luaMenuRows().Reset(pluginsMenuRowsOf(&s.rows, s))
 	// before the program runs, State's first value is the text as it stands then
 	if a, ok := s.c.(interface{ Attached() bool }); ok && a.Attached() {
 		s.c.Set("App.luaKeysText", s.luaKeysText())
