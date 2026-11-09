@@ -22,16 +22,23 @@ type Env []string
 
 // Get is name's value, "" when it has none.
 func (e Env) Get(name string) string {
+	v, _ := e.Lookup(name)
+	return v
+}
+
+// Lookup is name's value and whether it is set at all, an empty value being set: os.LookupEnv's
+// answer when e is nil. A name is matched as the OS matches it (case-blind on Windows: sameName).
+func (e Env) Lookup(name string) (string, bool) {
 	if e == nil {
-		return os.Getenv(name)
+		return os.LookupEnv(name)
 	}
-	v := ""
+	v, set := "", false
 	for _, kv := range e {
-		if k, val, ok := strings.Cut(kv, "="); ok && k == name {
-			v = val
+		if k, val, ok := strings.Cut(kv, "="); ok && sameName(k, name) {
+			v, set = val, true
 		}
 	}
-	return v
+	return v, set
 }
 
 // Environ is the environment, os.Environ's when e is nil: what a program started with it inherits.
@@ -49,7 +56,7 @@ func (e Env) With(set ...string) Env {
 	out := Env(e.Environ())
 	for _, kv := range set {
 		name, _, hasValue := strings.Cut(kv, "=")
-		out = slices.DeleteFunc(out, func(v string) bool { k, _, _ := strings.Cut(v, "="); return k == name })
+		out = slices.DeleteFunc(out, func(v string) bool { k, _, _ := strings.Cut(v, "="); return sameName(k, name) })
 		if hasValue {
 			out = append(out, kv)
 		}

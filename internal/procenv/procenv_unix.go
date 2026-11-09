@@ -29,3 +29,6 @@ func runnable(path string) error {
 	}
 	return nil
 }
+
+// sameName is whether two variable names are one: exactly equal, as Unix compares them.
+func sameName(a, b string) bool { return a == b }
