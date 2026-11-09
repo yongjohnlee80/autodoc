@@ -433,7 +433,9 @@ func (h *Host) askDiskOnEnter(b *openBuffer) {
 // did not change keeps the cursor on it. b is clean after.
 func (h *Host) reloadFromDisk(b *openBuffer, content, version string) {
 	ed := h.editorFor(b)
-	old, now := ed.Lines(), strings.Split(content, "\n")
+	b.file.crlf = usesCRLF(content)
+	// compared as the editor holds it, LF (lineendings.go): a CRLF file's lines keep no CR
+	old, now := ed.Lines(), strings.Split(asEditorText(content), "\n")
 	if hunks := lineHunks(old, now); len(hunks) > 0 {
 		ro := ed.ReadOnly()
 		ed.SetReadOnly(false) // read-only to the user, not to the disk
