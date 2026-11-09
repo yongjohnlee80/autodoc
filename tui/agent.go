@@ -22,6 +22,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc"
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // agents owns profile forms and the running agent's identity. Its single panel
@@ -80,7 +81,7 @@ func newAgents(c agentHost, s *seams, dir, config string) *agents {
 		agentRows: tuidecl.NewListModel("key", "default", "name", "codename", "command"),
 		spawn:     func(c pty.Cmd) (terminal.TerminalProcess, error) { return pty.Start(c) }, commandCheck: commandOnPath}
 }
-func (a *agents) BindPanelHost(c PanelHost) error {
+func (a *agents) BindPanelHost(c feature.PanelHost) error {
 	host, ok := c.(agentHost)
 	if !ok {
 		return fmt.Errorf("agents panel requires terminal configuration services")
@@ -112,33 +113,33 @@ func (a *agents) State() map[string]any {
 	}
 	return st
 }
-func (a *agents) Prefs() []PrefSpec { return agentPrefRows(a) }
+func (a *agents) Prefs() []feature.PrefSpec { return agentPrefRows(a) }
 
-func (a *agents) Catalog() []Entry {
-	return []Entry{
-		builtin("agent.toggle", "AI agent", "App.toggleAgent()", a.toggleAgent),
-		builtin("prefs.agent_profiles", "agent profiles", "App.openAgentProfiles()", a.openAgentProfiles),
-		builtin("agent.setup", "set up an agent", "App.openAgentSetup()", a.openAgentSetup),
+func (a *agents) Catalog() []feature.Entry {
+	return []feature.Entry{
+		feature.Builtin("agent.toggle", "AI agent", "App.toggleAgent()", a.toggleAgent),
+		feature.Builtin("prefs.agent_profiles", "agent profiles", "App.openAgentProfiles()", a.openAgentProfiles),
+		feature.Builtin("agent.setup", "set up an agent", "App.openAgentSetup()", a.openAgentSetup),
 	}
 }
 
-func agentPrefRows(a *agents) []PrefSpec {
+func agentPrefRows(a *agents) []feature.PrefSpec {
 	edge := choicePref(prefAgentEdge, defaultAgentEdge, agentEdges, func(p *prefs) *string { return &p.agentEdge }).
-		shows(agentPreferenceState)
-	profiles := ValuePref(prefAgentProfiles, "[]", nil)
-	def := ValuePref(prefAgentDefault, "", nil)
-	identity := ValuePref(prefAgentDefaultCodename, "", nil)
-	setup := ValuePref(prefAgentSetup, "", nil) // the setup's answer (agentsetup.go)
+		Shows(agentPreferenceState)
+	profiles := feature.ValuePref(prefAgentProfiles, "[]", nil)
+	def := feature.ValuePref(prefAgentDefault, "", nil)
+	identity := feature.ValuePref(prefAgentDefaultCodename, "", nil)
+	setup := feature.ValuePref(prefAgentSetup, "", nil) // the setup's answer (agentsetup.go)
 	if a != nil {
-		edge = edge.then(func(PrefsView) { a.c.DockPanel("agent") })
-		profiles = profiles.then(func(PrefsView) { a.listAgents() })
-		def = def.then(func(PrefsView) { a.listAgents() })
-		identity = identity.then(func(PrefsView) { a.listAgents() })
+		edge = edge.Then(func(feature.PrefsView) { a.c.DockPanel("agent") })
+		profiles = profiles.Then(func(feature.PrefsView) { a.listAgents() })
+		def = def.Then(func(feature.PrefsView) { a.listAgents() })
+		identity = identity.Then(func(feature.PrefsView) { a.listAgents() })
 	}
-	return []PrefSpec{edge, profiles, def, identity, setup}
+	return []feature.PrefSpec{edge, profiles, def, identity, setup}
 }
 
-func agentPreferenceState(p PrefsView) map[string]any {
+func agentPreferenceState(p feature.PrefsView) map[string]any {
 	st := agentState(p)
 	size, length := p.PanelGeometry("agent", p.Value(prefAgentEdge))
 	maps.Copy(st, map[string]any{
@@ -155,37 +156,37 @@ func (a *agents) profiles() []agentProfile {
 func (a *agents) defaultProfile() string {
 	return a.c.Prefs().Value(prefAgentDefaultCodename)
 }
-func (a *agents) Commands() map[string]Command {
-	return map[string]Command{
-		"App.toggleAgent":             none(a.toggleAgent),
-		"App.stopAllAgents":           none(a.stopAllAgents),
-		"App.openAgentProfiles":       none(a.openAgentProfiles),
-		"App.startAddAgent":           none(a.startAddAgent),
-		"App.startEditAgent":          oneNumber("a row", a.startEditAgent),
-		"App.saveAgent":               twoStrings("a name and a command", a.saveAgent),
-		"App.saveAgentProfile":        threeStrings("a name, command and codename", a.saveAgentProfile),
-		"App.saveAgentProfileWithEnv": fourStrings("a name, command, codename and env", a.saveAgentProfileWithEnv),
-		"App.agentKindPicked":         numberAndTwoStrings("a row, the name and the command", a.agentKindChosen),
-		"App.removeAgent":             oneNumber("a row", a.removeAgent),
-		"App.makeAgentDefault":        oneNumber("a row", a.makeAgentDefault),
-		"App.openAgentSetup":          none(a.openAgentSetup),
-		"App.agentSetupPicked":        numberAndString("a row and the name", a.agentSetupPicked),
-		"App.agentSetupConfirm":       numberAndString("a row and the name", a.agentSetupConfirm),
-		"App.agentSetupDecline":       none(a.agentSetupDecline),
-		"App.useAgent":                oneNumber("a row", a.useAgent),
-		"App.switchAgentConfirmed":    none(a.switchAgentConfirmed),
-		"App.agentTabsChanged":        none(a.agentTabsChanged),
-		"App.setAgentEdge":            oneNumber("a row", a.setAgentEdge),
-		"App.setAgentSize":            oneNumber("a row", a.setAgentSize),
-		"App.setAgentLength":          oneNumber("a row", a.setAgentLength),
+func (a *agents) Commands() map[string]feature.Command {
+	return map[string]feature.Command{
+		"App.toggleAgent":             feature.None(a.toggleAgent),
+		"App.stopAllAgents":           feature.None(a.stopAllAgents),
+		"App.openAgentProfiles":       feature.None(a.openAgentProfiles),
+		"App.startAddAgent":           feature.None(a.startAddAgent),
+		"App.startEditAgent":          feature.OneNumber("a row", a.startEditAgent),
+		"App.saveAgent":               feature.TwoStrings("a name and a command", a.saveAgent),
+		"App.saveAgentProfile":        feature.ThreeStrings("a name, command and codename", a.saveAgentProfile),
+		"App.saveAgentProfileWithEnv": feature.FourStrings("a name, command, codename and env", a.saveAgentProfileWithEnv),
+		"App.agentKindPicked":         feature.NumberAndTwoStrings("a row, the name and the command", a.agentKindChosen),
+		"App.removeAgent":             feature.OneNumber("a row", a.removeAgent),
+		"App.makeAgentDefault":        feature.OneNumber("a row", a.makeAgentDefault),
+		"App.openAgentSetup":          feature.None(a.openAgentSetup),
+		"App.agentSetupPicked":        feature.NumberAndString("a row and the name", a.agentSetupPicked),
+		"App.agentSetupConfirm":       feature.NumberAndString("a row and the name", a.agentSetupConfirm),
+		"App.agentSetupDecline":       feature.None(a.agentSetupDecline),
+		"App.useAgent":                feature.OneNumber("a row", a.useAgent),
+		"App.switchAgentConfirmed":    feature.None(a.switchAgentConfirmed),
+		"App.agentTabsChanged":        feature.None(a.agentTabsChanged),
+		"App.setAgentEdge":            feature.OneNumber("a row", a.setAgentEdge),
+		"App.setAgentSize":            feature.OneNumber("a row", a.setAgentSize),
+		"App.setAgentLength":          feature.OneNumber("a row", a.setAgentLength),
 	}
 }
-func (a *agents) Panels() []PanelSpec {
+func (a *agents) Panels() []feature.PanelSpec {
 	s := agentPanelSpec()
-	s.Open = func(PanelHost) { a.openAgentPanel() }
-	s.Opened = func(c PanelHost) { c.Set("App.agentShown", true) }
-	s.Closed = func(c PanelHost) { c.Set("App.agentShown", false); c.Keep(c.RestoreKeyboardHome()) }
-	return []PanelSpec{s}
+	s.Open = func(feature.PanelHost) { a.openAgentPanel() }
+	s.Opened = func(c feature.PanelHost) { c.Set("App.agentShown", true) }
+	s.Closed = func(c feature.PanelHost) { c.Set("App.agentShown", false); c.Keep(c.RestoreKeyboardHome()) }
+	return []feature.PanelSpec{s}
 }
 func (a *agents) PreferencesChanged() {
 	for name, value := range agentState(a.c.Prefs()) {
@@ -830,8 +831,8 @@ const editorGuide = "## The page the user is writing\n\n" +
 	"Say so to the user. When the refusal says their answer comes as mail, wait for that mail rather than retrying: " +
 	"allowed, call again; not allowed, don't. Without it, try again once they have answered.\n\n"
 
-func agentPanelSpec() PanelSpec {
-	return PanelSpec{ID: "agent", View: "agentView", Priority: 40, Icon: "✦",
-		Edge: func(p PrefsView) string { return p.Value(prefAgentEdge) }, Places: slices.Clone(agentEdges),
-		Size: [2]int{sidePanelMin, 90}, Length: [2]int{20, 100}, Default: agentDefault}
+func agentPanelSpec() feature.PanelSpec {
+	return feature.PanelSpec{ID: "agent", View: "agentView", Priority: 40, Icon: "✦",
+		Edge: func(p feature.PrefsView) string { return p.Value(prefAgentEdge) }, Places: slices.Clone(agentEdges),
+		Size: [2]int{feature.SidePanelMin, 90}, Length: [2]int{20, 100}, Default: agentDefault}
 }

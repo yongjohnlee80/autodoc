@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/gui"
 	guidecl "github.com/yongjohnlee80/golib/gui/decl"
 	guiwidget "github.com/yongjohnlee80/golib/gui/widget"
@@ -97,7 +98,7 @@ func visible(bl guiwidget.BlockLayout) string {
 // source identity and clicks; while typing on it the line is its source, editable.
 func TestARenderedNoteDrawsItsEmbeds(t *testing.T) {
 	notes, _ := embedNote(t, nil)
-	r := notes.Renderer(guiwidget.Diagrams(nil))(NoteRendererSpec{})
+	r := notes.Renderer(guiwidget.Diagrams(nil))(feature.NoteRendererSpec{})
 	lines := []string{"# Note", "", "![The flow](flow.mmd)", "", "![Data](data.csv)", ""}
 
 	// the diagram: the host's picture, asked for the line's block with the file's source
@@ -147,7 +148,7 @@ func TestARenderedNoteDrawsItsEmbeds(t *testing.T) {
 func TestAnEmbeddedTableShowsItsValuesLiterally(t *testing.T) {
 	value := "literal **strong** and `code`, [l](u) ![i](p) &amp; a|b c\\d"
 	notes, _ := embedNote(t, map[string]string{"literal.csv": "value\n\"" + value + "\"\n"})
-	r := notes.Renderer(nil)(NoteRendererSpec{})
+	r := notes.Renderer(nil)(feature.NoteRendererSpec{})
 	_, bl := layOut(r, []string{"![data](literal.csv)"}, 0, false, nil)
 	table, ok := bl.Picture.(laidBlock)
 	if !ok {
@@ -164,7 +165,7 @@ func TestAnEmbeddedTableShowsItsValuesLiterally(t *testing.T) {
 // to golib.
 func TestAnEmbedAloneInItsParagraphIsDrawn(t *testing.T) {
 	notes, _ := embedNote(t, map[string]string{"flow(v2).mmd": "graph TD\n  v --> two\n"})
-	r := notes.Renderer(nil)(NoteRendererSpec{})
+	r := notes.Renderer(nil)(feature.NoteRendererSpec{})
 	for _, c := range []struct {
 		name  string
 		lines []string
@@ -200,7 +201,7 @@ func TestAnEmbedAloneInItsParagraphIsDrawn(t *testing.T) {
 // lays each, so an edit that joins it to the image or parts it from it changes the blocks there.
 func TestAParagraphHoldingAnEmbedIsOneBlock(t *testing.T) {
 	notes, _ := embedNote(t, nil)
-	r := notes.Renderer(nil)(NoteRendererSpec{})
+	r := notes.Renderer(nil)(feature.NoteRendererSpec{})
 	lines := []string{"# Note", "", "![flow](flow.mmd)", "more text", "", "last"}
 	blocks := r.Blocks(lines, 0, len(lines))
 	if !slices.Contains(blocks, guiwidget.Block{From: 2, To: 4}) {
@@ -226,7 +227,7 @@ func TestOnlyTheNoteEditorDrawsEmbeds(t *testing.T) {
 	var mu sync.Mutex
 	var made []tuidecl.RendererSpec
 	factory := notes.Renderer(nil)
-	note := guidecl.WithRendererFor(NoteRendererKind, func(s tuidecl.RendererSpec) guiwidget.Renderer {
+	note := guidecl.WithRendererFor(feature.NoteRendererKind, func(s tuidecl.RendererSpec) guiwidget.Renderer {
 		mu.Lock()
 		made = append(made, s)
 		mu.Unlock()
@@ -239,7 +240,7 @@ func TestOnlyTheNoteEditorDrawsEmbeds(t *testing.T) {
 	onLoop(r, func() bool { r.h.openPath("a.md"); return true })
 	r.waitFile(t, "a.md")
 	onLoop(r, func() bool { r.h.openSearch(); return true })
-	onLoop(r, func() bool { r.h.searchPick.previewItem(hit{path: "b.md"}); return true })
+	onLoop(r, func() bool { r.h.searchPick.PreviewItem(hit{path: "b.md"}); return true })
 	r.s.WaitFor(t, "b's preview", func(string) bool {
 		return onLoop(r, func() bool {
 			title, _ := r.h.p.Tree().Source("App.searchPreviewTitle")
@@ -251,7 +252,7 @@ func TestOnlyTheNoteEditorDrawsEmbeds(t *testing.T) {
 	if len(made) != 1 {
 		t.Fatalf("the note renderer was made %d times, want once, for the note editor", len(made))
 	}
-	if spec, ok := made[0].(NoteRendererSpec); !ok || !spec.Mermaid {
+	if spec, ok := made[0].(feature.NoteRendererSpec); !ok || !spec.Mermaid {
 		t.Errorf("the note renderer was made for %#v, want main.qml's NoteRenderer { mermaid: true }", made[0])
 	}
 }
@@ -329,7 +330,7 @@ func paintedEditor(t *testing.T, r guiwidget.Renderer, text string) (editor *gui
 // text deleted, it is alone again, and drawn as its file. On golib's own editor, painted natively.
 func TestEditingTheLineAfterAnEmbedLaysItOutAgain(t *testing.T) {
 	notes, _ := embedNote(t, nil)
-	r := &countingRenderer{Renderer: notes.Renderer(nil)(NoteRendererSpec{}), picture: map[int]bool{}}
+	r := &countingRenderer{Renderer: notes.Renderer(nil)(feature.NoteRendererSpec{}), picture: map[int]bool{}}
 	editor, onApp, paint := paintedEditor(t, r, "# Note\n\n![data](data.csv)\n\nlast\n")
 	onApp(paint)
 	onApp(func() {
@@ -358,7 +359,7 @@ func TestEditingTheLineAfterAnEmbedLaysItOutAgain(t *testing.T) {
 // line's layout while the lines around it are unchanged. The page still draws it.
 func TestAnEmbedByReferenceStaysAsWritten(t *testing.T) {
 	notes, _ := embedNote(t, nil)
-	r := notes.Renderer(nil)(NoteRendererSpec{})
+	r := notes.Renderer(nil)(feature.NoteRendererSpec{})
 	for _, lines := range [][]string{
 		{"# Note", "", "![data][file]", "", "[file]: note/data.csv"},
 		{"# Note", "", "![data][]", "", "[data]: note/data.csv"},
@@ -374,7 +375,7 @@ func TestAnEmbedByReferenceStaysAsWritten(t *testing.T) {
 // paragraphs holding an image allocates about five times as much, not twenty-five.
 func TestBlocksScaleWithTheNote(t *testing.T) {
 	notes, _ := embedNote(t, nil)
-	r := notes.Renderer(nil)(NoteRendererSpec{})
+	r := notes.Renderer(nil)(feature.NoteRendererSpec{})
 	allocated := func(paragraphs int) uint64 {
 		lines := strings.Split(strings.Repeat("![flow](flow.mmd)\ncontinuation\n\n", paragraphs), "\n")
 		r.Blocks(lines, 0, len(lines)) // warm
@@ -399,7 +400,7 @@ func TestBlocksScaleWithTheNote(t *testing.T) {
 func TestARenderedNoteDrawsItsCharts(t *testing.T) {
 	spec := `{"data":{"values":[{"a":"x","b":1}]},"mark":"bar","encoding":{"x":{"field":"a","type":"nominal"},"y":{"field":"b","type":"quantitative"}}}`
 	notes, _ := embedNote(t, map[string]string{"note/sales.chart.json": spec + "\n"})
-	r := notes.Renderer(guiwidget.Diagrams(nil))(NoteRendererSpec{})
+	r := notes.Renderer(guiwidget.Diagrams(nil))(feature.NoteRendererSpec{})
 	lines := []string{"# Note", "", "![Sales](sales.chart.json)", ""}
 	pic := gui.ViewFunc(func(gui.Canvas) {})
 	host := &diagramHost{answer: guiwidget.DiagramAnswer{State: guiwidget.Ready, Pic: pic, Size: gui.Size{W: 300, H: 200}}}
@@ -420,7 +421,7 @@ func TestARenderedNoteDrawsItsCharts(t *testing.T) {
 // while its closing fence is not written, it is its source.
 func TestACSVFenceIsATable(t *testing.T) {
 	notes, _ := embedNote(t, nil)
-	r := notes.Renderer(nil)(NoteRendererSpec{})
+	r := notes.Renderer(nil)(feature.NoteRendererSpec{})
 	lines := []string{"# Note", "", "```csv", "name, age, address", "john, 25, 1234 Howe St.", "```", ""}
 	b, bl := layOut(r, lines, 3, false, nil)
 	table, ok := bl.Picture.(laidBlock)
@@ -473,7 +474,7 @@ func TestAChartEmbedIsDrawnByGolib(t *testing.T) {
 	spec := `{"data":{"values":[{"a":"apples","b":3},{"a":"pears","b":5}]},"mark":"bar","encoding":{"x":{"field":"a","type":"nominal"},"y":{"field":"b","type":"quantitative"}}}`
 	notes, _ := embedNote(t, map[string]string{"note/fruit.chart.json": spec, "note/other.chart.json": `{"data":{"values":[]},"mark":"bar","transform":[]}`,
 		"note/broken.chart.json": `{"mark": "bar",`})
-	r := noteRenderer(notes)(NoteRendererSpec{}) // the renderer GUIStyle installs
+	r := noteRenderer(notes)(feature.NoteRendererSpec{}) // the renderer GUIStyle installs
 	lines := []string{"![Fruit](fruit.chart.json)", "", "![Other](other.chart.json)", "", "![Broken](broken.chart.json)"}
 	draw := func(ln int) guiwidget.BlockLayout {
 		host := &realHost{ready: make(chan struct{}, 1)}
@@ -664,7 +665,7 @@ func TestALayeredChartEmbedIsDrawnAsAStill(t *testing.T) {
 			 "params":[{"name":"pick","select":{"type":"point","fields":["loads"]},"bind":"legend"}]},
 			{"mark":{"type":"rule","strokeDash":[4,3]},"encoding":{"x":{"datum":{"expr":"budget"},"type":"quantitative"}}}]}`
 	notes, _ := embedNote(t, map[string]string{"note/bundle-size.chart.json": spec})
-	r := notes.Renderer(guiwidget.Diagrams(nil))(NoteRendererSpec{})
+	r := notes.Renderer(guiwidget.Diagrams(nil))(feature.NoteRendererSpec{})
 	lines := []string{"![Bundle size by part](bundle-size.chart.json)"}
 	host := &realHost{ready: make(chan struct{}, 1)}
 	_, bl := layOut(r, lines, 0, false, host)
@@ -697,7 +698,7 @@ func TestASubtitledShapedChartEmbedIsDrawn(t *testing.T) {
 			"color":{"field":"in","type":"nominal","scale":{"domain":["yes","no"],"range":["#2e9e6a","#d64545"]},"legend":null},
 			"shape":{"field":"case","type":"nominal"}}}`
 	notes, _ := embedNote(t, map[string]string{"note/window.chart.json": spec})
-	r := noteRenderer(notes)(NoteRendererSpec{})
+	r := noteRenderer(notes)(feature.NoteRendererSpec{})
 	lines := []string{"![Window](window.chart.json)"}
 	host := &realHost{ready: make(chan struct{}, 1)}
 	_, bl := layOut(r, lines, 0, false, host)

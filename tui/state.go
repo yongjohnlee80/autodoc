@@ -3,6 +3,7 @@ package tui
 import (
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/internal/userdirs"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
@@ -55,16 +56,16 @@ func (h *Host) state() map[string]any {
 		"App.syntaxDefinition":   "Markdown",
 
 		// the search picker
-		"App.hits":                  h.searchPick.list.Model(),
+		"App.hits":                  h.searchPick.List.Model(),
 		"App.hitsTitle":             h.tr("autodoc.text.state.hits"),
 		"App.searchPreviewTitle":    "",
 		"App.searchPreviewText":     "",
 		"App.searchPreviewRendered": false,
 		"App.searchPreviewAt":       0,
 		// the open picker
-		"App.pickerRows":          h.openPick.list.Model(),
+		"App.pickerRows":          h.openPick.List.Model(),
 		"App.openField":           "",
-		"App.bufferRows":          h.bufferPick.list.Model(),
+		"App.bufferRows":          h.bufferPick.List.Model(),
 		"App.buffersField":        "",
 		"App.buffersPreviewTitle": "",
 		"App.buffersPreviewText":  "",
@@ -77,7 +78,7 @@ func (h *Host) state() map[string]any {
 		"App.openPreviewText":     "",
 		"App.openPreviewAt":       0,
 		// the new-file picker
-		"App.newFiles":        h.newPick.list.Model(),
+		"App.newFiles":        h.newPick.List.Model(),
 		"App.newFilePath":     "",
 		"App.newPreviewTitle": "",
 		"App.newPreviewText":  "",
@@ -169,7 +170,7 @@ func (h *Host) state() map[string]any {
 		"App.terminalFonts": h.termFontModel,
 		"App.proseFonts":    h.proseFontModel,
 		"App.fontSizes":     choices(fontSizeLabels()...),
-		"App.agentScales":   choices(percentLabels(agentScales)...),
+		"App.agentScales":   choices(percentLabels(feature.AgentScales)...),
 		"App.zoomSteps":     choices(zoomLabels()...),
 		"App.cellFontIndex": 0, "App.proseFontIndex": 0, "App.terminalFontIndex": 0, "App.terminalLookNote": "",
 	}
@@ -210,9 +211,9 @@ func (h *Host) languageState() map[string]any {
 // choices are a chooser's rows: each a label.
 func choices(labels ...string) *tuidecl.ListModel {
 	m := tuidecl.NewListModel("key", "label")
-	rows := make([]rowOf, len(labels))
+	rows := make([]feature.RowOf, len(labels))
 	for i, l := range labels {
-		rows[i] = rowOf{"key": l, "label": l}
+		rows[i] = feature.RowOf{"key": l, "label": l}
 	}
 	m.Reset(rows)
 	return m

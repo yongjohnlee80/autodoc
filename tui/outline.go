@@ -10,6 +10,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/outline"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE OUTLINE AND THE BREADCRUMB (docs/decisions/search.md#outline-breadcrumbs-and-previews), a
@@ -37,34 +38,34 @@ func (h *Host) showTitle() {
 func (h *Host) cursorMoved() {
 	h.followCursorInPane()
 	line, _ := h.core.Line()
-	h.reg.moved(line, h.cursorBytes())
+	h.reg.Moved(line, h.cursorBytes())
 }
 
 // outliner is Go › Outline and the breadcrumb: the page's outline, read at each pause, and the
 // cursor's place in it.
 type outliner struct {
-	c        Core
-	page     Page
+	c        feature.Core
+	page     feature.Page
 	doc      *outline.Doc // nil while no page is shown
 	line, at int          // the cursor: its line (0-based) and byte offset
-	pick     *pick[outline.Heading]
+	pick     *feature.Pick[outline.Heading]
 }
 
-func newOutline(c Core) *outliner {
+func newOutline(c feature.Core) *outliner {
 	o := &outliner{c: c}
-	o.pick = &pick[outline.Heading]{c: c, dialog: "outlinePicker", name: "outline",
-		list:   newRows(tuidecl.NewListModel("key", "heading", "line"), headingRowOf),
-		field:  "App.outlineField",
-		status: "App.outlineStatus", noun: "headings",
-		match: func(hd outline.Heading) string { return hd.Text },
-		preview: func(hd outline.Heading) func(context.Context) answerOf[pane] {
-			pn := pane{title: pageName(o.page) + crumbSep + hd.Text, text: string(o.page.Text), at: hd.Byte}
-			return func(context.Context) answerOf[pane] { return answerOf[pane]{v: pn} }
+	o.pick = &feature.Pick[outline.Heading]{Core: c, Dialog: "outlinePicker", Name: "outline",
+		List:   feature.NewRows(tuidecl.NewListModel("key", "heading", "line"), headingRowOf),
+		Field:  "App.outlineField",
+		Status: "App.outlineStatus", Noun: "headings",
+		Match: func(hd outline.Heading) string { return hd.Text },
+		Preview: func(hd outline.Heading) func(context.Context) feature.AnswerOf[feature.Pane] {
+			pn := feature.Pane{Title: pageName(o.page) + crumbSep + hd.Text, Text: string(o.page.Text), At: hd.Byte}
+			return func(context.Context) feature.AnswerOf[feature.Pane] { return feature.AnswerOf[feature.Pane]{Value: pn} }
 		},
 		// no heading: the whole note
-		empty:  func() pane { return pane{title: pageName(o.page), text: string(o.page.Text)} },
-		scope:  TicketFile,
-		choose: o.jump}
+		Empty:  func() feature.Pane { return feature.Pane{Title: pageName(o.page), Text: string(o.page.Text)} },
+		Scope:  feature.TicketFile,
+		Choose: o.jump}
 	return o
 }
 
@@ -72,7 +73,7 @@ func (*outliner) Name() string { return "outline" }
 
 func (o *outliner) State() map[string]any {
 	return map[string]any{
-		"App.outlineRows":         o.pick.list.Model(),
+		"App.outlineRows":         o.pick.List.Model(),
 		"App.outlineField":        "",
 		"App.outlineStatus":       "headings",
 		"App.outlinePreviewTitle": "",
@@ -81,44 +82,46 @@ func (o *outliner) State() map[string]any {
 	}
 }
 
-func (o *outliner) Commands() map[string]Command {
-	return map[string]Command{"App.openOutline": none(o.open)}
+func (o *outliner) Commands() map[string]feature.Command {
+	return map[string]feature.Command{"App.openOutline": feature.None(o.open)}
 }
 
-// Catalog is the outline's user command (catalog.go): it runs what App.openOutline runs.
-func (o *outliner) Catalog() []Entry {
-	return []Entry{builtin("file.outline", "the file's outline", "App.openOutline()", o.open)}
+// Catalog is the outline's user command (feature/catalog.go): it runs what App.openOutline runs.
+func (o *outliner) Catalog() []feature.Entry {
+	return []feature.Entry{feature.Builtin("file.outline", "the file's outline", "App.openOutline()", o.open)}
 }
 
-func (o *outliner) Picks() map[string]picker { return map[string]picker{"outline": o.pick} }
+func (o *outliner) Picks() map[string]feature.Picker {
+	return map[string]feature.Picker{"outline": o.pick}
+}
 
 // The page's lifecycle: outlined when shown, at each pause and when read as another kind; the
 // breadcrumb follows the cursor, from where it was when the page was shown; nothing is outlined
 // once the page goes.
-func (o *outliner) Shown(p Page) {
+func (o *outliner) Shown(p feature.Page) {
 	o.line, o.at = p.Line, p.At
 	o.read(p)
 }
-func (o *outliner) Edited(p Page) { o.read(p) }
-func (o *outliner) Reread(p Page) { o.read(p) }
+func (o *outliner) Edited(p feature.Page) { o.read(p) }
+func (o *outliner) Reread(p feature.Page) { o.read(p) }
 func (o *outliner) Moved(line, at int) {
 	o.line, o.at = line, at
 	o.crumb()
 }
 func (o *outliner) Closed() {
-	o.page, o.doc = Page{}, nil
-	o.pick.setAll(nil)
-	o.pick.list.Reset(nil)
+	o.page, o.doc = feature.Page{}, nil
+	o.pick.SetAll(nil)
+	o.pick.List.Reset(nil)
 	o.c.Crumbs(nil)
 }
 
 // read outlines page p and puts the breadcrumb at the cursor. The cursor is Moved's, not p's: a
 // page read again (Reread, the picker's) may be a snapshot taken before the cursor last moved.
-func (o *outliner) read(p Page) {
+func (o *outliner) read(p feature.Page) {
 	o.page = p
 	title := untitled
-	if p.Ref.path != "" {
-		title = strings.TrimSuffix(path.Base(p.Ref.path), path.Ext(p.Ref.path))
+	if p.Ref.Path != "" {
+		title = strings.TrimSuffix(path.Base(p.Ref.Path), path.Ext(p.Ref.Path))
 	}
 	o.doc = outline.Read(p.Text, p.Kind, title)
 	o.crumb()
@@ -148,8 +151,8 @@ func (o *outliner) open() {
 		return
 	}
 	o.read(p)
-	o.pick.setAll(o.doc.Headings())
-	o.pick.open()
+	o.pick.SetAll(o.doc.Headings())
+	o.pick.Open()
 }
 
 // jump puts the cursor on heading hd, the page scrolled to it: the picker has closed.
@@ -159,14 +162,14 @@ func (o *outliner) jump(hd outline.Heading) {
 }
 
 // pageName is the page's file as its title names it: its path, or untitled for the draft.
-func pageName(p Page) string {
-	if p.Ref.path == "" {
+func pageName(p feature.Page) string {
+	if p.Ref.Path == "" {
 		return untitled
 	}
-	return p.Ref.path
+	return p.Ref.Path
 }
 
 // headingRowOf is a heading's row, indented by its level.
-func headingRowOf(_ int, hd outline.Heading) rowOf {
-	return rowOf{"key": hd.ID, "heading": strings.Repeat("  ", hd.Level-1) + hd.Text, "line": fmt.Sprint(hd.Line)}
+func headingRowOf(_ int, hd outline.Heading) feature.RowOf {
+	return feature.RowOf{"key": hd.ID, "heading": strings.Repeat("  ", hd.Level-1) + hd.Text, "line": fmt.Sprint(hd.Line)}
 }

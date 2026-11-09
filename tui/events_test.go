@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // Two TUIs on one daemon keep their own workspace and their own unsaved file while each sees what
@@ -37,8 +38,8 @@ func TestTwoClientsStayIndependentAndSeePeerChanges(t *testing.T) {
 	past := onLoop(one, func() int64 { return one.h.evCursor })
 	two.s.WaitFor(t, "two past the event", func(string) bool { return onLoop(two, func() int64 { return two.h.evCursor }) >= past })
 	if onLoop(two, func() bool {
-		for _, n := range two.h.noticeLog.items {
-			if strings.Contains(n.text, "changed by another client") {
+		for _, n := range two.h.noticeLog.Items {
+			if strings.Contains(n.Text, "changed by another client") {
 				return true
 			}
 		}
@@ -90,7 +91,7 @@ func TestAPeersRemovalKeepsTheUnsavedText(t *testing.T) {
 	})
 	one.s.WaitFor(t, "dirty", func(string) bool { return one.file().dirty })
 	// an answer still coming for the file (a ticket of its own) is of a file no longer open
-	tk := onLoop(one, func() Ticket { return one.h.ticket(nil, TicketFile) })
+	tk := onLoop(one, func() feature.Ticket { return one.h.ticket(nil, feature.TicketFile) })
 	two.h.p.Post(func() {
 		two.h.removeWorkspaceConfirmed("alpha")
 	})
@@ -107,8 +108,8 @@ func TestAPeersRemovalKeepsTheUnsavedText(t *testing.T) {
 		return strings.Contains(t, "┌ "+untitled) && !strings.Contains(t, "conf.yaml") && !strings.Contains(t, "›")
 	})
 	one.h.p.Post(func() { one.h.outline.open() })
-	if p := onLoop(one, func() Page { return one.h.outline.page }); p.Kind != kind.Markdown || p.Ref.path != "" {
-		t.Fatalf("the outline reads the kept draft as %v of %q, want the Markdown draft", p.Kind, p.Ref.path)
+	if p := onLoop(one, func() feature.Page { return one.h.outline.page }); p.Kind != kind.Markdown || p.Ref.Path != "" {
+		t.Fatalf("the outline reads the kept draft as %v of %q, want the Markdown draft", p.Kind, p.Ref.Path)
 	}
 }
 
@@ -128,7 +129,7 @@ func TestTheLastWorkspacesRemovalDropsItsFilesAnswers(t *testing.T) {
 		one.h.edited()
 	})
 	one.s.WaitFor(t, "dirty", func(string) bool { return one.file().dirty })
-	tk := onLoop(one, func() Ticket { return one.h.ticket(nil, TicketFile) })
+	tk := onLoop(one, func() feature.Ticket { return one.h.ticket(nil, feature.TicketFile) })
 	two.h.p.Post(func() { two.h.removeWorkspaceConfirmed("alpha") })
 	one.waitNoticed(t, "kept as an untitled draft")
 	one.s.WaitForText(t, "no workspace")

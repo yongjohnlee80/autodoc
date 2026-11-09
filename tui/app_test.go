@@ -37,6 +37,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/todo/todotest"
 	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 func md(p string) bool { return strings.HasSuffix(p, ".md") }
@@ -467,7 +468,7 @@ func TestQClosesNavigationPanelsAndCards(t *testing.T) {
 		title string
 	}{{0, "1 of"}, {'p', "SPC p — plugins"}} {
 		if card.key == 0 { // the tutorial, which no key opens: Help › Tutorial… runs its entry
-			if err := onLoop(r, func() error { return r.h.cat.run("help.tutorial", nil) }); err != nil {
+			if err := onLoop(r, func() error { return r.h.cat.Run("help.tutorial", nil) }); err != nil {
 				t.Fatal(err)
 			}
 		} else {
@@ -688,7 +689,9 @@ func TestUnsavedWorkIsNeverLostQuietly(t *testing.T) {
 	r.typeInEditor(t, "Y")
 	closeShown()
 	r.keys(t, key('d'))
-	r.s.WaitFor(t, "b.md closed", func(string) bool { return onLoop(r, func() bool { return r.h.bufferOf(fileRef{"kb", "b.md"}) == nil }) })
+	r.s.WaitFor(t, "b.md closed", func(string) bool {
+		return onLoop(r, func() bool { return r.h.bufferOf(feature.FileRef{WS: "kb", Path: "b.md"}) == nil })
+	})
 	if got := d.read(t, "kb", "b.md"); got != "bbb\n" {
 		t.Errorf("discard wrote b.md: %q", got)
 	}
@@ -1016,7 +1019,9 @@ func TestASaveNeverDropsANewerEdit(t *testing.T) {
 		t.Fatalf("after the save: %s, dirty %v, text %q", n.path, n.dirty, r.editorText())
 	}
 	r.keys(t, key('s')) // save the newer edit too; then the close goes ahead
-	r.s.WaitFor(t, "a.md closed", func(string) bool { return onLoop(r, func() bool { return r.h.bufferOf(fileRef{"kb", "a.md"}) == nil }) })
+	r.s.WaitFor(t, "a.md closed", func(string) bool {
+		return onLoop(r, func() bool { return r.h.bufferOf(feature.FileRef{WS: "kb", Path: "a.md"}) == nil })
+	})
 	if got := d.read(t, "kb", "a.md"); !strings.Contains(got, "Y") || !strings.Contains(got, "X") {
 		t.Errorf("a.md %q", got)
 	}

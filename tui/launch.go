@@ -17,6 +17,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/internal/client"
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
 	"github.com/yongjohnlee80/autodoc/internal/profiling"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // LaunchOptions is what a program running AutoDoc's TUI changes about how it starts: autodoc's own
@@ -152,7 +153,7 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 	}
 	appOpts := []tuicore.AppOption{tuicore.WithBackend(backend)}
 	if o.DebugRecorder != nil {
-		appOpts = append(appOpts, tuicore.WithTrace(traceTo(o.DebugRecorder)))
+		appOpts = append(appOpts, tuicore.WithTrace(feature.TraceTo(o.DebugRecorder)))
 	}
 	host, err := New(session, Options{
 		Backend:   backend,

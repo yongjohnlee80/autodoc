@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
@@ -143,7 +144,7 @@ func TestTheExplorersTabRefusesWhatTheViewNeverSends(t *testing.T) {
 	c.shown = true // on screen: a tab shown gives its list the keyboard
 	e.tabShown(linksTab)
 	e.tabShown(7) // no such tab
-	if e.tab != linksTab || c.set["App.explorerTab"] != linksTab || c.set["App.linksTabShown"] != true || e.view() != relationsView {
+	if e.tab != linksTab || c.set["App.explorerTab"] != linksTab || c.set["App.linksTabShown"] != true || e.view() != feature.RelationsView {
 		t.Fatalf("after tab 7: tab %d, App.explorerTab %v, App.linksTabShown %v, view %q; want the Links tab kept",
 			e.tab, c.set["App.explorerTab"], c.set["App.linksTabShown"], e.view())
 	}

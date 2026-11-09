@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 )
@@ -21,8 +22,8 @@ type findableFake struct {
 	moved []int
 }
 
-func (f *findableFake) FindPane() FindPane {
-	return FindPane{Name: f.pane, View: f.view, Scope: f.scope, Rows: func() ([]string, int, func(int, int) error) {
+func (f *findableFake) FindPane() feature.FindPane {
+	return feature.FindPane{Name: f.pane, View: f.view, Scope: f.scope, Rows: func() ([]string, int, func(int, int) error) {
 		return slices.Clone(f.rows), f.cur, func(row, _ int) error {
 			f.moved = append(f.moved, row)
 			f.cur = row
@@ -34,10 +35,10 @@ func (f *findableFake) FindPane() FindPane {
 // findablePanelFake is a panel feature finding in a view of its own, or not.
 type findablePanelFake struct {
 	findableFake
-	spec PanelSpec
+	spec feature.PanelSpec
 }
 
-func (f *findablePanelFake) Panels() []PanelSpec { return []PanelSpec{f.spec} }
+func (f *findablePanelFake) Panels() []feature.PanelSpec { return []feature.PanelSpec{f.spec} }
 
 // A feature's pane is searched by /, n and N in the program without find.go naming it: the pane
 // with the keyboard is found by its view, its rows read, its cursor moved by its own moveTo. The
@@ -48,8 +49,8 @@ func TestAFeaturesPaneIsSearchedWithoutFindNamingIt(t *testing.T) {
 		"App.zzRows": tuidecl.NewListModel("key", "label"), "App.zzOther": tuidecl.NewListModel("key", "label")}},
 		pane: "birds", view: "zzList", rows: []string{"robin", "blue jay", "wren", "jaybird"}}
 	h := newHost(NewSession(d.sock, nil), Options{seams: seamsFor(t)})
-	h.moreFeatures = []Feature{f}
-	main, err := keyCatalog(h.features()).withGenerated(string(layout))
+	h.moreFeatures = []feature.Feature{f}
+	main, err := feature.KeyCatalog(h.features()).WithGenerated(string(layout))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +87,7 @@ func TestAFeaturesPaneIsSearchedWithoutFindNamingIt(t *testing.T) {
 		t.Fatalf("find searches %q, want %q: the page, then the features' order", names, want)
 	}
 	// the built-ins' hint is today's, word for word
-	if got := findPaneList(onLoop(r, func() []FindPane { return r.h.findPanes()[:3] })); got != "the page, the explorer or the links" {
+	if got := findPaneList(onLoop(r, func() []feature.FindPane { return r.h.findPanes()[:3] })); got != "the page, the explorer or the links" {
 		t.Errorf("the built-in panes are named %q", got)
 	}
 	// the explorer and the relations declare the views their drawer gives the keyboard, each on its
@@ -139,32 +140,32 @@ func TestTheRegistryRefusesAPaneFindCannotRoute(t *testing.T) {
 	noRows := &findableFakeNoRows{fake: fake{name: "b"}}
 	for _, c := range []struct {
 		name string
-		fs   []Feature
+		fs   []feature.Feature
 		want string
 	}{
-		{"no name", []Feature{pane("a", "", "aList")}, "a's find pane needs a name, a view and its rows"},
-		{"no view", []Feature{pane("a", "birds", "")}, "a's find pane needs a name, a view and its rows"},
-		{"no rows", []Feature{noRows}, "b's find pane needs a name, a view and its rows"},
-		{"a name twice", []Feature{pane("a", "birds", "aList"), pane("b", "birds", "bList")}, "the find pane birds is both a's and b's"},
-		{"a view twice", []Feature{pane("a", "birds", "aList"), pane("b", "fish", "aList")}, "the find view aList is both a's and b's"},
-		{"none of its panels' views", []Feature{&findablePanelFake{findableFake: *pane("a", "birds", "aList"),
-			spec: PanelSpec{ID: "aPanel", View: "aPanelView", Edge: func(PrefsView) string { return "left" }}}}, "a finds in aList, which is none of its panels' views"},
+		{"no name", []feature.Feature{pane("a", "", "aList")}, "a's find pane needs a name, a view and its rows"},
+		{"no view", []feature.Feature{pane("a", "birds", "")}, "a's find pane needs a name, a view and its rows"},
+		{"no rows", []feature.Feature{noRows}, "b's find pane needs a name, a view and its rows"},
+		{"a name twice", []feature.Feature{pane("a", "birds", "aList"), pane("b", "birds", "bList")}, "the find pane birds is both a's and b's"},
+		{"a view twice", []feature.Feature{pane("a", "birds", "aList"), pane("b", "fish", "aList")}, "the find view aList is both a's and b's"},
+		{"none of its panels' views", []feature.Feature{&findablePanelFake{findableFake: *pane("a", "birds", "aList"),
+			spec: feature.PanelSpec{ID: "aPanel", View: "aPanelView", Edge: func(feature.PrefsView) string { return "left" }}}}, "a finds in aList, which is none of its panels' views"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			_, err := newRegistry(c.fs...)
+			_, err := feature.NewRegistry(c.fs...)
 			if err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Fatalf("the registry said %v, want %q", err, c.want)
 			}
 		})
 	}
 	// a panel feature finding in its own panel's view, and two distinct panes, are taken in order
-	r, err := newRegistry(pane("a", "birds", "aList"), &findablePanelFake{findableFake: *pane("b", "fish", "bView"),
-		spec: PanelSpec{ID: "bPanel", View: "bView", Edge: func(PrefsView) string { return "left" }}})
+	r, err := feature.NewRegistry(pane("a", "birds", "aList"), &findablePanelFake{findableFake: *pane("b", "fish", "bView"),
+		spec: feature.PanelSpec{ID: "bPanel", View: "bView", Edge: func(feature.PrefsView) string { return "left" }}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var names []string
-	for _, p := range r.finds {
+	for _, p := range r.Finds {
 		names = append(names, p.Name)
 	}
 	if !slices.Equal(names, []string{"birds", "fish"}) {
@@ -175,7 +176,9 @@ func TestTheRegistryRefusesAPaneFindCannotRoute(t *testing.T) {
 // findableFakeNoRows declares a pane with no rows.
 type findableFakeNoRows struct{ fake }
 
-func (*findableFakeNoRows) FindPane() FindPane { return FindPane{Name: "fish", View: "bList"} }
+func (*findableFakeNoRows) FindPane() feature.FindPane {
+	return feature.FindPane{Name: "fish", View: "bList"}
+}
 
 // Search › Find in page with the keyboard in the explorer: the page's hit gives the page the keyboard
 // (the page's FindPane moves it there).
@@ -204,9 +207,9 @@ func TestAPageHitFromAnotherPaneGivesThePageTheKeyboard(t *testing.T) {
 // order, and a pane without one adds none. A scope two panes claim, or one main.qml does not
 // scope, is the registry's error.
 func TestTheScopedFindKeysAreTheRegisteredPanes(t *testing.T) {
-	findScopes := func(fs []Feature) []string {
+	findScopes := func(fs []feature.Feature) []string {
 		var out []string
-		for _, k := range keyCatalog(fs).keys {
+		for _, k := range feature.KeyCatalog(fs).Keys {
 			if k.Scope != "" && k.Seq == "/" {
 				out = append(out, k.Scope)
 			}
@@ -225,9 +228,9 @@ func TestTheScopedFindKeysAreTheRegisteredPanes(t *testing.T) {
 		t.Errorf("a pane with no scope added scoped keys: %q", got)
 	}
 	scoped := &findableFake{fake: fake{name: "zz"}, pane: "birds", view: "zzList", scope: "links"}
-	got := keyCatalog([]Feature{scoped})
+	got := feature.KeyCatalog([]feature.Feature{scoped})
 	var seqs []string
-	for _, k := range got.keys {
+	for _, k := range got.Keys {
 		if k.Scope == "links" {
 			seqs = append(seqs, k.Seq)
 		}
@@ -235,11 +238,11 @@ func TestTheScopedFindKeysAreTheRegisteredPanes(t *testing.T) {
 	if want := []string{"/", "n", "Shift+N", "d"}; !slices.Equal(seqs, want) {
 		t.Errorf("a pane scoped to links answers %q there, want %q", seqs, want)
 	}
-	for want, fs := range map[string][]Feature{
+	for want, fs := range map[string][]feature.Feature{
 		"the pane links's / is taken twice": {scoped, &findableFake{fake: fake{name: "yy"}, pane: "fish", view: "yyList", scope: "links"}},
 		"which main.qml does not scope":     {&findableFake{fake: fake{name: "zz"}, pane: "birds", view: "zzList", scope: "nowhere"}},
 	} {
-		if _, err := newRegistry(fs...); err == nil || !strings.Contains(err.Error(), want) {
+		if _, err := feature.NewRegistry(fs...); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("the registry said %v, want %q", err, want)
 		}
 	}

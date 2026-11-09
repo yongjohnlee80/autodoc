@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"image/color"
 	"slices"
 	"strings"
@@ -14,7 +15,7 @@ import (
 // Mindmap have one each; a terminal's Mindmap in cells has its own (mindmap_cells.go).
 
 type groupEditor struct {
-	c       Core
+	c       feature.Core
 	store   *graphStore
 	view    string // viewGlobeMap or viewMindmap
 	name    string // the App names' stem: "globe", "mind"
@@ -203,16 +204,16 @@ func (e *groupEditor) state() map[string]any {
 }
 
 // commands are the dialog's.
-func (e *groupEditor) commands() map[string]Command {
-	return map[string]Command{
-		e.source("GroupMoved"):       oneNumber("a row", e.moved),
-		e.source("GroupQuerySet"):    oneString("type:<type>, tag:#<tag> or path:<folder>", e.setQuery),
-		e.source("GroupColourSet"):   oneString("#rrggbb", e.setColour),
-		e.source("GroupShapeSet"):    oneNumber("a row", e.setShape),
-		e.source("GroupAdd"):         none(e.add),
-		e.source("GroupRemove"):      none(e.remove),
-		e.source("GroupUp"):          none(func() { e.move(-1) }),
-		e.source("GroupDown"):        none(func() { e.move(1) }),
-		e.source("GroupsAddMissing"): none(e.addMissing),
+func (e *groupEditor) commands() map[string]feature.Command {
+	return map[string]feature.Command{
+		e.source("GroupMoved"):       feature.OneNumber("a row", e.moved),
+		e.source("GroupQuerySet"):    feature.OneString("type:<type>, tag:#<tag> or path:<folder>", e.setQuery),
+		e.source("GroupColourSet"):   feature.OneString("#rrggbb", e.setColour),
+		e.source("GroupShapeSet"):    feature.OneNumber("a row", e.setShape),
+		e.source("GroupAdd"):         feature.None(e.add),
+		e.source("GroupRemove"):      feature.None(e.remove),
+		e.source("GroupUp"):          feature.None(func() { e.move(-1) }),
+		e.source("GroupDown"):        feature.None(func() { e.move(1) }),
+		e.source("GroupsAddMissing"): feature.None(e.addMissing),
 	}
 }

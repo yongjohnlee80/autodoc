@@ -16,6 +16,7 @@ import (
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE EDITOR SOCKET (docs/decisions/crew.md#the-editor-socket): the page's functions as tools for
@@ -523,7 +524,7 @@ func (h *Host) editorAddCommand(ctx context.Context, req *golibrpc.Request) (any
 		if _, err := os.Stat(path); err == nil {
 			return false, &golibrpc.Error{Code: codeEditorRefused, Message: "lua/" + name + ".lua exists: it is the user's"}
 		}
-		h.ask(Question{
+		h.ask(feature.Question{
 			Title: h.trf("autodoc.question.editorsocket.let_the_agent_add_the_lua_command_file_lua", agent, name),
 			Text:  src,
 			Yes:   h.tr("autodoc.question.editorsocket.add_it"), No: h.tr("autodoc.question.editorsocket.no"),

@@ -1,4 +1,4 @@
-package tui
+package feature
 
 import "github.com/yongjohnlee80/autodoc/internal/procenv"
 
@@ -9,7 +9,7 @@ type PanelHost interface {
 	Set(name string, v any)
 	Open(id string)
 	Close(id string)
-	// Tr and Trf are Core's: catalog text in the UI's language (language.go)
+	// Tr and Trf are Core's: catalog text in the UI's language (tui/language.go)
 	Tr(id string) string
 	Trf(id string, args ...any) string
 	Notify(msg string)
@@ -35,6 +35,6 @@ type PanelHost interface {
 	SetPref(name, value string)
 	KeepPanelGeometry(id, dimension string, percent int)
 	ActiveWorkspace() (Workspace, bool)
-	// WidgetsChanged: what of the panel runs on with its drawer closed changed (dock.go)
+	// WidgetsChanged: what of the panel runs on with its drawer closed changed (tui/dock.go)
 	WidgetsChanged()
 }

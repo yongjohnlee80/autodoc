@@ -1,4 +1,4 @@
-package tui
+package feature
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 // A feature is one file's worth of the program: the App.* sources it publishes and the commands the
 // document may invoke. The registry merges them into the program's Sources and Handlers, refusing a
 // name two features both claim (golib would let the later one win without a word). Today's host is
-// one feature, legacy (featurehost.go); features move out of it one at a time.
+// one feature, legacy (tui/featurehost.go); features move out of it one at a time.
 
 // HostOwned marks the host's own part of the program (the host's legacy feature), which the
 // catalog lists as built in, until each of its parts moves into a feature.
@@ -65,40 +65,40 @@ type (
 	}
 	// Pickers has pickers of its own (pick.go), by the name Picker.qml's handlers pass:
 	// App.pickFilter(name, text) reaches Picks()[name].
-	Pickers interface{ Picks() map[string]picker }
+	Pickers interface{ Picks() map[string]Picker }
 )
 
 // registry is the program's features, merged.
-type registry struct {
-	features  []Feature
-	state     map[string]any
-	handlers  map[string]decl.HandlerFunc
-	picks     map[string]picker // every feature's pickers, which the App.pick* commands reach by name
-	finds     []FindPane        // the panes / searches, in the features' order (find.go)
-	pageShown bool              // a page was shown to the DocWatchers (page.go): the next one closes it first
-	catalog   *catalog          // the user commands: the features' now, Lua's and the plugins' as they come
-	panels    *panelRegistry
+type Registry struct {
+	Features  []Feature
+	State     map[string]any
+	Handlers  map[string]decl.HandlerFunc
+	picks     map[string]Picker // every feature's pickers, which the App.pick* commands reach by name
+	Finds     []FindPane        // the panes / searches, in the features' order (tui/find.go)
+	PageShown bool              // a page was shown to the DocWatchers (tui/page.go): the next one closes it first
+	Catalog   *Catalog          // the user commands: the features' now, Lua's and the plugins' as they come
+	Panels    *PanelRegistry
 }
 
 // newRegistry merges fs; a source, a command or a picker two features both name is an error, and so
 // is a catalog entry the catalog refuses (catalog.go). It adds one feature of its own, pickCommands:
 // the App.pick* commands over every feature's picks.
-func newRegistry(fs ...Feature) (*registry, error) {
-	return newRegistryWithPanels(nil, fs...)
+func NewRegistry(fs ...Feature) (*Registry, error) {
+	return NewRegistryWithPanels(nil, fs...)
 }
 
 // The host binds the validated snapshot before State runs, so features read
 // geometry from their actual program's panel schema even at first assembly.
-func newRegistryWithPanels(bind func([]PanelSpec), fs ...Feature) (*registry, error) {
-	panels, err := newPanelRegistry(fs)
+func NewRegistryWithPanels(bind func([]PanelSpec), fs ...Feature) (*Registry, error) {
+	panels, err := NewPanelRegistry(fs)
 	if err != nil {
 		return nil, err
 	}
-	r := &registry{state: map[string]any{}, handlers: map[string]decl.HandlerFunc{}, picks: map[string]picker{},
-		catalog: newCatalog()}
+	r := &Registry{State: map[string]any{}, Handlers: map[string]decl.HandlerFunc{}, picks: map[string]Picker{},
+		Catalog: NewCatalog()}
 	fs = append(slices.Clip(fs), registryPicks{r})
-	r.features = fs
-	r.panels = panels
+	r.Features = fs
+	r.Panels = panels
 	owner := map[string]string{}
 	claim := func(f Feature, name string) error {
 		if prev, ok := owner[name]; ok {
@@ -127,16 +127,16 @@ func newRegistryWithPanels(bind func([]PanelSpec), fs ...Feature) (*registry, er
 		}
 		for _, e := range c.Catalog() {
 			e.Source, e.Owner = src, f.Name()
-			if err := r.catalog.add(e); err != nil {
+			if err := r.Catalog.Add(e); err != nil {
 				return nil, err
 			}
 		}
 	}
-	if err := keyCatalog(fs).check(mainIDs, r.catalog); err != nil {
+	if err := KeyCatalog(fs).Check(MainIDs, r.Catalog); err != nil {
 		return nil, err
 	}
 	if bind != nil {
-		bind(panels.specs)
+		bind(panels.Specs)
 	}
 	for _, f := range fs {
 		state := f.State()
@@ -144,14 +144,14 @@ func newRegistryWithPanels(bind func([]PanelSpec), fs ...Feature) (*registry, er
 			if err := claim(f, name); err != nil {
 				return nil, err
 			}
-			r.state[name] = state[name]
+			r.State[name] = state[name]
 		}
 		cmds := f.Commands()
 		for _, name := range slices.Sorted(maps.Keys(cmds)) {
 			if err := claim(f, name); err != nil {
 				return nil, err
 			}
-			r.handlers[name] = cmds[name].handler(name)
+			r.Handlers[name] = cmds[name].Handler(name)
 		}
 		if p, ok := f.(Pickers); ok {
 			picks := p.Picks()
@@ -172,7 +172,7 @@ func newRegistryWithPanels(bind func([]PanelSpec), fs ...Feature) (*registry, er
 					return nil, err
 				}
 			}
-			r.finds = append(r.finds, pane)
+			r.Finds = append(r.Finds, pane)
 		}
 	}
 	return r, nil
@@ -192,18 +192,18 @@ func checkFindPane(f Feature, pane FindPane) error {
 
 // registryPicks is the registry's own feature: Picker.qml's handlers, over every feature's picks
 // (the map fills as the registry merges them).
-type registryPicks struct{ r *registry }
+type registryPicks struct{ r *Registry }
 
 func (registryPicks) Name() string                   { return "pickers" }
 func (registryPicks) State() map[string]any          { return nil }
-func (p registryPicks) Commands() map[string]Command { return pickCommands(p.r.picks) }
+func (p registryPicks) Commands() map[string]Command { return PickCommands(p.r.picks) }
 
 // stopping retires pending UI work before the program unmounts its owners.
-func (r *registry) stopping() {
+func (r *Registry) Stopping() {
 	if r == nil {
 		return
 	}
-	for _, f := range r.features {
+	for _, f := range r.Features {
 		if s, ok := f.(Stopping); ok {
 			s.Stopping()
 		}
@@ -211,11 +211,11 @@ func (r *registry) stopping() {
 }
 
 // stopped tells the features that stop what they started, once the loop has ended.
-func (r *registry) stopped() {
+func (r *Registry) Stopped() {
 	if r == nil {
 		return
 	}
-	for _, f := range r.features {
+	for _, f := range r.Features {
 		if s, ok := f.(Stopper); ok {
 			s.Stopped()
 		}
@@ -223,11 +223,11 @@ func (r *registry) stopped() {
 }
 
 // themeChanged tells the features that hear the theme the screen wears.
-func (r *registry) themeChanged() {
+func (r *Registry) ThemeChanged() {
 	if r == nil {
 		return
 	}
-	for _, f := range r.features {
+	for _, f := range r.Features {
 		if t, ok := f.(ThemeSink); ok {
 			t.ThemeChanged()
 		}
@@ -235,33 +235,33 @@ func (r *registry) themeChanged() {
 }
 
 // languageChanged tells the features that keep text on screen the language the UI now speaks.
-func (r *registry) languageChanged() {
+func (r *Registry) LanguageChanged() {
 	if r == nil {
 		return
 	}
-	for _, f := range r.features {
+	for _, f := range r.Features {
 		if l, ok := f.(LanguageSink); ok {
 			l.LanguageChanged()
 		}
 	}
 }
 
-func (r *registry) prefSet(name string) {
+func (r *Registry) PrefSet(name string) {
 	if r == nil {
 		return
 	}
-	for _, f := range r.features {
+	for _, f := range r.Features {
 		if p, ok := f.(PrefSetSink); ok {
 			p.PrefSet(name)
 		}
 	}
 }
 
-func (r *registry) preferencesChanged() {
+func (r *Registry) PreferencesChanged() {
 	if r == nil {
 		return
 	}
-	for _, f := range r.features {
+	for _, f := range r.Features {
 		if p, ok := f.(PreferenceSink); ok {
 			p.PreferencesChanged()
 		}
@@ -269,11 +269,11 @@ func (r *registry) preferencesChanged() {
 }
 
 // connected tells the features that hear connections.
-func (r *registry) connected() {
+func (r *Registry) Connected() {
 	if r == nil {
 		return // a host built without its options (tests)
 	}
-	for _, f := range r.features {
+	for _, f := range r.Features {
 		if c, ok := f.(Connecter); ok {
 			c.Connected()
 		}
@@ -281,11 +281,11 @@ func (r *registry) connected() {
 }
 
 // started tells the features that hear the start.
-func (r *registry) started() {
+func (r *Registry) Started() {
 	if r == nil {
 		return
 	}
-	for _, f := range r.features {
+	for _, f := range r.Features {
 		if s, ok := f.(Starter); ok {
 			s.Started()
 		}
@@ -293,11 +293,11 @@ func (r *registry) started() {
 }
 
 // entered tells the features that hear workspaces entered.
-func (r *registry) entered(ws string) {
+func (r *Registry) Entered(ws string) {
 	if r == nil {
 		return // a host built without its options (tests)
 	}
-	for _, f := range r.features {
+	for _, f := range r.Features {
 		if e, ok := f.(Enterer); ok {
 			e.Entered(ws)
 		}
@@ -305,12 +305,12 @@ func (r *registry) entered(ws string) {
 }
 
 // event hands an event to the features that named its kind; whether any did.
-func (r *registry) event(kind, workspace, detail string) bool {
+func (r *Registry) Event(kind, workspace, detail string) bool {
 	if r == nil {
 		return false
 	}
 	heard := false
-	for _, f := range r.features {
+	for _, f := range r.Features {
 		if s, ok := f.(EventSink); ok {
 			for _, k := range s.Kinds() {
 				if k == kind {
@@ -331,25 +331,25 @@ type Core interface {
 	AgentEntries() []AgentEntry
 	HandTask(to AgentRef, task TaskRef, instruction string, done func(error)) error
 	// SendText is HandTask's delivery for text, a plain message through the agent messaging
-	// (agentmessaging.go)
+	// (tui/agentmessaging.go)
 	SendText(to AgentRef, text string, done func(error)) error
 	Set(name string, v any)
 	Open(id string)
 	Close(id string)
 	// Tr is a catalog message's text in the UI's language now, and Trf the same with %1, %2 … filled
-	// (language.go): for a notice, a question or a status a feature composes.
+	// (tui/language.go): for a notice, a question or a status a feature composes.
 	Tr(id string) string
 	Trf(id string, args ...any) string
 	Notify(msg string)
 	// NotifyOngoing is a long task's toast, id's, updated in place; NotifyDone ends it with its last
-	// message, which the history keeps (notify.go)
+	// message, which the history keeps (tui/notify.go)
 	NotifyOngoing(id, msg string)
 	NotifyDone(id, msg string)
 	// NotifyOngoingClick is NotifyOngoing whose click runs onClick, on the loop, instead of opening
-	// the history: a candidate's toast reopens its card (candidate.go)
+	// the history: a candidate's toast reopens its card (tui/candidate.go)
 	NotifyOngoingClick(id, msg string, onClick func())
 	// WidgetsChanged tells the host that what of a feature is alive changed (a shell, an agent, a
-	// plugin run): the dock lists its widgets again (dock.go)
+	// plugin run): the dock lists its widgets again (tui/dock.go)
 	WidgetsChanged()
 	// Ask asks a yes-or-no question (ask.go): OnYes runs on Yes; the Asked rewrites its text.
 	Ask(q Question) Asked
@@ -386,22 +386,22 @@ type Core interface {
 	// again: what a preference changes on screen is its row's State and Changed. A name no row
 	// declares is ignored.
 	SetPref(name, value string)
-	// Files is the workspace's files as last listed (page.go): one snapshot, not to be changed.
+	// Files is the workspace's files as last listed (tui/page.go): one snapshot, not to be changed.
 	Files() FileList
 	// Workspaces are the daemon's workspaces, as last listed.
 	Workspaces() []Workspace
 	// View calls a method of a view of the document, by its id: a drawer's close, a tree's
 	// toggleExpanded.
 	View(id, method string, args ...any) error
-	// TogglePanel opens or closes a side panel, by its id, its own way (panels.go).
+	// TogglePanel opens or closes a side panel, by its id, its own way (tui/panels.go).
 	TogglePanel(id string)
 	// TogglePanelTab is a tabbed panel's toggle for one of its tabs: closed or hidden, the panel
-	// shown on that tab; shown on another tab, that tab; shown on it, closed (panels.go).
+	// shown on that tab; shown on another tab, that tab; shown on it, closed (tui/panels.go).
 	TogglePanelTab(id string, tab int)
 	// PanelShown reports whether panel id is open and not hidden by the dock: on screen.
 	PanelShown(id string) bool
 	// HidePanel hides an open panel, not closed: it keeps what it holds, its Closed hook does not
-	// run, and the dock shows it again as it was (dock.go). The editor has the keyboard, as after the
+	// run, and the dock shows it again as it was (tui/dock.go). The editor has the keyboard, as after the
 	// dock's own click.
 	HidePanel(id string)
 	// HasFocus reports whether the view id, or one inside it, has the keyboard: a key bound across
@@ -414,7 +414,7 @@ type Core interface {
 	// Post runs fn on the loop once the event being handled is done: a view still changing (a tab)
 	// must not have what it shows changed under it.
 	Post(fn func())
-	// Page is the page as it is now (page.go: pageNow): it can take a fresh snapshot, when typed since
+	// Page is the page as it is now (tui/page.go: pageNow): it can take a fresh snapshot, when typed since
 	// the last one (on the loop, a copy of the editor's text), so a reader that cannot wait for the
 	// pause (a picker opened, a plugin started mid-typing) has the text and Version as they are.
 	Page() Page
@@ -435,7 +435,7 @@ type Workspace struct {
 }
 
 // same reports whether w and o are the same workspace, in the same state, over the same files.
-func (w Workspace) same(o Workspace) bool {
+func (w Workspace) Same(o Workspace) bool {
 	return w.Name == o.Name && w.Root == o.Root && w.State == o.State &&
 		slices.Equal(w.Include, o.Include) && slices.Equal(w.Exclude, o.Exclude)
 }
@@ -452,6 +452,9 @@ const (
 
 // Ticket is one answer's claim to still matter.
 type Ticket struct{ current func() bool }
+
+// NewTicket is a Ticket current while current says so (the host's Core.Ticket makes them).
+func NewTicket(current func() bool) Ticket { return Ticket{current: current} }
 
 // Current reports whether no newer answer was asked for and the scope has not moved; a zero
 // Ticket is always current.
@@ -487,7 +490,7 @@ type FileList struct {
 // Page is what the editor shows: a file, or the draft (Ref zero). Text is one snapshot, handed to
 // every watcher as it is: a reader never changes it.
 type Page struct {
-	Ref     fileRef
+	Ref     FileRef
 	Kind    kind.Kind // how its text is read: derived, raw and the daemon's registrations applied
 	Text    []byte
 	Outside bool // a file in no workspace
@@ -523,7 +526,7 @@ type PeerAgent struct {
 }
 
 // fileRef is a document opened: its workspace ("" outside every one) and its path.
-type fileRef struct{ ws, path string }
+type FileRef struct{ WS, Path string }
 
 // More optional parts of a Feature.
 type (
@@ -542,11 +545,11 @@ type (
 )
 
 // listed tells the features that hear listings.
-func (r *registry) listed() {
+func (r *Registry) Listed() {
 	if r == nil {
 		return
 	}
-	for _, f := range r.features {
+	for _, f := range r.Features {
 		if l, ok := f.(Lister); ok {
 			l.Listed()
 		}
@@ -554,12 +557,12 @@ func (r *registry) listed() {
 }
 
 // watchers are the features that hear the page.
-func (r *registry) watchers() []DocWatcher {
+func (r *Registry) watchers() []DocWatcher {
 	if r == nil {
 		return nil
 	}
 	var out []DocWatcher
-	for _, f := range r.features {
+	for _, f := range r.Features {
 		if w, ok := f.(DocWatcher); ok {
 			out = append(out, w)
 		}
@@ -568,24 +571,24 @@ func (r *registry) watchers() []DocWatcher {
 }
 
 // shown tells the watchers a page is shown, the one before it closed first.
-func (r *registry) shown(p Page) {
+func (r *Registry) Shown(p Page) {
 	if r == nil {
 		return
 	}
-	if r.pageShown {
+	if r.PageShown {
 		for _, w := range r.watchers() {
 			w.Closed()
 		}
 	}
-	r.pageShown = true
+	r.PageShown = true
 	for _, w := range r.watchers() {
 		w.Shown(p)
 	}
 }
 
 // edited, moved and reread tell the watchers, while a page is shown.
-func (r *registry) edited(p Page) {
-	if r == nil || !r.pageShown {
+func (r *Registry) Edited(p Page) {
+	if r == nil || !r.PageShown {
 		return
 	}
 	for _, w := range r.watchers() {
@@ -593,8 +596,8 @@ func (r *registry) edited(p Page) {
 	}
 }
 
-func (r *registry) moved(line, at int) {
-	if r == nil || !r.pageShown {
+func (r *Registry) Moved(line, at int) {
+	if r == nil || !r.PageShown {
 		return
 	}
 	for _, w := range r.watchers() {
@@ -602,8 +605,8 @@ func (r *registry) moved(line, at int) {
 	}
 }
 
-func (r *registry) reread(p Page) {
-	if r == nil || !r.pageShown {
+func (r *Registry) Reread(p Page) {
+	if r == nil || !r.PageShown {
 		return
 	}
 	for _, w := range r.watchers() {

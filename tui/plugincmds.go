@@ -10,12 +10,13 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/plugin"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // PLUGIN COMMANDS (docs/decisions/plugins.md#plugin-commands-and-the-spc-p-chooser) — a manifest's
 // [[commands]] are on the Plugins menu, under the plugin's own submenu, and on the plugin's SPC p
 // card by their letters: SPC p chooses the plugin (pluginpick.go), then its card shows its
-// commands. Each is a command catalog entry (catalog.go), plugin.<name>.<id>, with no verb: the
+// commands. Each is a command catalog entry (feature/catalog.go), plugin.<name>.<id>, with no verb: the
 // cards are made from the catalog's, and F1 lists them with their keys. A letter is the manifest's,
 // or the user's (tui.plugin.<name>.key.<id>; "" unbinds it), unique within its plugin only: two
 // plugins may both use s. Two of one plugin's commands wanting a letter, the first in the manifest
@@ -122,7 +123,7 @@ func (pl *plugins) syncPluginEntries() {
 	pl.c.RemovePluginEntries()
 	pl.pluginCmds = map[string]pluginCommandRef{}
 	rows := pl.c.MenuRows()
-	declared := map[*addedRow]bool{} // each plugin's [[menu]] rows as found now
+	declared := map[*feature.AddedRow]bool{} // each plugin's [[menu]] rows as found now
 	for _, e := range pl.pluginList {
 		if e.reason != "" {
 			continue
@@ -135,21 +136,21 @@ func (pl *plugins) syncPluginEntries() {
 					title = cmp.Or(title, c.Title)
 				}
 			}
-			r := &addedRow{owner: "plugin:" + e.m.Name, source: fromManifest, id: cmd, where: "editor", files: row.Files,
-				menu: e.label(), title: title, run: func() { pl.runPluginCommand(key, cmd) }}
+			r := &feature.AddedRow{Owner: "plugin:" + e.m.Name, Source: feature.FromManifest, ID: cmd, Where: "editor", Files: row.Files,
+				Menu: e.label(), Title: title, Run: func() { pl.runPluginCommand(key, cmd) }}
 			// a row declared as it was keeps what the plugin's live run pushed to it (a stopped
 			// plugin's pushed nothing: forgetMenu)
-			if old := rows.find(r.owner, fromManifest, cmd); old != nil &&
-				old.title == r.title && old.menu == r.menu && slices.Equal(old.files, r.files) {
-				r.pushed, r.disabled = old.pushed, old.disabled
+			if old := rows.Find(r.Owner, feature.FromManifest, cmd); old != nil &&
+				old.Title == r.Title && old.Menu == r.Menu && slices.Equal(old.Files, r.Files) {
+				r.Pushed, r.Disabled = old.Pushed, old.Disabled
 			}
-			declared[rows.add(r)] = true // in its place, when it was there
+			declared[rows.Add(r)] = true // in its place, when it was there
 		}
 		title := cmp.Or(e.m.Title, e.m.Name)
 		for _, c := range e.m.Commands {
 			id, key, cmd := "plugin."+e.m.Name+"."+c.ID, e.key(), c.ID
-			err := pl.c.AddPluginEntry(Entry{ID: id, Source: SourcePlugin, Owner: e.m.Name, Title: title + ": " + c.Title, Help: c.Title,
-				Run: func(Invocation) error { pl.runPluginCommand(key, cmd); return nil }})
+			err := pl.c.AddPluginEntry(feature.Entry{ID: id, Source: feature.SourcePlugin, Owner: e.m.Name, Title: title + ": " + c.Title, Help: c.Title,
+				Run: func(feature.Invocation) error { pl.runPluginCommand(key, cmd); return nil }})
 			if err != nil { // a manifest's ids are checked when it is read; this is a bug, said
 				pl.c.Keep(err)
 				continue
@@ -157,7 +158,7 @@ func (pl *plugins) syncPluginEntries() {
 			pl.pluginCmds[id] = pluginCommandRef{plugin: e.m.Name, key: key, id: cmd, letter: c.Key}
 		}
 	}
-	rows.drop(func(r *addedRow) bool { return r.source == fromManifest && !declared[r] }) // a row no manifest declares now
+	rows.Drop(func(r *feature.AddedRow) bool { return r.Source == feature.FromManifest && !declared[r] }) // a row no manifest declares now
 }
 
 // bindPluginKeys gives the catalog's plugin commands their letters on their plugins' SPC p cards,
@@ -165,7 +166,7 @@ func (pl *plugins) syncPluginEntries() {
 // command's binding, by "<plugin>.<id>".
 func (pl *plugins) bindPluginKeys() map[string]pluginBinding {
 	entries := pl.c.PluginEntries() // each plugin's in its manifest's order
-	slices.SortStableFunc(entries, func(a, b *Entry) int { return strings.Compare(a.Owner, b.Owner) })
+	slices.SortStableFunc(entries, func(a, b *feature.Entry) int { return strings.Compare(a.Owner, b.Owner) })
 	out := map[string]pluginBinding{}
 	taken := map[string]map[string]string{} // by plugin: a letter's holder
 	bound, unbound := map[string][]string{}, map[string][]string{}

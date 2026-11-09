@@ -6,6 +6,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // A NOTE'S RENDERED VIEW IN A TERMINAL (docs/decisions/editor.md#a-terminal-notes-rendered-view):
@@ -28,7 +29,7 @@ type cellNotePage struct {
 	view *notePageView
 	// shown is the HTML file the page shows (none for a note or any other page). Its own bytes carry
 	// no source spans, so the page's place maps to no place in the text: Raw opens at the cursor.
-	shown  fileRef
+	shown  feature.FileRef
 	dirKey string // the folder the page's images load from, as last given to the view
 	dirSet bool
 	// md draws a note's Rendered view in the editor (renderNote); imgKey is the folder its images
@@ -140,13 +141,13 @@ var _ editor.DocumentView = (*notePageView)(nil)
 
 func newCellNotePage(h *Host) *cellNotePage { return &cellNotePage{h: h} }
 
-func (*cellNotePage) Name() string                 { return "notepage" }
-func (*cellNotePage) State() map[string]any        { return map[string]any{} }
-func (*cellNotePage) Commands() map[string]Command { return map[string]Command{} }
-func (*cellNotePage) Reread(Page)                  {}
-func (*cellNotePage) Closed()                      {}
-func (p *cellNotePage) notice(kind string) string  { return p.h.pageNotice(kind) }
-func (p *cellNotePage) isShown() bool              { return p.view != nil && p.view.Visible() }
+func (*cellNotePage) Name() string                         { return "notepage" }
+func (*cellNotePage) State() map[string]any                { return map[string]any{} }
+func (*cellNotePage) Commands() map[string]feature.Command { return map[string]feature.Command{} }
+func (*cellNotePage) Reread(feature.Page)                  {}
+func (*cellNotePage) Closed()                              {}
+func (p *cellNotePage) notice(kind string) string          { return p.h.pageNotice(kind) }
+func (p *cellNotePage) isShown() bool                      { return p.view != nil && p.view.Visible() }
 
 // Moved changes nothing: the page has no place in the text to bring the cursor's to.
 func (*cellNotePage) Moved(int, int) {}
@@ -188,7 +189,7 @@ func (p *cellNotePage) currentMark(i int) {
 
 // notePage is the host's note page, nil when it has none.
 func (h *Host) notePage() *cellNotePage {
-	for _, f := range h.reg.features {
+	for _, f := range h.reg.Features {
 		if p, ok := f.(*cellNotePage); ok {
 			return p
 		}
@@ -268,9 +269,9 @@ func (p *cellNotePage) viewOf() *notePageView {
 // (docs/decisions/editor.md#html-files-open-raw-or-simplified). Any other page keeps what
 // documentFor gave it (a table file its table, the rest their text), with no renderer, and a
 // window's editor its own. A page shown while the page view is drawn renders at once.
-func (p *cellNotePage) Shown(pg Page) {
-	html := p.h.file.open && p.h.file.raw && pg.Ref.path != ""
-	p.shown = fileRef{}
+func (p *cellNotePage) Shown(pg feature.Page) {
+	html := p.h.file.open && p.h.file.raw && pg.Ref.Path != ""
+	p.shown = feature.FileRef{}
 	if !p.onATerminal() {
 		p.noRenderer() // a terminal's editor turned native (a test's flip) keeps no note's renderer
 		return
@@ -296,7 +297,7 @@ func (p *cellNotePage) Shown(pg Page) {
 
 // renderNote draws note pg's Rendered view in the editor: its Markdown cell renderer, highlighting
 // code in the program's languages, its images loading from the note's folder, and no page over it.
-func (p *cellNotePage) renderNote(pg Page) {
+func (p *cellNotePage) renderNote(pg feature.Page) {
 	e := p.h.editor.(*editor.Editor) // on a terminal (onATerminal)
 	if p.md == nil {
 		p.md = &editor.MarkdownCellRenderer{MarkdownBlocks: editor.MarkdownBlocks{HideMetadata: true}}
@@ -315,7 +316,7 @@ func (p *cellNotePage) renderNote(pg Page) {
 	// a safeguard for a show that reuses the layout, with no switch: a switch to the note already
 	// lays it again (SetImages, SetRenderer), so an embedded file written since is read anew there
 	e.RelayRendered()
-	root, base := p.h.resourcesFor(pg.Ref.ws, pg.Ref.path)
+	root, base := p.h.resourcesFor(pg.Ref.WS, pg.Ref.Path)
 	if key := root + "\x00" + base; !p.imgSet || key != p.imgKey {
 		p.imgKey, p.imgSet = key, true
 		if p.h.diskPath() != "" {
@@ -355,16 +356,16 @@ func (p *cellNotePage) embedsChanged() {
 
 // Edited lays an HTML file's page out again once typing rests (pagePaused), keeping the
 // reader's place.
-func (p *cellNotePage) Edited(pg Page) {
-	if pg.Ref == p.shown && p.shown.path != "" && p.isShown() {
+func (p *cellNotePage) Edited(pg feature.Page) {
+	if pg.Ref == p.shown && p.shown.Path != "" && p.isShown() {
 		p.render(pg.Text)
 	}
 }
 
 // images points the page's images at the note's folder (resourcesFor), only when that changes: a
 // new resolver drops the page's images.
-func (p *cellNotePage) images(pg Page) {
-	root, base := p.h.resourcesFor(pg.Ref.ws, pg.Ref.path)
+func (p *cellNotePage) images(pg feature.Page) {
+	root, base := p.h.resourcesFor(pg.Ref.WS, pg.Ref.Path)
 	if key := root + "\x00" + base; !p.dirSet || key != p.dirKey {
 		p.dirKey, p.dirSet = key, true
 		if p.h.diskPath() != "" {

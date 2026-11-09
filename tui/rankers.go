@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/search/rank"
 )
 
@@ -42,7 +43,7 @@ type rankers struct {
 	listed   func() // the dialog's buttons follow the list (aimodels.go)
 }
 
-func newRankers(c Core, listed func()) *rankers {
+func newRankers(c feature.Core, listed func()) *rankers {
 	r := &rankers{listed: listed}
 	r.endpoints = newEndpoints(c, endpointSpec{
 		noun: "ranker", verb: "ranker", list: "ranker.list", ranker: true,
@@ -64,16 +65,16 @@ func (r *rankers) State() map[string]any {
 	return s
 }
 
-func (r *rankers) Commands() map[string]Command {
-	return map[string]Command{
-		"App.showRanker":        oneNumber("a row", r.detail),
-		"App.startEditRanker":   oneNumber("a row", r.startEdit),
-		"App.stopRanker":        none(r.stop),
-		"App.startRankerWindow": none(r.startWindow),
-		"App.saveRankerWindow":  oneString("a number of candidates", r.saveWindow),
-		"App.rankerKindChosen":  numberAndString("a row and the base URL", r.kindChosen),
-		"App.checkRanker":       twoStrings("the base URL and the key", r.check),
-		"App.saveRanker": fourStrings("a name, the base URL, the model and the key", func(name, base, model, key string) {
+func (r *rankers) Commands() map[string]feature.Command {
+	return map[string]feature.Command{
+		"App.showRanker":        feature.OneNumber("a row", r.detail),
+		"App.startEditRanker":   feature.OneNumber("a row", r.startEdit),
+		"App.stopRanker":        feature.None(r.stop),
+		"App.startRankerWindow": feature.None(r.startWindow),
+		"App.saveRankerWindow":  feature.OneString("a number of candidates", r.saveWindow),
+		"App.rankerKindChosen":  feature.NumberAndString("a row and the base URL", r.kindChosen),
+		"App.checkRanker":       feature.TwoStrings("the base URL and the key", r.check),
+		"App.saveRanker": feature.FourStrings("a name, the base URL, the model and the key", func(name, base, model, key string) {
 			r.save(name, base, model, key, "")
 		}),
 	}
@@ -82,9 +83,9 @@ func (r *rankers) Commands() map[string]Command {
 // status reads the build's own ranker from the list, the dialog's buttons following it, and is the
 // line under the list.
 func (r *rankers) status(m map[string]any, active, why string) string {
-	r.supplied = str(m, "supplied")
+	r.supplied = feature.Str(m, "supplied")
 	r.listed()
-	return rankersStatus(r.c, active, r.supplied, why, num(m, "window"))
+	return rankersStatus(r.c, active, r.supplied, why, feature.Num(m, "window"))
 }
 
 // rankersStatus is the line under the list: the ranker in use and its window, or the build's own.
@@ -113,7 +114,7 @@ func (r *rankers) use(i int) {
 	}
 	r.c.Set("App.rankersStatus", r.c.Trf("autodoc.text.rankers.setting_up", row.name))
 	r.choose(row.name, func(err error) {
-		r.c.Set("App.rankersStatus", r.c.Trf("autodoc.text.rankers.not_used", row.name, wireMessage(err)))
+		r.c.Set("App.rankersStatus", r.c.Trf("autodoc.text.rankers.not_used", row.name, feature.WireMessage(err)))
 	},
 		func() { r.c.Notify(r.c.Trf("autodoc.notice.rankers.search_is_re_ranked_with", row.name)) })
 }
@@ -124,7 +125,7 @@ func (r *rankers) stop() {
 		return
 	}
 	r.choose("", func(err error) {
-		r.c.Set("App.rankersStatus", r.c.Trf("autodoc.text.rankers.still_re_ranking", wireMessage(err)))
+		r.c.Set("App.rankersStatus", r.c.Trf("autodoc.text.rankers.still_re_ranking", feature.WireMessage(err)))
 	},
 		func() { r.c.Notify(r.c.Tr("autodoc.notice.rankers.search_is_not_re_ranked_the_hits_are_in_recall_o")) })
 }
@@ -142,7 +143,7 @@ func (r *rankers) startWindow() {
 		if err != nil {
 			return int64(rank.DefaultWindow)
 		}
-		return num(asMap(res), "window")
+		return feature.Num(feature.AsMap(res), "window")
 	}, func(v any) { setField(r.c, "App.rankerWindow", strconv.FormatInt(v.(int64), 10)) })
 }
 
@@ -159,7 +160,7 @@ func (r *rankers) saveWindow(text string) {
 		return err
 	}, func(v any) {
 		if err, _ := v.(error); err != nil {
-			r.c.Set("App.rankerWindowError", r.c.Trf("autodoc.text.rankers.not_saved", wireMessage(err)))
+			r.c.Set("App.rankerWindowError", r.c.Trf("autodoc.text.rankers.not_saved", feature.WireMessage(err)))
 			r.c.Open("rankerWindow")
 			return
 		}
@@ -171,7 +172,7 @@ func (r *rankers) saveWindow(text string) {
 
 // removal asks before removing ranker row.
 func (r *rankers) removal(row endpointRow, remove func()) {
-	r.c.Ask(Question{Title: r.c.Tr("autodoc.question.rankers.remove_the_ranker"), Text: r.c.Trf("autodoc.question.rankers.remove_the_ranker_its_key_its_usage_and_its_log", row.name), OnYes: remove})
+	r.c.Ask(feature.Question{Title: r.c.Tr("autodoc.question.rankers.remove_the_ranker"), Text: r.c.Trf("autodoc.question.rankers.remove_the_ranker_its_key_its_usage_and_its_log", row.name), OnYes: remove})
 }
 
 // formOpened is the form's title on Add… and what Check does, in the UI's language: the spec's
@@ -201,7 +202,7 @@ func (r *rankers) kindShown(k endpointKind) {
 func (r *rankers) checked(models []string, err error) {
 	switch {
 	case err != nil:
-		r.c.Set("App.rankerModelsStatus", r.c.Trf("autodoc.text.rankers.not_a_ranker", wireMessage(err)))
+		r.c.Set("App.rankerModelsStatus", r.c.Trf("autodoc.text.rankers.not_a_ranker", feature.WireMessage(err)))
 	case len(models) == 0:
 		r.c.Set("App.rankerModelsStatus", r.c.Tr("autodoc.text.rankers.an_endpoint_that_names_no_models_type_the_model"))
 	default:
@@ -211,11 +212,11 @@ func (r *rankers) checked(models []string, err error) {
 
 // rankedTitle is what the hits' title says of their order: the ranker's, or why it is recall's.
 func rankedTitle(t wording, rk map[string]any) string {
-	switch str(rk, "state") {
+	switch feature.Str(rk, "state") {
 	case "ready":
-		return " · " + t.Trf("autodoc.text.rankers.re_ranked_by", shortModel(str(rk, "model")))
+		return " · " + t.Trf("autodoc.text.rankers.re_ranked_by", shortModel(feature.Str(rk, "model")))
 	case "error":
-		return " · " + t.Trf("autodoc.text.rankers.not_re_ranked", str(rk, "error"))
+		return " · " + t.Trf("autodoc.text.rankers.not_re_ranked", feature.Str(rk, "error"))
 	}
 	return ""
 }

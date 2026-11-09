@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/search/embed"
 )
 
@@ -31,7 +32,7 @@ func (h *Host) openVectors() {
 }
 
 func (h *Host) loadVectors() {
-	tk, ws := h.ticket(nil, TicketWorkspace), h.ws
+	tk, ws := h.ticket(nil, feature.TicketWorkspace), h.ws
 	type answer struct {
 		rows     []vectorRow
 		refusals []map[string]any // index.status's refused texts
@@ -43,19 +44,19 @@ func (h *Host) loadVectors() {
 			return answer{err: err}
 		}
 		var rows []vectorRow
-		for _, x := range asList(res) {
-			m := asMap(x)
-			rows = append(rows, vectorRow{fp: str(m, "fp"), name: str(m, "name"), state: str(m, "state"), dims: num(m, "dims"),
-				vectors: num(m, "vectors"), f32: num(m, "f32_bytes"), bits: num(m, "bits_bytes"), keys: num(m, "key_bytes")})
+		for _, x := range feature.AsList(res) {
+			m := feature.AsMap(x)
+			rows = append(rows, vectorRow{fp: feature.Str(m, "fp"), name: feature.Str(m, "name"), state: feature.Str(m, "state"), dims: feature.Num(m, "dims"),
+				vectors: feature.Num(m, "vectors"), f32: feature.Num(m, "f32_bytes"), bits: feature.Num(m, "bits_bytes"), keys: feature.Num(m, "key_bytes")})
 		}
 		st, err := h.call(ctx, "index.status", ws)
 		if err != nil {
 			return answer{err: err}
 		}
-		emb := asMap(asMap(st)["embeddings"])
+		emb := feature.AsMap(feature.AsMap(st)["embeddings"])
 		var refusals []map[string]any
-		for _, item := range asList(emb["refused_texts"]) {
-			refusals = append(refusals, asMap(item))
+		for _, item := range feature.AsList(emb["refused_texts"]) {
+			refusals = append(refusals, feature.AsMap(item))
 		}
 		return answer{rows: rows, refusals: refusals}
 	}, func(a answer) {
@@ -63,7 +64,7 @@ func (h *Host) loadVectors() {
 			return
 		}
 		if a.err != nil {
-			h.set("App.vectorsStatus", h.trf("autodoc.text.vectors.vectors", wireMessage(a.err)))
+			h.set("App.vectorsStatus", h.trf("autodoc.text.vectors.vectors", feature.WireMessage(a.err)))
 			return
 		}
 		h.vectors.Reset(a.rows)
@@ -81,8 +82,8 @@ func (h *Host) loadVectors() {
 		h.set("App.vectorsStatus", status)
 		details := make([]string, len(a.refusals))
 		for i, r := range a.refusals {
-			details[i] = h.trf("autodoc.text.vectors.bytes_estimated_tokens_retry", str(r, "path"), str(r, "breadcrumb"), str(r, "error"),
-				num(r, "bytes"), num(r, "estimated_tokens"), time.Unix(num(r, "retry_at"), 0).Format("15:04"))
+			details[i] = h.trf("autodoc.text.vectors.bytes_estimated_tokens_retry", feature.Str(r, "path"), feature.Str(r, "breadcrumb"), feature.Str(r, "error"),
+				feature.Num(r, "bytes"), feature.Num(r, "estimated_tokens"), time.Unix(feature.Num(r, "retry_at"), 0).Format("15:04"))
 		}
 		h.set("App.vectorsRefusals", strings.Join(details, "\n"))
 	})
@@ -92,8 +93,8 @@ func (h *Host) loadVectors() {
 func (r vectorRow) size() int64 { return r.f32 + r.bits + r.keys }
 
 // vectorRowOf is a model as the list shows it.
-func vectorRowOf(_ int, r vectorRow) rowOf {
-	return rowOf{"key": r.fp, "state": r.state, "model": r.name, "dims": fmt.Sprint(r.dims),
+func vectorRowOf(_ int, r vectorRow) feature.RowOf {
+	return feature.RowOf{"key": r.fp, "state": r.state, "model": r.name, "dims": fmt.Sprint(r.dims),
 		"vectors": fmt.Sprint(r.vectors), "f32": bytesText(r.f32), "bits": bytesText(r.bits),
 		"keys": bytesText(r.keys), "total": bytesText(r.size())}
 }
@@ -126,7 +127,7 @@ func (h *Host) startPurge(i int) {
 		return
 	}
 	ws := h.ws
-	h.ask(Question{Title: h.tr("autodoc.question.vectors.purge_the_model"), Text: h.trf("autodoc.question.vectors.purge_s_vectors_from_switching_back_to_it_would", r.name, r.vectors, bytesText(r.size()), ws), OnYes: func() { h.purgeConfirmed(r, ws) }})
+	h.ask(feature.Question{Title: h.tr("autodoc.question.vectors.purge_the_model"), Text: h.trf("autodoc.question.vectors.purge_s_vectors_from_switching_back_to_it_would", r.name, r.vectors, bytesText(r.size()), ws), OnYes: func() { h.purgeConfirmed(r, ws) }})
 }
 
 func (h *Host) purgeConfirmed(r vectorRow, ws string) {
@@ -135,7 +136,7 @@ func (h *Host) purgeConfirmed(r vectorRow, ws string) {
 		return err
 	}, func(err error) {
 		if err != nil {
-			h.set("App.vectorsStatus", h.trf("autodoc.text.vectors.not_purged", wireMessage(err)))
+			h.set("App.vectorsStatus", h.trf("autodoc.text.vectors.not_purged", feature.WireMessage(err)))
 			return
 		}
 		h.notify(h.trf("autodoc.notice.vectors.purged_s_vectors_from", r.name, r.vectors, ws))
@@ -151,16 +152,15 @@ func (h *Host) cancelIndexing() {
 	switch {
 	case e.target != "":
 		target := embed.ModelName(e.target)
-		do(h, func(ctx context.Context) (out answerOf[string]) {
+		do(h, func(ctx context.Context) feature.AnswerOf[string] {
 			res, err := h.call(ctx, "embedding.cancel_switch")
-			out.v, out.err = str(asMap(res), "model"), err
-			return
-		}, func(a answerOf[string]) {
-			if a.err != nil {
-				h.failed(h.tr("autodoc.notice.vectors.cancel_the_switch"), a.err)
+			return feature.Answered(feature.Str(feature.AsMap(res), "model"), err)
+		}, func(a feature.AnswerOf[string]) {
+			if a.Err() != nil {
+				h.failed(h.tr("autodoc.notice.vectors.cancel_the_switch"), a.Err())
 				return
 			}
-			h.notify(h.trf("autodoc.notice.vectors.switch_cancelled_semantic_search_with_again_s_ve", a.v, target))
+			h.notify(h.trf("autodoc.notice.vectors.switch_cancelled_semantic_search_with_again_s_ve", a.Value, target))
 			h.ai.providers.load()
 		})
 	case e.working() > 0:

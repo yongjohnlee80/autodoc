@@ -3,6 +3,7 @@ package tui
 import (
 	"slices"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
@@ -17,16 +18,16 @@ import (
 // they are the editor's.
 
 // panelSpecs are this program's snapshotted Feature contributions.
-func (h *Host) panelSpecs() []PanelSpec {
-	if h.reg == nil || h.reg.panels == nil {
+func (h *Host) panelSpecs() []feature.PanelSpec {
+	if h.reg == nil || h.reg.Panels == nil {
 		return nil
 	}
-	return h.reg.panels.specs
+	return h.reg.Panels.Specs
 }
 
 // panelSpec is the panel id, or nil when there is no such panel.
-func (h *Host) panelSpec(id string) *PanelSpec {
-	return findPanel(h.panelSpecs(), id)
+func (h *Host) panelSpec(id string) *feature.PanelSpec {
+	return feature.FindPanel(h.panelSpecs(), id)
 }
 
 // panelIDs are the panels' ids.
@@ -41,7 +42,7 @@ func (h *Host) panelIDs() []string {
 // panelView is what in the panel id takes the keyboard now; "" for no such panel.
 func (h *Host) panelView(id string) string {
 	if s := h.panelSpec(id); s != nil {
-		return s.focusView()
+		return s.FocusView()
 	}
 	return ""
 }
@@ -252,7 +253,7 @@ func (h *Host) windowView(panel string) string {
 	if panel == "" {
 		return "editor"
 	}
-	return h.panelSpec(panel).focusView()
+	return h.panelSpec(panel).FocusView()
 }
 
 // hasKeyboard reports whether the keyboard is in w.
@@ -305,7 +306,7 @@ func (h *Host) focusWindow(panel string) {
 		h.keep(h.p.Call(h.keyboardHome(), "forceActiveFocus"))
 		return
 	}
-	h.keep(h.p.Call(s.focusView(), "forceActiveFocus"))
+	h.keep(h.p.Call(s.FocusView(), "forceActiveFocus"))
 }
 
 // nextWindow is the window next to shown[from] a step away: of those whose centre lies that way,
@@ -342,19 +343,19 @@ func nextWindow(shown []placedWindow, from int, step tuicore.Point) (placedWindo
 	return best, found
 }
 
-func legacyPanelSpecs() []PanelSpec {
-	return []PanelSpec{
+func legacyPanelSpecs() []feature.PanelSpec {
+	return []feature.PanelSpec{
 		{ID: "htmlPane", View: "htmlView", Priority: 50, Icon: "⎙"},
 	}
 }
 
-func defaultPanelSpecs() []PanelSpec {
-	return []PanelSpec{
-		explorerPanelSpec(),
+func defaultPanelSpecs() []feature.PanelSpec {
+	return []feature.PanelSpec{
+		feature.ExplorerPanelSpec(),
 		terminalPanelSpec(), agentPanelSpec(), legacyPanelSpecs()[0],
 	}
 }
 
-func (l legacy) Panels() []PanelSpec {
+func (l legacy) Panels() []feature.PanelSpec {
 	return legacyPanelSpecs()
 }

@@ -667,8 +667,8 @@ func TestACardTheDockHidComesBackForItsCommands(t *testing.T) {
 func (r *running) noticesSaying(text string) int {
 	return onLoop(r, func() int {
 		n := 0
-		for _, it := range r.h.noticeLog.items {
-			if strings.Contains(it.text, text) {
+		for _, it := range r.h.noticeLog.Items {
+			if strings.Contains(it.Text, text) {
 				n++
 			}
 		}

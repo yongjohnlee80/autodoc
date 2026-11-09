@@ -10,6 +10,7 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE EMBEDDING PROVIDERS — AI models' first tab: the providers semantic search can use, the one in
@@ -36,7 +37,7 @@ type providers struct {
 	max              int64
 }
 
-func newProviders(c Core) *providers {
+func newProviders(c feature.Core) *providers {
 	p := &providers{models: tuidecl.NewListModel("key", "name")}
 	p.endpoints = newEndpoints(c, endpointSpec{
 		noun: "provider", verb: "embedding", list: "embedding.providers",
@@ -60,18 +61,18 @@ func (p *providers) State() map[string]any {
 	return s
 }
 
-func (p *providers) Commands() map[string]Command {
-	return map[string]Command{
-		"App.showProvider":        oneNumber("a row", p.detail),
-		"App.useProvider":         oneNumber("a row", p.use),
-		"App.stopProvider":        none(p.stop),
-		"App.startAddProvider":    none(p.startAdd),
-		"App.startEditProvider":   oneNumber("a row", p.startEdit),
-		"App.startRemoveProvider": oneNumber("a row", p.startRemove),
-		"App.providerKindChosen":  numberAndString("a row and the base URL", p.kindChosen),
-		"App.listProviderModels":  twoStrings("the base URL and the key", p.listModels),
-		"App.pickProviderModel":   oneNumber("a row", p.pickModel),
-		"App.saveProvider":        fiveStrings("a name, the base URL, the model, the key and the context window", p.save),
+func (p *providers) Commands() map[string]feature.Command {
+	return map[string]feature.Command{
+		"App.showProvider":        feature.OneNumber("a row", p.detail),
+		"App.useProvider":         feature.OneNumber("a row", p.use),
+		"App.stopProvider":        feature.None(p.stop),
+		"App.startAddProvider":    feature.None(p.startAdd),
+		"App.startEditProvider":   feature.OneNumber("a row", p.startEdit),
+		"App.startRemoveProvider": feature.OneNumber("a row", p.startRemove),
+		"App.providerKindChosen":  feature.NumberAndString("a row and the base URL", p.kindChosen),
+		"App.listProviderModels":  feature.TwoStrings("the base URL and the key", p.listModels),
+		"App.pickProviderModel":   feature.OneNumber("a row", p.pickModel),
+		"App.saveProvider":        feature.FiveStrings("a name, the base URL, the model, the key and the context window", p.save),
 	}
 }
 
@@ -111,7 +112,7 @@ func (p *providers) use(i int) {
 	}
 	p.c.Set("App.providersStatus", p.c.Trf("autodoc.text.providers.setting_up", r.name))
 	p.choose(r.name, func(err error) {
-		p.c.Set("App.providersStatus", p.c.Trf("autodoc.text.providers.not_used", r.name, wireMessage(err), p.inUseText()))
+		p.c.Set("App.providersStatus", p.c.Trf("autodoc.text.providers.not_used", r.name, feature.WireMessage(err), p.inUseText()))
 	}, func() {
 		p.c.Notify(p.c.Trf("autodoc.notice.providers.semantic_search_with_the_files_are_embedded_in_t", r.name))
 	})
@@ -133,7 +134,7 @@ func (p *providers) removal(r endpointRow, remove func()) {
 			sibling = o.name
 		}
 	}
-	q := Question{Title: p.c.Tr("autodoc.question.providers.remove_the_provider"), OnYes: remove}
+	q := feature.Question{Title: p.c.Tr("autodoc.question.providers.remove_the_provider"), OnYes: remove}
 	switch {
 	case p.active != "" && p.active != r.name:
 		q.Text = p.c.Trf("autodoc.text.providers.remove_the_provider_its_vectors_go_once_unused", r.name)
@@ -158,7 +159,7 @@ func providerFamily(kind string) string {
 
 // countRemoved says, in the removal's question, how many of r's model's vectors it deletes, and in
 // how many workspaces, while the question is still open.
-func (p *providers) countRemoved(r endpointRow, asked Asked) {
+func (p *providers) countRemoved(r endpointRow, asked feature.Asked) {
 	var names []string
 	for _, w := range p.c.Workspaces() {
 		names = append(names, w.Name)
@@ -172,13 +173,13 @@ func (p *providers) countRemoved(r endpointRow, asked Asked) {
 				continue
 			}
 			counted := false
-			for _, x := range asList(res) {
-				m := asMap(x)
-				if embed.ModelName(str(m, "fp")) != r.model {
+			for _, x := range feature.AsList(res) {
+				m := feature.AsMap(x)
+				if embed.ModelName(feature.Str(m, "fp")) != r.model {
 					continue
 				}
-				a.vectors += num(m, "vectors")
-				a.bytes += num(m, "f32_bytes") + num(m, "bits_bytes") + num(m, "key_bytes")
+				a.vectors += feature.Num(m, "vectors")
+				a.bytes += feature.Num(m, "f32_bytes") + feature.Num(m, "bits_bytes") + feature.Num(m, "key_bytes")
 				counted = true
 			}
 			if counted {
@@ -246,13 +247,13 @@ func (p *providers) listModels(base, key string) {
 // checked lists the models the provider has, and asks the maximum of the one in the form.
 func (p *providers) checked(models []string, err error) {
 	if err != nil {
-		p.c.Set("App.providerModelsStatus", p.c.Trf("autodoc.text.providers.no_models", wireMessage(err)))
+		p.c.Set("App.providerModelsStatus", p.c.Trf("autodoc.text.providers.no_models", feature.WireMessage(err)))
 		return
 	}
 	p.modelList = models
-	rows := make([]rowOf, len(models))
+	rows := make([]feature.RowOf, len(models))
 	for i, m := range models {
-		rows[i] = rowOf{"key": m, "name": m}
+		rows[i] = feature.RowOf{"key": m, "name": m}
 	}
 	p.models.Reset(rows)
 	p.c.Set("App.providerModelsStatus", p.c.Trf("autodoc.text.providers.models_enter_on_one_writes_it_above_an_embedding", len(models)))
@@ -286,24 +287,24 @@ func (p *providers) checkModelContext(base, key, model string) {
 	if key == "" && p.editing != "" {
 		stored = p.editing
 	}
-	tk := p.c.Ticket(nil, TicketSession)
+	tk := p.c.Ticket(nil, feature.TicketSession)
 	p.c.Go(func(ctx context.Context) any {
 		v, err := p.c.Call(ctx, "embedding.model_context", stored, spec)
-		return answered(num(asMap(v), "maximum"), err)
+		return feature.Answered(feature.Num(feature.AsMap(v), "maximum"), err)
 	}, func(v any) {
-		a := v.(answerOf[int64])
+		a := v.(feature.AnswerOf[int64])
 		if !tk.Current() || p.model != model {
 			return
 		}
-		if a.err != nil || a.v <= 0 {
+		if a.Err() != nil || a.Value <= 0 {
 			p.max = 0
 			p.c.Set("App.providerContextHint", p.c.Tr("autodoc.text.providers.max_unknown_more_uses_gpu_memory"))
 			return
 		}
-		p.max = a.v
-		p.c.Set("App.providerContextHint", p.c.Trf("autodoc.text.providers.model_max_more_uses_gpu_memory", a.v))
+		p.max = a.Value
+		p.c.Set("App.providerContextHint", p.c.Trf("autodoc.text.providers.model_max_more_uses_gpu_memory", a.Value))
 		if p.editing == "" {
-			setField(p.c, "App.providerContext", fmt.Sprint(min(int64(store.DefaultContext), a.v)))
+			setField(p.c, "App.providerContext", fmt.Sprint(min(int64(store.DefaultContext), a.Value)))
 		}
 	})
 }

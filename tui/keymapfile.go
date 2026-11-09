@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/keymap"
 )
@@ -27,7 +28,7 @@ func CheckKeymap(file string) (warnings []keymap.Problem, err error) {
 
 // The generated block of docs/keymap.md: every AutoDoc command and its keys.
 const (
-	keymapDocBegin = "<!-- the commands: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) -->\n"
+	keymapDocBegin = "<!-- the commands: generated from tui/feature/keys.go (go test ./tui -run TestKeysAreGenerated -update) -->\n"
 	keymapDocEnd   = "<!-- end of the generated commands -->\n"
 )
 
@@ -37,14 +38,14 @@ func keymapTable(cmds []keymap.Command) string {
 	var b strings.Builder
 	b.WriteString("| id | scope | keys |\n| --- | --- | --- |\n")
 	for _, c := range cmds {
-		fmt.Fprintf(&b, "| `%s` | `%s` | %s |\n", c.ID, c.Scope, strings.ReplaceAll(seqNames(c.Keys), "|", "\\|"))
+		fmt.Fprintf(&b, "| `%s` | `%s` | %s |\n", c.ID, c.Scope, strings.ReplaceAll(feature.SeqNames(c.Keys), "|", "\\|"))
 	}
 	return b.String()
 }
 
 // KeyCommandsForReference are AutoDoc's own key commands, as the reference lists them.
 func KeyCommandsForReference() []keymap.Command {
-	cmds, err := keyCatalog(newHost(NewSession("", nil), Options{}).features()).commands()
+	cmds, err := feature.KeyCatalog(newHost(NewSession("", nil), Options{}).features()).Commands()
 	if err != nil {
 		panic(err) // the registry's check refuses it first: a build that cannot start
 	}

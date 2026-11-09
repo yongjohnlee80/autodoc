@@ -77,7 +77,7 @@ func (h *Host) applyToastPrefs() {
 // otherwise.
 func (h *Host) post(t widgetcore.Toast) {
 	if t.OnClick == nil {
-		t.OnClick = h.noticeLog.open
+		t.OnClick = h.noticeLog.Open
 	}
 	if h.toasts == nil {
 		h.early = append(h.early, t) // before the Window mounted: shown once it is
@@ -124,8 +124,8 @@ func (h *Host) notifyAs(ns string, r noticeReq) {
 	}
 }
 
-// keepNotice adds a notification to the history (notices.go).
-func (h *Host) keepNotice(msg string) { h.noticeLog.keep(msg) }
+// keepNotice adds a notification to the history (feature/notices.go).
+func (h *Host) keepNotice(msg string) { h.noticeLog.Keep(msg) }
 
 // say is a message about the page or the view, on the status line's right until the next.
 func (h *Host) say(msg string) {

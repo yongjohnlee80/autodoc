@@ -14,6 +14,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 
 	"github.com/yongjohnlee80/autodoc/core/todo"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // hearingAgent is an agent that takes bracketed pastes (mode 2004), as agent CLIs do, and writes
@@ -206,12 +207,12 @@ func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 // TestAssignableAgents: the picker leaves out a closing instance (HandTask refuses one) and a stopped
 // orphan (its profile gone, it cannot be started), and keeps the order AgentEntries gives.
 func TestAssignableAgents(t *testing.T) {
-	entries := []AgentEntry{
-		{Ref: AgentRef{Codename: "stopped"}},
-		{Ref: AgentRef{Codename: "closing", Instance: "1"}, Running: true, Closing: true},
-		{Ref: AgentRef{Codename: "running", Instance: "2"}, Running: true},
-		{Ref: AgentRef{Codename: "orphan-running", Instance: "3"}, Running: true, Orphan: true},
-		{Ref: AgentRef{Codename: "orphan-stopped"}, Orphan: true},
+	entries := []feature.AgentEntry{
+		{Ref: feature.AgentRef{Codename: "stopped"}},
+		{Ref: feature.AgentRef{Codename: "closing", Instance: "1"}, Running: true, Closing: true},
+		{Ref: feature.AgentRef{Codename: "running", Instance: "2"}, Running: true},
+		{Ref: feature.AgentRef{Codename: "orphan-running", Instance: "3"}, Running: true, Orphan: true},
+		{Ref: feature.AgentRef{Codename: "orphan-stopped"}, Orphan: true},
 	}
 	var got []string
 	for _, e := range assignable(entries) {
@@ -227,30 +228,30 @@ func TestAssignableAgents(t *testing.T) {
 // workspace on: a TicketWorkspace taken before it is stale.
 type agentCore struct {
 	*scriptedCore
-	entries []AgentEntry
+	entries []feature.AgentEntry
 	handed  []handOverCall
 	refuse  error
 	wsGen   int
 }
 
 func (c *agentCore) switchWorkspace() { c.wsGen++ }
-func (c *agentCore) Ticket(seq *uint64, scope TicketScope) Ticket {
-	if seq != nil || scope != TicketWorkspace {
+func (c *agentCore) Ticket(seq *uint64, scope feature.TicketScope) feature.Ticket {
+	if seq != nil || scope != feature.TicketWorkspace {
 		return c.scriptedCore.Ticket(seq, scope)
 	}
 	gen := c.wsGen
-	return Ticket{current: func() bool { return c.wsGen == gen }}
+	return feature.NewTicket(func() bool { return c.wsGen == gen })
 }
 
 type handOverCall struct {
-	to          AgentRef
-	task        TaskRef
+	to          feature.AgentRef
+	task        feature.TaskRef
 	instruction string
 	done        func(error)
 }
 
-func (c *agentCore) AgentEntries() []AgentEntry { return c.entries }
-func (c *agentCore) HandTask(to AgentRef, task TaskRef, instruction string, done func(error)) error {
+func (c *agentCore) AgentEntries() []feature.AgentEntry { return c.entries }
+func (c *agentCore) HandTask(to feature.AgentRef, task feature.TaskRef, instruction string, done func(error)) error {
 	if c.refuse != nil {
 		return c.refuse
 	}
@@ -260,7 +261,7 @@ func (c *agentCore) HandTask(to AgentRef, task TaskRef, instruction string, done
 
 // assigningStore is a claimed store whose open task t1 todos.assign moves to in-progress, as D1
 // does; assigned records each todos.assign's params.
-func assigningStore(entries ...AgentEntry) (*agentCore, *[][]any) {
+func assigningStore(entries ...feature.AgentEntry) (*agentCore, *[][]any) {
 	s := scriptedStore(true)
 	var assigned [][]any
 	s.answers["todos.assign"] = func(p []any) (any, error) {
@@ -276,7 +277,7 @@ func assigningStore(entries ...AgentEntry) (*agentCore, *[][]any) {
 // handed over at the path the assign returned, the store's root joined: in-progress/, where D1 left
 // the file, not open/, where the row had it. The current incarnation is HandTask's to resolve.
 func TestTodosAssignWritesThenHandsOverAtTheReturnedPath(t *testing.T) {
-	c, assigned := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe", Instance: "7"}, Name: "Scribe", Running: true})
+	c, assigned := assigningStore(feature.AgentEntry{Ref: feature.AgentRef{Codename: "scribe", Instance: "7"}, Name: "Scribe", Running: true})
 	v := newTodos(c)
 	v.list()
 	onTask(t, v, "open")
@@ -284,7 +285,7 @@ func TestTodosAssignWritesThenHandsOverAtTheReturnedPath(t *testing.T) {
 	if !slices.Contains(c.opened, "agentAssignPicker") || c.set["App.agentAssignStatus"] != "agents (1 of 1)" {
 		t.Fatalf("A opened %v, listing %v", c.opened, c.set["App.agentAssignStatus"])
 	}
-	v.assignPick.accept(0, "")
+	v.assignPick.Accept(0, "")
 	if c.opened[len(c.opened)-1] != "todoAssign" || c.set["App.todoAssignText"] != "" || c.set["App.todoAssignTitle"] != "assign to Scribe" {
 		t.Fatalf("the agent chosen: opened %v, text %q, title %v", c.opened, c.set["App.todoAssignText"], c.set["App.todoAssignTitle"])
 	}
@@ -299,8 +300,8 @@ func TestTodosAssignWritesThenHandsOverAtTheReturnedPath(t *testing.T) {
 		t.Fatalf("handed over %d times", len(c.handed))
 	}
 	h := c.handed[0]
-	if h.to != (AgentRef{Codename: "scribe"}) || h.instruction != assignDefault ||
-		h.task != (TaskRef{Title: "Ship", Path: "/kb/.todo-list/in-progress/t1.md", ID: "t1"}) {
+	if h.to != (feature.AgentRef{Codename: "scribe"}) || h.instruction != assignDefault ||
+		h.task != (feature.TaskRef{Title: "Ship", Path: "/kb/.todo-list/in-progress/t1.md", ID: "t1"}) {
 		t.Fatalf("handed %+v", h)
 	}
 	h.done(nil)
@@ -317,7 +318,7 @@ func TestTodosAssignWritesThenHandsOverAtTheReturnedPath(t *testing.T) {
 	c.refuse = ErrAgentUnavailable
 	v.showTab(0) // the task followed to In progress; this store's answers keep it in Open
 	v.assign()
-	v.assignPick.accept(0, "")
+	v.assignPick.Accept(0, "")
 	v.assignSet("  Read the ADR first ")
 	if p := (*assigned)[1]; p[4] != "Read the ADR first" {
 		t.Fatalf("todos.assign params %v", p)
@@ -335,7 +336,7 @@ func TestTodosAssignWritesThenHandsOverAtTheReturnedPath(t *testing.T) {
 // it says how to add one. None opens the picker. A dismissed picker has chosen no agent: nothing is
 // written.
 func TestTodosAssignIsRefusedWithoutATaskAnAgentOrWrites(t *testing.T) {
-	c, assigned := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe"})
+	c, assigned := assigningStore(feature.AgentEntry{Ref: feature.AgentRef{Codename: "scribe"}, Name: "Scribe"})
 	v := newTodos(c)
 	v.list()
 	v.showTab(1) // In progress: no task under the cursor
@@ -345,13 +346,13 @@ func TestTodosAssignIsRefusedWithoutATaskAnAgentOrWrites(t *testing.T) {
 	}
 	v.showTab(0)
 	v.assign()
-	v.assignPick.dismiss()
+	v.assignPick.Dismiss()
 	v.assignSet("") // as a stray App.todoAssignSet after the dismissal would
 	if len(*assigned) != 0 {
 		t.Fatalf("a dismissed picker wrote %v", *assigned)
 	}
 
-	none, _ := assigningStore(AgentEntry{Ref: AgentRef{Codename: "gone"}, Closing: true})
+	none, _ := assigningStore(feature.AgentEntry{Ref: feature.AgentRef{Codename: "gone"}, Closing: true})
 	v = newTodos(none)
 	v.list()
 	onTask(t, v, "open")
@@ -361,7 +362,7 @@ func TestTodosAssignIsRefusedWithoutATaskAnAgentOrWrites(t *testing.T) {
 		t.Fatalf("no agent: notes %q, opened %v", none.notes, none.opened)
 	}
 
-	ro := &agentCore{scriptedCore: scriptedStore(false), entries: []AgentEntry{{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe"}}}
+	ro := &agentCore{scriptedCore: scriptedStore(false), entries: []feature.AgentEntry{{Ref: feature.AgentRef{Codename: "scribe"}, Name: "Scribe"}}}
 	v = newTodos(ro)
 	v.list()
 	onTask(t, v, "open")
@@ -377,12 +378,12 @@ func TestTodosAssignIsRefusedWithoutATaskAnAgentOrWrites(t *testing.T) {
 // workspace, it is handed over as ever.
 func TestTodosAssignAnsweredAfterAWorkspaceSwitchIsHandedToNoOne(t *testing.T) {
 	for _, switched := range []bool{false, true} {
-		c, assigned := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
+		c, assigned := assigningStore(feature.AgentEntry{Ref: feature.AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
 		v := newTodos(c)
 		v.list()
 		onTask(t, v, "open")
 		v.assign()
-		v.assignPick.accept(0, "")
+		v.assignPick.Accept(0, "")
 		c.deferred = true
 		v.assignSet("")
 		if len(*assigned) != 1 || len(c.pending) != 1 {
@@ -407,12 +408,12 @@ func TestTodosAssignAnsweredAfterAWorkspaceSwitchIsHandedToNoOne(t *testing.T) {
 // again, and Open no longer shows it. Listing made the store shown a new value, and the answer,
 // compared by value, was dropped: no follow, no read.
 func TestTodosAssignAnsweredAfterTheStoresAreListedAgainFollowsTheTask(t *testing.T) {
-	c, assigned := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
+	c, assigned := assigningStore(feature.AgentEntry{Ref: feature.AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
 	v := newTodos(c)
 	v.list()
 	onTask(t, v, "open")
 	v.assign()
-	v.assignPick.accept(0, "")
+	v.assignPick.Accept(0, "")
 	c.deferred = true
 	v.assignSet("")
 	if len(*assigned) != 1 || len(c.pending) != 1 {
@@ -461,13 +462,13 @@ func (c *scopedAgentCore) windowScope() string { return c.scope }
 // holding no scope assigns with none, as before.
 func TestTodosAssignCarriesTheWindowsScope(t *testing.T) {
 	for _, scope := range []string{"autodoc:0123456789abcdef", ""} {
-		ac, assigned := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
+		ac, assigned := assigningStore(feature.AgentEntry{Ref: feature.AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
 		c := &scopedAgentCore{agentCore: ac, scope: scope}
 		v := newTodos(c)
 		v.list()
 		onTask(t, v, "open")
 		v.assign()
-		v.assignPick.accept(0, "")
+		v.assignPick.Accept(0, "")
 		v.assignSet("Go.")
 		if len(*assigned) != 1 {
 			t.Fatalf("scope %q: todos.assign called %d times", scope, len(*assigned))

@@ -85,7 +85,7 @@ func TestAnAgentOpensAFileByItsPath(t *testing.T) {
 		t.Fatalf("an ungranted editor.open opened %s", n.path)
 	}
 	r.s.WaitForText(t, "let the agent zen use commands?")
-	onLoop(r, func() bool { r.h.asker.accepted(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); return true })
 	r.s.WaitFor(t, "commands granted", func(string) bool {
 		return onLoop(r, func() bool { return r.h.prefs.luaGrants["agent:zen"]["commands"] })
 	})
@@ -181,7 +181,7 @@ func TestALuaCommandNamedOpenIsListedAsOwningIt(t *testing.T) {
 	r.connected(t)
 	r.s.WaitFor(t, "the Lua command registered", func(string) bool {
 		return onLoop(r, func() bool {
-			return r.h.cat != nil && r.h.cat.names["open"] != "" && r.h.cat.names["open"] != "file.open_path"
+			return r.h.cat != nil && r.h.cat.Names["open"] != "" && r.h.cat.Names["open"] != "file.open_path"
 		})
 	})
 	call := editorClient(t, r, onLoop(r, func() string { return r.h.agents.editorToken("zen") }))

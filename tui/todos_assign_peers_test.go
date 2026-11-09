@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"slices"
 	"strings"
 	"testing"
@@ -12,7 +13,7 @@ import (
 type peerCore struct {
 	*agentCore
 	scope   string
-	peers   []AgentEntry
+	peers   []feature.AgentEntry
 	sent    []peerSend
 	sendErr error
 }
@@ -20,7 +21,7 @@ type peerCore struct {
 type peerSend struct{ codename, scope, subject, body, key string }
 
 func (c *peerCore) windowScope() string { return c.scope }
-func (c *peerCore) peerAgents(then func([]AgentEntry)) {
+func (c *peerCore) peerAgents(then func([]feature.AgentEntry)) {
 	if c.scope == "" {
 		then(nil)
 		return
@@ -32,13 +33,13 @@ func (c *peerCore) sendTask(codename, scope, subject, body, key string, then fun
 	then(c.sendErr)
 }
 
-func peer(codename, scope, project string, reachable bool, why string) AgentEntry {
-	return AgentEntry{Ref: AgentRef{Codename: codename}, Name: codename,
-		Peer: &PeerAgent{Scope: scope, Project: project, Reachable: reachable, Why: why}}
+func peer(codename, scope, project string, reachable bool, why string) feature.AgentEntry {
+	return feature.AgentEntry{Ref: feature.AgentRef{Codename: codename}, Name: codename,
+		Peer: &feature.PeerAgent{Scope: scope, Project: project, Reachable: reachable, Why: why}}
 }
 
-func newPeerCore(scope string, peers ...AgentEntry) (*peerCore, *[][]any) {
-	ac, assigned := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
+func newPeerCore(scope string, peers ...feature.AgentEntry) (*peerCore, *[][]any) {
+	ac, assigned := assigningStore(feature.AgentEntry{Ref: feature.AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
 	return &peerCore{agentCore: ac, scope: scope, peers: peers}, assigned
 }
 
@@ -59,8 +60,8 @@ func TestTodosAssignListsEveryConnectedAgent(t *testing.T) {
 		t.Fatalf("A opened %v, listing %v; want the picker with the window's agent and 3 others", c.opened, c.set["App.agentAssignStatus"])
 	}
 	var keys, labels []string
-	for i, e := range v.assignPick.list.items {
-		r := v.assignPick.list.row(i, e)
+	for i, e := range v.assignPick.List.Items {
+		r := v.assignPick.List.Row(i, e)
 		keys, labels = append(keys, r["key"].(string)), append(labels, r["agent"].(string))
 	}
 	if !slices.Equal(keys, []string{"scribe", "jarvis@autovim:plugins", "zen@autovim:plugins", "zen@autovim:mcat"}) {
@@ -93,7 +94,7 @@ func TestTodosAssignHandsAnotherHostsAgentATaskAsTheUser(t *testing.T) {
 	v.list()
 	onTask(t, v, "open")
 	v.assign()
-	v.assignPick.accept(1, "")
+	v.assignPick.Accept(1, "")
 	if c.set["App.todoAssignTitle"] != "assign to jarvis@plugins" {
 		t.Errorf("the Instructions: line's title %q", c.set["App.todoAssignTitle"])
 	}
@@ -129,7 +130,7 @@ func TestTodosAssignQueuesForAnAgentNoWakeReaches(t *testing.T) {
 	v.list()
 	onTask(t, v, "open")
 	v.assign()
-	v.assignPick.accept(1, "")
+	v.assignPick.Accept(1, "")
 	v.assignSet("")
 	if len(c.sent) != 1 || !strings.Contains(c.sent[0].body, "Instruction: "+assignDefault) {
 		t.Fatalf("sent %+v, want the task, with the default instruction", c.sent)
@@ -146,7 +147,7 @@ func TestTodosAssignQueuesForAnAgentNoWakeReaches(t *testing.T) {
 	w.list()
 	onTask(t, w, "open")
 	w.assign()
-	w.assignPick.accept(1, "")
+	w.assignPick.Accept(1, "")
 	w.assignSet("Go.")
 	if !slices.ContainsFunc(r.notes, func(n string) bool {
 		return strings.Contains(n, "not sent") && strings.Contains(n, "mail.no_recipient")
@@ -196,7 +197,7 @@ type slowPeerCore struct {
 	pending func()
 }
 
-func (c *slowPeerCore) peerAgents(then func([]AgentEntry)) {
+func (c *slowPeerCore) peerAgents(then func([]feature.AgentEntry)) {
 	c.pending = func() { c.peerCore.peerAgents(then) }
 }
 
@@ -218,7 +219,7 @@ func TestTodosAssignAnsweredAfterAWorkspaceSwitchOpensNothing(t *testing.T) {
 	if slices.Contains(c.opened, "agentAssignPicker") {
 		t.Errorf("A opened its picker for a workspace no longer in use: %v", c.opened)
 	}
-	v.assignPick.accept(1, "")
+	v.assignPick.Accept(1, "")
 	v.assignSet("Go.")
 	if len(*assigned) != 0 || len(c.sent) != 0 {
 		t.Errorf("after the switch: %d assigns, %d sends; want none", len(*assigned), len(c.sent))

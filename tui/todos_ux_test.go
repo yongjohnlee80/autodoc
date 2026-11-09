@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/parse/qml"
 )
 
@@ -18,7 +19,7 @@ import (
 // the window wide and 80% tall, at any edge, the left one unless chosen; a size the user leaves it
 // at is kept, per edge, and wins, and so do an edge they chose and a place they float it to.
 func TestTodosPanelOpensLargeAndKeepsTheUsersSize(t *testing.T) {
-	p := prefs{panelDefs: []PanelSpec{todosPanelSpec()}}
+	p := prefs{panelDefs: []feature.PanelSpec{todosPanelSpec()}}
 	for edge, want := range map[string][2]int{"right": {65, 80}, "left": {65, 80}, "top": {80, 65}, "bottom": {80, 65}} {
 		if s, l := p.panelGeometry("todos", edge); s != want[0] || l != want[1] {
 			t.Errorf("at the %s edge, before it is sized: %d × %d, want %d × %d", edge, s, l, want[0], want[1])
@@ -40,7 +41,7 @@ func TestTodosPanelOpensLargeAndKeepsTheUsersSize(t *testing.T) {
 		t.Errorf("a fresh state's todos edge: %q, want left", p.todosEdge)
 	}
 	var kept prefs
-	ReadRows(&kept, map[string]any{prefTodosEdge: "right"}, legacyPrefRows(nil, false))
+	feature.ReadRows(&kept, map[string]any{prefTodosEdge: "right"}, legacyPrefRows(nil, false))
 	if kept.todosEdge != "right" || todosPanelSpec().Edge(kept) != "right" {
 		t.Errorf("a kept right edge read as %q, the panel's %q", kept.todosEdge, todosPanelSpec().Edge(kept))
 	}
@@ -111,7 +112,7 @@ func TestTodosStatusLineSaysOnlyWhatNeedsTheUser(t *testing.T) {
 // name for it). New… on a folder whose store was released loads it and says so.
 func TestTodosAReadOnlyStoreTakesNoKeyAsAnError(t *testing.T) {
 	writes := []string{"todos.add", "todos.remove", "todos.status", "todos.assign", "todos.move_store", "todos.scaffold", "todos.refresh"}
-	s := &agentCore{scriptedCore: scriptedStore(false), entries: []AgentEntry{{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true}}}
+	s := &agentCore{scriptedCore: scriptedStore(false), entries: []feature.AgentEntry{{Ref: feature.AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true}}}
 	v := newTodos(s)
 	v.list()
 	cmds := v.Commands()
@@ -130,7 +131,7 @@ func TestTodosAReadOnlyStoreTakesNoKeyAsAnError(t *testing.T) {
 			if arg != "" {
 				err = cmds[name].Run([]qml.SpecValue{{Kind: qml.SpecValueNumber, Raw: arg}})
 			} else {
-				err = cmds[name].handler(name)(nil)
+				err = cmds[name].Handler(name)(nil)
 			}
 			if err != nil {
 				t.Errorf("on a read-only %s, %s: %v", where.kind, key.Show, err)
@@ -171,7 +172,7 @@ func TestTodosEnterOnTheCardOfKeysOpensTheRow(t *testing.T) {
 	s := scriptedStore(true)
 	v := newTodos(s)
 	v.list()
-	if err := v.Commands()["App.todoEnter"].handler("App.todoEnter")(nil); err != nil {
+	if err := v.Commands()["App.todoEnter"].Handler("App.todoEnter")(nil); err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Equal(s.files, []string{"/kb/.todo-list/open/t1.md"}) {

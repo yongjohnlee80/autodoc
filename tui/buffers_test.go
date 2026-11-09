@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/internal/ipc"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
@@ -28,7 +29,7 @@ func (r *running) waitBuffer(t *testing.T, p string) {
 
 // bufferOn is the open buffer of p in kb, read on the loop.
 func bufferOn(r *running, p string) *openBuffer {
-	return onLoop(r, func() *openBuffer { return r.h.bufferOf(fileRef{"kb", p}) })
+	return onLoop(r, func() *openBuffer { return r.h.bufferOf(feature.FileRef{WS: "kb", Path: p}) })
 }
 
 // TestABufferIsShownAgainWithItsEdits: :b by name and by number shows a buffer, its unsaved edit
@@ -53,7 +54,7 @@ func TestABufferIsShownAgainWithItsEdits(t *testing.T) {
 	if got := r.editorText(); !strings.Contains(got, "Xaaa") || !r.file().dirty {
 		t.Fatalf(":b a.md: %q, dirty %v", got, r.file().dirty)
 	}
-	n := onLoop(r, func() int { return r.h.bufferOf(fileRef{"kb", "b.md"}).n }) // not bufferOn: onLoop inside onLoop waits on itself
+	n := onLoop(r, func() int { return r.h.bufferOf(feature.FileRef{WS: "kb", Path: "b.md"}).n }) // not bufferOn: onLoop inside onLoop waits on itself
 	run("b " + strconv.Itoa(n))
 	r.waitFile(t, "b.md")
 	if r.file().dirty || r.editorText() != "bbb\n" {
@@ -114,7 +115,7 @@ func TestALoadLandsInItsBufferAfterASwitch(t *testing.T) {
 	hold.Store(true)
 	r.openByPicker(t, "b.md")          // its buffer is made and shown; the read is held
 	r.s.WaitForText(t, "opening b.md") // the picker's Enter is a key: the open is under way before the switch
-	onLoop(r, func() bool { r.h.activate(r.h.bufferOf(fileRef{"kb", "a.md"})); return true })
+	onLoop(r, func() bool { r.h.activate(r.h.bufferOf(feature.FileRef{WS: "kb", Path: "a.md"})); return true })
 	hold.Store(false)
 	close(release)
 	r.s.WaitFor(t, "b.md loaded into its buffer", func(string) bool {
@@ -149,12 +150,12 @@ func TestASaveLandsInItsBufferAfterASwitch(t *testing.T) {
 	hold.Store(true)
 	r.keys(t, decltest.Ctrl('s'))
 	r.s.WaitForText(t, "saving a.md")
-	onLoop(r, func() bool { r.h.activate(r.h.bufferOf(fileRef{"kb", "b.md"})); return true })
+	onLoop(r, func() bool { r.h.activate(r.h.bufferOf(feature.FileRef{WS: "kb", Path: "b.md"})); return true })
 	hold.Store(false)
 	close(release)
 	r.s.WaitFor(t, "a.md saved in its buffer", func(string) bool {
 		return onLoop(r, func() bool {
-			b := r.h.bufferOf(fileRef{"kb", "a.md"})
+			b := r.h.bufferOf(feature.FileRef{WS: "kb", Path: "a.md"})
 			return b != nil && !b.file.dirty && !b.buf.Modified()
 		})
 	})
@@ -442,7 +443,9 @@ func TestTheBuffersPickerAndB(t *testing.T) {
 }
 
 // bufferOnLoop is p's open buffer in kb, for a function already on the loop.
-func bufferOnLoop(r *running, p string) *openBuffer { return r.h.bufferOf(fileRef{"kb", p}) }
+func bufferOnLoop(r *running, p string) *openBuffer {
+	return r.h.bufferOf(feature.FileRef{WS: "kb", Path: p})
+}
 
 // TestCreatingAFileOpensItInABufferOfItsOwn: App.createFile with no draft being named makes an empty
 // file and opens it in a new buffer, the modified one left keeping its text; a name that exists is

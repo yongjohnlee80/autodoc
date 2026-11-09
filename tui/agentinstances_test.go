@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/pty"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
@@ -24,7 +25,7 @@ func (*modelRemoval) Generation() int              { return 1 }
 
 type modelPanel struct {
 	owner     *identityHost
-	configs   map[terminal.TerminalTabID]TerminalConfig
+	configs   map[terminal.TerminalTabID]feature.TerminalConfig
 	tabs      []terminal.TerminalTab
 	active    terminal.TerminalTabID
 	next      int
@@ -62,11 +63,11 @@ func testAgentsWith(c agentHost, s *seams, dir, config string) *agents {
 	return a
 }
 
-func (p *modelPanel) SameOwner(other TerminalPanel) bool {
+func (p *modelPanel) SameOwner(other feature.TerminalPanel) bool {
 	peer, ok := other.(*modelPanel)
 	return ok && p == peer
 }
-func (p *modelPanel) Shutdown() TerminalCompletion {
+func (p *modelPanel) Shutdown() feature.TerminalCompletion {
 	for i := range p.tabs {
 		p.tabs[i].Running = false
 	}
@@ -77,11 +78,11 @@ func (p *modelPanel) Shutdown() TerminalCompletion {
 	return p.removal
 }
 
-func (p *modelPanel) Add(label string, config TerminalConfig) (terminal.TerminalTabID, error) {
+func (p *modelPanel) Add(label string, config feature.TerminalConfig) (terminal.TerminalTabID, error) {
 	p.next++
 	id := terminal.TerminalTabID(fmt.Sprintf("tab-%d", p.next))
 	if p.configs == nil {
-		p.configs = map[terminal.TerminalTabID]TerminalConfig{}
+		p.configs = map[terminal.TerminalTabID]feature.TerminalConfig{}
 	}
 	p.configs[id] = config
 	p.tabs = append(p.tabs, terminal.TerminalTab{ID: id, Label: label})
@@ -152,7 +153,7 @@ func (p *modelPanel) SetMode(id terminal.TerminalTabID, mode terminal.TerminalMo
 	p.modes = append(p.modes, fmt.Sprintf("%s:%v", id, mode))
 	return nil
 }
-func (p *modelPanel) Remove(id terminal.TerminalTabID) (TerminalRemoval, error) {
+func (p *modelPanel) Remove(id terminal.TerminalTabID) (feature.TerminalRemoval, error) {
 	if p.owner != nil && p.owner.stopErr != nil {
 		return nil, p.owner.stopErr
 	}
@@ -183,7 +184,7 @@ func (p *modelPanel) exit(id terminal.TerminalTabID, code int) {
 	}
 }
 
-func (c *identityHost) Terminals(string) (TerminalPanel, error) {
+func (c *identityHost) Terminals(string) (feature.TerminalPanel, error) {
 	if c.panel == nil {
 		c.panel = &modelPanel{owner: c}
 	}
@@ -212,11 +213,14 @@ func (c *identityHost) fireAfters() {
 		c.drainPosts()
 	}
 }
-func (c *identityHost) Ticket(_ *uint64, _ TicketScope) Ticket {
+func (c *identityHost) Ticket(_ *uint64, _ feature.TicketScope) feature.Ticket {
 	epoch := c.epoch
-	return Ticket{current: func() bool { return c.epoch == epoch }}
+	return feature.NewTicket(func() bool { return c.epoch == epoch })
 }
-func (c *identityHost) Ask(q Question) Asked { c.questions = append(c.questions, q); return Asked{} }
+func (c *identityHost) Ask(q feature.Question) feature.Asked {
+	c.questions = append(c.questions, q)
+	return feature.Asked{}
+}
 func (c *identityHost) drainPosts() {
 	for {
 		c.postMu.Lock()
@@ -253,7 +257,7 @@ func modelAgents(t *testing.T) (*agents, *identityHost) {
 
 func retainModelInstance(a *agents, c *identityHost, code, label string) {
 	panel, _ := c.Terminals("agentView")
-	id, _ := panel.Add(label, TerminalConfig{})
+	id, _ := panel.Add(label, feature.TerminalConfig{})
 	_ = panel.Start(id)
 	p, exists := a.profile(code)
 	if !exists {
@@ -272,7 +276,7 @@ func TestAgentInstancesRunTogetherAndRefsDoNotFollowRestarts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	old := AgentRef{Codename: "one", Instance: first.token}
+	old := feature.AgentRef{Codename: "one", Instance: first.token}
 	if _, err := a.startInstance(two); err != nil {
 		t.Fatal(err)
 	}
@@ -284,7 +288,7 @@ func TestAgentInstancesRunTogetherAndRefsDoNotFollowRestarts(t *testing.T) {
 		t.Fatal(err)
 	}
 	callbacks := 0
-	err = a.HandTask(old, TaskRef{Title: "task", Path: "/tasks/task.md"}, "work", func(error) { callbacks++ })
+	err = a.HandTask(old, feature.TaskRef{Title: "task", Path: "/tasks/task.md"}, "work", func(error) { callbacks++ })
 	if !errors.Is(err, ErrAgentStale) || callbacks != 0 || len(c.posts) != 0 {
 		t.Fatal("stale ref was accepted or completed")
 	}
@@ -300,8 +304,8 @@ func TestHandTaskAcceptedDeliverySnapshotsAndCompletesOnce(t *testing.T) {
 	c.opened = nil                                              // the start opened the panel: what the delivery opens is counted from here
 	a.promptsReported = func(string, bool) bool { return true } // a CLI that reports its prompts: the base sends
 	done := 0
-	task := TaskRef{Title: "original", Path: "/tasks/one.md", ID: "one"}
-	if err := a.HandTask(AgentRef{Codename: "one"}, task, "inspect", func(err error) {
+	task := feature.TaskRef{Title: "original", Path: "/tasks/one.md", ID: "one"}
+	if err := a.HandTask(feature.AgentRef{Codename: "one"}, task, "inspect", func(err error) {
 		if err != nil {
 			t.Error(err)
 		}
@@ -344,7 +348,7 @@ func TestHandTaskStoppedConsentRevalidatesAndNeverSendsAfterCancellation(t *test
 			a.promptsReported = func(string, bool) bool { return true } // delivered is sent: the base presses Enter
 			done := 0
 			var outcome error
-			if err := a.HandTask(AgentRef{Codename: "one"}, TaskRef{Title: "task", Path: "/tasks/task.md"}, "work", func(err error) { done++; outcome = err }); err != nil {
+			if err := a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "task", Path: "/tasks/task.md"}, "work", func(err error) { done++; outcome = err }); err != nil {
 				t.Fatal(err)
 			}
 			if len(c.questions) != 1 || len(a.instances) != 0 {
@@ -395,7 +399,7 @@ func TestHandTaskQueuedTargetReplacementAndSendFailureAreCompletionErrors(t *tes
 			}
 			var outcome error
 			calls := 0
-			if err := a.HandTask(AgentRef{Codename: "one", Instance: instance.token}, TaskRef{Title: "task", Path: "/task.md"}, "work", func(err error) { outcome = err; calls++ }); err != nil {
+			if err := a.HandTask(feature.AgentRef{Codename: "one", Instance: instance.token}, feature.TaskRef{Title: "task", Path: "/task.md"}, "work", func(err error) { outcome = err; calls++ }); err != nil {
 				t.Fatal(err)
 			}
 			if failure == "replacement" {
@@ -422,7 +426,7 @@ func TestHandTaskWaitsForAStartedAgentToTakeBracketedPastes(t *testing.T) {
 	c.panel = &modelPanel{owner: c, unbracketed: 3}
 	calls := 0
 	var outcome error
-	if err := a.HandTask(AgentRef{Codename: "one"}, TaskRef{Title: "task", Path: "/task.md"}, "work", func(err error) { calls++; outcome = err }); err != nil {
+	if err := a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "task", Path: "/task.md"}, "work", func(err error) { calls++; outcome = err }); err != nil {
 		t.Fatal(err)
 	}
 	c.questions[0].OnYes()
@@ -459,7 +463,7 @@ func TestHandTaskToAnUnbracketedProgramSendsNothing(t *testing.T) {
 			}
 			calls := 0
 			var outcome error
-			if err := a.HandTask(AgentRef{Codename: "one"}, TaskRef{Title: "task", Path: "/task.md"}, "work", func(err error) { calls++; outcome = err }); err != nil {
+			if err := a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "task", Path: "/task.md"}, "work", func(err error) { calls++; outcome = err }); err != nil {
 				t.Fatal(err)
 			}
 			if target == "started" {
@@ -492,7 +496,7 @@ func TestHandTaskIsCheckedAgainInTheWait(t *testing.T) {
 			c.panel = &modelPanel{owner: c, unbracketed: -1}
 			calls := 0
 			var outcome error
-			if err := a.HandTask(AgentRef{Codename: "one"}, TaskRef{Title: "task", Path: "/task.md"}, "work", func(err error) { calls++; outcome = err }); err != nil {
+			if err := a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "task", Path: "/task.md"}, "work", func(err error) { calls++; outcome = err }); err != nil {
 				t.Fatal(err)
 			}
 			c.questions[0].OnYes()
@@ -541,7 +545,7 @@ func TestSendTextIsSentWithItsEnter(t *testing.T) {
 	c.opened = nil // the start opened the panel
 	calls := 0
 	a.promptsReported = func(string, bool) bool { return true } // a CLI that reports its prompts: the base sends
-	if err := a.SendText(AgentRef{Codename: "one"}, "draft", func(err error) {
+	if err := a.SendText(feature.AgentRef{Codename: "one"}, "draft", func(err error) {
 		if err != nil {
 			t.Error(err)
 		}
@@ -573,7 +577,7 @@ func TestStoppedAgentDoesNotRelabelItsOldWorkspaceConfiguration(t *testing.T) {
 	c.epoch++
 	done := 0
 	var outcome error
-	if err := a.HandTask(AgentRef{Codename: "one"}, TaskRef{Title: "other task", Path: "/other/task.md"}, "work", func(err error) { done++; outcome = err }); err != nil {
+	if err := a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "other task", Path: "/other/task.md"}, "work", func(err error) { done++; outcome = err }); err != nil {
 		t.Fatal(err)
 	}
 	c.questions[len(c.questions)-1].OnYes()
@@ -592,11 +596,11 @@ func TestParentRebuildRetiresOldRefsAndCreatesCurrentOwnerInstances(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldRef := AgentRef{Codename: "one", Instance: instance.token}
+	oldRef := feature.AgentRef{Codename: "one", Instance: instance.token}
 	oldOwner := c.panel
 	done := 0
 	var outcome error
-	if err := a.HandTask(oldRef, TaskRef{Title: "queued", Path: "/task.md"}, "work", func(err error) { done++; outcome = err }); err != nil {
+	if err := a.HandTask(oldRef, feature.TaskRef{Title: "queued", Path: "/task.md"}, "work", func(err error) { done++; outcome = err }); err != nil {
 		t.Fatal(err)
 	}
 	c.panel = &modelPanel{owner: c, next: 100}
@@ -605,7 +609,7 @@ func TestParentRebuildRetiresOldRefsAndCreatesCurrentOwnerInstances(t *testing.T
 		t.Fatal("queued old-parent request sent or lost completion")
 	}
 	callbacks := 0
-	if err := a.HandTask(oldRef, TaskRef{Title: "stale", Path: "/task.md"}, "work", func(error) { callbacks++ }); !errors.Is(err, ErrAgentStale) || callbacks != 0 {
+	if err := a.HandTask(oldRef, feature.TaskRef{Title: "stale", Path: "/task.md"}, "work", func(error) { callbacks++ }); !errors.Is(err, ErrAgentStale) || callbacks != 0 {
 		t.Fatal("old ref survived parent retirement")
 	}
 	fresh, err := a.startInstance(p)

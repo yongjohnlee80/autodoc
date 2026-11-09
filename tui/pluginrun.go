@@ -15,6 +15,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/plugin"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/style"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
@@ -119,7 +120,7 @@ func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
 	log := openPluginLog(pl.pluginOpt.LogDir, e.m.Name)
 	cmd := exec.Command(procenv.Resolve(pl.seams.env, e.m.Command[0]), e.m.Command[1:]...)
 	cmd.Dir = e.dir
-	cmd.Env = append(ownEnviron(pl.seams.env), fmt.Sprintf("AUTODOC_PLUGIN_PROTOCOL=%d", e.m.Protocol),
+	cmd.Env = append(feature.OwnEnviron(pl.seams.env), fmt.Sprintf("AUTODOC_PLUGIN_PROTOCOL=%d", e.m.Protocol),
 		"AUTODOC_PLUGIN_DIR="+e.dir, "AUTODOC_SOCKET="+pl.pluginOpt.Socket)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = toPlugin, fromPlugin, log
 	if surfaceChild != nil {
@@ -624,26 +625,26 @@ func (pl *plugins) acceptMenu(r *pluginRun, u plugin.MenuUpdate) {
 	if r.closing || pl.running[r.e.key()] != r {
 		return
 	}
-	row := pl.c.MenuRows().find("plugin:"+r.e.m.Name, fromManifest, u.ID)
+	row := pl.c.MenuRows().Find("plugin:"+r.e.m.Name, feature.FromManifest, u.ID)
 	if row == nil {
 		r.log.note("host.menu refused: no [[menu]] row " + strconv.Quote(u.ID))
 		return
 	}
 	if u.Title != nil {
 		t := *u.Title
-		row.pushed = &t
+		row.Pushed = &t
 	}
 	if u.Enabled != nil {
-		row.disabled = !*u.Enabled
+		row.Disabled = !*u.Enabled
 	}
 }
 
 // forgetMenu forgets what r pushed to its plugin's rows: a stopped plugin's rows show their manifest's
 // titles, enabled.
 func (pl *plugins) forgetMenu(r *pluginRun) {
-	for _, row := range pl.c.MenuRows().rows {
-		if row.owner == "plugin:"+r.e.m.Name && row.source == fromManifest {
-			row.pushed, row.disabled = nil, false
+	for _, row := range pl.c.MenuRows().Rows {
+		if row.Owner == "plugin:"+r.e.m.Name && row.Source == feature.FromManifest {
+			row.Pushed, row.Disabled = nil, false
 		}
 	}
 }
