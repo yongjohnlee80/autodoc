@@ -131,6 +131,9 @@ func TestTheTerminalsMindmapWearsItsGroups(t *testing.T) {
 				return false
 			}
 			want := onGround(hexColour(yellow), color.NRGBA{R: bg.R, G: bg.G, B: bg.B, A: 0xff})
+			if theme == "sepia" && want == hexColour(yellow) {
+				return false // a frame still on a page that leaves the yellow as it is: not sepia's paper yet
+			}
 			return fg == tuicore.CellColor{Kind: tuicore.CellColorRGB, R: want.R, G: want.G, B: want.B} &&
 				(len(seen) == 0 || bg != seen[0])
 		})
