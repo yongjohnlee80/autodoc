@@ -1,3 +1,30 @@
 # The packages that build, vet and pass their tests on Windows in CI (ci.yml's windows job):
 # the ones ported so far. The list only grows. A discover run lists the candidates:
 #   gh workflow run ci.yml --ref <branch> -f discover=true
+.
+./core/clock
+./core/edition
+./core/export/mermaid
+./core/kbtype
+./core/kind
+./core/lab
+./core/manifests
+./core/module
+./core/outline
+./core/pgstore
+./core/procstat
+./core/registrations
+./core/registry
+./enterprise/embedder
+./enterprise/ingest
+./enterprise/opcode
+./enterprise/ops
+./enterprise/search
+./internal/luarefgen
+./internal/profiling
+./internal/tuiaudit
+./plugin/card
+./plugin/decl
+./script
+./shell/tei
+./sql/deployments
