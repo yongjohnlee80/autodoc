@@ -141,6 +141,7 @@ function Shortcut {
 	$s = $shell.CreateShortcut($lnk)
 	$s.TargetPath = $Bin
 	$s.Arguments = "--gui"
+	$s.WindowStyle = 7 # minimized: AutoDoc gives up the console this opens, and nothing flashes
 	$s.WorkingDirectory = $env:USERPROFILE
 	$s.IconLocation = "$Bin,0"
 	$s.Description = "AutoDoc"

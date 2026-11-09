@@ -94,7 +94,8 @@ try {
 	elseif (-not ((Get-Content -Raw $rec) -match 'version\s*=\s*"v1\.0\.0"' -and (Get-Content -Raw $rec) -match 'method\s*=\s*"script"')) { Bad "a fresh install" "the record is: $(Get-Content -Raw $rec)" }
 	elseif (-not (Test-Path (Join-Path $h "Local\autodoc\update.ps1"))) { Bad "a fresh install" "no update.ps1 beside the record" }
 	elseif (-not (Test-Path (Join-Path $h "Roaming\Microsoft\Windows\Start Menu\Programs\AutoDoc.lnk"))) { Bad "a fresh install" "no Start menu shortcut" }
-	else { Ok "a fresh install: the binary, the record, update.ps1 and the shortcut" }
+	elseif ((New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $h "Roaming\Microsoft\Windows\Start Menu\Programs\AutoDoc.lnk")).WindowStyle -ne 7) { Bad "a fresh install" "the shortcut does not start minimized" }
+	else { Ok "a fresh install: the binary, the record, update.ps1 and the shortcut, minimized" }
 
 	# the record's paths are TOML strings: a backslash is escaped, so a TOML reader gets the path back
 	if ((Get-Content -Raw $rec) -match ('bin\s*=\s*"' + [regex]::Escape($bin.Replace("\", "\\")) + '"')) { Ok "the record's bin path is a TOML string" }

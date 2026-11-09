@@ -9,6 +9,7 @@ import (
 	"github.com/yongjohnlee80/golib/gui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
+	"github.com/yongjohnlee80/autodoc/internal/proctree"
 	"github.com/yongjohnlee80/autodoc/tui"
 )
 
@@ -18,6 +19,7 @@ import (
 // Gio needs the process's main thread for windows (macOS requires it), so gui.Main takes it and
 // ends the process when the UI quits: it never returns.
 func runGUI(ctx context.Context, o tui.LaunchOptions, owned []owner) error {
+	proctree.ReleaseConsoleIfAlone() // on Windows, a Start menu launch's console window goes
 	configureGUIPreferences()
 	gui.Main(func() error {
 		opts := append([]gui.Option{gui.WithTitle("AutoDoc")}, rendererOptions(tui.GUIRendererFile(o.ConfigPath))...)

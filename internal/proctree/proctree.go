@@ -26,5 +26,12 @@ func StartDetached(cmd *exec.Cmd) error {
 // and exits with its exit code, so whoever waits on this process sees the program's.
 func Replace(path string, args, env []string) error { return replace(path, args, env) }
 
+// ReleaseConsoleIfAlone gives up this process's console when no other process shares it, and
+// reports whether it did. A console-subsystem program started from a shortcut gets a console window
+// of its own, which a window of the program's would otherwise stand beside; started from a shell it
+// shares the shell's console and keeps it, so its output and exit code stay. Windows alone has
+// consoles to give up: elsewhere it does nothing and returns false.
+func ReleaseConsoleIfAlone() bool { return releaseConsoleIfAlone() }
+
 // Alive is whether a process with pid exists now. It sends nothing to the process.
 func Alive(pid int) bool { return pid > 0 && alive(pid) }

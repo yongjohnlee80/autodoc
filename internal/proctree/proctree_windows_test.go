@@ -3,13 +3,18 @@
 package proctree
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
 	"golang.org/x/sys/windows"
+
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 )
 
 var getConsoleWindow = windows.NewLazySystemDLL("kernel32.dll").NewProc("GetConsoleWindow")
@@ -70,5 +75,63 @@ func TestAProcessThatEndedWith259IsNotAlive(t *testing.T) {
 	}
 	if Alive(pid) {
 		t.Errorf("Alive(%d) of a program that ended with 259 is true", pid)
+	}
+}
+
+// reportConsole gives up the console if alone on it and writes what it saw to the report file:
+// whether it had a console, whether ReleaseConsoleIfAlone said it gave it up, and whether it has one
+// after. A file, since a program on its own console has no output the test can read.
+func reportConsole() {
+	had := consoleWindow()
+	dropped := ReleaseConsoleIfAlone()
+	_ = os.WriteFile(os.Getenv("PROCTREE_REPORT"), []byte(fmt.Sprintf("had=%v dropped=%v after=%v", had, dropped, consoleWindow())), 0o600)
+}
+
+func consoleWindow() bool {
+	h, _, _ := getConsoleWindow.Call()
+	return h != 0
+}
+
+// With --gui's rule: a program alone on its console gives it up; one sharing it, as with the shell
+// that started it, keeps it; one with no console has nothing to give up. Each helper is this test
+// binary on a console made for it. What a person sees (no window left, no flash from the shortcut)
+// is the desktop's to show, not this cell's.
+func TestAProgramGivesUpItsConsoleOnlyWhenAlone(t *testing.T) {
+	const run = "-test.run=^TestAProgramGivesUpItsConsoleOnlyWhenAlone$"
+	switch os.Getenv("PROCTREE_CONSOLE") {
+	case "report":
+		reportConsole()
+		os.Exit(0)
+	case "share": // on the new console; the report comes from a child that inherits it
+		child := exec.Command(os.Args[0], run)
+		child.Env = procenv.Env(os.Environ()).With("PROCTREE_CONSOLE=report")
+		_ = child.Run()
+		os.Exit(0)
+	}
+	for _, c := range []struct {
+		name, role string
+		flags      uint32
+		want       string
+	}{
+		{"alone", "report", windows.CREATE_NEW_CONSOLE, "had=true dropped=true after=false"},
+		{"shared", "share", windows.CREATE_NEW_CONSOLE, "had=true dropped=false after=true"},
+		{"none", "report", windows.DETACHED_PROCESS, "had=false dropped=false after=false"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			report := filepath.Join(t.TempDir(), "report")
+			cmd := exec.Command(os.Args[0], run)
+			cmd.Env = procenv.Env(os.Environ()).With("PROCTREE_CONSOLE="+c.role, "PROCTREE_REPORT="+report)
+			cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: c.flags}
+			if err := cmd.Run(); err != nil {
+				t.Fatalf("the helper: %v", err)
+			}
+			got, err := os.ReadFile(report)
+			if err != nil {
+				t.Fatalf("no report from the helper: %v", err)
+			}
+			if string(got) != c.want {
+				t.Errorf("%s: %s, want %s", c.name, got, c.want)
+			}
+		})
 	}
 }
