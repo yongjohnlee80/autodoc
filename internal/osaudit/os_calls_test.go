@@ -36,6 +36,7 @@ var seamPackages = []string{
 	"internal/proctree",  // process trees: start, signal, stop
 	"internal/filelock",  // an exclusive file lock
 	"internal/diskspace", // free disk space
+	"internal/fileowner", // whether a file is this user's: its uid, or its owner SID
 	"internal/userdirs",  // the user's folders
 	"internal/usershell", // the default shell
 	"internal/procenv",   // the environment and the programs on its PATH
