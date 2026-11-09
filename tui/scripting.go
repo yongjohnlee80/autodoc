@@ -594,10 +594,10 @@ func (s *scripting) evalOnce(chunk string) error {
 	return nil
 }
 
-// rowsShown is a menu's rows as it opens: each row that shows, with its title, in serial order.
+// menuRowsShown is a menu's rows as it opens: each row that shows, with its title, in serial order.
 // An error, or the budget running out, leaves that row out; said is the open's one notice, "" for
 // none.
-func (m *menuRows) rowsShown(s *scripting, where string, ctx menuCtx) (shown []shownRow, said string) {
+func menuRowsShown(m *menuRows, s *scripting, where string, ctx menuCtx) (shown []shownRow, said string) {
 	end := time.Now().Add(menuBudget)
 	var first error
 	skipped := 0
@@ -661,10 +661,10 @@ type shownRow struct {
 	title string
 }
 
-// editorItems are the right-click menu's rows for ctx, after a separator; none without one. A
+// editorMenuItems are the right-click menu's rows for ctx, after a separator; none without one. A
 // script's words are its own: a row's label is only its & parsed, never a catalog translation.
-func (m *menuRows) editorItems(s *scripting, ctx menuCtx) []widgetcore.MenuItemModel {
-	shown, said := m.rowsShown(s, "editor", ctx)
+func editorMenuItems(m *menuRows, s *scripting, ctx menuCtx) []widgetcore.MenuItemModel {
+	shown, said := menuRowsShown(m, s, "editor", ctx)
 	if said != "" {
 		s.c.Notify(said)
 	}
@@ -696,10 +696,10 @@ func (m *menuRows) editorItems(s *scripting, ctx menuCtx) []widgetcore.MenuItemM
 	return items
 }
 
-// pluginsMenuRows are the Plugins menu's rows of scripts, as App.luaMenus lists them: each row,
+// pluginsMenuRowsOf is the Plugins menu's rows of scripts, as App.luaMenus lists them: each row,
 // or a submenu of them, in serial order.
-func (m *menuRows) pluginsMenuRows(s *scripting) []tuidecl.Row {
-	shown, _ := m.rowsShown(s, "plugins", menuCtx{})
+func pluginsMenuRowsOf(m *menuRows, s *scripting) []tuidecl.Row {
+	shown, _ := menuRowsShown(m, s, "plugins", menuCtx{})
 	var rows []tuidecl.Row
 	subs := map[string]*tuidecl.ListModel{}
 	var subRows = map[string][]tuidecl.Row{}

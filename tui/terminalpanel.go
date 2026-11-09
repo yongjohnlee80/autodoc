@@ -69,11 +69,24 @@ type TerminalPanel interface {
 // ErrResumeUnsupported is Resume where the platform has no SIGCONT.
 var ErrResumeUnsupported = errs.Sentinel(errs.ErrUnsupported, "resume: no SIGCONT on this platform")
 
-type terminalPanel struct{ tabs *terminal.TerminalTabs }
+type terminalPanel struct {
+	tabs   *terminal.TerminalTabs
+	resume func(*terminal.TerminalTabs, terminal.TerminalTabID) error // the host's, per OS; nil: none
+}
 
-// Resume is TerminalTabs.Signal with SIGCONT for that tab (resumeTab); where the platform has none,
-// it says so.
-func (p terminalPanel) Resume(id terminal.TerminalTabID) error { return resumeTab(p.tabs, id) }
+// newTerminalPanel is tabs as a TerminalPanel; resume is how the host wakes a tab's stopped
+// program (SIGCONT where the platform has it), nil where it has none.
+func newTerminalPanel(tabs *terminal.TerminalTabs, resume func(*terminal.TerminalTabs, terminal.TerminalTabID) error) TerminalPanel {
+	return terminalPanel{tabs: tabs, resume: resume}
+}
+
+// Resume is the host's resume for that tab; where the platform has none, it says so.
+func (p terminalPanel) Resume(id terminal.TerminalTabID) error {
+	if p.resume == nil {
+		return ErrResumeUnsupported
+	}
+	return p.resume(p.tabs, id)
+}
 
 func (p terminalPanel) SameOwner(other TerminalPanel) bool {
 	peer, ok := other.(terminalPanel)

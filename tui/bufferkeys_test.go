@@ -105,7 +105,7 @@ func TestSPCbIsTheBufferCard(t *testing.T) {
 			t.Errorf("no entry %s", id)
 			continue
 		}
-		if got := k.keysOf(e); !slices.Equal(got, []string{want}) {
+		if got := keysOf(k, e); !slices.Equal(got, []string{want}) {
 			t.Errorf("F1 names %s's keys %q, want %q", id, got, want)
 		}
 	}
