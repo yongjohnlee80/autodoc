@@ -10,13 +10,16 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/errs"
+
+	"github.com/yongjohnlee80/autodoc/internal/filelock"
 )
 
 // ErrBusy is a store another AutoDoc instance already serves: its lease is held.
 var ErrBusy = errs.Sentinel(errs.ErrPrecondition, "store: another instance serves this store")
 
-// acquireLease takes the single-instance lease on the store at path: an flock
-// on a sidecar named for the store's device and inode, beside it.
+// acquireLease takes the single-instance lease on the store at path: a file
+// lock (internal/filelock) on a sidecar named for the store's device and inode,
+// beside it.
 //
 // The lock names the DATABASE, not the spelling of the path: the store, a
 // symlink to it and a hardlink to it in its directory are one store. It is a
@@ -26,23 +29,19 @@ var ErrBusy = errs.Sentinel(errs.ErrPrecondition, "store: another instance serve
 // closing any descriptor to it would drop SQLite's fcntl locks; os.Stat reads
 // the inode without one. A missing store is created first (an empty file is a
 // valid empty SQLite database).
-func acquireLease(path string) (*os.File, error) {
+func acquireLease(path string) (filelock.Unlock, error) {
 	lockPath, err := leaseLockPath(path)
 	if err != nil {
 		return nil, err
 	}
-	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+	unlock, err := filelock.TryLock(lockPath)
+	if errors.Is(err, filelock.ErrHeld) {
+		return nil, fmt.Errorf("%w (%s)", ErrBusy, path)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("store: opening the lease file %s: %w", lockPath, err)
+		return nil, fmt.Errorf("store: the lease on %s: %w", path, err)
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		_ = f.Close()
-		if errors.Is(err, syscall.EWOULDBLOCK) {
-			return nil, fmt.Errorf("%w (%s)", ErrBusy, path)
-		}
-		return nil, fmt.Errorf("store: locking %s: %w", path, err)
-	}
-	return f, nil
+	return unlock, nil
 }
 
 func leaseLockPath(path string) (string, error) {

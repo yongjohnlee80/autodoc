@@ -162,7 +162,7 @@ func TestLease_AcquiresOverAnOpenStore(t *testing.T) {
 	if _, err := acquireLease(path); !errors.Is(err, ErrBusy) {
 		t.Errorf("a second lease = %v, want ErrBusy", err)
 	}
-	_ = f.Close()
+	_ = f()
 	if _, err := db.ExecContext(ctx, "INSERT INTO x VALUES (1)"); err != nil {
 		t.Errorf("releasing the lease disturbed the store: %v", err)
 	}
