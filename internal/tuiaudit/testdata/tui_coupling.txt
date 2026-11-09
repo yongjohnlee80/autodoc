@@ -18,6 +18,7 @@ gui	crew	host	Host.p	field
 gui	crew	host	Host.seams	field
 gui	crew	host	Host.workspaces	field
 gui	crew	host	Host.ws	field
+gui	crew	host	asPrefs	func
 gui	crew	host	boolPref	func
 gui	crew	host	choicePref	func
 gui	crew	host	choices	func
@@ -416,6 +417,7 @@ term	crew	host	Host.p	field
 term	crew	host	Host.seams	field
 term	crew	host	Host.workspaces	field
 term	crew	host	Host.ws	field
+term	crew	host	asPrefs	func
 term	crew	host	boolPref	func
 term	crew	host	choicePref	func
 term	crew	host	choices	func
