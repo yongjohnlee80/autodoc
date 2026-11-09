@@ -247,11 +247,13 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: the ported packages build, vet and pass
+      - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
         run: |
+          # the whole module's vet, not only the ported packages': it compiles every package's tests
+          # for Windows, so a neutral test can't come to lean on a helper in a Unix-tagged file
+          go vet ./...
           mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
-          go vet "${pkgs[@]}"
           go test -count=1 -timeout 20m "${pkgs[@]}"
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
