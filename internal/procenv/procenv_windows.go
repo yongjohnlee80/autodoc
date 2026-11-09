@@ -62,3 +62,6 @@ func runnable(path string) error {
 	}
 	return nil
 }
+
+// sameName is whether two variable names are one: equal but for case, as Windows compares them.
+func sameName(a, b string) bool { return strings.EqualFold(a, b) }
