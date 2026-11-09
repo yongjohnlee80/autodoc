@@ -231,6 +231,7 @@ the code ever disagree, the code is right and the page is fixed.
 - [Nothing moves until everything is checked](install.md#nothing-moves-until-everything-is-checked)
 - [update.sh runs the newest installer](install.md#updatesh-runs-the-newest-installer)
 - [About's Update and the restart](install.md#abouts-update-and-the-restart)
+- [Windows](install.md#windows)
 
 ## [The enterprise search server](server.md)
 
