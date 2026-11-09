@@ -300,8 +300,10 @@ jobs:
       # The TUI's GUI-only cells (the title bar's buffer tabs, the GUI editor's keys): no other job
       # builds tui/ with the gui tag, so they ran nowhere and main stayed green while two failed.
       # They need no display (decltest's backend), and run without -race to keep this job short.
+      # internal/tuiaudit checks the GUI build's rows of tui's feature map here
+      # (docs/decisions/editor.md#the-tui-packages-feature-map); the test job checks the terminal build's.
       - name: the TUI's GUI cells
-        run: go test -tags gui -count=1 -timeout 20m ./tui/
+        run: go test -tags gui -count=1 -timeout 20m ./tui/ ./internal/tuiaudit/
       # The export's GUI cells: the chart hook draws a chart as SVG
       # (docs/decisions/editor.md#charts-drawn-as-svg). Named, since app's other cells start the
       # GUI, which needs a display. Few and quick, so with -race.

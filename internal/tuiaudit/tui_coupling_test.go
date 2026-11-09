@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -119,6 +120,10 @@ func (c crossing) row() string {
 // how many files it read. One platform for every host: the ledger is linux/amd64's.
 func tuiCrossings(t *testing.T) ([]crossing, int) {
 	t.Helper()
+	if build == "gui" && runtime.GOOS != "linux" {
+		// the GUI build's rows are linux's, and gio's linux backend needs cgo, which a cross build lacks
+		t.Skipf("the GUI build's feature map is checked on linux (CI's Linux GUI job), not on %s", runtime.GOOS)
+	}
 	root := repoRoot(t)
 	env := append(os.Environ(), "GOOS=linux", "GOARCH=amd64")
 	tags := []string{}
