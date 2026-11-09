@@ -10,10 +10,17 @@
 //     (CheckAddr).
 //
 // What the OSes share is here: the guard's refusal, the checks' wording, Listen's order. Each OS's
-// primitive is in its own files: on Linux and macOS a unix socket in a folder only its user can
-// write, its peer read from the kernel (SO_PEERCRED on Linux, LOCAL_PEERCRED on macOS):
-// ipc_unix.go, listen_unix.go, peer_linux.go and peer_darwin.go. unsupported.go fails the build on
-// any other OS, naming the seam.
+// primitive is in its own files:
+//
+//   - Linux and macOS: a unix socket in a folder only its user can write, its peer read from the
+//     kernel (SO_PEERCRED, LOCAL_PEERCRED): ipc_unix.go, listen_unix.go, peer_linux.go and
+//     peer_darwin.go;
+//   - Windows: a named pipe named for the user's SID, whose protected DACL admits that SID alone;
+//     each end reads the other's process (GetNamedPipeClientProcessId, GetNamedPipeServerProcessId)
+//     and compares its token's SID, and a client refuses a pipe whose DACL admits anyone else:
+//     ipc_windows.go, over go-winio's pipe.
+//
+// unsupported.go fails the build on any other OS, naming the seam.
 //
 // The default address ($XDG_RUNTIME_DIR, or the 0700 state directory) passes every check; they bite
 // on a server.socket configured into a shared folder such as /tmp.

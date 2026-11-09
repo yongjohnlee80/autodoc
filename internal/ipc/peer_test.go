@@ -6,7 +6,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
@@ -17,28 +16,12 @@ import (
 // test's end.
 func playAnotherUser(t *testing.T) (restore func()) {
 	t.Helper()
-	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
 		t.Skip("no peer credentials on " + runtime.GOOS)
 	}
 	restore = PlayUser(os.Getuid() + 1)
 	t.Cleanup(restore)
 	return restore
-}
-
-// socketIn listens on a unix socket in a fresh short directory.
-func socketIn(t *testing.T) (net.Listener, string) {
-	t.Helper()
-	dir, err := os.MkdirTemp("", "pc")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	path := filepath.Join(dir, "s.sock")
-	ln, err := net.Listen("unix", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return ln, path
 }
 
 // serve accepts on ln until it closes, handing each connection to accepted; the returned wait
@@ -69,7 +52,7 @@ func TestTheDaemonDropsAnotherUsersConnection(t *testing.T) {
 
 	restore := playAnotherUser(t)
 	wait := serve(ln, accepted)
-	c, err := net.Dial("unix", path)
+	c, err := rawDial(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +78,7 @@ func TestTheDaemonDropsAnotherUsersConnection(t *testing.T) {
 	raw2, path2 := socketIn(t)
 	wait2 := serve(Guard(raw2, func(err error) { t.Errorf("this user's connection refused: %v", err) }), accepted)
 	defer wait2()
-	c2, err := net.Dial("unix", path2)
+	c2, err := rawDial(path2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,60 +115,16 @@ func TestAClientRefusesAnotherUsersDaemon(t *testing.T) {
 	}
 }
 
-// TestCheckDir: a socket's folder that its group or others can write, sticky or not, is refused,
-// as is one of another owner and a file; a folder only its owner writes is taken.
-func TestCheckDir(t *testing.T) {
-	dir := t.TempDir()
-	for _, mode := range []os.FileMode{0o700, 0o755, 0o750} {
-		if err := os.Chmod(dir, mode); err != nil {
-			t.Fatal(err)
-		}
-		if err := CheckDir(dir); err != nil {
-			t.Errorf("mode %#o: %v", mode, err)
-		}
-	}
-	var unsafe *UnsafeDirError
-	for _, mode := range []os.FileMode{0o770, 0o707, 0o777, 0o777 | os.ModeSticky} {
-		if err := os.Chmod(dir, mode); err != nil {
-			t.Fatal(err)
-		}
-		if err := CheckDir(dir); !errors.As(err, &unsafe) {
-			t.Errorf("mode %v: %v, want an UnsafeDirError", mode, err)
-		}
-	}
-	if err := os.Chmod(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	file := filepath.Join(dir, "f")
-	if err := os.WriteFile(file, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := CheckDir(file); !errors.As(err, &unsafe) {
-		t.Errorf("a file: %v, want an UnsafeDirError", err)
-	}
-	if os.Getuid() == 0 {
-		// run as root (a container), the folder is root's, which CheckDir accepts by design: make it
-		// another, unprivileged user's
-		if err := os.Chown(dir, 54321, -1); err != nil {
-			t.Fatal(err)
-		}
-	}
-	playAnotherUser(t)
-	if err := CheckDir(dir); !errors.As(err, &unsafe) {
-		t.Errorf("another user's folder: %v, want an UnsafeDirError", err)
-	}
-}
-
-// PeerPID names the process at the other end, from each end of a unix connection (here this test's
-// own process at both), and refuses a connection that is not a unix socket's rather than pass.
+// PeerPID names the process at the other end, from each end of a connection (here this test's own
+// process at both), and refuses a connection that is not ipc's rather than pass.
 func TestPeerPIDNamesTheProcessAtTheOtherEnd(t *testing.T) {
-	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
 		t.Skip("no peer process record on " + runtime.GOOS)
 	}
 	ln, path := socketIn(t)
 	accepted := make(chan net.Conn, 1)
 	defer serve(ln, accepted)()
-	c, err := net.Dial("unix", path)
+	c, err := rawDial(path)
 	if err != nil {
 		t.Fatal(err)
 	}
