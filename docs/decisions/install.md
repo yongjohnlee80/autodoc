@@ -92,6 +92,10 @@ binary in its place with the same arguments. Unsaved work is asked about first, 
 Nothing is downloaded or replaced without the user's Update, and AutoDoc reads no output of
 update.sh: it trusts only the new binary's `--version`.
 
+Update is hidden while the start's look for a newer release is out, and when it found this is the
+latest. It stays when that look had no answer (offline, the preference off, a build that is not a
+release): AutoDoc can't say then that there is nothing to update to.
+
 In the code: `internal/install`, `tui/update.go`, `tui/startup.go`, `app/relaunch.go`
 
 ## Windows
