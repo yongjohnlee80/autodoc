@@ -30,6 +30,7 @@ func withFakeSurfaces(t *testing.T) *fakeSink {
 // pointer reaches it in dp, with press, release, move and scroll; the user's paste reaches it; and
 // a right press still opens the card's menu.
 func TestAProtocolTenCardRunsItsSurface(t *testing.T) {
+	t.Parallel()
 	withFakeSurfaces(t)
 	dir := t.TempDir()
 	installPluginAt(t, dir, "card", "dialog", "echo", surfaceCard, 10)
@@ -79,6 +80,7 @@ func TestAProtocolTenCardRunsItsSurface(t *testing.T) {
 
 // A surface plugin whose manifest requires pixels isn't opened where the host draws none.
 func TestARequiredSurfaceIsNotOpenedWithoutPixels(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPluginAt(t, dir, "card", "dialog", "echo", rightCard+"[surface]\nrequired = true\n", 10)
 	_, r, _ := cardTUI(t, dir, nil)
@@ -89,6 +91,7 @@ func TestARequiredSurfaceIsNotOpenedWithoutPixels(t *testing.T) {
 
 // Without pixels a surface plugin runs on cells, as any plugin does.
 func TestASurfacePluginDrawsCellsWithoutPixels(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPluginAt(t, dir, "card", "dialog", "echo", surfaceCard, 10)
 	_, r, logs := cardTUI(t, dir, nil)
@@ -108,6 +111,7 @@ func TestASurfacePluginDrawsCellsWithoutPixels(t *testing.T) {
 // its place inside the cell, with its modifiers; an event it doesn't take (no button, a kind it
 // doesn't know), or one before the view is laid out, isn't sent. A terminal's view has no native view.
 func TestASurfacePointerIsInDpForEachKind(t *testing.T) {
+	t.Parallel()
 	if p, ok := (&pluginView{}).surfacePointer(tuicore.MouseEvent{Kind: tuicore.MouseMotion}); ok {
 		t.Errorf("a view never laid out sent %+v", p)
 	}
@@ -163,6 +167,7 @@ func TestASurfacePointerIsInDpForEachKind(t *testing.T) {
 
 // A card whose surface has its own context menu gets the right press, and the host opens none.
 func TestASurfaceWithItsOwnMenuGetsTheRightPress(t *testing.T) {
+	t.Parallel()
 	withFakeSurfaces(t)
 	dir := t.TempDir()
 	installPluginAt(t, dir, "card", "dialog", "echo", rightCard+"[surface]\ncontext_menu = \"plugin\"\n", 10)
@@ -184,6 +189,7 @@ func TestASurfaceWithItsOwnMenuGetsTheRightPress(t *testing.T) {
 // height a step. A plugin's host.surface.cursor reaches the run, the default for a name the host
 // doesn't know.
 func TestASurfaceScrollIsPreciseAndItsPointerShapeArrives(t *testing.T) {
+	t.Parallel()
 	withFakeSurfaces(t)
 	dir := t.TempDir()
 	installPluginAt(t, dir, "card", "dialog", "echo", surfaceCard, 10)

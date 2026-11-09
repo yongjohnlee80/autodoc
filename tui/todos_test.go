@@ -110,6 +110,7 @@ func listedIn(t *testing.T, d *daemon, bucket string) []todo.Task {
 // its note, and every write's key does nothing: no dialog, no notice, no error. SPC x again closes
 // the panel.
 func TestTodosShowsAReleasedStoreReadOnly(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, false, todo.Spec{Title: "Write the view", Priority: "high"})
 	r := attached(t, d)
@@ -140,6 +141,7 @@ func TestTodosShowsAReleasedStoreReadOnly(t *testing.T) {
 // by that write, marker and all. Nothing on the way is a notice or a toast: the view's reads of the
 // store not made yet answer it empty.
 func TestTodosAddsAFreshWorkspacesFirstTask(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.s.WaitFor(t, "kb entered", func(string) bool { return onLoop(r, func() bool { return r.h.ws == "kb" }) })
@@ -192,6 +194,7 @@ func TestTodosAddsAFreshWorkspacesFirstTask(t *testing.T) {
 // that status showing with the cursor on it; d removes after asking. Each lands in the store. d is
 // the panel's alone: with the keyboard in the page it asks nothing.
 func TestTodosAddsChoosesAStatusAndRemoves(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true)
 	r := attached(t, d)
@@ -233,6 +236,7 @@ func TestTodosAddsChoosesAStatusAndRemoves(t *testing.T) {
 // TestTodosStatusPickerArchivesATask: archived is one of s's statuses: the task is filed under its
 // month, as the daemon files it, and the Archived tab shows that month with the cursor on it.
 func TestTodosStatusPickerArchivesATask(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true, todo.Spec{Title: "Old news"})
 	r := attached(t, d)
@@ -248,6 +252,7 @@ func TestTodosStatusPickerArchivesATask(t *testing.T) {
 // TestTodosArchiveIsReadByMonth: Archived lists its months, and a month's tasks are read only once
 // it is opened.
 func TestTodosArchiveIsReadByMonth(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true, todo.Spec{Title: "Old and done", Status: "archived"}, todo.Spec{Title: "Still open"})
 	r := attached(t, d)
@@ -264,6 +269,7 @@ func TestTodosArchiveIsReadByMonth(t *testing.T) {
 // TestTodosRefreshesOnAnotherClientsChange: todos.changed from another client reads the tab shown
 // again, so the panel never shows a stale list.
 func TestTodosRefreshesOnAnotherClientsChange(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true)
 	r := attached(t, d)
@@ -279,6 +285,7 @@ func TestTodosRefreshesOnAnotherClientsChange(t *testing.T) {
 // TestTodosStoreDropdownShowsOneStore: the dropdown shows the store shown alone; another chosen in
 // it (Enter opens it, ↓ and Enter choose) shows its own tasks, and the first's are gone.
 func TestTodosStoreDropdownShowsOneStore(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true, todo.Spec{Title: "A kb task"})
 	ctx := context.Background()
@@ -365,6 +372,7 @@ func panelFrame(sc string) (row, left, right int) {
 // Remove and Add, whole, and nothing else. A click on Status… opens the picker, and the task moves
 // to the status chosen, the cursor following it. A size the user gives the panel is kept, and wins.
 func TestTodosPanelOpensLargeWithOneActionRow(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true, todo.Spec{Title: "Ship it"})
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 80, 40)
@@ -459,6 +467,7 @@ func TestTodosPanelOpensLargeWithOneActionRow(t *testing.T) {
 // by default; as two drawers on one edge do, each opens over the page, the one opened later drawn
 // over the other, and Ctrl+l from either goes back to the page.
 func TestTodosSharesTheLeftEdgeWithTheExplorer(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true, todo.Spec{Title: "Ship it"})
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 100, 30)
@@ -502,6 +511,7 @@ func todosOf(r *running) *todos {
 // purpose, over the page as SPC's is; ? again closes it, and so does Esc; a key on it runs, the
 // card closing first. The panel holds no inline list of keys.
 func TestTodosQuestionMarkOpensTheKeysCard(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true)
 	r := attached(t, d)
@@ -580,6 +590,7 @@ func todosState(r *running) string {
 // and whether it is released, the open dialog, and the view the keyboard is in, as they are (the
 // mutants: a field left out, or read from the wrong place).
 func TestTodosStateSaysWhatTheKeysRead(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true)
 	r := attached(t, d)
@@ -621,6 +632,7 @@ func TestTodosStateSaysWhatTheKeysRead(t *testing.T) {
 // then (the keys card cell's one red, in a loaded whole ./tui run). Put back in that state, the
 // panel holds tabRead until its store is shown again (the mutant: the store not waited for).
 func TestTabReadWaitsForTheStore(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true)
 	r := attached(t, d)
@@ -668,6 +680,7 @@ func (f *fatalRecorder) Fatalf(format string, args ...any) {
 // must never change the task being read. The details' read-only Editor lets the edit keys it refuses
 // (a d s i o) bubble. In the tab's table they still work, and on the action row's buttons too.
 func TestTodosKeysAreTheListsNotTheDetails(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true, todo.Spec{Title: "Read me"})
 	r := attached(t, d)
@@ -704,6 +717,7 @@ func TestTodosKeysAreTheListsNotTheDetails(t *testing.T) {
 // TestTodosTabKeysInThePanel: ] and [ step through the tabs, round (Variables last), 1–6 pick one, and a click on a
 // tab's title shows it: each read, the keyboard in its table.
 func TestTodosTabKeysInThePanel(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true, todo.Spec{Title: "Ship it"}, todo.Spec{Title: "Later", Status: "deferred"})
 	r := attached(t, d)

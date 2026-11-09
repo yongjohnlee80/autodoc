@@ -223,6 +223,7 @@ func slowFeed(t *testing.T) {
 // manifest rather than run a plugin whose results it cannot show; it names the panel's title, and
 // the install question says it shows a table.
 func TestATableNeedsProtocolFour(t *testing.T) {
+	t.Parallel()
 	const head = "name = \"p\"\nkind = \"service\"\ncommand = [\"x\"]\n[[commands]]\nid = \"run\"\ntitle = \"Run\"\n"
 	for _, c := range []struct{ toml, reason string }{
 		{"protocol = 4\n" + head + "[table]\ntitle = \"Results\"\n", ""},
@@ -248,6 +249,7 @@ func TestATableNeedsProtocolFour(t *testing.T) {
 // of those loaded, and asks again only once the plugin has answered: however often the table wants
 // more, a fetch waiting is never sent twice.
 func TestAFetchWaitsForItsAnswer(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin4(t, dir, "rows", "service", "tablestall", tableManifest)
 	r, logs := pluginTUI(t, dir)
@@ -282,6 +284,7 @@ func TestAFetchWaitsForItsAnswer(t *testing.T) {
 // TestANewerTableClosesTheOld: a newer host.table replaces the one shown, and its plugin is told
 // the old one is gone (plugin.table.close); closing the panel tells it of the one shown.
 func TestANewerTableClosesTheOld(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin4(t, dir, "rows", "service", "table", tableManifest)
 	r, logs := pluginTUI(t, dir)
@@ -344,6 +347,7 @@ func wantAllRows(t *testing.T, records [][]string, n int) {
 // the sort's order. After scrolling loads another page, it writes both. No .part is left. A file
 // there already is asked about, and replaced once the rows are written.
 func TestExportingTheLoadedRowsAsCSV(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin4(t, dir, "rows", "service", "table", tableManifest)
 	r, logs := pluginTUI(t, dir)
@@ -423,6 +427,7 @@ func (r *running) wantNoFetchSince(t *testing.T, logs string, fetches int) {
 // the same name, asked about and accepted) removes its .part and leaves the folder as it was; one
 // whose .part is there already writes nothing, and leaves that .part alone.
 func TestAFailedExportLeavesNothing(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin4(t, dir, "rows", "service", "tablestall", tableManifest)
 	r, _ := pluginTUI(t, dir)
@@ -465,6 +470,7 @@ func TestAFailedExportLeavesNothing(t *testing.T) {
 // now into the page, on lines of their own, a cell on one line with its | escaped; while the result
 // has more the notice says so, and that changing the query changes what is returned.
 func TestInsertingTheLoadedRowsAsMarkdown(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin4(t, dir, "rows", "service", "tablestall", tableManifest)
 	r, _ := pluginTUI(t, dir)
@@ -502,6 +508,7 @@ func TestInsertingTheLoadedRowsAsMarkdown(t *testing.T) {
 // by the command with no pause for the feed, run on the new text, cursor and selection: the command
 // carries them. The byte offsets are the grapheme cursor's, on multibyte text.
 func TestACommandCarriesTheNoteItWasChosenOn(t *testing.T) {
+	t.Parallel()
 	slowFeed(t)
 	dir := t.TempDir()
 	installPlugin4(t, dir, "snap", "dialog", "snap", snapManifest)
@@ -564,6 +571,7 @@ func TestACommandCarriesTheNoteItWasChosenOn(t *testing.T) {
 // document waiting, but not the command's: the command runs on the note it was chosen on, and the
 // newer one arrives after it.
 func TestACommandRunsOnItsOwnNoteWhenANewerOneFollows(t *testing.T) {
+	t.Parallel()
 	slowFeed(t)
 	dir := t.TempDir()
 	installPlugin4(t, dir, "snap", "dialog", "snap", snapManifest)
@@ -610,6 +618,9 @@ func TestACommandRunsOnItsOwnNoteWhenANewerOneFollows(t *testing.T) {
 // inside a plugin.command goes with the command as its too-large form, through the real link; the
 // plugin stays connected, and the next command carries its note whole.
 func TestACommandTooLargeForTheLinkGoesTooLarge(t *testing.T) {
+	// Serial: it holds a 1 MiB document, which golib's editor lays out whole on SetValue (about
+	// 5 GB under -race), so two such cells at once pass a gate lane's memory. It runs in parallel
+	// again once the editor lays out only what it shows (the AM-6 memory fix in golib).
 	slowFeed(t)
 	dir := t.TempDir()
 	installPlugin4(t, dir, "snap", "dialog", "snap", snapManifest)
@@ -665,6 +676,7 @@ func TestACommandTooLargeForTheLinkGoesTooLarge(t *testing.T) {
 // read as plain text, with no Markdown table keys, though its text looks like a Markdown table; a
 // note beside it keeps them.
 func TestASQLFileOpensAsSource(t *testing.T) {
+	t.Parallel()
 	const table = "| a | b |\n|---|---|\n| 1 | 2 |\n"
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", table, "q.sql", table}}, daemonOpts{goFiles: true, chunked: ".sql"})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
@@ -709,6 +721,7 @@ func pluginLogHas(logs, name, text string) bool {
 // the shown table's id. It is refused and noted; the table shown, and its rows, are as they were, and
 // the fetch's answer is taken as the shown table's: nothing of the new one mixes in.
 func TestATableReusingTheShownIDIsRefused(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin4(t, dir, "rows", "service", "tablereuse", tableManifest)
 	r, logs := pluginTUI(t, dir)
@@ -727,6 +740,7 @@ func TestATableReusingTheShownIDIsRefused(t *testing.T) {
 // TestAReusedIDLeavesAnExportWhole: the same reuse at every fetch while the reader scrolls page
 // after page in: the export writes every row loaded once, in order, none of the refused tables'.
 func TestAReusedIDLeavesAnExportWhole(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin4(t, dir, "rows", "service", "tablereuse", tableManifest)
 	r, _ := pluginTUI(t, dir)
@@ -757,6 +771,7 @@ func TestAReusedIDLeavesAnExportWhole(t *testing.T) {
 // TestRowsNoFetchAskedForAreDropped: host.rows with no fetch waiting are dropped and noted, the
 // table as it was.
 func TestRowsNoFetchAskedForAreDropped(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin4(t, dir, "rows", "service", "tablestall", tableManifest)
 	r, logs := pluginTUI(t, dir)
@@ -779,6 +794,7 @@ func TestRowsNoFetchAskedForAreDropped(t *testing.T) {
 // more; the panel never holds more than 250 (every change the model announces is measured). The
 // export writes those 250, fetching nothing past the cap, and says the result has more.
 func TestThePanelHoldsAtMostItsCap(t *testing.T) {
+	t.Parallel()
 	tune(t).resultsResident = 250
 	dir := t.TempDir()
 	installPlugin4(t, dir, "rows", "service", "table1000", tableManifest)
@@ -859,6 +875,7 @@ func (r *running) app(t *testing.T, name string, args ...qml.SpecValue) {
 // cannot; results.toggle closes the panel, telling the plugin its table is gone, and Go › Results
 // opens it again, empty.
 func TestTheResultsCommandsRunFromTheCatalogAndThePanel(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin4(t, dir, "rows", "service", "tablestall", tableManifest)
 	r, logs := resultsTUI(t, dir, map[string][]string{"kb": {"a.md", "# A\n", "manual.pdf", manualPDF}}, daemonOpts{deriver: pdfAsText{}})
@@ -942,6 +959,7 @@ func TestTheResultsCommandsRunFromTheCatalogAndThePanel(t *testing.T) {
 // TestQuittingStopsAnExport: AutoDoc quitting with an export not finished (its writer held after
 // its first chunk) cancels it: the .part is removed and the chosen path never written.
 func TestQuittingStopsAnExport(t *testing.T) {
+	t.Parallel()
 	entered, release := make(chan struct{}), make(chan struct{})
 	var once sync.Once
 	tune(t).exportWritten = func(int) {
@@ -982,6 +1000,7 @@ func TestQuittingStopsAnExport(t *testing.T) {
 // never another view or an id that is none; before the program runs the host has neither a table
 // nor a page to insert into.
 func TestTheHostsTableAndBlockServices(t *testing.T) {
+	t.Parallel()
 	early := core{newHost(NewSession("unused", nil), Options{})}
 	if early.TableCore(resultsView) != nil {
 		t.Error("a table before the program runs")

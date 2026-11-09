@@ -33,6 +33,7 @@ func updateScript(t *testing.T, code string) string {
 // says it installed this AutoDoc; with no record, another method's, or one that doesn't read,
 // About shows Close alone.
 func TestAboutOffersUpdateOnlyForAScriptInstall(t *testing.T) {
+	t.Parallel()
 	notes := map[string][]string{"kb": {"a.md", "a\n"}}
 	for _, tc := range []struct {
 		name   string
@@ -66,6 +67,7 @@ func TestAboutOffersUpdateOnlyForAScriptInstall(t *testing.T) {
 // terminal panel; when it ends well and the binary at this one's path is newer, AutoDoc asks to
 // restart, naming both versions. A failed update.sh says its code, and offers nothing.
 func TestUpdateRunsUpdateShAndOffersTheRestart(t *testing.T) {
+	t.Parallel()
 	disarm(t)
 	tuneEnv(t, "SHELL=/bin/sh", "HOME="+t.TempDir(), "PS1=$ ")
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
@@ -96,6 +98,7 @@ func TestUpdateRunsUpdateShAndOffersTheRestart(t *testing.T) {
 // TestAnUpdateThatChangedNothingSaysSo: update.sh ended well, but the binary at this one's path is
 // the version running: no restart is offered.
 func TestAnUpdateThatChangedNothingSaysSo(t *testing.T) {
+	t.Parallel()
 	disarm(t)
 	tuneEnv(t, "SHELL=/bin/sh", "HOME="+t.TempDir())
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
@@ -115,6 +118,7 @@ func TestAnUpdateThatChangedNothingSaysSo(t *testing.T) {
 // TestRestartNowWithNoBackendOfItsOwnRelaunchesTheUI: a program that starts no daemon has none to
 // restart: Restart now quits it to relaunch (Run returns ErrRelaunch).
 func TestRestartNowWithNoBackendOfItsOwnRelaunchesTheUI(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{InstallRecord: scriptInstall("/u.sh")})
 	r.connected(t)
@@ -126,6 +130,7 @@ func TestRestartNowWithNoBackendOfItsOwnRelaunchesTheUI(t *testing.T) {
 // TestRestartNowRestartsTheBackendThenRelaunches: with a backend of its own, Restart now restarts it
 // as Restart backend… does, and once the installed one answers, the UI quits to relaunch.
 func TestRestartNowRestartsTheBackendThenRelaunches(t *testing.T) {
+	t.Parallel()
 	dir, err := os.MkdirTemp("", "upd")
 	if err != nil {
 		t.Fatal(err)
@@ -171,6 +176,7 @@ func TestRestartNowRestartsTheBackendThenRelaunches(t *testing.T) {
 // TestHowToUpdateIsAboutsUpdateForAScriptInstall: a newer release's word says About › Update when
 // install-autodoc.sh installed this AutoDoc, whatever its path.
 func TestHowToUpdateIsAboutsUpdateForAScriptInstall(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	s := startupOf(r)

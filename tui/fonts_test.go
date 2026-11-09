@@ -108,6 +108,7 @@ func runWindowTUI(t *testing.T, prefs map[string]string, fonts *fakeFonts) (*dae
 // TestTheWindowsFontsComeFromTheStore: the stored fonts and zoom are told to the window when the
 // preferences load, once each; one changed is told again alone.
 func TestTheWindowsFontsComeFromTheStore(t *testing.T) {
+	t.Parallel()
 	fonts := &fakeFonts{}
 	d, r := runWindowTUI(t, map[string]string{"gui.font.cell": "JetBrains Mono", "gui.font.size": "16",
 		"gui.font.prose": "Noto Serif", "gui.zoom": "125"}, fonts)
@@ -125,6 +126,7 @@ func TestTheWindowsFontsComeFromTheStore(t *testing.T) {
 // TestZoomStepsStopAtTheEnds: Ctrl+= and Ctrl+- move between the steps and stop at 100% and 200%;
 // Ctrl+0 is 100%, and the first step in from it is 110%.
 func TestZoomStepsStopAtTheEnds(t *testing.T) {
+	t.Parallel()
 	fonts := &fakeFonts{}
 	d, r := runWindowTUI(t, map[string]string{"gui.zoom": "175"}, fonts)
 	r.s.WaitFor(t, "the zoom told", func(string) bool { return slices.Contains(fonts.all(), "zoom 175") })
@@ -145,6 +147,7 @@ func TestZoomStepsStopAtTheEnds(t *testing.T) {
 // TestTheFontsDialogListsTheFamilies: Options › Fonts and zoom… lists the default and the installed
 // families, the stored one chosen; a choice is stored and told to the window at once.
 func TestTheFontsDialogListsTheFamilies(t *testing.T) {
+	t.Parallel()
 	fonts := &fakeFonts{}
 	d, r := runWindowTUI(t, map[string]string{"gui.font.cell": "JetBrains Mono"}, fonts)
 	onLoop(r, func() bool { r.h.openFonts(); return true })
@@ -162,6 +165,7 @@ func TestTheFontsDialogListsTheFamilies(t *testing.T) {
 // TestATerminalHasNoFonts: in a terminal there are no fonts to set: Options' entries hide, the zoom
 // keys and Fonts do nothing but say why, and the right-click menu has no Zoom.
 func TestATerminalHasNoFonts(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	onLoop(r, func() bool { r.h.zoomStep(1); r.h.setZoom(150); r.h.choosePrefNamed(prefExplorer, 1); return true })
@@ -188,6 +192,7 @@ func TestATerminalHasNoFonts(t *testing.T) {
 // TestTheTutorialPagesStopAtTheEnds: Help › Tutorial… opens at page 1, docs/tutorials' first; Back
 // does nothing there, Next goes on to the last page and stops. The index (README.md) is no page.
 func TestTheTutorialPagesStopAtTheEnds(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	onLoop(r, func() bool { r.h.openTutorial(); return true })
@@ -212,6 +217,7 @@ func TestTheTutorialPagesStopAtTheEnds(t *testing.T) {
 // page 1 stays there, and Next on the last page reads Close and closes the tutorial. Enter on the
 // focused Next does the same.
 func TestTheTutorialsButtonsWalkItAndCloseIt(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	n := len(tutorialPages)
@@ -262,6 +268,7 @@ func TestTheTutorialsButtonsWalkItAndCloseIt(t *testing.T) {
 // TestSpacePeriodOpensTheRightClickMenu: SPC . opens the page's right-click menu at the cursor, and
 // the menu, not the page, has the keyboard.
 func TestSpacePeriodOpensTheRightClickMenu(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.leader(t, '.')
@@ -274,6 +281,7 @@ func TestSpacePeriodOpensTheRightClickMenu(t *testing.T) {
 // TestTheFontsDialogShowsTheDefaultAtFirst: with no font chosen yet, the choosers read "(the
 // default)" the first time the dialog opens, not a blank field.
 func TestTheFontsDialogShowsTheDefaultAtFirst(t *testing.T) {
+	t.Parallel()
 	fonts := &fakeFonts{}
 	_, r := runWindowTUI(t, nil, fonts)
 	onLoop(r, func() bool { r.h.openFonts(); return true })
@@ -284,6 +292,7 @@ func TestTheFontsDialogShowsTheDefaultAtFirst(t *testing.T) {
 // TestTheRightClickRowsHaveAccessKeysButNotHJKL: AutoDoc's rows in the page's right-click menu
 // each have an access key, none twice in a level, and none of h j k l, which move the cursor there.
 func TestTheRightClickRowsHaveAccessKeysButNotHJKL(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	rows := onLoop(r, func() []widgetcore.MenuItemModel {
@@ -318,6 +327,7 @@ func TestTheRightClickRowsHaveAccessKeysButNotHJKL(t *testing.T) {
 // minimum (80 × 20) is refused and said, so the too-small screen, with only its Quit, never comes
 // of it; a stored zoom the window cannot hold is drawn at the largest step it can.
 func TestZoomStopsBeforeTheScreenIsTooSmall(t *testing.T) {
+	t.Parallel()
 	// 120 × 40 at 100%: 125% leaves 96 columns, 150% would leave 80, which a cell's rounding could
 	// take under the minimum
 	fonts := &fakeFonts{grid: tuicore.Size{W: 120, H: 40}}
@@ -347,6 +357,7 @@ func TestZoomStopsBeforeTheScreenIsTooSmall(t *testing.T) {
 // TestTwoQuickZoomsAreJudgedByTheWindowDrawn: a second Ctrl+= before the window has drawn the
 // first is judged by the grid the window still has, not the one it will have.
 func TestTwoQuickZoomsAreJudgedByTheWindowDrawn(t *testing.T) {
+	t.Parallel()
 	// 96 × 40 at 100%: 110% leaves 87 columns, 125% 76; that grid judged as 110%'s would leave 84
 	fonts := &fakeFonts{grid: tuicore.Size{W: 96, H: 40}, lag: true}
 	d, r := runWindowTUI(t, nil, fonts)
@@ -366,6 +377,7 @@ func TestTwoQuickZoomsAreJudgedByTheWindowDrawn(t *testing.T) {
 // columns is refused (130 columns, 175% is 74). And a frame drawn between two of
 // them is drawn at the latest told, which the next step judges by.
 func TestSeveralQuickZoomsAreJudgedByTheWindowDrawn(t *testing.T) {
+	t.Parallel()
 	fonts := &fakeFonts{grid: tuicore.Size{W: 130, H: 40}, lag: true}
 	d, r := runWindowTUI(t, nil, fonts)
 	r.s.WaitFor(t, "the fonts told", func(string) bool { return len(fonts.all()) > 0 })
@@ -390,6 +402,7 @@ func TestSeveralQuickZoomsAreJudgedByTheWindowDrawn(t *testing.T) {
 // to 150%, and the frame publishes its 125% grid after; that grid is judged by 125%, its own, so 175%
 // (74 columns of 130) is refused.
 func TestAGridMeasuredBeforeAZoomIsJudgedByItsOwnFonts(t *testing.T) {
+	t.Parallel()
 	fonts := &fakeFonts{grid: tuicore.Size{W: 130, H: 40}, lag: true}
 	d, r := runWindowTUI(t, nil, fonts)
 	r.s.WaitFor(t, "the fonts told", func(string) bool { return len(fonts.all()) > 0 })
@@ -426,6 +439,7 @@ func (f *frameRecorder) Frame(cells []tuicore.Cell, _, _ int, _ tuicore.Point, _
 // In a window the terminal panel's shells are views of their own (paneltext_gui.go), so the face is
 // read where a view is handed it: the frame each is drawn from.
 func TestTheTerminalsFontIsTheirs(t *testing.T) {
+	t.Parallel()
 	tuneEnv(t, "SHELL=/bin/sh", "PS1=$ ")
 	fonts := &fakeFonts{}
 	d, r := runWindowTUI(t, map[string]string{"gui.font.terminal": "JetBrains Mono"}, fonts)
@@ -469,6 +483,7 @@ func TestTheTerminalsFontIsTheirs(t *testing.T) {
 // fonts (no "draws in its own" note); a font chosen there is stored, and Esc puts back the one
 // before. Once OK has kept a choice, a late cancel puts nothing back.
 func TestTheTerminalsLookInAWindowPutsTheFontBack(t *testing.T) {
+	t.Parallel()
 	d, r := runWindowTUI(t, nil, &fakeFonts{})
 	look := func() {
 		t.Helper()
@@ -507,6 +522,7 @@ func TestTheTerminalsLookInAWindowPutsTheFontBack(t *testing.T) {
 // older 75) the nearest, the larger of two as near. It stores the one chosen
 // (docs/decisions/editor.md#the-terminal-text-size).
 func TestTheAgentsTextSizeIsStored(t *testing.T) {
+	t.Parallel()
 	fonts := &fakeFonts{}
 	d, r := runWindowTUI(t, map[string]string{"tui.agent.text.scale": "80"}, fonts)
 	index := func() string {
@@ -535,6 +551,7 @@ func TestTheAgentsTextSizeIsStored(t *testing.T) {
 // The tutorial's page wears the theme's cursor, as the editor does: under sepia the terminal is told
 // sepia's, rather than left to its own colour on the light page.
 func TestTheTutorialsCursorIsTheThemes(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	onLoop(r, func() bool { r.h.useTheme("sepia"); r.h.openTutorial(); return true })

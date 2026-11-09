@@ -121,6 +121,7 @@ func kindsTUI(t *testing.T, mode string) (*running, string) {
 // reads it through its kinds (golib's TableKinds), so it sorts by them; a protocol-4 table is
 // shown through the model alone. The SDK's kind bytes are golib's.
 func TestKindsReachTheTableFromProtocolFive(t *testing.T) {
+	t.Parallel()
 	r, _ := kindsTUI(t, "tablestall")
 	got := onLoop(r, func() string {
 		m := r.h.plugins.results.model
@@ -154,6 +155,7 @@ func TestKindsReachTheTableFromProtocolFive(t *testing.T) {
 // of the table's fields is dropped, noted, and ends the table's rows there, the rows before it kept
 // as they were; a host.table whose kinds do not fit is refused, the table shown kept.
 func TestAKindsPageThatDoesNotFitIsDropped(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin5(t, dir, "kinds", "service", "kindsbad", tableManifest)
 	r, logs := pluginTUI(t, dir)
@@ -184,6 +186,7 @@ func TestAKindsPageThatDoesNotFitIsDropped(t *testing.T) {
 // says it covers the loaded rows; on a whole result the note is empty. The rows are numbered, the
 // gutter as wide as the last number.
 func TestTheSortIsInBuffer(t *testing.T) {
+	t.Parallel()
 	r, logs := kindsTUI(t, "tablestall")
 	if note := r.source("App.resultsViewNote"); note != "" {
 		t.Errorf("the note on a whole result: %q", note)
@@ -226,6 +229,7 @@ func TestTheSortIsInBuffer(t *testing.T) {
 // equal rows in the query's order. While a name is typed the line offers the fields it may be, a
 // shared one as its positions. The s key writes its sort back to the bar.
 func TestTheSortBarReadsTheFields(t *testing.T) {
+	t.Parallel()
 	r, _ := kindsTUI(t, "tablestall")
 	names := func(order ...int) []string {
 		out := make([]string, len(order))
@@ -287,6 +291,7 @@ const wantJSON = `[
 // extension takes .json. A protocol-4 table's values are all strings. A failed write leaves no
 // .part.
 func TestJSONIsExact(t *testing.T) {
+	t.Parallel()
 	r, _ := kindsTUI(t, "tablestall")
 	out := t.TempDir()
 	onLoop(r, func() bool {
@@ -342,6 +347,7 @@ func TestJSONIsExact(t *testing.T) {
 // TestThePanelActsOnTheView: sorted by two keys, the loaded rows leave as shown: the CSV and JSON
 // exports, a V selection's copies as TSV, CSV, JSON and Markdown, and results.markdown.
 func TestThePanelActsOnTheView(t *testing.T) {
+	t.Parallel()
 	r, _ := kindsTUI(t, "tablestall")
 	order := []int{4, 1, 2, 0, 3}
 	var names []string
@@ -436,6 +442,7 @@ func markdownNames(text string) []string {
 // no line of more; JSON chosen, the save dialog's name ends .json and a name with no extension takes
 // it; results.csv opens the dialog on CSV again, and results.export keeps the last choice.
 func TestTheExportDialogSaysWhatItTakes(t *testing.T) {
+	t.Parallel()
 	r, _ := kindsTUI(t, "tablestall")
 	if err := onLoop(r, func() error { return r.h.cat.run("results.export", nil) }); err != nil {
 		t.Fatal(err)
@@ -486,6 +493,7 @@ func (r *running) resultsMenuRow(t *testing.T, id string) {
 // command: the copies, Select all, the sorts and Unsort, Export loaded rows… and Insert as
 // Markdown. A copy past the cap copies nothing and says to export.
 func TestTheMenuRowsRunTheirCommands(t *testing.T) {
+	t.Parallel()
 	r, _ := kindsTUI(t, "tablestall")
 	onLoop(r, func() bool {
 		tc := r.resultsCore()
@@ -548,6 +556,7 @@ func TestTheMenuRowsRunTheirCommands(t *testing.T) {
 // them, it is in the theme's inactive highlight (not the faint highlight a table has without it);
 // when the keys come back, the highlight again.
 func TestTheBlurredCursor(t *testing.T) {
+	t.Parallel()
 	r, _ := kindsTUI(t, "tablestall")
 	look := func(id string) string {
 		return onLoop(r, func() string {
@@ -582,6 +591,7 @@ func TestTheBlurredCursor(t *testing.T) {
 // text typed into its input and entered sorts the rows. Each clause keeps its own text as the
 // dropdown moves between them, and WHERE's Enter filters the rows the sort orders.
 func TestTheBarIsAClauseAndItsText(t *testing.T) {
+	t.Parallel()
 	r, _ := kindsTUI(t, "tablestall")
 	r.s.WaitForText(t, "ORDER BY")
 	read := func(id, prop string) string {

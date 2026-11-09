@@ -31,6 +31,7 @@ func (f *fake) Event(kind, ws, detail string) { f.heard = append(f.heard, kind+"
 var noop = none(func() {})
 
 func TestTheRegistryMergesFeatures(t *testing.T) {
+	t.Parallel()
 	a := &fake{name: "a", state: map[string]any{"App.a": 1}, cmds: map[string]Command{"App.doA": noop}}
 	b := &fake{name: "b", state: map[string]any{"App.b": "x"}, cmds: map[string]Command{"App.doB": noop}, kinds: []string{"b.changed"}}
 	r, err := newRegistry(a, b)
@@ -57,6 +58,7 @@ func TestTheRegistryMergesFeatures(t *testing.T) {
 }
 
 func TestTheRegistryRefusesANameTwoFeaturesClaim(t *testing.T) {
+	t.Parallel()
 	for name, b := range map[string]*fake{
 		"a source":                    {name: "b", state: map[string]any{"App.a": 2}},
 		"a command":                   {name: "b", cmds: map[string]Command{"App.doA": noop}},
@@ -72,6 +74,7 @@ func TestTheRegistryRefusesANameTwoFeaturesClaim(t *testing.T) {
 // TestTheLegacyFeatureIsTheWholeHost: the host's own state and commands are one feature, so the
 // program is what it was.
 func TestTheLegacyFeatureIsTheWholeHost(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	n := onLoop(r, func() [2]int { return [2]int{len(r.h.reg.state), len(r.h.reg.handlers)} })
@@ -96,6 +99,7 @@ func TestTheLegacyFeatureIsTheWholeHost(t *testing.T) {
 // TestAFileTicketIsStaleWhenAnotherFileOpens: a file-scoped answer is stale once another file
 // opens; a workspace-scoped one is not. With no sequence, nothing newer makes either stale.
 func TestAFileTicketIsStaleWhenAnotherFileOpens(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	got := onLoop(r, func() [4]bool {
@@ -114,6 +118,7 @@ func TestAFileTicketIsStaleWhenAnotherFileOpens(t *testing.T) {
 // TestATicketIsStaleAfterANewerOneOrAWorkspaceSwitch: the latest answer wins, and an answer asked
 // under another workspace never applies.
 func TestATicketIsStaleAfterANewerOneOrAWorkspaceSwitch(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	got := onLoop(r, func() [4]bool {
@@ -135,6 +140,7 @@ func TestATicketIsStaleAfterANewerOneOrAWorkspaceSwitch(t *testing.T) {
 
 // TestCoreReachesTheHost: what a feature does through Core lands on the host.
 func TestCoreReachesTheHost(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.s.WaitFor(t, "kb entered", func(string) bool { return onLoop(r, func() bool { return r.h.ws == "kb" }) })
@@ -170,6 +176,7 @@ func coreKept(r *running) []error {
 // TestCoreOpensAFileByItsAbsolutePath: Core.OpenFile and Core.OpenAbsolute open the file at an
 // absolute path: one a workspace indexes as that workspace's, one outside every workspace as in none.
 func TestCoreOpensAFileByItsAbsolutePath(t *testing.T) {
+	t.Parallel()
 	r, kb, _, abs := runOutside(t)
 	c := core{r.h}
 	r.h.p.Post(func() { c.OpenFile(filepath.Join(kb, "a.md")) })
@@ -181,6 +188,7 @@ func TestCoreOpensAFileByItsAbsolutePath(t *testing.T) {
 // TestCoreAsksWhenTheCardIsFree: Core.AskWhenFree never displaces the question open: it waits,
 // the open one still asked and its callbacks not run, and is asked once that one is answered.
 func TestCoreAsksWhenTheCardIsFree(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	type seen struct {
@@ -221,6 +229,7 @@ func TestCoreAsksWhenTheCardIsFree(t *testing.T) {
 // TestCoreFocusesTheWidgetNamed: Core.Focus gives the keyboard to the widget id, from wherever it
 // is; an id the layout has not is kept as an error, the keyboard left where it was.
 func TestCoreFocusesTheWidgetNamed(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	onLoop(r, func() bool { r.h.keep(r.h.p.Call("explorer", "open")); return true })
@@ -250,6 +259,7 @@ func TestCoreFocusesTheWidgetNamed(t *testing.T) {
 // TestCoreRingsTheTerminalsBell: in the terminal build Core.Bell rings the terminal's bell, once
 // for each ring.
 func TestCoreRingsTheTerminalsBell(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	before := r.s.Backend.Bells()
@@ -263,6 +273,7 @@ func TestCoreRingsTheTerminalsBell(t *testing.T) {
 // layout keeps that as an error, never passes over it; before the host has a layout at all, there
 // is nothing to set and nothing is wrong.
 func TestCoreSetTextSaysALayoutWithoutTheTextArea(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	before := len(coreKept(r))
@@ -283,6 +294,7 @@ func TestCoreSetTextSaysALayoutWithoutTheTextArea(t *testing.T) {
 // TestCoreSaysTheStoreItsDaemonServes: Core.StoreID is the store_id the daemon said at hello: the
 // identity of the store it serves.
 func TestCoreSaysTheStoreItsDaemonServes(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "autodoc.db")
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{storeAt: path})
 	r := attached(t, d)
@@ -305,6 +317,7 @@ func (f *pickFake) Picks() map[string]picker { return f.picks }
 
 // A feature's picker is reached by its name through the App.pick* commands the registry serves.
 func TestAFeaturesPickerIsReachedByName(t *testing.T) {
+	t.Parallel()
 	p := newTestPick()
 	r, err := newRegistry(&fake{name: "a"}, &pickFake{fake: fake{name: "b"}, picks: map[string]picker{"test": p}})
 	if err != nil {
@@ -322,6 +335,7 @@ func TestAFeaturesPickerIsReachedByName(t *testing.T) {
 
 // Two features naming a picker alike are refused when the registry is built.
 func TestTheRegistryRefusesAPickerTwoFeaturesName(t *testing.T) {
+	t.Parallel()
 	a := &pickFake{fake: fake{name: "a"}, picks: map[string]picker{"test": newTestPick()}}
 	b := &pickFake{fake: fake{name: "b"}, picks: map[string]picker{"test": newTestPick()}}
 	if _, err := newRegistry(a, b); err == nil || err.Error() != "tui: the picker test is both a's and b's" {

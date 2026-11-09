@@ -51,6 +51,7 @@ func startMenu(t *testing.T, src string) *running {
 // A row shows only for a file its globs match (the base name), and only when its when answers true;
 // a folder's scope is when on ctx.path. Both are asked at every open.
 func TestAMenuRowShowsForItsFilesAndWhen(t *testing.T) {
+	t.Parallel()
 	r := startMenu(t, `whens = 0
 autodoc.menu{ where = "editor", files = {"*.sql"}, title = "&Run query", command = "mark q" }
 autodoc.menu{ where = "editor", when = function(ctx) whens = whens + 1; return ctx.selection end, title = "Selected", command = "mark s" }
@@ -92,6 +93,7 @@ func lua2num(r *running, name string) float64 {
 // "A B", two non-Latin names and two long names with one prefix are distinct, and every item id
 // in the menu is unique.
 func TestMenuRowsGroupUnderTheirExactSubmenu(t *testing.T) {
+	t.Parallel()
 	long := strings.Repeat("Long submenu name ", 4)
 	r := startMenu(t, `autodoc.menu{ where = "editor", menu = "Jupyter", title = "Run", command = "mark a" }
 autodoc.menu{ where = "editor", title = "Loose", command = "mark b" }
@@ -133,6 +135,7 @@ autodoc.menu{ where = "editor", menu = "`+long+`two", title = "L2", command = "m
 // A title function is answered at each open, its & the row's key. A script's title is its own: a
 // row titled as one of AutoDoc's own ("&Back") is never swapped for a catalog translation.
 func TestAMenuRowsTitleIsAnsweredAtEachOpenAndKeptAsWritten(t *testing.T) {
+	t.Parallel()
 	r := startMenu(t, `n = 0
 autodoc.menu{ where = "editor", title = function(ctx) n = n + 1; return "&Run " .. n end, command = "mark r" }
 autodoc.menu{ where = "editor", title = "&Back", command = "mark b" }`)
@@ -153,6 +156,7 @@ autodoc.menu{ where = "editor", title = "&Back", command = "mark b" }`)
 // The same id from the same script replaces its row, in its place. The old row's handle then
 // removes nothing; the replacement's removes it, once. Rows with no id are each new.
 func TestAMenuRowIsReplacedByItsIdAndRemovedByItsOwnHandle(t *testing.T) {
+	t.Parallel()
 	r := startMenu(t, `autodoc.menu{ where = "editor", title = "Before", command = "mark a" }
 one = autodoc.menu{ where = "editor", id = "x", title = "One", command = "mark b" }
 autodoc.menu{ where = "editor", title = "After", command = "mark c" }
@@ -183,6 +187,7 @@ autodoc.menu{ where = "editor", title = "Twin", command = "mark e" }`)
 // A when or a title that fails, or a title that isn't a string, is a notice, and the menu opens
 // with the other rows. A spec the menu can't take is the script's error.
 func TestAMenuRowsErrorsAreNoticedAndTheMenuStillOpens(t *testing.T) {
+	t.Parallel()
 	r := startMenu(t, `autodoc.menu{ where = "editor", when = function() error("no when") end, title = "W", command = "mark w" }
 autodoc.menu{ where = "editor", title = function() return 7 end, command = "mark t" }
 autodoc.menu{ where = "editor", title = "Fine", command = "mark f" }`)
@@ -217,6 +222,7 @@ autodoc.menu{ where = "editor", title = "Fine", command = "mark f" }`)
 // command that spins (autodoc.run): the command inherits the budget's deadline, not the engine's
 // own two seconds.
 func TestTheMenuBudgetBoundsSlowRowsAndCommandsTheyRun(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct{ name, src string }{
 		{"spinning whens", `for i = 1, 8 do autodoc.menu{ where = "editor", when = function() while true do end end, title = "S" .. i, command = "mark s" } end`},
 		{"whens that run a spinning command", `autodoc.command{ name = "spin", run = function() while true do end end }
@@ -246,6 +252,7 @@ autodoc.menu{ where = "editor", title = "Fine", command = "mark f" }`)
 // A when runs while the engine counts as running, so asking for a reload from inside one is refused
 // and the engine stays; once the open is over the engine isn't running.
 func TestAMenuRowsWhenCannotReloadTheScriptsUnderIt(t *testing.T) {
+	t.Parallel()
 	r := startMenu(t, `said = ""
 autodoc.menu{ where = "editor", when = function() local ok, err = autodoc.run("scripts.reload"); said = tostring(err); return true end, title = "R", command = "mark r" }`)
 	before := onLoop(r, func() any { return r.h.scripts })
@@ -263,6 +270,7 @@ autodoc.menu{ where = "editor", when = function() local ok, err = autodoc.run("s
 
 // A gated script's row needs commands when it runs, as its keys do.
 func TestAGatedScriptsRowNeedsCommandsWhenItRuns(t *testing.T) {
+	t.Parallel()
 	r := startMenu(t, ``)
 	if err := onLoop(r, func() error {
 		return r.h.loadGated("pkg", "pkg.lua", []byte(`autodoc.menu{ where = "editor", title = "Gated", command = "mark g" }`))
@@ -290,6 +298,7 @@ func TestAGatedScriptsRowNeedsCommandsWhenItRuns(t *testing.T) {
 // rows as it began, less those taken out or replaced, each once, so the menu's model is valid and it
 // opens; the replacement shows from the next open.
 func TestAWhenThatChangesTheRowsCannotBreakTheMenu(t *testing.T) {
+	t.Parallel()
 	r := startMenu(t, `changed = false
 autodoc.menu{ where = "editor", title = "A", command = "mark a", when = function()
   if not changed then
@@ -321,6 +330,7 @@ autodoc.menu{ where = "editor", id = "d", title = "D1", command = "mark d" }`)
 // it and whenever: its own, or a later row's after it was reached. A row put in another's place
 // shows from the next open.
 func TestARowWithdrawnAsTheMenuOpensDoesNotShowInIt(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		name, src  string
 		want, next []string
@@ -356,6 +366,7 @@ end }`, []string{"B"}, []string{"A2", "B"}},
 // function never called in that open: the title may act, and it spends the open's budget (the
 // removed case is the one a review first tested).
 func TestARowItsWhenWithdrawsNeverRunsItsTitle(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct{ name, src string }{
 		{"removed", `titled = 0
 local row
@@ -383,6 +394,7 @@ autodoc.menu{ where = "editor", title = "Safe", command = "mark s" }`},
 // A removed row leaves no slot behind it in the registry's backing array, so nothing keeps its
 // functions alive.
 func TestARemovedRowLeavesNoSlotBehind(t *testing.T) {
+	t.Parallel()
 	var m menuRows
 	m.add(&addedRow{id: "a"})
 	b := m.add(&addedRow{id: "b"})

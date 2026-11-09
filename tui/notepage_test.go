@@ -32,6 +32,7 @@ func renderedByTheEditor(r *running) bool {
 // boxed, its mind map drawn, a diagram of a kind golib doesn't draw shown as its fence's source.
 // SPC is the app's leader there, Ctrl+T shows its text and back, and an edit is drawn at once.
 func TestATerminalNoteOpensRenderedByTheEditor(t *testing.T) {
+	t.Parallel()
 	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "pantry.md", notePageNote)}, tableInclude)
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
@@ -87,6 +88,7 @@ func TestATerminalNoteOpensRenderedByTheEditor(t *testing.T) {
 // draw shows is the catalog's, its kind filled in (the page asks it at each layout, so a language
 // switch's relayout says it in the new language).
 func TestTheTerminalPagesDiagramNoticeIsTheCatalogs(t *testing.T) {
+	t.Parallel()
 	p := newCellNotePage(newHost(NewSession("unused", nil), Options{}))
 	if got := p.notice("flowchart"); got != "flowchart diagram: not drawn in the terminal (Raw shows its source)" {
 		t.Errorf("the English notice: %q", got)
@@ -99,6 +101,7 @@ func TestTheTerminalPagesDiagramNoticeIsTheCatalogs(t *testing.T) {
 // TestCtrlTKeepsTheCursorBetweenRenderedAndRaw: the cursor moved in a note's Rendered view, the view
 // following it, Ctrl+T opens Raw with the cursor where it was, and back.
 func TestCtrlTKeepsTheCursorBetweenRenderedAndRaw(t *testing.T) {
+	t.Parallel()
 	var note strings.Builder
 	for i := range 60 {
 		fmt.Fprintf(&note, "Paragraph %02d of the long note.\n\n", i)
@@ -120,6 +123,7 @@ func TestCtrlTKeepsTheCursorBetweenRenderedAndRaw(t *testing.T) {
 // (applyPrefs at start) tells the page nothing and makes none; the page made later is told, and
 // told again at the next change.
 func TestTheHTMLPageTakesALanguageBeforeItIsMade(t *testing.T) {
+	t.Parallel()
 	p := newCellNotePage(newHost(NewSession("unused", nil), Options{}))
 	p.LanguageChanged() // no page yet: it failed here, stopping the preferences' read
 	if p.view != nil {
@@ -134,6 +138,7 @@ func TestTheHTMLPageTakesALanguageBeforeItIsMade(t *testing.T) {
 // stopped the preferences' read); a note shown then is Rendered by the editor, a diagram it doesn't
 // draw its source, and a switch to English with it shown fails no handler either.
 func TestAStoredLanguageReachesTheStart(t *testing.T) {
+	t.Parallel()
 	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "history.md", "# History\n\n```mermaid\nkanban\n  Todo\n    [Write the docs]\n  Done\n    [Ship it]\n```\n")}, tableInclude)
 	first := runTUI(t, NewSession(d.sock, nil), Options{})
 	first.connected(t)
@@ -170,6 +175,7 @@ func TestAStoredLanguageReachesTheStart(t *testing.T) {
 // Rendered view, not said to be undrawn nor shown as their source: a flowchart's boxes and the line
 // between, and a pie's title, circle and legend (a note each: a pie is as tall as the view).
 func TestATerminalNoteDrawsAFlowchartAndAPie(t *testing.T) {
+	t.Parallel()
 	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t,
 		"flow.md", "# Flow\n\n```mermaid\nflowchart LR\n  Jar-->Shelf\n```\n",
 		"pets.md", "```mermaid\npie title Pets\n  \"Dogs\" : 386\n  \"Cats\" : 85\n```\n")}, tableInclude)
@@ -199,6 +205,7 @@ func TestATerminalNoteDrawsAFlowchartAndAPie(t *testing.T) {
 // TestTheLeaderWorksOverTheStartsRenderedNote: at start the untitled note is Rendered by the
 // editor; SPC is the app's over it, as over the text: SPC o opens the picker.
 func TestTheLeaderWorksOverTheStartsRenderedNote(t *testing.T) {
+	t.Parallel()
 	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")}, tableInclude)
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.connected(t)
@@ -237,6 +244,7 @@ func (r *running) asText(t *testing.T) {
 // TestTypingInAJustOpenedNoteEditsItInPlace: a note opens Rendered and is edited there: i, then the
 // typing and Esc, edit the note at the cursor, and the view stays Rendered.
 func TestTypingInAJustOpenedNoteEditsItInPlace(t *testing.T) {
+	t.Parallel()
 	r := openRenderedNote(t, "# Pantry\n\nshelf\n", "Pantry")
 	r.keys(t, key('i'))
 	r.keys(t, decltest.Type("xy")...)
@@ -252,6 +260,7 @@ func TestTypingInAJustOpenedNoteEditsItInPlace(t *testing.T) {
 // TestTheCommandLineOpensFromTheRenderedView: ':' in a note's Rendered view opens the command line,
 // as in its text.
 func TestTheCommandLineOpensFromTheRenderedView(t *testing.T) {
+	t.Parallel()
 	r := openRenderedNote(t, "# Pantry\n", "Pantry")
 	r.keys(t, key(':'))
 	r.s.WaitForText(t, "VIM Commands")
@@ -261,6 +270,7 @@ func TestTheCommandLineOpensFromTheRenderedView(t *testing.T) {
 // source, as in its text (a link's target counts too): "1 of 3", the cursor on the first match, and
 // the view stays Rendered; Ctrl+T to Raw and back keeps the count (docs/decisions/editor.md).
 func TestAFindInARenderedNoteCountsItsSource(t *testing.T) {
+	t.Parallel()
 	r := openRenderedNote(t, "# Birds\n\na kestrel, see [the hawk](kestrel.md), another kestrel\n", "Birds")
 	r.h.p.Post(func() { r.h.find.pending = findPage; r.h.startFind("kestrel") })
 	total := func() int { return onLoop(r, func() int { return r.h.find.total }) }
@@ -282,6 +292,7 @@ func TestAFindInARenderedNoteCountsItsSource(t *testing.T) {
 // link under the cursor, as in its text, not the first one shown: off a link it says so, and on the
 // second link it opens that one (docs/decisions/editor.md).
 func TestSPCjInTheRenderedViewFollowsTheLinkUnderTheCursor(t *testing.T) {
+	t.Parallel()
 	line := "second [[c]]"
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "# Links\n\nfirst [[b]]\n\n" + line + "\n", "b.md", "# B\n", "c.md", "# C\n"}})
 	r := attached(t, d)
@@ -303,6 +314,7 @@ func TestSPCjInTheRenderedViewFollowsTheLinkUnderTheCursor(t *testing.T) {
 // source has, a link's target, is found in place: the cursor on its match, the view still Rendered,
 // with no notice of a move to the text. A term in neither is not found (docs/decisions/editor.md).
 func TestAFindOnlyTheSourceHasIsFoundInTheRenderedView(t *testing.T) {
+	t.Parallel()
 	line := "a kestrel, see [the hawk](https://x.example/target), another kestrel"
 	r := openRenderedNote(t, "# Birds\n\n"+line+"\n", "Birds")
 	find := func(term string) {
@@ -353,6 +365,7 @@ func braille(s string) bool {
 // categories and values and a line in Braille, never their spec's JSON; a spec outside golib's
 // subset is its fence's source.
 func TestATerminalNoteDrawsItsCharts(t *testing.T) {
+	t.Parallel()
 	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "charts.md", chartNote)}, tableInclude)
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 120, 60)
 	r.waitAttached(t, "kb")
@@ -374,6 +387,7 @@ func TestATerminalNoteDrawsItsCharts(t *testing.T) {
 // TestThePagesChartNoticeIsTheCatalogs: a vega-lite chart the terminal doesn't draw says so in the
 // catalog's words, its own sentence (a chart, not "a vega-lite diagram"); a Mermaid kind keeps its own.
 func TestThePagesChartNoticeIsTheCatalogs(t *testing.T) {
+	t.Parallel()
 	h := newHost(NewSession("unused", nil), Options{})
 	if got := h.pageNotice("vega-lite"); got != "vega-lite chart: not drawn in the terminal (Raw shows its source)" {
 		t.Errorf("the chart's notice: %q", got)
@@ -387,6 +401,7 @@ func TestThePagesChartNoticeIsTheCatalogs(t *testing.T) {
 // text file after a note and the editor no longer draws through it, so the text file is never laid
 // out as Markdown.
 func TestAnotherFileTakesTheNotesRendererOff(t *testing.T) {
+	t.Parallel()
 	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n\n**bold** words\n", "b.txt", "**plain** text\n")},
 		[]string{"**/*.md", "**/*.txt"})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})

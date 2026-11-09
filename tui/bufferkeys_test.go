@@ -33,6 +33,7 @@ func (r *running) bufferPaths() []string {
 // TestTheBuffersHaveKeysAndMenuEntries: SPC b s opens the Buffers picker, SPC b d closes the buffer
 // shown; Go › Buffers… and File › Close buffer are on the menus.
 func TestTheBuffersHaveKeysAndMenuEntries(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n"}})
 	r := attached(t, d)
 	r.waitListed(t, 2)
@@ -65,6 +66,7 @@ func TestTheBuffersHaveKeysAndMenuEntries(t *testing.T) {
 // catalog entry by its key on it: buffer.show_1 to buffer.show_10, buffer.close, buffer.pick,
 // buffer.close_right, buffer.close_left and file.back.
 func TestSPCbIsTheBufferCard(t *testing.T) {
+	t.Parallel()
 	h := newHost(NewSession("unused", nil), Options{})
 	fs := h.features()
 	reg, err := newRegistry(fs...)
@@ -115,6 +117,7 @@ func TestSPCbIsTheBufferCard(t *testing.T) {
 // order, and 0 the 10th; a place past the last buffer shows none (run on the loop: a key that does
 // nothing has no effect to wait on).
 func TestTheBufferCardShowsTheNthBuffer(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n", "c.md", "ccc\n"}})
 	r := attached(t, d)
 	r.waitListed(t, 3)
@@ -148,6 +151,7 @@ func TestTheBufferCardShowsTheNthBuffer(t *testing.T) {
 // closes d.md, asked about and shown first (Discard), then e.md, and c.md is shown again. SPC b l
 // asks about b.md first, the nearest; Stay stops there, b.md shown and a.md left open.
 func TestTheBufferCardClosesToTheRightAndLeft(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n", "c.md", "ccc\n", "d.md", "ddd\n", "e.md", "eee\n"}})
 	r := attached(t, d)
 	r.waitListed(t, 5)
@@ -195,6 +199,7 @@ func TestTheBufferCardClosesToTheRightAndLeft(t *testing.T) {
 // question after the first waits for the next turn of the loop (closeBeside): the dialog the
 // answer closes does not show again in the same turn.
 func TestTheBufferCardAsksAboutEachUnsavedBufferInTurn(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n", "c.md", "ccc\n", "d.md", "ddd\n", "e.md", "eee\n"}})
 	r := attached(t, d)
 	r.waitListed(t, 5)
@@ -255,6 +260,7 @@ func TestTheBufferCardAsksAboutEachUnsavedBufferInTurn(t *testing.T) {
 // buffer.close_right and buffer.close_left close the buffers beside it, and buffer.show_3, past
 // the last, shows none.
 func TestTheBufferEntriesRunAsTheirKeys(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n", "c.md", "ccc\n"}})
 	r := attached(t, d)
 	r.waitListed(t, 3)
@@ -300,6 +306,7 @@ func bufferCardHost(name func(n int) string) *Host {
 // are cut in the middle, each row within the 80 × 20 screen's card, its file's name kept. The other
 // keys follow; F1 lists the card as declared.
 func TestTheBufferCardNamesEachSlotsBuffer(t *testing.T) {
+	t.Parallel()
 	h := bufferCardHost(func(n int) string { return fmt.Sprintf("n%d.md", n) })
 	text := h.bufferCardText()
 	for n := 1; n <= 10; n++ {
@@ -354,6 +361,7 @@ func TestTheBufferCardNamesEachSlotsBuffer(t *testing.T) {
 // TestTheBufferCardFollowsTheBuffers: the card names what is open as it changes. Open while it
 // shows, it drops a buffer closed meanwhile; opened again, it names a buffer opened since.
 func TestTheBufferCardFollowsTheBuffers(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n", "c.md", "ccc\n"}})
 	r := attached(t, d)
 	r.waitListed(t, 3)
@@ -383,6 +391,7 @@ func TestTheBufferCardFollowsTheBuffers(t *testing.T) {
 // its tab and its row on SPC b's card, one pass over the buffers' labels (bufferTabLabels); the
 // edits after it change neither and resolve nothing.
 func TestAnEditResolvesTheLabelsOnlyWhenItsMarkComesOn(t *testing.T) {
+	t.Parallel()
 	// the hook is the program's own, set before it starts
 	passes := countLabelPasses(tune(t))
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n"}})
@@ -414,6 +423,7 @@ func TestAnEditResolvesTheLabelsOnlyWhenItsMarkComesOn(t *testing.T) {
 // of buffers (one width, one pass), and the cost of a pass grows with the buffers, not with their
 // square: eight times the buffers take well under the 64 times a pass over every pair would.
 func TestTheBufferLabelsTakeOnePassAChange(t *testing.T) {
+	t.Parallel()
 	h := bufferCardHostN(1600)
 	passes := countLabelPasses(&h.seams) // no loop runs: the host is the test's alone
 	h.bufferCardText()
@@ -480,6 +490,7 @@ func BenchmarkBufferCardText(b *testing.B) {
 // its Replace, the buffer still clean, which syncs the buffers once [+] comes on; were it to come
 // after the restore's setDirty, it would sync nothing, and the mark would never show.
 func TestARestoreIntoTheShownBufferMarksItsRow(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n"}})
 	r := attached(t, d)
 	r.waitListed(t, 2)

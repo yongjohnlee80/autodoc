@@ -15,6 +15,7 @@ import (
 // TestCtrlVReachesTheResultsTable: with the keys in the results, Ctrl+V starts a block, which j and
 // l grow: AutoDoc's own keys never take it.
 func TestCtrlVReachesTheResultsTable(t *testing.T) {
+	t.Parallel()
 	r, _ := kindsTUI(t, "tablestall")
 	wantCtrlVBlock(t, r)
 }
@@ -22,6 +23,7 @@ func TestCtrlVReachesTheResultsTable(t *testing.T) {
 // A table yank and an editor put share the unnamed register. Sending both keys through the
 // program catches a missing table-to-editor bridge or a focus path that swallows y.
 func TestAResultsYankPastesIntoTheEditor(t *testing.T) {
+	t.Parallel()
 	r, _ := kindsTUI(t, "tablestall")
 	onLoop(r, func() bool { r.h.keep(r.h.p.Call(resultsView, "forceActiveFocus")); return true })
 	r.s.WaitFor(t, "the results with the keys", func(string) bool { return r.focused(resultsView) })
@@ -43,6 +45,7 @@ func TestAResultsYankPastesIntoTheEditor(t *testing.T) {
 // The results bar uses each clause's own parser forms: two id fields complete to a position,
 // ORDER BY's bare number and WHERE's #number. Tab inserts it into the actual TextField.
 func TestTheResultsBarTabInsertsAFieldTheClauseParses(t *testing.T) {
+	t.Parallel()
 	r, _ := kindsTUI(t, "kinds")
 	readText := func() string {
 		return onLoop(r, func() string {
@@ -78,6 +81,7 @@ func TestTheResultsBarTabInsertsAFieldTheClauseParses(t *testing.T) {
 // The s key cycles a sort over the loaded rows. A sort landing the cursor at the far end must not
 // send plugin.table.fetch; only reading the table should do that.
 func TestTheResultsSKeySortsWithoutFetching(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin4(t, dir, "rows", "service", "tablestall", tableManifest)
 	r, logs := pluginTUI(t, dir)
@@ -113,6 +117,7 @@ func wantCtrlVBlock(t *testing.T, r *running) {
 // TestEscClosesTheResultsOnceNothingIsPending: in the results, Esc first ends what the table holds
 // (a selection, a count typed), the panel left open; with nothing pending it closes the panel.
 func TestEscClosesTheResultsOnceNothingIsPending(t *testing.T) {
+	t.Parallel()
 	r, _ := kindsTUI(t, "tablestall")
 	wantEscCloses(t, r, func() {
 		onLoop(r, func() bool { r.h.plugins.runPluginCommand("kinds", "run"); return true })

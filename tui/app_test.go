@@ -443,6 +443,7 @@ func key(r rune) tuicore.Event {
 }
 
 func TestQClosesNavigationPanelsAndCards(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"note.md", "# Note\n"}})
 	r := attached(t, d)
 	for _, panel := range []struct {
@@ -482,6 +483,7 @@ func TestQClosesNavigationPanelsAndCards(t *testing.T) {
 }
 
 func TestQTypesInAFocusedDialogField(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"note.md", "# Note\n"}})
 	r := attached(t, d)
 	onLoop(r, func() bool { r.h.open("pluginAdd"); return true })
@@ -538,6 +540,7 @@ func (r *running) waitFile(t *testing.T, p string) {
 }
 
 func TestEveryQMLFileIsSound(t *testing.T) {
+	t.Parallel()
 	decltest.Check(t, newHost(NewSession("unused", nil), Options{}).options(Options{})...)
 }
 
@@ -545,6 +548,7 @@ func TestEveryQMLFileIsSound(t *testing.T) {
 // left and the file under the cursor on the right; Enter opens the hit in the editor, the cursor
 // at its section; typed text marks it unsaved; Ctrl+S writes it to the file.
 func TestSearchesOpensEditsSaves(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "# A\n\nintro\n\n## Birds\n\nkestrel notes\n", "b/c.md", "# C\n\nplover\n"}})
 	r := attached(t, d)
 	r.waitListed(t, 2)
@@ -579,6 +583,7 @@ func TestSearchesOpensEditsSaves(t *testing.T) {
 // TestThePickerKeepsTheFileName: a path too long for the open picker's list loses its start, not
 // its file name.
 func TestThePickerKeepsTheFileName(t *testing.T) {
+	t.Parallel()
 	deep := "archive/2026/09/projects/autodoc/reviews/2026-09-29-the-review-of-the-store.md"
 	d := startDaemon(t, map[string][]string{"kb": {deep, "# R\n\nreview\n"}})
 	r := attached(t, d)
@@ -597,6 +602,7 @@ func TestThePickerKeepsTheFileName(t *testing.T) {
 // TestAConflictAsks: a file changed on disk since it was opened is not overwritten: the save asks,
 // and keep, reload and overwrite each do what they say.
 func TestAConflictAsks(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "one\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -639,6 +645,7 @@ func TestAConflictAsks(t *testing.T) {
 // its unsaved changes; closing a modified buffer asks: stay keeps it, save writes it first, discard
 // drops it.
 func TestUnsavedWorkIsNeverLostQuietly(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -680,6 +687,7 @@ func TestUnsavedWorkIsNeverLostQuietly(t *testing.T) {
 
 // TestQuitOverUnsavedAsks: quitting with unsaved changes asks; with none it quits at once.
 func TestQuitOverUnsavedAsks(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -701,6 +709,7 @@ func TestQuitOverUnsavedAsks(t *testing.T) {
 
 // TestQuitOverUnsavedCanSaveFirst: Save in the quit question writes the file, then quits.
 func TestQuitOverUnsavedCanSaveFirst(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -722,6 +731,7 @@ func TestQuitOverUnsavedCanSaveFirst(t *testing.T) {
 // TestCommittedIsReadBack: a save the daemon reports as landed-then-failed is read back, and adopted
 // when the disk holds what was written.
 func TestCommittedIsReadBack(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb!": {"a.md", "one\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -746,6 +756,7 @@ func TestCommittedIsReadBack(t *testing.T) {
 // (docs/decisions/editor.md#dock-clicks-hide-and-show); SPC l shows it again, and it holds src.md's
 // own links.
 func TestBacklinks(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"target.md", "# Target\n", "src.md", "see [[target]]\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "target.md")
@@ -762,6 +773,7 @@ func TestBacklinks(t *testing.T) {
 
 // TestWorkspaces: the picker lists the daemon's workspaces, and switching lists the other's files.
 func TestWorkspaces(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"alpha": {"a.md", "a\n"}, "beta": {"b1.md", "b\n", "b2.md", "b\n"}})
 	sess := NewSession(d.sock, nil)
 	release := make(chan struct{})
@@ -790,6 +802,7 @@ func TestWorkspaces(t *testing.T) {
 
 // TestConnectFailedSaysSo: with nothing on the socket and no daemon to start, the TUI says so.
 func TestConnectFailedSaysSo(t *testing.T) {
+	t.Parallel()
 	sess := NewSession(filepath.Join(t.TempDir(), "none.sock"), nil)
 	sess.SetProbeWindow(200 * time.Millisecond)
 	r := runTUI(t, sess, Options{})
@@ -800,6 +813,7 @@ func TestConnectFailedSaysSo(t *testing.T) {
 
 // TestSpawnsTheDaemonOnce: nothing answering, the TUI starts the daemon once, and attaches.
 func TestSpawnsTheDaemonOnce(t *testing.T) {
+	t.Parallel()
 	dir, err := os.MkdirTemp("", "ads")
 	if err != nil {
 		t.Fatal(err)
@@ -827,6 +841,7 @@ func TestSpawnsTheDaemonOnce(t *testing.T) {
 // TestEveryThemeKeepsTextLegible: under each shipped theme the status line, the explorer and the
 // note wear a foreground that differs from their background.
 func TestEveryThemeKeepsTextLegible(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "legible text\n"}})
 	for _, name := range themes.Names() {
 		t.Run(name, func(t *testing.T) {
@@ -886,6 +901,7 @@ func find(cells [][]tuicore.Cell, text string) (int, int, bool) {
 // TestASlowOpenNeverReplacesALaterOne: an open whose answer comes after a later open's is dropped:
 // the editor holds the file opened last.
 func TestASlowOpenNeverReplacesALaterOne(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"slow.md", "slow text\n", "fast.md", "fast text\n"}})
 	sess := NewSession(d.sock, nil)
 	release := make(chan struct{})
@@ -911,6 +927,7 @@ func TestASlowOpenNeverReplacesALaterOne(t *testing.T) {
 // overwritten by someone else before the read-back, is a conflict: the other writer's version is
 // not adopted as the one the editor holds.
 func TestCommittedThenOverwrittenIsAConflict(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb!": {"a.md", "one\n"}})
 	sess := NewSession(d.sock, nil)
 	wrote := false
@@ -937,6 +954,7 @@ func TestCommittedThenOverwrittenIsAConflict(t *testing.T) {
 // TestReconnects: when the daemon goes, the TUI says so and connects again to the next one on the
 // socket, listing its files.
 func TestReconnects(t *testing.T) {
+	t.Parallel()
 	d1 := startDaemonOn(t, "", map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUI(t, NewSession(d1.sock, nil), Options{})
 	r.waitListed(t, 1)
@@ -952,6 +970,7 @@ func TestReconnects(t *testing.T) {
 // TestASaveNeverDropsANewerEdit: an edit made while a guarded save is on its way is not dropped by
 // what the save guarded: the close asks again.
 func TestASaveNeverDropsANewerEdit(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n"}})
 	sess := NewSession(d.sock, nil)
 	release := make(chan struct{})
@@ -995,6 +1014,7 @@ func TestASaveNeverDropsANewerEdit(t *testing.T) {
 // once the disk's version is in the editor; a file gone by then leaves the edits guarded, the file
 // marked deleted on disk.
 func TestAFailedReloadKeepsTheEditsUnsaved(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "one\n", "b.md", "b\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -1016,6 +1036,7 @@ func TestAFailedReloadKeepsTheEditsUnsaved(t *testing.T) {
 }
 
 func TestProgressText(t *testing.T) {
+	t.Parallel()
 	const qwen = "ollama|qwen3-embedding:4b|sha256:1|2560"
 	for _, c := range []struct {
 		p    progress
@@ -1047,6 +1068,7 @@ func TestProgressText(t *testing.T) {
 // TestSemanticOnline: semantic search is online with a provider in use, its model not mid-switch,
 // its last call answered; offline otherwise.
 func TestSemanticOnline(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		e    embedProgress
 		want bool
@@ -1069,6 +1091,7 @@ func TestSemanticOnline(t *testing.T) {
 // done; when it ends it says so once, and the files, listed mid-scan, are listed again whole: the
 // pickers' and the explorer's.
 func TestProgressWhileIndexing(t *testing.T) {
+	t.Parallel()
 	var notes []string
 	for i := range 40 {
 		notes = append(notes, fmt.Sprintf("n%02d.md", i), "note\n")
@@ -1109,6 +1132,7 @@ func TestProgressWhileIndexing(t *testing.T) {
 // TestOnePollAfterSwitches: switching workspace (as a reconnect does) starts the next workspace's
 // poll, and the old one's pending timer starts nothing: status is asked about once a second.
 func TestOnePollAfterSwitches(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"alpha": {"a.md", "a\n"}, "beta": {"b.md", "b\n"}})
 	sess := NewSession(d.sock, nil)
 	var polls atomic.Int32
