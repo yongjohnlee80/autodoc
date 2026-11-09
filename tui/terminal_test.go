@@ -118,7 +118,7 @@ func frameAt(screen string) (row, column int) {
 func TestTheTerminalTogglesFromTheLeaderAndGivesTheKeyboardBack(t *testing.T) {
 	_, r := runShellTUI(t, nil)
 	// The tests' workspaces live in memory, not on this disk: the shell starts in the home folder.
-	root := os.Getenv("HOME")
+	root := onLoop(r, func() procenv.Env { return r.h.seams.env }).Get("HOME") // the program's own (runShellTUI's)
 
 	r.leader(t, '`')
 	r.s.WaitForText(t, "┌ terminal")

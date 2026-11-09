@@ -56,6 +56,23 @@ func tuneEnv(t testing.TB, set ...string) {
 	s.env = s.env.With(set...)
 }
 
+// seamsWithEnv is the seams for one more program of t's: base (nil: t's own, as seamsFor makes
+// them) with set applied to its environment (procenv.Env.With). A helper that makes a program, and
+// may make several in one test, sets the environment it needs this way: tune(t) can't once the
+// first program is made.
+func seamsWithEnv(t testing.TB, base *seams, set ...string) *seams {
+	t.Helper()
+	if base == nil {
+		base = seamsFor(t)
+	}
+	s := defaultSeams
+	if base != nil {
+		s = *base
+	}
+	s.env = s.env.With(set...)
+	return &s
+}
+
 // seamsFor is a copy of the seams t's program is made with: t's own, else its nearest parent
 // test's (a subtest reads the tune its parent made), else nil, defaultSeams. t's own are marked
 // built, so a later tune(t) fails.

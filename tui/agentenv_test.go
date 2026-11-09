@@ -4,6 +4,7 @@ package tui
 
 import (
 	"fmt"
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -75,7 +76,8 @@ func TestAProfilesEnvReachesItsAgent(t *testing.T) {
 		"PATH":              extra + ":$PATH",
 	}
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron", Env: env}}, "heron")
-	home, path := os.Getenv("HOME"), os.Getenv("PATH") // runAgentTUI's own, which the spawn expands from
+	own := onLoop(r, func() procenv.Env { return r.h.seams.env })
+	home, path := own.Get("HOME"), own.Get("PATH") // the program's own (runAgentTUI's), which the spawn expands from
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	got := envReported(t, r, report)
 	if want := filepath.Join(home, ".claude-work"); got["CLAUDE_CONFIG_DIR"] != want {
