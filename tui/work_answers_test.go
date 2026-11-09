@@ -1,4 +1,4 @@
-package feature
+package tui
 
 import (
 	"go/ast"
@@ -11,13 +11,15 @@ import (
 )
 
 // TestEveryBackgroundAnswerCanCarryAFailure: a background job's panic reaches its caller as a
-// failure in the job's own answer (failed, tui/crash.go), so every do and coreDo in this package answers
-// in a shape that can carry one: an error, any, an answerOf, or a struct with an err field of type
-// error. A job answering a bool, a string or a slice would leave its caller waiting on a panic, or
+// failure in the job's own answer (failed, tui/feature/work.go), so every do and CoreDo in tui and
+// its kit (tui/feature) answers in a shape that can carry one: an error, any, a feature.AnswerOf, or
+// a struct with an err field of type error. A job answering a bool, a string or a slice would leave its caller waiting on a panic, or
 // read a zero answer as a success; this test names it.
 func TestEveryBackgroundAnswerCanCarryAFailure(t *testing.T) {
 	fset := token.NewFileSet()
 	paths, _ := filepath.Glob("*.go")
+	kit, _ := filepath.Glob("feature/*.go")
+	paths = append(paths, kit...)
 	files := map[string]*ast.File{}
 	pkgTypes := map[string]ast.Expr{} // the package's own types, by name
 	for _, p := range paths {
@@ -69,7 +71,7 @@ func TestEveryBackgroundAnswerCanCarryAFailure(t *testing.T) {
 				checked++
 				res := lit.Type.Results.List[0].Type
 				if !carriesFailure(res, local, pkgTypes) {
-					t.Errorf("%s: a background job answers %s, which cannot carry its failure: answer an error, an answerOf, or a struct with an err error field",
+					t.Errorf("%s: a background job answers %s, which cannot carry its failure: answer an error, a feature.AnswerOf, or a struct with an err error field",
 						fset.Position(call.Pos()), exprString(res))
 				}
 				return true
@@ -81,11 +83,14 @@ func TestEveryBackgroundAnswerCanCarryAFailure(t *testing.T) {
 	}
 }
 
-// isBackgroundCall is a call of do or coreDo, typed or not.
+// isBackgroundCall is a call of do or the kit's CoreDo (feature.CoreDo from tui), typed or not.
 func isBackgroundCall(fun ast.Expr) bool {
 	switch f := fun.(type) {
 	case *ast.Ident:
-		return f.Name == "do" || f.Name == "coreDo"
+		return f.Name == "do" || f.Name == "CoreDo"
+	case *ast.SelectorExpr:
+		x, ok := f.X.(*ast.Ident)
+		return ok && x.Name == "feature" && f.Sel.Name == "CoreDo"
 	case *ast.IndexExpr:
 		return isBackgroundCall(f.X)
 	case *ast.IndexListExpr:
@@ -94,7 +99,7 @@ func isBackgroundCall(fun ast.Expr) bool {
 	return false
 }
 
-// carriesFailure is whether an answer of type e can carry an error (failed, tui/crash.go).
+// carriesFailure is whether an answer of type e can carry an error (failed, tui/feature/work.go).
 func carriesFailure(e ast.Expr, local, pkg map[string]ast.Expr) bool {
 	switch x := e.(type) {
 	case *ast.Ident:
@@ -117,8 +122,13 @@ func carriesFailure(e ast.Expr, local, pkg map[string]ast.Expr) bool {
 			}
 		}
 	case *ast.IndexExpr:
-		id, ok := x.X.(*ast.Ident)
-		return ok && id.Name == "answerOf"
+		switch f := x.X.(type) {
+		case *ast.Ident: // within the kit
+			return f.Name == "AnswerOf"
+		case *ast.SelectorExpr: // from tui
+			pkg, ok := f.X.(*ast.Ident)
+			return ok && pkg.Name == "feature" && f.Sel.Name == "AnswerOf"
+		}
 	}
 	return false
 }
@@ -131,6 +141,8 @@ func exprString(e ast.Expr) string {
 		return "[]" + exprString(x.Elt)
 	case *ast.IndexExpr:
 		return exprString(x.X) + "[" + exprString(x.Index) + "]"
+	case *ast.SelectorExpr:
+		return exprString(x.X) + "." + x.Sel.Name
 	}
 	return "an unnamed type"
 }
