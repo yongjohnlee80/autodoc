@@ -14,7 +14,9 @@ import (
 // and hands its features a pointer to its copy, so each program reads its own and two tests that
 // set different ones can run at once. Each field is read on the loop unless its comment says
 // otherwise. A test that changes one while its program runs changes that program's copy, on the
-// loop.
+// loop: only a field read on the loop. The four read off the loop (serverReady, installFS,
+// exportWritten, beforeSend) are set before the program starts, through tune(t), and never after;
+// a worker that needs another field (env, registry) is handed a copy read on the loop as it starts.
 type seams struct {
 	// diskPoll is vfs.Poll's interval where the folder has no native watcher.
 	// NOTE: deadline: a poll is a listing per interval, the only way to see a change without a watcher.

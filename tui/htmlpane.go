@@ -50,7 +50,7 @@ func (h *Host) openPaneInBrowser() {
 		h.notify(h.tr("autodoc.notice.htmlpane.html_preview_currently_accepts_markdown_files"))
 		return
 	}
-	source, theme := []byte(h.pageNow().Text), h.exportTheme()
+	source, theme, env := []byte(h.pageNow().Text), h.exportTheme(), h.seams.env // read on the loop
 	options := export.Options{Chart: h.chart}
 	if full := h.diskPath(); full != "" {
 		options.Base, options.Document = filepath.Dir(full), full
@@ -61,7 +61,7 @@ func (h *Host) openPaneInBrowser() {
 		if err != nil {
 			return answerOf[string]{err: err}
 		}
-		path, err := htmlPreviewFile(h.seams.env, content)
+		path, err := htmlPreviewFile(env, content)
 		if err != nil {
 			return answerOf[string]{err: err}
 		}
