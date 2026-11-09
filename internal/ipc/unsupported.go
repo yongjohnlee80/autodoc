@@ -1,6 +1,7 @@
+//go:build !(linux || darwin)
+
 package ipc
 
-import "errors"
-
-// errUnsupported is a platform with no record of a socket peer's user.
-var errUnsupported = errors.New("peercred: no peer credentials on this platform")
+// This OS has no implementation of ipc's per-OS half (ipc_unix.go, listen_unix.go and the peer
+// files): a port adds its own.
+var _ = ipcIsNotImplementedOnThisOS

@@ -117,14 +117,14 @@ func TestAClientRefusesAnotherUsersDaemon(t *testing.T) {
 	defer wait()
 	ctx := context.Background()
 
-	c, err := Dial(ctx, "unix", path)
+	c, err := Dial(ctx, path)
 	if err != nil {
 		t.Fatalf("this user's daemon: %v", err)
 	}
 	_ = c.Close()
 
 	playAnotherUser(t)
-	if c, err := Dial(ctx, "unix", path); !errors.Is(err, ErrOtherUser) {
+	if c, err := Dial(ctx, path); !errors.Is(err, ErrOtherUser) {
 		if c != nil {
 			_ = c.Close()
 		}

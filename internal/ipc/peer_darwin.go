@@ -8,8 +8,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// peerUID is the user the peer of c ran as when it connected (LOCAL_PEERCRED).
-func peerUID(c *net.UnixConn) (int, error) {
+// unixPeerUID is the user the peer of c ran as when it connected (LOCAL_PEERCRED).
+func unixPeerUID(c *net.UnixConn) (int, error) {
 	raw, err := c.SyscallConn()
 	if err != nil {
 		return 0, err
@@ -27,8 +27,8 @@ func peerUID(c *net.UnixConn) (int, error) {
 	return int(cred.Uid), nil
 }
 
-// peerPID is the process at the other end of c when it connected (LOCAL_PEERPID).
-func peerPID(c *net.UnixConn) (int, error) {
+// unixPeerPID is the process at the other end of c when it connected (LOCAL_PEERPID).
+func unixPeerPID(c *net.UnixConn) (int, error) {
 	raw, err := c.SyscallConn()
 	if err != nil {
 		return 0, err
