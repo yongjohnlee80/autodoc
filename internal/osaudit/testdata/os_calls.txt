@@ -92,8 +92,6 @@ core/procstat/stats_other.go	os-file	linux
 core/procstat/stats_unix.go	os-file	darwin
 core/procstat/stats_unix.go	os-file	linux
 core/procstat/stats_unix.go	syscall	Timeval
-core/store/compact.go	syscall	Statfs
-core/store/compact.go	syscall	Statfs_t
 core/store/lease.go	syscall	Stat_t
 examples/surface-go/main.go	os-file	linux
 internal/client/spawn.go	syscall	SysProcAttr
