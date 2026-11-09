@@ -173,7 +173,17 @@ func TestPeerPIDNamesAnotherProcess(t *testing.T) {
 		if err := cmd.Start(); err != nil {
 			t.Fatal(err)
 		}
-		t.Cleanup(func() { _ = in.Close(); _ = cmd.Wait() })
+		t.Cleanup(func() { // closing stdin ends the helper; one that has not ended in 5s is killed
+			_ = in.Close()
+			done := make(chan struct{})
+			go func() { _ = cmd.Wait(); close(done) }()
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				_ = cmd.Process.Kill()
+				<-done
+			}
+		})
 		return cmd, bufio.NewReader(out), in
 	}
 	ready := func(r *bufio.Reader, want string) {
@@ -212,8 +222,13 @@ func TestPeerPIDNamesAnotherProcess(t *testing.T) {
 }
 
 // peerHelper is TestPeerPIDNamesAnotherProcess's other process: it dials addr, or serves at it and
-// accepts once, says so, and holds the connection until its stdin closes.
+// accepts once, says so, and holds the connection until its stdin closes. Its stdin closing ends it
+// whatever it is doing, an Accept still waiting among them: the test's failure paths close it too.
 func peerHelper(role, addr string) {
+	go func() {
+		_, _ = io.Copy(io.Discard, os.Stdin)
+		os.Exit(0)
+	}()
 	var c net.Conn
 	switch role {
 	case "dial":
@@ -232,7 +247,6 @@ func peerHelper(role, addr string) {
 			os.Exit(2)
 		}
 	}
-	_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
-	_ = c.Close()
-	os.Exit(0)
+	_ = c
+	time.Sleep(time.Hour) // until stdin closes, which exits the process
 }
