@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // complete is golib's Command.Complete: a list as it is (strings and numbers), a function called
@@ -23,7 +23,7 @@ editor.command{ name = "odd", run = function() end, complete = function() return
 `)); err != nil {
 		t.Fatal(err)
 	}
-	complete := func(name string, x widget.CompleteContext) []string {
+	complete := func(name string, x editor.CompleteContext) []string {
 		t.Helper()
 		c, ok := core.Commands().Lookup(name)
 		if !ok || c.Complete == nil {
@@ -31,19 +31,19 @@ editor.command{ name = "odd", run = function() end, complete = function() return
 		}
 		return c.Complete(x)
 	}
-	if got := complete("fixed", widget.CompleteContext{}); strings.Join(got, " ") != "one 2 three" {
+	if got := complete("fixed", editor.CompleteContext{}); strings.Join(got, " ") != "one 2 three" {
 		t.Fatalf("a list: %q", got)
 	}
-	got := complete("live", widget.CompleteContext{Core: core, Name: "lv", Bang: true, Args: []string{"a", "b"}, Word: "be"})
+	got := complete("live", editor.CompleteContext{Core: core, Name: "lv", Bang: true, Args: []string{"a", "b"}, Word: "be"})
 	if strings.Join(got, "|") != "alpha|be|a+b|lv|true" {
 		t.Fatalf("a function: %q", got)
 	}
 	*said = nil
-	if got := complete("boom", widget.CompleteContext{}); got != nil || strings.Join(*said, "|") != "boom's complete: no list" {
+	if got := complete("boom", editor.CompleteContext{}); got != nil || strings.Join(*said, "|") != "boom's complete: no list" {
 		t.Fatalf("an error: %q, said %q", got, *said)
 	}
 	*said = nil
-	if got := complete("odd", widget.CompleteContext{}); got != nil || strings.Join(*said, "|") != "odd's complete: answered a string, not a list of strings" {
+	if got := complete("odd", editor.CompleteContext{}); got != nil || strings.Join(*said, "|") != "odd's complete: answered a string, not a list of strings" {
 		t.Fatalf("not a list: %q, said %q", got, *said)
 	}
 	if c, _ := core.Commands().Lookup("w"); c.Complete != nil {
