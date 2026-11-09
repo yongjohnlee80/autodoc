@@ -29,7 +29,7 @@ func TestASocketInAFolderOthersCanWriteIsRefused(t *testing.T) {
 		if err := os.Chmod(shared, mode); err != nil {
 			t.Fatal(err)
 		}
-		sock := filepath.Join(shared, "a.sock")
+		sock := ipc.ScratchAddr(shared, "a.sock")
 		// bounded: a daemon that binds there anyway serves until ctx ends, and fails the cell then
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		err := runServe(ctx, writeConfig(t, sock, filepath.Join(dir, "state"), ""), io.Discard, testBuild, nil, "")
@@ -52,7 +52,7 @@ func TestTheDaemonServesOnlyItsUsersProcesses(t *testing.T) {
 		t.Skip("no peer credentials on " + runtime.GOOS)
 	}
 	dir := short(t)
-	sock := filepath.Join(dir, "a.sock")
+	sock := ipc.ScratchAddr(dir, "a.sock")
 	d := start(t, writeConfig(t, sock, filepath.Join(dir, "state"), ""), sock)
 
 	restore := ipc.PlayUser(os.Getuid() + 1)

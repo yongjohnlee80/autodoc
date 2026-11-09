@@ -12,6 +12,7 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/tui"
 )
 
@@ -19,7 +20,7 @@ import (
 // then the params; a refusal comes back as the CallError --call prints; without the environment it
 // says what is missing.
 func TestEditorCallsThePageAsTheAgent(t *testing.T) {
-	sock := filepath.Join(t.TempDir(), "e.sock")
+	sock := ipc.ScratchAddr(t.TempDir(), "e.sock")
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatal(err)
@@ -57,7 +58,7 @@ func TestEditorCallsThePageAsTheAgent(t *testing.T) {
 // A file others can open, a link, or an empty one is refused, saying why, and nothing is sent; the
 // variable, when set, still wins.
 func TestEditorReadsTheTokenFromItsFileWhenTheVariableIsDropped(t *testing.T) {
-	sock := filepath.Join(t.TempDir(), "e.sock")
+	sock := ipc.ScratchAddr(t.TempDir(), "e.sock")
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatal(err)
@@ -115,7 +116,7 @@ func TestEditorReadsTheTokenFromItsFileWhenTheVariableIsDropped(t *testing.T) {
 // line when it has one, and nothing with the editor refusing, gone or never set; it always exits 0,
 // as a hook must.
 func TestTheWorkspaceNoticePrintsALineOrNothing(t *testing.T) {
-	sock := filepath.Join(t.TempDir(), "e.sock")
+	sock := ipc.ScratchAddr(t.TempDir(), "e.sock")
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatal(err)

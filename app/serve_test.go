@@ -27,6 +27,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/internal/client"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 	"github.com/yongjohnlee80/autodoc/tui"
 )
@@ -178,7 +179,7 @@ func eventually(t *testing.T, what string, cond func() bool) {
 // TestServesAndCleansUp: the socket is 0600 while it serves, and gone after.
 func TestServesAndCleansUp(t *testing.T) {
 	dir := short(t)
-	sock := filepath.Join(dir, "a.sock")
+	sock := ipc.ScratchAddr(dir, "a.sock")
 	d := start(t, writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+t.TempDir()), sock)
 	fi, err := os.Stat(sock)
 	if err != nil || fi.Mode().Perm() != 0o600 {
@@ -197,7 +198,7 @@ func TestServesAndCleansUp(t *testing.T) {
 // first keeps serving on its socket.
 func TestSecondDaemonIsRefused(t *testing.T) {
 	dir := short(t)
-	sock := filepath.Join(dir, "a.sock")
+	sock := ipc.ScratchAddr(dir, "a.sock")
 	cfg := writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+t.TempDir())
 	start(t, cfg, sock)
 	err := runServe(context.Background(), cfg, io.Discard, testBuild, nil, "")
@@ -212,7 +213,7 @@ func TestSecondDaemonIsRefused(t *testing.T) {
 // TestStaleSocketIsReplaced: a socket file nothing answers on (a crashed daemon's) is taken over.
 func TestStaleSocketIsReplaced(t *testing.T) {
 	dir := short(t)
-	sock := filepath.Join(dir, "a.sock")
+	sock := ipc.ScratchAddr(dir, "a.sock")
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatal(err)
@@ -225,7 +226,7 @@ func TestStaleSocketIsReplaced(t *testing.T) {
 // TestSuccessorsSocketIsLeft: a daemon shutting down removes the socket only while it is its own.
 func TestSuccessorsSocketIsLeft(t *testing.T) {
 	dir := short(t)
-	sock := filepath.Join(dir, "a.sock")
+	sock := ipc.ScratchAddr(dir, "a.sock")
 	d := start(t, writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+t.TempDir()), sock)
 	// a successor took the path over (as after a stale-socket takeover)
 	if err := os.Remove(sock); err != nil {
@@ -249,9 +250,9 @@ func TestSuccessorsSocketIsLeft(t *testing.T) {
 func TestSecondDaemonOnTheStoreFindsTheFirst(t *testing.T) {
 	dir := short(t)
 	state := filepath.Join(dir, "state")
-	a := filepath.Join(dir, "a.sock")
+	a := ipc.ScratchAddr(dir, "a.sock")
 	start(t, writeConfig(t, a, state, "", "kb="+t.TempDir()), a)
-	b := filepath.Join(dir, "b.sock")
+	b := ipc.ScratchAddr(dir, "b.sock")
 	err := runServe(context.Background(), writeConfig(t, b, state, ""), io.Discard, testBuild, nil, "")
 	if !errors.Is(err, errAlreadyServing) || !strings.Contains(err.Error(), a) {
 		t.Fatalf("a second daemon over the store: %v, want errAlreadyServing naming %s", err, a)
@@ -266,7 +267,7 @@ func TestSecondDaemonOnTheStoreFindsTheFirst(t *testing.T) {
 func TestSecondDaemonDoesNotTrustAMismatchedLeaseInfo(t *testing.T) {
 	dir := short(t)
 	state := filepath.Join(dir, "state")
-	a := filepath.Join(dir, "a.sock")
+	a := ipc.ScratchAddr(dir, "a.sock")
 	start(t, writeConfig(t, a, state, "", "kb="+t.TempDir()), a)
 	storePath := filepath.Join(state, "autodoc.db")
 	li, err := store.ReadLeaseInfo(storePath)
@@ -277,7 +278,7 @@ func TestSecondDaemonDoesNotTrustAMismatchedLeaseInfo(t *testing.T) {
 	if err := store.WriteLeaseInfo(storePath, li); err != nil {
 		t.Fatal(err)
 	}
-	b := filepath.Join(dir, "b.sock")
+	b := ipc.ScratchAddr(dir, "b.sock")
 	err = runServe(context.Background(), writeConfig(t, b, state, ""), io.Discard, testBuild, nil, "")
 	if !errors.Is(err, store.ErrBusy) {
 		t.Fatalf("a second daemon over a mismatched lease-info: %v, want store.ErrBusy", err)
@@ -288,7 +289,7 @@ func TestSecondDaemonDoesNotTrustAMismatchedLeaseInfo(t *testing.T) {
 // store keeps them across a restart; the files of a removed workspace stay.
 func TestWorkspaceVerbs(t *testing.T) {
 	dir := short(t)
-	state, sock := filepath.Join(dir, "state"), filepath.Join(dir, "s.sock")
+	state, sock := filepath.Join(dir, "state"), ipc.ScratchAddr(dir, "s.sock")
 	cfg := writeConfig(t, sock, state, "")
 	d := start(t, cfg, sock)
 	cli := dial(t, sock)
@@ -403,7 +404,7 @@ func changed(t *testing.T, cli *golibrpc.Client, since int64, want ...string) in
 func TestFollowsTheFiles(t *testing.T) {
 	dir := short(t)
 	root := t.TempDir()
-	sock := filepath.Join(dir, "a.sock")
+	sock := ipc.ScratchAddr(dir, "a.sock")
 	start(t, writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+root), sock)
 	cli := dial(t, sock)
 	write := func(p, s string) {
@@ -452,7 +453,7 @@ func TestFollowsTheFiles(t *testing.T) {
 func TestWrittenLikeAnExternalEdit(t *testing.T) {
 	dir := short(t)
 	root := t.TempDir()
-	sock := filepath.Join(dir, "a.sock")
+	sock := ipc.ScratchAddr(dir, "a.sock")
 	start(t, writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+root), sock)
 	cli := dial(t, sock)
 	body := "# Heron\n\ngrey heron #wader [[egret]]\n\n## Range\n\nmarshes\n"
@@ -520,7 +521,7 @@ func TestEmbeddingProvidersFromTheStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	srv := ollama(t)
-	sock := filepath.Join(dir, "a.sock")
+	sock := ipc.ScratchAddr(dir, "a.sock")
 	cfg := writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+root)
 	d := start(t, cfg, sock)
 	cli := dial(t, sock)
@@ -606,7 +607,7 @@ func TestMain(m *testing.M) {
 // serve.log (0600) in the state directory, and the daemon answers on the socket.
 func TestSpawnServeStartsADetachedDaemon(t *testing.T) {
 	dir := short(t)
-	sock := filepath.Join(dir, "a.sock")
+	sock := ipc.ScratchAddr(dir, "a.sock")
 	state := filepath.Join(dir, "state")
 	if err := os.MkdirAll(state, 0o700); err != nil {
 		t.Fatal(err)
@@ -663,7 +664,7 @@ func TestServesWithoutAConfigFile(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", data)
 	missing := filepath.Join(t.TempDir(), "config.toml")
-	d := start(t, missing, filepath.Join(dir, "autodoc.sock"))
+	d := start(t, missing, ipc.ScratchAddr(dir, "autodoc.sock"))
 	if got := call(t, dial(t, d.sock), "workspace.list").([]any); len(got) != 0 {
 		t.Errorf("workspaces %v", got)
 	}
@@ -731,7 +732,7 @@ func TestCallPrintsTheResultAsJSON(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	sock := filepath.Join(dir, "a.sock")
+	sock := ipc.ScratchAddr(dir, "a.sock")
 	cfg := writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+root)
 	start(t, cfg, sock)
 	cli := dial(t, sock)
@@ -800,7 +801,7 @@ func TestCallPrintsTheResultAsJSON(t *testing.T) {
 // starts; nothing is spawned (no serve.log).
 func TestACallDuringARestartSpawnsNothing(t *testing.T) {
 	dir := short(t)
-	sock := filepath.Join(dir, "a.sock")
+	sock := ipc.ScratchAddr(dir, "a.sock")
 	state := filepath.Join(dir, "state")
 	if err := os.MkdirAll(state, 0o700); err != nil {
 		t.Fatal(err)
@@ -837,7 +838,7 @@ func TestACallDuringARestartSpawnsNothing(t *testing.T) {
 // is the reconnect after sys.shutdown a slow machine hits.
 func TestServeWaitsForAPredecessorClosing(t *testing.T) {
 	dir := short(t)
-	state, sock := filepath.Join(dir, "state"), filepath.Join(dir, "s.sock")
+	state, sock := filepath.Join(dir, "state"), ipc.ScratchAddr(dir, "s.sock")
 	if err := os.MkdirAll(state, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -866,7 +867,7 @@ func TestServeGivesUpOnAStoreStillHeld(t *testing.T) {
 	predecessorWait = 300 * time.Millisecond
 	t.Cleanup(func() { predecessorWait = old })
 	dir := short(t)
-	state, sock := filepath.Join(dir, "state"), filepath.Join(dir, "s.sock")
+	state, sock := filepath.Join(dir, "state"), ipc.ScratchAddr(dir, "s.sock")
 	if err := os.MkdirAll(state, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -890,7 +891,7 @@ func TestServeGivesUpOnAStoreStillHeld(t *testing.T) {
 // (docs/decisions/todos.md#a-cli-call-says-who-runs-it).
 func TestACallsEventsAreTheCLIs(t *testing.T) {
 	dir := short(t)
-	sock := filepath.Join(dir, "a.sock")
+	sock := ipc.ScratchAddr(dir, "a.sock")
 	cfg := writeConfig(t, sock, filepath.Join(dir, "state"), "")
 	start(t, cfg, sock)
 	var out bytes.Buffer
@@ -915,7 +916,7 @@ func TestACallsEventsAreTheCLIs(t *testing.T) {
 // cannot make, stops it before anything is bound, with exit 1.
 func TestServeAsAModeSaysWhyItServesNothing(t *testing.T) {
 	dir := short(t)
-	sock := filepath.Join(dir, "a.sock")
+	sock := ipc.ScratchAddr(dir, "a.sock")
 	cfg := writeConfig(t, sock, filepath.Join(dir, "state"), "")
 	start(t, cfg, sock)
 	var stdout, stderr bytes.Buffer
@@ -935,14 +936,14 @@ func TestServeAsAModeSaysWhyItServesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	under := filepath.Join(dir, "under.toml")
-	conf := fmt.Sprintf("[server]\nsocket = %q\nstate_dir = %q\ndata_dir = %q\n", filepath.Join(dir, "b.sock"), filepath.Join(dir, "state2"), filepath.Join(file, "data"))
+	conf := fmt.Sprintf("[server]\nsocket = %q\nstate_dir = %q\ndata_dir = %q\n", ipc.ScratchAddr(dir, "b.sock"), filepath.Join(dir, "state2"), filepath.Join(file, "data"))
 	if err := os.WriteFile(under, []byte(conf), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := runServe(context.Background(), under, io.Discard, testBuild, nil, ""); err == nil || !strings.Contains(err.Error(), filepath.Join(file, "data")) {
 		t.Errorf("--serve with a data directory under a file: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "b.sock")); err == nil {
+	if _, err := os.Stat(ipc.ScratchAddr(dir, "b.sock")); err == nil {
 		t.Error("the socket was bound before the data directory was refused")
 	}
 	// the socket held by a daemon of another store, and by something that is no autodoc
@@ -950,7 +951,7 @@ func TestServeAsAModeSaysWhyItServesNothing(t *testing.T) {
 	if err := runServe(context.Background(), other, io.Discard, testBuild, nil, ""); err == nil || !strings.Contains(err.Error(), "that is not serving") {
 		t.Errorf("--serve on another store's daemon's socket: %v", err)
 	}
-	plain := filepath.Join(dir, "p.sock")
+	plain := ipc.ScratchAddr(dir, "p.sock")
 	ln, err := net.Listen("unix", plain)
 	if err != nil {
 		t.Fatal(err)

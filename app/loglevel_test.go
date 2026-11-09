@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/golib/logger"
+
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // The daemon's [log] level leaves out the records less severe than it, --log-level is taken over
@@ -29,7 +31,7 @@ func TestTheLogLevelFiltersTheDaemonsLog(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			dir := short(t)
-			sock := filepath.Join(dir, "a.sock")
+			sock := ipc.ScratchAddr(dir, "a.sock")
 			extra := ""
 			if c.key != "" {
 				extra = fmt.Sprintf("[log]\nlevel = %q\n", c.key)

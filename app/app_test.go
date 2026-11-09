@@ -14,6 +14,7 @@ import (
 	"github.com/yongjohnlee80/golib/search"
 
 	"github.com/yongjohnlee80/autodoc/core/registrations"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -178,7 +179,7 @@ func TestABuildsDeriverIsReported(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir := short(t)
-	sock := filepath.Join(dir, "a.sock")
+	sock := ipc.ScratchAddr(dir, "a.sock")
 	cfg := writeConfig(t, sock, filepath.Join(dir, "state"), "")
 	startAs(t, cfg, sock, build{version: "v1", reg: reg})
 	got, err := rpc.RegistrationsOf(call(t, dial(t, sock), "sys.capabilities"))
