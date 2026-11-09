@@ -407,23 +407,38 @@ func TestAWatchLeavesNoHandleBehind(t *testing.T) {
 	r, _ := onDisk(t, Options{})
 	r.openOnDisk(t, "a.md")
 	fds := func() int { e, _ := os.ReadDir("/proc/self/fd"); return len(e) }
+	// settled is the count once it holds still for a few samples: an earlier test's server still
+	// closing its sockets moves it for a moment, and a count read then is no baseline
+	settled := func() int {
+		last, same := fds(), 0
+		for deadline := time.Now().Add(2 * time.Second); same < 3 && time.Now().Before(deadline); {
+			time.Sleep(50 * time.Millisecond)
+			if n := fds(); n == last {
+				same++
+			} else {
+				last, same = n, 0
+			}
+		}
+		return last
+	}
 	cycle := func() {
 		onLoop(r, func() bool { r.h.unwatchFile(r.h.active); r.h.watchFile(r.h.active); return true })
 	}
 	for range 5 { // warm: the runtime's own descriptors settle
 		cycle()
 	}
-	time.Sleep(200 * time.Millisecond)
-	before := fds()
+	before := settled()
 	for range 20 {
 		cycle()
 	}
-	deadline := time.Now().Add(3 * time.Second)
-	for fds()-before > 3 && time.Now().Before(deadline) {
+	// a leak holds a folder, an inotify and a pipe pair a watch: 20 leaked watches are far past 3,
+	// however long the count is given to settle
+	last := fds()
+	for deadline := time.Now().Add(3 * time.Second); last-before > 3 && time.Now().Before(deadline); last = fds() {
 		time.Sleep(20 * time.Millisecond)
 	}
-	if grown := fds() - before; grown > 3 {
-		t.Fatalf("%d more file descriptors after 20 watches started and ended", grown)
+	if grown := last - before; grown > 3 {
+		t.Fatalf("%d more file descriptors after 20 watches started and ended (%d settled before, %d after 3 s)", grown, before, last)
 	}
 }
 
