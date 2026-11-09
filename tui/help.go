@@ -14,7 +14,7 @@ import (
 // command of the catalog (catalog.go) with its ':' names and its keys, more naming keys the key
 // catalog does not hold (a plugin's SPC p letter), then the page, the panels and what a key needs.
 func helpText(k keyset, cat *catalog, more map[string][]string) string {
-	cmds := k.helpCommands(cat, more)
+	cmds := helpCommands(k, cat, more)
 	if cmds != "" {
 		cmds += "\n\n"
 	}
@@ -52,7 +52,7 @@ var helpGroups = []struct {
 // helpCommands is F1's COMMANDS: every entry by its source, each line its id, its ':' names, its
 // keys and its title. The names are the ones it owns now, so F1, ':' and its completion name the
 // same owner. "" with no catalog.
-func (k keyset) helpCommands(cat *catalog, more map[string][]string) string {
+func helpCommands(k keyset, cat *catalog, more map[string][]string) string {
 	if cat == nil {
 		return ""
 	}
@@ -72,7 +72,7 @@ func (k keyset) helpCommands(cat *catalog, more map[string][]string) string {
 			for i, n := range names {
 				names[i] = ":" + n
 			}
-			keys := append(k.keysOf(e), more[e.ID]...)
+			keys := append(keysOf(k, e), more[e.ID]...)
 			lines = append(lines, fmt.Sprintf("    %s%s  %s · %s · %s", e.ID, strings.Repeat(" ", width-utf8.RuneCountInString(e.ID)),
 				orDash(strings.Join(names, " ")), orDash(strings.Join(keys, ", ")), k.textID("autodoc.cmd."+e.ID, e.Title)))
 		}
@@ -91,11 +91,11 @@ func orDash(s string) string {
 }
 
 // keysOf are the keys that run e, as help names them: its Cmd's, and its twin's.
-func (k keyset) keysOf(e *Entry) []string {
+func keysOf(k keyset, e *Entry) []string {
 	var out []string
 	for _, key := range k.keys {
 		if key.Cmd == e.ID || e.Twin != "" && key.Run == e.Twin {
-			if n := k.keyName(key, 0); !slices.Contains(out, n) {
+			if n := keyName(k, key, 0); !slices.Contains(out, n) {
 				out = append(out, n)
 			}
 		}
@@ -105,7 +105,7 @@ func (k keyset) keysOf(e *Entry) []string {
 
 // keyName is key as typed from the page: a Window key's own name, a leader key after SPC, a key
 // on a card after the keys that open the card.
-func (k keyset) keyName(key Key, depth int) string {
+func keyName(k keyset, key Key, depth int) string {
 	show := k.shown(key)
 	if key.Card == leader {
 		return "SPC " + show
@@ -117,7 +117,7 @@ func (k keyset) keyName(key Key, depth int) string {
 	if i < 0 {
 		return show
 	}
-	return k.keyName(k.keys[i], depth+1) + " " + show
+	return keyName(k, k.keys[i], depth+1) + " " + show
 }
 
 const helpKeys = `KEYS
