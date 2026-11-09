@@ -46,6 +46,16 @@ func tune(t testing.TB) *seams {
 	return &tu.s
 }
 
+// tuneEnv sets variables in t's program's environment (procenv.Env.With: NAME=value sets NAME,
+// NAME alone removes it), over its tune so far, else over the process's: the program's HOME, PATH,
+// SHELL, folders and what it starts see them, and the process's environment is left as it is, so
+// tests that set different ones can run at once.
+func tuneEnv(t testing.TB, set ...string) {
+	t.Helper()
+	s := tune(t)
+	s.env = s.env.With(set...)
+}
+
 // seamsFor is a copy of the seams t's program is made with: t's own, else its nearest parent
 // test's (a subtest reads the tune its parent made), else nil, defaultSeams. t's own are marked
 // built, so a later tune(t) fails.

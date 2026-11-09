@@ -62,9 +62,7 @@ func rightBorder(screen string, y, x int) int {
 // FrameDrag (app's terminalOptions, term.WithFrameDrag).
 func shellTUIOn(t *testing.T, caps tuicore.Capabilities) (*daemon, *running) {
 	t.Helper()
-	t.Setenv("SHELL", "/bin/sh")
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("PS1", "$ ")
+	tuneEnv(t, "SHELL=/bin/sh", "HOME="+t.TempDir(), "PS1=$ ")
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{})
 	h := newHost(NewSession(d.sock, nil), Options{seams: seamsFor(t)})
 	s := decltest.RunOn(t, tuicore.NewTestBackend(100, 30, tuicore.WithTestCapabilities(caps)), h.attach, h.options(Options{})...)

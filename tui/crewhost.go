@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
@@ -120,13 +121,13 @@ type crewSession struct {
 // errNoCrewScope is a registration asked of a window that holds no scope.
 var errNoCrewScope = errors.New("this window holds no crew scope")
 
-func newCrewHost(c crewCore, agentDir string) *crewHost {
+func newCrewHost(c crewCore, env procenv.Env, agentDir string) *crewHost {
 	b := make([]byte, 32)
 	_, _ = rand.Read(b) // crypto/rand: never fails on the platforms AutoDoc runs on
 	proc, _ := crew.ProcRef(os.Getpid())
-	h := &crewHost{c: c, dir: filepath.Join(agentBase(agentDir), ".crew-scopes"), run: hex.EncodeToString(b), proc: proc,
+	h := &crewHost{c: c, dir: filepath.Join(agentBase(env, agentDir), ".crew-scopes"), run: hex.EncodeToString(b), proc: proc,
 		sessions: map[string]crewSession{}, pending: map[string]*crewRegistration{}, owed: map[string]crewOwedExit{}}
-	h.todos = &todoFeed{h: h, dir: filepath.Join(agentBase(agentDir), ".crew-todos"), start: time.Now()}
+	h.todos = &todoFeed{h: h, dir: filepath.Join(agentBase(env, agentDir), ".crew-todos"), start: time.Now()}
 	return h
 }
 

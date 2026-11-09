@@ -29,7 +29,7 @@ func (w *crewWindow) shown() string {
 func TestTheOrphansAreOfferedOnceAtTheFirstClaim(t *testing.T) {
 	w := &crewWindow{d: newCrewDaemonForHost()}
 	w.d.orphans = []any{orphan("autodoc:dead1", 3, "gold", "jarvis"), orphan("autodoc:dead2", 1, "lector"), orphan("autodoc:dead3", 2, "zen")}
-	h := newCrewHost(w, t.TempDir())
+	h := newCrewHost(w, nil, t.TempDir())
 	h.Connected()
 	scope, epoch, _ := h.held()
 	if q := w.card.current; !strings.Contains(w.shown(), "3 unhandled message(s) wait for gold, jarvis") ||
@@ -68,7 +68,7 @@ func TestAnOfferWaitsForTheUsersQuestion(t *testing.T) {
 	w.d.orphans = []any{orphan("autodoc:dead1", 1, "gold")}
 	yes, cancelled := 0, 0
 	w.card.ask(Question{Title: "remove the provider?", OnYes: func() { yes++ }, OnCancel: func() { cancelled++ }})
-	h := newCrewHost(w, t.TempDir())
+	h := newCrewHost(w, nil, t.TempDir())
 	h.Connected() // its orphans arrive while the user's question is open
 	if !strings.HasPrefix(w.shown(), "remove the provider?") || cancelled != 0 {
 		t.Fatalf("the card shows %q, the user's question cancelled %d times; want it left open", w.shown(), cancelled)
@@ -86,7 +86,7 @@ func TestAnOfferWaitsForTheUsersQuestion(t *testing.T) {
 func TestAQuestionOverAnOfferPutsItBack(t *testing.T) {
 	w := &crewWindow{d: newCrewDaemonForHost()}
 	w.d.orphans = []any{orphan("autodoc:deadA", 1, "gold"), orphan("autodoc:deadB", 1, "lector")}
-	h := newCrewHost(w, t.TempDir())
+	h := newCrewHost(w, nil, t.TempDir())
 	h.Connected()
 	if !strings.Contains(w.shown(), "autodoc:deadA") {
 		t.Fatalf("the card shows %q, want A", w.shown())
@@ -113,7 +113,7 @@ func TestAQuestionOverAnOfferPutsItBack(t *testing.T) {
 func TestTheWindowsOwnScopeIsNoOrphan(t *testing.T) {
 	dir := t.TempDir()
 	const own = "autodoc:00000000000000aa"
-	scopes := filepath.Join(agentBase(dir), ".crew-scopes")
+	scopes := filepath.Join(agentBase(nil, dir), ".crew-scopes")
 	if err := os.MkdirAll(scopes, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestTheWindowsOwnScopeIsNoOrphan(t *testing.T) {
 	}
 	w := &crewWindow{d: newCrewDaemonForHost()}
 	w.d.orphans = []any{orphan(own, 4, "gold")}
-	h := newCrewHost(w, dir)
+	h := newCrewHost(w, nil, dir)
 	h.Connected()
 	if scope, _, _ := h.held(); scope != own {
 		t.Fatalf("the window claimed %s, want its predecessor's %s", scope, own)
@@ -138,7 +138,7 @@ func TestAnOrphanNotSettledSaysSoAndGoesOn(t *testing.T) {
 	w := &crewWindow{d: newCrewDaemonForHost()}
 	w.d.orphans = []any{orphan("autodoc:dead1", 1, "gold"), orphan("autodoc:dead2", 1, "lector")}
 	w.d.settleErr = errors.New("the store is unavailable")
-	h := newCrewHost(w, t.TempDir())
+	h := newCrewHost(w, nil, t.TempDir())
 	h.Connected()
 	w.card.accepted()
 	w.card.closed()

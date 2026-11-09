@@ -25,7 +25,7 @@ func (s *scriptedCore) listCalls() int {
 // row it was refused for shows the task as it is now, its rev with it.
 func TestAFailedTodoWriteReadsThePanelAgain(t *testing.T) {
 	s := scriptedStore(true)
-	v := newTodos(s)
+	v := newTodos(s, nil)
 	v.list()
 	s.answers["todos.remove"] = func([]any) (any, error) {
 		return nil, &golibrpc.Error{Code: todo.CodeStale, Message: "the task changed since it was read"}

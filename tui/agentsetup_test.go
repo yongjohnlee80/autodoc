@@ -22,9 +22,9 @@ func offeringSetup(t *testing.T) {
 
 // fakeClaude is a claude that writes every line typed to it into heard, a line only once its Enter
 // arrives: a prompt submitted is a whole line there, a prompt pasted without Enter none. The card
-// finds it (the seams' lookAgentCLI); onPath puts it on PATH for the agent's start, after runAgentTUIWith,
-// which sets a PATH of its own.
-func fakeClaude(t *testing.T) (heard string, onPath func()) {
+// finds it (the seams' lookAgentCLI); onPath puts it on r's program's PATH for the agent's start, after
+// runAgentTUIWith, which sets a PATH of its own.
+func fakeClaude(t *testing.T) (heard string, onPath func(*running)) {
 	t.Helper()
 	bin := t.TempDir()
 	heard = filepath.Join(t.TempDir(), "heard")
@@ -38,7 +38,9 @@ func fakeClaude(t *testing.T) (heard string, onPath func()) {
 		}
 		return "", errors.New("not found")
 	}
-	return heard, func() { t.Setenv("PATH", bin+":/usr/bin:/bin") }
+	return heard, func(r *running) {
+		onLoop(r, func() bool { r.h.seams.env = r.h.seams.env.With("PATH=" + bin + ":/usr/bin:/bin"); return true })
+	}
 }
 
 func heardLines(path string) []string {
@@ -107,7 +109,7 @@ func TestSetUpSavesAndStartsTypingNothing(t *testing.T) {
 	offeringSetup(t)
 	heard, onPath := fakeClaude(t)
 	d, r, _ := runAgentTUIWith(t, t.TempDir(), nil, "", nil, Options{})
-	onPath()
+	onPath(r)
 	r.s.WaitForText(t, "Set up an AI agent?")
 	r.s.WaitForText(t, "Claude (claude)")
 	r.keys(t, key('s')) // &Set up
@@ -143,7 +145,7 @@ func TestASetupWithATakenCodenameIsRefused(t *testing.T) {
 	heard, onPath := fakeClaude(t)
 	old := agentProfile{Name: "Old", Command: "claude", Codename: "claude"}
 	d, r, _ := runAgentTUIWith(t, t.TempDir(), []agentProfile{old}, "", nil, Options{})
-	onPath()
+	onPath(r)
 	onLoop(r, func() bool { r.h.agents.openAgentSetup(); return true })
 	r.s.WaitForText(t, "Set up an AI agent?")
 	onLoop(r, func() bool { r.h.agents.agentSetupConfirm(0, "Claude"); return true })

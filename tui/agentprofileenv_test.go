@@ -138,7 +138,7 @@ func TestAChangedEnvRestartsAStoppedTabFresh(t *testing.T) {
 func TestAClaudeProfileOnAnotherAccountIsAClaudeAgent(t *testing.T) {
 	bin := t.TempDir()
 	fakeClaudeBin(t, bin, append(claudeHookEvents, "crossSessionInbound")...)
-	t.Setenv("PATH", "/usr/bin:/bin") // the Claude Code is on the profile's PATH, not AutoDoc's
+	tuneEnv(t, "PATH=/usr/bin:/bin") // the Claude Code is on the profile's PATH, not AutoDoc's
 	a, c, w := crewAgents(t, `[{"name":"Sephiroth","command":"claude","codename":"sephiroth","env":{"CLAUDE_CONFIG_DIR":"~/.claude-work","PATH":"`+bin+`:$PATH"}}]`)
 	p, _ := a.profile("sephiroth")
 	instance, err := a.startInstance(p)

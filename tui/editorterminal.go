@@ -150,7 +150,7 @@ func (h *Host) editorTerminalRun(ctx context.Context, req *golibrpc.Request) (an
 		}
 		dir := ""
 		if ws, ok := h.activeWorkspaceInfo(); ok {
-			dir = termDir(ws.root)
+			dir = termDir(h.seams.env, ws.root)
 		}
 		h.asker.askWhenFree(Question{ // behind an open card, never in its place
 			Title: h.trf("autodoc.question.editorterminal.let_the_agent_run_this_in_the_terminal", agent),
@@ -225,7 +225,7 @@ func (t *terminals) runFor(agent, line, dir string, exited func(int)) (string, e
 		t.c.Keep(t.c.CallView("terminal", "open"))
 	}
 	label := agentRunLabel(panel, agent)
-	id, err := panel.Add(label, TerminalConfig{Command: "/bin/sh", Args: []string{"-c", line}, Dir: dir, Exited: exited})
+	id, err := panel.Add(label, t.inOwnEnv(TerminalConfig{Command: "/bin/sh", Args: []string{"-c", line}, Dir: dir, Exited: exited}))
 	if err != nil {
 		return "", err
 	}

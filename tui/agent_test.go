@@ -70,8 +70,7 @@ func runAgentTUIWith(t *testing.T, dir string, profiles []agentProfile, def stri
 // runAgentTUIIn is runAgentTUIWith over the daemon's workspaces files, kb's entered first.
 func runAgentTUIIn(t *testing.T, dir string, profiles []agentProfile, def string, more map[string]string, opt Options, files map[string][]string) (d *daemon, r *running, calls string) {
 	t.Helper()
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("PATH", "/usr/bin:/bin")
+	tuneEnv(t, "HOME="+t.TempDir(), "PATH=/usr/bin:/bin")
 	bins := filepath.Join(t.TempDir(), "a build's dir") // a path the shell must have quoted
 	if err := os.Mkdir(bins, 0o700); err != nil {
 		t.Fatal(err)

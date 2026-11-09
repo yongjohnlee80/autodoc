@@ -203,8 +203,7 @@ func (r *running) waitPage(t *testing.T, want string) {
 // a Lua find replaces :find and leaves the page's find runnable by its id; a Lua term takes :term
 // alone, and :terminal still opens the terminal. A Lua id outside lua.* does not load.
 func TestALuaCommandTakesOnlyTheNameItAsksFor(t *testing.T) {
-	t.Setenv("SHELL", "/bin/sh")
-	t.Setenv("HOME", t.TempDir())
+	tuneEnv(t, "SHELL=/bin/sh", "HOME="+t.TempDir())
 	_, r := luaTUI(t, "one\ntwo\n", map[string]string{"over.lua": `
 autodoc.command{ name = "find", run = function(ed, args, line) ed:insert("lua find " .. line .. ";") end }
 autodoc.command{ name = "term", run = function(ed) ed:insert("lua term;") end }

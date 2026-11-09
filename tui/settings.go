@@ -537,7 +537,7 @@ func changed(t wording, c map[string]any) string {
 // until another is typed or browsed to, with the default rules.
 func (h *Host) startAddWorkspace() {
 	h.withSettingsExtras(func(providers []string, databases bool) {
-		w := wsInfo{name: "untitled", root: homeDir(), include: workspace.DefaultInclude(), exclude: workspace.DefaultExclude(),
+		w := wsInfo{name: "untitled", root: homeDir(h.seams.env), include: workspace.DefaultInclude(), exclude: workspace.DefaultExclude(),
 			sectionTokens: store.SectionTokensDefault, embeddingPolicy: store.EmbeddingAlways,
 			db: databasesInfo{destination: store.DestinationLocal}}
 		h.dropKBType() // a fresh dialog: no type staged, and none still staging may land
@@ -722,7 +722,7 @@ func (h *Host) rootChosen(folder string) { h.setField("App.settingsRoot", folder
 func (h *Host) newRootFolder(root string) {
 	root = strings.TrimSpace(root)
 	if rest, ok := strings.CutPrefix(root, "~"); ok && (rest == "" || strings.HasPrefix(rest, "/")) {
-		root = homeDir() + rest
+		root = homeDir(h.seams.env) + rest
 	}
 	if !filepath.IsAbs(root) {
 		h.notify(h.tr("autodoc.notice.settings.new_folder_type_the_folder_s_full_path_in_the_ro"))

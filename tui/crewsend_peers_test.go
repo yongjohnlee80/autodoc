@@ -47,7 +47,7 @@ func TestTheCrewHostListsOtherScopesLiveAgents(t *testing.T) {
 		t.Error("a failed crew.list never answered")
 	}
 
-	h := newCrewHost(&crewWindow{d: newCrewDaemonForHost()}, t.TempDir()) // never connected: no scope
+	h := newCrewHost(&crewWindow{d: newCrewDaemonForHost()}, nil, t.TempDir()) // never connected: no scope
 	asked = false
 	h.peerAgents(func(peers []AgentEntry) { asked = len(peers) == 0 })
 	if !asked {
@@ -99,7 +99,7 @@ func TestTheCrewHostSendsAnotherHostsAgentATaskUnrung(t *testing.T) {
 		t.Errorf("a refused send was heard as %v", heard)
 	}
 
-	h := newCrewHost(&crewWindow{d: newCrewDaemonForHost()}, t.TempDir())
+	h := newCrewHost(&crewWindow{d: newCrewDaemonForHost()}, nil, t.TempDir())
 	heard = nil
 	h.sendTask("jarvis", "autovim:plugins", "Task: t", "body", "k", func(err error) { heard = append(heard, err) })
 	if len(heard) != 1 || !errors.Is(heard[0], errDoorbellNotSent) {
@@ -111,7 +111,7 @@ func TestTheCrewHostSendsAnotherHostsAgentATaskUnrung(t *testing.T) {
 // codename@project and names its scope and whether a wake reaches it.
 func TestTodosAssignPreviewsAnotherHostsAgent(t *testing.T) {
 	c, _ := newPeerCore("autodoc:0123456789abcdef", peer("zen", "autovim:mcat", "mcat", false, "no_endpoint"))
-	v := newTodos(c)
+	v := newTodos(c, nil)
 	e := c.peers[0]
 	pn := v.assignPick.preview(e)(context.Background()).v
 	if pn.title != "zen@mcat" || !strings.Contains(pn.text, "autovim:mcat") || !strings.Contains(pn.text, runState(c, e)) {
@@ -123,7 +123,7 @@ func TestTodosAssignPreviewsAnotherHostsAgent(t *testing.T) {
 // window that can't reach the crew sends nothing and says nothing.
 func TestTodosAssignSendsNoPeerTaskFromAWindowWithoutACrew(t *testing.T) {
 	ac, _ := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
-	v := newTodos(ac)
+	v := newTodos(ac, nil)
 	v.list()
 	s, _ := v.cursor()
 	before := len(ac.notes)

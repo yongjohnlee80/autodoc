@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"os"
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"slices"
 	"strings"
 )
@@ -48,11 +48,12 @@ func spawnerIdentity(environ []string) []string {
 	return out
 }
 
-// ownEnviron is the environment AutoDoc was started with, without its spawner's identity: what a
-// process AutoDoc starts on its own behalf inherits.
-func ownEnviron() []string {
-	drop := spawnerIdentity(os.Environ())
-	return slices.DeleteFunc(os.Environ(), func(kv string) bool {
+// ownEnviron is the program's environment (env, nil for AutoDoc's own), without its spawner's
+// identity: what a process AutoDoc starts on its own behalf inherits.
+func ownEnviron(env procenv.Env) []string {
+	environ := env.Environ()
+	drop := spawnerIdentity(environ)
+	return slices.DeleteFunc(environ, func(kv string) bool {
 		name, _, _ := strings.Cut(kv, "=")
 		return slices.Contains(drop, name)
 	})

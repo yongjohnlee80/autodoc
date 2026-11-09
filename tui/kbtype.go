@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -14,6 +13,8 @@ import (
 
 	"github.com/yongjohnlee80/autodoc"
 	"github.com/yongjohnlee80/autodoc/core/kbtype"
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/internal/userdirs"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -68,7 +69,7 @@ type stagedKBType struct {
 // stageKBType clones url into a stage of its own and reads it as a KB type. It reuses the plugin
 // installer's git helper (plugininstall.go): no prompts, a timeout, a shallow clone. Nothing in the
 // clone runs. On any failure the stage is removed.
-func stageKBType(ctx context.Context, url string) stagedKBType {
+func stageKBType(ctx context.Context, env procenv.Env, url string) stagedKBType {
 	s := stagedKBType{url: url}
 	fail := func(err error) stagedKBType {
 		if s.stage != "" {
@@ -81,18 +82,18 @@ func stageKBType(ctx context.Context, url string) stagedKBType {
 	if !strings.HasPrefix(url, "https://") {
 		return fail(errors.New("a KB type is cloned over https:// only"))
 	}
-	if _, err := exec.LookPath("git"); err != nil {
+	if _, err := procenv.LookPath(env, "git"); err != nil {
 		return fail(errors.New("a KB type needs git"))
 	}
-	stage, err := os.MkdirTemp("", "autodoc-kbtype-")
+	stage, err := os.MkdirTemp(userdirs.Temp(env), "autodoc-kbtype-")
 	if err != nil {
 		return fail(err)
 	}
 	s.stage = stage
-	if _, err := git(ctx, pluginCloneTimeout, "", "clone", "--depth", "1", "--", url, stage); err != nil {
+	if _, err := git(ctx, env, pluginCloneTimeout, "", "clone", "--depth", "1", "--", url, stage); err != nil {
 		return fail(err)
 	}
-	if s.commit, err = git(ctx, pluginCloneTimeout, stage, "rev-parse", "HEAD"); err != nil {
+	if s.commit, err = git(ctx, env, pluginCloneTimeout, stage, "rev-parse", "HEAD"); err != nil {
 		return fail(err)
 	}
 	if size, err := dirSize(stage); err != nil {
@@ -129,7 +130,7 @@ func (h *Host) stageKB(ctx context.Context, url string) stagedKBType {
 	if h.kbStage != nil {
 		return h.kbStage(ctx, url)
 	}
-	return stageKBType(ctx, url)
+	return stageKBType(ctx, h.seams.env, url)
 }
 
 // kbTypePicked is the KB type field's choice, row i of kbTypeRows.

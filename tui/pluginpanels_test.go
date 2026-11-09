@@ -679,9 +679,7 @@ func (r *running) pluginRowLabel(name string) (string, bool) {
 // comes forward, as a window that opens does), and the terminal closed, the card is on the screen,
 // the keyboard in it; not on the page, which would have come over the card.
 func TestTheTerminalClosedGivesTheKeyboardToTheTopmostWindowStillOpen(t *testing.T) {
-	t.Setenv("SHELL", "/bin/sh")
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("PS1", "$ ")
+	tuneEnv(t, "SHELL=/bin/sh", "HOME="+t.TempDir(), "PS1=$ ")
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "echo", rightCard)
 	_, r, _ := cardTUI(t, dir, nil)

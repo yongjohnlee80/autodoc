@@ -55,7 +55,7 @@ func (h *Host) browseFolder() string {
 	if root := h.rootOf(h.ws); root != "" {
 		return root
 	}
-	return homeDir()
+	return homeDir(h.seams.env)
 }
 
 // diskPath is the open file's absolute path on disk; "" when none is open, or its workspace's

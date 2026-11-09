@@ -61,7 +61,7 @@ func (h *Host) openPaneInBrowser() {
 		if err != nil {
 			return answerOf[string]{err: err}
 		}
-		path, err := htmlPreviewFile(content)
+		path, err := htmlPreviewFile(h.seams.env, content)
 		if err != nil {
 			return answerOf[string]{err: err}
 		}

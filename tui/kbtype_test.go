@@ -294,7 +294,7 @@ func TestAKBTypeIsSentInBatches(t *testing.T) {
 // are refused before git runs, so nothing in a type's URL can run a command.
 func TestAKBTypeIsClonedOverHTTPSOnly(t *testing.T) {
 	for _, url := range []string{"ext::sh -c touch% /tmp/pwned", "file:///tmp/a-type", "/tmp/a-type", "git@github.com:x/y.git", "http://example.com/x"} {
-		s := stageKBType(context.Background(), url)
+		s := stageKBType(context.Background(), nil, url)
 		if s.err == nil || !strings.Contains(s.err.Error(), "https://") || s.stage != "" {
 			t.Errorf("%q: %v, stage %q; want refused before any clone", url, s.err, s.stage)
 		}
@@ -328,7 +328,6 @@ func TestNewFolderMakesTheRoot(t *testing.T) {
 	r.h.p.Post(func() { r.h.newRootFolder("relative/path") })
 	r.s.WaitFor(t, "a notice", func(string) bool { return r.noticed("type the folder's full path") })
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	r.h.p.Post(func() { r.h.newRootFolder("~/from-home") })
-	r.s.WaitFor(t, "~ made under home", func(string) bool { _, err := os.Stat(filepath.Join(homeDir(), "from-home")); return err == nil })
+	r.h.p.Post(func() { r.h.seams.env = r.h.seams.env.With("HOME=" + home); r.h.newRootFolder("~/from-home") })
+	r.s.WaitFor(t, "~ made under home", func(string) bool { _, err := os.Stat(filepath.Join(home, "from-home")); return err == nil })
 }

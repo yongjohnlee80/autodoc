@@ -24,7 +24,7 @@ func (h *Host) resolveOpenPath(p string) (string, error) {
 	case p == "":
 		return "", errors.New("open: takes a path, absolute or relative to the workspace in use")
 	case p == "~" || strings.HasPrefix(p, "~/"):
-		return filepath.Join(homeDir(), strings.TrimPrefix(p, "~")), nil
+		return filepath.Join(homeDir(h.seams.env), strings.TrimPrefix(p, "~")), nil
 	case filepath.IsAbs(p):
 		return filepath.Clean(p), nil
 	}
