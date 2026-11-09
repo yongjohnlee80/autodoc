@@ -174,6 +174,11 @@ func TestThePaneReadsInSepiaAndDark(t *testing.T) {
 			if !ok || !eok || !r.paneHas("Start", "Finish") {
 				return false
 			}
+			// a frame still on the other theme's paper is not this theme's yet: sepia's is light, dark's
+			// dark (under load the first frames after a switch can still be the old one's)
+			if bg := snap[py][px].Attrs.BG; bg.Kind != tuicore.CellColorRGB || lightPaper(bg) != (theme == "sepia") {
+				return false
+			}
 			kw = snap[py][px].Attrs.FG
 			return kw == snap[ey][ex].Attrs.FG && (len(kws) == 0 || kw != kws[0])
 		})
@@ -191,6 +196,11 @@ func TestThePaneReadsInSepiaAndDark(t *testing.T) {
 		kws = append(kws, kw)
 		t.Logf("%s: the pane:\n%s", theme, r.paneText())
 	}
+}
+
+// lightPaper is whether c is a light page's colour: its relative luminance over half.
+func lightPaper(c tuicore.CellColor) bool {
+	return (0.2126*float64(c.R)+0.7152*float64(c.G)+0.0722*float64(c.B))/255 > 0.5
 }
 
 // paneCorner is the pane's frame's top-left corner and heading as drawn in the UI's language now
