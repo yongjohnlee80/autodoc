@@ -74,6 +74,9 @@ type openedFile struct {
 	// taskGone is a todo task's file gone from its path for good, its task removed or open in
 	// another buffer (todomove.go): its save is refused, never a second file of the task
 	taskGone bool
+	// crlf is a file that uses CRLF line breaks, as it was read (lineendings.go): it is written back
+	// with them. false, the default, writes LF.
+	crlf bool
 }
 
 // untitled is the draft's name wherever a file's path would show.
@@ -455,6 +458,9 @@ func (h *Host) show(b *openBuffer, ws, p, content, version string, raw bool) {
 // refused as the widget's are (editorFor).
 func (h *Host) adopt(b *openBuffer, ws, p, version string, raw bool, content *string) {
 	b.file.ws, b.file.path, b.file.version, b.file.open, b.file.dirty = ws, p, version, true, content == nil
+	if content != nil {
+		b.file.crlf = usesCRLF(*content) // a draft written under p (nil) keeps its own
+	}
 	b.file.hint = "" // a draft named: its path is its name now
 	b.file.raw = raw
 	b.file.derived = derivedOf(p, raw)
@@ -819,9 +825,10 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 		same    bool  // the read-back holds what was written
 	}
 	h.say(h.trf("autodoc.notice.files.saving", p))
+	onDisk := withEndings(content, b.file.crlf) // the file's own line breaks, CRLF where it had them
 	do(h, func(ctx context.Context) answer {
 		ctx = withAuthority(ctx, who)
-		res, err := h.writeFile(ctx, ws, p, []byte(content), want, raw)
+		res, err := h.writeFile(ctx, ws, p, []byte(onDisk), want, raw)
 		if err == nil {
 			return answer{version: str(asMap(res), "version")}
 		}
@@ -834,7 +841,7 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 		}
 		m := asMap(back)
 		b, _ := m["content"].([]byte)
-		return answer{err: err, version: str(m, "version"), same: string(b) == content}
+		return answer{err: err, version: str(m, "version"), same: string(b) == onDisk}
 	}, func(a answer) {
 		defer settled()
 		if !tk.Current() {

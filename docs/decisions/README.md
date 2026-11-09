@@ -208,6 +208,7 @@ the code ever disagree, the code is right and the page is fixed.
 - [The documentation site](editor.md#the-documentation-site)
 - [Charts drawn as SVG](editor.md#charts-drawn-as-svg)
 - [The tui package's feature map](editor.md#the-tui-packages-feature-map)
+- [Line endings](editor.md#line-endings)
 
 ## [Neovim](neovim.md)
 
