@@ -42,10 +42,17 @@ func id(path string) (string, error) {
 	if err := windows.GetFileInformationByHandleEx(h, windows.FileIdInfo, (*byte)(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info))); err != nil {
 		return "", fmt.Errorf("its file identifier: %w", err)
 	}
-	if sentinel(info.FileID) {
+	return format(info.VolumeSerialNumber, info.FileID)
+}
+
+// format is a volume serial and a 128-bit file identifier as the id: "serial-identifier", each in
+// hex, the identifier's 16 bytes whole (two identifiers that differ only in their high 64 bits are two
+// ids); errNoIdentity for a sentinel identifier.
+func format(serial uint64, fid [16]byte) (string, error) {
+	if sentinel(fid) {
 		return "", errNoIdentity
 	}
-	return fmt.Sprintf("%016x-%x", info.VolumeSerialNumber, info.FileID), nil
+	return fmt.Sprintf("%016x-%x", serial, fid), nil
 }
 
 // sentinel is whether an identifier is all zeros or all ones: MS-FSCC's "no unique identity".
