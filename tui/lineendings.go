@@ -7,11 +7,11 @@ import "strings"
 // LF, on every platform, except to a file that already uses CRLF: that one is written back with
 // CRLF, so editing a Windows user's file changes the lines edited, not every line of it.
 
-// usesCRLF reports whether text, a file's bytes as read, uses CRLF line breaks: most of its breaks
-// are CRLF. A file with no line break is LF's.
+// usesCRLF reports whether text, a file's bytes as read, uses CRLF line breaks: more than half of
+// its breaks are CRLF. A file with no line break, or half of each, is LF's.
 func usesCRLF(text string) bool {
 	crlf := strings.Count(text, "\r\n")
-	return crlf > 0 && 2*crlf >= strings.Count(text, "\n")
+	return crlf > 0 && 2*crlf > strings.Count(text, "\n") // a tie falls to LF, the default
 }
 
 // withEndings is content, the editor's LF text, with the line breaks a file written as crlf has.

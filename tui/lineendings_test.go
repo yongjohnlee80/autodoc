@@ -17,6 +17,7 @@ func TestAFilesLineBreaksAreReadAndWrittenBack(t *testing.T) {
 		{"a\r\nb\r\n", true},
 		{"a\r\nb\r\nc\n", true}, // mostly CRLF
 		{"a\nb\nc\r\n", false},  // mostly LF
+		{"a\r\nb\n", false},     // a tie falls to LF, the default
 		{"a\nb\n", false},
 		{"no break", false},
 		{"", false},
@@ -97,5 +98,26 @@ func TestACRLFFileReloadedFromDiskKeepsNoCR(t *testing.T) {
 	got := openAndSave(t, r, kb, "windows.md", "# Notes\n\nchanged on disk, then edited\n")
 	if want := "# Notes\r\n\r\nchanged on disk, then edited\r\n"; got != want {
 		t.Errorf("saved after the reload as %q, want %q", got, want)
+	}
+}
+
+// A CRLF file changed on disk on one line is reloaded on that line alone: the lines that didn't
+// change are kept, the cursor on them with them, as for an LF file (diskwatch.go's reload).
+func TestACRLFFileReloadedFromDiskKeepsTheCursorOnUnchangedLines(t *testing.T) {
+	kb := fileDir(t, "windows.md", "one\r\ntwo\r\nthree\r\nfour\r\n")
+	d := startManaged(t, map[string]string{"kb": kb})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.waitAttached(t, "kb")
+	r.h.p.Post(func() { r.h.openPath("windows.md") })
+	r.waitFile(t, "windows.md")
+	r.putCursor(2, 0) // on "three"
+	if err := os.WriteFile(filepath.Join(kb, "windows.md"), []byte("ONE\r\ntwo\r\nthree\r\nfour\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitFor(t, "the change on disk reloaded", func(string) bool {
+		return onLoop(r, func() bool { return r.h.core.Value() == "ONE\ntwo\nthree\nfour\n" })
+	})
+	if line := onLoop(r, func() int { return r.h.core.Cursor().Line }); line != 2 {
+		t.Fatalf("the cursor is on line %d after the reload, want 3: still on \"three\"", line+1)
 	}
 }
