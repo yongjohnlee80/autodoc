@@ -5,7 +5,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
+
+	"github.com/yongjohnlee80/autodoc/internal/proctree"
 )
 
 // SpawnServe starts this executable's `--serve` detached from the TUI (its own session, so it
@@ -50,8 +51,7 @@ func SpawnServe(configPath, stateDir string) (string, error) {
 	cmd := exec.Command(exe, args...)
 	cmd.Env = serveEnv(os.Environ())
 	cmd.Stdout, cmd.Stderr = f, f
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	if err := cmd.Start(); err != nil {
+	if err := proctree.StartDetached(cmd); err != nil {
 		_ = f.Close()
 		return "", err
 	}
