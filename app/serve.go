@@ -39,6 +39,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/workspace"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
+	"github.com/yongjohnlee80/autodoc/internal/fileowner"
 	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/internal/localfs"
 	"github.com/yongjohnlee80/autodoc/internal/profiling"
@@ -477,7 +478,7 @@ func codexWaker(ctx context.Context, uid int, bin string) crew.Waker {
 	if err != nil || !strings.Contains(string(out), "--thread") {
 		return nil
 	}
-	return crew.NewCodexWaker(uid, bin)
+	return crew.NewCodexWaker(uid, bin, fileowner.OwnedBy)
 }
 
 // startScheduler makes the wake scheduler for a fresh run id, and answers it and how to stop it.
