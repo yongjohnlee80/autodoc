@@ -2,8 +2,8 @@
 // says another holder has it (ErrHeld) without waiting, and Lock waits for it. A lock lasts until
 // its Unlock runs or the process ends, so a crashed holder never leaves it taken.
 //
-// The OS-specific part, the lock itself, is in this package's per-OS files; everything they share
-// (opening the file, the errors) is here.
+// The OS-specific part, the lock itself, is in this package's per-OS files (flock on Linux and
+// macOS, LockFileEx on Windows); everything they share (opening the file, the errors) is here.
 package filelock
 
 import (
