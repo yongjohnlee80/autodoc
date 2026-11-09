@@ -253,13 +253,14 @@ func repoRoot(t *testing.T) string {
 	return root
 }
 
-const tuiCouplingHeader = `# tui's feature map: each name a group of tui's files uses and a group it may not use declares
+const tuiCouplingHeader = `# tui's feature map: each name (not each use) a group of tui's files uses and a group it may not use declares
 # (docs/decisions/editor.md#the-tui-packages-feature-map; internal/tuiaudit/tui_coupling_test.go
 # assigns the groups by file name). Each would be an import cycle once the groups are packages.
 #
 #   build <TAB> using group <TAB> owning group <TAB> name <TAB> kind
 #
-# This list may only SHRINK. Empty is the destination. Each build's rows are checked by that
+# This list may only SHRINK, but for a step of the split that adds rows, named in its pull request
+# with the step that removes them. Empty is the destination. Each build's rows are checked by that
 # build's test run (the terminal build's, and -tags gui's).
 #
 # Regenerate one build's rows: AUTODOC_TUI_COUPLING_UPDATE=1 go test [-tags gui] ./internal/tuiaudit/
@@ -318,7 +319,8 @@ func TestTuiFeaturesReachOnlyDown(t *testing.T) {
 	sort.Strings(gone)
 	if len(added) > 0 {
 		t.Errorf("%d new use(s) across tui's feature map (%s build), each a name a group it may not use declares:\n  %s\n"+
-			"Use what the group may use, or move the name to where it belongs: the crossings may not grow.",
+			"Use what the group may use, or move the name to where it belongs: the crossings may not grow. A step of the "+
+			"split that must add some regenerates the ledger and names them in its pull request, with the step that removes them.",
 			len(added), build, strings.Join(added, "\n  "))
 	}
 	if len(gone) > 0 {
