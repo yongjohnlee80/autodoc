@@ -5812,8 +5812,8 @@ WHAT A KEY NEEDS
         <translation>Update: install-autodoc.sh didn't install this AutoDoc, so update it the way it was installed</translation>
     </message>
     <message id="autodoc.notice.update.the_update_exited">
-        <source>Update: update.sh exited %1; its tab in the terminal panel says why</source>
-        <translation>Update: update.sh exited %1; its tab in the terminal panel says why</translation>
+        <source>Update: %2 exited %1; its tab in the terminal panel says why</source>
+        <translation>Update: %2 exited %1; its tab in the terminal panel says why</translation>
     </message>
     <message id="autodoc.notice.update.update">
         <source>Update</source>

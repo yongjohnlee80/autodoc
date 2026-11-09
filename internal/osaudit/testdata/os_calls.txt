@@ -38,7 +38,6 @@ app/gui_preferences_darwin.go	os-file	darwin
 app/gui_preferences_other.go	os-file	darwin
 app/keys_darwin.go	os-file	darwin
 app/keys_other.go	os-file	darwin
-app/relaunch.go	syscall	Exec
 app/server_on.go	syscall	SIGINT
 app/server_on.go	syscall	SIGTERM
 core/config/config.go	goos	runtime.GOOS

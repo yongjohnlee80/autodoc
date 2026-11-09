@@ -2,11 +2,15 @@ package proctree
 
 import (
 	"bufio"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 )
 
 // The contract every OS keeps: a program StartDetached starts is detached (a session of its own on
@@ -73,4 +77,35 @@ func proctreeHelper() {
 	os.Stdout.WriteString(detachedFact() + "\n")
 	_, _ = io.Copy(io.Discard, os.Stdin)
 	os.Exit(0)
+}
+
+// The contract every OS keeps: Replace runs the program with the arguments and environment it is
+// given, on this process's output, and whoever waits on this process sees the program's exit code.
+// A program that cannot start is an error, and the caller goes on. The helpers are this test binary
+// run again.
+func TestReplaceRunsTheProgramInThisOnesPlace(t *testing.T) {
+	const run = "-test.run=^TestReplaceRunsTheProgramInThisOnesPlace$"
+	switch os.Getenv("PROCTREE_REPLACE") {
+	case "first":
+		err := Replace(os.Args[0], []string{os.Args[0], run, "the-new-argument"}, procenv.Env(os.Environ()).With("PROCTREE_REPLACE=second"))
+		os.Stdout.WriteString("Replace returned: " + err.Error() + "\n")
+		os.Exit(9)
+	case "second":
+		os.Stdout.WriteString("the program ran with " + os.Args[len(os.Args)-1] + "\n")
+		os.Exit(37)
+	}
+	cmd := exec.Command(os.Args[0], run)
+	cmd.Env = append(os.Environ(), "PROCTREE_REPLACE=first")
+	out, err := cmd.Output()
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() != 37 {
+		t.Errorf("the process that replaced itself ended with %v; want the program's exit code, 37", err)
+	}
+	if !strings.Contains(string(out), "the program ran with the-new-argument") {
+		t.Errorf("the program's output on this process's: %q", out)
+	}
+	missing := t.TempDir() + string(os.PathSeparator) + "no-such-program"
+	if err := Replace(missing, []string{missing}, os.Environ()); err == nil {
+		t.Error("Replace of a program that does not exist returned no error")
+	}
 }

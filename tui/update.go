@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 
 	"github.com/yongjohnlee80/autodoc/internal/install"
 )
 
-// UPDATE — About's Update (docs/decisions/install.md#abouts-update-and-the-restart). When
-// install-autodoc.sh installed this AutoDoc, its record says so, and About offers Update: update.sh
-// runs in a tab of the terminal panel, where the user sees its progress and can answer it. When it
+// UPDATE — About's Update (docs/decisions/install.md#abouts-update-and-the-restart). When the
+// install script installed this AutoDoc, its record says so, and About offers Update: the update
+// script (update.sh; update.ps1 on Windows) runs in a tab of the terminal panel, where the user sees its progress and can answer it. When it
 // ends well and the binary at this one's path is newer, AutoDoc offers to restart: the backend
 // restarts as Restart backend… does, then this program starts again as the new binary (Launch
 // returns ErrRelaunch, and the program execs it). An AutoDoc installed another way has no record,
@@ -34,7 +35,7 @@ func (h *Host) scriptRecord() (install.Record, bool) {
 	return r, true
 }
 
-// updateAutoDoc is About's Update: update.sh runs in a tab of the terminal panel.
+// updateAutoDoc is About's Update: the update script runs in a tab of the terminal panel.
 func (h *Host) updateAutoDoc() {
 	r, ok := h.scriptRecord()
 	if !ok {
@@ -42,16 +43,19 @@ func (h *Host) updateAutoDoc() {
 		return
 	}
 	h.closeDialog("about")
-	if _, err := h.terminals.runFor("AutoDoc", "/bin/sh "+shellQuote(r.Update), "", h.updateExited); err != nil {
+	program, args := r.UpdateCommand()
+	script := filepath.Base(r.Update)
+	exited := func(code int) { h.updateExited(script, code) }
+	if _, err := h.terminals.runProgramFor("AutoDoc", program, args, "", exited); err != nil {
 		h.failed(h.tr("autodoc.notice.update.update"), err)
 	}
 }
 
-// updateExited hears update.sh's exit: a failure is said (its tab says why); a success that put a
+// updateExited hears the update script's exit: a failure is said (its tab says why); a success that put a
 // newer AutoDoc at this one's path offers the restart.
-func (h *Host) updateExited(code int) {
+func (h *Host) updateExited(script string, code int) {
 	if code != 0 {
-		h.notify(h.trf("autodoc.notice.update.the_update_exited", fmt.Sprint(code)))
+		h.notify(h.trf("autodoc.notice.update.the_update_exited", fmt.Sprint(code), script))
 		return
 	}
 	running := h.aboutInfo.Version

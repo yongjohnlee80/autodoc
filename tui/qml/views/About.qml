@@ -2,7 +2,7 @@
 // daemon's socket are; the author and the licence. Each label is bold, its value beside it; the
 // log is under the config, in brackets and italic. A program that replaces About's text
 // (LaunchOptions.About) shows that instead. Update shows when install-autodoc.sh installed this
-// AutoDoc (its record says so): update.sh runs in the terminal panel (update.go).
+// AutoDoc (its record says so): the update script runs in the terminal panel (update.go).
 Dialog {
     closeOnQ: true
     maxWidthPercent: 80

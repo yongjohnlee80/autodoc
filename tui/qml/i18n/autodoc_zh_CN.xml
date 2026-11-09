@@ -5518,8 +5518,8 @@ WHAT A KEY NEEDS
         <translation>更新：此 AutoDoc 不是由 install-autodoc.sh 安装的，请用安装它的方式更新</translation>
     </message>
     <message id="autodoc.notice.update.the_update_exited">
-        <source>Update: update.sh exited %1; its tab in the terminal panel says why</source>
-        <translation>更新：update.sh 以 %1 退出，原因见终端面板中的标签页</translation>
+        <source>Update: %2 exited %1; its tab in the terminal panel says why</source>
+        <translation>更新：%2 以 %1 退出，原因见终端面板中的标签页</translation>
     </message>
     <message id="autodoc.notice.update.update">
         <source>Update</source>

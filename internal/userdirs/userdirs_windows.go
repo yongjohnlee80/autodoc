@@ -26,6 +26,10 @@ func cache(env procenv.Env) (string, error) {
 	return "", errors.New("%LocalAppData% is not defined")
 }
 
+// state is %LocalAppData%, where Windows keeps a user's per-machine program data, as ~/.local/state
+// is on Unix.
+func state(env procenv.Env) (string, error) { return cache(env) }
+
 // temp is the folder GetTempPath names: the first of %TMP%, %TEMP% and %USERPROFILE% that is set at
 // all, even set empty (GetTempPath then names no folder), else the Windows folder; made a full path
 // as GetTempPath makes it (GetFullPathName, against this process's current folder), with no trailing

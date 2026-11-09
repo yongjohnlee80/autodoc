@@ -217,6 +217,11 @@ func (h *Host) terminalRunExited(agent, line string, code int, mailed bool) {
 // gives it the keyboard so the user can type a passphrase; exited hears its code. The tab stays
 // after the command ends, so the user can read what it printed and close it.
 func (t *terminals) runFor(agent, line, dir string, exited func(int)) (string, error) {
+	return t.runProgramFor(agent, "/bin/sh", []string{"-c", line}, dir, exited)
+}
+
+// runProgramFor is runFor for a program and its arguments, through no shell.
+func (t *terminals) runProgramFor(agent, program string, args []string, dir string, exited func(int)) (string, error) {
 	panel, err := t.panel()
 	if err != nil {
 		return "", err
@@ -225,7 +230,7 @@ func (t *terminals) runFor(agent, line, dir string, exited func(int)) (string, e
 		t.c.Keep(t.c.CallView("terminal", "open"))
 	}
 	label := agentRunLabel(panel, agent)
-	id, err := panel.Add(label, t.inOwnEnv(TerminalConfig{Command: "/bin/sh", Args: []string{"-c", line}, Dir: dir, Exited: exited}))
+	id, err := panel.Add(label, t.inOwnEnv(TerminalConfig{Command: program, Args: args, Dir: dir, Exited: exited}))
 	if err != nil {
 		return "", err
 	}
