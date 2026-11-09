@@ -501,3 +501,27 @@ func TestPreferenceVerbs(t *testing.T) {
 		t.Fatalf("preference.list without Preferences: %v, want unsupported", err)
 	}
 }
+
+// TestProbeDialsTheNetworkItIsGiven: Probe dials the network its caller names, not always ipc's:
+// a server on TCP is probed there, and answers as one on the daemon's socket does.
+func TestProbeDialsTheNetworkItIsGiven(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	srv := New(Fixed(), "v-tcp", WithListener(ln))
+	go func() { done <- srv.Run(ctx) }()
+	defer func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Error("the server did not stop")
+		}
+	}()
+	if v, err := ProbeOn(context.Background(), "tcp", ln.Addr().String()); err != nil || v != "v-tcp" {
+		t.Fatalf("probing a server on TCP: %q, %v; want v-tcp", v, err)
+	}
+}

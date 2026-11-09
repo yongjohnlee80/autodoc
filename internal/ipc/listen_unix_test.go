@@ -5,9 +5,11 @@ package ipc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"testing"
 )
@@ -191,5 +193,37 @@ func TestRemoveLeavesASuccessorsAddress(t *testing.T) {
 	ln2.Remove()
 	if _, err := os.Lstat(own); !os.IsNotExist(err) {
 		t.Errorf("Remove left the listener's own socket: %v", err)
+	}
+}
+
+// Listens at once on distinct sockets each bind under umask 0077, and the process's own umask is
+// what it was once they are done: the umask is the process's, so its save and restore are
+// serialized (umaskMu).
+func TestConcurrentListensRestoreTheUmask(t *testing.T) {
+	old := syscall.Umask(0o022)
+	defer syscall.Umask(old)
+	dir := short(t)
+	var wg sync.WaitGroup
+	errs := make(chan error, 64)
+	for i := range 64 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ln, err := Listen(filepath.Join(dir, fmt.Sprintf("%d.sock", i)), nil)
+			if err != nil {
+				errs <- err
+				return
+			}
+			_ = ln.Close()
+			ln.Remove()
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	if now := syscall.Umask(0o022); now != 0o022 {
+		t.Fatalf("after 64 Listens at once the process's umask is %#o, want its own 022 back", now)
 	}
 }
