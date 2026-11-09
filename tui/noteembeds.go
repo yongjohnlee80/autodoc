@@ -122,9 +122,8 @@ func (t *termEmbeds) resolve(dest string) (string, bool) {
 		return "", false
 	}
 	st, err := os.Stat(p)
-	if err != nil {
+	if err != nil { // gone since EmbedPath found it: the next pass finds it missing, and follows it
 		delete(t.files, dest)
-		t.awaited(p) // drawn as its alt text until it is written
 		return "", false
 	}
 	if c, ok := t.files[dest]; ok && c.path == p && c.size == st.Size() && c.mod.Equal(st.ModTime()) {
