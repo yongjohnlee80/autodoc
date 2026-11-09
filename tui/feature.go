@@ -8,7 +8,7 @@ import (
 
 	"github.com/yongjohnlee80/golib/decl"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 )
 
 // FEATURES — what the program is made of, each contributing its own state and commands.
@@ -552,7 +552,7 @@ func (c core) SetText(id, text string) {
 	if c.h.p == nil {
 		return
 	}
-	ta, ok := tuidecl.FindAs[*widget.TextArea](c.h.p, id)
+	ta, ok := tuidecl.FindAs[*widgetcore.TextArea](c.h.p, id)
 	if !ok {
 		c.h.keep(fmt.Errorf("the layout has no text area %q", id))
 		return

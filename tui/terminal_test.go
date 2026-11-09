@@ -17,7 +17,8 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // terminal_test.go: the terminal pane — SPC ` and Go › Terminal, a shell in the workspace's folder,
@@ -80,8 +81,8 @@ func TestTerminalExistingGeometryPreferencesReadBack(t *testing.T) {
 }
 
 // shellTabs are the terminal panel's tabs, a snapshot taken on the loop.
-func (r *running) shellTabs() []widget.TerminalTab {
-	return onLoop(r, func() []widget.TerminalTab {
+func (r *running) shellTabs() []terminal.TerminalTab {
+	return onLoop(r, func() []terminal.TerminalTab {
 		c, _ := r.h.p.Find("terminalView")
 		tabs, ok := tuidecl.TerminalTabsOf(c)
 		if !ok {
@@ -427,11 +428,11 @@ func TestTheTerminalsShellsAreTabs(t *testing.T) {
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
 	menu := func(id string) {
 		t.Helper()
-		rows, tab := onLoop(r, func() []widget.MenuItemModel {
+		rows, tab := onLoop(r, func() []widgetcore.MenuItemModel {
 			c, _ := r.h.p.Find("terminalView")
 			tabs, _ := tuidecl.TerminalTabsOf(c)
 			return r.h.terminals.tabRows(tabs.Active())
-		}), onLoop(r, func() widget.TerminalTabID {
+		}), onLoop(r, func() terminal.TerminalTabID {
 			c, _ := r.h.p.Find("terminalView")
 			tabs, _ := tuidecl.TerminalTabsOf(c)
 			return tabs.Active()
@@ -440,7 +441,7 @@ func TestTheTerminalsShellsAreTabs(t *testing.T) {
 		if !ok {
 			t.Fatalf("no row %s in %v", id, rowIDs(rows))
 		}
-		onLoop(r, func() bool { row.Action.(widget.TerminalTabsMenuAction).Run(tab); return true })
+		onLoop(r, func() bool { row.Action.(terminal.TerminalTabsMenuAction).Run(tab); return true })
 	}
 	labels := func() []string {
 		var out []string
@@ -505,7 +506,7 @@ func TestABackgroundShellLeavingKeepsTheActiveOne(t *testing.T) {
 	_, r := runShellTUI(t, nil)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
-	tabsOf := func(fn func(*widget.TerminalTabs)) {
+	tabsOf := func(fn func(*terminal.TerminalTabs)) {
 		onLoop(r, func() bool {
 			c, _ := r.h.p.Find("terminalView")
 			tabs, _ := tuidecl.TerminalTabsOf(c)
@@ -513,12 +514,12 @@ func TestABackgroundShellLeavingKeepsTheActiveOne(t *testing.T) {
 			return true
 		})
 	}
-	active := func() (id widget.TerminalTabID) {
-		tabsOf(func(tabs *widget.TerminalTabs) { id = tabs.Active() })
+	active := func() (id terminal.TerminalTabID) {
+		tabsOf(func(tabs *terminal.TerminalTabs) { id = tabs.Active() })
 		return id
 	}
-	live := func() []widget.TerminalTabID {
-		var out []widget.TerminalTabID
+	live := func() []terminal.TerminalTabID {
+		var out []terminal.TerminalTabID
 		for _, tab := range r.shellTabs() {
 			if !tab.Closing {
 				out = append(out, tab.ID)
@@ -535,12 +536,12 @@ func TestABackgroundShellLeavingKeepsTheActiveOne(t *testing.T) {
 	}
 
 	// a background shell exits
-	tabsOf(func(tabs *widget.TerminalTabs) {
+	tabsOf(func(tabs *terminal.TerminalTabs) {
 		if err := tabs.SendText(b, "exit\r"); err != nil {
 			t.Error(err)
 		}
 	})
-	r.s.WaitFor(t, "the background shell gone", func(string) bool { return slices.Equal(live(), []widget.TerminalTabID{a, c}) })
+	r.s.WaitFor(t, "the background shell gone", func(string) bool { return slices.Equal(live(), []terminal.TerminalTabID{a, c}) })
 	if got := active(); got != c {
 		t.Fatalf("a background exit selected %s, want the active %s", got, c)
 	}
@@ -549,13 +550,13 @@ func TestABackgroundShellLeavingKeepsTheActiveOne(t *testing.T) {
 	r.s.WaitForText(t, "kept-43")
 
 	// Close on a background tab's menu
-	rows := onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows(a) })
+	rows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.terminals.tabRows(a) })
 	row, ok := menuRow(rows, "terminal.close")
 	if !ok {
 		t.Fatalf("no Close in %v", rowIDs(rows))
 	}
-	onLoop(r, func() bool { row.Action.(widget.TerminalTabsMenuAction).Run(a); return true })
-	r.s.WaitFor(t, "the background tab closed", func(string) bool { return slices.Equal(live(), []widget.TerminalTabID{c}) })
+	onLoop(r, func() bool { row.Action.(terminal.TerminalTabsMenuAction).Run(a); return true })
+	r.s.WaitFor(t, "the background tab closed", func(string) bool { return slices.Equal(live(), []terminal.TerminalTabID{c}) })
 	if got := active(); got != c {
 		t.Fatalf("a background Close selected %s, want the active %s", got, c)
 	}
@@ -639,15 +640,15 @@ func TestHideClosesThePanelAndKeepsTheShells(t *testing.T) {
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
 	onLoop(r, func() bool { r.h.terminals.newShell(); return true })
 	r.s.WaitFor(t, "two shells", func(string) bool { return r.shellsRunning() == 2 })
-	active := func() (id widget.TerminalTabID) {
-		return onLoop(r, func() widget.TerminalTabID {
+	active := func() (id terminal.TerminalTabID) {
+		return onLoop(r, func() terminal.TerminalTabID {
 			c, _ := r.h.p.Find("terminalView")
 			tabs, _ := tuidecl.TerminalTabsOf(c)
 			return tabs.Active()
 		})
 	}
 	before, was := r.shellTabs(), active()
-	rows := onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows(was) })
+	rows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.terminals.tabRows(was) })
 	row, ok := menuRow(rows, "tabs.hide")
 	if !ok || row.Label != "Hide" || row.Hotkey != 'd' {
 		t.Fatalf("no Hide (d) in %v", rowIDs(rows))
@@ -655,7 +656,7 @@ func TestHideClosesThePanelAndKeepsTheShells(t *testing.T) {
 	if _, ok := menuRow(rows, "tabs.look"); !ok {
 		t.Fatalf("no Theme and font… in %v", rowIDs(rows))
 	}
-	onLoop(r, func() bool { row.Action.(widget.TerminalTabsMenuAction).Run(was); return true })
+	onLoop(r, func() bool { row.Action.(terminal.TerminalTabsMenuAction).Run(was); return true })
 	r.s.WaitFor(t, "hidden", func(string) bool { return !r.termShown() })
 	after := r.shellTabs()
 	if len(after) != 2 || r.shellsRunning() != 2 || after[0].ID != before[0].ID || after[0].Generation != before[0].Generation || after[1].Generation != before[1].Generation {
@@ -666,7 +667,7 @@ func TestHideClosesThePanelAndKeepsTheShells(t *testing.T) {
 	if got := active(); got != was || r.shellsRunning() != 2 || len(r.shellTabs()) != 2 {
 		t.Fatalf("reopened on %s (want %s), %d running of %d", got, was, r.shellsRunning(), len(r.shellTabs()))
 	}
-	empty := onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows("") })
+	empty := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.terminals.tabRows("") })
 	if row, _ := menuRow(empty, "terminal.close"); row.Enabled {
 		t.Error("an empty panel's menu offers Close")
 	}
@@ -686,12 +687,12 @@ func TestTheTerminalsLookDialogSetsTheSameSettings(t *testing.T) {
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
 	look := func() {
 		t.Helper()
-		rows := onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows("") })
+		rows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.terminals.tabRows("") })
 		row, ok := menuRow(rows, "tabs.look")
 		if !ok {
 			t.Fatalf("no Theme and font… in %v", rowIDs(rows))
 		}
-		onLoop(r, func() bool { row.Action.(widget.TerminalTabsMenuAction).Run(""); return true })
+		onLoop(r, func() bool { row.Action.(terminal.TerminalTabsMenuAction).Run(""); return true })
 		r.s.WaitForText(t, "the terminals' theme and font")
 	}
 	light := slices.Index(termThemes(), "light")
@@ -720,12 +721,12 @@ func TestMaximizeFromThePanelMenus(t *testing.T) {
 	row0, _ := frameAt(r.s.String())
 	maximize := func(want string) {
 		t.Helper()
-		rows := onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows("") })
+		rows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.terminals.tabRows("") })
 		row, ok := menuRow(rows, "tabs.maximize")
 		if !ok || row.Label != want {
 			t.Fatalf("the maximize row reads %q (want %q) in %v", row.Label, want, rowIDs(rows))
 		}
-		onLoop(r, func() bool { row.Action.(widget.TerminalTabsMenuAction).Run(""); return true })
+		onLoop(r, func() bool { row.Action.(terminal.TerminalTabsMenuAction).Run(""); return true })
 	}
 	maximize("Maximize")
 	r.s.WaitFor(t, "the terminal fills the dock area", func(sc string) bool { y, _ := frameAt(sc); return y >= 0 && y < row0 })
@@ -746,7 +747,7 @@ func TestMaximizeFromThePanelMenus(t *testing.T) {
 		t.Fatalf("reopened with %+v", r.shellTabs())
 	}
 
-	agentRows := onLoop(r, func() []widget.MenuItemModel { return r.h.agents.tabRows("") })
+	agentRows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.agents.tabRows("") })
 	if row, ok := menuRow(agentRows, "tabs.maximize"); !ok || row.Label != "Maximize" {
 		t.Fatalf("the agents' menu: %v", rowIDs(agentRows))
 	}
@@ -760,7 +761,7 @@ func TestF11AndSPCZToggleMaximize(t *testing.T) {
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
 	maximized := func() bool { return onLoop(r, func() bool { return r.h.panelMax["terminal"] }) }
 	label := func() string {
-		row, _ := menuRow(onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows("") }), "tabs.maximize")
+		row, _ := menuRow(onLoop(r, func() []widgetcore.MenuItemModel { return r.h.terminals.tabRows("") }), "tabs.maximize")
 		return row.Label
 	}
 	f11 := tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyF11}

@@ -10,7 +10,8 @@ import (
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -223,7 +224,7 @@ func (r *addedRow) name() string { return cmp.Or(r.id, "menu row "+strconv.Itoa(
 
 // editorItems are the right-click menu's rows for ctx, after a separator; none without one. A
 // script's words are its own: a row's label is only its & parsed, never a catalog translation.
-func (m *menuRows) editorItems(s *scripting, ctx menuCtx) []widget.MenuItemModel {
+func (m *menuRows) editorItems(s *scripting, ctx menuCtx) []widgetcore.MenuItemModel {
 	shown, said := m.rowsShown(s, "editor", ctx)
 	if said != "" {
 		s.c.Notify(said)
@@ -231,13 +232,13 @@ func (m *menuRows) editorItems(s *scripting, ctx menuCtx) []widget.MenuItemModel
 	if len(shown) == 0 {
 		return nil
 	}
-	items := []widget.MenuItemModel{widget.NewSeparator("menu.sep")}
+	items := []widgetcore.MenuItemModel{widgetcore.NewSeparator("menu.sep")}
 	at := map[string]int{} // a submenu's place in items
 	for _, x := range shown {
 		r := x.r
 		label, key, idx := tuicore.ParseMnemonic(x.title)
-		item := widget.NewCommand(widget.ItemID("menu.row."+strconv.Itoa(r.serial)), label,
-			widget.CoreMenuAction{ID: tuicore.ActionID("menu.row." + strconv.Itoa(r.serial)), Run: func(*widget.EditorCore) { r.run() }})
+		item := widgetcore.NewCommand(widgetcore.ItemID("menu.row."+strconv.Itoa(r.serial)), label,
+			editor.CoreMenuAction{ID: tuicore.ActionID("menu.row." + strconv.Itoa(r.serial)), Run: func(*editor.EditorCore) { r.run() }})
 		item.Hotkey, item.HotkeyIdx, item.Enabled = key, idx, !r.disabled
 		if r.menu == "" {
 			items = append(items, item)
@@ -245,7 +246,7 @@ func (m *menuRows) editorItems(s *scripting, ctx menuCtx) []widget.MenuItemModel
 		}
 		i, ok := at[r.menu]
 		if !ok {
-			sub := widget.NewSubmenu(widget.ItemID("menu.group."+strconv.Itoa(m.group(r.menu))), r.menu, nil)
+			sub := widgetcore.NewSubmenu(widgetcore.ItemID("menu.group."+strconv.Itoa(m.group(r.menu))), r.menu, nil)
 			sub.Label, sub.Hotkey, sub.HotkeyIdx = tuicore.ParseMnemonic(r.menu)
 			items = append(items, sub)
 			i = len(items) - 1
@@ -296,7 +297,7 @@ func (s *scripting) rowAnswer(end time.Time, r *addedRow, part string, fn *lua.L
 }
 
 // menuCtxOf is the open file's context for the right-click menu opening on c.
-func (h *Host) menuCtxOf(c *widget.EditorCore) menuCtx {
+func (h *Host) menuCtxOf(c *editor.EditorCore) menuCtx {
 	var ctx menuCtx
 	if h.file != nil {
 		ctx.path, ctx.workspace = h.file.path, h.file.ws

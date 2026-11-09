@@ -12,7 +12,8 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 )
 
 // htmlpane_test.go: File › Preview HTML (htmlpane.go, htmlpane_cells.go) — the note's page in the
@@ -92,7 +93,7 @@ func TestImagePreviewsLeavePreviewHTMLThePane(t *testing.T) {
 	opened := make(chan string, 1)
 	onLoop(r, func() bool {
 		r.h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
-		r.h.rasterizeOverride = func(_ context.Context, _ []byte, p widget.Page) ([]byte, error) {
+		r.h.rasterizeOverride = func(_ context.Context, _ []byte, p htmlview.Page) ([]byte, error) {
 			return tallPage(t, p.Width, p.MinHeight), nil
 		}
 		r.h.browser = func(_ context.Context, p string) error { opened <- p; return nil }
@@ -350,7 +351,7 @@ func TestThePaneTakesTheKeyboardByCtrlL(t *testing.T) {
 	r.s.WaitFor(t, "back to the page", func(string) bool { return r.focused("editor") })
 }
 
-var _ = widget.DirImages
+var _ = htmlview.DirImages
 
 // TestThePaneOpensItsPageInTheBrowser: under its page the pane has the terminal preview's buttons,
 // Open in browser and Close (q); Open in browser writes the note's page and opens it in the browser.
@@ -451,18 +452,18 @@ func TestThePanesCloseClosesIt(t *testing.T) {
 }
 
 // buttonsUnder are the Buttons under the node id names, in order.
-func buttonsUnder(p *tuidecl.Program, id string) []*widget.Button {
+func buttonsUnder(p *tuidecl.Program, id string) []*widgetcore.Button {
 	root, ok := p.Tree().NodeByID(id)
 	if !ok {
 		return nil
 	}
-	var out []*widget.Button
+	var out []*widgetcore.Button
 	queue := []decl.NodeID{root}
 	for len(queue) > 0 {
 		n := queue[0]
 		queue = queue[1:]
 		if c, ok := p.Adapter().Component(n); ok {
-			if b, ok := c.(*widget.Button); ok {
+			if b, ok := c.(*widgetcore.Button); ok {
 				out = append(out, b)
 			}
 		}

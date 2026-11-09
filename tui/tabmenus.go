@@ -5,7 +5,8 @@ import (
 	"strconv"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // THE TAB MENUS — one shape for the strips of the agent and terminal panels (golib's
@@ -18,16 +19,16 @@ import (
 
 // tabMenuRow is a row of a strip's menu: run, with the tab the menu was opened for, when chosen.
 // An & in label marks its key ("Hi&de"); never h, j, k or l, which move in the menu.
-func tabMenuRow(id, label string, run func(widget.TerminalTabID)) widget.MenuItemModel {
+func tabMenuRow(id, label string, run func(terminal.TerminalTabID)) widgetcore.MenuItemModel {
 	text, key, at := tuicore.ParseMnemonic(label)
-	row := widget.NewCommand(widget.ItemID(id), text, widget.TerminalTabsMenuAction{ID: tuicore.ActionID(id), Run: run})
+	row := widgetcore.NewCommand(widgetcore.ItemID(id), text, terminal.TerminalTabsMenuAction{ID: tuicore.ActionID(id), Run: run})
 	row.Hotkey, row.HotkeyIdx = key, at
 	return withLabelMessage(row, label)
 }
 
 // tabRowOf is tabMenuRow as a rowMaker: a row whatever tab its menu was opened for (Layout ›).
-func tabRowOf(id, label string, run func()) widget.MenuItemModel {
-	return tabMenuRow(id, label, func(widget.TerminalTabID) { run() })
+func tabRowOf(id, label string, run func()) widgetcore.MenuItemModel {
+	return tabMenuRow(id, label, func(terminal.TerminalTabID) { run() })
 }
 
 // panelRows end panel's tab menu: Resume, a SIGCONT to tab id's program on tabs (disabled with no
@@ -35,16 +36,16 @@ func tabRowOf(id, label string, run func()) widget.MenuItemModel {
 // in a window, the shells' share of its text (textSizeMenu); Maximize, or Restore while it is
 // maximized, its Drawer's own toggleMaximize (none where the host has none); and Hide, the panel's
 // own toggle (hide), its tabs running on.
-func panelRows(c any, panel string, tabs TerminalPanel, id widget.TerminalTabID, hide func()) []widget.MenuItemModel {
-	resume := tabMenuRow("tabs.resume", "Res&ume", func(id widget.TerminalTabID) {
+func panelRows(c any, panel string, tabs TerminalPanel, id terminal.TerminalTabID, hide func()) []widgetcore.MenuItemModel {
+	resume := tabMenuRow("tabs.resume", "Res&ume", func(id terminal.TerminalTabID) {
 		if err := tabs.Resume(id); err != nil {
 			keepFailure(c, fmt.Errorf("Resume a tab of the %s panel: %w", panel, err))
 		}
 	})
 	resume.Enabled = id != ""
-	rows := []widget.MenuItemModel{widget.NewSeparator("tabs.panel"), resume}
+	rows := []widgetcore.MenuItemModel{widgetcore.NewSeparator("tabs.panel"), resume}
 	if look := lookOf(c); look != nil {
-		rows = append(rows, tabMenuRow("tabs.look", "&Theme and font…", func(widget.TerminalTabID) {
+		rows = append(rows, tabMenuRow("tabs.look", "&Theme and font…", func(terminal.TerminalTabID) {
 			if err := look(); err != nil {
 				keepFailure(c, fmt.Errorf("Theme and font… for the %s panel: %w", panel, err))
 			}
@@ -63,13 +64,13 @@ func panelRows(c any, panel string, tabs TerminalPanel, id widget.TerminalTabID,
 		if m.PanelMaximized(panel) {
 			label, op = "Re&store", "Restore"
 		}
-		rows = append(rows, tabMenuRow("tabs.maximize", label, func(widget.TerminalTabID) {
+		rows = append(rows, tabMenuRow("tabs.maximize", label, func(terminal.TerminalTabID) {
 			if err := m.ToggleMaximize(panel); err != nil {
 				keepFailure(c, fmt.Errorf("%s the %s panel: %w", op, panel, err))
 			}
 		}))
 	}
-	return append(rows, tabMenuRow("tabs.hide", "Hi&de", func(widget.TerminalTabID) { hide() }))
+	return append(rows, tabMenuRow("tabs.hide", "Hi&de", func(terminal.TerminalTabID) { hide() }))
 }
 
 // textScaler is a host whose window draws the agent and terminal panels' text at a share of its own
@@ -81,21 +82,21 @@ type textScaler interface {
 
 // textSizeMenu is Text size ›: the share now, then Smaller and Larger, a step of 10% each, each
 // disabled at its end. The share is the agent and terminal panels' both, whichever menu moves it.
-func textSizeMenu(c any, panel string, pct int, step func(int) error) widget.MenuItemModel {
-	run := func(dir int, op string) func(widget.TerminalTabID) {
-		return func(widget.TerminalTabID) {
+func textSizeMenu(c any, panel string, pct int, step func(int) error) widgetcore.MenuItemModel {
+	run := func(dir int, op string) func(terminal.TerminalTabID) {
+		return func(terminal.TerminalTabID) {
 			if err := step(dir); err != nil {
 				keepFailure(c, fmt.Errorf("Text size › %s for the %s panel: %w", op, panel, err))
 			}
 		}
 	}
-	now := tabMenuRow("tabs.text.now", strconv.Itoa(pct)+"%", func(widget.TerminalTabID) {})
+	now := tabMenuRow("tabs.text.now", strconv.Itoa(pct)+"%", func(terminal.TerminalTabID) {})
 	now.Enabled = false
 	smaller := tabMenuRow("tabs.text.smaller", "&Smaller", run(-1, "Smaller"))
 	smaller.Enabled = pct > agentScales[0]
 	larger := tabMenuRow("tabs.text.larger", "La&rger", run(+1, "Larger"))
 	larger.Enabled = pct < agentScales[len(agentScales)-1]
-	sub := widget.NewSubmenu("tabs.text", "Text size", []widget.MenuItemModel{now, smaller, larger})
+	sub := widgetcore.NewSubmenu("tabs.text", "Text size", []widgetcore.MenuItemModel{now, smaller, larger})
 	sub.Label, sub.Hotkey, sub.HotkeyIdx = tuicore.ParseMnemonic("Te&xt size")
 	return withLabelMessage(sub, "Te&xt size")
 }
@@ -117,15 +118,15 @@ func lookOf(c any) func() error {
 
 // goToRows is Go to ›: every tab of panel, as label names it, going to it by pick. A tab closing
 // is shown, not offered.
-func goToRows(panel TerminalPanel, label func(widget.TerminalTab) string, pick func(widget.TerminalTabID)) widget.MenuItemModel {
-	var rows []widget.MenuItemModel
+func goToRows(panel TerminalPanel, label func(terminal.TerminalTab) string, pick func(terminal.TerminalTabID)) widgetcore.MenuItemModel {
+	var rows []widgetcore.MenuItemModel
 	for _, tab := range panel.Tabs() {
 		target := tab.ID
-		row := tabMenuRow("tabs.goto."+string(target), label(tab), func(widget.TerminalTabID) { pick(target) })
+		row := tabMenuRow("tabs.goto."+string(target), label(tab), func(terminal.TerminalTabID) { pick(target) })
 		row.Enabled = !tab.Closing
 		rows = append(rows, row)
 	}
-	sub := withLabelMessage(widget.NewSubmenu("tabs.goto", "Go to", rows), "Go to")
+	sub := withLabelMessage(widgetcore.NewSubmenu("tabs.goto", "Go to", rows), "Go to")
 	sub.Enabled = len(rows) > 0
 	return sub
 }

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // agentServer is a crew agent's server where there are no process groups to run one in: none is
@@ -19,4 +19,4 @@ func startAgentServer(argv []string, socket, dir string, environ []string, ready
 
 func (s *agentServer) stop() {}
 
-func bindServer(proc widget.TerminalProcess, _ *agentServer) widget.TerminalProcess { return proc }
+func bindServer(proc terminal.TerminalProcess, _ *agentServer) terminal.TerminalProcess { return proc }

@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // SWITCHING BUFFERS IN THE TUI — the Buffers picker (BufferPick.qml) and :b
@@ -106,7 +106,7 @@ func (h *Host) bufferEntries() []Entry {
 	return []Entry{
 		{ID: "buffer.go", Title: "show a buffer", Verb: "b", Args: "<number|name>",
 			Help: "show the buffer of that number, or whose name holds the text; Tab lists them",
-			Complete: func(widget.CompleteContext) []string {
+			Complete: func(editor.CompleteContext) []string {
 				out := make([]string, 0, len(h.buffers))
 				for _, b := range h.buffers {
 					out = append(out, b.file.name())

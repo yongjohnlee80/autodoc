@@ -20,7 +20,7 @@ import (
 	guiwidget "github.com/yongjohnlee80/golib/gui/widget"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	tuiwidget "github.com/yongjohnlee80/golib/tui/widget"
+	widgeteditor "github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // diagramHost stands in for the editor's: it records what it is asked and answers with answer.
@@ -286,7 +286,7 @@ func (c *countingRenderer) LayOut(b guiwidget.Block, lines []string, width float
 // does, which lays out the blocks it shows.
 func paintedEditor(t *testing.T, r guiwidget.Renderer, text string) (editor *guiwidget.Editor, onApp func(func()), paint func()) {
 	t.Helper()
-	editor = guiwidget.NewEditor(guiwidget.WithRenderer(r), guiwidget.WithView(tuiwidget.ViewRendered))
+	editor = guiwidget.NewEditor(guiwidget.WithRenderer(r), guiwidget.WithView(widgeteditor.ViewRendered))
 	editor.SetValue(text)
 	backend := &nativeBackend{TestBackend: tuicore.NewTestBackend(100, 50, tuicore.WithTestCapabilities(tuicore.Capabilities{NativeViews: true}))}
 	app := tuicore.NewApp(editor, tuicore.WithBackend(backend))
@@ -336,14 +336,14 @@ func TestEditingTheLineAfterAnEmbedLaysItOutAgain(t *testing.T) {
 		if !r.picture[2] {
 			t.Fatal("the embed was not drawn as its file to begin with")
 		}
-		if _, err := editor.Core().Insert(tuiwidget.TextPos{Line: 3, Col: 0}, "continuation"); err != nil {
+		if _, err := editor.Core().Insert(widgeteditor.TextPos{Line: 3, Col: 0}, "continuation"); err != nil {
 			t.Fatal(err)
 		}
 		paint()
 		if r.picture[2] {
 			t.Error("text typed under the embed: it is still drawn as its file")
 		}
-		if err := editor.Core().Delete(tuiwidget.TextRange{From: tuiwidget.TextPos{Line: 3, Col: 0}, To: tuiwidget.TextPos{Line: 3, Col: len("continuation")}}); err != nil {
+		if err := editor.Core().Delete(widgeteditor.TextRange{From: widgeteditor.TextPos{Line: 3, Col: 0}, To: widgeteditor.TextPos{Line: 3, Col: len("continuation")}}); err != nil {
 			t.Fatal(err)
 		}
 		paint()

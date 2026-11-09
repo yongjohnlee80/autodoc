@@ -4,7 +4,7 @@ import (
 	"os"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // THE APP SINGLETON'S STATE — what the document reads.
@@ -239,9 +239,9 @@ func (h *Host) setWhere(where string) {
 	h.where = where
 	mode := h.core.Mode().String()
 	switch h.core.OneShotMode() {
-	case widget.ModeInsert:
+	case editor.ModeInsert:
 		mode = "(INSERT)"
-	case widget.ModeReplace:
+	case editor.ModeReplace:
 		mode = "(REPLACE)"
 	}
 	h.set("App.statusLeft", mode+"  "+where)

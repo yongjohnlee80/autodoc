@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 
 	"github.com/yongjohnlee80/autodoc/core/todo"
 )
@@ -304,8 +304,8 @@ func TestTodosAssignWritesThenHandsOverAtTheReturnedPath(t *testing.T) {
 		t.Fatalf("handed %+v", h)
 	}
 	h.done(nil)
-	h.done(ErrAgentCancelled)                  // as a second A's would: each says how it went
-	h.done(widget.ErrTerminalPasteUnbracketed) // a program that takes no bracketed paste got nothing
+	h.done(ErrAgentCancelled)                    // as a second A's would: each says how it went
+	h.done(terminal.ErrTerminalPasteUnbracketed) // a program that takes no bracketed paste got nothing
 	if len(c.notes) != 3 || c.notes[0] != "todos: assigned to Scribe, and sent to it" ||
 		!strings.Contains(c.notes[1], "assigned to autodoc:scribe, but not delivered (you didn't start it)") ||
 		c.notes[2] != "todos: assigned to Scribe, but not handed over: its program takes no bracketed paste; open its panel and paste the task" {

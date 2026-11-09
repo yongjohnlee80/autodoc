@@ -8,7 +8,7 @@ import (
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 )
 
 // tilelayout_test.go: v0.3.0's base, a TileManager whose windows are the page (a FloatWindow, the
@@ -49,14 +49,14 @@ func TestTheDefaultLayoutReadsAsTheReleasedOne(t *testing.T) {
 
 // tilesOf is the base's manager: golib's Tiles, which the TileManager node mounts as its one child.
 // Read on the loop.
-func tilesOf(r *running) *widget.Tiles {
+func tilesOf(r *running) *widgetcore.Tiles {
 	c, _ := r.h.p.Find("tiles")
 	n, ok := c.(interface{ Context() *tuicore.Context })
 	if !ok || n.Context() == nil {
 		return nil
 	}
 	for _, ch := range n.Context().Children(c) {
-		if t, ok := ch.(*widget.Tiles); ok {
+		if t, ok := ch.(*widgetcore.Tiles); ok {
 			return t
 		}
 	}

@@ -13,7 +13,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // RECOVERY — unsaved work kept when AutoDoc ends without being asked to: SIGTERM, SIGHUP, the
@@ -297,8 +297,8 @@ func (h *Host) restoreSettled() {
 // text is saved or discarded (settleRecovery).
 func (h *Host) applyRecovered(b *openBuffer, r recovered) {
 	ed := h.editorFor(b)
-	end := widget.TextPos{Line: ed.LineCount() - 1, Col: 1 << 30}
-	if _, err := ed.Replace(widget.TextRange{To: end}, r.Text); err != nil {
+	end := editor.TextPos{Line: ed.LineCount() - 1, Col: 1 << 30}
+	if _, err := ed.Replace(editor.TextRange{To: end}, r.Text); err != nil {
 		h.failed("could not restore "+r.Path, err)
 		return
 	}

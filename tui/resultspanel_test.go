@@ -12,7 +12,8 @@ import (
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
+	"github.com/yongjohnlee80/golib/tui/widget/table"
 
 	"github.com/yongjohnlee80/autodoc/plugin"
 )
@@ -83,7 +84,7 @@ func (r *running) source(name string) string {
 }
 
 // resultsCore is the results' table core, on the loop only.
-func (r *running) resultsCore() *widget.TableCore { return r.h.plugins.c.TableCore(resultsView) }
+func (r *running) resultsCore() *table.TableCore { return r.h.plugins.c.TableCore(resultsView) }
 
 // shownColumn is field col of every loaded row, as the view shows them, in its order.
 func (r *running) shownColumn(col int) []string {
@@ -124,7 +125,7 @@ func TestKindsReachTheTableFromProtocolFive(t *testing.T) {
 	got := onLoop(r, func() string {
 		m := r.h.plugins.results.model
 		_, shown := r.h.plugins.results.shown.(kindedResults)
-		_, viewKinds := r.resultsCore().Source().(widget.TableKinds)
+		_, viewKinds := r.resultsCore().Source().(table.TableKinds)
 		return fmt.Sprintf("kinded %v %q, shown with kinds %v, the view reads kinds %v, kind(1,1) %c", m.kinded, m.kinds, shown, viewKinds, m.kind(1, 1))
 	})
 	if want := fmt.Sprintf("kinded true %q, shown with kinds true, the view reads kinds true, kind(1,1) z", kindsOf); got != want {
@@ -135,14 +136,14 @@ func TestKindsReachTheTableFromProtocolFive(t *testing.T) {
 	got = onLoop(r, func() string {
 		m := r.h.plugins.results.model
 		_, shown := r.h.plugins.results.shown.(*resultsModel)
-		_, viewKinds := r.resultsCore().Source().(widget.TableKinds)
+		_, viewKinds := r.resultsCore().Source().(table.TableKinds)
 		return fmt.Sprintf("kinded %v %d, shown alone %v, the view reads kinds %v", m.kinded, len(m.kinds), shown, viewKinds)
 	})
 	if want := "kinded false 0, shown alone true, the view reads kinds false"; got != want {
 		t.Fatalf("a protocol-4 table: %s, want %s", got, want)
 	}
-	for b, k := range map[byte]widget.TableCellKind{plugin.KindText: widget.TableCellText, plugin.KindNull: widget.TableCellNull,
-		plugin.KindNumber: widget.TableCellNumber, plugin.KindBool: widget.TableCellBool, plugin.KindJSON: widget.TableCellJSON} {
+	for b, k := range map[byte]table.TableCellKind{plugin.KindText: table.TableCellText, plugin.KindNull: table.TableCellNull,
+		plugin.KindNumber: table.TableCellNumber, plugin.KindBool: table.TableCellBool, plugin.KindJSON: table.TableCellJSON} {
 		if b != byte(k) {
 			t.Errorf("the SDK's kind %q is golib's %q", b, byte(k))
 		}
@@ -258,14 +259,14 @@ func TestTheSortBarReadsTheFields(t *testing.T) {
 
 	onLoop(r, func() bool {
 		r.h.keep(r.h.p.Call(resultsView, "forceActiveFocus"))
-		r.resultsCore().SetCursor(widget.TablePos{Col: 1})
+		r.resultsCore().SetCursor(table.TablePos{Col: 1})
 		return true
 	})
 	r.keys(t, key('s'))
 	r.s.WaitFor(t, "s written to the bar", func(string) bool {
 		return r.source("App.resultsOrder") == "name ASC" && r.source("App.resultsClauseText") == "name ASC"
 	})
-	onLoop(r, func() bool { r.resultsCore().SetCursor(widget.TablePos{Col: 0}); return true })
+	onLoop(r, func() bool { r.resultsCore().SetCursor(table.TablePos{Col: 0}); return true })
 	r.keys(t, key('s'))
 	r.s.WaitFor(t, "a shared name's s written as its position", func(string) bool { return r.source("App.resultsOrder") == "1 ASC" })
 }
@@ -408,7 +409,7 @@ func TestThePanelActsOnTheView(t *testing.T) {
 	}
 	onLoop(r, func() bool {
 		r.h.editor.SetValue("")
-		r.h.core.SetCursor(widget.TextPos{})
+		r.h.core.SetCursor(editor.TextPos{})
 		r.h.plugins.insertResults()
 		return true
 	})
@@ -469,7 +470,7 @@ func (r *running) resultsMenuRow(t *testing.T, id string) {
 	found := onLoop(r, func() bool {
 		for _, row := range r.h.plugins.resultsMenuRows() {
 			if string(row.ID) == "results.menu."+id {
-				row.Action.(widget.CoreMenuAction).Run(nil)
+				row.Action.(editor.CoreMenuAction).Run(nil)
 				return true
 			}
 		}
@@ -488,8 +489,8 @@ func TestTheMenuRowsRunTheirCommands(t *testing.T) {
 	r, _ := kindsTUI(t, "tablestall")
 	onLoop(r, func() bool {
 		tc := r.resultsCore()
-		tc.SetCursor(widget.TablePos{Row: 1})
-		tc.Select(widget.TableSelectRows, widget.TablePos{})
+		tc.SetCursor(table.TablePos{Row: 1})
+		tc.Select(table.TableSelectRows, table.TablePos{})
 		x := resultsGutter(tc) + tc.Width(0) + 2 + 1 // inside the name field
 		r.h.plugins.c.ResultsTable(resultsView).HandleEvent(tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseRight, X: x, Y: resultsHeaderRows + 2})
 		return true
@@ -501,7 +502,7 @@ func TestTheMenuRowsRunTheirCommands(t *testing.T) {
 		at, hit := r.h.plugins.c.ResultsTable(resultsView).MenuAt()
 		return fmt.Sprintf("open %v, selection %v %v to %v, at %v %v", r.h.plugins.c.ResultsTable(resultsView).Menu().IsOpen(),
 			tc.SelectionKind(), from, to, at, hit)
-	}); got != fmt.Sprintf("open true, selection %v {0 0} to {1 0}, at {2 1} %v", widget.TableSelectRows, widget.TableHitCell) {
+	}); got != fmt.Sprintf("open true, selection %v {0 0} to {1 0}, at {2 1} %v", table.TableSelectRows, table.TableHitCell) {
 		t.Fatalf("after the right press: %s", got)
 	}
 	r.resultsMenuRow(t, "sort_asc")
@@ -520,7 +521,7 @@ func TestTheMenuRowsRunTheirCommands(t *testing.T) {
 	if got := onLoop(r, func() string {
 		from, to, _ := r.resultsCore().Selection()
 		return fmt.Sprintf("%v %v %v", r.resultsCore().SelectionKind(), from.Row, to.Row)
-	}); got != fmt.Sprintf("%v 0 4", widget.TableSelectRows) {
+	}); got != fmt.Sprintf("%v 0 4", table.TableSelectRows) {
 		t.Errorf("Select all: %s", got)
 	}
 	r.resultsMenuRow(t, "export")

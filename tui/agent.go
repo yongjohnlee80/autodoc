@@ -15,7 +15,7 @@ import (
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/pty"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 
 	"github.com/yongjohnlee80/autodoc"
 	"github.com/yongjohnlee80/autodoc/core/crew"
@@ -37,7 +37,7 @@ type agents struct {
 	promptsReported func(kind string, reported bool) bool
 	// spawn starts an agent's program on a pseudo-terminal (runAgent): pty.Start, as a terminal
 	// tab's own start is
-	spawn func(pty.Cmd) (widget.TerminalProcess, error)
+	spawn func(pty.Cmd) (terminal.TerminalProcess, error)
 	// commandCheck refuses a start whose command's program the agent can't find (commandOnPath);
 	// nil checks nothing
 	commandCheck func(command string, env []string) error
@@ -75,7 +75,7 @@ type agents struct {
 func newAgents(c agentHost, s *seams, dir, config string) *agents {
 	return &agents{c: c, seams: s, agentDir: dir, agentConfig: config, instances: map[string]*agentInstance{}, deliveries: map[*agentDelivery]bool{},
 		agentRows: tuidecl.NewListModel("key", "default", "name", "codename", "command"),
-		spawn:     func(c pty.Cmd) (widget.TerminalProcess, error) { return pty.Start(c) }, commandCheck: commandOnPath}
+		spawn:     func(c pty.Cmd) (terminal.TerminalProcess, error) { return pty.Start(c) }, commandCheck: commandOnPath}
 }
 func (a *agents) BindPanelHost(c PanelHost) error {
 	host, ok := c.(agentHost)

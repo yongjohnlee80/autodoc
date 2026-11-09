@@ -5,7 +5,7 @@ import (
 	"slices"
 
 	"github.com/yongjohnlee80/golib/tui/panelgeometry"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // FLOATING PANELS — the five drawers move and resize anywhere over the page: Alt/Option-left drag
@@ -94,11 +94,11 @@ func (h *Host) panelInHand() string {
 func (h *Host) cyclePanelTab(step int) {
 	var panel TerminalPanel
 	var err error
-	var pick func(widget.TerminalTabID)
+	var pick func(terminal.TerminalTabID)
 	switch {
 	case h.panelHasKeyboard("terminal"):
 		panel, err = h.terminals.panel()
-		pick = func(id widget.TerminalTabID) { h.keep(panel.Select(id)) }
+		pick = func(id terminal.TerminalTabID) { h.keep(panel.Select(id)) }
 	case h.panelHasKeyboard("agent"):
 		panel, err = h.agents.runtime()
 		pick = h.agents.goToTab
@@ -115,8 +115,8 @@ func (h *Host) cyclePanelTab(step int) {
 
 // tabAfter is the tab step away from active among tabs, round, a tab closing passed over: false
 // with fewer than two left, or with active closing (or gone), whose place among them is none.
-func tabAfter(tabs []widget.TerminalTab, active widget.TerminalTabID, step int) (widget.TerminalTabID, bool) {
-	var open []widget.TerminalTabID
+func tabAfter(tabs []terminal.TerminalTab, active terminal.TerminalTabID, step int) (terminal.TerminalTabID, bool) {
+	var open []terminal.TerminalTabID
 	for _, tab := range tabs {
 		if !tab.Closing {
 			open = append(open, tab.ID)

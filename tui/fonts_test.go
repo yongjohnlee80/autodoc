@@ -12,7 +12,8 @@ import (
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // fakeFonts records what the window is told, as golib's gui.Backend would take it, and answers its
@@ -285,16 +286,16 @@ func TestTheFontsDialogShowsTheDefaultAtFirst(t *testing.T) {
 func TestTheRightClickRowsHaveAccessKeysButNotHJKL(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
-	rows := onLoop(r, func() []widget.MenuItemModel {
+	rows := onLoop(r, func() []widgetcore.MenuItemModel {
 		r.h.fonts = &fakeFonts{} // the GUI's rows too: the Zoom
 		defer func() { r.h.fonts = nil }()
 		return r.h.editorMenu(r.h.core)
 	})
-	var check func(level []widget.MenuItemModel)
-	check = func(level []widget.MenuItemModel) {
+	var check func(level []widgetcore.MenuItemModel)
+	check = func(level []widgetcore.MenuItemModel) {
 		seen := map[rune]string{}
 		for _, row := range level {
-			if row.Kind == widget.ItemKindSeparator || !strings.HasPrefix(string(row.ID), "autodoc.") {
+			if row.Kind == widgetcore.ItemKindSeparator || !strings.HasPrefix(string(row.ID), "autodoc.") {
 				continue
 			}
 			k := unicode.ToLower(row.Hotkey)
@@ -437,7 +438,7 @@ func TestTheTerminalsFontIsTheirs(t *testing.T) {
 		if !ok {
 			t.Fatal("no terminal panel")
 		}
-		tabs.SetTerminalViews(func(*widget.Terminal) widget.TerminalView { return rec })
+		tabs.SetTerminalViews(func(*terminal.Terminal) terminal.TerminalView { return rec })
 		return true
 	})
 	shell := func() bool { return onLoop(r, func() bool { return rec.frames > 0 && rec.faced }) }

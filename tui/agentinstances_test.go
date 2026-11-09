@@ -9,7 +9,8 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/tui/pty"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 type modelRemoval struct {
@@ -23,14 +24,14 @@ func (*modelRemoval) Generation() int              { return 1 }
 
 type modelPanel struct {
 	owner     *identityHost
-	configs   map[widget.TerminalTabID]TerminalConfig
-	tabs      []widget.TerminalTab
-	active    widget.TerminalTabID
+	configs   map[terminal.TerminalTabID]TerminalConfig
+	tabs      []terminal.TerminalTab
+	active    terminal.TerminalTabID
 	next      int
 	pastes    []string
-	keys      []string               // each SendText: the messaging base's Enter
-	resumed   []widget.TerminalTabID // each Resume's tab
-	modes     []string               // each SetMode, tab:mode
+	keys      []string                 // each SendText: the messaging base's Enter
+	resumed   []terminal.TerminalTabID // each Resume's tab
+	modes     []string                 // each SetMode, tab:mode
 	sendErr   error
 	startErr  error // what Start answers instead of starting, when set
 	selectErr error // what Select answers instead of selecting, when set
@@ -38,8 +39,8 @@ type modelPanel struct {
 	// still starting; below zero, they never do
 	unbracketed int
 	removal     *modelRemoval
-	addMenu     func() []widget.MenuItemModel
-	tabMenu     func(widget.TerminalTabID) []widget.MenuItemModel
+	addMenu     func() []widgetcore.MenuItemModel
+	tabMenu     func(terminal.TerminalTabID) []widgetcore.MenuItemModel
 	// starts runs a tab's starter at Start, as the terminal does, and keeps what each failed one
 	// said on its screen (reported, tab: error); unset, Start only marks the tab running
 	starts   bool
@@ -70,27 +71,27 @@ func (p *modelPanel) Shutdown() TerminalCompletion {
 	return p.removal
 }
 
-func (p *modelPanel) Add(label string, config TerminalConfig) (widget.TerminalTabID, error) {
+func (p *modelPanel) Add(label string, config TerminalConfig) (terminal.TerminalTabID, error) {
 	p.next++
-	id := widget.TerminalTabID(fmt.Sprintf("tab-%d", p.next))
+	id := terminal.TerminalTabID(fmt.Sprintf("tab-%d", p.next))
 	if p.configs == nil {
-		p.configs = map[widget.TerminalTabID]TerminalConfig{}
+		p.configs = map[terminal.TerminalTabID]TerminalConfig{}
 	}
 	p.configs[id] = config
-	p.tabs = append(p.tabs, widget.TerminalTab{ID: id, Label: label})
+	p.tabs = append(p.tabs, terminal.TerminalTab{ID: id, Label: label})
 	if p.owner != nil && len(config.Args) > 0 {
 		p.owner.configuredCommand = config.Args[len(config.Args)-1]
 	}
 	return id, nil
 }
-func (p *modelPanel) Select(id widget.TerminalTabID) error {
+func (p *modelPanel) Select(id terminal.TerminalTabID) error {
 	if p.selectErr != nil {
 		return p.selectErr
 	}
 	p.active = id
 	return nil
 }
-func (p *modelPanel) Start(id widget.TerminalTabID) error {
+func (p *modelPanel) Start(id terminal.TerminalTabID) error {
 	if p.startErr != nil {
 		return p.startErr
 	}
@@ -112,13 +113,13 @@ func (p *modelPanel) Start(id widget.TerminalTabID) error {
 }
 
 // Resume keeps the tab it was asked for.
-func (p *modelPanel) Resume(id widget.TerminalTabID) error {
+func (p *modelPanel) Resume(id terminal.TerminalTabID) error {
 	p.resumed = append(p.resumed, id)
 	return nil
 }
 
 // SendText records literal keys sent to a tab (the messaging base's Enter).
-func (p *modelPanel) SendText(id widget.TerminalTabID, text string) error {
+func (p *modelPanel) SendText(id terminal.TerminalTabID, text string) error {
 	if p.sendErr != nil {
 		return p.sendErr
 	}
@@ -127,7 +128,7 @@ func (p *modelPanel) SendText(id widget.TerminalTabID, text string) error {
 }
 
 // SendBracketedPaste is SendPaste, recorded as bracketed, once the programs take them (unbracketed).
-func (p *modelPanel) SendBracketedPaste(id widget.TerminalTabID, text string) error {
+func (p *modelPanel) SendBracketedPaste(id terminal.TerminalTabID, text string) error {
 	if p.sendErr != nil {
 		return p.sendErr
 	}
@@ -135,17 +136,17 @@ func (p *modelPanel) SendBracketedPaste(id widget.TerminalTabID, text string) er
 		if p.unbracketed > 0 {
 			p.unbracketed--
 		}
-		return widget.ErrTerminalPasteUnbracketed
+		return terminal.ErrTerminalPasteUnbracketed
 	}
 	p.pastes = append(p.pastes, string(id)+":[bracketed]"+text)
 	return nil
 }
 
-func (p *modelPanel) SetMode(id widget.TerminalTabID, mode widget.TerminalMode) error {
+func (p *modelPanel) SetMode(id terminal.TerminalTabID, mode terminal.TerminalMode) error {
 	p.modes = append(p.modes, fmt.Sprintf("%s:%v", id, mode))
 	return nil
 }
-func (p *modelPanel) Remove(id widget.TerminalTabID) (TerminalRemoval, error) {
+func (p *modelPanel) Remove(id terminal.TerminalTabID) (TerminalRemoval, error) {
 	if p.owner != nil && p.owner.stopErr != nil {
 		return nil, p.owner.stopErr
 	}
@@ -155,15 +156,17 @@ func (p *modelPanel) Remove(id widget.TerminalTabID) (TerminalRemoval, error) {
 	}
 	return p.removal, nil
 }
-func (*modelPanel) ForceRemove(widget.TerminalTabID) error     { return nil }
-func (p *modelPanel) Tabs() []widget.TerminalTab               { return append([]widget.TerminalTab(nil), p.tabs...) }
-func (p *modelPanel) Active() widget.TerminalTabID             { return p.active }
-func (*modelPanel) Actions(func(), func(widget.TerminalTabID)) {}
-func (p *modelPanel) Menus(add func() []widget.MenuItemModel, tab func(widget.TerminalTabID) []widget.MenuItemModel) {
+func (*modelPanel) ForceRemove(terminal.TerminalTabID) error { return nil }
+func (p *modelPanel) Tabs() []terminal.TerminalTab {
+	return append([]terminal.TerminalTab(nil), p.tabs...)
+}
+func (p *modelPanel) Active() terminal.TerminalTabID             { return p.active }
+func (*modelPanel) Actions(func(), func(terminal.TerminalTabID)) {}
+func (p *modelPanel) Menus(add func() []widgetcore.MenuItemModel, tab func(terminal.TerminalTabID) []widgetcore.MenuItemModel) {
 	p.addMenu, p.tabMenu = add, tab
 }
 
-func (p *modelPanel) exit(id widget.TerminalTabID, code int) {
+func (p *modelPanel) exit(id terminal.TerminalTabID, code int) {
 	for i := range p.tabs {
 		if p.tabs[i].ID == id {
 			p.tabs[i].Running = false
@@ -318,7 +321,7 @@ func TestHandTaskAcceptedDeliverySnapshotsAndCompletesOnce(t *testing.T) {
 	if done != 1 || !slices.Equal(c.panel.keys, []string{"\r"}) {
 		t.Fatalf("the Enter sends it, then done: done=%d keys=%q", done, c.panel.keys)
 	}
-	if !slices.Equal(c.opened, []string{"agent"}) || c.panel.active != instance.tab || !slices.Equal(c.panel.modes, []string{fmt.Sprintf("%s:%v", tab, widget.TerminalInput)}) {
+	if !slices.Equal(c.opened, []string{"agent"}) || c.panel.active != instance.tab || !slices.Equal(c.panel.modes, []string{fmt.Sprintf("%s:%v", tab, terminal.TerminalInput)}) {
 		t.Fatalf("the agent's panel is brought forward for the Enter: opened=%q active=%q modes=%q", c.opened, c.panel.active, c.panel.modes)
 	}
 	c.drainPosts()
@@ -427,7 +430,7 @@ func TestHandTaskWaitsForAStartedAgentToTakeBracketedPastes(t *testing.T) {
 		!slices.Equal(c.delays, []time.Duration{agentReadyPoll, agentReadyPoll, agentReadyPoll, submitDelay}) || !slices.Equal(c.panel.keys, []string{"\r"}) {
 		t.Fatalf("once it takes bracketed pastes: calls=%d outcome=%v pastes=%q delays=%v keys=%q", calls, outcome, c.panel.pastes, c.delays, c.panel.keys)
 	}
-	if want := []string{fmt.Sprintf("%s:%v", a.instances["one"].tab, widget.TerminalInput)}; !slices.Equal(c.panel.modes, want) {
+	if want := []string{fmt.Sprintf("%s:%v", a.instances["one"].tab, terminal.TerminalInput)}; !slices.Equal(c.panel.modes, want) {
 		t.Errorf("the agent's tab was not put in input mode for the Enter: %q", c.panel.modes)
 	}
 }
@@ -462,7 +465,7 @@ func TestHandTaskToAnUnbracketedProgramSendsNothing(t *testing.T) {
 			if target == "started" {
 				waits = int(agentReadyWait / agentReadyPoll)
 			}
-			if calls != 1 || !errors.Is(outcome, widget.ErrTerminalPasteUnbracketed) || len(c.delays) != waits {
+			if calls != 1 || !errors.Is(outcome, terminal.ErrTerminalPasteUnbracketed) || len(c.delays) != waits {
 				t.Fatalf("calls=%d outcome=%v delays=%d, want one ErrTerminalPasteUnbracketed after %d waits", calls, outcome, len(c.delays), waits)
 			}
 			if len(c.panel.pastes) != 0 || len(c.panel.modes) != 0 {

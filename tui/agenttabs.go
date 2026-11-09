@@ -1,6 +1,9 @@
 package tui
 
-import "github.com/yongjohnlee80/golib/tui/widget"
+import (
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
+)
 
 // THE AGENTS' STRIP (tabmenus.go): each agent's tab is named by its codename. + offers the
 // profiles: a running one goes to its tab, a stopped one starts in one. A tab's menu goes to
@@ -8,14 +11,14 @@ import "github.com/yongjohnlee80/golib/tui/widget"
 // Closing the last tab leaves the panel open on its empty text.
 
 // addRows are what + offers: every profile, then Profiles….
-func (a *agents) addRows() []widget.MenuItemModel {
-	var rows []widget.MenuItemModel
+func (a *agents) addRows() []widgetcore.MenuItemModel {
+	var rows []widgetcore.MenuItemModel
 	for _, p := range a.profiles() {
 		code, label := p.Codename, p.Name+" ("+p.Codename+")"
 		if instance := a.instances[code]; instance != nil && instance.running {
 			label += " ▶"
 		}
-		rows = append(rows, tabMenuRow("agents.add."+code, label, func(widget.TerminalTabID) {
+		rows = append(rows, tabMenuRow("agents.add."+code, label, func(terminal.TerminalTabID) {
 			if p, ok := a.profile(code); ok {
 				a.useProfile(p)
 			} else {
@@ -24,37 +27,37 @@ func (a *agents) addRows() []widget.MenuItemModel {
 		}))
 	}
 	if len(rows) > 0 {
-		rows = append(rows, widget.NewSeparator("agents.add.profiles"))
+		rows = append(rows, widgetcore.NewSeparator("agents.add.profiles"))
 	}
 	return append(rows, a.profilesRow())
 }
 
 // tabRows are tab id's menu: the panel's Layout ›, Go to ›, Restart and Close for its agent,
 // Profiles….
-func (a *agents) tabRows(id widget.TerminalTabID) []widget.MenuItemModel {
+func (a *agents) tabRows(id terminal.TerminalTabID) []widgetcore.MenuItemModel {
 	panel, err := a.runtime()
 	if err != nil {
 		return nil
 	}
-	rows := append(layoutRows(a.c, "agent", tabRowOf), goToRows(panel, func(tab widget.TerminalTab) string { return tab.Label }, a.goToTab))
+	rows := append(layoutRows(a.c, "agent", tabRowOf), goToRows(panel, func(tab terminal.TerminalTab) string { return tab.Label }, a.goToTab))
 	if instance := a.instanceOn(panel, id); instance != nil {
 		code := instance.profile.Codename
-		restart := tabMenuRow("agents.restart", "Restart", func(widget.TerminalTabID) { a.restartAgent(code) })
-		closing := tabMenuRow("agents.close", "Close", func(widget.TerminalTabID) { a.closeAgent(code) })
+		restart := tabMenuRow("agents.restart", "Restart", func(terminal.TerminalTabID) { a.restartAgent(code) })
+		closing := tabMenuRow("agents.close", "Close", func(terminal.TerminalTabID) { a.closeAgent(code) })
 		restart.Enabled, closing.Enabled = !instance.closing, !instance.closing
 		rows = append(rows, restart, closing)
 	}
-	rows = append(rows, widget.NewSeparator("agents.tab.profiles"), a.profilesRow())
+	rows = append(rows, widgetcore.NewSeparator("agents.tab.profiles"), a.profilesRow())
 	// Hide is SPC g's own toggle (agent.toggle): the panel closed, every agent running on
 	return append(rows, panelRows(a.c, "agent", panel, id, a.toggleAgent)...)
 }
 
-func (a *agents) profilesRow() widget.MenuItemModel {
-	return tabMenuRow("agents.profiles", "Profiles…", func(widget.TerminalTabID) { a.openAgentProfiles() })
+func (a *agents) profilesRow() widgetcore.MenuItemModel {
+	return tabMenuRow("agents.profiles", "Profiles…", func(terminal.TerminalTabID) { a.openAgentProfiles() })
 }
 
 // instanceOn is the agent whose tab id is on panel, nil for none.
-func (a *agents) instanceOn(panel TerminalPanel, id widget.TerminalTabID) *agentInstance {
+func (a *agents) instanceOn(panel TerminalPanel, id terminal.TerminalTabID) *agentInstance {
 	for _, instance := range a.instances {
 		if instance.tab == id && instance.owner != nil && instance.owner.SameOwner(panel) {
 			return instance
@@ -64,7 +67,7 @@ func (a *agents) instanceOn(panel TerminalPanel, id widget.TerminalTabID) *agent
 }
 
 // goToTab is Go to › on the strip: the agent's tab selected, as Use selects it.
-func (a *agents) goToTab(id widget.TerminalTabID) {
+func (a *agents) goToTab(id terminal.TerminalTabID) {
 	panel, err := a.runtime()
 	if err != nil {
 		return

@@ -5,7 +5,8 @@ import (
 	"time"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // THE DOCK — the menu bar's corner (docs/decisions/editor.md#the-dock-of-open-widgets): one icon
@@ -45,7 +46,7 @@ func (h *Host) panelAlive(s PanelSpec) bool {
 		return true
 	}
 	if tabs, ok := h.tabsOf(s.View); ok {
-		return slices.ContainsFunc(tabs.Tabs(), func(t widget.TerminalTab) bool { return t.Running })
+		return slices.ContainsFunc(tabs.Tabs(), func(t terminal.TerminalTab) bool { return t.Running })
 	}
 	return false
 }
@@ -215,7 +216,7 @@ func (h *Host) editorMinimized() bool { return h.panelHidden("editorWindow") }
 // panelHidden reports whether panel id is hidden by the dock: open, minimized.
 func (h *Host) panelHidden(id string) bool {
 	c, ok := h.p.Find(id)
-	w, isWindow := c.(interface{ WindowBehavior() *widget.WindowCore })
+	w, isWindow := c.(interface{ WindowBehavior() *widgetcore.WindowCore })
 	return ok && isWindow && w.WindowBehavior() != nil && w.WindowBehavior().State().Minimized
 }
 

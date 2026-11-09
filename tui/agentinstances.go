@@ -16,7 +16,7 @@ import (
 
 	"github.com/yongjohnlee80/golib/errs"
 	"github.com/yongjohnlee80/golib/tui/pty"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
@@ -83,7 +83,7 @@ type agentInstance struct {
 	// then AutoDoc's (agentEnv), in its environment (agentEnviron); its setup's server is started
 	// with the same (runAgent)
 	env              []string
-	tab              widget.TerminalTabID
+	tab              terminal.TerminalTabID
 	token            string
 	workspace        wsInfo
 	running, closing bool
@@ -297,7 +297,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 		instance = &agentInstance{profile: p, workspace: ws, owner: panel, dir: dir}
 		id, err := panel.Add(p.Codename, TerminalConfig{Command: path, Args: args, Dir: dir,
 			Exited: func(code int) { a.instanceExited(instance, code) },
-			Start:  func(c pty.Cmd) (widget.TerminalProcess, error) { return a.runAgent(instance, c) }})
+			Start:  func(c pty.Cmd) (terminal.TerminalProcess, error) { return a.runAgent(instance, c) }})
 		if err != nil {
 			return nil, err
 		}
@@ -489,7 +489,7 @@ var errCrewStartHere = errors.New("this agent runs as a crew session: start it f
 // OpenCode agent also loads AutoDoc's OpenCode plugin (OPENCODE_CONFIG_CONTENT, opencodeEnv), which
 // registers its session and wakes it: without it the session is never reachable, so a plugin that
 // can't be had refuses the start.
-func (a *agents) runAgent(instance *agentInstance, c pty.Cmd) (widget.TerminalProcess, error) {
+func (a *agents) runAgent(instance *agentInstance, c pty.Cmd) (terminal.TerminalProcess, error) {
 	if instance.refusal != nil {
 		return nil, instance.refusal
 	}
@@ -808,7 +808,7 @@ func (a *agents) SendRequest(to AgentRef, subject, body string, done func(error)
 func (a *agents) present(panel TerminalPanel, instance *agentInstance) {
 	a.c.OpenDrawer("agent")
 	a.c.Keep(a.selectInstance(instance))
-	a.c.Keep(panel.SetMode(instance.tab, widget.TerminalInput))
+	a.c.Keep(panel.SetMode(instance.tab, terminal.TerminalInput))
 }
 
 // Resume is autodoc.agents.resume: a SIGCONT to agent to's tab, to as SendText takes it, or with
@@ -864,7 +864,7 @@ type deliverOpts struct {
 	// the messaging base's Enter decision (agentmessaging.go). still checks everything again, as an
 	// attempt does (finished, the workspace, the instance, its tab's owner): what submit waits for
 	// lets any of them change, so it presses nothing unless still answers nil.
-	submit func(panel TerminalPanel, tab widget.TerminalTabID, still func() error, finish func(error))
+	submit func(panel TerminalPanel, tab terminal.TerminalTabID, still func() error, finish func(error))
 	// queue, when set, mails the delivery instead, queued for the agent's first receive, when nothing
 	// may be typed into it because it hasn't started (ErrAgentNotStarted), and the delivery finishes
 	// with its answer
@@ -878,7 +878,7 @@ type deliverOpts struct {
 // until agentReadyWait. An agent running in another workspace than the window's is rung all the
 // same (its crew mail needs no tab), but never typed into: its tab works in that workspace, so a
 // doorbell that didn't ring, or none, ends the delivery agentElsewhere.
-func (a *agents) deliver(to AgentRef, check func() error, what string, o deliverOpts, send func(TerminalPanel, widget.TerminalTabID) error, done func(error)) error {
+func (a *agents) deliver(to AgentRef, check func() error, what string, o deliverOpts, send func(TerminalPanel, terminal.TerminalTabID) error, done func(error)) error {
 	a.syncInstances()
 	if a.stopping {
 		return ErrAgentShuttingDown
@@ -996,7 +996,7 @@ func (a *agents) deliver(to AgentRef, check func() error, what string, o deliver
 		if err == nil {
 			err = send(panel, instance.tab)
 		}
-		if tries > 0 && errors.Is(err, widget.ErrTerminalPasteUnbracketed) {
+		if tries > 0 && errors.Is(err, terminal.ErrTerminalPasteUnbracketed) {
 			c.After(agentReadyPoll, func() { attempt(tries - 1) })
 			return
 		}

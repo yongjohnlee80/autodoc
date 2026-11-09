@@ -7,7 +7,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/plugin"
 	"github.com/yongjohnlee80/gio/op/extimage"
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 )
 
 // A PLUGIN'S PIXEL SURFACE, AS THE REST OF THE HOST SEES IT
@@ -27,7 +27,7 @@ func surfaceCellPixels(ctx *tuicore.Context) tuicore.CellPixels {
 	if cp := ctx.CellPixels(); cp.W > 0 && cp.H > 0 {
 		return cp
 	}
-	return tuicore.CellPixels{W: widget.CellPixelsW, H: widget.CellPixelsH}
+	return tuicore.CellPixels{W: htmlview.CellPixelsW, H: htmlview.CellPixelsH}
 }
 
 // pointerShapes are host.surface.cursor's names, as the SDK's SetPointerShape lists them.

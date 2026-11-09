@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // suspendingAgent is an agent CLI as Claude Code is: its tty raw, it reads a key at a time, stops
@@ -160,7 +160,7 @@ func TestPanelResumeOnAnExitedAgentKeepsWhy(t *testing.T) {
 	r := exitedAgent(t)
 	onLoop(r, func() bool { r.h.resumePanel(); return true })
 	errs := keptErrors(r)
-	if len(errs) != 1 || !errors.Is(errs[0], widget.ErrTerminalNotRunning) || !strings.HasPrefix(errs[0].Error(), "Resume the agent panel's tab: ") {
+	if len(errs) != 1 || !errors.Is(errs[0], terminal.ErrTerminalNotRunning) || !strings.HasPrefix(errs[0].Error(), "Resume the agent panel's tab: ") {
 		t.Fatalf("panel.resume on an exited agent kept %v, want why, naming the agent panel's tab", errs)
 	}
 }

@@ -10,7 +10,7 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	tuiwidget "github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // The window opens in the Rendered view, and the view drawn follows the page's kind: a note renders;
@@ -31,38 +31,38 @@ func TestTheRenderedViewFollowsTheFilesKind(t *testing.T) {
 		t.Fatal("the editor under the native style is not gui's Editor")
 	}
 	// on the loop, as one call: ed() is its own onLoop, and nesting one in another waits forever
-	view := func() tuiwidget.EditorView {
-		return onLoop(r, func() tuiwidget.EditorView { return r.h.editor.(*guiwidget.Editor).View() })
+	view := func() editor.EditorView {
+		return onLoop(r, func() editor.EditorView { return r.h.editor.(*guiwidget.Editor).View() })
 	}
 	ctrlT := func() { pageCtrlT(t, r) }
 
 	onLoop(r, func() bool { r.h.openPath("a.md"); return true })
 	r.waitFile(t, "a.md")
 	// the window opens in the Rendered view: a note reads as it will look
-	if m := view(); m != tuiwidget.ViewRendered {
+	if m := view(); m != editor.ViewRendered {
 		t.Fatalf("a note as the window opens: %v, want Rendered", m)
 	}
 	ctrlT()
-	if m := view(); m != tuiwidget.ViewRaw {
+	if m := view(); m != editor.ViewRaw {
 		t.Fatalf("a note: Ctrl+T from Rendered gives %v, want Raw", m)
 	}
 	ctrlT()
-	if m := view(); m != tuiwidget.ViewRendered {
+	if m := view(); m != editor.ViewRendered {
 		t.Fatalf("a note: Ctrl+T gives %v, want Rendered", m)
 	}
 
 	// what the editor draws, apart from the view the user chose (View): a document that cannot
 	// render is drawn Raw while Rendered stays the choice
-	shown := func() tuiwidget.EditorView {
-		return onLoop(r, func() tuiwidget.EditorView { return r.h.editor.(*guiwidget.Editor).ShownView() })
+	shown := func() editor.EditorView {
+		return onLoop(r, func() editor.EditorView { return r.h.editor.(*guiwidget.Editor).ShownView() })
 	}
 	onLoop(r, func() bool { r.h.openPath("a.go"); return true })
 	r.waitFile(t, "a.go")
-	if s, m := shown(), view(); s != tuiwidget.ViewRaw || m != tuiwidget.ViewRendered {
+	if s, m := shown(), view(); s != editor.ViewRaw || m != editor.ViewRendered {
 		t.Fatalf("a Go file opened after a rendered note is drawn %v, the choice %v; want drawn Raw, Rendered kept", s, m)
 	}
 	ctrlT()
-	if s := shown(); s != tuiwidget.ViewRaw {
+	if s := shown(); s != editor.ViewRaw {
 		t.Fatalf("Ctrl+T on a Go file draws %v, want Raw: its # line must not render as a heading", s)
 	}
 
@@ -71,7 +71,7 @@ func TestTheRenderedViewFollowsTheFilesKind(t *testing.T) {
 	onLoop(r, func() bool { r.h.closeFile(); return true })
 	r.s.WaitFor(t, "the draft", func(string) bool { return !r.file().open })
 	onLoop(r, func() bool { r.h.core.SetValue("# Draft heading\nmore\n"); return true })
-	if s := shown(); s != tuiwidget.ViewRendered {
+	if s := shown(); s != editor.ViewRendered {
 		t.Fatalf("the draft after a Go file is drawn %v, want Rendered: the choice was kept", s)
 	}
 
@@ -79,11 +79,11 @@ func TestTheRenderedViewFollowsTheFilesKind(t *testing.T) {
 	// is the user's; Ctrl+T switches it back
 	onLoop(r, func() bool { r.h.openPath("b.md"); return true })
 	r.waitFile(t, "b.md")
-	if s := shown(); s != tuiwidget.ViewRendered {
+	if s := shown(); s != editor.ViewRendered {
 		t.Fatalf("a note opened from the rendered draft is drawn %v, want Rendered (the view kept)", s)
 	}
 	ctrlT()
-	if s, m := shown(), view(); s != tuiwidget.ViewRaw || m != tuiwidget.ViewRaw {
+	if s, m := shown(), view(); s != editor.ViewRaw || m != editor.ViewRaw {
 		t.Fatalf("Ctrl+T on a rendered note: drawn %v, the choice %v; want Raw both", s, m)
 	}
 }
@@ -113,12 +113,12 @@ func TestCtrlTIsTheTerminalsInItAndThePagesOnThePage(t *testing.T) {
 	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
 	r.connected(t)
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
-	view := func() tuiwidget.EditorView {
-		return onLoop(r, func() tuiwidget.EditorView { return r.h.editor.(*guiwidget.Editor).View() })
+	view := func() editor.EditorView {
+		return onLoop(r, func() editor.EditorView { return r.h.editor.(*guiwidget.Editor).View() })
 	}
 	onLoop(r, func() bool { r.h.openPath("a.md"); return true })
 	r.waitFile(t, "a.md")
-	if m := view(); m != tuiwidget.ViewRendered {
+	if m := view(); m != editor.ViewRendered {
 		t.Fatalf("a note as the window opens: %v, want Rendered", m)
 	}
 
@@ -133,14 +133,14 @@ func TestCtrlTIsTheTerminalsInItAndThePagesOnThePage(t *testing.T) {
 	if sc := r.s.String(); strings.Contains(sc, "b^[panel") || strings.Contains(sc, "^T") {
 		t.Fatalf("Normal mode's b, or Ctrl+T itself, reached the program:\n%s", sc)
 	}
-	if m := view(); m != tuiwidget.ViewRendered {
+	if m := view(); m != editor.ViewRendered {
 		t.Fatalf("Ctrl+T in the terminal reached the page: %v, want Rendered", m)
 	}
 
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	r.s.WaitFor(t, "the page's keyboard", func(string) bool { return r.focused("editor") })
 	pageCtrlT(t, r)
-	if m := view(); m != tuiwidget.ViewRaw {
+	if m := view(); m != editor.ViewRaw {
 		t.Fatalf("Ctrl+T on the page gives %v, want Raw", m)
 	}
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
@@ -183,23 +183,23 @@ func TestCtrlOReturnsToTheViewItLeft(t *testing.T) {
 	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
 	r.connected(t)
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
-	view := func() tuiwidget.EditorView {
-		return onLoop(r, func() tuiwidget.EditorView { return r.h.editor.(*guiwidget.Editor).View() })
+	view := func() editor.EditorView {
+		return onLoop(r, func() editor.EditorView { return r.h.editor.(*guiwidget.Editor).View() })
 	}
-	setView := func(m tuiwidget.EditorView) {
+	setView := func(m editor.EditorView) {
 		onLoop(r, func() bool { r.h.editor.(*guiwidget.Editor).SetView(m); return true })
 	}
 	onLoop(r, func() bool { r.h.openPath("a.md"); return true })
 	r.waitFile(t, "a.md")
-	setView(tuiwidget.ViewRaw)
+	setView(editor.ViewRaw)
 	col := strings.Index("see [[b]]", "b]]")
 	r.putCursor(2, col)
 	onLoop(r, func() bool { r.h.followLink(); return true })
 	r.waitFile(t, "b.md")
-	setView(tuiwidget.ViewRendered)
+	setView(editor.ViewRendered)
 	r.keys(t, ctrlKey('o'))
 	r.waitAt(t, "a.md", 2, col)
-	if m := view(); m != tuiwidget.ViewRaw {
+	if m := view(); m != editor.ViewRaw {
 		t.Fatalf("back to a: %v, want the Raw view it was left in", m)
 	}
 }

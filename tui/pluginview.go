@@ -8,7 +8,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/plugin"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/style"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // THE PLUGIN'S VIEW — a dialog plugin's latest frame, drawn in its dialog, and the keys passed to
@@ -64,7 +65,7 @@ func runStyle(s plugin.Style) (style.Style, int) {
 // made with its run; a card's is its panel's PluginCard (pluginpanels.go), which shows each run of
 // its plugin in turn, and nothing while none runs.
 type pluginView struct {
-	widget.Base
+	widgetcore.Base
 	run          *pluginRun // nil: a card whose plugin is not running
 	pl           *plugins
 	card         string // the card plugin whose panel this is; "" for a modal dialog's
@@ -72,7 +73,7 @@ type pluginView struct {
 	fill         bool   // the height is the float's share of the screen ("80%"): take all of it
 	sentW, sentH int    // the size last told to the plugin: plugin.open's, then each resize's
 	laidW, laidH int
-	menu         *widget.EditorMenu // a card's right-click menu
+	menu         *editor.EditorMenu // a card's right-click menu
 	// lastSurface is the geometry a pixel surface was last painted at (pluginsurface_gui.go)
 	lastSurface surfaceGeometry
 	// precise: the backend has told a scroll precisely (MouseEvent.ScrollX, ScrollY), so it tells
@@ -334,11 +335,11 @@ func (v *pluginView) HandleEvent(ev tuicore.Event) bool {
 // panel as Esc does.
 func (v *pluginView) openMenu(at tuicore.Point) bool {
 	if v.menu == nil {
-		v.menu = widget.NewEditorMenu(v, nil)
+		v.menu = editor.NewEditorMenu(v, nil)
 		v.menu.SetEnabled(true)
-		v.menu.SetRows(func() []widget.MenuItemModel {
-			return []widget.MenuItemModel{menuCommand("plugin.card.close", "&Close (Esc)",
-				widget.CoreMenuAction{ID: "plugin.card.close", Run: func(*widget.EditorCore) { v.closePanel() }})}
+		v.menu.SetRows(func() []widgetcore.MenuItemModel {
+			return []widgetcore.MenuItemModel{menuCommand("plugin.card.close", "&Close (Esc)",
+				editor.CoreMenuAction{ID: "plugin.card.close", Run: func(*editor.EditorCore) { v.closePanel() }})}
 		})
 	}
 	return v.menu.OpenAt(at)

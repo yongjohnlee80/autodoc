@@ -13,7 +13,7 @@ import (
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
@@ -188,13 +188,13 @@ func (a editorArgs) num(i int, what string, optional bool) (n int, given bool, e
 }
 
 // pos is params i and i+1 as a 1-based (line, col).
-func (a editorArgs) pos(i int) (widget.TextPos, error) {
+func (a editorArgs) pos(i int) (editor.TextPos, error) {
 	l, _, err := a.num(i, "a line", false)
 	if err != nil {
-		return widget.TextPos{}, err
+		return editor.TextPos{}, err
 	}
 	c, _, err := a.num(i+1, "a column", false)
-	return widget.TextPos{Line: l - 1, Col: c - 1}, err
+	return editor.TextPos{Line: l - 1, Col: c - 1}, err
 }
 
 // editorVerbs are the socket's handlers.
@@ -269,7 +269,7 @@ func (h *Host) ungranted(agent, capability string) error {
 
 // socketBuffer is the buffer a verb acts on: its optional trailing param i (a buffer number), or
 // the active buffer without it; and that buffer's editor (editorFor). An unknown number is refused.
-func (h *Host) socketBuffer(a editorArgs, i int) (*openBuffer, *widget.EditorCore, error) {
+func (h *Host) socketBuffer(a editorArgs, i int) (*openBuffer, *editor.EditorCore, error) {
 	n, given, err := a.num(i, "the buffer", true)
 	if err != nil {
 		return nil, nil, err
@@ -369,7 +369,7 @@ func (h *Host) editorFind(_ string, a editorArgs) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	var o widget.FindOptions
+	var o editor.FindOptions
 	if len(a) > 1 {
 		if m, ok := a[1].(map[string]any); ok {
 			o.IgnoreCase, _ = m["ignore_case"].(bool)
@@ -386,7 +386,7 @@ func (h *Host) editorFind(_ string, a editorArgs) (any, error) {
 // edit runs fn on buffer b's editor ed as one undo step, refused on a read-only buffer or one whose
 // text is not at the revision param rev gives (absent: whatever it is). A buffer not shown is told of
 // the edit as the shown one is by its textChanged (bufferEdited).
-func (h *Host) edit(a editorArgs, rev int, b *openBuffer, ed *widget.EditorCore, fn func(ed *widget.EditorCore) (widget.TextPos, error)) (any, error) {
+func (h *Host) edit(a editorArgs, rev int, b *openBuffer, ed *editor.EditorCore, fn func(ed *editor.EditorCore) (editor.TextPos, error)) (any, error) {
 	if want, given, err := a.num(rev, "the revision read", true); err != nil {
 		return nil, err
 	} else if given && uint64(want) != ed.Revision() {
@@ -399,13 +399,13 @@ func (h *Host) edit(a editorArgs, rev int, b *openBuffer, ed *widget.EditorCore,
 	if b != h.active {
 		defer h.bufferEdited(b)
 	}
-	var end widget.TextPos
+	var end editor.TextPos
 	err := ed.Batch(func() error {
 		var err error
 		end, err = fn(ed)
 		return err
 	})
-	if errors.Is(err, widget.ErrReadOnly) {
+	if errors.Is(err, editor.ErrReadOnly) {
 		return nil, &golibrpc.Error{Code: codeEditorReadOnly, Message: "the page is read-only"}
 	}
 	if err != nil {
@@ -427,7 +427,7 @@ func (h *Host) editorInsert(_ string, a editorArgs) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return h.edit(a, 3, b, ed, func(ed *widget.EditorCore) (widget.TextPos, error) { return ed.Insert(p, text) })
+	return h.edit(a, 3, b, ed, func(ed *editor.EditorCore) (editor.TextPos, error) { return ed.Insert(p, text) })
 }
 
 func (h *Host) editorReplace(_ string, a editorArgs) (any, error) {
@@ -447,8 +447,8 @@ func (h *Host) editorReplace(_ string, a editorArgs) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return h.edit(a, 5, b, ed, func(ed *widget.EditorCore) (widget.TextPos, error) {
-		return ed.Replace(widget.TextRange{From: from, To: to}, text)
+	return h.edit(a, 5, b, ed, func(ed *editor.EditorCore) (editor.TextPos, error) {
+		return ed.Replace(editor.TextRange{From: from, To: to}, text)
 	})
 }
 
@@ -465,8 +465,8 @@ func (h *Host) editorDelete(_ string, a editorArgs) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, err := h.edit(a, 4, b, ed, func(ed *widget.EditorCore) (widget.TextPos, error) {
-		return from, ed.Delete(widget.TextRange{From: from, To: to})
+	res, err := h.edit(a, 4, b, ed, func(ed *editor.EditorCore) (editor.TextPos, error) {
+		return from, ed.Delete(editor.TextRange{From: from, To: to})
 	})
 	if m, ok := res.(map[string]any); ok {
 		res = map[string]any{"revision": m["revision"]}

@@ -8,13 +8,13 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/script"
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // ownCore is a bare editor core with AutoDoc's own Lua commands loaded.
-func ownCore(t *testing.T, text string) *widget.EditorCore {
+func ownCore(t *testing.T, text string) *editor.EditorCore {
 	t.Helper()
-	core := widget.NewEditorCore(widget.CoreInitialText(text))
+	core := editor.NewEditorCore(editor.CoreInitialText(text))
 	e := script.New(core, script.WithGlobal("autodoc"))
 	t.Cleanup(e.Close)
 	if errs := e.LoadDir(ownScripts, "lua"); len(errs) > 0 {
@@ -41,7 +41,7 @@ func TestTableMakesTheMarkdownTable(t *testing.T) {
 	if got := core.Value(); got != want {
 		t.Fatalf("table 3 4:\n%s\nwant:\n%s", got, want)
 	}
-	if got := core.Cursor(); got != (widget.TextPos{Line: 0, Col: 2}) {
+	if got := core.Cursor(); got != (editor.TextPos{Line: 0, Col: 2}) {
 		t.Fatalf("the cursor is at %v, want the first header cell", got)
 	}
 	core.HandleKey(tuicore.KeyEvent{Code: 'u', Text: "u"})

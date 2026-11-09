@@ -10,7 +10,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 
 	"github.com/yongjohnlee80/autodoc"
 	regindex "github.com/yongjohnlee80/autodoc/core/registry"
@@ -369,7 +369,7 @@ func (cs *candidates) handOver(c *candidate, a AgentEntry, task string) {
 		switch {
 		case errors.Is(err, ErrAgentCancelled):
 			why = cs.c.Trf("autodoc.notice.candidate.you_didn_t_start", a.Name)
-		case errors.Is(err, widget.ErrTerminalPasteUnbracketed):
+		case errors.Is(err, terminal.ErrTerminalPasteUnbracketed):
 			why = cs.c.Tr("autodoc.notice.candidate.its_program_takes_no_bracketed_paste")
 		}
 		c.toasted = false

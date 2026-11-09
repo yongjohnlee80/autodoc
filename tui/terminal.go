@@ -12,7 +12,8 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
 	"github.com/yongjohnlee80/golib/tui/pty"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // terminals owns shell startup and keyboard restoration. The host contributes
@@ -21,7 +22,7 @@ type terminals struct {
 	c       PanelHost
 	restore bool
 	// startLua is a Lua shell's program (Host.startLuaShell, luashell.go); nil: no Lua shells
-	startLua func(pty.Cmd) (widget.TerminalProcess, error)
+	startLua func(pty.Cmd) (terminal.TerminalProcess, error)
 }
 
 // terminalRuntimeHost is the PanelHost with the terminal panel's tabs (terminalpanel.go).
@@ -438,8 +439,8 @@ func (t *terminals) newLuaShell() {
 
 // liveShell is a tab of panel neither closing nor failed to start: prefer if it is one, else the
 // first; "" for none.
-func liveShell(panel TerminalPanel, prefer widget.TerminalTabID) widget.TerminalTabID {
-	first := widget.TerminalTabID("")
+func liveShell(panel TerminalPanel, prefer terminal.TerminalTabID) terminal.TerminalTabID {
+	first := terminal.TerminalTabID("")
 	for _, tab := range panel.Tabs() {
 		if tab.Closing || (!tab.Running && tab.StartError != nil) {
 			continue
@@ -481,7 +482,7 @@ func (t *terminals) startTab(label func(TerminalPanel) string, config TerminalCo
 		t.c.Keep(err)
 		return
 	}
-	var id widget.TerminalTabID
+	var id terminal.TerminalTabID
 	config.Exited = func(code int) { t.shellExited(id, code) }
 	id, err = panel.Add(label(panel), config)
 	if err != nil {
@@ -512,7 +513,7 @@ func shellLabel(panel TerminalPanel) string {
 }
 
 // tabRows are a shell tab's menu: the panel's Layout ›, Go to ›, New, Close.
-func (t *terminals) tabRows(id widget.TerminalTabID) []widget.MenuItemModel {
+func (t *terminals) tabRows(id terminal.TerminalTabID) []widgetcore.MenuItemModel {
 	panel, err := t.panel()
 	if err != nil {
 		return nil
@@ -520,12 +521,12 @@ func (t *terminals) tabRows(id widget.TerminalTabID) []widget.MenuItemModel {
 	closing := tabMenuRow("terminal.close", "Close", t.closeShell)
 	closing.Enabled = id != "" // an empty panel's menu has no shell to close
 	rows := append(layoutRows(t.c, "terminal", tabRowOf),
-		goToRows(panel, func(tab widget.TerminalTab) string { return tab.Label }, func(target widget.TerminalTabID) {
+		goToRows(panel, func(tab terminal.TerminalTab) string { return tab.Label }, func(target terminal.TerminalTabID) {
 			t.c.Keep(panel.Select(target))
 		}),
-		tabMenuRow("terminal.new", "New", func(widget.TerminalTabID) { t.newShell() }))
+		tabMenuRow("terminal.new", "New", func(terminal.TerminalTabID) { t.newShell() }))
 	if t.startLua != nil {
-		rows = append(rows, tabMenuRow("terminal.lua", "New &Lua shell", func(widget.TerminalTabID) { t.newLuaShell() }))
+		rows = append(rows, tabMenuRow("terminal.lua", "New &Lua shell", func(terminal.TerminalTabID) { t.newLuaShell() }))
 	}
 	rows = append(rows, closing)
 	// Hide is SPC `'s own toggle (terminal.toggle): the panel closed, every shell running on
@@ -534,7 +535,7 @@ func (t *terminals) tabRows(id widget.TerminalTabID) []widget.MenuItemModel {
 
 // closeShell is Close on a tab's menu: the shell hung up and its tab closed. The panel stays open,
 // on its next shell or its empty text; SPC ` then starts a fresh one.
-func (t *terminals) closeShell(id widget.TerminalTabID) {
+func (t *terminals) closeShell(id terminal.TerminalTabID) {
 	panel, err := t.panel()
 	if err != nil {
 		return
@@ -580,7 +581,7 @@ func (t *terminals) stopAllShells() {
 // replaceActive follows tab id's removal: the shell that was active stays so, and only when id
 // was the active one does the keyboard go to the next live shell. It reports whether a live shell
 // is left.
-func (t *terminals) replaceActive(panel TerminalPanel, id, active widget.TerminalTabID) bool {
+func (t *terminals) replaceActive(panel TerminalPanel, id, active terminal.TerminalTabID) bool {
 	if id != active {
 		if keep := liveShell(panel, active); keep == active {
 			return true
@@ -677,7 +678,7 @@ func (h *Host) paneHasKeyboard(id string) bool {
 // the keyboard to the topmost window still open, and the next open starts a fresh shell. A non-zero exit is kept
 // as a notice, as it may be an error. golib's Terminal says it in an App.Update, where closing the
 // drawer may move the keyboard.
-func (t *terminals) shellExited(id widget.TerminalTabID, code int) {
+func (t *terminals) shellExited(id terminal.TerminalTabID, code int) {
 	if code != 0 {
 		t.c.Notify(t.c.Trf("autodoc.notice.terminal.the_terminal_s_shell_exited", strconv.Itoa(code)))
 	}

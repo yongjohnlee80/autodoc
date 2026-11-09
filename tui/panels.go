@@ -6,7 +6,9 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/panelgeometry"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // THE PANELS — the explorer, with its Explorer and Links tabs, and the others, drawers over the
@@ -229,7 +231,7 @@ func (h *Host) movePane(dir string) {
 	}
 	shown := h.shownWindows()
 	from := slices.IndexFunc(shown, h.hasKeyboard)
-	if from < 0 || shown[from].panel == "" && h.core.Mode() != widget.ModeNormal {
+	if from < 0 || shown[from].panel == "" && h.core.Mode() != editor.ModeNormal {
 		return
 	}
 	if to, ok := nextWindow(shown, from, step); ok {
@@ -251,8 +253,8 @@ func (h *Host) typeIn(panel string) {
 	}
 	if tabs, ok := tuidecl.TerminalTabsOf(c); ok {
 		if id := tabs.Active(); id != "" {
-			_ = tabs.Select(id)                        // the keyboard in the tab's terminal, not the panel around it
-			_ = tabs.SetMode(id, widget.TerminalInput) // Input needs no program: never refused
+			_ = tabs.Select(id)                          // the keyboard in the tab's terminal, not the panel around it
+			_ = tabs.SetMode(id, terminal.TerminalInput) // Input needs no program: never refused
 		}
 	}
 }
@@ -322,13 +324,13 @@ func (h *Host) keyboardHome() string {
 		views = append(views, h.windowView(w.panel))
 	}
 	for i := len(layers) - 1; i >= 0; i-- {
-		layer, ok := layers[i].(widget.ContextOwner)
+		layer, ok := layers[i].(widgetcore.ContextOwner)
 		if !ok || layer.Context() == nil {
 			continue
 		}
 		for _, view := range views {
 			c, _ := h.p.Find(view)
-			if n, ok := c.(widget.ContextOwner); ok && n.Context() != nil && layer.Context().SubtreeContains(n.Context().ID()) {
+			if n, ok := c.(widgetcore.ContextOwner); ok && n.Context() != nil && layer.Context().SubtreeContains(n.Context().ID()) {
 				return view
 			}
 		}

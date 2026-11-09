@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 
 	"github.com/yongjohnlee80/autodoc/core/export"
 )
@@ -38,8 +38,8 @@ func (h *Host) native() bool {
 }
 
 // htmlView is the pane's HTMLView.
-func (h *Host) htmlView() (*widget.HTMLView, bool) {
-	return tuidecl.FindAs[*widget.HTMLView](h.p, "htmlView")
+func (h *Host) htmlView() (*htmlview.HTMLView, bool) {
+	return tuidecl.FindAs[*htmlview.HTMLView](h.p, "htmlView")
 }
 
 // openPaneInBrowser opens the note's page, as the pane shows it, in the browser: the pane's Open in
@@ -145,7 +145,7 @@ func (h *Host) renderHTMLPane() {
 			h.htmlPane.dir, h.htmlPane.dirSet = key, true
 			v.SetOnRefused(h.resourceRefused)
 			if dir != "" {
-				v.SetImageResolver(widget.DirResources(root, base))
+				v.SetImageResolver(htmlview.DirResources(root, base))
 			} else {
 				v.SetImageResolver(nil)
 			}

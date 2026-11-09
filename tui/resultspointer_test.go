@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/table"
 )
 
 // THE POINTER IN THE RESULTS — a drag over cells, over the row numbers and over the titles, a
@@ -19,10 +19,10 @@ import (
 // title (hit): a left press, a drag to another of the same, the release, and a right press. Each
 // returns once the table has had the event.
 type pointer interface {
-	press(row, col int, hit widget.TableHit)
-	dragTo(row, col int, hit widget.TableHit)
+	press(row, col int, hit table.TableHit)
+	dragTo(row, col int, hit table.TableHit)
 	release()
-	rightPress(row, col int, hit widget.TableHit)
+	rightPress(row, col int, hit table.TableHit)
 }
 
 // screenPointer is the terminal's pointer: mouse events at the screen's cells, through the App's
@@ -40,7 +40,7 @@ const resultsHeaderRows = 2
 
 // resultsGutter is the cells before the first field: the row numbers, then the gap, the gutter's
 // rule and the gap again.
-func resultsGutter(tc *widget.TableCore) int { return tc.RowNumberDigits() + 3 }
+func resultsGutter(tc *table.TableCore) int { return tc.RowNumberDigits() + 3 }
 
 func newScreenPointer(t *testing.T, r *running) *screenPointer {
 	t.Helper()
@@ -72,7 +72,7 @@ func newScreenPointer(t *testing.T, r *running) *screenPointer {
 	return p
 }
 
-func (p *screenPointer) local(row, col int, hit widget.TableHit) (int, int) {
+func (p *screenPointer) local(row, col int, hit table.TableHit) (int, int) {
 	xy := onLoop(p.r, func() [2]int {
 		tc := p.r.resultsCore()
 		x := resultsGutter(tc)
@@ -80,9 +80,9 @@ func (p *screenPointer) local(row, col int, hit widget.TableHit) (int, int) {
 			x += tc.Width(c) + 2
 		}
 		switch hit {
-		case widget.TableHitHeader:
+		case table.TableHitHeader:
 			return [2]int{x, 0}
-		case widget.TableHitGutter:
+		case table.TableHitGutter:
 			return [2]int{0, row + resultsHeaderRows}
 		}
 		return [2]int{x, row + resultsHeaderRows}
@@ -96,53 +96,53 @@ func (p *screenPointer) send(kind tuicore.MouseKind, button tuicore.MouseButton,
 	p.last = [2]int{x, y}
 }
 
-func (p *screenPointer) press(row, col int, hit widget.TableHit) {
+func (p *screenPointer) press(row, col int, hit table.TableHit) {
 	p.t.Helper()
 	x, y := p.local(row, col, hit)
 	p.send(tuicore.MousePress, tuicore.MouseLeft, x, y)
-	waitHandled(p.t, p.r, "the press", func(tc *widget.TableCore) bool { return tc.Dragging() && pointerAt(tc, row, col, hit) })
+	waitHandled(p.t, p.r, "the press", func(tc *table.TableCore) bool { return tc.Dragging() && pointerAt(tc, row, col, hit) })
 }
 
-func (p *screenPointer) dragTo(row, col int, hit widget.TableHit) {
+func (p *screenPointer) dragTo(row, col int, hit table.TableHit) {
 	p.t.Helper()
 	x, y := p.local(row, col, hit)
 	p.send(tuicore.MouseMotion, tuicore.MouseLeft, x, y)
-	waitHandled(p.t, p.r, "the drag", func(tc *widget.TableCore) bool { return pointerAt(tc, row, col, hit) })
+	waitHandled(p.t, p.r, "the drag", func(tc *table.TableCore) bool { return pointerAt(tc, row, col, hit) })
 }
 
 func (p *screenPointer) release() {
 	p.t.Helper()
 	p.send(tuicore.MouseRelease, tuicore.MouseLeft, p.last[0], p.last[1])
-	waitHandled(p.t, p.r, "the release", func(tc *widget.TableCore) bool { return !tc.Dragging() })
+	waitHandled(p.t, p.r, "the release", func(tc *table.TableCore) bool { return !tc.Dragging() })
 }
 
-func (p *screenPointer) rightPress(row, col int, hit widget.TableHit) {
+func (p *screenPointer) rightPress(row, col int, hit table.TableHit) {
 	p.t.Helper()
 	x, y := p.local(row, col, hit)
 	p.send(tuicore.MousePress, tuicore.MouseRight, x, y)
-	waitHandled(p.t, p.r, "the right press", func(*widget.TableCore) bool {
+	waitHandled(p.t, p.r, "the right press", func(*table.TableCore) bool {
 		return p.r.h.plugins.c.ResultsTable(resultsView).Menu().IsOpen()
 	})
 }
 
 // waitHandled waits until the table shows an event's effect: an injected event and a posted
 // function are drained in either order, so what the event does is what says it arrived.
-func waitHandled(t *testing.T, r *running, what string, done func(*widget.TableCore) bool) {
+func waitHandled(t *testing.T, r *running, what string, done func(*table.TableCore) bool) {
 	t.Helper()
 	r.s.WaitFor(t, what+" handled", func(string) bool { return onLoop(r, func() bool { return done(r.resultsCore()) }) })
 }
 
 // pointerAt reports whether the cursor is where a press or a drag over (row, col, hit) puts it: the
 // cell; the row, for a row's number; the field, for a title.
-func pointerAt(tc *widget.TableCore, row, col int, hit widget.TableHit) bool {
+func pointerAt(tc *table.TableCore, row, col int, hit table.TableHit) bool {
 	cur := tc.Cursor()
 	switch hit {
-	case widget.TableHitGutter:
+	case table.TableHitGutter:
 		return cur.Row == row
-	case widget.TableHitHeader:
+	case table.TableHitHeader:
 		return cur.Col == col
 	}
-	return cur == widget.TablePos{Row: row, Col: col}
+	return cur == table.TablePos{Row: row, Col: col}
 }
 
 // kindsTSV is the kinds table's rows from..to, fields lo..hi (each inclusive), as Copy writes
@@ -160,7 +160,7 @@ func kindsTSV(from, to, lo, hi int) string {
 // selection while the menu opens.
 func wantPointerSelections(t *testing.T, r *running, p pointer) {
 	t.Helper()
-	drag := func(from, to [2]int, hit widget.TableHit) {
+	drag := func(from, to [2]int, hit table.TableHit) {
 		t.Helper()
 		p.press(from[0], from[1], hit)
 		if from != to {
@@ -183,18 +183,18 @@ func wantPointerSelections(t *testing.T, r *running, p pointer) {
 	for _, c := range []struct {
 		what     string
 		from, to [2]int
-		hit      widget.TableHit
-		kind     widget.TableSelectKind
+		hit      table.TableHit
+		kind     table.TableSelectKind
 		tsv      string
 	}{
-		{"a drag over cells", [2]int{0, 1}, [2]int{2, 2}, widget.TableHitCell, widget.TableSelectCells,
+		{"a drag over cells", [2]int{0, 1}, [2]int{2, 2}, table.TableHitCell, table.TableSelectCells,
 			kindsTSV(0, 0, 1, 5) + "\n" + kindsTSV(1, 1, 0, 5) + "\n" + kindsTSV(2, 2, 0, 2)},
-		{"a drag over the row numbers", [2]int{1, 0}, [2]int{3, 0}, widget.TableHitGutter, widget.TableSelectRows, kindsTSV(1, 3, 0, 5)},
-		{"a title clicked", [2]int{0, 2}, [2]int{0, 2}, widget.TableHitHeader, widget.TableSelectBlock, kindsTSV(0, 4, 2, 2)},
-		{"a drag over the titles", [2]int{0, 1}, [2]int{0, 3}, widget.TableHitHeader, widget.TableSelectBlock, kindsTSV(0, 4, 1, 3)},
+		{"a drag over the row numbers", [2]int{1, 0}, [2]int{3, 0}, table.TableHitGutter, table.TableSelectRows, kindsTSV(1, 3, 0, 5)},
+		{"a title clicked", [2]int{0, 2}, [2]int{0, 2}, table.TableHitHeader, table.TableSelectBlock, kindsTSV(0, 4, 2, 2)},
+		{"a drag over the titles", [2]int{0, 1}, [2]int{0, 3}, table.TableHitHeader, table.TableSelectBlock, kindsTSV(0, 4, 1, 3)},
 	} {
 		drag(c.from, c.to, c.hit)
-		if got := onLoop(r, func() widget.TableSelectKind { return r.resultsCore().SelectionKind() }); got != c.kind || !strings.HasPrefix(selection(), "true") {
+		if got := onLoop(r, func() table.TableSelectKind { return r.resultsCore().SelectionKind() }); got != c.kind || !strings.HasPrefix(selection(), "true") {
 			t.Fatalf("%s: selection %s, want kind %v", c.what, selection(), c.kind)
 		}
 		if got := copied(formatTSV); got != c.tsv {
@@ -220,7 +220,7 @@ func wantPointerSelections(t *testing.T, r *running, p pointer) {
 	// a right press on a cell outside it: the menu opens over the selection, which stays, and Copy
 	// still writes it
 	before := selection()
-	p.rightPress(3, 4, widget.TableHitCell)
+	p.rightPress(3, 4, table.TableHitCell)
 	if got := selection(); got != before {
 		t.Errorf("the right press changed the selection: %s, was %s", got, before)
 	}

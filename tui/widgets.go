@@ -6,7 +6,8 @@ import (
 	"strings"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // GOING TO A WIDGET — :go, the Go-to picker (SPC Tab) and F6 / Shift+F6
@@ -20,12 +21,12 @@ import (
 
 // widgetTarget is one place :go, the Go-to picker and F6 reach.
 type widgetTarget struct {
-	name    string               // what :go takes: "editor", "autodb", "terminal/shell 2"
-	title   string               // what the picker shows, in English: "the editor", "AutoDB", "shell 2 (terminal)"
-	panel   string               // the panel's id; "" for the editor
-	tab     widget.TerminalTabID // a tab of the panel's TerminalTabs; "" for the panel itself
-	showTab func()               // shows a tabbed panel's tab (PanelSpec.GoTabs); nil for none
-	open    bool                 // the editor always; a panel by panelOpen; a tab by its panel's
+	name    string                 // what :go takes: "editor", "autodb", "terminal/shell 2"
+	title   string                 // what the picker shows, in English: "the editor", "AutoDB", "shell 2 (terminal)"
+	panel   string                 // the panel's id; "" for the editor
+	tab     terminal.TerminalTabID // a tab of the panel's TerminalTabs; "" for the panel itself
+	showTab func()                 // shows a tabbed panel's tab (PanelSpec.GoTabs); nil for none
+	open    bool                   // the editor always; a panel by panelOpen; a tab by its panel's
 	focused bool
 	// the picker's row in the UI's language (openWidgets)
 	label, state string
@@ -104,7 +105,7 @@ func (h *Host) within(id string) bool {
 }
 
 // tabsOf is view's TerminalTabs, when it is one.
-func (h *Host) tabsOf(view string) (*widget.TerminalTabs, bool) {
+func (h *Host) tabsOf(view string) (*terminal.TerminalTabs, bool) {
 	c, ok := h.p.Find(view)
 	if !ok {
 		return nil, false
@@ -170,7 +171,7 @@ func (h *Host) widgetNamed(arg string) (widgetTarget, error) {
 func (h *Host) widgetEntries() []Entry {
 	return []Entry{{ID: "widget.go", Title: "go to a widget", Verb: "go", Args: "<name>", Twin: "App.openWidgets()",
 		Help: "put the keyboard on a widget: a panel opens if closed; Tab lists the names; alone, the Go-to picker",
-		Complete: func(widget.CompleteContext) []string {
+		Complete: func(editor.CompleteContext) []string {
 			var out []string
 			for _, t := range h.widgets() {
 				out = append(out, t.name)

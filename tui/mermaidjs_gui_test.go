@@ -11,7 +11,7 @@ import (
 	"time"
 
 	guiwidget "github.com/yongjohnlee80/golib/gui/widget"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 )
 
 // fakeBrowser is a rasterizer that holds each drawing until it is let go, and says when one starts
@@ -31,8 +31,8 @@ func newFakeBrowser() *fakeBrowser {
 	return &fakeBrowser{started: make(chan context.Context, 64), release: make(chan struct{})}
 }
 
-func (f *fakeBrowser) rasterize(t *testing.T) func(context.Context, []byte, widget.Page) ([]byte, error) {
-	return func(ctx context.Context, _ []byte, _ widget.Page) ([]byte, error) {
+func (f *fakeBrowser) rasterize(t *testing.T) func(context.Context, []byte, htmlview.Page) ([]byte, error) {
+	return func(ctx context.Context, _ []byte, _ htmlview.Page) ([]byte, error) {
 		f.mu.Lock()
 		f.calls++
 		w, h, fail, immediate := f.width, f.height, f.fail, f.immediate
