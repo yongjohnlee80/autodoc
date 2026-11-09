@@ -101,7 +101,7 @@ func (h *Host) startEditorSocket(dir string) {
 	}
 	// another user's process is closed unanswered, as at the daemon's socket; the folder already
 	// keeps it out, so this is the second lock
-	srv := golibrpc.New(msgpackrpc.New(nil), golibrpc.WithListener(ipc.Listener(ln, nil)))
+	srv := golibrpc.New(msgpackrpc.New(nil), golibrpc.WithListener(ipc.Guard(ln, nil)))
 	for verb, handler := range h.editorVerbs() {
 		srv.Handle(verb, handler)
 	}
