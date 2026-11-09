@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
@@ -15,7 +16,7 @@ import (
 // testPick is a picker over paths, its preview the path's text, recording what it chose, entered,
 // submitted and cancelled.
 type testPick struct {
-	*pick[string]
+	*feature.Pick[string]
 	c                          *scriptedCore
 	chosen, entered, submitted []string
 	cancelled, read            int
@@ -24,34 +25,34 @@ type testPick struct {
 func newTestPick() *testPick {
 	c := newScripted("kb")
 	t := &testPick{c: c}
-	t.pick = &pick[string]{c: c, dialog: "testDialog", name: "test",
-		list:   newRows(tuidecl.NewListModel("key", "path"), pathRowOf),
-		field:  "App.testField",
-		status: "App.testStatus", noun: "files",
-		match: func(p string) string { return p },
-		preview: func(p string) func(context.Context) answerOf[pane] {
-			return func(context.Context) answerOf[pane] {
+	t.Pick = &feature.Pick[string]{Core: c, Dialog: "testDialog", Name: "test",
+		List:   feature.NewRows(tuidecl.NewListModel("key", "path"), pathRowOf),
+		Field:  "App.testField",
+		Status: "App.testStatus", Noun: "files",
+		Match: func(p string) string { return p },
+		Preview: func(p string) func(context.Context) feature.AnswerOf[feature.Pane] {
+			return func(context.Context) feature.AnswerOf[feature.Pane] {
 				t.read++
-				return answerOf[pane]{v: pane{title: p, text: "text of " + p, at: 3}}
+				return feature.AnswerOf[feature.Pane]{Value: feature.Pane{Title: p, Text: "text of " + p, At: 3}}
 			}
 		},
-		empty:  func() pane { return pane{title: "nothing"} },
-		scope:  TicketWorkspace,
-		choose: func(p string) { t.chosen = append(t.chosen, p) },
-		cancel: func() { t.cancelled++ }}
-	t.setAll([]string{"Notes/A.md", "b.md", "notes/c.md"})
+		Empty:  func() feature.Pane { return feature.Pane{Title: "nothing"} },
+		Scope:  feature.TicketWorkspace,
+		Choose: func(p string) { t.chosen = append(t.chosen, p) },
+		Cancel: func() { t.cancelled++ }}
+	t.SetAll([]string{"Notes/A.md", "b.md", "notes/c.md"})
 	return t
 }
 
-func (t *testPick) shown() []string { return slices.Clone(t.list.All()) }
+func (t *testPick) Shown() []string { return slices.Clone(t.List.All()) }
 func (t *testPick) title() any      { return t.c.set["App.testPreviewTitle"] }
 
 // The filter keeps the items whose text holds it, case and the spaces around it aside, counts them
 // in the list's title, and previews the first; no match previews nothing.
 func TestAPickFilters(t *testing.T) {
 	p := newTestPick()
-	p.filter("  NOTES ")
-	if got := p.shown(); !slices.Equal(got, []string{"Notes/A.md", "notes/c.md"}) {
+	p.Filter("  NOTES ")
+	if got := p.Shown(); !slices.Equal(got, []string{"Notes/A.md", "notes/c.md"}) {
 		t.Fatalf("the filter kept %v", got)
 	}
 	if got := p.c.set["App.testStatus"]; got != "files (2 of 3)" {
@@ -60,18 +61,18 @@ func TestAPickFilters(t *testing.T) {
 	if p.title() != "Notes/A.md" || p.c.set["App.testPreviewText"] != "text of Notes/A.md" || p.c.set["App.testPreviewAt"] != 3 {
 		t.Errorf("the first row previewed: %v %v %v", p.title(), p.c.set["App.testPreviewText"], p.c.set["App.testPreviewAt"])
 	}
-	if rows := p.list.Model().Len(); rows != 2 {
+	if rows := p.List.Model().Len(); rows != 2 {
 		t.Errorf("the model shows %d rows, want 2", rows)
 	}
-	p.filter("zzz")
-	if got := p.shown(); len(got) != 0 || p.c.set["App.testStatus"] != "files (0 of 3)" || p.title() != "nothing" {
+	p.Filter("zzz")
+	if got := p.Shown(); len(got) != 0 || p.c.set["App.testStatus"] != "files (0 of 3)" || p.title() != "nothing" {
 		t.Errorf("no match: rows %v, title %v, preview %v", got, p.c.set["App.testStatus"], p.title())
 	}
 
 	// open empties the field, lists every item, and opens the dialog
-	p.open()
-	if p.c.set["App.testField"] != "" || len(p.shown()) != 3 || !slices.Equal(p.c.opened, []string{"testDialog"}) {
-		t.Errorf("open: field %q, rows %v, opened %v", p.c.set["App.testField"], p.shown(), p.c.opened)
+	p.Open()
+	if p.c.set["App.testField"] != "" || len(p.Shown()) != 3 || !slices.Equal(p.c.opened, []string{"testDialog"}) {
+		t.Errorf("open: field %q, rows %v, opened %v", p.c.set["App.testField"], p.Shown(), p.c.opened)
 	}
 }
 
@@ -80,24 +81,24 @@ func TestAPickFilters(t *testing.T) {
 func TestAPickPreviewsTheLatestOnly(t *testing.T) {
 	p := newTestPick()
 	p.c.deferred = true
-	p.filter("") // asks for row 0
-	p.move(2)    // then row 2
+	p.Filter("") // asks for row 0
+	p.Move(2)    // then row 2
 	p.c.deliver(1, 0)
 	if p.title() != "notes/c.md" {
 		t.Fatalf("after the later answer, then the earlier: the preview shows %v, want notes/c.md", p.title())
 	}
 
-	p.move(1)       // b.md, still being read …
-	p.filter("zzz") // … when nothing matches
+	p.Move(1)       // b.md, still being read …
+	p.Filter("zzz") // … when nothing matches
 	p.c.deliver(0)
 	if p.title() != "nothing" {
 		t.Errorf("a preview read before the filter emptied the list replaced the empty one: %v", p.title())
 	}
 
-	p.filter("")
+	p.Filter("")
 	p.c.deliver(0)
-	p.move(1) // b.md, still being read …
-	p.dismiss()
+	p.Move(1) // b.md, still being read …
+	p.Dismiss()
 	p.c.deliver(0)
 	if p.title() != "Notes/A.md" {
 		t.Errorf("a preview read before the picker closed was shown: %v", p.title())
@@ -108,12 +109,12 @@ func TestAPickPreviewsTheLatestOnly(t *testing.T) {
 // enters or closes.
 func TestAPickIgnoresARowItDoesNotShow(t *testing.T) {
 	p := newTestPick()
-	p.filter("b.md")
+	p.Filter("b.md")
 	p.read = 0
 	for _, i := range []int{-1, 1, 7} {
-		p.move(i)
-		p.enterRow(i)
-		p.accept(i, "")
+		p.Move(i)
+		p.EnterRow(i)
+		p.Accept(i, "")
 	}
 	if p.read != 0 || len(p.chosen) != 0 || len(p.c.closed) != 0 {
 		t.Errorf("rows out of range: %d previews, chose %v, closed %v", p.read, p.chosen, p.c.closed)
@@ -125,23 +126,23 @@ func TestAPickIgnoresARowItDoesNotShow(t *testing.T) {
 // accept; dismissing it cancels.
 func TestAPickChoosesAndCancels(t *testing.T) {
 	p := newTestPick()
-	p.filter("")
-	p.enterRow(1)
-	p.accept(2, "typed")
+	p.Filter("")
+	p.EnterRow(1)
+	p.Accept(2, "typed")
 	if !slices.Equal(p.chosen, []string{"b.md", "notes/c.md"}) || !slices.Equal(p.c.closed, []string{"testDialog", "testDialog"}) {
 		t.Fatalf("chose %v, closed %v", p.chosen, p.c.closed)
 	}
-	p.dismiss()
+	p.Dismiss()
 	if p.cancelled != 1 {
 		t.Errorf("dismissed: %d cancels", p.cancelled)
 	}
 
 	// the draft's name: Enter on a row takes its folder, accept the path typed
 	p.chosen, p.c.closed = nil, nil
-	p.enter = func(x string) { p.entered = append(p.entered, x) }
-	p.submit = func(text string) { p.submitted = append(p.submitted, text) }
-	p.enterRow(2)
-	p.accept(0, "ideas/draft")
+	p.Enter = func(x string) { p.entered = append(p.entered, x) }
+	p.Submit = func(text string) { p.submitted = append(p.submitted, text) }
+	p.EnterRow(2)
+	p.Accept(0, "ideas/draft")
 	if !slices.Equal(p.entered, []string{"notes/c.md"}) || !slices.Equal(p.submitted, []string{"ideas/draft"}) {
 		t.Errorf("entered %v, submitted %v", p.entered, p.submitted)
 	}
@@ -233,12 +234,12 @@ func TestAPickersNoteAndFooterLookAsBefore(t *testing.T) {
 // Picker.qml's handlers reach a pick by the name they pass; a name no picker has is refused.
 func TestThePickCommandsGoByName(t *testing.T) {
 	p := newTestPick()
-	cmds := pickCommands(map[string]picker{"test": p})
+	cmds := feature.PickCommands(map[string]feature.Picker{"test": p})
 	str := func(s string) qml.SpecValue { return qml.SpecValue{Kind: qml.SpecValueString, Raw: s} }
 	num := func(s string) qml.SpecValue { return qml.SpecValue{Kind: qml.SpecValueNumber, Raw: s} }
-	run := func(name string, args ...qml.SpecValue) error { return cmds[name].handler(name)(args) }
-	if err := run("App.pickFilter", str("test"), str("notes")); err != nil || len(p.shown()) != 2 {
-		t.Fatalf("pickFilter: %v, rows %v", err, p.shown())
+	run := func(name string, args ...qml.SpecValue) error { return cmds[name].Handler(name)(args) }
+	if err := run("App.pickFilter", str("test"), str("notes")); err != nil || len(p.Shown()) != 2 {
+		t.Fatalf("pickFilter: %v, rows %v", err, p.Shown())
 	}
 	if err := run("App.pickMove", str("test"), num("1")); err != nil || p.title() != "notes/c.md" {
 		t.Errorf("pickMove: %v, preview %v", err, p.title())
@@ -272,11 +273,11 @@ func TestThePickCommandsGoByName(t *testing.T) {
 // answers while either is open (Lister) is what the next filter looks through.
 func TestTheFilePickersRelistWhenTheFilesAreListed(t *testing.T) {
 	h := newHost(NewSession("unused", nil), Options{})
-	h.files = FileList{Paths: []string{"a.md", "b/c.md"}, Loaded: true, Gen: 1}
+	h.files = feature.FileList{Paths: []string{"a.md", "b/c.md"}, Loaded: true, Gen: 1}
 	legacy{h}.Listed()
-	for name, p := range map[string]*pick[string]{"open": h.openPick, "new": h.newPick} {
-		if !slices.Equal(p.all, h.files.Paths) {
-			t.Errorf("%s lists %v after the listing, want %v", name, p.all, h.files.Paths)
+	for name, p := range map[string]*feature.Pick[string]{"open": h.openPick, "new": h.newPick} {
+		if !slices.Equal(p.All, h.files.Paths) {
+			t.Errorf("%s lists %v after the listing, want %v", name, p.All, h.files.Paths)
 		}
 	}
 }
@@ -285,13 +286,13 @@ func TestTheFilePickersRelistWhenTheFilesAreListed(t *testing.T) {
 // accept, does not write the closed picker's preview.
 func TestAPickChosenDropsThePreviewInFlight(t *testing.T) {
 	for name, choose := range map[string]func(p *testPick){
-		"Enter on a row": func(p *testPick) { p.enterRow(0) },
-		"accept":         func(p *testPick) { p.accept(0, "") },
+		"Enter on a row": func(p *testPick) { p.EnterRow(0) },
+		"accept":         func(p *testPick) { p.Accept(0, "") },
 	} {
 		p := newTestPick()
-		p.filter("")
+		p.Filter("")
 		p.c.deferred = true
-		p.move(1) // b.md, still being read …
+		p.Move(1) // b.md, still being read …
 		choose(p) // … when the picker closes on a choice
 		p.c.deliver(0)
 		if p.title() != "Notes/A.md" {

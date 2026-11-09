@@ -11,6 +11,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 
 	"github.com/yongjohnlee80/autodoc/core/export"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE HTML PREVIEW PANE — File › Preview HTML (docs/decisions/editor.md#the-html-preview-pane):
@@ -56,22 +57,22 @@ func (h *Host) openPaneInBrowser() {
 		options.Base, options.Document = filepath.Dir(full), full
 	}
 	h.say(h.tr("autodoc.notice.htmlpane.opening_the_page_in_the_browser"))
-	do(h, func(ctx context.Context) answerOf[string] {
+	do(h, func(ctx context.Context) feature.AnswerOf[string] {
 		content, err := export.RenderWith(source, export.HTML, theme, options)
 		if err != nil {
-			return answerOf[string]{err: err}
+			return feature.AnswerFailed[string](err)
 		}
 		path, err := htmlPreviewFile(env, content)
 		if err != nil {
-			return answerOf[string]{err: err}
+			return feature.AnswerFailed[string](err)
 		}
-		return answerOf[string]{v: path, err: h.browser(ctx, path)}
-	}, func(a answerOf[string]) {
-		if a.err != nil {
-			h.failed(h.tr("autodoc.notice.htmlpane.the_browser_did_not_open"), a.err)
+		return feature.Answered(path, h.browser(ctx, path))
+	}, func(a feature.AnswerOf[string]) {
+		if a.Err() != nil {
+			h.failed(h.tr("autodoc.notice.htmlpane.the_browser_did_not_open"), a.Err())
 			return
 		}
-		h.say(h.trf("autodoc.notice.htmlpane.html_preview_opened_in_the_browser", filepath.Base(a.v)))
+		h.say(h.trf("autodoc.notice.htmlpane.html_preview_opened_in_the_browser", filepath.Base(a.Value)))
 	})
 }
 
@@ -115,7 +116,7 @@ func (h *Host) htmlPaneShown() bool { return h.panelOpen["htmlPane"] }
 // renderHTMLPane exports the editor's text off the loop and shows it in the pane, its images read
 // from the note's folder and its blocks carrying their source bytes.
 func (h *Host) renderHTMLPane() {
-	tk := h.ticket(&h.htmlPane.gen, TicketLocal)
+	tk := h.ticket(&h.htmlPane.gen, feature.TicketLocal)
 	source, theme := h.pageNow().Text, h.exportTheme()
 	options := export.Options{SourceSpans: true}
 	dir, root, base := "", "", ""
@@ -124,15 +125,15 @@ func (h *Host) renderHTMLPane() {
 		options.Base, options.Document = dir, full
 		root, base = h.resourcesFor(h.file.ws, h.file.path)
 	}
-	do(h, func(context.Context) answerOf[[]byte] {
+	do(h, func(context.Context) feature.AnswerOf[[]byte] {
 		page, err := export.RenderWith(source, export.HTML, theme, options)
-		return answerOf[[]byte]{v: page, err: err}
-	}, func(a answerOf[[]byte]) {
+		return feature.Answered(page, err)
+	}, func(a feature.AnswerOf[[]byte]) {
 		if !tk.Current() {
 			return // an edit since: its render follows
 		}
-		if a.err != nil {
-			h.failed(h.tr("autodoc.notice.htmlpane.html_preview"), a.err)
+		if a.Err() != nil {
+			h.failed(h.tr("autodoc.notice.htmlpane.html_preview"), a.Err())
 			return
 		}
 		v, ok := h.htmlView()
@@ -150,7 +151,7 @@ func (h *Host) renderHTMLPane() {
 				v.SetImageResolver(nil)
 			}
 		}
-		v.SetHTML(a.v)
+		v.SetHTML(a.Value)
 		h.followCursorInPane()
 	})
 }

@@ -1,4 +1,4 @@
-package tui
+package feature
 
 import (
 	"errors"
@@ -27,14 +27,14 @@ type Command struct {
 }
 
 // argError is a command refusing an argument's value, said after its name: "takes a row, not 1.5".
-type argError string
+type ArgError string
 
-func (e argError) Error() string { return string(e) }
+func (e ArgError) Error() string { return string(e) }
 
 // handler is c as golib calls it under name: its arguments checked, each refusal naming it.
-func (c Command) handler(name string) decl.HandlerFunc {
+func (c Command) Handler(name string) decl.HandlerFunc {
 	return func(args []qml.SpecValue) error {
-		defer renamePanic(name) // a panic says which command it came out of (crash.go)
+		defer renamePanic(name) // a panic says which command it came out of (tui/crash.go)
 		if len(c.Args) == 0 && len(args) > 0 {
 			return fmt.Errorf("%s takes no arguments, and was given %d", name, len(args))
 		}
@@ -47,7 +47,7 @@ func (c Command) handler(name string) decl.HandlerFunc {
 			}
 		}
 		err := c.Run(args)
-		var ae argError
+		var ae ArgError
 		if errors.As(err, &ae) {
 			return fmt.Errorf("%s %s", name, ae)
 		}
@@ -58,58 +58,58 @@ func (c Command) handler(name string) decl.HandlerFunc {
 // The commands by the arguments they take.
 
 const (
-	argStr = qml.SpecValueString
-	argNum = qml.SpecValueNumber
+	ArgStr = qml.SpecValueString
+	ArgNum = qml.SpecValueNumber
 )
 
-func none(fn func()) Command {
+func None(fn func()) Command {
 	return Command{Run: func([]qml.SpecValue) error { fn(); return nil }}
 }
 
 // twoStringsAndBool takes two strings and true or false: a panel, a Drawer's changed operation and
 // its maximized flag.
-func twoStringsAndBool(what string, fn func(string, string, bool)) Command {
-	return Command{Args: []qml.SpecValueKind{argStr, argStr, qml.SpecValueBool}, What: what,
+func TwoStringsAndBool(what string, fn func(string, string, bool)) Command {
+	return Command{Args: []qml.SpecValueKind{ArgStr, ArgStr, qml.SpecValueBool}, What: what,
 		Run: func(a []qml.SpecValue) error { fn(a[0].Raw, a[1].Raw, a[2].Raw == "true"); return nil }}
 }
 
 // oneBool takes true or false: an Editor signal's.
-func oneBool(fn func(bool)) Command {
+func OneBool(fn func(bool)) Command {
 	return Command{Args: []qml.SpecValueKind{qml.SpecValueBool}, What: "true or false",
 		Run: func(a []qml.SpecValue) error { fn(a[0].Raw == "true"); return nil }}
 }
 
-func oneString(what string, fn func(string)) Command {
-	return Command{Args: []qml.SpecValueKind{argStr}, What: what,
+func OneString(what string, fn func(string)) Command {
+	return Command{Args: []qml.SpecValueKind{ArgStr}, What: what,
 		Run: func(a []qml.SpecValue) error { fn(a[0].Raw); return nil }}
 }
 
-func twoStrings(what string, fn func(string, string)) Command {
-	return Command{Args: []qml.SpecValueKind{argStr, argStr}, What: what,
+func TwoStrings(what string, fn func(string, string)) Command {
+	return Command{Args: []qml.SpecValueKind{ArgStr, ArgStr}, What: what,
 		Run: func(a []qml.SpecValue) error { fn(a[0].Raw, a[1].Raw); return nil }}
 }
 
-func threeStrings(what string, fn func(string, string, string)) Command {
-	return Command{Args: []qml.SpecValueKind{argStr, argStr, argStr}, What: what,
+func ThreeStrings(what string, fn func(string, string, string)) Command {
+	return Command{Args: []qml.SpecValueKind{ArgStr, ArgStr, ArgStr}, What: what,
 		Run: func(a []qml.SpecValue) error { fn(a[0].Raw, a[1].Raw, a[2].Raw); return nil }}
 }
 
-func fourStrings(what string, fn func(a, b, c, d string)) Command {
-	return Command{Args: []qml.SpecValueKind{argStr, argStr, argStr, argStr}, What: what,
+func FourStrings(what string, fn func(a, b, c, d string)) Command {
+	return Command{Args: []qml.SpecValueKind{ArgStr, ArgStr, ArgStr, ArgStr}, What: what,
 		Run: func(a []qml.SpecValue) error { fn(a[0].Raw, a[1].Raw, a[2].Raw, a[3].Raw); return nil }}
 }
 
-func fiveStrings(what string, fn func(a, b, c, d, e string)) Command {
-	return Command{Args: []qml.SpecValueKind{argStr, argStr, argStr, argStr, argStr}, What: what,
+func FiveStrings(what string, fn func(a, b, c, d, e string)) Command {
+	return Command{Args: []qml.SpecValueKind{ArgStr, ArgStr, ArgStr, ArgStr, ArgStr}, What: what,
 		Run: func(a []qml.SpecValue) error { fn(a[0].Raw, a[1].Raw, a[2].Raw, a[3].Raw, a[4].Raw); return nil }}
 }
 
 // oneNumber takes a whole number.
-func oneNumber(what string, fn func(int)) Command {
-	return Command{Args: []qml.SpecValueKind{argNum}, What: what, Run: func(a []qml.SpecValue) error {
+func OneNumber(what string, fn func(int)) Command {
+	return Command{Args: []qml.SpecValueKind{ArgNum}, What: what, Run: func(a []qml.SpecValue) error {
 		n, err := strconv.Atoi(a[0].Raw)
 		if err != nil {
-			return argError(fmt.Sprintf("takes %s, not %s", what, a[0].Raw))
+			return ArgError(fmt.Sprintf("takes %s, not %s", what, a[0].Raw))
 		}
 		fn(n)
 		return nil
@@ -117,11 +117,11 @@ func oneNumber(what string, fn func(int)) Command {
 }
 
 // numberAndString takes a whole number and a string: a row and what to do with it.
-func numberAndString(what string, fn func(int, string)) Command {
-	return Command{Args: []qml.SpecValueKind{argNum, argStr}, What: what, Run: func(a []qml.SpecValue) error {
+func NumberAndString(what string, fn func(int, string)) Command {
+	return Command{Args: []qml.SpecValueKind{ArgNum, ArgStr}, What: what, Run: func(a []qml.SpecValue) error {
 		n, err := strconv.Atoi(a[0].Raw)
 		if err != nil {
-			return argError(fmt.Sprintf("takes %s, not %s", what, a[0].Raw))
+			return ArgError(fmt.Sprintf("takes %s, not %s", what, a[0].Raw))
 		}
 		fn(n, a[1].Raw)
 		return nil
@@ -129,11 +129,11 @@ func numberAndString(what string, fn func(int, string)) Command {
 }
 
 // numberAndTwoStrings takes a whole number and two strings: a row and two of a form's fields.
-func numberAndTwoStrings(what string, fn func(int, string, string)) Command {
-	return Command{Args: []qml.SpecValueKind{argNum, argStr, argStr}, What: what, Run: func(a []qml.SpecValue) error {
+func NumberAndTwoStrings(what string, fn func(int, string, string)) Command {
+	return Command{Args: []qml.SpecValueKind{ArgNum, ArgStr, ArgStr}, What: what, Run: func(a []qml.SpecValue) error {
 		n, err := strconv.Atoi(a[0].Raw)
 		if err != nil {
-			return argError(fmt.Sprintf("takes %s, not %s", what, a[0].Raw))
+			return ArgError(fmt.Sprintf("takes %s, not %s", what, a[0].Raw))
 		}
 		fn(n, a[1].Raw, a[2].Raw)
 		return nil
@@ -141,12 +141,12 @@ func numberAndTwoStrings(what string, fn func(int, string, string)) Command {
 }
 
 // stringAndTwoNumbers takes a name and two whole numbers: a panel and its size and length.
-func stringAndTwoNumbers(what string, fn func(string, int, int)) Command {
-	return Command{Args: []qml.SpecValueKind{argStr, argNum, argNum}, What: what, Run: func(a []qml.SpecValue) error {
+func StringAndTwoNumbers(what string, fn func(string, int, int)) Command {
+	return Command{Args: []qml.SpecValueKind{ArgStr, ArgNum, ArgNum}, What: what, Run: func(a []qml.SpecValue) error {
 		x, err1 := strconv.Atoi(a[1].Raw)
 		y, err2 := strconv.Atoi(a[2].Raw)
 		if err1 != nil || err2 != nil {
-			return argError(fmt.Sprintf("takes %s, not %s and %s", what, a[1].Raw, a[2].Raw))
+			return ArgError(fmt.Sprintf("takes %s, not %s and %s", what, a[1].Raw, a[2].Raw))
 		}
 		fn(a[0].Raw, x, y)
 		return nil
@@ -154,13 +154,13 @@ func stringAndTwoNumbers(what string, fn func(string, int, int)) Command {
 }
 
 // stringAndFourNumbers takes a name and four numbers, fractions allowed: a panel's placement.
-func stringAndFourNumbers(what string, fn func(string, float64, float64, float64, float64)) Command {
-	return Command{Args: []qml.SpecValueKind{argStr, argNum, argNum, argNum, argNum}, What: what, Run: func(a []qml.SpecValue) error {
+func StringAndFourNumbers(what string, fn func(string, float64, float64, float64, float64)) Command {
+	return Command{Args: []qml.SpecValueKind{ArgStr, ArgNum, ArgNum, ArgNum, ArgNum}, What: what, Run: func(a []qml.SpecValue) error {
 		var n [4]float64
 		for i, v := range a[1:] {
 			f, err := strconv.ParseFloat(v.Raw, 64)
 			if err != nil {
-				return argError(fmt.Sprintf("takes %s, not %s", what, v.Raw))
+				return ArgError(fmt.Sprintf("takes %s, not %s", what, v.Raw))
 			}
 			n[i] = f
 		}
@@ -170,23 +170,23 @@ func stringAndFourNumbers(what string, fn func(string, float64, float64, float64
 }
 
 // oneIndex takes a view's row Index, as a tree's signal gives it.
-func oneIndex(fn func(tuidecl.Index) error) Command {
+func OneIndex(fn func(tuidecl.Index) error) Command {
 	return Command{Args: []qml.SpecValueKind{qml.SpecValueInvalid}, What: "a row's index", Run: func(a []qml.SpecValue) error {
 		ix, ok := a[0].Obj.(tuidecl.Index)
 		if !ok {
-			return argError("takes a row's index, not " + a[0].Raw)
+			return ArgError("takes a row's index, not " + a[0].Raw)
 		}
 		return fn(ix)
 	}}
 }
 
 // namedPanic is a panic and the command it came out of, named on its way up to golib's boundary.
-type namedPanic struct {
-	name  string
-	value any
+type NamedPanic struct {
+	Name  string
+	Value any
 }
 
-func (p namedPanic) String() string { return fmt.Sprint(p.value) }
+func (p NamedPanic) String() string { return fmt.Sprint(p.Value) }
 
 // renamePanic, deferred in a command, names a panic coming out of it and raises it again, its stack
 // kept, for golib's boundary to contain or not: a command does not contain its own panics, since
@@ -194,8 +194,8 @@ func (p namedPanic) String() string { return fmt.Sprint(p.value) }
 // name stays: a catalog entry run by an App.* command is the entry's.
 func renamePanic(name string) {
 	if rec := recover(); rec != nil {
-		if _, named := rec.(namedPanic); !named {
-			rec = namedPanic{name: name, value: rec}
+		if _, named := rec.(NamedPanic); !named {
+			rec = NamedPanic{Name: name, Value: rec}
 		}
 		panic(rec)
 	}

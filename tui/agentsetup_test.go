@@ -203,7 +203,7 @@ func TestTheSetupOpensFromTheCatalogAndTheMenu(t *testing.T) {
 	fakeClaude(t)
 	_, r, _ := runAgentTUIWith(t, t.TempDir(), nil, "", nil, Options{})
 	r.s.WaitFor(t, "started", func(string) bool { return onLoop(r, func() bool { return r.h.started }) })
-	if err := onLoop(r, func() error { return r.h.cat.run("agent.setup", nil) }); err != nil {
+	if err := onLoop(r, func() error { return r.h.cat.Run("agent.setup", nil) }); err != nil {
 		t.Fatalf("agent.setup: %v", err)
 	}
 	r.s.WaitForText(t, "Claude (claude)")

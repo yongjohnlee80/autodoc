@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
@@ -67,18 +68,18 @@ func (h *Host) editorMenu(c *editor.EditorCore) []widgetcore.MenuItemModel {
 		items = append(items, widgetcore.NewSeparator("autodoc.sep.zoom"), h.zoomMenu())
 	}
 	s := h.luaFeature()
-	return append(items, editorMenuItems(&s.rows, s, h.menuCtxOf(c))...) // scripts' and plugins' rows (menurows.go)
+	return append(items, editorMenuItems(&s.rows, s, h.menuCtxOf(c))...) // scripts' and plugins' rows (feature/menurows.go)
 }
 
 // menuCtxOf is the open file's context for the right-click menu opening on c.
-func (h *Host) menuCtxOf(c *editor.EditorCore) menuCtx {
-	var ctx menuCtx
+func (h *Host) menuCtxOf(c *editor.EditorCore) feature.MenuCtx {
+	var ctx feature.MenuCtx
 	if h.file != nil {
-		ctx.path, ctx.workspace = h.file.path, h.file.ws
+		ctx.Path, ctx.Workspace = h.file.path, h.file.ws
 	}
-	if ctx.path != "" {
-		ctx.kind = h.resolver().Of(ctx.path).String()
+	if ctx.Path != "" {
+		ctx.Kind = h.resolver().Of(ctx.Path).String()
 	}
-	_, ctx.selection = c.Selection()
+	_, ctx.Selection = c.Selection()
 	return ctx
 }

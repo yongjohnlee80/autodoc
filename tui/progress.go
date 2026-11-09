@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/search/embed"
 )
 
@@ -43,10 +44,10 @@ type progress struct {
 // follower still on its first scan of the root (searches and listings answer, but are not complete).
 func warmingReasons(m map[string]any) []string {
 	var out []string
-	if f := asMap(m["following"]); str(f, "mode") == "starting" {
+	if f := feature.AsMap(m["following"]); feature.Str(f, "mode") == "starting" {
 		out = append(out, scanningFiles)
 	}
-	for _, r := range asList(m["warming"]) {
+	for _, r := range feature.AsList(m["warming"]) {
 		if s, ok := r.(string); ok && s != "" {
 			out = append(out, s)
 		}
@@ -89,14 +90,14 @@ func embedOf(m map[string]any) embedProgress {
 	if m == nil {
 		return embedProgress{}
 	}
-	e := embedProgress{on: true, model: str(m, "model"), target: str(m, "target"), failing: str(m, "last_error") != ""}
+	e := embedProgress{on: true, model: feature.Str(m, "model"), target: feature.Str(m, "target"), failing: feature.Str(m, "last_error") != ""}
 	e.texts, _ = m["texts"].(int64)
 	e.pending, _ = m["pending"].(int64)
 	e.targetPending, _ = m["target_pending"].(int64)
 	e.refused, _ = m["refused"].(int64)
 	e.targetRefused, _ = m["target_refused"].(int64)
-	e.queueState, e.waitingFor = str(m, "queue_state"), str(m, "waiting_for")
-	e.semantic = str(m, "semantic")
+	e.queueState, e.waitingFor = feature.Str(m, "queue_state"), feature.Str(m, "waiting_for")
+	e.semantic = feature.Str(m, "semantic")
 	return e
 }
 
@@ -116,7 +117,7 @@ func (e embedProgress) online() bool {
 
 // poll asks for the status, and asks again a second after the answer, while the program runs.
 func (h *Host) poll() {
-	tk, ws := h.ticket(nil, TicketWorkspace), h.ws
+	tk, ws := h.ticket(nil, feature.TicketWorkspace), h.ws
 	if ws != "" && time.Since(h.focusSent) >= 10*time.Second {
 		h.focusSent = time.Now()
 		do(h, func(ctx context.Context) error { _, err := h.call(ctx, "workspace.focus", ws); return err }, func(error) {})
@@ -132,8 +133,8 @@ func (h *Host) poll() {
 		if err != nil {
 			return answer{err: err}
 		}
-		m := asMap(res)
-		a := answer{emb: embedOf(asMap(m["embeddings"])), warming: warmingReasons(m)}
+		m := feature.AsMap(res)
+		a := answer{emb: embedOf(feature.AsMap(m["embeddings"])), warming: warmingReasons(m)}
 		a.docs, _ = m["docs"].(int64)
 		a.pending, _ = m["pending_jobs"].(int64)
 		a.cursor, _ = m["cursor"].(int64)
@@ -278,7 +279,7 @@ func (h *Host) spinWhileEmbedding() {
 		return
 	}
 	h.prog.spinning = true
-	tk := h.ticket(nil, TicketWorkspace)
+	tk := h.ticket(nil, feature.TicketWorkspace)
 	var turn func()
 	turn = func() {
 		if !tk.Current() || h.prog.emb.working() == 0 || h.prog.emb.failing || h.prog.emb.queueState == "paused" || (h.prog.emb.queueState == "waiting" && h.prog.emb.waitingFor != "") {

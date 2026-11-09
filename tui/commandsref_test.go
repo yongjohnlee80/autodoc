@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"os"
 	"testing"
 )
@@ -14,7 +15,7 @@ const (
 // catalog's, every builtin and feature command, as editor.commands lists them; -update rewrites it.
 func TestTheCommandsReferenceIsGenerated(t *testing.T) {
 	h := newHost(NewSession("unused", nil), Options{})
-	r, err := newRegistry(h.features()...)
+	r, err := feature.NewRegistry(h.features()...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -22,7 +23,7 @@ func TestTheCommandsReferenceIsGenerated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want, err := replaceBlock(string(doc), commandsDocBegin, commandsDocEnd, commandsReference(r.catalog.entries()))
+	want, err := feature.ReplaceBlock(string(doc), commandsDocBegin, commandsDocEnd, commandsReference(r.Catalog.Entries()))
 	if err != nil {
 		t.Fatal(err)
 	}

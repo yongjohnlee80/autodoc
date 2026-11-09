@@ -14,6 +14,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/inbox"
 	"github.com/yongjohnlee80/autodoc/core/mail"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE WINDOW'S ASSIGNMENT FEED (docs/decisions/crew.md#an-assignment-reaches-a-window-agent).
@@ -138,14 +139,14 @@ func (f *todoFeed) read(ctx context.Context, scope, run string, epoch int64, sta
 	seen := readTodoSeen(seenFile)
 	var out todoFeedRead
 	added := false
-	for _, e := range asList(v) {
-		m := asMap(e)
-		roots := asList(m["roots"])
+	for _, e := range feature.AsList(v) {
+		m := feature.AsMap(e)
+		roots := feature.AsList(m["roots"])
 		if len(roots) == 0 {
 			continue
 		}
 		root, _ := roots[0].(string)
-		s := todoFeedStore{id: str(m, "id"), path: str(m, "path"), at: map[string]any{"root": root}}
+		s := todoFeedStore{id: feature.Str(m, "id"), path: feature.Str(m, "path"), at: map[string]any{"root": root}}
 		if s.id == "" || root == "" {
 			continue
 		}
@@ -194,16 +195,16 @@ func (d *todoDelivery) store(ctx context.Context, s todoFeedStore, start time.Ti
 		if err != nil {
 			return todoDone, past
 		}
-		page := asMap(v)
-		cursor := num(page, "cursor")
+		page := feature.AsMap(v)
+		cursor := feature.Num(page, "cursor")
 		if resync, _ := page["resync"].(bool); resync { // away past the daemon's silence: the snapshot stands for the log
 			if s.news { // a store never read: its snapshot is history, acked unsent
 				return todoDone, ack(cursor)
 			}
-			for _, r := range asList(page["snapshot"]) {
-				row := asMap(r)
-				key := fmt.Sprintf("todo-%s-r%d-%s", s.id, cursor, str(row, "id"))
-				if d.deliver(ctx, s, str(row, "assignee"), str(row, "scope"), str(row, "by"), 0, str(row, "id"), "", key,
+			for _, r := range feature.AsList(page["snapshot"]) {
+				row := feature.AsMap(r)
+				key := fmt.Sprintf("todo-%s-r%d-%s", s.id, cursor, feature.Str(row, "id"))
+				if d.deliver(ctx, s, feature.Str(row, "assignee"), feature.Str(row, "scope"), feature.Str(row, "by"), 0, feature.Str(row, "id"), "", key,
 					"Sent again: the window was away too long to know what changed.") == todoRetry {
 					return todoRetry, true
 				}
@@ -211,21 +212,21 @@ func (d *todoDelivery) store(ctx context.Context, s todoFeedStore, start time.Ti
 			ack(cursor)
 			return todoDone, true
 		}
-		changes := asList(page["changes"])
+		changes := feature.AsList(page["changes"])
 		acked := int64(-1)
 		for _, e := range changes {
-			c := asMap(e)
-			seq := num(c, "seq")
-			old := s.news && beforeStart(str(c, "at"), start)
+			c := feature.AsMap(e)
+			seq := feature.Num(c, "seq")
+			old := s.news && beforeStart(feature.Str(c, "at"), start)
 			if !old {
 				past = true
-				if from := str(c, "from_path"); from != "" { // a creation names no file a buffer could be on
-					d.files = append(d.files, todoFileChange{store: s.path, from: from, to: str(c, "to_path"), removed: str(c, "op") == "delete"})
+				if from := feature.Str(c, "from_path"); from != "" { // a creation names no file a buffer could be on
+					d.files = append(d.files, todoFileChange{store: s.path, from: from, to: feature.Str(c, "to_path"), removed: feature.Str(c, "op") == "delete"})
 				}
 			}
-			if str(c, "kind") == "assign" && !old {
+			if feature.Str(c, "kind") == "assign" && !old {
 				key := fmt.Sprintf("todo-%s-%d", s.id, seq)
-				if d.deliver(ctx, s, str(c, "to"), str(c, "scope"), str(c, "by"), seq, str(c, "id"), str(c, "reason"), key, "") == todoRetry {
+				if d.deliver(ctx, s, feature.Str(c, "to"), feature.Str(c, "scope"), feature.Str(c, "by"), seq, feature.Str(c, "id"), feature.Str(c, "reason"), key, "") == todoRetry {
 					if acked >= 0 {
 						ack(acked)
 					}
@@ -272,9 +273,9 @@ func (d *todoDelivery) deliver(ctx context.Context, s todoFeedStore, assignee, s
 	}
 	title, file := "", ""
 	if v, err := d.f.h.c.Call(ctx, "todos.get", s.at, id); err == nil {
-		t := asMap(v)
-		title = str(t, "title")
-		if p := str(t, "path"); p != "" && s.path != "" {
+		t := feature.AsMap(v)
+		title = feature.Str(t, "title")
+		if p := feature.Str(t, "path"); p != "" && s.path != "" {
 			file = filepath.Join(s.path, filepath.FromSlash(p))
 		}
 	}
@@ -297,7 +298,7 @@ func (d *todoDelivery) deliver(ctx context.Context, s todoFeedStore, assignee, s
 
 // assignmentRefused reports whether the daemon refused an assignment's mail for good.
 func assignmentRefused(err error) bool {
-	switch code(err) {
+	switch feature.Code(err) {
 	case mail.CodeNoRecipient, mail.CodeTooLarge, inbox.CodeTooLarge, inbox.CodeKeyReused,
 		golibrpc.CodeInvalidParams, golibrpc.CodeMethodNotFound:
 		return true
@@ -312,9 +313,9 @@ func (d *todoDelivery) ownAgents(ctx context.Context) (map[string]bool, error) {
 		return nil, err
 	}
 	own := map[string]bool{}
-	for _, e := range asList(v) {
-		if m := asMap(e); str(m, "scope") == d.scope {
-			own[str(m, "codename")] = true
+	for _, e := range feature.AsList(v) {
+		if m := feature.AsMap(e); feature.Str(m, "scope") == d.scope {
+			own[feature.Str(m, "codename")] = true
 		}
 	}
 	return own, nil

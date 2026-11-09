@@ -95,7 +95,7 @@ hand, and include the result in your commit:
 
 | After changing… | Run |
 | --- | --- |
-| a key (`tui/keys.go`) | `go test ./tui -run TestKeysAreGenerated -update` |
+| a key (`tui/feature/keys.go`) | `go test ./tui -run TestKeysAreGenerated -update` |
 | the Go tables behind catalog ids | `go test -tags gui ./tui -run TestTheEnglishCatalogHoldsTheGoTables -update` |
 | a verb's contract | `go test ./rpc -update`, then `go generate ./rpc` |
 | the Lua surface | `go generate ./tui` |

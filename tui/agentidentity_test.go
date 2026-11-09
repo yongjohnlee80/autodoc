@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/parse/qml"
 )
 
@@ -26,7 +27,7 @@ type identityHost struct {
 	posts             []func()
 	afters            []func()
 	delays            []time.Duration
-	questions         []Question
+	questions         []feature.Question
 	epoch             int
 	closed            []string // the drawers CloseDrawer closed, in order
 	opened            []string // the drawers OpenDrawer opened, in order
@@ -37,15 +38,17 @@ func newIdentityHost(raw string) *identityHost {
 		prefAgentProfiles: raw, prefAgentDefaultCodename: "",
 	}}, state: map[string]any{}}
 }
-func (c *identityHost) Prefs() PrefsView                    { return c.p }
-func (c *identityHost) SetPref(name, value string)          { c.p.values[name] = value }
-func (c *identityHost) Set(name string, value any)          { c.state[name] = value }
-func (c *identityHost) SetFormText(name, value string)      { c.Set(name, value) }
-func (*identityHost) Open(string)                           {}
-func (*identityHost) Close(string)                          {}
-func (*identityHost) Focus(string) error                    { return nil }
-func (*identityHost) DaemonAddress() string                 { return "unused" }
-func (c *identityHost) ActiveWorkspace() (Workspace, bool)  { return workspaceOf(c.ws), c.ws.name != "" }
+func (c *identityHost) Prefs() feature.PrefsView       { return c.p }
+func (c *identityHost) SetPref(name, value string)     { c.p.values[name] = value }
+func (c *identityHost) Set(name string, value any)     { c.state[name] = value }
+func (c *identityHost) SetFormText(name, value string) { c.Set(name, value) }
+func (*identityHost) Open(string)                      {}
+func (*identityHost) Close(string)                     {}
+func (*identityHost) Focus(string) error               { return nil }
+func (*identityHost) DaemonAddress() string            { return "unused" }
+func (c *identityHost) ActiveWorkspace() (feature.Workspace, bool) {
+	return workspaceOf(c.ws), c.ws.name != ""
+}
 func (c *identityHost) ActiveWorkspaceInfo() (wsInfo, bool) { return c.ws, c.ws.name != "" }
 func (c *identityHost) ConfigureTerminal(_, _, _ string, args ...string) error {
 	if len(args) > 0 {
@@ -234,7 +237,7 @@ func TestAgentDefaultMigrationDistinguishesMissingAndExplicitEmptyAtRestart(t *t
 				t.Fatal("migration ignored canonical key presence")
 			}
 			var rows prefs
-			ReadRows(&rows, values, agentPrefRows(nil))
+			feature.ReadRows(&rows, values, agentPrefRows(nil))
 			for _, p := range []prefs{rows, prefsFor(raw, false), prefsFor(raw, true)} {
 				c := newIdentityHost(`[]`)
 				c.p = p
@@ -325,7 +328,7 @@ func TestProfileFormSaveKeepsAnExplicitDeliveryIdentity(t *testing.T) {
 		{Kind: qml.SpecValueString, Raw: "command"},
 		{Kind: qml.SpecValueString, Raw: "work-helper"},
 	}
-	if err := a.Commands()["App.saveAgentProfile"].handler("App.saveAgentProfile")(args); err != nil {
+	if err := a.Commands()["App.saveAgentProfile"].Handler("App.saveAgentProfile")(args); err != nil {
 		t.Fatal(err)
 	}
 	if p := a.profiles()[0]; p.Name != "Display Label" || p.Command != "command" || p.Codename != "work-helper" {

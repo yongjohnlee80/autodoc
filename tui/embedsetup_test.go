@@ -12,6 +12,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/search/embed"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 )
@@ -66,8 +67,8 @@ func shown(c *scriptedCore, name string) bool {
 	return b
 }
 
-func setupRows(s *embedSetup) map[string]rowOf {
-	out := map[string]rowOf{}
+func setupRows(s *embedSetup) map[string]feature.RowOf {
+	out := map[string]feature.RowOf{}
 	for i := range s.rows.Len() {
 		r := s.rows.At(i)
 		out[r["key"].(string)] = r

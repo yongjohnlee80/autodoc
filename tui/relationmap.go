@@ -7,6 +7,7 @@ import (
 	"path"
 	"slices"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	pm "github.com/yongjohnlee80/golib/parse/mermaid"
 )
 
@@ -42,29 +43,29 @@ type relMap struct {
 func decodeMap(res any) relMap {
 	var m relMap
 	at := map[string]int{}
-	for _, n := range asList(asMap(res)["nodes"]) {
-		nm := asMap(n)
+	for _, n := range feature.AsList(feature.AsMap(res)["nodes"]) {
+		nm := feature.AsMap(n)
 		superseded, _ := nm["superseded"].(bool)
-		at[str(nm, "path")] = len(m.Nodes)
+		at[feature.Str(nm, "path")] = len(m.Nodes)
 		var tags []string
-		for _, t := range asList(nm["tags"]) {
+		for _, t := range feature.AsList(nm["tags"]) {
 			if t, ok := t.(string); ok {
 				tags = append(tags, t)
 			}
 		}
-		m.Nodes = append(m.Nodes, mapNode{Path: str(nm, "path"), Title: str(nm, "title"), Type: str(nm, "type"), Superseded: superseded, Tags: tags})
+		m.Nodes = append(m.Nodes, mapNode{Path: feature.Str(nm, "path"), Title: feature.Str(nm, "title"), Type: feature.Str(nm, "type"), Superseded: superseded, Tags: tags})
 	}
-	for _, t := range asList(asMap(res)["types"]) {
+	for _, t := range feature.AsList(feature.AsMap(res)["types"]) {
 		if t, ok := t.(string); ok && t != "" {
 			m.Types = append(m.Types, t)
 		}
 	}
-	for _, e := range asList(asMap(res)["edges"]) {
-		em := asMap(e)
-		src, ok1 := at[str(em, "src")]
-		dst, ok2 := at[str(em, "dst")]
+	for _, e := range feature.AsList(feature.AsMap(res)["edges"]) {
+		em := feature.AsMap(e)
+		src, ok1 := at[feature.Str(em, "src")]
+		dst, ok2 := at[feature.Str(em, "dst")]
 		if ok1 && ok2 {
-			m.Edges = append(m.Edges, mapEdge{Src: src, Dst: dst, Kind: str(em, "kind")})
+			m.Edges = append(m.Edges, mapEdge{Src: src, Dst: dst, Kind: feature.Str(em, "kind")})
 		}
 	}
 	return m
@@ -88,10 +89,10 @@ func readMap(read func(opts map[string]any) (any, error), opts map[string]any, g
 		if err != nil {
 			return relMap{}, err
 		}
-		page := asMap(res)
-		nodes = append(nodes, asList(page["nodes"])...)
-		edges = append(edges, asList(page["edges"])...)
-		if t := asList(page["types"]); len(t) > 0 {
+		page := feature.AsMap(res)
+		nodes = append(nodes, feature.AsList(page["nodes"])...)
+		edges = append(edges, feature.AsList(page["edges"])...)
+		if t := feature.AsList(page["types"]); len(t) > 0 {
 			types = t // every page says the same: the last one's
 		}
 		if got != nil {

@@ -1,4 +1,4 @@
-package tui
+package feature
 
 import (
 	"context"
@@ -9,12 +9,12 @@ import (
 )
 
 // coreDo is do for a feature, through its Core: fn off the loop, then on it with fn's result, typed.
-func coreDo[T any](c Core, fn func(context.Context) T, then func(T)) {
+func CoreDo[T any](c Core, fn func(context.Context) T, then func(T)) {
 	c.Go(func(ctx context.Context) any { return fn(ctx) }, func(v any) {
-		if p, panicked := v.(errPanicked); panicked {
+		if p, panicked := v.(ErrPanicked); panicked {
 			// fn panicked: then gets the failure in its own answer, never a zero answer that reads as
 			// success (an empty clone, a finished update)
-			if t, ok := failed[T](p); ok {
+			if t, ok := Failed[T](p); ok {
 				then(t)
 			} else {
 				c.Notify(c.Trf("autodoc.notice.work.a_background_job_failed", p.Error()))
@@ -26,20 +26,27 @@ func coreDo[T any](c Core, fn func(context.Context) T, then func(T)) {
 	})
 }
 
-// answerOf is a background answer: a value, or why there is none. An answer of several values is
+// AnswerOf is a background answer: a value, or why there is none. An answer of several values is
 // a struct of its own; one value and its error is this.
-type answerOf[T any] struct {
-	v   T
-	err error
+type AnswerOf[T any] struct {
+	Value T
+	err   error
 }
 
-// answered is a value and its error as an answerOf.
-func answered[T any](v T, err error) answerOf[T] { return answerOf[T]{v: v, err: err} }
+// Answered is a value and its error as an answerOf.
+func Answered[T any](v T, err error) AnswerOf[T] { return AnswerOf[T]{Value: v, err: err} }
+
+// AnswerFailed is an answer of no value: why there is none.
+func AnswerFailed[T any](err error) AnswerOf[T] { return AnswerOf[T]{err: err} }
+
+// Err is why the answer has no value; nil when it has one. The field stays unexported: failed (below)
+// finds every answer's err by its name.
+func (a AnswerOf[T]) Err() error { return a.err }
 
 // errPanicked is a background job's panic, as the error its caller is handed.
-type errPanicked struct {
-	value any
-	path  string
+type ErrPanicked struct {
+	Value any
+	Path  string
 }
 
 // failed is a background answer carrying err, the failure its job ended in: err itself where the
@@ -47,7 +54,7 @@ type errPanicked struct {
 // struct a job answers with: TestEveryBackgroundAnswerCanCarryAFailure holds each do and coreDo to
 // one). The field is unexported, set through its address; its type is checked first. ok is false
 // for an answer with none, which that test keeps from being written.
-func failed[T any](err error) (v T, ok bool) {
+func Failed[T any](err error) (v T, ok bool) {
 	if t, isT := any(err).(T); isT {
 		return t, true
 	}
@@ -64,12 +71,12 @@ func failed[T any](err error) (v T, ok bool) {
 }
 
 // panicText is what a log or a notice says of a panic's value: the runtime's own message (cut to
-// panicTextMax characters), or only its type, its message withheld (crash.go's top).
-func panicText(v any) string {
+// panicTextMax characters), or only its type, its message withheld (tui/crash.go's top).
+func PanicText(v any) string {
 	if re, ok := v.(runtime.Error); ok && runtimeAuthored(v) {
 		s := re.Error()
-		if r := []rune(s); len(r) > panicTextMax {
-			s = string(r[:panicTextMax]) + "…"
+		if r := []rune(s); len(r) > PanicTextMax {
+			s = string(r[:PanicTextMax]) + "…"
 		}
 		return s
 	}
@@ -88,13 +95,13 @@ func runtimeAuthored(v any) bool {
 	return t != nil && t.PkgPath() == "runtime"
 }
 
-func (e errPanicked) Error() string {
-	s := "it panicked: " + panicText(e.value)
-	if e.path != "" {
-		s += " — details in " + e.path
+func (e ErrPanicked) Error() string {
+	s := "it panicked: " + PanicText(e.Value)
+	if e.Path != "" {
+		s += " — details in " + e.Path
 	}
 	return s
 }
 
 // panicTextMax is the characters of a panic's message a log and a notice keep.
-const panicTextMax = 500
+const PanicTextMax = 500

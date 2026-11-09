@@ -69,7 +69,7 @@ func TestARetryWhileItsGrantCardIsOpenGetsTheOneAnswer(t *testing.T) {
 	}
 	settled := func(what string) {
 		r.s.WaitFor(t, what, func(string) bool {
-			return onLoop(r, func() bool { return !r.h.asker.pending && !r.h.luaAsking && len(r.h.luaAsks) == 0 })
+			return onLoop(r, func() bool { return !r.h.asker.Pending && !r.h.luaAsking && len(r.h.luaAsks) == 0 })
 		})
 	}
 	for i, end := range []struct {
@@ -77,9 +77,9 @@ func TestARetryWhileItsGrantCardIsOpenGetsTheOneAnswer(t *testing.T) {
 		answer func()
 		want   string
 	}{
-		{"answered no", func() { r.h.asker.rejected(); r.h.asker.closed() }, "agent:zen editor.write no"},
-		{"closed", func() { r.h.asker.closed() }, "agent:zen editor.write no"},
-		{"answered yes", func() { r.h.asker.accepted(); r.h.asker.closed() }, "agent:zen editor.write yes"},
+		{"answered no", func() { r.h.asker.Rejected(); r.h.asker.Closed() }, "agent:zen editor.write no"},
+		{"closed", func() { r.h.asker.Closed() }, "agent:zen editor.write no"},
+		{"answered yes", func() { r.h.asker.Accepted(); r.h.asker.Closed() }, "agent:zen editor.write yes"},
 	} {
 		request("agent:zen")
 		r.s.WaitForText(t, "let the agent zen use editor.write?")
@@ -95,10 +95,10 @@ func TestARetryWhileItsGrantCardIsOpenGetsTheOneAnswer(t *testing.T) {
 	r.s.WaitForText(t, "let the agent one use editor.write?")
 	request("agent:two")
 	request("agent:two") // queued, asked twice: one card in its turn
-	onLoop(r, func() bool { r.h.asker.rejected(); r.h.asker.closed(); return true })
+	onLoop(r, func() bool { r.h.asker.Rejected(); r.h.asker.Closed(); return true })
 	r.s.WaitForText(t, "let the agent two use editor.write?")
 	request("agent:two")
-	onLoop(r, func() bool { r.h.asker.rejected(); r.h.asker.closed(); return true })
+	onLoop(r, func() bool { r.h.asker.Rejected(); r.h.asker.Closed(); return true })
 	settled("the queued request answered")
 	if got := answers[3:]; len(got) != 2 || got[0] != "agent:one editor.write no" || got[1] != "agent:two editor.write no" {
 		t.Fatalf("the open and the queued request: %v, want one answer each", got)

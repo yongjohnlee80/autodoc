@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/gui"
 	guiwidget "github.com/yongjohnlee80/golib/gui/widget"
 )
@@ -41,7 +42,7 @@ func (l *layoutLog) at(line int) (laid int, picture bool) {
 // retryingNote is the note editor's renderer for notes, its retries after delays, logged.
 func retryingNote(t *testing.T, notes *NoteEmbeds, chain guiwidget.Diagrammer, delays ...time.Duration) *layoutLog {
 	t.Helper()
-	r := notes.Renderer(chain)(NoteRendererSpec{})
+	r := notes.Renderer(chain)(feature.NoteRendererSpec{})
 	er, ok := r.(*embedRenderer)
 	if !ok {
 		t.Fatalf("the note renderer is %T", r)

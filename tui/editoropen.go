@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
@@ -38,7 +39,7 @@ func (h *Host) resolveOpenPath(p string) (string, error) {
 // runOpenPath is file.open_path's Run. From ':' the path is the whole line after the verb, spaces
 // and all, as resolveOpenPath takes it. Run any other way (a key, autodoc.run, a plugin's
 // host.call), it takes one absolute path, as it always has: a relative path there is refused.
-func (h *Host) runOpenPath(x Invocation) error {
+func (h *Host) runOpenPath(x feature.Invocation) error {
 	if x.Name == "" {
 		if len(x.Args) != 1 || !filepath.IsAbs(x.Args[0]) {
 			return errors.New("file.open_path: takes one absolute path")
@@ -79,10 +80,10 @@ func (h *Host) editorCommands(_ string, a editorArgs) (any, error) {
 		return []any{}, nil
 	}
 	var core []editor.Command
-	if h.cat.cmds != nil {
-		core = h.cat.cmds.All() // the editor's registry, the entries' names among them
+	if h.cat.Cmds != nil {
+		core = h.cat.Cmds.All() // the editor's registry, the entries' names among them
 	}
-	return commandRows(h.cat.entries(), h.cat.owned, core), nil
+	return commandRows(h.cat.Entries(), h.cat.Owned, core), nil
 }
 
 // commandRows are entries as editor.commands answers them, by id: its id, ':' name and aliases
@@ -90,9 +91,9 @@ func (h *Host) editorCommands(_ string, a editorArgs) (any, error) {
 // (builtin, feature, lua, plugin). names are an entry's ':' names: the ones it owns now, live (a Lua
 // command takes a name over), or the ones it declares. Then the editor's own ':' commands in core
 // that no entry declares (w, q, replace …), by name, from "editor", with no id.
-func commandRows(entries []*Entry, names func(id string) []string, core []editor.Command) []any {
+func commandRows(entries []*feature.Entry, names func(id string) []string, core []editor.Command) []any {
 	sorted := slices.Clone(entries)
-	slices.SortFunc(sorted, func(a, b *Entry) int { return strings.Compare(a.ID, b.ID) })
+	slices.SortFunc(sorted, func(a, b *feature.Entry) int { return strings.Compare(a.ID, b.ID) })
 	out := make([]any, 0, len(sorted))
 	for _, e := range sorted {
 		row := map[string]any{"id": e.ID, "title": e.Title, "source": string(e.Source)}
@@ -112,11 +113,11 @@ func commandRows(entries []*Entry, names func(id string) []string, core []editor
 	}
 	owned := map[string]bool{}
 	for _, e := range entries {
-		for _, n := range e.declared() {
+		for _, n := range e.Declared() {
 			owned[n] = true
 		}
 	}
-	own := slices.DeleteFunc(slices.Clone(core), func(c editor.Command) bool { return owned[c.Name] || takenOver[c.Name] })
+	own := slices.DeleteFunc(slices.Clone(core), func(c editor.Command) bool { return owned[c.Name] || feature.TakenOver[c.Name] })
 	slices.SortFunc(own, func(a, b editor.Command) int { return strings.Compare(a.Name, b.Name) })
 	for _, c := range own {
 		row := map[string]any{"name": c.Name, "source": "editor"}
@@ -137,13 +138,13 @@ func commandRows(entries []*Entry, names func(id string) []string, core []editor
 // commandsReference is `autodoc --commands-reference`'s table (docs/commands.md): entries by id,
 // those ':' reaches with their names, then the editor's own ':' commands (golib's, those AutoDoc
 // keeps).
-func commandsReference(entries []*Entry) string {
+func commandsReference(entries []*feature.Entry) string {
 	var b strings.Builder
 	b.WriteString("| Command | `:` name | Arguments | What it does |\n|---|---|---|---|\n")
 	cell := func(s string) string { return strings.ReplaceAll(s, "|", `\|`) }
 	declared := map[string][]string{}
 	for _, e := range entries {
-		declared[e.ID] = e.declared()
+		declared[e.ID] = e.Declared()
 	}
 	for _, r := range commandRows(entries, func(id string) []string { return declared[id] }, editor.DefaultCommands()) {
 		m := r.(map[string]any)
@@ -175,7 +176,7 @@ func commandsReference(entries []*Entry) string {
 // asStrings is a row's []any of strings back as strings.
 func asStrings(v any) []string {
 	var out []string
-	for _, x := range asList(v) {
+	for _, x := range feature.AsList(v) {
 		if s, ok := x.(string); ok {
 			out = append(out, s)
 		}

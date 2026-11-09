@@ -11,6 +11,7 @@ import (
 	guimermaid "github.com/yongjohnlee80/golib/gui/mermaid"
 	pm "github.com/yongjohnlee80/golib/parse/mermaid"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/style"
@@ -191,7 +192,7 @@ func relationViewChoices() map[string][]string {
 	}
 }
 
-func (h *Host) relationViewFeatures() []Feature {
+func (h *Host) relationViewFeatures() []feature.Feature {
 	if !h.gui { // run as a terminal (--ui): the terminal's Mindmap, in cells (mindmap_cells.go)
 		if h.relationViews == nil {
 			h.relationViews = cellRelationViews(h)
@@ -202,7 +203,7 @@ func (h *Host) relationViewFeatures() []Feature {
 		store := newGraphStore(core{h}, core{h}, h.graphUserFile) // the views' groups, one store for both
 		g, m := newGlobeMap(core{h}, h.globePresenter, h.seams.globeMapPage), newMindmap(core{h})
 		g.store, g.editor.store, m.store = store, store, store
-		h.relationViews = []Feature{g, m}
+		h.relationViews = []feature.Feature{g, m}
 	}
 	return h.relationViews
 }

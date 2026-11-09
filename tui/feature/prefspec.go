@@ -1,4 +1,4 @@
-package tui
+package feature
 
 import (
 	"fmt"
@@ -42,7 +42,7 @@ type PrefBinding struct {
 
 // BoundPref is the row name, one of choices (nil when Valid says what it takes), kept where b says.
 func BoundPref(name string, choices []string, b PrefBinding) PrefSpec {
-	return PrefSpec{Name: name, Choices: choices, valid: b.Valid, read: b.Read, value: b.Value, reset: b.Reset}
+	return PrefSpec{Name: name, Choices: choices, Valid: b.Valid, Read: b.Read, Value: b.Value, Reset: b.Reset}
 }
 
 // PrefSpec is one preference.
@@ -56,11 +56,11 @@ type PrefSpec struct {
 	// Changed runs after the user chose a new value (a panel docks again, a notice); nil for nothing.
 	Changed func(p PrefsView)
 
-	valid  func(v string) bool           // a stored value the TUI can use; nil: one of Choices
-	read   func(p PrefsWriter, v string) // a usable value into p
-	value  func(p PrefsView) string      // p's value, as stored
-	reset  func(p PrefsWriter)           // the default into p
-	byName bool                          // a ValuePref: its value is kept by its name, not in a field
+	Valid  func(v string) bool           // a stored value the TUI can use; nil: one of Choices
+	Read   func(p PrefsWriter, v string) // a usable value into p
+	Value  func(p PrefsView) string      // p's value, as stored
+	Reset  func(p PrefsWriter)           // the default into p
+	ByName bool                          // a ValuePref: its value is kept by its name, not in a field
 }
 
 // Prefs is a feature that declares preferences of its own.
@@ -68,34 +68,34 @@ type Prefs interface{ Prefs() []PrefSpec }
 
 // admits reports whether v is a value the TUI can use.
 func (s PrefSpec) admits(v string) bool {
-	if s.valid != nil {
-		return s.valid(v)
+	if s.Valid != nil {
+		return s.Valid(v)
 	}
 	return slices.Contains(s.Choices, v)
 }
 
 // row is the chooser's row of p's value: its place in Choices, the first row for one not there.
-func (s PrefSpec) row(p PrefsView) int { return max(slices.Index(s.Choices, s.value(p)), 0) }
+func (s PrefSpec) Row(p PrefsView) int { return max(slices.Index(s.Choices, s.Value(p)), 0) }
 
 // chooser gives the row the Preferences dialog's chooser: the source it reads and the command it calls.
-func (s PrefSpec) chooser(index, set string) PrefSpec { s.Index, s.Set = index, set; return s }
+func (s PrefSpec) Chooser(index, set string) PrefSpec { s.Index, s.Set = index, set; return s }
 
 // shows gives the row what the document reads of its value.
-func (s PrefSpec) shows(state func(p PrefsView) map[string]any) PrefSpec { s.State = state; return s }
+func (s PrefSpec) Shows(state func(p PrefsView) map[string]any) PrefSpec { s.State = state; return s }
 
 // then gives the row what follows a change the user makes.
-func (s PrefSpec) then(changed func(p PrefsView)) PrefSpec { s.Changed = changed; return s }
+func (s PrefSpec) Then(changed func(p PrefsView)) PrefSpec { s.Changed = changed; return s }
 
 // ValuePref is a feature's own preference, one of choices (any value but "" when choices is nil),
 // read with PrefsView.Value.
 func ValuePref(name, def string, choices []string) PrefSpec {
-	s := PrefSpec{Name: name, Choices: choices, byName: true,
-		read:  func(p PrefsWriter, v string) { p.SetValue(name, v) },
-		value: func(p PrefsView) string { return p.Value(name) },
+	s := PrefSpec{Name: name, Choices: choices, ByName: true,
+		Read:  func(p PrefsWriter, v string) { p.SetValue(name, v) },
+		Value: func(p PrefsView) string { return p.Value(name) },
 	}
-	s.reset = func(p PrefsWriter) { s.read(p, def) }
+	s.Reset = func(p PrefsWriter) { s.Read(p, def) }
 	if choices == nil {
-		s.valid = func(v string) bool { return v != "" }
+		s.Valid = func(v string) bool { return v != "" }
 	}
 	return s
 }
@@ -104,9 +104,9 @@ func ValuePref(name, def string, choices []string) PrefSpec {
 // is the default's.
 func ReadRows(p PrefsWriter, m map[string]any, rows []PrefSpec) {
 	for _, s := range rows {
-		s.reset(p)
+		s.Reset(p)
 		if v, ok := m[s.Name].(string); ok && v != "" && s.admits(v) {
-			s.read(p, v)
+			s.Read(p, v)
 		}
 	}
 }
@@ -116,7 +116,7 @@ func RowState(p PrefsView, rows []PrefSpec) map[string]any {
 	m := map[string]any{}
 	for _, s := range rows {
 		if s.Index != "" {
-			m[s.Index] = s.row(p)
+			m[s.Index] = s.Row(p)
 		}
 		if s.State != nil {
 			maps.Copy(m, s.State(p))

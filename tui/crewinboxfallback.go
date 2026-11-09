@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/yongjohnlee80/autodoc/core/mail"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // The fallback in the human's feed (docs/decisions/crew.md#the-fallback-exactly-once): a job whose
@@ -33,7 +34,7 @@ func (x *crewInbox) readFallback(gen uint64, job, kind string) {
 		if _, failed := v.(error); failed { // an older daemon, a job gone, or a failure: the next change asks again
 			return
 		}
-		x.showFallback(job, kind, asMap(v))
+		x.showFallback(job, kind, feature.AsMap(v))
 	})
 }
 
@@ -41,13 +42,13 @@ func (x *crewInbox) readFallback(gen uint64, job, kind string) {
 // the wait ends; an unknown outcome's text to the user, unless this window's host took the job.
 func (x *crewInbox) showFallback(job, kind string, m map[string]any) {
 	id := fallbackToast(job)
-	state, present := str(m, "state"), m["host_present"] == true
+	state, present := feature.Str(m, "state"), m["host_present"] == true
 	if (state == mail.JobOpen || state == mail.JobLeased) && !present {
-		text := x.c.Trf("autodoc.crew.fallback_waits", str(m, "from"), str(m, "recipient"), str(m, "scope"))
+		text := x.c.Trf("autodoc.crew.fallback_waits", feature.Str(m, "from"), feature.Str(m, "recipient"), feature.Str(m, "scope"))
 		x.fallbacks[job] = text
 		if o, shown := x.open[id]; !shown || o.text != text {
 			x.c.NotifyOngoingClick(id, text, nil)
-			x.open[id] = crewOpen{text: text, done: x.c.Trf("autodoc.crew.fallback_went", str(m, "recipient"))}
+			x.open[id] = crewOpen{text: text, done: x.c.Trf("autodoc.crew.fallback_went", feature.Str(m, "recipient"))}
 		}
 		return
 	}
@@ -59,7 +60,7 @@ func (x *crewInbox) showFallback(job, kind string, m map[string]any) {
 		}
 	}
 	if state == mail.JobUnknown && kind == mail.ChangeFallbackUnknown && (x.took == nil || !x.took(job)) {
-		x.c.Notify(x.c.Trf("autodoc.notice.crewfallback.unknown", str(m, "recipient"), str(m, "text")))
+		x.c.Notify(x.c.Trf("autodoc.notice.crewfallback.unknown", feature.Str(m, "recipient"), feature.Str(m, "text")))
 	}
 }
 
@@ -67,12 +68,12 @@ func (x *crewInbox) showFallback(job, kind string, m map[string]any) {
 // prompt, waiting for the user's Enter; or not known to have arrived (its text is in a notice).
 func (x *crewInbox) fallbackEnded(m map[string]any) string {
 	switch {
-	case str(m, "state") == mail.JobUnknown:
-		return x.c.Trf("autodoc.crew.fallback_unknown_ended", str(m, "recipient"))
-	case str(m, "outcome") == string(mail.FallbackTypedNotSent):
-		return x.c.Trf("autodoc.crew.fallback_typed", str(m, "recipient"))
+	case feature.Str(m, "state") == mail.JobUnknown:
+		return x.c.Trf("autodoc.crew.fallback_unknown_ended", feature.Str(m, "recipient"))
+	case feature.Str(m, "outcome") == string(mail.FallbackTypedNotSent):
+		return x.c.Trf("autodoc.crew.fallback_typed", feature.Str(m, "recipient"))
 	}
-	return x.c.Trf("autodoc.crew.fallback_went", str(m, "recipient"))
+	return x.c.Trf("autodoc.crew.fallback_went", feature.Str(m, "recipient"))
 }
 
 // recheckFallbacks reads again every job shown as waiting: a reconnected feed, or a scope that

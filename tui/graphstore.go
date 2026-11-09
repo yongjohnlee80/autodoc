@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE VIEWS' GRAPH FILES — one graphStore for a window's GlobeMap and Mindmap, or for a terminal's
@@ -18,7 +19,7 @@ import (
 // their edits. All on the loop: its reads and writes run off it, and hand back on it.
 
 type graphStore struct {
-	c        Core
+	c        feature.Core
 	files    absoluteFiles // the daemon's files by path (core's)
 	userFile string        // graph.toml beside the config; "" for none
 	byWS     map[string]*graphWS
@@ -44,7 +45,7 @@ type absoluteFiles interface {
 	WriteAbsolute(ctx context.Context, path string, content []byte, version string) (string, error)
 }
 
-func newGraphStore(c Core, files absoluteFiles, userFile string) *graphStore {
+func newGraphStore(c feature.Core, files absoluteFiles, userFile string) *graphStore {
 	now := uint64(time.Now().UnixNano())
 	return &graphStore{c: c, files: files, userFile: userFile, byWS: map[string]*graphWS{}, rnd: rand.New(rand.NewPCG(now, now>>17|1))}
 }
@@ -54,7 +55,7 @@ func newGraphStore(c Core, files absoluteFiles, userFile string) *graphStore {
 func (s *graphStore) with(ws string, fn func(*graphWS)) {
 	g := s.byWS[ws]
 	if g == nil {
-		i := slices.IndexFunc(s.c.Workspaces(), func(w Workspace) bool { return w.Name == ws })
+		i := slices.IndexFunc(s.c.Workspaces(), func(w feature.Workspace) bool { return w.Name == ws })
 		if i < 0 || s.c.Workspaces()[i].Root == "" {
 			return
 		}
@@ -82,7 +83,7 @@ func (s *graphStore) with(ws string, fn func(*graphWS)) {
 		case err == nil:
 			r.version = version
 			r.conf, r.err = parseGraphConf(b)
-		case code(err) != rpc.CodeNotFound: // none yet is no groups
+		case feature.Code(err) != rpc.CodeNotFound: // none yet is no groups
 			r.err = err
 		}
 		if userFile != "" {
@@ -203,7 +204,7 @@ func (s *graphStore) write(g *graphWS) {
 			g.version = v
 		case error:
 			s.c.Failed(s.c.Trf("autodoc.notice.graphstore_gui.save_the_graph_groups", file), v)
-			if code(v) == rpc.CodeConflict { // changed on disk: read again before another write
+			if feature.Code(v) == rpc.CodeConflict { // changed on disk: read again before another write
 				g.read, g.again = false, false
 				return
 			}

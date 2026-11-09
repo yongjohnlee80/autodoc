@@ -1,4 +1,4 @@
-package tui
+package feature
 
 import (
 	"fmt"
@@ -10,8 +10,8 @@ import (
 // A reset shows exactly its items, each row made from the item and its place; At answers an index
 // QML may give, -1 or past the end included, without a check of the caller's own.
 func TestRowsKeepTheItemsAndTheModelInStep(t *testing.T) {
-	r := newRows(tuidecl.NewListModel("key", "label"), func(i int, s string) rowOf {
-		return rowOf{"key": fmt.Sprint(i), "label": s}
+	r := NewRows(tuidecl.NewListModel("key", "label"), func(i int, s string) RowOf {
+		return RowOf{"key": fmt.Sprint(i), "label": s}
 	})
 	r.Reset([]string{"a", "b"})
 	if r.Len() != 2 || r.Model().Len() != 2 || r.Model().At(1)["label"] != "b" || r.Model().At(1)["key"] != "1" {

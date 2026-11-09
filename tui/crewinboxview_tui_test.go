@@ -12,6 +12,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 
 	"github.com/yongjohnlee80/autodoc/core/module"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // fakeInbox serves inbox.list from items (the history, newest first, paged by before and limit; the
@@ -84,13 +85,13 @@ func TestTheInboxShowsTheMailOnScreen(t *testing.T) {
 			strings.Contains(sc, "subject m001") && strings.Contains(sc, "request")
 	})
 	if err := onLoop(r, func() error {
-		return r.h.reg.handlers["App.inboxShown"]([]qml.SpecValue{{Kind: argNum, Raw: "0"}})
+		return r.h.reg.Handlers["App.inboxShown"]([]qml.SpecValue{{Kind: feature.ArgNum, Raw: "0"}})
 	}); err != nil {
 		t.Fatal(err)
 	}
 	r.s.WaitForText(t, "body of m002")
 	if err := onLoop(r, func() error {
-		return r.h.reg.handlers["App.inboxOpen"]([]qml.SpecValue{{Kind: argNum, Raw: "0"}})
+		return r.h.reg.Handlers["App.inboxOpen"]([]qml.SpecValue{{Kind: feature.ArgNum, Raw: "0"}})
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -160,11 +161,11 @@ func TestEveryInboxLetterWorksFromTheList(t *testing.T) {
 	press('d') // the request, under the cursor
 	r.s.WaitFor(t, "d asking to dismiss", func(string) bool {
 		return onLoop(r, func() bool {
-			return r.h.asker.pending && r.h.asker.current.Title == r.h.tr("autodoc.question.inbox.dismiss")
+			return r.h.asker.Pending && r.h.asker.Current.Title == r.h.tr("autodoc.question.inbox.dismiss")
 		})
 	})
 	r.keys(t, decltest.Rune('n')) // No, as the user answers it
-	r.s.WaitFor(t, "the question answered No", func(string) bool { return !onLoop(r, func() bool { return r.h.asker.pending }) })
+	r.s.WaitFor(t, "the question answered No", func(string) bool { return !onLoop(r, func() bool { return r.h.asker.Pending }) })
 	press('r')
 	press('s')
 	r.s.WaitFor(t, "r opening the request's reply and s showing its sender", func(string) bool {
@@ -257,7 +258,7 @@ func TestTheInboxListAndItsMessageAreSetApart(t *testing.T) {
 			onLoop(r, func() bool { r.h.runEntry("crew.inbox"); return true })
 			r.s.WaitForText(t, "Inbox — All")
 			if err := onLoop(r, func() error {
-				return r.h.reg.handlers["App.inboxShown"]([]qml.SpecValue{{Kind: argNum, Raw: "0"}})
+				return r.h.reg.Handlers["App.inboxShown"]([]qml.SpecValue{{Kind: feature.ArgNum, Raw: "0"}})
 			}); err != nil {
 				t.Fatal(err)
 			}

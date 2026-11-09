@@ -1,4 +1,4 @@
-package tui
+package feature
 
 import (
 	"github.com/yongjohnlee80/golib/errs"
@@ -12,7 +12,7 @@ var ErrPanelViewAccess = errs.Sentinel(errs.ErrInvalidArgument, "view is not own
 // built. A feature may project state earlier, but may not operate views yet.
 type PanelBound interface{ BindPanelHost(PanelHost) error }
 
-type panelContribution struct {
-	feature Feature
-	specs   []PanelSpec
+type PanelContribution struct {
+	Feature Feature
+	Specs   []PanelSpec
 }

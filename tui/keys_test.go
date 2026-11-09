@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
@@ -19,9 +20,9 @@ import (
 
 // binds reports whether a generated block's Shortcuts take seq: a keyId's command holding it (the
 // catalog's commands), or a fixed sequence that is it.
-func binds(t *testing.T, k keyset, block, seq string) bool {
+func binds(t *testing.T, k feature.Keyset, block, seq string) bool {
 	t.Helper()
-	cmds, err := k.commands()
+	cmds, err := k.Commands()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,23 +50,23 @@ var updateKeys = flag.Bool("update", false, "rewrite the files generated from th
 func TestKeysAreGenerated(t *testing.T) {
 	h := newHost(NewSession("unused", nil), Options{})
 	fs := h.features()
-	if _, err := newRegistry(fs...); err != nil { // checks the keys, against the catalog
+	if _, err := feature.NewRegistry(fs...); err != nil { // checks the keys, against the catalog
 		t.Fatal(err)
 	}
-	k := keyCatalog(fs)
+	k := feature.KeyCatalog(fs)
 	mainQML, err := os.ReadFile("qml/main.qml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantMain, err := k.withGenerated(string(mainQML))
+	wantMain, err := k.WithGenerated(string(mainQML))
 	if err != nil {
 		t.Fatal(err)
 	}
 	files := map[string]string{"qml/main.qml": wantMain}
-	for _, c := range k.cards {
-		files["qml/views/"+c.View+".qml"] = cardQML(c, k.on(c.ID))
+	for _, c := range k.Cards {
+		files["qml/views/"+c.View+".qml"] = feature.CardQML(c, k.On(c.ID))
 	}
-	cmds, err := k.commands()
+	cmds, err := k.Commands()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +74,7 @@ func TestKeysAreGenerated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if files["../docs/keymap.md"], err = replaceBlock(string(doc), keymapDocBegin, keymapDocEnd, keymapTable(cmds)); err != nil {
+	if files["../docs/keymap.md"], err = feature.ReplaceBlock(string(doc), keymapDocBegin, keymapDocEnd, keymapTable(cmds)); err != nil {
 		t.Fatal(err)
 	}
 	for path, want := range files {
@@ -96,16 +97,16 @@ func TestKeysAreGenerated(t *testing.T) {
 // Every Window key is named in the help, as help names it; every card key is on its card, and
 // every card is in the help under its heading.
 func TestEveryKeyIsInTheHelp(t *testing.T) {
-	k := keyCatalog(nil)
+	k := feature.KeyCatalog(nil)
 	help := helpText(k, nil, nil)
-	for _, key := range k.on("") {
+	for _, key := range k.On("") {
 		if !strings.Contains(help, key.Show) {
 			t.Errorf("the Window's %s (%s) is not in the help", key.Seq, key.Show)
 		}
 	}
-	for _, c := range k.cards {
-		text := k.cardText(c.Groups, k.on(c.ID))
-		for _, key := range k.on(c.ID) {
+	for _, c := range k.Cards {
+		text := k.CardText(c.Groups, k.On(c.ID))
+		for _, key := range k.On(c.ID) {
 			if !strings.Contains(text, key.Show+"  "+key.Does) {
 				t.Errorf("%s is not on the card %s", key.Show, c.ID)
 			}
@@ -120,18 +121,18 @@ func TestEveryKeyIsInTheHelp(t *testing.T) {
 // to the card it came from, and its keys in the help.
 func TestACardOpensFromAKey(t *testing.T) {
 	agents := &keyedFake{fake: fake{name: "agents"},
-		cards: []Card{{ID: "agentsCard", View: "AgentsCard", Title: "SPC a — agents", Back: leader, Help: "SPC a — AGENTS"}},
-		keys: []Key{
-			{Card: leader, Seq: "Shift+Y", Show: "Y", Does: "agents…", Opens: "agentsCard"},
+		cards: []feature.Card{{ID: "agentsCard", View: "AgentsCard", Title: "SPC a — agents", Back: feature.Leader, Help: "SPC a — AGENTS"}},
+		keys: []feature.Key{
+			{Card: feature.Leader, Seq: "Shift+Y", Show: "Y", Does: "agents…", Opens: "agentsCard"},
 			{Card: "agentsCard", Seq: "b", Show: "b", Does: "send the buffer", Run: `App.runCommand("agent.buffer")`},
 			{Card: "agentsCard", Seq: "f", Show: "f", Does: "send the selection", Run: `App.runCommand("agent.selection")`},
 		}}
-	k := keyCatalog([]Feature{agents})
-	if err := k.check(mainIDs, nil); err != nil {
+	k := feature.KeyCatalog([]feature.Feature{agents})
+	if err := k.Check(feature.MainIDs, nil); err != nil {
 		t.Fatal(err)
 	}
-	c, _ := k.card("agentsCard")
-	qml := cardQML(c, k.on("agentsCard"))
+	c, _ := k.Card("agentsCard")
+	qml := feature.CardQML(c, k.On("agentsCard"))
 	for _, want := range []string{
 		"id: agentsCard",
 		`title: qsTrId("autodoc.card.agentsCard.title")`, // "SPC a — agents" in English (language_catalog_test.go)
@@ -144,34 +145,34 @@ func TestACardOpensFromAKey(t *testing.T) {
 			t.Errorf("the card's QML lacks %q:\n%s", want, qml)
 		}
 	}
-	if help := cardKeyHelp(c); !strings.Contains(help, "Backspace goes back") {
+	if help := feature.CardKeyHelp(c); !strings.Contains(help, "Backspace goes back") {
 		t.Errorf("the card's help line %q does not say Backspace goes back", help)
 	}
-	lq, _ := k.card(leader)
-	if q := cardQML(lq, k.on(leader)); !strings.Contains(q, `Shortcut { sequence: keyId("autodoc.leader.open.agentsCard"); onActivated: { leader.close(); agentsCard.open() } }`) || !binds(t, k, q, "Shift+Y") {
+	lq, _ := k.Card(feature.Leader)
+	if q := feature.CardQML(lq, k.On(feature.Leader)); !strings.Contains(q, `Shortcut { sequence: keyId("autodoc.leader.open.agentsCard"); onActivated: { leader.close(); agentsCard.open() } }`) || !binds(t, k, q, "Shift+Y") {
 		t.Error("SPC Y does not close SPC's card and open the agents'")
 	}
 	if !binds(t, k, qml, "b") || !binds(t, k, qml, "f") {
 		t.Error("the agents' card's commands do not hold b and f")
 	}
-	if got := k.cardState()["App.agentsCardText"]; got != "b  send the buffer  f  send the selection" {
+	if got := k.CardState()["App.agentsCardText"]; got != "b  send the buffer  f  send the selection" {
 		t.Errorf("the card's text: %q", got)
 	}
-	main, err := k.withGenerated(keysBegin + keysEnd + cardsBegin + cardsEnd + scopeBlocks())
+	main, err := k.WithGenerated(feature.KeysBegin + feature.KeysEnd + feature.CardsBegin + feature.CardsEnd + scopeBlocks())
 	if err != nil || !strings.Contains(main, "    AgentsCard { id: agentsCard }\n") || !strings.Contains(main, "    Leader { id: leader }\n") {
 		t.Errorf("the cards' declarations: %v\n%s", err, main)
 	}
 	if !strings.Contains(helpText(k, nil, nil), "SPC a — AGENTS\n  b  send the buffer") {
 		t.Error("the help lacks the agents card")
 	}
-	if _, err := keyCatalog(nil).withGenerated("no markers"); err == nil {
+	if _, err := feature.KeyCatalog(nil).WithGenerated("no markers"); err == nil {
 		t.Error("a main.qml without the markers was rewritten")
 	}
-	if _, err := keyCatalog(nil).withGenerated(keysBegin + keysEnd + cardsBegin + cardsEnd); err == nil {
+	if _, err := feature.KeyCatalog(nil).WithGenerated(feature.KeysBegin + feature.KeysEnd + feature.CardsBegin + feature.CardsEnd); err == nil {
 		t.Error("a main.qml without its panes' markers was rewritten")
 	}
 	// a title is its catalog message, the card's id quoted in it (language_catalog_test.go holds its text)
-	if q := cardQML(Card{ID: "x", View: "X", Title: `say "hi" \ bye`}, nil); !strings.Contains(q, `title: qsTrId("autodoc.card.x.title")`) {
+	if q := feature.CardQML(feature.Card{ID: "x", View: "X", Title: `say "hi" \ bye`}, nil); !strings.Contains(q, `title: qsTrId("autodoc.card.x.title")`) {
 		t.Errorf("the title is not its message:\n%s", q)
 	}
 }
@@ -181,28 +182,28 @@ func TestACardOpensFromAKey(t *testing.T) {
 // and a card without groups lists its keys two a row, as ever.
 func TestAFeaturesKeyIsUnderItsGroupOrMore(t *testing.T) {
 	f := &keyedFake{fake: fake{name: "zz"},
-		cards: []Card{{ID: "zzCard", View: "ZzCard", Title: "SPC Z", Back: leader, Help: "SPC Z — ZZ"}},
-		keys: []Key{
-			{Card: leader, Seq: "a", Show: "a", Does: "agents…", Group: groupAgents, Opens: "zzCard"},
-			{Card: leader, Seq: "Shift+Z", Show: "Z", Does: "zz's own", Group: "ZZ", Run: "App.x()"},
-			{Card: leader, Seq: "Shift+Y", Show: "Y", Does: "no group", Run: "App.y()"},
-			{Card: leader, Seq: "Shift+X", Show: "X", Group: "ZZ", Run: "App.z()"}, // listed nowhere: no Does
+		cards: []feature.Card{{ID: "zzCard", View: "ZzCard", Title: "SPC Z", Back: feature.Leader, Help: "SPC Z — ZZ"}},
+		keys: []feature.Key{
+			{Card: feature.Leader, Seq: "a", Show: "a", Does: "agents…", Group: feature.GroupAgents, Opens: "zzCard"},
+			{Card: feature.Leader, Seq: "Shift+Z", Show: "Z", Does: "zz's own", Group: "ZZ", Run: "App.x()"},
+			{Card: feature.Leader, Seq: "Shift+Y", Show: "Y", Does: "no group", Run: "App.y()"},
+			{Card: feature.Leader, Seq: "Shift+X", Show: "X", Group: "ZZ", Run: "App.z()"}, // listed nowhere: no Does
 			{Card: "zzCard", Seq: "b", Show: "b", Does: "send the buffer", Run: "App.b()"},
 			{Card: "zzCard", Seq: "f", Show: "f", Does: "forward", Run: "App.f()"},
-			{Card: "zzCard", Seq: "Shift+F", Show: "F", Does: "forward all", Group: groupAgents, Run: "App.g()"},
+			{Card: "zzCard", Seq: "Shift+F", Show: "F", Does: "forward all", Group: feature.GroupAgents, Run: "App.g()"},
 		}}
-	k := keyCatalog([]Feature{f})
-	if err := k.check(mainIDs, nil); err != nil {
+	k := feature.KeyCatalog([]feature.Feature{f})
+	if err := k.Check(feature.MainIDs, nil); err != nil {
 		t.Fatal(err)
 	}
-	lines := strings.Split(k.cardState()[textSource(leader)].(string), "\n")
-	row, col := headingAt(t, lines, groupAgents)
+	lines := strings.Split(k.CardState()[feature.TextSource(feature.Leader)].(string), "\n")
+	row, col := headingAt(t, lines, feature.GroupAgents)
 	if got := cellAt(lines, row+3, col); got != "a  agents…" {
 		t.Errorf("the agents' key is %q under AGENTS, after its two:\n%s", got, strings.Join(lines, "\n"))
 	}
-	last := leaderGroups[len(leaderGroups)-1]
+	last := feature.LeaderGroups[len(feature.LeaderGroups)-1]
 	lastRow, lastCol := headingAt(t, lines, last[len(last)-1])
-	row, col = headingAt(t, lines, groupMore)
+	row, col = headingAt(t, lines, feature.GroupMore)
 	if col != lastCol || row <= lastRow {
 		t.Errorf("MORE is at row %d column %d, not under %s (row %d column %d)", row, col, last[len(last)-1], lastRow, lastCol)
 	}
@@ -214,7 +215,7 @@ func TestAFeaturesKeyIsUnderItsGroupOrMore(t *testing.T) {
 	if text := strings.Join(lines, "\n"); strings.Contains(text, "ZZ") || strings.Contains(text, "X  ") {
 		t.Errorf("a group the card lacks is headed, or a key without Does listed:\n%s", text)
 	}
-	if got := k.cardState()[textSource("zzCard")]; got != "b  send the buffer  f  forward\nF  forward all" {
+	if got := k.CardState()[feature.TextSource("zzCard")]; got != "b  send the buffer  f  forward\nF  forward all" {
 		t.Errorf("the card without groups: %q", got)
 	}
 }
@@ -223,88 +224,88 @@ func TestAFeaturesKeyIsUnderItsGroupOrMore(t *testing.T) {
 // and a key on or opening a card nobody declared.
 func TestTheRegistryRefusesKeysThatDoNotFit(t *testing.T) {
 	for want, f := range map[string]*keyedFake{
-		"the card leader's x is taken twice": {keys: []Key{{Card: leader, Seq: "x", Show: "x", Does: "mine", Run: "App.x()"}}},
-		"the Window's Ctrl+S is taken twice": {keys: []Key{{Seq: "F2", Also: []string{"Ctrl+S"}, Run: "App.x()"}}},
-		"no key opens the card lonely":       {cards: []Card{{ID: "lonely", View: "Lonely"}}},
-		"the card leader is declared twice":  {cards: []Card{{ID: leader, View: "Other"}}, keys: []Key{{Seq: "F3", Opens: leader}}},
-		"which is not declared":              {keys: []Key{{Card: "nowhere", Seq: "z", Run: "App.x()"}}},
-		"opens the card gone, which is not":  {keys: []Key{{Card: leader, Seq: "Shift+Z", Opens: "gone"}}},
+		"the card leader's x is taken twice": {keys: []feature.Key{{Card: feature.Leader, Seq: "x", Show: "x", Does: "mine", Run: "App.x()"}}},
+		"the Window's Ctrl+S is taken twice": {keys: []feature.Key{{Seq: "F2", Also: []string{"Ctrl+S"}, Run: "App.x()"}}},
+		"no key opens the card lonely":       {cards: []feature.Card{{ID: "lonely", View: "Lonely"}}},
+		"the card leader is declared twice":  {cards: []feature.Card{{ID: feature.Leader, View: "Other"}}, keys: []feature.Key{{Seq: "F3", Opens: feature.Leader}}},
+		"which is not declared":              {keys: []feature.Key{{Card: "nowhere", Seq: "z", Run: "App.x()"}}},
+		"opens the card gone, which is not":  {keys: []feature.Key{{Card: feature.Leader, Seq: "Shift+Z", Opens: "gone"}}},
 		// what every card answers itself: q and Escape close it, Backspace goes back
-		"the card leader's q is taken twice":      {keys: []Key{{Card: leader, Seq: "q", Run: "App.x()"}}},
-		"the card leader's Escape is taken twice": {keys: []Key{{Card: leader, Seq: "F4", Also: []string{"Escape"}, Run: "App.x()"}}},
-		"the card subCard's Backspace is taken twice": {cards: []Card{{ID: "subCard", View: "SubCard", Back: leader}},
-			keys: []Key{{Card: leader, Seq: "Shift+Y", Opens: "subCard"}, {Card: "subCard", Seq: "Backspace", Run: "App.x()"}}},
+		"the card leader's q is taken twice":      {keys: []feature.Key{{Card: feature.Leader, Seq: "q", Run: "App.x()"}}},
+		"the card leader's Escape is taken twice": {keys: []feature.Key{{Card: feature.Leader, Seq: "F4", Also: []string{"Escape"}, Run: "App.x()"}}},
+		"the card subCard's Backspace is taken twice": {cards: []feature.Card{{ID: "subCard", View: "SubCard", Back: feature.Leader}},
+			keys: []feature.Key{{Card: feature.Leader, Seq: "Shift+Y", Opens: "subCard"}, {Card: "subCard", Seq: "Backspace", Run: "App.x()"}}},
 		// a card's ID and View are QML names, and the ID is no other of main.qml's
-		"needs a lower-camel ID":           {cards: []Card{{ID: "agents-card", View: "AgentsCard"}}, keys: []Key{{Seq: "F5", Opens: "agents-card"}}},
-		"and an upper-camel View":          {cards: []Card{{ID: "agentsCard", View: "agentsCard"}}, keys: []Key{{Seq: "F5", Opens: "agentsCard"}}},
-		"takes an id main.qml already has": {cards: []Card{{ID: "help", View: "HelpCard"}}, keys: []Key{{Seq: "F5", Opens: "help"}}},
+		"needs a lower-camel ID":           {cards: []feature.Card{{ID: "agents-card", View: "AgentsCard"}}, keys: []feature.Key{{Seq: "F5", Opens: "agents-card"}}},
+		"and an upper-camel View":          {cards: []feature.Card{{ID: "agentsCard", View: "agentsCard"}}, keys: []feature.Key{{Seq: "F5", Opens: "agentsCard"}}},
+		"takes an id main.qml already has": {cards: []feature.Card{{ID: "help", View: "HelpCard"}}, keys: []feature.Key{{Seq: "F5", Opens: "help"}}},
 		// Backspace goes where the card came from
-		"whose Backspace goes back to the card leader's": {cards: []Card{{ID: "subCard", View: "SubCard", Back: leader}},
-			keys: []Key{{Seq: "F6", Opens: "subCard"}}},
-		"whose Backspace goes back to the Window's": {cards: []Card{{ID: "subCard", View: "SubCard"}},
-			keys: []Key{{Card: leader, Seq: "Shift+Y", Opens: "subCard"}}},
-		"goes back to the card missing, which is not declared": {cards: []Card{{ID: "subCard", View: "SubCard", Back: "missing"}},
-			keys: []Key{{Card: leader, Seq: "Shift+Y", Opens: "subCard"}}},
-		"subCard's Backspace is taken twice": {cards: []Card{{ID: "subCard", View: "SubCard", Back: leader}},
-			keys: []Key{{Card: leader, Seq: "Shift+Y", Opens: "subCard"}, {Card: "subCard", Seq: "z", Also: []string{"Backspace"}, Run: "App.x()"}}},
+		"whose Backspace goes back to the card leader's": {cards: []feature.Card{{ID: "subCard", View: "SubCard", Back: feature.Leader}},
+			keys: []feature.Key{{Seq: "F6", Opens: "subCard"}}},
+		"whose Backspace goes back to the Window's": {cards: []feature.Card{{ID: "subCard", View: "SubCard"}},
+			keys: []feature.Key{{Card: feature.Leader, Seq: "Shift+Y", Opens: "subCard"}}},
+		"goes back to the card missing, which is not declared": {cards: []feature.Card{{ID: "subCard", View: "SubCard", Back: "missing"}},
+			keys: []feature.Key{{Card: feature.Leader, Seq: "Shift+Y", Opens: "subCard"}}},
+		"subCard's Backspace is taken twice": {cards: []feature.Card{{ID: "subCard", View: "SubCard", Back: feature.Leader}},
+			keys: []feature.Key{{Card: feature.Leader, Seq: "Shift+Y", Opens: "subCard"}, {Card: "subCard", Seq: "z", Also: []string{"Backspace"}, Run: "App.x()"}}},
 		// a key runs exactly one of Run, Opens and Cmd; Cmd a built-in's or a feature's entry
-		"the card leader's Shift+Z runs 2 of Run, Opens and Cmd":                                 {keys: []Key{{Card: leader, Seq: "Shift+Z", Run: "App.x()", Cmd: "b.hello"}}},
-		"the card leader's Shift+Z runs 0 of Run, Opens and Cmd":                                 {keys: []Key{{Card: leader, Seq: "Shift+Z", Show: "Z"}}},
-		"the card leader's Shift+Z runs no.such, which no command is":                            {keys: []Key{{Card: leader, Seq: "Shift+Z", Cmd: "no.such"}}},
-		"the card leader's Shift+Z runs lua.upper: a key runs a built-in or a feature's command": {keys: []Key{{Card: leader, Seq: "Shift+Z", Cmd: "lua.upper"}}},
-		"the Window's F7 runs plugin.tetris.new: a key runs a built-in":                          {keys: []Key{{Seq: "F7", Cmd: "plugin.tetris.new"}}},
+		"the card leader's Shift+Z runs 2 of Run, Opens and Cmd":                                 {keys: []feature.Key{{Card: feature.Leader, Seq: "Shift+Z", Run: "App.x()", Cmd: "b.hello"}}},
+		"the card leader's Shift+Z runs 0 of Run, Opens and Cmd":                                 {keys: []feature.Key{{Card: feature.Leader, Seq: "Shift+Z", Show: "Z"}}},
+		"the card leader's Shift+Z runs no.such, which no command is":                            {keys: []feature.Key{{Card: feature.Leader, Seq: "Shift+Z", Cmd: "no.such"}}},
+		"the card leader's Shift+Z runs lua.upper: a key runs a built-in or a feature's command": {keys: []feature.Key{{Card: feature.Leader, Seq: "Shift+Z", Cmd: "lua.upper"}}},
+		"the Window's F7 runs plugin.tetris.new: a key runs a built-in":                          {keys: []feature.Key{{Seq: "F7", Cmd: "plugin.tetris.new"}}},
 	} {
 		f.fake = fake{name: "b"}
-		if _, err := newRegistry(f); err == nil || !strings.Contains(err.Error(), want) {
+		if _, err := feature.NewRegistry(f); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("want %q: %v", want, err)
 		}
 	}
-	if _, err := newRegistry(&keyedFake{fake: fake{name: "b"}, keys: []Key{{Card: leader, Seq: "Shift+X", Show: "X", Does: "mine", Run: "App.x()"}}}); err != nil {
+	if _, err := feature.NewRegistry(&keyedFake{fake: fake{name: "b"}, keys: []feature.Key{{Card: feature.Leader, Seq: "Shift+X", Show: "X", Does: "mine", Run: "App.x()"}}}); err != nil {
 		t.Errorf("a key of a feature's own: %v", err)
 	}
 }
 
 type keyedFake struct {
 	fake
-	keys  []Key
-	cards []Card
+	keys  []feature.Key
+	cards []feature.Card
 }
 
-func (f *keyedFake) Keys() []Key   { return f.keys }
-func (f *keyedFake) Cards() []Card { return f.cards }
+func (f *keyedFake) Keys() []feature.Key   { return f.keys }
+func (f *keyedFake) Cards() []feature.Card { return f.cards }
 
 // keyedCatFake is a feature with keys and catalog entries: its card's keys run its entries by id.
 type keyedCatFake struct {
 	keyedFake
-	entries []Entry
+	entries []feature.Entry
 }
 
-func (f *keyedCatFake) Catalog() []Entry { return f.entries }
+func (f *keyedCatFake) Catalog() []feature.Entry { return f.entries }
 
 // TestAKeyRunsACatalogEntryByItsID (docs/decisions/plugins.md#keys-and-help-read-the-catalog): a
 // feature's key with Cmd runs App.run with the id quoted, and its card names it by the entry's
 // title when the key does not.
 func TestAKeyRunsACatalogEntryByItsID(t *testing.T) {
 	f := &keyedCatFake{keyedFake: keyedFake{fake: fake{name: "zz"},
-		cards: []Card{{ID: "zzCard", View: "ZzCard", Title: "SPC Z", Back: leader, Help: "SPC Z — ZZ"}},
-		keys: []Key{
-			{Card: leader, Seq: "Shift+Z", Show: "Z", Does: "zz…", Opens: "zzCard"},
+		cards: []feature.Card{{ID: "zzCard", View: "ZzCard", Title: "SPC Z", Back: feature.Leader, Help: "SPC Z — ZZ"}},
+		keys: []feature.Key{
+			{Card: feature.Leader, Seq: "Shift+Z", Show: "Z", Does: "zz…", Opens: "zzCard"},
 			{Card: "zzCard", Seq: "b", Show: "b", Cmd: "zz.send_buffer"},
 			{Card: "zzCard", Seq: "f", Show: "f", Does: "its own words", Cmd: "zz.send_selection"},
 		}},
-		entries: []Entry{{ID: "zz.send_buffer", Title: "send the buffer", Run: noRun}, {ID: "zz.send_selection", Title: "send the selection", Run: noRun}}}
-	if _, err := newRegistry(f); err != nil {
+		entries: []feature.Entry{{ID: "zz.send_buffer", Title: "send the buffer", Run: noRun}, {ID: "zz.send_selection", Title: "send the selection", Run: noRun}}}
+	if _, err := feature.NewRegistry(f); err != nil {
 		t.Fatal(err)
 	}
-	k := keyCatalog([]Feature{f})
-	if got := k.cardState()["App.zzCardText"]; got != "b  send the buffer  f  its own words" {
+	k := feature.KeyCatalog([]feature.Feature{f})
+	if got := k.CardState()["App.zzCardText"]; got != "b  send the buffer  f  its own words" {
 		t.Errorf("the card's text: %q", got)
 	}
-	c, _ := k.card("zzCard")
-	if q := cardQML(c, k.on("zzCard")); !strings.Contains(q, `Shortcut { sequence: keyId("autodoc.zzCard.run.zz.send_buffer"); onActivated: { zzCard.close(); App.run("zz.send_buffer") } }`) || !binds(t, k, q, "b") {
+	c, _ := k.Card("zzCard")
+	if q := feature.CardQML(c, k.On("zzCard")); !strings.Contains(q, `Shortcut { sequence: keyId("autodoc.zzCard.run.zz.send_buffer"); onActivated: { zzCard.close(); App.run("zz.send_buffer") } }`) || !binds(t, k, q, "b") {
 		t.Errorf("the card's QML does not run the entry:\n%s", q)
 	}
-	if got := shortcuts([]Key{{Seq: "F9", Cmd: `a.b"c`}}, "", ""); got != `Shortcut { sequence: keyId("autodoc.window.run.a.b\"c"); onActivated: App.run("a.b\"c") }`+"\n" {
+	if got := feature.Shortcuts([]feature.Key{{Seq: "F9", Cmd: `a.b"c`}}, "", ""); got != `Shortcut { sequence: keyId("autodoc.window.run.a.b\"c"); onActivated: App.run("a.b\"c") }`+"\n" {
 		t.Errorf("an id is a QML string, quoted: %q", got)
 	}
 }
@@ -316,11 +317,11 @@ func TestAKeyRunsACatalogEntryByItsID(t *testing.T) {
 func TestAFeaturesKeyRunsItsEntryInTheProgram(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	ran := make(chan *editor.EditorCore, 1)
-	f := &keyedCatFake{keyedFake: keyedFake{fake: fake{name: "zz"}, keys: []Key{{Seq: "F12", Show: "F12", Cmd: "zz.mark"}}},
-		entries: []Entry{{ID: "zz.mark", Title: "mark", Run: func(inv Invocation) error { ran <- inv.Core; return nil }}}}
+	f := &keyedCatFake{keyedFake: keyedFake{fake: fake{name: "zz"}, keys: []feature.Key{{Seq: "F12", Show: "F12", Cmd: "zz.mark"}}},
+		entries: []feature.Entry{{ID: "zz.mark", Title: "mark", Run: func(inv feature.Invocation) error { ran <- inv.Core; return nil }}}}
 	h := newHost(NewSession(d.sock, nil), Options{seams: seamsFor(t)})
-	h.moreFeatures = []Feature{f}
-	main, err := keyCatalog(h.features()).withGenerated(string(layout))
+	h.moreFeatures = []feature.Feature{f}
+	main, err := feature.KeyCatalog(h.features()).WithGenerated(string(layout))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -339,7 +340,7 @@ func TestAFeaturesKeyRunsItsEntryInTheProgram(t *testing.T) {
 		t.Fatal("F12 did not run zz.mark")
 	}
 	onLoop(r, func() error {
-		return r.h.reg.handlers["App.run"]([]qml.SpecValue{{Kind: qml.SpecValueString, Raw: "no.such"}})
+		return r.h.reg.Handlers["App.run"]([]qml.SpecValue{{Kind: qml.SpecValueString, Raw: "no.such"}})
 	})
 	r.waitNotice(t, "unknown: no.such")
 }
@@ -347,8 +348,8 @@ func TestAFeaturesKeyRunsItsEntryInTheProgram(t *testing.T) {
 // scopeBlocks are every pane's generated block, empty, as main.qml holds them.
 func scopeBlocks() string {
 	var b strings.Builder
-	for _, s := range keyScopes {
-		begin, end := scopeMarkers(s)
+	for _, s := range feature.KeyScopes {
+		begin, end := feature.ScopeMarkers(s)
 		b.WriteString(begin + end)
 	}
 	return b.String()
@@ -360,24 +361,24 @@ func scopeBlocks() string {
 // scope, and a sequence a pane takes twice.
 func TestAPanesKeysAreItsOwn(t *testing.T) {
 	fs := newHost(NewSession("unused", nil), Options{}).features()
-	k := keyCatalog(fs) // the find panes give the scopes their / n N
+	k := feature.KeyCatalog(fs) // the find panes give the scopes their / n N
 	finds := map[string]bool{}
 	for _, f := range fs {
-		if p, ok := f.(Findable); ok {
+		if p, ok := f.(feature.Findable); ok {
 			finds[p.FindPane().Scope] = true
 		}
 	}
-	if err := k.check(mainIDs, nil); err != nil {
+	if err := k.Check(feature.MainIDs, nil); err != nil {
 		t.Fatal(err)
 	}
-	main, err := k.withGenerated(keysBegin + keysEnd + cardsBegin + cardsEnd + scopeBlocks())
+	main, err := k.WithGenerated(feature.KeysBegin + feature.KeysEnd + feature.CardsBegin + feature.CardsEnd + scopeBlocks())
 	if err != nil {
 		t.Fatal(err)
 	}
 	block := func(begin, end string) string {
 		return main[strings.Index(main, begin)+len(begin) : strings.Index(main, end)]
 	}
-	window := block(keysBegin, keysEnd)
+	window := block(feature.KeysBegin, feature.KeysEnd)
 	for _, seq := range []string{"/", "n", "Shift+N"} {
 		if !binds(t, k, window, seq) {
 			t.Errorf("the Window lost %s, its fallback where find does not reach", seq)
@@ -386,8 +387,8 @@ func TestAPanesKeysAreItsOwn(t *testing.T) {
 	if binds(t, k, window, "d") {
 		t.Error("d is still the Window's")
 	}
-	for _, s := range keyScopes {
-		begin, end := scopeMarkers(s)
+	for _, s := range feature.KeyScopes {
+		begin, end := feature.ScopeMarkers(s)
 		got := block(begin, end)
 		find := s.Indent + `Shortcut { sequence: keyId("autodoc.` + s.ID + `.openFind"); onActivated: App.openFind() }`
 		if has := strings.Contains(got, find) && binds(t, k, got, "/"); has != finds[s.ID] {
@@ -400,12 +401,12 @@ func TestAPanesKeysAreItsOwn(t *testing.T) {
 	// the todos' keys are autofinder's, in its panel alone: its list's and its task buttons' blocks,
 	// both of them every key (and its details pane, between them, none)
 	todosBlocks := 0
-	for _, s := range keyScopes {
+	for _, s := range feature.KeyScopes {
 		if s.ID != "todos" {
 			continue
 		}
 		todosBlocks++
-		todosBegin, todosEnd := scopeMarkers(s)
+		todosBegin, todosEnd := feature.ScopeMarkers(s)
 		todosKeys := block(todosBegin, todosEnd)
 		for _, seq := range []string{"a", "d", "s", "i", "o", "Shift+R", "Shift+M", "Shift+L", "Shift+A", "Shift+S", "Shift+N", "Shift+O",
 			"[", "]", "Backspace", "?", "1", "2", "3", "4", "5"} {
@@ -417,8 +418,8 @@ func TestAPanesKeysAreItsOwn(t *testing.T) {
 	if todosBlocks != 2 {
 		t.Errorf("the todos panel has %d blocks of keys, want 2: its list's and its task buttons'", todosBlocks)
 	}
-	for want, key := range map[string]Key{
-		"a card's keys are the card's":      {Card: leader, Scope: "page", Seq: "x", Run: "App.x()"},
+	for want, key := range map[string]feature.Key{
+		"a card's keys are the card's":      {Card: feature.Leader, Scope: "page", Seq: "x", Run: "App.x()"},
 		"which main.qml does not scope":     {Scope: "nowhere", Seq: "x", Run: "App.x()"},
 		"the pane links's d is taken twice": {Scope: "links", Seq: "d", Run: "App.x()"},
 		// key.Parse refuses the sequence, through commands
@@ -426,15 +427,15 @@ func TestAPanesKeysAreItsOwn(t *testing.T) {
 		// two arguments: no action names it, so no key command could
 		`the Window's F9 runs "App.x(1, 2)", which names no action`: {Seq: "F9", Run: "App.x(1, 2)"},
 	} {
-		bad := keyCatalog(nil)
-		bad.keys = append(bad.keys, key)
-		if err := bad.check(mainIDs, nil); err == nil || !strings.Contains(err.Error(), want) {
+		bad := feature.KeyCatalog(nil)
+		bad.Keys = append(bad.Keys, key)
+		if err := bad.Check(feature.MainIDs, nil); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%+v: err = %v, want %q", key, err, want)
 		}
 	}
-	nameless := keyCatalog(nil)
-	nameless.cards = append(nameless.cards, Card{View: "Nameless"})
-	if err := nameless.check(mainIDs, nil); err == nil || !strings.Contains(err.Error(), `the card "" (view "Nameless") needs a lower-camel ID`) {
+	nameless := feature.KeyCatalog(nil)
+	nameless.Cards = append(nameless.Cards, feature.Card{View: "Nameless"})
+	if err := nameless.Check(feature.MainIDs, nil); err == nil || !strings.Contains(err.Error(), `the card "" (view "Nameless") needs a lower-camel ID`) {
 		t.Errorf("a card with no ID: err = %v", err)
 	}
 }
@@ -442,11 +443,11 @@ func TestAPanesKeysAreItsOwn(t *testing.T) {
 // TestAKeysValueIsTheCatalogsKeys: the terminals' key sources before the program runs are the
 // catalog's keys of the command, and none for an id it does not declare.
 func TestAKeysValueIsTheCatalogsKeys(t *testing.T) {
-	k := keyCatalog(nil)
-	if got := k.keysValue(terminalModeID); !slices.Equal(got, tuidecl.Keys(tuikey.MustParse("Ctrl+T"))) {
+	k := feature.KeyCatalog(nil)
+	if got := k.KeysValue(feature.TerminalModeID); !slices.Equal(got, tuidecl.Keys(tuikey.MustParse("Ctrl+T"))) {
 		t.Errorf("the mode key's value: %v, want Ctrl+T", got)
 	}
-	if got := k.keysValue("autodoc.window.nothing"); got != nil {
+	if got := k.KeysValue("autodoc.window.nothing"); got != nil {
 		t.Errorf("an undeclared command's value: %v, want none", got)
 	}
 }
@@ -456,16 +457,16 @@ func TestAKeysValueIsTheCatalogsKeys(t *testing.T) {
 // closes it, as q and Esc do. No key on the card may take its ?, and < and > are no key of the panel.
 func TestTodosQuestionMarkOpensItsCardOfKeys(t *testing.T) {
 	fs := newHost(NewSession("unused", nil), Options{}).features()
-	k := keyCatalog(fs)
-	if err := k.check(mainIDs, nil); err != nil {
+	k := feature.KeyCatalog(fs)
+	if err := k.Check(feature.MainIDs, nil); err != nil {
 		t.Fatal(err)
 	}
-	c, ok := k.card(todoKeysCard)
+	c, ok := k.Card(todoKeysCard)
 	if !ok {
 		t.Fatal("no todos card of keys")
 	}
 	opens := false
-	for _, key := range k.in("todos") {
+	for _, key := range k.In("todos") {
 		if key.Seq == "?" && key.Opens == todoKeysCard {
 			opens = true
 		}
@@ -476,7 +477,7 @@ func TestTodosQuestionMarkOpensItsCardOfKeys(t *testing.T) {
 	if !opens {
 		t.Error("? in the todos panel does not open its card")
 	}
-	text := k.cardText(c.Groups, k.on(todoKeysCard))
+	text := k.CardText(c.Groups, k.On(todoKeysCard))
 	for _, want := range []string{"MOVE", "TABS", "TASK", "STATUS", "STORE", "Enter  open the task's file, or a month", "1–6  a tab",
 		"[ ]  the tab before, after", "s  status…: move the task", "a  add a task", "A  assign it to an agent", "S  choose the store",
 		"N  a new store", "O  load a store", "L  rename it (its label)", "R  refresh", "M  move the store"} {
@@ -489,7 +490,7 @@ func TestTodosQuestionMarkOpensItsCardOfKeys(t *testing.T) {
 			t.Errorf("a line of %d cells: wider than the 80 × 20 screen's card\n%s", n, text)
 		}
 	}
-	q := cardQML(c, k.on(todoKeysCard))
+	q := feature.CardQML(c, k.On(todoKeysCard))
 	for _, want := range []string{
 		`Shortcut { sequence: "?"; onActivated: todoKeys.close() }`,
 		`Shortcut { sequence: keyId("autodoc.todoKeys.todoChooseStatus"); onActivated: { todoKeys.close(); App.todoChooseStatus() } }`,
@@ -501,7 +502,7 @@ func TestTodosQuestionMarkOpensItsCardOfKeys(t *testing.T) {
 			t.Errorf("the card's QML lacks %q:\n%s", want, q)
 		}
 	}
-	if help, want := cardKeyHelp(c), "↑ ↓ or j k move · q closes the panel · a key runs its command · ?, q or Esc closes"; help != want {
+	if help, want := feature.CardKeyHelp(c), "↑ ↓ or j k move · q closes the panel · a key runs its command · ?, q or Esc closes"; help != want {
 		t.Errorf("the card's help line is %q, want %q", help, want)
 	}
 	for _, seq := range []string{"s", "]", "i", "o"} {
@@ -509,12 +510,12 @@ func TestTodosQuestionMarkOpensItsCardOfKeys(t *testing.T) {
 			t.Errorf("the card's commands do not hold %s", seq)
 		}
 	}
-	if lq, _ := k.card(leader); strings.Contains(cardQML(lq, k.on(leader)), "onActivated: leader.close() }") {
+	if lq, _ := k.Card(feature.Leader); strings.Contains(feature.CardQML(lq, k.On(feature.Leader)), "onActivated: leader.close() }") {
 		t.Error("SPC's card, which has no Toggle, closes on a key of its own")
 	}
 	bad := k
-	bad.keys = append(slices.Clone(k.keys), Key{Card: todoKeysCard, Seq: "?", Show: "?", Run: "App.x()"})
-	if err := bad.check(mainIDs, nil); err == nil || !strings.Contains(err.Error(), "the card todoKeys's ? is taken twice") {
+	bad.Keys = append(slices.Clone(k.Keys), feature.Key{Card: todoKeysCard, Seq: "?", Show: "?", Run: "App.x()"})
+	if err := bad.Check(feature.MainIDs, nil); err == nil || !strings.Contains(err.Error(), "the card todoKeys's ? is taken twice") {
 		t.Errorf("a card key on its Toggle: %v", err)
 	}
 }

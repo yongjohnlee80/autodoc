@@ -13,6 +13,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/export"
 	"github.com/yongjohnlee80/autodoc/core/export/mermaid"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // IMAGE PREVIEWS — a Mermaid diagram as an image in the terminal
@@ -186,7 +187,7 @@ func (h *Host) showDiagram(source string) {
 	// asked, whichever engine is chosen (sourceAsked). Whether golib draws it is learned off the
 	// loop: a newer preview, or the dialog closed, meanwhile withdraws this one (its ticket), and an
 	// engine or a preference changed meanwhile is the one it is drawn by
-	tk := h.ticket(&h.previewGen, TicketLocal)
+	tk := h.ticket(&h.previewGen, feature.TicketLocal)
 	if h.sourceAsked() {
 		h.showDiagramImage(source, "") // no image: the source, saying image previews are off
 		return
@@ -308,7 +309,7 @@ func (h *Host) showDiagramText(text, help string) {
 // keeps it until the new one comes, and keeps the part of it shown where it was.
 func (h *Host) renderPreview(fresh bool, fallback func(why string)) {
 	pv := h.imagePreview
-	h.withImageCells("diagram", fallback, func(tk Ticket, img *htmlview.Image, cols, rows int) {
+	h.withImageCells("diagram", fallback, func(tk feature.Ticket, img *htmlview.Image, cols, rows int) {
 		shown, w, ht := img.Scroll()
 		if fresh {
 			img.Clear()
@@ -321,24 +322,24 @@ func (h *Host) renderPreview(fresh bool, fallback func(why string)) {
 		img.SetLoading(true)
 		// a page taller than a terminal shows an image (widget.MaxImagePixels), a tall diagram zoomed
 		// in, is cut into strips here, off the loop: whole, it shows nothing at all
-		do(h, func(ctx context.Context) answerOf[htmlview.Strips] {
+		do(h, func(ctx context.Context) feature.AnswerOf[htmlview.Strips] {
 			png, err := rasterize(ctx, pv.page, htmlview.Page{Width: cols * htmlview.CellPixelsW,
 				MinHeight: rows * htmlview.CellPixelsH, MaxHeight: diagramMaxHeight, Scale: zooms[pv.zoom], Wide: true, Background: pv.background})
 			if err != nil {
-				return answerOf[htmlview.Strips]{err: err}
+				return feature.AnswerFailed[htmlview.Strips](err)
 			}
 			strips, err := htmlview.SplitPNG(png)
-			return answerOf[htmlview.Strips]{v: strips, err: err}
-		}, func(a answerOf[htmlview.Strips]) {
+			return feature.Answered(strips, err)
+		}, func(a feature.AnswerOf[htmlview.Strips]) {
 			if !tk.Current() {
 				return // closed, or another preview since
 			}
 			img.SetLoading(false)
-			if a.err != nil {
-				fallback(h.trf("autodoc.text.preview.the_image_failed", a.err.Error()))
+			if a.Err() != nil {
+				fallback(h.trf("autodoc.text.preview.the_image_failed", a.Err().Error()))
 				return
 			}
-			img.SetStrips(a.v)
+			img.SetStrips(a.Value)
 			if w > 0 && ht > 0 { // the same place in the page, at the new scale
 				_, nw, nh := img.Scroll()
 				img.ScrollTo(shown.X*nw/w, shown.Y*nh/ht)
@@ -371,8 +372,8 @@ func (h *Host) zoomPreview(step int) {
 // preview always ends as an image or as its fallback, never blank
 // (docs/decisions/search.md#outline-breadcrumbs-and-previews). A screen resized to a usable size
 // before then renders the image. A new preview or a closed dialog drops both.
-func (h *Host) withImageCells(dialog string, fallback func(why string), fn func(tk Ticket, img *htmlview.Image, cols, rows int)) {
-	tk := h.ticket(&h.previewGen, TicketLocal)
+func (h *Host) withImageCells(dialog string, fallback func(why string), fn func(tk feature.Ticket, img *htmlview.Image, cols, rows int)) {
+	tk := h.ticket(&h.previewGen, feature.TicketLocal)
 	deadline := time.Now().Add(imageWait)
 	var try func()
 	try = func() {

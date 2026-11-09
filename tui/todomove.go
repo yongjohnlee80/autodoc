@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -108,7 +109,7 @@ func taskIDOf(content string) string {
 	if err != nil {
 		return ""
 	}
-	switch id := asMap(fm)["id"].(type) {
+	switch id := feature.AsMap(fm)["id"].(type) {
 	case string:
 		return id
 	case int64, int, uint64, float64:
@@ -160,22 +161,22 @@ func (h *Host) taskFateOf(ctx context.Context, ws, p, abs string, raw bool, hint
 	if err != nil {
 		return taskFate{}
 	}
-	for _, s := range asList(res) {
-		sm := asMap(s)
-		roots := asList(sm["roots"])
-		rel, ok := under(str(sm, "path"), canon)
+	for _, s := range feature.AsList(res) {
+		sm := feature.AsMap(s)
+		roots := feature.AsList(sm["roots"])
+		rel, ok := under(feature.Str(sm, "path"), canon)
 		if !ok || len(roots) == 0 {
 			continue
 		}
 		root, _ := roots[0].(string)
 		got, err := h.call(ctx, "todos.get", map[string]any{"root": root}, id)
-		if code(err) == codeNoTask {
+		if feature.Code(err) == codeNoTask {
 			return taskFate{removed: true}
 		}
 		if err != nil {
 			return taskFate{}
 		}
-		now := str(asMap(got), "path")
+		now := feature.Str(feature.AsMap(got), "path")
 		if now == "" || now == rel || !(slashP == rel || strings.HasSuffix(slashP, "/"+rel)) {
 			return taskFate{}
 		}
@@ -200,9 +201,9 @@ func (h *Host) readMoved(ctx context.Context, ws, to string, raw bool) (movedFil
 	if err != nil {
 		return movedFile{}, false
 	}
-	m := asMap(read)
+	m := feature.AsMap(read)
 	content, _ := m["content"].([]byte)
-	return movedFile{path: to, content: string(content), version: str(m, "version")}, true
+	return movedFile{path: to, content: string(content), version: feature.Str(m, "version")}, true
 }
 
 // under is abs's path inside dir, with / separators, when abs is in dir.
@@ -254,7 +255,7 @@ func (h *Host) keepTaskGone(b *openBuffer, note string) {
 // edits, it keeps them where it is, its save refused.
 func (h *Host) followMove(b *openBuffer, to movedFile) {
 	from, dirty := b.file.name(), b.file.dirty
-	if o := h.bufferOf(fileRef{b.file.ws, to.path}); o != nil && o != b {
+	if o := h.bufferOf(feature.FileRef{WS: b.file.ws, Path: to.path}); o != nil && o != b {
 		if !dirty {
 			h.dropBuffer(b)
 			h.notify(h.trf("autodoc.notice.todomove.moved_to", from, to.path))

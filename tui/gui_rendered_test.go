@@ -160,7 +160,7 @@ func TestTheSearchPreviewRendersAMarkdownHit(t *testing.T) {
 	onLoop(r, func() bool { r.h.openSearch(); return true })
 	show := func(p, want string) {
 		t.Helper()
-		onLoop(r, func() bool { r.h.searchPick.previewItem(hit{path: p}); return true })
+		onLoop(r, func() bool { r.h.searchPick.PreviewItem(hit{path: p}); return true })
 		r.s.WaitFor(t, p+"'s preview: rendered "+want, func(string) bool {
 			return onLoop(r, func() bool {
 				v, _ := r.h.p.Tree().Source("App.searchPreviewRendered")
