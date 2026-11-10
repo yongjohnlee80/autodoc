@@ -118,11 +118,11 @@ func TestTodosShowsOneStoreChosenInADropdown(t *testing.T) {
 	s.Pending = nil
 	s.Deferred = false
 	v.storeChosen(1)
-	if v.cur.id != "root:/p" || !s.Called("todos.list[map[root:/p] map[buckets:[open]]]") {
+	if v.cur.id != "root:"+slashFile("/p") || !s.Called("todos.list[map[root:"+slashFile("/p")+"] map[buckets:[open]]]") {
 		t.Fatalf("p chosen: %+v, calls %v", v.cur, s.Calls)
 	}
 	held[0]() // kb's Open, late
-	if got := tabRows(v, 0); !slices.Equal(got, []string{"1  map[root:/p]"}) {
+	if got := tabRows(v, 0); !slices.Equal(got, []string{"1  map[root:" + slashFile("/p") + "]"}) {
 		t.Errorf("p's Open after kb's late answer: %q", got)
 	}
 	n := len(s.Calls)
@@ -416,7 +416,7 @@ func TestTodosAtTheEdges(t *testing.T) {
 	s.WS = ""
 	v := newTodos(s)
 	v.list()
-	if got := storeLabels(v); !slices.Equal(got, []string{"p"}) || v.cur.id != "root:/p" {
+	if got := storeLabels(v); !slices.Equal(got, []string{"p"}) || v.cur.id != "root:"+slashFile("/p") {
 		t.Errorf("no workspace: stores %q", got)
 	}
 
