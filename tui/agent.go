@@ -317,12 +317,12 @@ func (h *agents) stopAgent() bool {
 
 // fillAgentCommand fills {root} and {workspace} in a profile's command, each quoted for the shell
 // that runs it in env (internal/usershell). A value that shell can't hand the program as itself
-// (usershell.Shell.Carries) is an error, and the command is not filled.
+// (usershell.Shell.CarriesQuoted) is an error, and the command is not filled.
 func fillAgentCommand(env procenv.Env, command string, ws wsInfo) (string, error) {
 	sh := usershell.Commands(env)
 	for _, f := range []struct{ placeholder, value string }{{"{root}", ws.root}, {"{workspace}", ws.name}} {
 		if strings.Contains(command, f.placeholder) {
-			if err := sh.Carries(f.value); err != nil {
+			if err := sh.CarriesQuoted(f.value); err != nil {
 				return "", fmt.Errorf("its command's %s can't reach it whole: %w", f.placeholder, err)
 			}
 		}

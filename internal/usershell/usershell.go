@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 )
@@ -68,6 +69,29 @@ func (s Shell) Carries(arg string) error {
 	}
 	if i := strings.IndexAny(arg, bad); i >= 0 {
 		return fmt.Errorf("%w: %q holds %q", ErrNotCarried, arg, arg[i:i+1])
+	}
+	return nil
+}
+
+// CarriesQuoted is Carries for an argument given as Quote writes it, inside a command line (a
+// profile's {root} or {workspace}), where Args' stop-parsing text can't be: under Windows PowerShell
+// 5.1 Quote's word is split where a space comes after an odd number of double quotes (5.1 counts
+// every quote, escaped or not, to decide whether to quote an argument), so that is refused too.
+func (s Shell) CarriesQuoted(arg string) error {
+	if err := s.Carries(arg); err != nil {
+		return err
+	}
+	if s.kind != winps {
+		return nil
+	}
+	quotes := 0
+	for _, r := range arg {
+		switch {
+		case r == '"':
+			quotes++
+		case unicode.IsSpace(r) && quotes%2 == 1:
+			return fmt.Errorf("%w: %q holds a space after a double quote, which Windows PowerShell 5.1 splits there", ErrNotCarried, arg)
+		}
 	}
 	return nil
 }

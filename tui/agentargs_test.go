@@ -9,8 +9,10 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/internal/usershell"
 )
@@ -68,7 +70,7 @@ func TestAnAgentsCommandReachesItsCLIWhole(t *testing.T) {
 	for _, c := range agentCommandCases(t) {
 		t.Run(c.label, func(t *testing.T) {
 			root := filepath.Join(t.TempDir(), "it's a root")
-			ws := wsInfo{id: 1, name: "kb it's", root: root}
+			ws := wsInfo{id: 1, name: `say "hi" now it's`, root: root} // quotes, but no space after an odd one
 			filled, err := fillAgentCommand(c.env, c.call+" {root} {workspace}", ws)
 			if err != nil {
 				t.Fatal(err)
@@ -107,6 +109,22 @@ func TestAnAgentsCommandRefusesAValueItCannotCarry(t *testing.T) {
 			if refused != (err != nil) || (err != nil && !errors.Is(err, usershell.ErrNotCarried)) {
 				t.Errorf("a root holding %% and &: %v; want refused %v", err, refused)
 			}
+			// a workspace name with a space after a double quote: Windows PowerShell 5.1 would split
+			// the quoted {workspace}, so there it is refused; every other shell hands it on whole
+			split := wsInfo{id: 1, name: `a"b c`, root: t.TempDir()}
+			filled, err := fillAgentCommand(c.env, c.call+" {workspace}", split)
+			if winps := strings.HasPrefix(c.label, "winps"); winps != (err != nil) || (err != nil && !errors.Is(err, usershell.ErrNotCarried)) {
+				t.Errorf("the workspace %q: %v; want refused %v", split.name, err, winps)
+			} else if err == nil {
+				prog, args := agentArgv(c.env, filled)
+				cmd := exec.Command(prog, args...)
+				cmd.Env = c.env.With(argvPrinterEnv + "=1")
+				out, err := cmd.Output()
+				var got []string
+				if err != nil || json.Unmarshal(out, &got) != nil || !reflect.DeepEqual(got, []string{split.name}) {
+					t.Errorf("the workspace %q reached the CLI as %q (%v, %s)", split.name, got, err, out)
+				}
+			}
 			// a setup's argument naming a path with a variable's name in it, the variable set, and one
 			// across two lines: each is refused before anything runs, not expanded or cut at the break
 			env := c.env.With("AUTODOC_CELL_VAR=expanded")
@@ -137,4 +155,44 @@ func TestAnAgentsCommandRefusesAValueItCannotCarry(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A command refused before it runs (a {workspace} its shell can't carry, a setup's argument it
+// can't carry) is never spawned: the start is refused in its tab, nothing registers for a fill's
+// refusal, and the tab's starter answers the refusal without calling spawn. A NUL, which no
+// shell can carry, makes the case on every OS.
+func TestARefusedAgentCommandIsNeverSpawned(t *testing.T) {
+	t.Run("a workspace the command can't carry", func(t *testing.T) {
+		a, c, w := crewAgents(t, `[{"name":"One","command":"one {workspace}","codename":"one"}]`)
+		c.ws.name = "kb\x00x"
+		p, _ := a.profile("one")
+		instance, err := a.startInstance(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if instance.refusal == nil || !errors.Is(instance.refusal, usershell.ErrNotCarried) || calledTimes(w, "crew.register") != 0 {
+			t.Fatalf("refusal %v, registered %d; want refused before anything registers", instance.refusal, calledTimes(w, "crew.register"))
+		}
+		if _, spawned, err := startedCmd(a, c, instance); spawned || !errors.Is(err, usershell.ErrNotCarried) {
+			t.Fatalf("its tab's start: spawned %v, %v; want the refusal and no spawn", spawned, err)
+		}
+	})
+	t.Run("a setup's argument the command can't carry", func(t *testing.T) {
+		a, c, _ := crewAgents(t, crewKinds)
+		setup := a.setupRun
+		a.setupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
+			s, err := setup(kind, dir, environ)
+			s.Argv = append(s.Argv, "--settings", "x\x00y")
+			return s, err
+		}
+		p, _ := a.profile("claude-one")
+		instance, err := a.startInstance(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		awaitStart(t, c, instance)
+		if _, spawned, err := startedCmd(a, c, instance); spawned || !errors.Is(err, usershell.ErrNotCarried) {
+			t.Fatalf("its tab's start: spawned %v, %v; want the setup's refusal and no spawn", spawned, err)
+		}
+	})
 }

@@ -1,6 +1,9 @@
 package usershell
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+)
 
 // quotePOSIX is s in single quotes, each ' written '\”: nothing inside is the shell's.
 func quotePOSIX(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
@@ -46,7 +49,7 @@ func legacyNative(s string) string {
 		slashes = 0
 		b.WriteRune(r)
 	}
-	if strings.ContainsAny(s, " \t") {
+	if strings.IndexFunc(s, unicode.IsSpace) >= 0 { // as 5.1 decides to quote: any white space
 		slashes *= 2
 	}
 	b.WriteString(strings.Repeat(`\`, slashes))

@@ -200,3 +200,28 @@ func TestArgsAreWrittenEachShellsWay(t *testing.T) {
 		}
 	}
 }
+
+// CarriesQuoted refuses, under Windows PowerShell 5.1 only, what 5.1 splits in a Quote'd word: a
+// space after an odd number of double quotes. pwsh and /bin/sh carry it.
+func TestCarriesQuotedRefusesWhatWindowsPowerShellSplits(t *testing.T) {
+	split := []string{`a"b c`, `{"k":"v w"}`, "x\"y\u00a0z"}
+	whole := []string{"", `say "hi" now`, `a"b"c d`, "it's", "a b", `ends\`}
+	for _, a := range split {
+		if err := (Shell{kind: winps}).CarriesQuoted(a); !errors.Is(err, ErrNotCarried) {
+			t.Errorf("winps, %q: %v; want ErrNotCarried", a, err)
+		}
+		for _, k := range []kind{powershell, posix} {
+			if err := (Shell{kind: k}).CarriesQuoted(a); err != nil {
+				t.Errorf("kind %d, %q: %v; want it carried", k, a, err)
+			}
+		}
+	}
+	for _, a := range whole {
+		if err := (Shell{kind: winps}).CarriesQuoted(a); err != nil {
+			t.Errorf("winps, %q: %v; want it carried", a, err)
+		}
+	}
+	if err := (Shell{kind: winps}).CarriesQuoted("50%"); !errors.Is(err, ErrNotCarried) {
+		t.Errorf("winps, 50%%: %v; want Carries' refusal too", err)
+	}
+}
