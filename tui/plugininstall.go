@@ -274,7 +274,13 @@ func (pl *plugins) installCandidate(c *candidate) {
 		if r := pl.running[c.name]; r != nil {
 			r.stopFor(plugin.CloseUpdate, "") // it is replaced under itself otherwise; its slot stays
 		}
-		feature.CoreDo(pl.c, func(context.Context) error { return swapIn(fsys, dir, c.stage, c.name) }, func(err error) { pl.installed(c, err) })
+		runs := pl.stoppingIn(filepath.Join(dir, c.name))
+		feature.CoreDo(pl.c, func(context.Context) error {
+			if err := awaitExit(runs); err != nil { // its folder is moved once nothing runs from it
+				return err
+			}
+			return swapIn(fsys, dir, c.stage, c.name)
+		}, func(err error) { pl.installed(c, err) })
 	})
 }
 
@@ -577,7 +583,13 @@ func (pl *plugins) removePluginConfirmed(dir string) {
 	}
 	name := filepath.Base(dir)
 	prev := filepath.Join(filepath.Dir(dir), previousDir, name)
+	runs := pl.stoppingIn(dir)
 	feature.CoreDo(pl.c, func(context.Context) error {
+		// removed once nothing runs from it: on Windows a removal would stop part way, at the first
+		// file in use
+		if err := awaitExit(runs); err != nil {
+			return err
+		}
 		if err := os.RemoveAll(dir); err != nil {
 			return err
 		}
