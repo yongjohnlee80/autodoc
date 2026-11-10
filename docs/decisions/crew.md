@@ -618,7 +618,9 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
     are never assumed reported.
   - OpenCode's plugin (`permission.asked`, `permission.replied`) and agy's bridge (a trajectory step
     waiting on a permission, read every 2 s) report them, and say they are alive (`crew.attention
-    alive`, every 5 s and every look). Their sessions' prompts count as reported only within 15 s of
+    alive`, every 5 s and every look). The bridge reads the trajectory's tail as a stream, keeping
+    one step at a time: a step holds what the agent read or wrote, so a tail has no small bound,
+    and a read refused for its size would be asked the same tail again and report nothing after it. Their sessions' prompts count as reported only within 15 s of
     the last heartbeat, which the daemon keeps in memory alone: a reporter that stopped, or a daemon
     that restarted, reads as unreported, and no Enter is pressed.
   - Codex's bridge (`autodoc crew bridge --codex`), which `crew endpoint --codex-here --wait`
