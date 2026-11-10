@@ -3,12 +3,13 @@ package tui
 import (
 	"encoding/json"
 	"errors"
-	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // TestAnAgentWorksInItsOwnFolderUnderTheWindowsScope (docs/decisions/crew.md#the-session-context):
@@ -18,7 +19,7 @@ import (
 // folder.
 func TestAnAgentWorksInItsOwnFolderUnderTheWindowsScope(t *testing.T) {
 	a, c := modelAgents(t)
-	ws := wsInfo{name: "kb", root: t.TempDir()}
+	ws := feature.Workspace{Name: "kb", Root: t.TempDir()}
 	shared := a.agentFolder(ws, "one")
 	a.crew = &crewHost{}
 	if got := a.agentFolder(ws, "one"); got != shared {

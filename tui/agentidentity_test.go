@@ -49,7 +49,9 @@ func (*identityHost) DaemonAddress() string            { return "unused" }
 func (c *identityHost) ActiveWorkspace() (feature.Workspace, bool) {
 	return workspaceOf(c.ws), c.ws.name != ""
 }
-func (c *identityHost) ActiveWorkspaceInfo() (wsInfo, bool) { return c.ws, c.ws.name != "" }
+func (c *identityHost) ActiveWorkspaceInfo() (feature.Workspace, bool) {
+	return workspaceOf(c.ws), c.ws.name != ""
+}
 func (c *identityHost) ConfigureTerminal(_, _, _ string, args ...string) error {
 	if len(args) > 0 {
 		c.configuredCommand = args[len(args)-1]
