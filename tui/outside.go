@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
+	"github.com/yongjohnlee80/golib/tui/widget/files"
 
 	"github.com/yongjohnlee80/autodoc/core/fsbounds"
 	"github.com/yongjohnlee80/autodoc/core/kind"
@@ -32,6 +33,15 @@ func localOnly(err error) error {
 		return errRemote
 	}
 	return err
+}
+
+// localDisk is what the file dialogs list: golib's local disk (files.LocalFiles: one tree at "/",
+// on Windows every drive, its paths Windows' own), read off the loop. Its Home is left unset, as
+// before: a typed ~ is the dialog's to refuse, as it was.
+func localDisk() files.FileSource {
+	src := files.LocalFiles()
+	src.Async, src.Home = true, ""
+	return src
 }
 
 // openFileDialog opens the file dialog at the browse folder.
