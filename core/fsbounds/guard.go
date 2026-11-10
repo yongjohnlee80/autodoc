@@ -328,7 +328,7 @@ func within(root, p string) bool {
 	if !strings.HasSuffix(root, sep) { // a drive's root (C:\) and "/" end in it already
 		root += sep
 	}
-	return strings.HasPrefix(p, root)
+	return len(p) >= len(root) && strings.EqualFold(p[:len(root)], root)
 }
 
 // canonical is realPath's answer for the walk's existing part, or errUnknown.
