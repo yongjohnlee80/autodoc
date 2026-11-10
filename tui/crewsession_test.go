@@ -431,8 +431,8 @@ func TestAWrapperClaudeGetsTheRealOnesHooks(t *testing.T) {
 // wrapper script) gets what a wake needs, SessionStart and crossSessionInbound, no prompt hooks,
 // registers without prompts, and is told of once, however often it starts.
 func TestAClaudeThatCantBeReadGetsTheFloor(t *testing.T) {
-	wrapper := filepath.Join(t.TempDir(), "claude")
-	if err := os.WriteFile(wrapper, []byte("#!/bin/sh\nexec somewhere-else \"$@\"\n"), 0o755); err != nil {
+	wrapper := filepath.Join(t.TempDir(), "claude"+scriptSuffix) // a script, named as this OS names one
+	if err := os.WriteFile(wrapper, []byte(wrapperScript), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	a, c, w := crewAgents(t, `[{"name":"Claude","command":`+strconv.Quote(wrapper)+`,"codename":"cl"}]`)
