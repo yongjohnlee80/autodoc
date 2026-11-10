@@ -149,6 +149,28 @@ func TestDamageFoundAfterTheStartStopsTheDaemon(t *testing.T) {
 	}
 }
 
+// A start refused after it bound its address (here, on a store marked damaged) lets go of it: the
+// next daemon can bind there. On Windows a pipe left open keeps its name, and the next daemon found
+// it taken by a listener nobody accepts on. On Unix the socket's file is removed either way.
+func TestARefusedStartLetsGoOfItsAddress(t *testing.T) {
+	dir := short(t)
+	sock, state := ipc.ScratchAddr(dir, "a.sock"), filepath.Join(dir, "state")
+	cfg := writeConfig(t, sock, state, "", "kb="+t.TempDir())
+	mark := filepath.Join(state, config.StoreName) + ".damaged"
+	if err := os.WriteFile(mark, []byte(`{"quick":true,"integrity":["page 9: bad"]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := runServe(context.Background(), cfg, io.Discard, testBuild, nil, ""); !errors.Is(err, store.ErrDamaged) {
+		t.Fatalf("serving a marked store: %v, want it refused", err)
+	}
+	ln, err := ipc.Listen(sock, nil)
+	if err != nil {
+		t.Fatalf("binding the address a refused start had: %v; want it free", err)
+	}
+	_ = ln.Close()
+	ln.Remove()
+}
+
 // TestCheckStoreClearsTheMarkOfASoundStore (AM-4): a store marked damaged is refused at every
 // start; --check-store's whole check, finding it sound (restored), clears the mark, and the daemon
 // serves it again.

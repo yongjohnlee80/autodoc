@@ -158,6 +158,11 @@ func (d *process) bind() error {
 	}
 	d.ln = ln
 	d.stops.push(ln.Remove)
+	// a start refused after the bind (a damaged store, a step that fails) closes the listener before
+	// Remove, as Remove asks: no server was made to close it, and on Windows a pipe left open keeps
+	// its name, so the next daemon finds it taken by a listener nobody accepts on. A served start's
+	// server has closed it already; a second Close is nothing.
+	d.stops.push(func() { _ = ln.Close() })
 	return nil
 }
 
