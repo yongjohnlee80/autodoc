@@ -1,4 +1,4 @@
-package tui
+package relations
 
 import (
 	"context"
@@ -18,9 +18,9 @@ import (
 // initialised the first time it asks for them and the file written; the views' settings writing
 // their edits. All on the loop: its reads and writes run off it, and hand back on it.
 
-type graphStore struct {
+type GraphStore struct {
 	c        feature.Core
-	files    absoluteFiles // the daemon's files by path (core's)
+	files    AbsoluteFiles // the daemon's files by path (core's)
 	userFile string        // graph.toml beside the config; "" for none
 	byWS     map[string]*graphWS
 	rnd      *rand.Rand
@@ -40,26 +40,26 @@ type graphWS struct {
 
 // absoluteFiles reads and writes a file on the daemon's disk by its absolute path (core's
 // ReadAbsolute and WriteAbsolute: the host's readFile and writeFile).
-type absoluteFiles interface {
+type AbsoluteFiles interface {
 	ReadAbsolute(ctx context.Context, path string) ([]byte, string, error)
 	WriteAbsolute(ctx context.Context, path string, content []byte, version string) (string, error)
 }
 
-func newGraphStore(c feature.Core, files absoluteFiles, userFile string) *graphStore {
+func NewGraphStore(c feature.Core, files AbsoluteFiles, userFile string) *GraphStore {
 	now := uint64(time.Now().UnixNano())
-	return &graphStore{c: c, files: files, userFile: userFile, byWS: map[string]*graphWS{}, rnd: rand.New(rand.NewPCG(now, now>>17|1))}
+	return &GraphStore{c: c, files: files, userFile: userFile, byWS: map[string]*graphWS{}, rnd: rand.New(rand.NewPCG(now, now>>17|1))}
 }
 
 // with runs fn with ws's graph file once it is read: at once when it has been. Nothing for a
 // workspace the daemon does not list.
-func (s *graphStore) with(ws string, fn func(*graphWS)) {
+func (s *GraphStore) with(ws string, fn func(*graphWS)) {
 	g := s.byWS[ws]
 	if g == nil {
 		i := slices.IndexFunc(s.c.Workspaces(), func(w feature.Workspace) bool { return w.Name == ws })
 		if i < 0 || s.c.Workspaces()[i].Root == "" {
 			return
 		}
-		g = &graphWS{file: graphFile(s.c.Workspaces()[i].Root)}
+		g = &graphWS{file: GraphFile(s.c.Workspaces()[i].Root)}
 		s.byWS[ws] = g
 	}
 	if g.read {
@@ -113,7 +113,7 @@ func (s *graphStore) with(ws string, fn func(*graphWS)) {
 // pathsOf is ws's files as the host lists them, taken as a request is made: the workspace in use's,
 // and none for another. A request's reply comes after the file is read, when another workspace
 // may be in use, whose files must never become ws's folder groups.
-func (s *graphStore) pathsOf(ws string) []string {
+func (s *GraphStore) pathsOf(ws string) []string {
 	if ws != s.c.Workspace() {
 		return nil
 	}
@@ -123,10 +123,10 @@ func (s *graphStore) pathsOf(ws string) []string {
 // groups hands done view's groups in ws: the file's, or, with none, its first groups (the user's,
 // then one a type of types and one a folder of the workspace's files, as they were when it was
 // asked), each a colour legible on ground, written into the file.
-func (s *graphStore) groups(ws, view string, types []string, ground color.NRGBA, done func([]relGroup)) {
+func (s *GraphStore) Groups(ws, view string, types []string, ground color.NRGBA, done func([]Group)) {
 	paths := s.pathsOf(ws)
 	s.with(ws, func(g *graphWS) {
-		if list := g.conf.groups(view); list != nil {
+		if list := g.conf.Groups(view); list != nil {
 			done(list)
 			return
 		}
@@ -142,7 +142,7 @@ func (s *graphStore) groups(ws, view string, types []string, ground color.NRGBA,
 
 // addMissing hands done view's groups in ws with a group added for each type of types and each
 // folder no group of them queries (its files as they were when it was asked), written into the file.
-func (s *graphStore) addMissing(ws, view string, current []relGroup, types []string, ground color.NRGBA, done func([]relGroup)) {
+func (s *GraphStore) AddMissing(ws, view string, current []Group, types []string, ground color.NRGBA, done func([]Group)) {
 	paths := s.pathsOf(ws)
 	s.with(ws, func(g *graphWS) {
 		have := map[string]bool{}
@@ -167,7 +167,7 @@ func (s *graphStore) addMissing(ws, view string, current []relGroup, types []str
 
 // save writes list as view's groups in ws's file, the palette in with them when the file names
 // none, so the file says what a new group takes its colour from.
-func (s *graphStore) save(ws, view string, list []relGroup) {
+func (s *GraphStore) save(ws, view string, list []Group) {
 	s.with(ws, func(g *graphWS) {
 		g.conf.setGroups(view, list)
 		if len(g.conf.Palette) == 0 {
@@ -184,7 +184,7 @@ func (s *graphStore) save(ws, view string, list []relGroup) {
 
 // write puts g's groups in its file: after the write under way, when there is one, so each write
 // carries the version the one before it left.
-func (s *graphStore) write(g *graphWS) {
+func (s *GraphStore) write(g *graphWS) {
 	if g.writing {
 		g.again = true
 		return

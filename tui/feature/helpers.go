@@ -19,6 +19,18 @@ func Choices(labels ...string) *tuidecl.ListModel {
 	return m
 }
 
+// ChoiceRows are a chooser's rows in w's language: each key its English label, each label its
+// catalog text (autodoc.choice.<slug>).
+func ChoiceRows(w Wording, labels []string) *tuidecl.ListModel {
+	rows := make([]RowOf, len(labels))
+	for i, l := range labels {
+		rows[i] = RowOf{"key": l, "label": w.Tr("autodoc.choice." + SlugOf(l))}
+	}
+	m := tuidecl.NewListModel("key", "label")
+	m.Reset(rows)
+	return m
+}
+
 // Wording is a catalog's text for a function that composes it: a feature's Core in the UI's
 // language, or the host's English (tui's inEnglish).
 type Wording interface {
@@ -56,6 +68,10 @@ func Fill(s string, args ...any) string {
 
 // Untitled is the draft's name wherever a file's path would show: the page no file holds.
 const Untitled = "untitled"
+
+// OutsideBadge marks a file outside every workspace (autodoc.text.files.no_workspace in the UI's
+// language): the host's file title and the relations feature's links title both show it.
+const OutsideBadge = "no workspace"
 
 // BytesText is a size as the list shows it.
 func BytesText(n int64) string {

@@ -1,8 +1,9 @@
-package tui
+package relations
 
 import (
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	graphlayout "github.com/yongjohnlee80/golib/graph/layout"
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
 // THE GLOBEMAP'S MODEL, in either build: the links it follows (f), its links' classes, and the
@@ -12,14 +13,14 @@ import (
 // The GlobeMap's settings both builds keep: whether it names the documents in view, and the links
 // it opens following (a window's keep more, globesettings_gui.go).
 const (
-	prefGlobeNames  = "tui.globemap.names"
-	prefGlobeFilter = "tui.globemap.filter"
+	PrefGlobeNames  = "tui.globemap.names"
+	PrefGlobeFilter = "tui.globemap.filter"
 )
 
 // globeFilterPref is the filter the preferences open the map with: globeFilters' index.
 func globeFilterPref(c feature.Core) int {
 	for i, f := range globeFilters {
-		if f.key == c.Prefs().Value(prefGlobeFilter) {
+		if f.key == c.Prefs().Value(PrefGlobeFilter) {
 			return i
 		}
 	}
@@ -107,4 +108,9 @@ func degrees(m relMap) []int {
 		deg[e.Dst]++
 	}
 	return deg
+}
+
+// relationChoice is the relation views' chooser src in w's language (relationViewChoices).
+func relationChoice(w feature.Wording, src string) *tuidecl.ListModel {
+	return feature.ChoiceRows(w, RelationViewChoices()[src])
 }

@@ -59,6 +59,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/script"
 	"github.com/yongjohnlee80/autodoc/tui/explorer"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/relations"
 	"github.com/yongjohnlee80/autodoc/tui/searchsetup"
 )
 
@@ -121,7 +122,7 @@ type Host struct {
 	find findState
 	// the Relations drawer (relations.go), a feature of its own; the jump list across the
 	// documents (navigation.go)
-	rel   *related
+	rel   *relations.Related
 	jumps *editor.JumpList
 
 	// the preferences (prefs.go), and the panels open now (panels.go)
@@ -537,7 +538,7 @@ func newHost(session *Session, opt Options) *Host {
 	h.explorer = explorer.NewExplorer(core{h})
 	h.ai = searchsetup.NewAIModels(core{h})
 	h.outline = explorer.NewOutline(core{h})
-	h.rel = newRelated(core{h})
+	h.rel = relations.NewRelated(core{h})
 	h.searchPick, h.openPick, h.newPick = h.newSearchPick(), h.newOpenPick(), h.newNewPick()
 	h.bufferPick = h.newBufferPick()
 	h.widgetRows = newWidgetRows()

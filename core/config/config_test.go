@@ -12,6 +12,8 @@ import (
 	"github.com/yongjohnlee80/golib/logger"
 
 	"github.com/yongjohnlee80/autodoc/core/config"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
+	"github.com/yongjohnlee80/autodoc/internal/userdirs"
 )
 
 func load(t *testing.T, body string) (*config.Config, error) {
@@ -91,9 +93,19 @@ func TestLoadRejects(t *testing.T) {
 	}
 }
 
+// socketIn is the daemon's address when its runtime directory is dir: the socket in it on Unix; on
+// Windows the user's named pipe, which no folder holds.
+func socketIn(dir string) string {
+	if runtime.GOOS == "windows" {
+		return ipc.DefaultAddr(dir)
+	}
+	return filepath.Join(dir, "autodoc.sock")
+}
+
 func TestPaths(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", "/cfg")
-	if p, _ := config.DefaultPath(); p != "/cfg/autodoc/config.toml" {
+	cfg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	if p, _ := config.DefaultPath(); p != filepath.Join(cfg, "autodoc", "config.toml") {
 		t.Errorf("DefaultPath = %q", p)
 	}
 	state := t.TempDir()
@@ -110,8 +122,9 @@ func TestPaths(t *testing.T) {
 	} else if _, err := os.Stat(filepath.Dir(p)); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("resolving the store touched the disk: %v", err)
 	}
-	t.Setenv("XDG_RUNTIME_DIR", "/run/user/1000")
-	if s, _ := (config.Server{}).SocketPath(); s != "/run/user/1000/autodoc.sock" {
+	run := filepath.FromSlash("/run/user/1000")
+	t.Setenv("XDG_RUNTIME_DIR", run)
+	if s, _ := (config.Server{}).SocketPath(); s != socketIn(run) {
 		t.Errorf("SocketPath = %q", s)
 	}
 	if _, err := (config.Server{Socket: "/" + strings.Repeat("x", 120)}).SocketPath(); !errors.Is(err, config.ErrInvalid) {
@@ -123,7 +136,7 @@ func TestPaths(t *testing.T) {
 // the XDG spec's defaults; a configured directory's "~/" is the home too.
 func TestPathsFallBackToTheHome(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	t.Setenv(userdirs.HomeVariable, home)
 	for _, v := range []string{"XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_DATA_HOME", "XDG_RUNTIME_DIR"} {
 		t.Setenv(v, "")
 	}
@@ -140,9 +153,10 @@ func TestPathsFallBackToTheHome(t *testing.T) {
 	if p, err := (config.Server{DataDir: "~/data"}).StorePath(); err != nil || p != filepath.Join(home, "data", "autodoc.db") {
 		t.Errorf("StorePath under a configured ~/data = %q, %v", p, err)
 	}
-	// no runtime directory: the socket goes in the state directory (on Linux; Darwin's is $TMPDIR)
+	// no runtime directory: the socket goes in the state directory (on Linux; Darwin's is $TMPDIR,
+	// Windows' the user's pipe)
 	if runtime.GOOS != "darwin" {
-		if s, err := (config.Server{}).SocketPath(); err != nil || s != filepath.Join(state, "autodoc.sock") {
+		if s, err := (config.Server{}).SocketPath(); err != nil || s != socketIn(state) {
 			t.Errorf("SocketPath = %q, %v", s, err)
 		}
 	}
@@ -160,6 +174,9 @@ func TestMissingFileIsDefaults(t *testing.T) {
 	}
 	if os.Geteuid() == 0 {
 		t.Skip("root reads a mode-000 file")
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows keeps no read permission in a file's mode: a mode-000 file is only read-only")
 	}
 	p := filepath.Join(t.TempDir(), "locked.toml")
 	if err := os.WriteFile(p, []byte("[follow]\n"), 0); err != nil {

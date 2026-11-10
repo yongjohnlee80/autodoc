@@ -131,9 +131,8 @@ func (n openedFile) title(tr func(string) string) string {
 	return n.name() + "  [" + strings.Join(badges, " · ") + "]"
 }
 
-// outsideBadge marks a file outside every workspace (autodoc.text.files.no_workspace in the UI's
-// language).
-const outsideBadge = "no workspace"
+// outsideBadge marks a file outside every workspace (the kit's, feature.OutsideBadge).
+const outsideBadge = feature.OutsideBadge
 
 // readFile is doc.read of p in workspace ws, or file.read of the absolute p when ws is "".
 // raw reads an HTML file's own bytes (doc.read_raw, file.read_raw) where the plain verbs give its

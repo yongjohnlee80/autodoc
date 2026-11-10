@@ -1,4 +1,4 @@
-package tui
+package relations
 
 import (
 	"cmp"
@@ -21,8 +21,9 @@ import (
 // fullest first), so a document's type wins over its folder; each a colour at random from the
 // palette, among those legible on the view's ground.
 
-// relGroup is one group.
-type relGroup struct {
+// Group is one group of a relation view: the documents its query matches, worn in its colour (and,
+// in the Mindmap, its outline).
+type Group struct {
 	Query  string       // "type:adr", "tag:#project", "path:notes/"
 	Colour color.NRGBA  // what its documents wear
 	Shape  pm.MindShape // the Mindmap's outline for them
@@ -31,13 +32,13 @@ type relGroup struct {
 // groupPalette is the palette with no graph file to name one: sixteen hues apart (Tableau 10, and
 // six more of their weight).
 var groupPalette = []color.NRGBA{
-	hexColour(0x4e79a7), hexColour(0xf28e2b), hexColour(0xe15759), hexColour(0x76b7b2), hexColour(0x59a14f),
-	hexColour(0xedc948), hexColour(0xb07aa1), hexColour(0xff9da7), hexColour(0x9c755f), hexColour(0xbab0ac),
-	hexColour(0x17becf), hexColour(0xbcbd22), hexColour(0x7f3c8d), hexColour(0x11a579), hexColour(0xe73f74),
-	hexColour(0x3969ac),
+	HexColour(0x4e79a7), HexColour(0xf28e2b), HexColour(0xe15759), HexColour(0x76b7b2), HexColour(0x59a14f),
+	HexColour(0xedc948), HexColour(0xb07aa1), HexColour(0xff9da7), HexColour(0x9c755f), HexColour(0xbab0ac),
+	HexColour(0x17becf), HexColour(0xbcbd22), HexColour(0x7f3c8d), HexColour(0x11a579), HexColour(0xe73f74),
+	HexColour(0x3969ac),
 }
 
-func hexColour(v uint32) color.NRGBA {
+func HexColour(v uint32) color.NRGBA {
 	return color.NRGBA{R: uint8(v >> 16), G: uint8(v >> 8), B: uint8(v), A: 0xff}
 }
 
@@ -65,11 +66,11 @@ func groupQueries(types, files []string) []string {
 // ground. Legible first, then away: away only adds contrast, and a turn taken before legibility
 // would be pulled back to the very colour of turn 0. A colour another group already wears steps on
 // a turn more, so no two groups share one.
-func initGroups(queries []string, palette []color.NRGBA, ground color.NRGBA, rnd *rand.Rand) []relGroup {
+func initGroups(queries []string, palette []color.NRGBA, ground color.NRGBA, rnd *rand.Rand) []Group {
 	if len(palette) == 0 {
 		palette = groupPalette
 	}
-	out := make([]relGroup, len(queries))
+	out := make([]Group, len(queries))
 	worn := map[color.NRGBA]bool{}
 	var deck []color.NRGBA
 	turn := -1
@@ -79,14 +80,14 @@ func initGroups(queries []string, palette []color.NRGBA, ground color.NRGBA, rnd
 			rnd.Shuffle(len(deck), func(i, j int) { deck[i], deck[j] = deck[j], deck[i] })
 			turn++
 		}
-		base := onGround(deck[0], ground)
+		base := OnGround(deck[0], ground)
 		deck = deck[1:]
 		c := away(base, ground, turn)
 		for t := turn + 1; worn[c] && t <= turn+4; t++ {
 			c = away(base, ground, t)
 		}
 		worn[c] = true
-		out[k] = relGroup{Query: q, Colour: c, Shape: pm.MindDefault}
+		out[k] = Group{Query: q, Colour: c, Shape: pm.MindDefault}
 		if k < len(mindAutoShapes) {
 			out[k].Shape = mindAutoShapes[k]
 		}
@@ -95,7 +96,7 @@ func initGroups(queries []string, palette []color.NRGBA, ground color.NRGBA, rnd
 }
 
 // onGround is c made legible on ground (golib style.Legible, at 3: WCAG's ratio for graphics).
-func onGround(c, ground color.NRGBA) color.NRGBA {
+func OnGround(c, ground color.NRGBA) color.NRGBA {
 	r, g, b, ok := style.Legible(style.RGB(c.R, c.G, c.B), style.RGB(ground.R, ground.G, ground.B), 3).RGBValues()
 	if !ok {
 		return c
@@ -110,7 +111,7 @@ func away(c, ground color.NRGBA, turn int) color.NRGBA {
 		return c
 	}
 	to := color.NRGBA{A: 0xff}
-	if contrast(ground, to) < contrast(ground, color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}) {
+	if Contrast(ground, to) < Contrast(ground, color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}) {
 		to = color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff} // a dark ground: away is lighter
 	}
 	t := min(0.2*float64(turn), 0.8)
@@ -119,7 +120,7 @@ func away(c, ground color.NRGBA, turn int) color.NRGBA {
 }
 
 // contrast is WCAG's contrast ratio of a and b (golib style.ContrastRatio): 1 to 21.
-func contrast(a, b color.NRGBA) float64 {
+func Contrast(a, b color.NRGBA) float64 {
 	r, _ := style.ContrastRatio(style.RGB(a.R, a.G, a.B), style.RGB(b.R, b.G, b.B))
 	return r
 }
@@ -172,12 +173,12 @@ func (g groupQuery) matches(n mapNode) bool {
 
 // relGroups are a view's groups, their queries read: the first that matches a document is its.
 type relGroups struct {
-	list    []relGroup
+	list    []Group
 	queries []groupQuery
 }
 
 // newRelGroups reads list's queries; a group whose query does not read matches nothing.
-func newRelGroups(list []relGroup) relGroups {
+func newRelGroups(list []Group) relGroups {
 	g := relGroups{list: list, queries: make([]groupQuery, len(list))}
 	for i, x := range list {
 		g.queries[i], _ = parseGroupQuery(x.Query)
@@ -222,7 +223,7 @@ const groupLegendRows = 12
 
 // legendGroups are the groups of gs that documents of m wear, in the groups' order: at most
 // groupLegendRows of them, and how many more there are. Both builds' Mindmap legends list them.
-func legendGroups(gs *relGroups, m relMap) (shown []relGroup, more int) {
+func legendGroups(gs *relGroups, m relMap) (shown []Group, more int) {
 	if gs == nil {
 		return nil, 0
 	}
