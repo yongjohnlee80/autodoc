@@ -16,7 +16,7 @@ import (
 // folder can't be the entry itself.
 func TestAnAgentsPathHasItsOwnAutodocFirst(t *testing.T) {
 	a, c, _ := crewAgents(t, oneTwo)
-	a.agentBinPath = fakeBuild(t, filepath.Join(t.TempDir(), "build"))
+	a.agentBinPath = fakeBuildCopy(t, filepath.Join(t.TempDir(), "build"))
 	p, _ := a.profile("one")
 	instance, err := a.startInstance(p)
 	if err != nil {
@@ -26,7 +26,7 @@ func TestAnAgentsPathHasItsOwnAutodocFirst(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := pathOf(args)
+	path := pathOfCopy(args)
 	first, _, _ := strings.Cut(path, string(os.PathListSeparator))
 	// found as the OS finds a program on that PATH: the launcher on Unix, the build itself on Windows
 	found, err := procenv.LookPath(procenv.Env(nil).With("PATH="+path), "autodoc")
@@ -74,7 +74,7 @@ func TestAnAgentsStalePathLinkIsReplaced(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if first, _, _ := strings.Cut(pathOf(args), string(os.PathListSeparator)); first != link {
+			if first, _, _ := strings.Cut(pathOfCopy(args), string(os.PathListSeparator)); first != link {
 				t.Fatalf("the agent's PATH starts %q, want its link %q", first, link)
 			}
 		})

@@ -418,9 +418,9 @@ func TestTheTerminalsShellsAreTabs(t *testing.T) {
 			tabs, _ := tuidecl.TerminalTabsOf(c)
 			return tabs.Active()
 		})
-		row, ok := menuRow(rows, id)
+		row, ok := menuRowCopy(rows, id)
 		if !ok {
-			t.Fatalf("no row %s in %v", id, rowIDs(rows))
+			t.Fatalf("no row %s in %v", id, rowIDsCopy(rows))
 		}
 		onLoop(r, func() bool { row.Action.(terminal.TerminalTabsMenuAction).Run(tab); return true })
 	}
@@ -533,9 +533,9 @@ func TestABackgroundShellLeavingKeepsTheActiveOne(t *testing.T) {
 
 	// Close on a background tab's menu
 	rows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.terminals.tabRows(a) })
-	row, ok := menuRow(rows, "terminal.close")
+	row, ok := menuRowCopy(rows, "terminal.close")
 	if !ok {
-		t.Fatalf("no Close in %v", rowIDs(rows))
+		t.Fatalf("no Close in %v", rowIDsCopy(rows))
 	}
 	onLoop(r, func() bool { row.Action.(terminal.TerminalTabsMenuAction).Run(a); return true })
 	r.s.WaitFor(t, "the background tab closed", func(string) bool { return slices.Equal(live(), []terminal.TerminalTabID{c}) })
@@ -634,12 +634,12 @@ func TestHideClosesThePanelAndKeepsTheShells(t *testing.T) {
 	}
 	before, was := r.shellTabs(), active()
 	rows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.terminals.tabRows(was) })
-	row, ok := menuRow(rows, "tabs.hide")
+	row, ok := menuRowCopy(rows, "tabs.hide")
 	if !ok || row.Label != "Hide" || row.Hotkey != 'd' {
-		t.Fatalf("no Hide (d) in %v", rowIDs(rows))
+		t.Fatalf("no Hide (d) in %v", rowIDsCopy(rows))
 	}
-	if _, ok := menuRow(rows, "tabs.look"); !ok {
-		t.Fatalf("no Theme and font… in %v", rowIDs(rows))
+	if _, ok := menuRowCopy(rows, "tabs.look"); !ok {
+		t.Fatalf("no Theme and font… in %v", rowIDsCopy(rows))
 	}
 	onLoop(r, func() bool { row.Action.(terminal.TerminalTabsMenuAction).Run(was); return true })
 	r.s.WaitFor(t, "hidden", func(string) bool { return !r.termShown() })
@@ -653,11 +653,11 @@ func TestHideClosesThePanelAndKeepsTheShells(t *testing.T) {
 		t.Fatalf("reopened on %s (want %s), %d running of %d", got, was, r.shellsRunning(), len(r.shellTabs()))
 	}
 	empty := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.terminals.tabRows("") })
-	if row, _ := menuRow(empty, "terminal.close"); row.Enabled {
+	if row, _ := menuRowCopy(empty, "terminal.close"); row.Enabled {
 		t.Error("an empty panel's menu offers Close")
 	}
 	for _, id := range []string{"tabs.hide", "tabs.look", "terminal.new"} {
-		if _, ok := menuRow(empty, id); !ok {
+		if _, ok := menuRowCopy(empty, id); !ok {
 			t.Errorf("an empty panel's menu lacks %s", id)
 		}
 	}
@@ -674,9 +674,9 @@ func TestTheTerminalsLookDialogSetsTheSameSettings(t *testing.T) {
 	look := func() {
 		t.Helper()
 		rows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.terminals.tabRows("") })
-		row, ok := menuRow(rows, "tabs.look")
+		row, ok := menuRowCopy(rows, "tabs.look")
 		if !ok {
-			t.Fatalf("no Theme and font… in %v", rowIDs(rows))
+			t.Fatalf("no Theme and font… in %v", rowIDsCopy(rows))
 		}
 		onLoop(r, func() bool { row.Action.(terminal.TerminalTabsMenuAction).Run(""); return true })
 		r.s.WaitForText(t, "the terminals' theme and font")
@@ -709,9 +709,9 @@ func TestMaximizeFromThePanelMenus(t *testing.T) {
 	maximize := func(want string) {
 		t.Helper()
 		rows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.terminals.tabRows("") })
-		row, ok := menuRow(rows, "tabs.maximize")
+		row, ok := menuRowCopy(rows, "tabs.maximize")
 		if !ok || row.Label != want {
-			t.Fatalf("the maximize row reads %q (want %q) in %v", row.Label, want, rowIDs(rows))
+			t.Fatalf("the maximize row reads %q (want %q) in %v", row.Label, want, rowIDsCopy(rows))
 		}
 		onLoop(r, func() bool { row.Action.(terminal.TerminalTabsMenuAction).Run(""); return true })
 	}
@@ -735,8 +735,8 @@ func TestMaximizeFromThePanelMenus(t *testing.T) {
 	}
 
 	agentRows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.agents.tabRows("") })
-	if row, ok := menuRow(agentRows, "tabs.maximize"); !ok || row.Label != "Maximize" {
-		t.Fatalf("the agents' menu: %v", rowIDs(agentRows))
+	if row, ok := menuRowCopy(agentRows, "tabs.maximize"); !ok || row.Label != "Maximize" {
+		t.Fatalf("the agents' menu: %v", rowIDsCopy(agentRows))
 	}
 }
 
@@ -749,7 +749,7 @@ func TestF11AndSPCZToggleMaximize(t *testing.T) {
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
 	maximized := func() bool { return onLoop(r, func() bool { return r.h.panelMax["terminal"] }) }
 	label := func() string {
-		row, _ := menuRow(onLoop(r, func() []widgetcore.MenuItemModel { return r.h.terminals.tabRows("") }), "tabs.maximize")
+		row, _ := menuRowCopy(onLoop(r, func() []widgetcore.MenuItemModel { return r.h.terminals.tabRows("") }), "tabs.maximize")
 		return row.Label
 	}
 	f11 := tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyF11}

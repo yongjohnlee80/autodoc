@@ -14,7 +14,7 @@ import (
 // The agent tiled at the right on a 220-column screen asks 35%, 77 columns, which would leave the
 // page 143: the page keeps its width, and the agent takes the rest, beside it with no gap.
 func TestTheAgentTiledBesideThePageTakesWhatThePageLeaves(t *testing.T) {
-	agent, _ := fakeAgent(t)
+	agent, _ := fakeAgentCopy(t)
 	_, r, _ := runAgentTUIWith(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron",
 		map[string]string{layoutKey("agent"): layoutTiled, tileEdgeKey("agent"): "right"}, Options{})
 	r.s.Backend.InjectResize(220, 30)

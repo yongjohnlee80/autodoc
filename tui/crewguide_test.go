@@ -267,7 +267,7 @@ func TestACrewClaudeAgentOnMCPMailStartsWithItsServer(t *testing.T) {
 
 // awaitStart runs what the loop is posted until instance's crew start is answered: a crew start
 // continues when its setup and then its registration answer, which post from off the loop.
-func awaitStart(t *testing.T, c *identityHost, instance *agentInstance) {
+func awaitStart(t *testing.T, c *identityHostCopy, instance *agentInstance) {
 	t.Helper()
 	for deadline := time.Now().Add(5 * time.Second); instance.starting; time.Sleep(time.Millisecond) {
 		if time.Now().After(deadline) {

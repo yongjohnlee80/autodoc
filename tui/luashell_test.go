@@ -411,9 +411,9 @@ func TestALuaShellFromATabsMenu(t *testing.T) {
 	newLua := func() {
 		tab := r.shellTabs()[0].ID // read before the loop is entered: shellTabs is on the loop itself
 		rows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.terminals.tabRows(tab) })
-		row, ok := menuRow(rows, "terminal.lua")
+		row, ok := menuRowCopy(rows, "terminal.lua")
 		if !ok {
-			t.Fatalf("no New Lua shell in %v", rowIDs(rows))
+			t.Fatalf("no New Lua shell in %v", rowIDsCopy(rows))
 		}
 		onLoop(r, func() bool { row.Action.(terminal.TerminalTabsMenuAction).Run(tab); return true })
 	}

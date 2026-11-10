@@ -20,13 +20,13 @@ import (
 
 // todoFeedRig is messagingRig (agent one running in the window's scope) whose daemon serves a
 // todo store at /kb, workspace kb, with one open task; every inbox.send is kept, and answered sent.
-func todoFeedRig(t *testing.T) (a *agents, c *identityHost, w *crewWindow, task todo.Task, sends *[][]any) {
+func todoFeedRig(t *testing.T) (a *agents, c *identityHostCopy, w *crewWindow, task todo.Task, sends *[][]any) {
 	t.Helper()
 	return todoFeedRigAt(t, time.Now)
 }
 
 // todoFeedRigAt is todoFeedRig whose todo store reads the time from now.
-func todoFeedRigAt(t *testing.T, now func() time.Time) (a *agents, c *identityHost, w *crewWindow, task todo.Task, sends *[][]any) {
+func todoFeedRigAt(t *testing.T, now func() time.Time) (a *agents, c *identityHostCopy, w *crewWindow, task todo.Task, sends *[][]any) {
 	t.Helper()
 	a, c, w = messagingRig(t)
 	disk := todotest.NewDisk()
@@ -107,7 +107,7 @@ func TestABareAssignmentReachesTheWindowsAgent(t *testing.T) {
 
 // assignAndRead assigns the rig's task again (as read now) to assignee from scope, then the window
 // reads its feed as a todos.changed event makes it.
-func assignAndRead(t *testing.T, a *agents, c *identityHost, w *crewWindow, id, assignee, scope string) {
+func assignAndRead(t *testing.T, a *agents, c *identityHostCopy, w *crewWindow, id, assignee, scope string) {
 	t.Helper()
 	ctx := context.Background()
 	cur, err := w.d.todos.Get(ctx, todo.At{Workspace: "kb"}, id)
