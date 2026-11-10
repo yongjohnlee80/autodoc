@@ -326,7 +326,7 @@ var (
 // runs. The error, when neither is found, is the program's, then claude's.
 func ClaudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
 	bin, k, err := claudeOf(program, path, dir, cache)
-	if err == nil || programName(program) == KindClaude {
+	if err == nil || filepath.Base(program) == KindClaude {
 		return bin, k, err
 	}
 	cbin, ck, cerr := claudeOf(KindClaude, path, dir, cache)
@@ -388,7 +388,7 @@ func claudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
 			continue
 		}
 		bin := hit
-		if programName(real) == "mise" { // a shim: the tool mise runs for it
+		if isProgram(real, "mise") { // a shim: the tool mise runs for it
 			if bin = which(real); bin == "" {
 				continue
 			}
