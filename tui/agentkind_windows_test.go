@@ -13,3 +13,24 @@ func TestAPathInAProfilesCommandIsItsProgramOnWindows(t *testing.T) {
 		t.Errorf("agentKind(%q) = %q, want claude", cmd, got)
 	}
 }
+
+// TestAgentKindReadsPowerShellsWordsOnWindows: on Windows an agent's kind is the program its command
+// runs, its words read as PowerShell reads them (a backslash a path's separator, a program named
+// without its PATHEXT extension), past its call operator and the wrappers named.
+func TestAgentKindReadsPowerShellsWordsOnWindows(t *testing.T) {
+	for command, want := range map[string]string{
+		"claude --model haiku":                         "claude",
+		`C:\Users\u\AppData\Roaming\npm\claude.cmd`:    "claude",
+		`& 'C:\Program Files\x\claude.cmd' --resume`:   "claude",
+		`& "C:\Program Files\x\codex.exe" --full-auto`: "codex",
+		`'it''s' --x`:                    "it's",
+		"mise x -- claude":               "claude",
+		"mise.exe exec node@22 -- codex": "codex",
+		"firejail claude":                "firejail",
+		"":                               "agent",
+	} {
+		if got := agentKind(command); got != want {
+			t.Errorf("agentKind(%q) = %q, want %q", command, got, want)
+		}
+	}
+}
