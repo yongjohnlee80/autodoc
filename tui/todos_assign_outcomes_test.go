@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
@@ -23,13 +24,13 @@ func TestTheHandOverSaysHowItWent(t *testing.T) {
 		want string
 	}{
 		{nil, "todos: assigned to Scribe, and sent to it"},
-		{ErrAgentTypedNotSent, "todos: assigned to Scribe, and typed into its input: press Enter there to send it"},
-		{fmt.Errorf("deliver: %w", ErrAgentTypedNotSent), "todos: assigned to Scribe, and typed into its input: press Enter there to send it"},
+		{agents.ErrAgentTypedNotSent, "todos: assigned to Scribe, and typed into its input: press Enter there to send it"},
+		{fmt.Errorf("deliver: %w", agents.ErrAgentTypedNotSent), "todos: assigned to Scribe, and typed into its input: press Enter there to send it"},
 		{terminal.ErrTerminalPasteUnbracketed, "todos: assigned to Scribe, but not handed over: its program takes no bracketed paste; open its panel and paste the task"},
-		{ErrAgentCancelled, "todos: assigned to autodoc:scribe, but not delivered (you didn't start it): start the agent, then A on the task to deliver it again"},
+		{agents.ErrAgentCancelled, "todos: assigned to autodoc:scribe, but not delivered (you didn't start it): start the agent, then A on the task to deliver it again"},
 		{errors.New("the tab closed"), "todos: assigned to autodoc:scribe, but not delivered (the tab closed): start the agent, then A on the task to deliver it again"},
 		// a running agent in another workspace: its workspace named to switch to, never "stale" or "start the agent"
-		{&agentElsewhere{workspace: "Finance", why: errNoDoorbell}, "todos: assigned to Scribe, but not delivered: it runs in workspace Finance, and its crew mail didn't reach it (no doorbell to ring); switch to Finance, then A on the task to deliver it again"},
+		{&agents.AgentElsewhere{Workspace: "Finance", Why: agents.ErrNoDoorbell}, "todos: assigned to Scribe, but not delivered: it runs in workspace Finance, and its crew mail didn't reach it (no doorbell to ring); switch to Finance, then A on the task to deliver it again"},
 	} {
 		s := newScripted("kb")
 		newTodos(s).handedOver("Scribe", "autodoc:scribe", c.err)

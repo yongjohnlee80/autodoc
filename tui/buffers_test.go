@@ -273,7 +273,7 @@ func TestAnAgentActsOnABufferNotShown(t *testing.T) {
 			r.h.prefs.luaGrants = map[string]map[string]bool{}
 		}
 		r.h.prefs.luaGrants["agent:zen"] = map[string]bool{"editor.read": true, "editor.write": true, "commands": true}
-		return r.h.agents.editorToken("zen")
+		return r.h.agents.EditorToken("zen")
 	})
 	call := func(verb string, params ...any) (any, *golibrpc.Error) {
 		t.Helper()

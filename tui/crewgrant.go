@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/yongjohnlee80/autodoc/core/mail"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 )
 
 // grantAnsweredBody is the mail that tells an agent the user's answer to the grant card its refused
@@ -29,7 +30,7 @@ func grantAnsweredBody(caps []string, allowed bool) (subject, body string) {
 func (h *crewHost) grantAnswered(codename string, caps []string, allowed bool) {
 	subject, body := grantAnsweredBody(caps, allowed)
 	h.userSend(codename, mail.KindMessage, subject, body, func(err error) {
-		if err != nil && !errors.Is(err, errHandedOver) {
+		if err != nil && !errors.Is(err, agents.ErrHandedOver) {
 			h.c.Notify(h.c.Trf("autodoc.crew.grant_answer_unsent", codename, err.Error()))
 		}
 	})

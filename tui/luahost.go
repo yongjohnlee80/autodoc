@@ -11,6 +11,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 
 	"github.com/yongjohnlee80/autodoc/script"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	lua "github.com/yuin/gopher-lua"
 )
@@ -409,7 +410,7 @@ func (s *scripting) luaAgentsSend(L *lua.LState) int {
 // luaAgentsResume is autodoc.agents.resume([ref]): ok, or nil and why.
 func (s *scripting) luaAgentsResume(L *lua.LState) int {
 	ref := luaAgentRef(L, 1, "resume", true)
-	err := ErrAgentUnavailable
+	err := agents.ErrAgentUnavailable
 	if s.host != nil {
 		err = s.host.resumeAgent(ref)
 	}
@@ -425,15 +426,15 @@ func (s *scripting) luaAgentsResume(L *lua.LState) int {
 // agentErr is a delivery's failure as a script reads it.
 func agentErr(err error) string {
 	switch {
-	case errors.Is(err, ErrAgentCancelled):
+	case errors.Is(err, agents.ErrAgentCancelled):
 		return "cancelled"
-	case errors.Is(err, ErrAgentStale):
+	case errors.Is(err, agents.ErrAgentStale):
 		return "stale"
-	case errors.Is(err, ErrAgentElsewhere):
+	case errors.Is(err, agents.ErrAgentElsewhere):
 		return "elsewhere"
-	case errors.Is(err, ErrAgentUnavailable):
+	case errors.Is(err, agents.ErrAgentUnavailable):
 		return "unavailable"
-	case errors.Is(err, ErrAgentShuttingDown):
+	case errors.Is(err, agents.ErrAgentShuttingDown):
 		return "closed"
 	case errors.Is(err, terminal.ErrTerminalPasteUnbracketed):
 		return "unbracketed"

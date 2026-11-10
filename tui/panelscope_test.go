@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/errs"
 )
@@ -21,7 +22,7 @@ func TestPanelServicesCannotBeAssertedToFullCore(t *testing.T) {
 		}); ok {
 			t.Fatal("panel services exposed an unchecked view call")
 		}
-		if _, ok := p.(agentHost); !ok {
+		if _, ok := p.(agents.AgentHost); !ok {
 			t.Fatal("panel services lost the agent's bounded configuration capability")
 		}
 	}

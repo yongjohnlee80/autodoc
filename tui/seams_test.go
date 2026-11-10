@@ -4,6 +4,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 )
 
 // tunings are the tests' own seams (seams.go), by test name. Parallel tests share the map, so a
@@ -161,14 +163,14 @@ type namedTB struct {
 
 func (n namedTB) Name() string { return n.name }
 
-// seamsOf is the seams the host's cell made a's agents with (testAgentsWithCopy, its rig's): the
+// seamsOf is the seams the host's cell made a's agents with (testAgentsWith, its rig's): the
 // cell sets an agents' hook there (agentSeams) as it builds the rig, before the agents use it.
-func seamsOf(a *agents) *seams {
+func seamsOf(a *agents.Agents) *seams {
 	agentsSeams.Lock()
 	defer agentsSeams.Unlock()
 	s, ok := agentsSeams.m[a]
 	if !ok {
-		panic("seamsOf: these agents weren't made by testAgentsWithCopy")
+		panic("seamsOf: these agents weren't made by testAgentsWith")
 	}
 	return s
 }
@@ -176,5 +178,5 @@ func seamsOf(a *agents) *seams {
 // agentsSeams are the seams each rig's agents were made with, by the agents (seamsOf).
 var agentsSeams = struct {
 	sync.Mutex
-	m map[*agents]*seams
-}{m: map[*agents]*seams{}}
+	m map[*agents.Agents]*seams
+}{m: map[*agents.Agents]*seams{}}

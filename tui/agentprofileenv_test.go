@@ -17,8 +17,8 @@ func TestAClaudeProfileOnAnotherAccountIsAClaudeAgent(t *testing.T) {
 	fakeClaudeBin(t, bin, append(claudeHookEvents, "crossSessionInbound")...)
 	tuneEnv(t, "PATH=/usr/bin:/bin") // the Claude Code is on the profile's PATH, not AutoDoc's
 	a, c, w := crewAgents(t, `[{"name":"Sephiroth","command":"claude","codename":"sephiroth","env":{"CLAUDE_CONFIG_DIR":"~/.claude-work","PATH":"`+bin+`:$PATH"}}]`)
-	p, _ := a.profile("sephiroth")
-	instance, err := a.startInstance(p)
+	p, _ := a.Profile("sephiroth")
+	instance, err := a.StartInstance(p)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,9 +34,9 @@ func TestAClaudeProfileOnAnotherAccountIsAClaudeAgent(t *testing.T) {
 		t.Error("its prompts aren't reported: its Claude Code was not found on the profile's PATH")
 	}
 	home, _ := os.UserHomeDir()
-	args, _, err := startedEnvCopy(a, c, instance)
+	args, _, err := startedEnv(a, c, instance)
 	if err != nil || !slices.Contains(args, "CLAUDE_CONFIG_DIR="+filepath.Join(home, ".claude-work")) ||
-		!slices.Contains(args, "PATH="+a.agentPathDir(dir)+string(os.PathListSeparator)+bin+string(os.PathListSeparator)+"/usr/bin:/bin") {
+		!slices.Contains(args, "PATH="+a.AgentPathDir(dir)+string(os.PathListSeparator)+bin+string(os.PathListSeparator)+"/usr/bin:/bin") {
 		t.Fatalf("its process starts with %v (%v), want CLAUDE_CONFIG_DIR expanded and its own bin, then the profile's PATH", args, err)
 	}
 	if n := unreportedNotices(c.notes); n != 0 {

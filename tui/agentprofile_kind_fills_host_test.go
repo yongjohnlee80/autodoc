@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
@@ -18,17 +19,17 @@ func formClick(t *testing.T, r *running, label string) {
 	time.Sleep(150 * time.Millisecond)
 }
 
-func openAddAgentForm(t *testing.T, profiles []agentProfile) *running {
+func openAddAgentForm(t *testing.T, profiles []agents.AgentProfile) *running {
 	t.Helper()
 	_, r, _ := runAgentTUI(t, t.TempDir(), profiles, profiles[0].Codename)
-	onLoop(r, func() bool { r.h.agents.openAgentProfiles(); return true })
+	onLoop(r, func() bool { r.h.agents.OpenAgentProfiles(); return true })
 	r.s.WaitForText(t, "CODENAME")
 	formClick(t, r, "[ Add… ]")
 	r.s.WaitForText(t, "add an agent profile")
 	return r
 }
 
-func storedProfile(r *running, codename string) (agentProfile, bool) {
-	return onLoop(r, func() agentProfile { p, _ := r.h.agents.profile(codename); return p }),
-		onLoop(r, func() bool { _, ok := r.h.agents.profile(codename); return ok })
+func storedProfile(r *running, codename string) (agents.AgentProfile, bool) {
+	return onLoop(r, func() agents.AgentProfile { p, _ := r.h.agents.Profile(codename); return p }),
+		onLoop(r, func() bool { _, ok := r.h.agents.Profile(codename); return ok })
 }

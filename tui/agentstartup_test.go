@@ -11,15 +11,16 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/inbox"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 )
 
-func claudeRig(t *testing.T) (*agents, *identityHostCopy, *crewWindow, *agentInstance) {
+func claudeRig(t *testing.T) (*agents.Agents, *identityHost, *crewWindow, *agents.AgentInstance) {
 	t.Helper()
 	a, c, w := crewAgents(t, claudeOne)
-	p, _ := a.profile("cl")
-	instance, err := a.startInstance(p)
+	p, _ := a.Profile("cl")
+	instance, err := a.StartInstance(p)
 	if err != nil || !instance.State().Running {
 		t.Fatalf("start: %v", err)
 	}
@@ -73,7 +74,7 @@ func TestAClaudeTheCrewCantVouchForIsNotTypedInto(t *testing.T) {
 			scope, _, _ := crewOf(a).held()
 			c.list(w, scope)
 			var heard []error
-			a.deliverFallback("cl", "hello cl", func(err error) { heard = append(heard, err) })
+			a.DeliverFallback("cl", "hello cl", func(err error) { heard = append(heard, err) })
 			settleMessaging(cw, w)
 			if len(cw.panel.pastes) != 0 || len(cw.panel.keys) != 0 || len(heard) != 1 || heard[0] == nil {
 				t.Fatalf("pasted %q, pressed %q, heard %v: want nothing typed, the delivery ended unsent", cw.panel.pastes, cw.panel.keys, heard)
@@ -96,7 +97,7 @@ func TestAWindowWithNoScopeTypesNothingIntoItsClaude(t *testing.T) {
 	if len(c.panel.pastes) != 0 || len(c.panel.keys) != 0 {
 		t.Fatalf("pasted %q, pressed %q into a Claude with no scope to ask: want nothing", c.panel.pastes, c.panel.keys)
 	}
-	if len(heard) != 1 || !errors.Is(heard[0], errDoorbellNotSent) {
+	if len(heard) != 1 || !errors.Is(heard[0], agents.ErrDoorbellNotSent) {
 		t.Fatalf("heard %v: want the send ended unsent, no crew scope to mail it from", heard)
 	}
 }
@@ -127,7 +128,7 @@ func TestNothingIsTypedIntoAClaudeThatHasntStarted(t *testing.T) {
 	a, c, w, instance := claudeRig(t)
 	var heard []error
 	for range 2 {
-		a.deliverFallback("cl", "hello cl", func(err error) { heard = append(heard, err) })
+		a.DeliverFallback("cl", "hello cl", func(err error) { heard = append(heard, err) })
 		settleMessaging(c, w)
 	}
 	if len(c.panel.pastes) != 0 || len(c.panel.keys) != 0 {
@@ -142,7 +143,7 @@ func TestNothingIsTypedIntoAClaudeThatHasntStarted(t *testing.T) {
 
 	w.d.started(t, "cl")
 	heard = nil
-	a.deliverFallback("cl", "hello cl", func(err error) { heard = append(heard, err) })
+	a.DeliverFallback("cl", "hello cl", func(err error) { heard = append(heard, err) })
 	settleMessaging(c, w)
 	if len(c.panel.pastes) != 1 || len(c.panel.keys) != 1 || len(heard) != 1 || heard[0] != nil {
 		t.Fatalf("started: pasted %q, pressed %q, heard %v; want it typed and sent", c.panel.pastes, c.panel.keys, heard)
@@ -192,7 +193,7 @@ func TestAClaudeWhoseHostsLeaseLapsedIsNotTakenForStarted(t *testing.T) {
 		t.Fatalf("crew.list: %+v %v, want cl's host gone", es, err)
 	}
 	var heard []error
-	a.deliverFallback("cl", "hello cl", func(err error) { heard = append(heard, err) })
+	a.DeliverFallback("cl", "hello cl", func(err error) { heard = append(heard, err) })
 	settleMessaging(c, w)
 	if len(c.panel.pastes) != 0 || len(c.panel.keys) != 0 {
 		t.Fatalf("pasted %q, pressed %q into a Claude whose host's lease lapsed, with no endpoint: want nothing", c.panel.pastes, c.panel.keys)
@@ -206,16 +207,16 @@ func TestAClaudeWhoseHostsLeaseLapsedIsNotTakenForStarted(t *testing.T) {
 // told of again.
 func TestTheNotStartedNoticeIsOncePerSession(t *testing.T) {
 	a, c, w, instance := claudeRig(t)
-	a.deliverFallback("cl", "one", func(error) {})
+	a.DeliverFallback("cl", "one", func(error) {})
 	settleMessaging(c, w)
 	c.panel.exit(instance.State().Tab, 0)
 	settleMessaging(c, w)
-	p, _ := a.profile("cl")
-	again, err := a.startInstance(p)
+	p, _ := a.Profile("cl")
+	again, err := a.StartInstance(p)
 	if err != nil || !again.State().Running {
 		t.Fatalf("the start again: %v", err)
 	}
-	a.deliverFallback("cl", "two", func(error) {})
+	a.DeliverFallback("cl", "two", func(error) {})
 	settleMessaging(c, w)
 	if n := notStartedNotices(c.notes, "Claude", again.State().Dir); n != 2 {
 		t.Fatalf("notices %q: want one for each session, two", c.notes)
@@ -241,8 +242,8 @@ func TestAClaudeThatExitsBeforeItStartsIsToldWhy(t *testing.T) {
 		t.Fatalf("notices %q: want one that Claude exited (3) before it started, maybe declining its folder-trust question", c.notes)
 	}
 
-	p, _ := a.profile("cl")
-	again, err := a.startInstance(p)
+	p, _ := a.Profile("cl")
+	again, err := a.StartInstance(p)
 	if err != nil || !again.State().Running {
 		t.Fatalf("the start again: %v", err)
 	}

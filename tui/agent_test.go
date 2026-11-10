@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
@@ -24,19 +25,19 @@ import (
 // runAgentTUI runs the TUI with the profiles given, the default named def, its agent folder dir, on
 // agentConfig, with no autodoc installed: the autodoc it hands its agent is a fake that writes the
 // arguments it is called with to calls.
-func runAgentTUI(t *testing.T, dir string, profiles []agentProfile, def string) (d *daemon, r *running, calls string) {
+func runAgentTUI(t *testing.T, dir string, profiles []agents.AgentProfile, def string) (d *daemon, r *running, calls string) {
 	t.Helper()
 	return runAgentTUIWith(t, dir, profiles, def, nil, Options{})
 }
 
 // runAgentTUIWith is runAgentTUI with more preferences stored and opt's options too.
-func runAgentTUIWith(t *testing.T, dir string, profiles []agentProfile, def string, more map[string]string, opt Options) (d *daemon, r *running, calls string) {
+func runAgentTUIWith(t *testing.T, dir string, profiles []agents.AgentProfile, def string, more map[string]string, opt Options) (d *daemon, r *running, calls string) {
 	t.Helper()
 	return runAgentTUIIn(t, dir, profiles, def, more, opt, map[string][]string{"kb": {"a.md", "a\n"}})
 }
 
 // runAgentTUIIn is runAgentTUIWith over the daemon's workspaces files, kb's entered first.
-func runAgentTUIIn(t *testing.T, dir string, profiles []agentProfile, def string, more map[string]string, opt Options, files map[string][]string) (d *daemon, r *running, calls string) {
+func runAgentTUIIn(t *testing.T, dir string, profiles []agents.AgentProfile, def string, more map[string]string, opt Options, files map[string][]string) (d *daemon, r *running, calls string) {
 	t.Helper()
 	opt.seams = seamsWithEnv(t, opt.seams, "HOME="+t.TempDir(), "PATH=/usr/bin:/bin") // a program of its own each call
 	bins := filepath.Join(t.TempDir(), "a build's dir")                               // a path the shell must have quoted
@@ -45,12 +46,12 @@ func runAgentTUIIn(t *testing.T, dir string, profiles []agentProfile, def string
 	}
 	calls = filepath.Join(bins, "calls")
 	bin := filepath.Join(bins, "autodoc-build")
-	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho \"$@\" >> "+shellQuote(calls)+"\n"), 0o755); err != nil {
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho \"$@\" >> "+agents.ShellQuote(calls)+"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	prefs := map[string]string{prefAgentProfiles: agentProfilesJSON(profiles)}
+	prefs := map[string]string{agents.PrefAgentProfiles: agents.AgentProfilesJSON(profiles)}
 	if def != "" {
-		prefs[prefAgentDefaultCopy] = def
+		prefs[prefAgentDefault] = def
 	}
 	maps.Copy(prefs, more)
 	d = startDaemonWith(t, "", files, daemonOpts{prefs: prefs})
@@ -70,7 +71,7 @@ func runAgentTUIIn(t *testing.T, dir string, profiles []agentProfile, def string
 	// with the listing's: SPC g before they land finds no default and opens the profiles.
 	r.s.WaitFor(t, "the preferences read", func(string) bool {
 		return onLoop(r, func() bool {
-			return r.h.started && r.h.agents.defaultProfile() == def && len(r.h.agents.profiles()) == len(profiles)
+			return r.h.started && r.h.agents.DefaultProfile() == def && len(r.h.agents.Profiles()) == len(profiles)
 		})
 	})
 	return d, r, calls
@@ -79,11 +80,11 @@ func runAgentTUIIn(t *testing.T, dir string, profiles []agentProfile, def string
 func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	agent, report := fakeAgentCopy(t)
+	agent, report := fakeAgent(t)
 	// as a user may write a command: a variable set before it, its program's path quoted
-	_, r, calls := runAgentTUI(t, dir, []agentProfile{
+	_, r, calls := runAgentTUI(t, dir, []agents.AgentProfile{
 		{Name: "other", Command: "false"},
-		{Name: "fake", Command: "FAKE_GREETING=hi " + shellQuote(agent) + " --root {root} --ws {workspace}"},
+		{Name: "fake", Command: "FAKE_GREETING=hi " + agents.ShellQuote(agent) + " --root {root} --ws {workspace}"},
 	}, "fake")
 	root := onLoop(r, func() string { ws, _ := r.h.activeWorkspaceInfo(); return ws.root })
 	folder := filepath.Join(dir, "kb")
@@ -97,7 +98,7 @@ func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.
 	if b, err := os.ReadFile(report); err != nil {
 		t.Fatal(err)
 	} else if want := "cwd=" + folder + "\nargs=--root " + root + " --ws kb\nenv=kb|" + root + "|hi" +
-		"\nAGENTS.md\nCLAUDE.md\nbin\nautodoc=" + filepath.Join(r.h.agents.agentPathDir(folder), "autodoc") + "\n"; string(b) != want {
+		"\nAGENTS.md\nCLAUDE.md\nbin\nautodoc=" + filepath.Join(r.h.agents.AgentPathDir(folder), "autodoc") + "\n"; string(b) != want {
 		t.Fatalf("the agent reported\n%s\nwant\n%s", b, want)
 	}
 	// Its autodoc, with none installed, is the TUI's build on the TUI's config, not the default one.
@@ -121,7 +122,7 @@ func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.
 	r.s.WaitForText(t, "heard-hello")
 
 	// Hidden, it lives on: SPC g again shows the same agent, not a new one.
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitFor(t, "hidden", func(sc string) bool { return !strings.Contains(sc, "agent · fake") })
 	r.s.WaitFor(t, "the page's keyboard", func(string) bool { return r.focused("editor") })
 	if !r.agentRunningNow() {
@@ -139,7 +140,7 @@ func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.
 	}
 
 	// The card lists it.
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitFor(t, "hidden", func(sc string) bool { return !strings.Contains(sc, "agent · fake") })
 	r.keys(t, key(' '))
 	r.s.WaitForText(t, "g  AI agent")
@@ -150,8 +151,8 @@ func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.
 // tab says its command isn't a program on its PATH, a notice says it did not start, and nothing runs.
 func TestAnAgentNotInstalledSaysItsCommandWasNotFound(t *testing.T) {
 	t.Parallel()
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "gone", Command: "autodoc-no-such-agent --x"}}, "gone")
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "gone", Command: "autodoc-no-such-agent --x"}}, "gone")
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitForText(t, `[terminal: its command "autodoc-no-such-agent" isn't a program on its`)
 	if !r.noticed(`gone did not start: its command "autodoc-no-such-agent" isn't a program on its PATH`) {
 		t.Fatal("no notice that gone did not start because its command isn't on its PATH")
@@ -166,60 +167,60 @@ func TestAnAgentNotInstalledSaysItsCommandWasNotFound(t *testing.T) {
 func TestAgentProfilesAreAddedEditedAndRemoved(t *testing.T) {
 	t.Parallel()
 	d, r, _ := runAgentTUI(t, t.TempDir(), nil, "")
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitForText(t, "no profiles yet")
 
 	onLoop(r, func() bool {
-		r.h.agents.startAddAgent()
+		r.h.agents.StartAddAgent()
 		r.h.closeDialog("agentEdit")
-		r.h.agents.saveAgent(" claude ", " claude --model opus ")
+		r.h.agents.SaveAgent(" claude ", " claude --model opus ")
 		return true
 	})
 	onLoop(r, func() bool {
-		r.h.agents.startAddAgent()
+		r.h.agents.StartAddAgent()
 		r.h.closeDialog("agentEdit")
-		r.h.agents.saveAgent("codex", "codex")
+		r.h.agents.SaveAgent("codex", "codex")
 		return true
 	})
 	r.s.WaitForText(t, "SPC g opens claude")
 	onLoop(r, func() bool {
-		r.h.agents.startAddAgent()
+		r.h.agents.StartAddAgent()
 		r.h.closeDialog("agentEdit")
-		r.h.agents.saveAgent("codex", "codex --other")
+		r.h.agents.SaveAgent("codex", "codex --other")
 		return true
 	})
 	r.s.WaitForText(t, "not saved: codename taken by codex")
 	onLoop(r, func() bool {
-		r.h.agents.startAddAgent()
+		r.h.agents.StartAddAgent()
 		r.h.closeDialog("agentEdit")
-		r.h.agents.saveAgent("blank", "  ")
+		r.h.agents.SaveAgent("blank", "  ")
 		return true
 	})
 	r.s.WaitForText(t, "not saved: a profile is a name and the command")
 
 	onLoop(r, func() bool {
-		r.h.agents.startEditAgent(0)
+		r.h.agents.StartEditAgent(0)
 		r.h.closeDialog("agentEdit")
-		r.h.agents.saveAgent("claude-opus", "claude --model opus")
+		r.h.agents.SaveAgent("claude-opus", "claude --model opus")
 		return true
 	})
 	r.s.WaitForText(t, "SPC g opens claude-opus")
 	d.waitStored(t, "claude-opus", `[{"name":"claude-opus","command":"claude --model opus","codename":"claude"},{"name":"codex","command":"codex","codename":"codex"}]`)
 
-	onLoop(r, func() bool { r.h.agents.makeAgentDefault(1); return true })
+	onLoop(r, func() bool { r.h.agents.MakeAgentDefault(1); return true })
 	r.s.WaitForText(t, "SPC g opens codex")
-	onLoop(r, func() bool { r.h.agents.removeAgent(1); return true })
+	onLoop(r, func() bool { r.h.agents.RemoveAgent(1); return true })
 	r.s.WaitForText(t, "remove the agent profile?")
 	r.keys(t, key('y'))
 	r.s.WaitForText(t, "Make default marks the one SPC g opens")
 	d.waitStored(t, "", `[{"name":"claude-opus","command":"claude --model opus","codename":"claude"}]`)
 	// Profiles but no default: SPC g asks for one.
-	onLoop(r, func() bool { r.h.closeDialog("agentProfiles"); r.h.agents.toggleAgent(); return true })
+	onLoop(r, func() bool { r.h.closeDialog("agentProfiles"); r.h.agents.ToggleAgent(); return true })
 	r.s.WaitFor(t, "the profiles, to make one the default", func(sc string) bool {
 		return strings.Contains(sc, "Make default marks the one SPC g opens") && !onLoop(r, func() bool { return r.h.panelOpen["agent"] })
 	})
 	again := attached(t, d)
-	if n := onLoop(again, func() int { return len(again.h.agents.profiles()) }); n != 1 {
+	if n := onLoop(again, func() int { return len(again.h.agents.Profiles()) }); n != 1 {
 		t.Errorf("a new TUI reads %d profiles, want the 1 kept", n)
 	}
 }
@@ -227,16 +228,16 @@ func TestAgentProfilesAreAddedEditedAndRemoved(t *testing.T) {
 func TestAnExplicitlyClearedAgentDefaultStaysClearedAfterLoad(t *testing.T) {
 	t.Parallel()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{
-		prefAgentProfiles:    `[{"name":"A","command":"false","codename":"a"}]`,
-		prefAgentDefaultCopy: "A", prefAgentDefaultCodename: "",
+		agents.PrefAgentProfiles: `[{"name":"A","command":"false","codename":"a"}]`,
+		prefAgentDefault:         "A", agents.PrefAgentDefaultCodename: "",
 	}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitFor(t, "stored cleared default loaded", func(string) bool {
 		return onLoop(r, func() bool {
-			return r.h.started && len(r.h.agents.profiles()) == 1 && r.h.agents.defaultProfile() == ""
+			return r.h.started && len(r.h.agents.Profiles()) == 1 && r.h.agents.DefaultProfile() == ""
 		})
 	})
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitForText(t, "Make default marks the one SPC g opens")
 	if code := onLoop(r, func() string { return r.h.agents.Snapshot().Running }); code != "" {
 		t.Fatalf("restart revived the old default identity %q", code)
@@ -246,26 +247,26 @@ func TestAnExplicitlyClearedAgentDefaultStaysClearedAfterLoad(t *testing.T) {
 func TestLegacyAgentDefaultMigratesOnceAndNeverReadsItsMirrorAgain(t *testing.T) {
 	t.Parallel()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{
-		prefAgentProfiles: `[{"name":"A","command":"false"}]`, prefAgentDefaultCopy: "A",
+		agents.PrefAgentProfiles: `[{"name":"A","command":"false"}]`, prefAgentDefault: "A",
 	}})
 	sess := NewSession(d.sock, nil)
 	var writes atomic.Int32
 	sess.SetBeforeCall(func(method string, args []any) {
-		if method == "preference.set" && args[0] == prefAgentDefaultCodename {
+		if method == "preference.set" && args[0] == agents.PrefAgentDefaultCodename {
 			writes.Add(1)
 		}
 	})
 	r := runTUI(t, sess, Options{})
 	r.waitWithin(t, "canonical default persisted", daemonWait, func() bool {
 		m, err := d.db.Preferences(context.Background())
-		return err == nil && m[prefAgentDefaultCodename] == "a"
+		return err == nil && m[agents.PrefAgentDefaultCodename] == "a"
 	})
-	if _, err := sess.Call(context.Background(), "preference.set", prefAgentDefaultCopy, "B"); err != nil {
+	if _, err := sess.Call(context.Background(), "preference.set", prefAgentDefault, "B"); err != nil {
 		t.Fatal(err)
 	}
 	onLoop(r, func() bool { r.h.loadPrefs(); return true })
 	r.s.WaitFor(t, "mirror reloaded without retargeting", func(string) bool {
-		return onLoop(r, func() bool { return r.h.prefs.Value(prefAgentDefaultCopy) == "B" && r.h.agents.defaultProfile() == "a" })
+		return onLoop(r, func() bool { return r.h.prefs.Value(prefAgentDefault) == "B" && r.h.agents.DefaultProfile() == "a" })
 	})
 	if got := writes.Load(); got != 1 {
 		t.Fatalf("canonical migration wrote %d times, want once", got)
@@ -274,10 +275,10 @@ func TestLegacyAgentDefaultMigratesOnceAndNeverReadsItsMirrorAgain(t *testing.T)
 
 func TestRemoveAgentOnlyRemovesTheConfirmedProfile(t *testing.T) {
 	t.Parallel()
-	profiles := []agentProfile{{Name: "alpha", Command: "alpha", Codename: "alpha"}, {Name: "beta", Command: "beta", Codename: "beta"}, {Name: "gamma", Command: "gamma", Codename: "gamma"}}
+	profiles := []agents.AgentProfile{{Name: "alpha", Command: "alpha", Codename: "alpha"}, {Name: "beta", Command: "beta", Codename: "beta"}, {Name: "gamma", Command: "gamma", Codename: "gamma"}}
 	_, r, _ := runAgentTUI(t, t.TempDir(), profiles, "beta")
-	count := func() int { return onLoop(r, func() int { return len(r.h.agents.profiles()) }) }
-	onLoop(r, func() bool { r.h.agents.removeAgent(1); return true })
+	count := func() int { return onLoop(r, func() int { return len(r.h.agents.Profiles()) }) }
+	onLoop(r, func() bool { r.h.agents.RemoveAgent(1); return true })
 	r.s.WaitForText(t, "remove the agent profile?")
 	if count() != 3 {
 		t.Fatal("asking removed a profile before an answer")
@@ -288,7 +289,7 @@ func TestRemoveAgentOnlyRemovesTheConfirmedProfile(t *testing.T) {
 		t.Fatal("No removed a profile")
 	}
 	onLoop(r, func() bool {
-		r.h.agents.removeAgent(1)
+		r.h.agents.RemoveAgent(1)
 		r.h.ask(feature.Question{Title: "another question?", Text: "Nothing is removed."})
 		return true
 	})
@@ -299,18 +300,18 @@ func TestRemoveAgentOnlyRemovesTheConfirmedProfile(t *testing.T) {
 		t.Fatal("answering a replacement removed the old question's profile")
 	}
 	onLoop(r, func() bool {
-		r.h.agents.removeAgent(1) // beta at row 1 when asked
-		r.h.agents.Snapshot().Host.SetPref(prefAgentProfiles, agentProfilesJSON([]agentProfile{profiles[1], profiles[0], profiles[2]}))
+		r.h.agents.RemoveAgent(1) // beta at row 1 when asked
+		r.h.agents.Snapshot().Host.SetPref(agents.PrefAgentProfiles, agents.AgentProfilesJSON([]agents.AgentProfile{profiles[1], profiles[0], profiles[2]}))
 		return true
 	})
 	r.s.WaitForText(t, "remove the agent profile?")
 	r.keys(t, key('y'))
 	r.s.WaitFor(t, "beta removed", func(string) bool { return count() == 2 })
-	got := onLoop(r, func() []agentProfile { return r.h.agents.profiles() })
-	if !got[0].same(profiles[0]) || !got[1].same(profiles[2]) {
+	got := onLoop(r, func() []agents.AgentProfile { return r.h.agents.Profiles() })
+	if !got[0].Same(profiles[0]) || !got[1].Same(profiles[2]) {
 		t.Fatalf("Yes removed a changed row instead of beta: %v", got)
 	}
-	if def := onLoop(r, func() string { return r.h.agents.defaultProfile() }); def != "" {
+	if def := onLoop(r, func() string { return r.h.agents.DefaultProfile() }); def != "" {
 		t.Errorf("removed profile is still default: %q", def)
 	}
 }
@@ -320,13 +321,13 @@ func TestRemoveAgentOnlyRemovesTheConfirmedProfile(t *testing.T) {
 // and default, instead of treating a matching name as enough identity.
 func TestRemoveAgentRefusesAProfileEditedWhileAsked(t *testing.T) {
 	t.Parallel()
-	profile := agentProfile{Name: "beta", Command: "beta --old"}
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{profile}, "beta")
+	profile := agents.AgentProfile{Name: "beta", Command: "beta --old"}
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{profile}, "beta")
 	onLoop(r, func() bool {
-		r.h.agents.removeAgent(0)
-		profiles := r.h.agents.profiles()
+		r.h.agents.RemoveAgent(0)
+		profiles := r.h.agents.Profiles()
 		profiles[0].Command = "beta --new"
-		r.h.agents.Snapshot().Host.SetPref(prefAgentProfiles, agentProfilesJSON(profiles))
+		r.h.agents.Snapshot().Host.SetPref(agents.PrefAgentProfiles, agents.AgentProfilesJSON(profiles))
 		return true
 	})
 	r.s.WaitForText(t, "remove the agent profile?")
@@ -334,11 +335,11 @@ func TestRemoveAgentRefusesAProfileEditedWhileAsked(t *testing.T) {
 	r.s.WaitFor(t, "the stale question closed", func(sc string) bool {
 		return !strings.Contains(sc, "remove the agent profile?")
 	})
-	got := onLoop(r, func() []agentProfile { return r.h.agents.profiles() })
+	got := onLoop(r, func() []agents.AgentProfile { return r.h.agents.Profiles() })
 	if len(got) != 1 || got[0].Name != "beta" || got[0].Command != "beta --new" {
 		t.Fatalf("stale Yes removed or rewrote the edited profile: %v", got)
 	}
-	if def := onLoop(r, func() string { return r.h.agents.defaultProfile() }); def != "beta" {
+	if def := onLoop(r, func() string { return r.h.agents.DefaultProfile() }); def != "beta" {
 		t.Errorf("refused removal changed the default to %q", def)
 	}
 }
@@ -348,20 +349,20 @@ func TestUsingAnotherAgentKeepsBothInstancesRunning(t *testing.T) {
 	t.Parallel()
 	heardDir := t.TempDir()
 	agent := hearingAgent(t, heardDir)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{
 		{Name: "one", Command: agent + " first"},
 		{Name: "two", Command: agent + " second"},
 	}, "one")
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitForText(t, "started first")
 	// The profiles mark the default and the one running; Use on the one running only shows it.
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); r.h.agents.openAgentProfiles(); return true })
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); r.h.agents.OpenAgentProfiles(); return true })
 	r.s.WaitForText(t, "●▶   one")
-	onLoop(r, func() bool { r.h.agents.useAgent(0); return true })
+	onLoop(r, func() bool { r.h.agents.UseAgent(0); return true })
 	r.s.WaitFor(t, "the one running shown, unasked", func(sc string) bool {
 		return strings.Contains(sc, "agent · one") && !strings.Contains(sc, "agent profiles") && r.focused("agentView")
 	})
-	onLoop(r, func() bool { r.h.agents.openAgentProfiles(); r.h.agents.useAgent(1); return true })
+	onLoop(r, func() bool { r.h.agents.OpenAgentProfiles(); r.h.agents.UseAgent(1); return true })
 	r.s.WaitForText(t, "agent · two")
 	r.s.WaitForText(t, "started second")
 	entries := onLoop(r, func() []feature.AgentEntry { return r.h.agents.AgentEntries() })
@@ -370,7 +371,7 @@ func TestUsingAnotherAgentKeepsBothInstancesRunning(t *testing.T) {
 	}
 	delivered := make(chan error, 1)
 	onLoop(r, func() bool {
-		if err := (core{r.h}).HandTask(entries[0].Ref, feature.TaskRef{Title: "only-first", Path: taskFileCopy("/tasks/first.md"), ID: "first"}, "inspect", func(err error) { delivered <- err }); err != nil {
+		if err := (core{r.h}).HandTask(entries[0].Ref, feature.TaskRef{Title: "only-first", Path: taskFile("/tasks/first.md"), ID: "first"}, "inspect", func(err error) { delivered <- err }); err != nil {
 			t.Error(err)
 		}
 		return true
@@ -390,7 +391,7 @@ func TestUsingAnotherAgentKeepsBothInstancesRunning(t *testing.T) {
 	if got := heardRaw(heardDir, "second"); got != "" {
 		t.Fatalf("task intended for first instance leaked to second: %q", got)
 	}
-	onLoop(r, func() bool { r.h.agents.useAgent(1); return true })
+	onLoop(r, func() bool { r.h.agents.UseAgent(1); return true })
 	r.s.WaitForText(t, "started second")
 	if n := onLoop(r, func() string { return r.h.agents.Snapshot().Running }); n != "two" {
 		t.Fatalf("after Yes %q is running, want two", n)
@@ -401,9 +402,9 @@ func TestUsingAnotherAgentKeepsBothInstancesRunning(t *testing.T) {
 	shown := func() bool {
 		return onLoop(r, func() bool { v, _ := r.h.p.Tree().Source("App.agentShown"); return v.Raw == "true" })
 	}
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitFor(t, "hidden, unchecked", func(sc string) bool { return !strings.Contains(sc, "agent · two") && !shown() })
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitFor(t, "two shown again, checked", func(sc string) bool { return strings.Contains(sc, "agent · two") && shown() })
 	if n := onLoop(r, func() string { return r.h.agents.Snapshot().Running }); n != "two" {
 		t.Fatalf("shown again, %q is running, want two", n)
@@ -443,16 +444,16 @@ func TestTheAgentsPanelSizeIsKept(t *testing.T) {
 func TestTheAgentOpensWherePreferencesSay(t *testing.T) {
 	t.Parallel()
 	d, r, _ := runAgentTUI(t, t.TempDir(), nil, "")
-	if e := onLoop(r, func() string { return r.h.prefs.Value(prefAgentEdgeCopy) }); e != "bottom" {
+	if e := onLoop(r, func() string { return r.h.prefs.Value(prefAgentEdge) }); e != "bottom" {
 		t.Fatalf("the agent opens at %q by default, want bottom", e)
 	}
-	onLoop(r, func() bool { r.h.agents.setAgentSize(feature.Nearest(feature.PanelSizes, 70)); return true })
-	onLoop(r, func() bool { r.h.agents.setAgentLength(feature.Nearest(feature.PanelLengths, 60)); return true })
-	onLoop(r, func() bool { r.h.agents.setAgentEdge(indexOf(agentEdgesCopy, "center")); return true })
+	onLoop(r, func() bool { r.h.agents.SetAgentSize(feature.Nearest(feature.PanelSizes, 70)); return true })
+	onLoop(r, func() bool { r.h.agents.SetAgentLength(feature.Nearest(feature.PanelLengths, 60)); return true })
+	onLoop(r, func() bool { r.h.agents.SetAgentEdge(indexOf(agentEdges, "center")); return true })
 	onLoop(r, func() bool {
-		r.h.agents.setAgentEdge(len(agentEdgesCopy))
-		r.h.agents.setAgentSize(-1)
-		r.h.agents.setAgentLength(99)
+		r.h.agents.SetAgentEdge(len(agentEdges))
+		r.h.agents.SetAgentSize(-1)
+		r.h.agents.SetAgentLength(99)
 		return true
 	}) // out of range: ignored
 	r.waitWithin(t, "kept", daemonWait, func() bool {
@@ -470,7 +471,7 @@ func TestTheAgentOpensWherePreferencesSay(t *testing.T) {
 	// loaded runner can answer after the notes. Wait for them; one that never reads center still fails.
 	again := attached(t, d)
 	again.s.WaitFor(t, "a new TUI opens the agent at the chosen center", func(string) bool {
-		return onLoop(again, func() string { return again.h.prefs.Value(prefAgentEdgeCopy) }) == "center"
+		return onLoop(again, func() string { return again.h.prefs.Value(prefAgentEdge) }) == "center"
 	})
 }
 
@@ -478,8 +479,8 @@ func TestTheAgentOpensWherePreferencesSay(t *testing.T) {
 // agent printed (TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace exits with 3).
 func TestAnAgentsCleanExitClosesItsPanel(t *testing.T) {
 	t.Parallel()
-	agent, _ := fakeAgentCopy(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
+	agent, _ := fakeAgent(t)
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "fake", Command: agents.ShellQuote(agent)}}, "fake")
 	r.leader(t, 'g')
 	r.s.WaitForText(t, "agent · fake")
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
@@ -497,8 +498,8 @@ func TestAnAgentsCleanExitClosesItsPanel(t *testing.T) {
 // bytes before it would make the line not match and the agent run on).
 func TestF11WorksWithTheKeyboardInARunningAgent(t *testing.T) {
 	t.Parallel()
-	agent, _ := fakeAgentCopy(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
+	agent, _ := fakeAgent(t)
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "fake", Command: agents.ShellQuote(agent)}}, "fake")
 	r.leader(t, 'g')
 	r.s.WaitForText(t, "started")
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
@@ -521,8 +522,8 @@ func TestF11WorksWithTheKeyboardInARunningAgent(t *testing.T) {
 // needs, so it exits 6 (a w or a Ctrl+T sent to it would make the line not match).
 func TestCtrlTTogglesTheAgentsModeAndEscIsTheAgents(t *testing.T) {
 	t.Parallel()
-	agent, _ := fakeAgentCopy(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
+	agent, _ := fakeAgent(t)
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "fake", Command: agents.ShellQuote(agent)}}, "fake")
 	r.leader(t, 'g')
 	r.s.WaitForText(t, "started")
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
@@ -544,19 +545,19 @@ func (d *daemon) waitStored(t *testing.T, def, profiles string) {
 	var got map[string]string
 	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
 		got, _ = d.db.Preferences(context.Background())
-		if got[prefAgentDefaultCopy] == def && got[prefAgentProfiles] == profiles {
+		if got[prefAgentDefault] == def && got[agents.PrefAgentProfiles] == profiles {
 			return
 		}
 	}
-	t.Fatalf("stored: default %q, profiles %s; want %q, %s", got[prefAgentDefaultCopy], got[prefAgentProfiles], def, profiles)
+	t.Fatalf("stored: default %q, profiles %s; want %q, %s", got[prefAgentDefault], got[agents.PrefAgentProfiles], def, profiles)
 }
 
 // Desktop drops are ordinary pastes from the GUI backend. The currently focused
 // agent terminal must receive the quoted paths unchanged, without a focus switch.
 func TestTheFocusedAgentReceivesDroppedPathsAsAnOrdinaryPaste(t *testing.T) {
 	t.Parallel()
-	agent, _ := fakeAgentCopy(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
+	agent, _ := fakeAgent(t)
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "fake", Command: agents.ShellQuote(agent)}}, "fake")
 	r.leader(t, 'g')
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
 	r.s.WaitForText(t, "started")
@@ -602,7 +603,7 @@ read line
 	if err := os.WriteFile(agent, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	_, r, _ := runAgentTUI(t, dir, []agentProfile{{Name: "kitty", Command: shellQuote(agent)}}, "kitty")
+	_, r, _ := runAgentTUI(t, dir, []agents.AgentProfile{{Name: "kitty", Command: agents.ShellQuote(agent)}}, "kitty")
 	r.leader(t, 'g')
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
 	r.s.WaitForText(t, "ready")

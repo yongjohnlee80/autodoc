@@ -19,14 +19,15 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/internal/userperm"
 	"github.com/yongjohnlee80/autodoc/internal/userperm/userpermtest"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // crewAgents is modelAgents whose window holds a crew scope on a real crew.Manager, in a workspace
 // with an id, so its agents start as crew sessions.
-func crewAgents(t *testing.T, profiles string) (*agents, *identityHostCopy, *crewWindow) {
+func crewAgents(t *testing.T, profiles string) (*agents.Agents, *identityHost, *crewWindow) {
 	t.Helper()
-	c := newIdentityHostCopy(profiles)
+	c := newIdentityHost(profiles)
 	c.ws = wsInfo{id: 7, name: "kb", root: t.TempDir()}
 	s := seamsFor(t)
 	if s == nil {
@@ -35,7 +36,7 @@ func crewAgents(t *testing.T, profiles string) (*agents, *identityHostCopy, *cre
 	}
 	agentDir := t.TempDir()
 	userpermtest.ExposeNew(t, agentDir) // a file made there the ordinary way is exposed: only a private create keeps it private
-	a := testAgentsWithCopy(c, s, agentDir, "")
+	a := testAgentsWith(c, s, agentDir, "")
 	// a crew start's setup, in-process from the same source `crew setup` answers from, offering no
 	// MCP server (a cell that wants one sets its own): every kind as it is without one, on CLI mail.
 	// A Codex agent still gets its own app-server (an agent folder gives one in every mail mode),
@@ -45,12 +46,12 @@ func crewAgents(t *testing.T, profiles string) (*agents, *identityHostCopy, *cre
 		s, err := crew.SetupFor(crew.SetupInput{Kind: kind, Host: crew.HostWindow, Env: map[string]string{"PATH": "/nonexistent"},
 			DataDir: data, Dir: dir, AgentDir: dir}, "")
 		if err == nil && len(s.Server) > 0 {
-			s.Server = fakeServerCopy(t, s.ServerSocket, true)
+			s.Server = fakeServer(t, s.ServerSocket, true)
 		}
 		return s, err
 	}
 	w := &crewWindow{d: newCrewDaemonForHost()}
-	a.crew = newCrewHost(w, s.env, t.TempDir())
+	a.Crew = newCrewHost(w, s.env, t.TempDir())
 	crewOf(a).Connected()
 	if _, _, ok := crewOf(a).held(); !ok {
 		t.Fatalf("the window holds no scope: %v", w.notices)
@@ -62,11 +63,11 @@ func crewAgents(t *testing.T, profiles string) (*agents, *identityHostCopy, *cre
 // does, on a spawn that starts nothing: a start its starter refuses (a refused registration shown in
 // its tab) leaves the tab stopped, as the terminal leaves it. The process it starts is a fake
 // terminal, never nil: a Codex agent's server is bound to it, and closes it when it ends.
-func startingCrewAgents(t *testing.T, profiles string) (*agents, *identityHostCopy, *crewWindow) {
+func startingCrewAgents(t *testing.T, profiles string) (*agents.Agents, *identityHost, *crewWindow) {
 	t.Helper()
 	a, c, w := crewAgents(t, profiles)
-	c.panel = &modelPanelCopy{owner: c, starts: true}
-	seamsOf(a).agentSpawn = func(pty.Cmd) (terminal.TerminalProcess, error) { return newFakeTerminalCopy(), nil }
+	c.panel = &modelPanel{owner: c, starts: true}
+	seamsOf(a).agentSpawn = func(pty.Cmd) (terminal.TerminalProcess, error) { return newFakeTerminal(), nil }
 	return a, c, w
 }
 
@@ -121,10 +122,10 @@ func contextFiles(t *testing.T, dir string) []string {
 // process is told; its exit ends the session and removes the context, so no later process reads a
 // dead session's credential, and the codename is free for its next session.
 func TestAnAgentIsRegisteredBeforeItStarts(t *testing.T) {
-	a, c, _ := crewAgents(t, oneTwoCopy)
+	a, c, _ := crewAgents(t, oneTwo)
 	scope, _, _ := crewOf(a).held()
-	p, _ := a.profile("one")
-	instance, err := a.startInstance(p)
+	p, _ := a.Profile("one")
+	instance, err := a.StartInstance(p)
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -148,7 +149,7 @@ func TestAnAgentIsRegisteredBeforeItStarts(t *testing.T) {
 	if fi.Name() != instance.State().Session.ID {
 		t.Fatalf("the context file %s: want its session's own, %s", fi.Name(), instance.State().Session.ID)
 	}
-	args, _, err := startedEnvCopy(a, c, instance)
+	args, _, err := startedEnv(a, c, instance)
 	if err != nil || !slices.Contains(args, "AUTODOC_CREW_CONTEXT="+crew.ContextPath(dir, instance.State().Session.ID)) {
 		t.Fatalf("the process isn't told its context file: %v %v", err, args)
 	}
@@ -157,7 +158,7 @@ func TestAnAgentIsRegisteredBeforeItStarts(t *testing.T) {
 	if _, _, ok := readContext(t, dir); ok {
 		t.Fatal("the context is still there after the agent exited")
 	}
-	again, err := a.startInstance(p)
+	again, err := a.StartInstance(p)
 	if err != nil {
 		t.Fatalf("its next start: %v: want a new session, the codename free", err)
 	}
@@ -169,17 +170,17 @@ func TestAnAgentIsRegisteredBeforeItStarts(t *testing.T) {
 // TestARefusedRegistrationStartsNothing: a registration the daemon refuses starts no process, writes
 // no context, says why, and is not kept to be replayed.
 func TestARefusedRegistrationStartsNothing(t *testing.T) {
-	a, c, w := startingCrewAgents(t, oneTwoCopy)
+	a, c, w := startingCrewAgents(t, oneTwo)
 	w.d.refuse = &golibrpc.Error{Code: crew.CodeCodenameBusy, Message: "the codename is busy"}
-	p, _ := a.profile("one")
-	instance, err := a.startInstance(p)
+	p, _ := a.Profile("one")
+	instance, err := a.StartInstance(p)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if instance.State().Running || instance.State().Starting || c.panel.tabs[0].Running {
 		t.Fatalf("a refused registration started the agent: running %v starting %v", instance.State().Running, instance.State().Starting)
 	}
-	if _, _, ok := readContext(t, a.agentFolder(workspaceOf(c.ws), "one")); ok {
+	if _, _, ok := readContext(t, a.AgentFolder(workspaceOf(c.ws), "one")); ok {
 		t.Fatal("a refused registration left a context")
 	}
 	if len(c.notes) == 0 || !strings.Contains(c.notes[len(c.notes)-1], "did not start") {
@@ -193,24 +194,24 @@ func TestARefusedRegistrationStartsNothing(t *testing.T) {
 // TestAFailedSpawnEndsItsSession: a start that fails after its session was registered ends the
 // session (start_failed) and removes its context.
 func TestAFailedSpawnEndsItsSession(t *testing.T) {
-	a, c, _ := crewAgents(t, oneTwoCopy)
-	c.panel = &modelPanelCopy{owner: c, startErr: errors.New("no such program")}
-	p, _ := a.profile("one")
-	instance, err := a.startInstance(p)
+	a, c, _ := crewAgents(t, oneTwo)
+	c.panel = &modelPanel{owner: c, startErr: errors.New("no such program")}
+	p, _ := a.Profile("one")
+	instance, err := a.StartInstance(p)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if instance.State().Running || instance.State().Session.ID != "" {
 		t.Fatalf("a failed spawn: running %v, session %q", instance.State().Running, instance.State().Session.ID)
 	}
-	if _, _, ok := readContext(t, a.agentFolder(workspaceOf(c.ws), "one")); ok {
+	if _, _, ok := readContext(t, a.AgentFolder(workspaceOf(c.ws), "one")); ok {
 		t.Fatal("a failed spawn left its context")
 	}
 	if len(crewOf(a).sessions) != 0 {
 		t.Fatalf("a failed spawn's session is still counted live: %v", crewOf(a).sessions)
 	}
 	c.panel.startErr = nil
-	if again, err := a.startInstance(p); err != nil || !again.State().Running {
+	if again, err := a.StartInstance(p); err != nil || !again.State().Running {
 		t.Fatalf("a start after the failed one: %v (its codename still busy?)", err)
 	}
 }
@@ -299,8 +300,8 @@ func TestAClaudeSessionAcceptsWakes(t *testing.T) {
 	tuneEnv(t, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	a, c, w := crewAgents(t, `[{"name":"Claude","command":"claude --model haiku","codename":"cl"},{"name":"One","command":"one","codename":"one"}]`)
 	for code, wants := range map[string]bool{"cl": true, "one": false} {
-		p, _ := a.profile(code)
-		instance, err := a.startInstance(p)
+		p, _ := a.Profile(code)
+		instance, err := a.StartInstance(p)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -312,9 +313,9 @@ func TestAClaudeSessionAcceptsWakes(t *testing.T) {
 		// and its permission prompts are reported, on each of the hooks that tell of them
 		hooks, _ := s["hooks"].(map[string]any)
 		for _, event := range claudeHookEvents[1:] {
-			reportedCopy := strings.Contains(fmt.Sprint(hooks[event]), "crew attention --claude-hook")
-			if reportedCopy != wants {
-				t.Errorf("%s's %s hook reports its permission prompts %v, want %v", code, event, reportedCopy, wants)
+			reported := strings.Contains(fmt.Sprint(hooks[event]), "crew attention --claude-hook")
+			if reported != wants {
+				t.Errorf("%s's %s hook reports its permission prompts %v, want %v", code, event, reported, wants)
 			}
 		}
 		// the one allowance is the guide's own commands, exactly (crew.ClaudeAllow): never a deny
@@ -352,8 +353,8 @@ func TestAnOlderClaudeGetsOnlyTheHooksItKnows(t *testing.T) {
 	path := fakeClaudeBin(t, bin, append(claudeHookEvents, "crossSessionInbound")...)
 	tuneEnv(t, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	a, c, w := crewAgents(t, `[{"name":"Claude","command":"claude","codename":"cl"}]`)
-	p, _ := a.profile("cl")
-	instance, err := a.startInstance(p)
+	p, _ := a.Profile("cl")
+	instance, err := a.StartInstance(p)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -367,7 +368,7 @@ func TestAnOlderClaudeGetsOnlyTheHooksItKnows(t *testing.T) {
 	if err := os.Chtimes(path, at, at); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.startInstance(p); err != nil {
+	if _, err := a.StartInstance(p); err != nil {
 		t.Fatal(err)
 	}
 	s, b := claudeSettingsOf(t, dir)
@@ -397,8 +398,8 @@ func TestAWrapperClaudeGetsTheRealOnesHooks(t *testing.T) {
 	sep := string(os.PathListSeparator)
 	tuneEnv(t, "PATH="+wrappers+sep+bin+sep+os.Getenv("PATH"))
 	a, c, w := crewAgents(t, `[{"name":"Claude","command":"claude","codename":"cl"}]`)
-	p, _ := a.profile("cl")
-	instance, err := a.startInstance(p)
+	p, _ := a.Profile("cl")
+	instance, err := a.StartInstance(p)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -419,9 +420,9 @@ func TestAClaudeThatCantBeReadGetsTheFloor(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, c, w := crewAgents(t, `[{"name":"Claude","command":"`+wrapper+`","codename":"cl"}]`)
-	p, _ := a.profile("cl")
+	p, _ := a.Profile("cl")
 	for range 2 {
-		instance, err := a.startInstance(p)
+		instance, err := a.StartInstance(p)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -442,11 +443,11 @@ func TestAClaudeThatCantBeReadGetsTheFloor(t *testing.T) {
 // TestAQuitRemovesEverySessionsContext: the window's clean quit, which releases its scope and so
 // ends every session, removes each session's context too.
 func TestAQuitRemovesEverySessionsContext(t *testing.T) {
-	a, c, _ := crewAgents(t, oneTwoCopy)
+	a, c, _ := crewAgents(t, oneTwo)
 	var dirs []string
 	for _, code := range []string{"one", "two"} {
-		p, _ := a.profile(code)
-		instance, err := a.startInstance(p)
+		p, _ := a.Profile(code)
+		instance, err := a.StartInstance(p)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -463,13 +464,13 @@ func TestAQuitRemovesEverySessionsContext(t *testing.T) {
 // TestADeliveryWaitsForItsAgentsRegistration: a task handed to an agent it starts waits while the
 // agent's crew session is registered, and reaches the agent once it runs, never as a stale send.
 func TestADeliveryWaitsForItsAgentsRegistration(t *testing.T) {
-	a, c, w := crewAgents(t, oneTwoCopy)
-	c.panel = &modelPanelCopy{owner: c}                                       // takes a bracketed paste at once
+	a, c, w := crewAgents(t, oneTwo)
+	c.panel = &modelPanel{owner: c}                                           // takes a bracketed paste at once
 	seamsOf(a).agentPromptsReported = func(string, bool) bool { return true } // delivered is sent: the base presses Enter
 	w.hold = true
 	calls := 0
 	var outcome error
-	if err := a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "task", Path: taskFileCopy("/task.md")}, "work", func(err error) { calls++; outcome = err }); err != nil {
+	if err := a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "task", Path: taskFile("/task.md")}, "work", func(err error) { calls++; outcome = err }); err != nil {
 		t.Fatal(err)
 	}
 	c.questions[0].OnYes()
@@ -500,10 +501,10 @@ func calledTimes(w *crewWindow, verb string) int {
 // committed comes back, its credential the one the daemon holds, never a fresh registration that
 // the first would leave busy.
 func TestALostRegistrationReplyIsReplayed(t *testing.T) {
-	a, c, w := startingCrewAgents(t, oneTwoCopy)
+	a, c, w := startingCrewAgents(t, oneTwo)
 	w.lost = map[string]int{"crew.register": 1}
-	p, _ := a.profile("one")
-	first, err := a.startInstance(p)
+	p, _ := a.Profile("one")
+	first, err := a.StartInstance(p)
 	if err != nil {
 		t.Fatalf("a lost answer: %v", err)
 	}
@@ -513,7 +514,7 @@ func TestALostRegistrationReplyIsReplayed(t *testing.T) {
 	if len(crewOf(a).pending) != 1 {
 		t.Fatalf("the lost registration is not kept: %v", crewOf(a).pending)
 	}
-	again, err := a.startInstance(p)
+	again, err := a.StartInstance(p)
 	if err != nil {
 		t.Fatalf("its next start: %v, notices %v", err, c.notes)
 	}
@@ -535,17 +536,17 @@ func TestALostRegistrationReplyIsReplayed(t *testing.T) {
 // TestALostRegistrationNobodyStartsIsEnded: a lost registration whose codename is not started again
 // is replayed and ended once the daemon answers again (the next renewal), so its codename is free.
 func TestALostRegistrationNobodyStartsIsEnded(t *testing.T) {
-	a, _, w := crewAgents(t, oneTwoCopy)
+	a, _, w := crewAgents(t, oneTwo)
 	w.lost = map[string]int{"crew.register": 1}
-	p, _ := a.profile("one")
-	if first, err := a.startInstance(p); err != nil || first.State().Running {
+	p, _ := a.Profile("one")
+	if first, err := a.StartInstance(p); err != nil || first.State().Running {
 		t.Fatalf("a lost answer: %v", err)
 	}
 	w.fire() // the renewal: the daemon answers
 	if len(crewOf(a).pending) != 0 || len(crewOf(a).owed) != 0 || calledTimes(w, "crew.register") != 2 || calledTimes(w, "crew.exit") != 1 {
 		t.Fatalf("after the renewal: pending %v, owed %v, calls %v; want it replayed and ended", crewOf(a).pending, crewOf(a).owed, w.calls)
 	}
-	again, err := a.startInstance(p)
+	again, err := a.StartInstance(p)
 	if err != nil {
 		t.Fatalf("a start after it was ended: %v (its codename still busy?)", err)
 	}
@@ -558,24 +559,24 @@ func TestALostRegistrationNobodyStartsIsEnded(t *testing.T) {
 // scope and epoch it was made under, or is connected to another daemon or store, writes no context
 // and starts nothing; its session is ended.
 func TestALateRegistrationStartsNothing(t *testing.T) {
-	for name, change := range map[string]func(t *testing.T, a *agents, w *crewWindow){
-		"the scope taken over": func(t *testing.T, a *agents, w *crewWindow) {
+	for name, change := range map[string]func(t *testing.T, a *agents.Agents, w *crewWindow){
+		"the scope taken over": func(t *testing.T, a *agents.Agents, w *crewWindow) {
 			if _, err := w.d.m.Takeover(context.Background(), crewOf(a).scope, "replacement-owner", ""); err != nil {
 				t.Fatal(err)
 			}
 			crewOf(a).scope, crewOf(a).epoch = "autodoc:0000000000000001", 1 // the window claimed another
 		},
-		"a new epoch":    func(_ *testing.T, a *agents, _ *crewWindow) { crewOf(a).epoch++ },
-		"another store":  func(_ *testing.T, _ *agents, w *crewWindow) { w.store = "store-2" },
-		"another daemon": func(_ *testing.T, _ *agents, w *crewWindow) { w.socket = "/run/test/other.sock" },
+		"a new epoch":    func(_ *testing.T, a *agents.Agents, _ *crewWindow) { crewOf(a).epoch++ },
+		"another store":  func(_ *testing.T, _ *agents.Agents, w *crewWindow) { w.store = "store-2" },
+		"another daemon": func(_ *testing.T, _ *agents.Agents, w *crewWindow) { w.socket = "/run/test/other.sock" },
 	} {
 		t.Run(name, func(t *testing.T) {
-			a, c, w := startingCrewAgents(t, oneTwoCopy)
+			a, c, w := startingCrewAgents(t, oneTwo)
 			// the start's setup answers at once; the daemon commits the registration, and its answer
 			// comes after the change
 			w.hold, w.late, w.skipHold = true, true, 1
-			p, _ := a.profile("one")
-			instance, err := a.startInstance(p)
+			p, _ := a.Profile("one")
+			instance, err := a.StartInstance(p)
 			if err != nil || !instance.State().Starting {
 				t.Fatalf("start: %v", err)
 			}
@@ -597,9 +598,9 @@ func TestALateRegistrationStartsNothing(t *testing.T) {
 // TestAnEndedSessionLeavesAReplacementsContext: ending a session removes its own context file, by
 // its session's name: a newer session's, published in the same agent folder by another host, stays.
 func TestAnEndedSessionLeavesAReplacementsContext(t *testing.T) {
-	a, c, _ := crewAgents(t, oneTwoCopy)
-	p, _ := a.profile("one")
-	instance, err := a.startInstance(p)
+	a, c, _ := crewAgents(t, oneTwo)
+	p, _ := a.Profile("one")
+	instance, err := a.StartInstance(p)
 	if err != nil || !instance.State().Running {
 		t.Fatalf("start: %v", err)
 	}
@@ -621,9 +622,9 @@ func TestAnEndedSessionLeavesAReplacementsContext(t *testing.T) {
 // codename under its epoch supersedes the session the daemon never heard end (docs/decisions/crew.md,
 // the owner's register), so the agent starts, and the old session ends 'takeover'.
 func TestALostExitIsAskedAgain(t *testing.T) {
-	a, c, w := crewAgents(t, oneTwoCopy)
-	p, _ := a.profile("one")
-	instance, err := a.startInstance(p)
+	a, c, w := crewAgents(t, oneTwo)
+	p, _ := a.Profile("one")
+	instance, err := a.StartInstance(p)
 	if err != nil || !instance.State().Running {
 		t.Fatalf("start: %v", err)
 	}
@@ -640,7 +641,7 @@ func TestALostExitIsAskedAgain(t *testing.T) {
 	for id := range crewOf(a).owed {
 		old = id
 	}
-	again, err := a.startInstance(p)
+	again, err := a.StartInstance(p)
 	if err != nil || !again.State().Running || again.State().Session.ID == "" || again.State().Session.ID == old {
 		t.Fatalf("a start while the old session's exit is owed: %+v, %v, notices %v; want it started, superseding it", again, err, c.notes)
 	}
@@ -660,10 +661,10 @@ func TestALostExitIsAskedAgain(t *testing.T) {
 // its session and with its context, whatever selecting its tab answers: that failure is said, and
 // the session ends with the process.
 func TestAStartedAgentKeepsItsSessionWhenItsTabCantBeShown(t *testing.T) {
-	a, c, _ := crewAgents(t, oneTwoCopy)
-	c.panel = &modelPanelCopy{owner: c, selectErr: errors.New("the panel is not mounted")}
-	p, _ := a.profile("one")
-	instance, err := a.startInstance(p)
+	a, c, _ := crewAgents(t, oneTwo)
+	c.panel = &modelPanel{owner: c, selectErr: errors.New("the panel is not mounted")}
+	p, _ := a.Profile("one")
+	instance, err := a.StartInstance(p)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -708,7 +709,7 @@ func TestAgentKindReadsTheShellsWords(t *testing.T) {
 		"":                                       "agent",
 		"A=1":                                    "agent",
 	} {
-		if got := agentKind(command); got != want {
+		if got := agents.AgentKind(command); got != want {
 			t.Errorf("agentKind(%q) = %q, want %q", command, got, want)
 		}
 	}
@@ -718,21 +719,21 @@ func TestAgentKindReadsTheShellsWords(t *testing.T) {
 // (Enter after its program exited) runs nothing, since no session is registered for that start;
 // the agents panel's start registers one, and its program is told that session's file.
 func TestACrewTabRestartedFromItselfIsRefused(t *testing.T) {
-	a, c, _ := crewAgents(t, oneTwoCopy)
-	p, _ := a.profile("one")
-	instance, err := a.startInstance(p)
+	a, c, _ := crewAgents(t, oneTwo)
+	p, _ := a.Profile("one")
+	instance, err := a.StartInstance(p)
 	if err != nil || !instance.State().Running {
 		t.Fatalf("start: %v", err)
 	}
 	c.panel.exit(instance.State().Tab, 0)
-	if _, spawned, err := startedEnvCopy(a, c, instance); !errors.Is(err, errCrewStartHere) || spawned {
+	if _, spawned, err := startedEnv(a, c, instance); !errors.Is(err, agents.ErrCrewStartHere) || spawned {
 		t.Fatalf("a restart from the tab: %v, spawned %v; want refused, nothing run", err, spawned)
 	}
-	again, err := a.startInstance(p)
+	again, err := a.StartInstance(p)
 	if err != nil || !again.State().Running {
 		t.Fatalf("a start from the panel: %v", err)
 	}
-	if args, spawned, err := startedEnvCopy(a, c, again); err != nil || !spawned ||
+	if args, spawned, err := startedEnv(a, c, again); err != nil || !spawned ||
 		!slices.Contains(args, "AUTODOC_CREW_CONTEXT="+crew.ContextPath(again.State().Dir, again.State().Session.ID)) {
 		t.Fatalf("its program after the panel's start: %v, spawned %v, %v", err, spawned, args)
 	}
@@ -742,17 +743,17 @@ func TestACrewTabRestartedFromItselfIsRefused(t *testing.T) {
 // session even when its tab can't be selected (that failure is kept), so it is never said to be in
 // another window; a session no agent here has is not found.
 func TestAnAgentHereIsRaisedWhateverItsTab(t *testing.T) {
-	a, c, _ := crewAgents(t, oneTwoCopy)
-	p, _ := a.profile("one")
-	instance, err := a.startInstance(p)
+	a, c, _ := crewAgents(t, oneTwo)
+	p, _ := a.Profile("one")
+	instance, err := a.StartInstance(p)
 	if err != nil || !instance.State().Running {
 		t.Fatalf("start: %v", err)
 	}
 	c.panel.selectErr = errors.New("the panel is not mounted")
-	if !a.raiseSession(instance.State().Session.ID) {
+	if !a.RaiseSession(instance.State().Session.ID) {
 		t.Fatal("this window's agent, its tab unselectable, was taken for another window's")
 	}
-	if a.raiseSession("elsewhere") {
+	if a.RaiseSession("elsewhere") {
 		t.Fatal("a session no agent here has was found")
 	}
 }
@@ -775,7 +776,7 @@ func TestTheGuidesAllowanceIsMergedIntoTheFolderAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 	for range 2 { // a second write changes nothing
-		if _, err := writeWakeAcceptance(shellQuote("/opt/autodoc/autodoc"), dir, crew.KindClaude, crew.ClaudeFloor(), crew.ClaudeAllow()); err != nil {
+		if _, err := agents.WriteWakeAcceptance(agents.ShellQuote("/opt/autodoc/autodoc"), dir, crew.KindClaude, crew.ClaudeFloor(), crew.ClaudeAllow()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -796,4 +797,4 @@ func TestTheGuidesAllowanceIsMergedIntoTheFolderAlone(t *testing.T) {
 }
 
 // crewOf is a's crew scope as the crew host it is, for a cell that reads or sets the host's own state.
-func crewOf(a *agents) *crewHost { return a.crew.(*crewHost) }
+func crewOf(a *agents.Agents) *crewHost { return a.Crew.(*crewHost) }

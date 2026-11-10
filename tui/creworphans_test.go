@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -115,11 +116,11 @@ func TestAQuestionOverAnOfferPutsItBack(t *testing.T) {
 func TestTheWindowsOwnScopeIsNoOrphan(t *testing.T) {
 	dir := t.TempDir()
 	const own = "autodoc:00000000000000aa"
-	scopes := filepath.Join(agentBase(nil, dir), ".crew-scopes")
+	scopes := filepath.Join(agents.AgentBase(nil, dir), ".crew-scopes")
 	if err := os.MkdirAll(scopes, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(scopes, crewFileName(own)), nil, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(scopes, agents.CrewFileName(own)), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	w := &crewWindow{d: newCrewDaemonForHost()}

@@ -11,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 )
 
 // A gated script's work is bounded however it runs
@@ -178,9 +180,9 @@ func TestAGatedScriptCannotWriteItsRights(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if after[prefLuaGrants] != before[prefLuaGrants] || after[prefAgentProfiles] != before[prefAgentProfiles] {
+	if after[prefLuaGrants] != before[prefLuaGrants] || after[agents.PrefAgentProfiles] != before[agents.PrefAgentProfiles] {
 		t.Errorf("a refused preference changed: grants %q → %q, profiles %q → %q",
-			before[prefLuaGrants], after[prefLuaGrants], before[prefAgentProfiles], after[prefAgentProfiles])
+			before[prefLuaGrants], after[prefLuaGrants], before[agents.PrefAgentProfiles], after[agents.PrefAgentProfiles])
 	}
 	if after["tui.theme"] != "light" {
 		t.Errorf("the theme it may set is %q", after["tui.theme"])

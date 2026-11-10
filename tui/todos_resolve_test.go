@@ -125,7 +125,7 @@ func TestALoadedFolderIsShownByTheStoreTheDaemonResolves(t *testing.T) {
 		{"new", "/made", "/made"}, {"new", "/madealias", "/madecanon"},
 	} {
 		v.folderAs = c.as
-		v.folderChosen(taskFileCopy(c.chosen))
+		v.folderChosen(taskFile(c.chosen))
 		if want := slashFile(c.want); v.cur == nil || v.cur.id != "root:"+want {
 			t.Errorf("%s %s: shown %+v; want the store at %s", c.as, c.chosen, v.cur, want)
 		}
@@ -176,7 +176,7 @@ func TestAStoreMovedIntoTheFolderLoadedIsShown(t *testing.T) {
 		t.Fatalf("the store shown first: %+v; want another than the moved one (the cell's premise)", v.cur)
 	}
 	v.folderAs = "load"
-	v.folderChosen(taskFileCopy("/moved"))
+	v.folderChosen(taskFile("/moved"))
 	// listed by its first root, /a: the folder chosen is not its listed root
 	if v.cur == nil || v.cur.sid != moved.StoreID || v.cur.path != slashFile("/moved")+"/.todo-list" || v.cur.id != "root:"+slashFile("/a") {
 		t.Errorf("/moved loaded: shown %+v; want the store moved there, %s at %s/.todo-list, listed as root:%s", v.cur, moved.StoreID, slashFile("/moved"), slashFile("/a"))
@@ -211,12 +211,12 @@ func TestAStoreNotListedIsSaidAndNoOtherIsShownInItsPlace(t *testing.T) {
 	v := newTodos(core)
 	v.list()
 	v.folderAs = "load"
-	v.folderChosen(taskFileCopy("/fresh"))
+	v.folderChosen(taskFile("/fresh"))
 	shown := v.cur
 	if shown == nil || shown.id != "root:"+slashFile("/fresh") {
 		t.Fatalf("/fresh loaded: shown %+v", shown)
 	}
-	v.folderChosen(taskFileCopy("/gone"))
+	v.folderChosen(taskFile("/gone"))
 	if v.cur == nil || v.cur.id != shown.id {
 		t.Errorf("a store not listed: shown %+v; want the one shown before, %s", v.cur, shown.id)
 	}
@@ -250,7 +250,7 @@ func TestAStoreNotListedWithNoneShownShowsNone(t *testing.T) {
 		t.Fatalf("shown before: %+v; want none (the cell's premise)", v.cur)
 	}
 	v.folderAs = "load"
-	v.folderChosen(taskFileCopy("/gone")) // /gone's store is listed, by another id than the one asked for
+	v.folderChosen(taskFile("/gone")) // /gone's store is listed, by another id than the one asked for
 	if v.cur != nil {
 		t.Errorf("a store not listed, none shown before: shown %+v; want none", v.cur)
 	}
@@ -286,12 +286,12 @@ func TestAMovedStoreStaysShown(t *testing.T) {
 	v := newTodos(managerCore(t, m))
 	v.list()
 	v.folderAs = "load"
-	v.folderChosen(taskFileCopy("/x"))
+	v.folderChosen(taskFile("/x"))
 	if v.cur == nil || v.cur.sid != x.StoreID {
 		t.Fatalf("/x loaded: shown %+v; want its store %s (the cell's premise)", v.cur, x.StoreID)
 	}
 	v.folderAs = "move"
-	v.folderChosen(taskFileCopy("/a0"))
+	v.folderChosen(taskFile("/a0"))
 	want := slashFile("/a0") + "/.todo-list"
 	if v.cur == nil || v.cur.sid != x.StoreID || v.cur.path != want || v.cur.id != "root:"+slashFile("/a0") {
 		t.Errorf("after the move: shown %+v; want the store %s at %s, listed as root:%s", v.cur, x.StoreID, want, slashFile("/a0"))
@@ -325,7 +325,7 @@ func movedRig(t *testing.T) (m *todo.Manager, core *featuretest.ScriptedCore, v 
 	v = newTodos(core)
 	v.list()
 	v.folderAs = "load"
-	v.folderChosen(taskFileCopy("/x"))
+	v.folderChosen(taskFile("/x"))
 	if v.cur == nil || v.cur.sid != x.StoreID {
 		t.Fatalf("/x loaded: shown %+v; want its store %s (the rig's premise)", v.cur, x.StoreID)
 	}
@@ -360,7 +360,7 @@ func TestAMovedStoreNotListedIsSaid(t *testing.T) {
 		return kept, err
 	}
 	v.folderAs = "move"
-	v.folderChosen(taskFileCopy("/a0"))
+	v.folderChosen(taskFile("/a0"))
 	if v.cur != nil {
 		t.Errorf("a moved store not listed: shown %+v; want none", v.cur)
 	}
@@ -396,7 +396,7 @@ func TestAFailedNewAsksForNothing(t *testing.T) {
 		t.Fatal("nothing shown before (the cell's premise)")
 	}
 	v.folderAs = "new"
-	v.folderChosen(taskFileCopy("/made"))
+	v.folderChosen(taskFile("/made"))
 	v.list()
 	if v.cur == nil || v.cur.id != shown.id {
 		t.Errorf("after a failed New and a listing: shown %+v; want the one shown before, %s", v.cur, shown.id)

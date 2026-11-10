@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 )
@@ -95,10 +96,10 @@ func TestATextUsersNormalModeSaysHowToGetBack(t *testing.T) {
 // The agent panel's terminals follow the keymap too: under the text editor's keys, its normal mode
 // says how to get back.
 func TestATextUsersAgentNormalModeSaysHowToGetBack(t *testing.T) {
-	agent, _ := fakeAgentCopy(t)
-	_, r, _ := runAgentTUIWith(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake",
+	agent, _ := fakeAgent(t)
+	_, r, _ := runAgentTUIWith(t, t.TempDir(), []agents.AgentProfile{{Name: "fake", Command: agents.ShellQuote(agent)}}, "fake",
 		map[string]string{prefKeymap: "text"}, Options{})
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true }) // SPC g: the text editor's keys have no SPC
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true }) // SPC g: the text editor's keys have no SPC
 	r.s.WaitForText(t, "agent · fake")
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
 	r.keys(t, ctrlKey('t'))

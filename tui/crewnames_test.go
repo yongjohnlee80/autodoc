@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 )
 
 // earlierBuild writes, under base, what a build before crewFileName left for scope: its claim, its
@@ -36,7 +38,7 @@ func earlierBuild(t *testing.T, base, scope string) {
 // and none by the old spelling.
 func renamedTo(t *testing.T, base, scope string) {
 	t.Helper()
-	enc := crewFileName(scope)
+	enc := agents.CrewFileName(scope)
 	for _, f := range []struct{ path, body string }{
 		{filepath.Join(base, ".crew-scopes", enc), ""},
 		{filepath.Join(base, ".crew-todos", enc), `{"stores":["S"]}`},
@@ -56,18 +58,18 @@ func renamedTo(t *testing.T, base, scope string) {
 // A crew identity's file name is legal on every OS: a scope's colon is escaped, a codename (lower
 // case, digits, hyphens) is itself, and two identities never share a name.
 func TestACrewIdentityIsAFileNameOnEveryOS(t *testing.T) {
-	scope := crewFileName("autodoc:0123456789abcdef")
+	scope := agents.CrewFileName("autodoc:0123456789abcdef")
 	if strings.ContainsAny(scope, `:/\`) {
 		t.Errorf("crewFileName(scope) = %q, holds a character a file name can't", scope)
 	}
-	if got := crewFileName("zen-2"); got != "zen-2" {
+	if got := agents.CrewFileName("zen-2"); got != "zen-2" {
 		t.Errorf("crewFileName(codename) = %q, want it unchanged", got)
 	}
-	if crewFileName("autovim:plugins") == crewFileName("autovim_plugins") {
+	if agents.CrewFileName("autovim:plugins") == agents.CrewFileName("autovim_plugins") {
 		t.Error("two scopes share a file name")
 	}
 	// the folder is made where it is named, on this OS
-	if err := os.MkdirAll(filepath.Join(t.TempDir(), "kb", scope, crewFileName("zen")), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Join(t.TempDir(), "kb", scope, agents.CrewFileName("zen")), 0o700); err != nil {
 		t.Fatalf("an agent's folder by crewFileName: %v", err)
 	}
 }
@@ -115,7 +117,7 @@ func TestADotNamedWorkspacesCrewNamesAreRenamed(t *testing.T) {
 		t.Fatalf("migrateCrewNames: kept %v, %v", kept, err)
 	}
 	renamedTo(t, base, scope)
-	moved := filepath.Join(base, ".kb", crewFileName(scope), "zen", "AGENTS.md")
+	moved := filepath.Join(base, ".kb", agents.CrewFileName(scope), "zen", "AGENTS.md")
 	if b, err := os.ReadFile(moved); err != nil || string(b) != "zen's guide in .kb" {
 		t.Errorf("the .kb workspace's agent folder: %q, %v; want it renamed, its guide kept", b, err)
 	}
@@ -133,7 +135,7 @@ func TestACrewRenameCutShortIsFinishedNextTime(t *testing.T) {
 	const scope = "autodoc:00000000000000bb"
 	earlierBuild(t, base, scope)
 	// the claim was renamed before the run ended; the rest was not
-	if err := os.Rename(filepath.Join(base, ".crew-scopes", scope), filepath.Join(base, ".crew-scopes", crewFileName(scope))); err != nil {
+	if err := os.Rename(filepath.Join(base, ".crew-scopes", scope), filepath.Join(base, ".crew-scopes", agents.CrewFileName(scope))); err != nil {
 		t.Fatal(err)
 	}
 	if kept, err := migrateCrewNames(base); err != nil || len(kept) != 0 {
@@ -150,14 +152,14 @@ func TestAnOldCrewNameWhoseNewOneIsThereIsKept(t *testing.T) {
 	base := t.TempDir()
 	const scope = "autodoc:00000000000000cc"
 	earlierBuild(t, base, scope)
-	newer := filepath.Join(base, "kb", crewFileName(scope), "zen", "AGENTS.md")
+	newer := filepath.Join(base, "kb", agents.CrewFileName(scope), "zen", "AGENTS.md")
 	if err := os.MkdirAll(filepath.Dir(newer), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(newer, []byte("the newer guide"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	oldTodos, newerTodos := filepath.Join(base, ".crew-todos", scope), filepath.Join(base, ".crew-todos", crewFileName(scope))
+	oldTodos, newerTodos := filepath.Join(base, ".crew-todos", scope), filepath.Join(base, ".crew-todos", agents.CrewFileName(scope))
 	if err := os.WriteFile(newerTodos, []byte(`{"stores":["newer"]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}

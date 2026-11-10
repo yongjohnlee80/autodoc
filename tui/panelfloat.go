@@ -101,8 +101,8 @@ func (h *Host) cyclePanelTab(step int) {
 		panel, err = h.terminals.panel()
 		pick = func(id terminal.TerminalTabID) { h.keep(panel.Select(id)) }
 	case h.panelHasKeyboard("agent"):
-		panel, err = h.agents.runtime()
-		pick = h.agents.goToTab
+		panel, err = h.agents.Runtime()
+		pick = h.agents.GoToTab
 	default:
 		return
 	}

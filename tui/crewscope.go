@@ -4,29 +4,30 @@ import (
 	"context"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 )
 
 // THE AGENTS' CREW SCOPE: the crew host and the inbox are what the agents ask of the window's crew
 // (agent.go CrewScope, CrewAttention), through these, each the crew host's or the inbox's own.
 
 var (
-	_ CrewScope     = (*crewHost)(nil)
-	_ CrewAttention = (*crewInbox)(nil)
+	_ agents.CrewScope     = (*crewHost)(nil)
+	_ agents.CrewAttention = (*crewInbox)(nil)
 )
 
 // Held is the scope the window holds (held).
 func (h *crewHost) Held() (scope string, epoch int64, ok bool) { return h.held() }
 
 // Register registers an agent's session under the window's scope (register).
-func (h *crewHost) Register(codename, kind string, prompts bool, via crew.MailVia, workspace int64, instance, dir string, then func(crewSession, error)) {
+func (h *crewHost) Register(codename, kind string, prompts bool, via crew.MailVia, workspace int64, instance, dir string, then func(agents.CrewSession, error)) {
 	h.register(codename, kind, prompts, via, workspace, instance, dir, then)
 }
 
 // Publish writes a session's context for the process about to start (publish).
-func (h *crewHost) Publish(s crewSession) (string, error) { return h.publish(s) }
+func (h *crewHost) Publish(s agents.CrewSession) (string, error) { return h.publish(s) }
 
 // Exit ends a session (exit).
-func (h *crewHost) Exit(s crewSession, why string) { h.exit(s, why) }
+func (h *crewHost) Exit(s agents.CrewSession, why string) { h.exit(s, why) }
 
 // PromptsReported is whether the crew says an agent's permission prompts are reported (promptsReported).
 func (h *crewHost) PromptsReported(codename string, then func(reported bool)) {

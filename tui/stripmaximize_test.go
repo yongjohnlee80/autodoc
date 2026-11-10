@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 )
 
 // THE STRIP'S + — a panel's tab strip ends in _, + and x, the title bar's controls side by side. +
@@ -73,8 +75,8 @@ func TestTheTerminalsStripMaximizesAndRestores(t *testing.T) {
 }
 
 func TestTheAgentsStripMaximizesAndRestores(t *testing.T) {
-	agent, _ := fakeAgentCopy(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
+	agent, _ := fakeAgent(t)
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "fake", Command: agents.ShellQuote(agent)}}, "fake")
 	r.leader(t, 'g')
 	r.s.WaitForText(t, "started")
 	stripMaximizes(t, r, "agent")
