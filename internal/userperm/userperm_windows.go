@@ -96,15 +96,18 @@ func exposure(f *os.File) (string, error) {
 	return "", nil
 }
 
-// create is a new file made with a protected DACL granting this user alone full control, set in the
-// call that makes it (CREATE_NEW): nothing is inherited from the folder at any moment. The handle
+// create is a new file made with this user as its owner and a protected DACL granting this user
+// alone full control, set in the call that makes it (CREATE_NEW): nothing is inherited from the
+// folder at any moment, and the token's default owner is not taken. The handle
 // is not inheritable.
 func create(path string) (*os.File, error) {
 	me, err := currentUser()
 	if err != nil {
 		return nil, err
 	}
-	sd, err := windows.SecurityDescriptorFromString("D:P(A;;FA;;;" + me.String() + ")")
+	// the owner is named too: a new object's default owner is the token's TokenOwner, which can be
+	// a group (an elevated administrator's is the Administrators), and OpenPrivate wants this user
+	sd, err := windows.SecurityDescriptorFromString("O:" + me.String() + "D:P(A;;FA;;;" + me.String() + ")")
 	if err != nil {
 		return nil, err
 	}
