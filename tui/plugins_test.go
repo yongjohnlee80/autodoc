@@ -44,10 +44,6 @@ import (
 
 const testPluginArg = "autodoc-test-plugin"
 
-// argvPrinterEnv, set to 1, makes this test binary print its arguments as JSON and exit: an agent
-// CLI stand-in that says what it was given (agentargs_test.go).
-const argvPrinterEnv = "AUTODOC_TUI_ARGV_PRINTER"
-
 // setupRecorderEnv, set to a folder, makes this test binary a stand-in for an agent's own autodoc
 // asked its crew setup: it writes its arguments (one a line), its environment and its working
 // folder there (args, env, pwd) and answers a setup, or, with setupAnswerEnv "other", something
@@ -79,7 +75,7 @@ func TestMain(m *testing.M) {
 	if dir := os.Getenv(setupRecorderEnv); dir != "" {
 		os.Exit(recordSetup(dir))
 	}
-	if os.Getenv(argvPrinterEnv) == "1" {
+	if os.Getenv(argvPrinterEnvCopy) == "1" {
 		_ = json.NewEncoder(os.Stdout).Encode(os.Args[1:])
 		os.Exit(0)
 	}
