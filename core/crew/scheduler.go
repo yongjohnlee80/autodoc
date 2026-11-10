@@ -122,7 +122,7 @@ type RungBefore interface {
 var noticeName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}(@[A-Za-z0-9][A-Za-z0-9._:-]{0,127})?$`)
 
 // noticeKinds are the kinds a notice names after a sender.
-var noticeKinds = []string{KindClaude, KindCodex, KindAgy, KindOpenCode}
+var noticeKinds = []string{KindClaude, KindCodex, KindAgy, KindOpenCode, KindJunie}
 
 // NoticeFor is the one wake text for a session that reads its mail via: every waker sends it. With
 // senders (WaitingSenders), it names at most NoticeMaxSenders of them by their daemon-set address

@@ -130,6 +130,8 @@ type Setup struct {
 //     until it is found (crew endpoint --codex-here --wait); given in.Servers, an app-server of its
 //     own carrying them (Server), the TUI attached to it (codexSetup).
 //   - Antigravity (agy): its mail as in.Servers' tools (agySetup).
+//   - Junie: its mail as in.Servers' tools, their config in a folder of the agent's own that its
+//     command line adds (junieSetup).
 //   - the other kinds: nothing yet.
 //
 // Each kind's is its kindSetups entry; a new kind, or a kind taking in.Servers, changes only its own.
@@ -164,6 +166,7 @@ var kindSetups = map[string]kindSetup{
 	KindCodex:    codexSetup,
 	KindOpenCode: opencodeSetup,
 	KindAgy:      agySetup,
+	KindJunie:    junieSetup,
 }
 
 // AgyBridgeCommand is the one shell command an agy crew agent runs, its guide's wake step and its
@@ -226,6 +229,43 @@ func agySetup(in SetupInput, _ string, s *Setup) error {
 	s.Argv = append(s.Argv, "-i", AgyLaunchPrompt)
 	s.Allow = allow
 	s.Prompts = true
+	s.MailVia = MailViaMCP
+	return nil
+}
+
+// JunieMCPFolder is the folder of the agent's own that holds Junie's MCP config (mcp.json), relative
+// to the agent's folder. Junie reads mcp.json from the folders --mcp-location names, beside its user
+// and project defaults, which stay on: the agent's own servers are added, nothing of the user's is
+// replaced or written.
+const JunieMCPFolder = ".junie-crew/mcp"
+
+// JunieMCPConfig is Junie's MCP config file in the agent's folder, in JunieMCPFolder.
+const JunieMCPConfig = JunieMCPFolder + "/mcp.json"
+
+// junieSetup gives a Junie agent its crew mail as in.Servers' tools
+// (docs/decisions/crew.md#the-crew-mcp-server): their config, mcp.json, in a folder of the agent's own
+// (FolderFiles), which its command line adds with --mcp-location. Junie has no session-scoped
+// allowlist (its rules are the user's ~/.junie/allowlist.json, which AutoDoc never writes), so a
+// tool call may ask the user; and no prompt reporter: its prompts are unreported. Without servers
+// or a folder it keeps its mail as commands, with a notice.
+func junieSetup(in SetupInput, _ string, s *Setup) error {
+	if len(in.Servers) == 0 || in.AgentDir == "" {
+		if len(in.Servers) > 0 {
+			s.Notices = append(s.Notices, "Junie's crew mail as MCP tools needs the agent's own folder, which this host didn't give: it reads its mail with the autodoc commands")
+		}
+		return nil
+	}
+	servers, err := mcpServers(in.Servers)
+	if err != nil {
+		return err
+	}
+	cfg, err := json.Marshal(map[string]any{"mcpServers": servers})
+	if err != nil {
+		return err
+	}
+	s.FolderFiles = append(s.FolderFiles, FolderFile{Path: JunieMCPConfig, Content: string(cfg)})
+	s.Argv = append(s.Argv, "--mcp-location", filepath.Join(in.AgentDir, filepath.FromSlash(JunieMCPFolder)))
+	s.Notices = append(s.Notices, "Junie may ask before each crew mail tool: allow the autodoc server's tools in your ~/.junie/allowlist.json (rules.mcpTools) to stop it")
 	s.MailVia = MailViaMCP
 	return nil
 }

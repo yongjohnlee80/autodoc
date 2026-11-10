@@ -827,3 +827,63 @@ func TestSetupForAClaudeWrapperOfAnotherName(t *testing.T) {
 		t.Fatalf("claude_tui.sh's setup: prompts %v, notices %q, argv %q; want --settings naming PermissionRequest, prompts, no notice", s.Prompts, s.Notices, s.Argv)
 	}
 }
+
+// TestSetupForJunieGivesItsMailAsMCPTools: a Junie agent's setup writes the crew MCP servers' config,
+// mcp.json, into a folder of the agent's own, and adds that folder on its command line with
+// --mcp-location; Junie's own default locations stay on, and nothing of the user's is written. Its
+// mail is then MCP; its prompts are unreported (Junie has no reporter), nothing goes in its env, and
+// a notice says a tool call may ask the user. Without servers it keeps its mail as commands, with no
+// notice; with servers and no folder, as commands with a notice.
+func TestSetupForJunieGivesItsMailAsMCPTools(t *testing.T) {
+	servers := []crew.MCPServer{{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"}, Tools: []string{"mail_receive", "mail_ack"}}}
+	for _, host := range []string{crew.HostWindow, crew.HostNvim} {
+		s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindJunie, Host: host, AgentDir: "/a", Dir: "/p", Servers: servers,
+			Env: map[string]string{"PATH": "/x", "SECRET": "s3"}}, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(s.FolderFiles) != 1 || s.FolderFiles[0].Path != ".junie-crew/mcp/mcp.json" || s.FolderFiles[0].Path != crew.JunieMCPConfig {
+			t.Fatalf("%s: folder files %+v, want .junie-crew/mcp/mcp.json alone", host, s.FolderFiles)
+		}
+		var cfg map[string]map[string]struct {
+			Command string            `json:"command"`
+			Args    []string          `json:"args"`
+			Env     map[string]string `json:"env"`
+		}
+		if err := json.Unmarshal([]byte(s.FolderFiles[0].Content), &cfg); err != nil {
+			t.Fatal(err)
+		}
+		if a, ok := cfg["mcpServers"]["autodoc"]; !ok || a.Command != "/x/autodoc" || !slices.Equal(a.Args, []string{"crew", "mcp"}) ||
+			strings.Contains(s.FolderFiles[0].Content, `"env"`) {
+			t.Errorf("%s: mcp.json %s, want the server's command and args, and no env (it inherits the agent's)", host, s.FolderFiles[0].Content)
+		}
+		want := []string{"--mcp-location", filepath.Join("/a", ".junie-crew", "mcp")}
+		if !slices.Equal(s.Argv, want) {
+			t.Errorf("%s: argv %q, want %q: the folder added, Junie's default locations left on", host, s.Argv, want)
+		}
+		if slices.Contains(s.Argv, "--mcp-default-locations") || strings.Contains(strings.Join(s.Argv, " "), "s3") {
+			t.Errorf("%s: argv %q: the user's own locations must stay on, and the profile's env must not appear", host, s.Argv)
+		}
+		if s.MailVia != crew.MailViaMCP || s.Prompts || len(s.Env) != 0 || len(s.Allow) != 0 {
+			t.Errorf("%s: mail %v, prompts %v, env %v, allow %q: want MCP, unreported, no env, no rule written", host, s.MailVia, s.Prompts, s.Env, s.Allow)
+		}
+		if len(s.Notices) != 1 || !strings.Contains(s.Notices[0], "allowlist") {
+			t.Errorf("%s: notices %q, want the one saying a tool call may ask", host, s.Notices)
+		}
+	}
+	// no servers (a daemon without them): its mail stays commands, and nothing is said
+	s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindJunie, Host: crew.HostNvim, AgentDir: "/a"}, "")
+	if err != nil || s.MailVia == crew.MailViaMCP || len(s.FolderFiles) != 0 || len(s.Argv) != 0 || len(s.Notices) != 0 {
+		t.Errorf("no servers: %+v %v, want the commands and nothing else", s, err)
+	}
+	// servers but no folder of its own: commands, and a notice why
+	s, err = crew.SetupFor(crew.SetupInput{Kind: crew.KindJunie, Host: crew.HostNvim, Servers: servers}, "")
+	if err != nil || s.MailVia == crew.MailViaMCP || len(s.FolderFiles) != 0 || len(s.Argv) != 0 || len(s.Notices) != 1 {
+		t.Errorf("no folder: %+v %v, want the commands and one notice", s, err)
+	}
+	// its guide in the MCP form names the tools and, with no waker for Junie, says its host tells it
+	if g := crew.GuideOfVia(crew.KindJunie, crew.MailViaMCP).Markdown; !strings.Contains(g, "`mail_receive`") || !strings.Contains(g, "no waker yet") ||
+		strings.Contains(g, "autodoc mail receive") {
+		t.Errorf("Junie's MCP guide:\n%s\nwant the tools, the no-waker step, and no mail command", g)
+	}
+}
