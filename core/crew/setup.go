@@ -67,7 +67,8 @@ type MCPServer struct {
 // FolderFile is a file a host writes into the agent's own folder (SetupInput.AgentDir): a CLI's
 // folder-scoped configuration, never a user-level file and never the user's project. Its Path is
 // local (filepath.IsLocal: relative, no "..", nothing outside the folder): SetupFor refuses any
-// other. A host writes it with mode 0600, since it may name the session's context.
+// other. A host writes it private to the user (0600 on Unix, an access list granting only the user
+// on Windows), replacing an earlier one, since it may name the session's context.
 type FolderFile struct {
 	Path    string `json:"path"` // relative to SetupInput.AgentDir
 	Content string `json:"content"`
@@ -248,6 +249,12 @@ func mcpServers(servers []MCPServer) (map[string]any, error) {
 	return out, nil
 }
 
+// ClaudeMCPConfig is the file of a Claude agent's own folder (SetupInput.AgentDir) holding its crew
+// MCP servers, which its --mcp-config names: their commands and args, and an env only a server of
+// its own carries (the crew's server has none), never a credential. A host writes it private, as
+// every folder file, replacing an earlier one.
+const ClaudeMCPConfig = ".autodoc-crew-mcp.json"
+
 // claudeSetup is crew.ClaudeSettings for the Claude Code on in.Env's PATH, the guide's commands
 // allowed: Neovim's --settings; a window writes them into the agent's folder itself.
 func claudeSetup(in SetupInput, cache string, s *Setup) error {
@@ -263,9 +270,15 @@ func claudeSetup(in SetupInput, cache string, s *Setup) error {
 	settings, prompts := ClaudeSettings(in.Autodoc, k)
 	s.Prompts = prompts
 	s.Allow = ClaudeAllow() // the guide's commands, for a session on CLI mail
-	if len(in.Servers) > 0 {
-		// the crew MCP server on its command line, on both hosts (a folder's .mcp.json would have the
-		// user approve its servers first), each tool allowed by its exact mcp__<server>__<tool>; never
+	switch {
+	case len(in.Servers) == 0:
+	case !filepath.IsAbs(in.AgentDir):
+		s.Notices = append(s.Notices, "Claude Code's crew mail over MCP needs the agent's own folder, which this host didn't give: the agent reads its mail through the CLI")
+	default:
+		// the crew MCP server in a file of the agent's own folder, named by its absolute path on the
+		// command line, on both hosts: no shell quoting can change it on any OS (a JSON argument holds
+		// quotes and, on Windows, backslashes), and it is never the folder's .mcp.json, whose servers
+		// the user would approve first. Each tool is allowed by its exact mcp__<server>__<tool>; never
 		// --strict-mcp-config, which would take the user's own MCP servers from their agent
 		servers, err := mcpServers(in.Servers)
 		if err != nil {
@@ -275,7 +288,8 @@ func claudeSetup(in SetupInput, cache string, s *Setup) error {
 		if err != nil {
 			return err
 		}
-		s.Argv = append(s.Argv, "--mcp-config", string(cfg))
+		s.FolderFiles = append(s.FolderFiles, FolderFile{Path: ClaudeMCPConfig, Content: string(cfg)})
+		s.Argv = append(s.Argv, "--mcp-config", filepath.Join(in.AgentDir, ClaudeMCPConfig))
 		// least privilege: a session on MCP mail is allowed its tools, and of the guide's shell commands
 		// only the read-only contracts, which its guide points to
 		s.Allow = []string{ClaudeContractsAllow}

@@ -351,18 +351,20 @@ func TestSetupForRefusesADataDirThatIsntAbsolute(t *testing.T) {
 	}
 }
 
-// TestSetupForClaudeTakesTheCrewMCPServer: a Claude agent given the crew's MCP server gets it on its
-// command line on both hosts (--mcp-config, the server's command and args, no env of its own), never
+// TestSetupForClaudeTakesTheCrewMCPServer: a Claude agent given the crew's MCP server gets it on both
+// hosts as a file of its own folder (ClaudeMCPConfig: the server's command and args, no env of its
+// own), named by its absolute path on its command line (--mcp-config), never
 // --strict-mcp-config (which would take the user's own servers away), exactly its tools allowed by
 // their mcp__<server>__<tool> rules and no shell rule for its mail (least privilege; Neovim's
 // --settings carries them), and its mail via MCP; without servers it keeps the guide's commands
-// allowed (P6's), its mail via the CLI.
+// allowed (P6's), its mail via the CLI; and without a folder of its own, the same, with a notice.
 func TestSetupForClaudeTakesTheCrewMCPServer(t *testing.T) {
 	full := claudeOnPath(t, everyClaudeEvent...)
 	servers := []crew.MCPServer{{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"}, Tools: []string{"mail_receive", "mail_ack"}}}
 	rules := []string{"Bash(autodoc --contracts:*)", "mcp__autodoc__mail_receive", "mcp__autodoc__mail_ack"}
 	for _, host := range []string{crew.HostWindow, crew.HostNvim} {
-		in := crew.SetupInput{Kind: crew.KindClaude, Host: host, Autodoc: "a", Env: map[string]string{"PATH": full}, Dir: t.TempDir(), DataDir: t.TempDir(), Servers: servers}
+		agent := t.TempDir()
+		in := crew.SetupInput{Kind: crew.KindClaude, Host: host, Autodoc: "a", Env: map[string]string{"PATH": full}, Dir: t.TempDir(), DataDir: t.TempDir(), AgentDir: agent, Servers: servers}
 		s, err := crew.SetupFor(in, "")
 		if err != nil {
 			t.Fatal(err)
@@ -371,11 +373,22 @@ func TestSetupForClaudeTakesTheCrewMCPServer(t *testing.T) {
 		if i < 0 || i+1 >= len(s.Argv) || slices.Contains(s.Argv, "--strict-mcp-config") {
 			t.Fatalf("%s: argv %q, want --mcp-config and never --strict-mcp-config", host, s.Argv)
 		}
+		// the argument is the file's absolute path, never the JSON: no shell quoting can change a path
+		// that holds no quote, and the file is the folder's own, never its .mcp.json
+		if want := filepath.Join(agent, crew.ClaudeMCPConfig); s.Argv[i+1] != want || crew.ClaudeMCPConfig == ".mcp.json" {
+			t.Errorf("%s: --mcp-config %q, want the folder file's path %q", host, s.Argv[i+1], want)
+		}
+		if len(s.FolderFiles) != 1 || s.FolderFiles[0].Path != crew.ClaudeMCPConfig {
+			t.Fatalf("%s: folder files %+v, want the MCP config alone", host, s.FolderFiles)
+		}
 		var cfg struct {
 			Servers map[string]map[string]any `json:"mcpServers"`
 		}
-		if err := json.Unmarshal([]byte(s.Argv[i+1]), &cfg); err != nil || len(cfg.Servers) != 1 || cfg.Servers["autodoc"]["command"] != "/x/autodoc" || cfg.Servers["autodoc"]["env"] != nil {
-			t.Errorf("%s: --mcp-config %s (%v), want the autodoc server's command, args, and no env", host, s.Argv[i+1], err)
+		err = json.Unmarshal([]byte(s.FolderFiles[0].Content), &cfg)
+		args, _ := cfg.Servers["autodoc"]["args"].([]any)
+		if err != nil || len(cfg.Servers) != 1 || cfg.Servers["autodoc"]["command"] != "/x/autodoc" ||
+			!slices.Equal(args, []any{"crew", "mcp"}) || cfg.Servers["autodoc"]["env"] != nil {
+			t.Errorf("%s: the MCP config %s (%v), want the autodoc server's command, args, and no env", host, s.FolderFiles[0].Content, err)
 		}
 		if !slices.Equal(s.Allow, rules) { // least privilege: its tools and the read-only contracts, no shell rule for its mail
 			t.Errorf("%s: Allow %q, want exactly %q", host, s.Allow, rules)
@@ -392,10 +405,24 @@ func TestSetupForClaudeTakesTheCrewMCPServer(t *testing.T) {
 		if s.MailVia != crew.MailViaMCP {
 			t.Errorf("%s: mail via %v, want MCP", host, s.MailVia)
 		}
-		in.Servers = nil
-		without, err := crew.SetupFor(in, "")
-		if err != nil || slices.Contains(without.Argv, "--mcp-config") || without.MailVia != crew.MailViaCLI || !slices.Equal(without.Allow, crew.ClaudeAllow()) {
-			t.Errorf("%s without servers: %+v %v, want no MCP, the guide's commands allowed (P6's), and mail via the CLI", host, without, err)
+		for _, c := range []struct {
+			name   string
+			change func(*crew.SetupInput)
+			notice bool
+		}{
+			{"without servers", func(in *crew.SetupInput) { in.Servers = nil }, false},
+			{"without a folder of its own", func(in *crew.SetupInput) { in.AgentDir = "" }, true},
+			{"with a relative folder", func(in *crew.SetupInput) { in.AgentDir = "agent" }, true},
+		} {
+			in := in
+			c.change(&in)
+			without, err := crew.SetupFor(in, "")
+			if err != nil || slices.Contains(without.Argv, "--mcp-config") || len(without.FolderFiles) != 0 || without.MailVia != crew.MailViaCLI || !slices.Equal(without.Allow, crew.ClaudeAllow()) {
+				t.Errorf("%s %s: %+v %v, want no MCP, the guide's commands allowed (P6's), and mail via the CLI", host, c.name, without, err)
+			}
+			if said := slices.ContainsFunc(without.Notices, func(n string) bool { return strings.Contains(n, "own folder") }); said != c.notice {
+				t.Errorf("%s %s: notices %q, want the folder's notice %v", host, c.name, without.Notices, c.notice)
+			}
 		}
 	}
 }
