@@ -61,16 +61,16 @@ func (h *Host) todoFilesChanged(cs []todoFileChange) {
 			}
 		}
 		for _, b := range h.buffers {
-			if b.file.open && c.of(h.pathOnDisk(b.file.ws, b.file.path)) {
+			if b.file.open && changeIsOf(c, h.pathOnDisk(b.file.ws, b.file.path)) {
 				h.diskSoon(b)
 			}
 		}
 	}
 }
 
-// of reports whether the change is of the file at abs: its store's path joined with its from, the
+// changeIsOf reports whether c is a change of the file at abs: its store's path joined with its from, the
 // two canonical, is abs's canonical path. A path that only ends as from does is another store's.
-func (c todoFileChange) of(abs string) bool {
+func changeIsOf(c todoFileChange, abs string) bool {
 	if c.store == "" || !endsWithPath(abs, c.from) { // the cheap test first
 		return false
 	}
@@ -89,7 +89,7 @@ func canonicalFile(abs string) string {
 // todoMoveOf is the latest move the feed read of the file at abs, in its own store, nil for none.
 func (h *Host) todoMoveOf(abs string) *todoFileChange {
 	for i := len(h.todoMoves) - 1; i >= 0; i-- {
-		if c := h.todoMoves[i]; c.of(abs) {
+		if c := h.todoMoves[i]; changeIsOf(c, abs) {
 			return &c
 		}
 	}

@@ -263,7 +263,7 @@ func retainModelInstance(a *agents, c *identityHost, code, label string) {
 	if !exists {
 		p = agentProfile{Name: label, Codename: code, Command: "orphan"}
 	}
-	a.instances[code] = &agentInstance{profile: p, tab: id, token: "retained-" + code, running: true, owner: panel, generation: 1, workspace: c.ws}
+	a.instances[code] = &agentInstance{profile: p, tab: id, token: "retained-" + code, running: true, owner: panel, generation: 1, workspace: workspaceOf(c.ws)}
 	a.instanceOrder = append(a.instanceOrder, code)
 	a.selectedAgent, a.agentRunning, a.agentRunningLabel = code, code, label
 }
