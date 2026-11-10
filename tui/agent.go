@@ -595,7 +595,11 @@ func writeEditorCredential(dir, token string) (string, error) {
 // whatever was there, so an earlier file, whatever its permissions, is replaced whole, never
 // opened or appended to.
 func writePrivate(path string, text []byte) error {
-	f, err := userperm.CreatePrivateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
+	name := filepath.Base(path)
+	if !strings.HasPrefix(name, ".") { // a dot file's temporary is its name, never ".." and its name
+		name = "." + name
+	}
+	f, err := userperm.CreatePrivateTemp(filepath.Dir(path), name+".*")
 	if err != nil {
 		return err
 	}

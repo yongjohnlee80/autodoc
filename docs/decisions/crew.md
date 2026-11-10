@@ -970,11 +970,12 @@ Claude Code's and OpenCode's setups take the crew MCP server too, when `crew set
 Code gets it on both hosts as a file of the agent's own folder (`.autodoc-crew-mcp.json`, a folder
 file), named on its command line (`--mcp-config`) as the agent's working folder reaches it: its bare
 name when the agent works in its own folder (a window's agent), else its absolute path (Neovim's
-agent works in the user's project, and its argv reaches it through no shell). The config's JSON
-never goes on the command line, since a shell may change its quotes and, on Windows, the build's
-backslashes. Nor does the folder's own name: a crew folder's name holds the scope's `:` encoded
-(`%3A`), and on Windows a CLI's `.cmd` shim reads `%3` as its third argument, so no command line
-through `cmd.exe` may name that folder. The file holds the servers' commands and arguments, and an environment only
+agent works in the user's project; Neovim starts it from its argv, with no shell of its own). The
+config's JSON never goes on the command line, since a shell may change its quotes and, on Windows,
+the build's backslashes. Nor does the folder's own name: a crew folder's name holds the scope's
+`:` encoded (`%3A`), and on Windows a CLI's `.cmd` shim reads its arguments again through
+`cmd.exe`, where `%3` is its third argument, so no command line through a `.cmd` shim may name
+that folder, from either host. The file holds the servers' commands and arguments, and an environment only
 for a server that has one of its own (the crew's server has none), never a credential. Like every
 folder file, the host writes it private to the user, over an earlier run's. It is never the folder's
 `.mcp.json`, whose servers the user would approve first. A host that gives no folder of the agent's
