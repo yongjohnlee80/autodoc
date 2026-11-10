@@ -24,6 +24,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 func md(p string) bool { return strings.HasSuffix(p, ".md") }
@@ -92,7 +93,7 @@ func serveWith(t *testing.T, opts ...Option) *rig {
 	ws := []Workspace{open("kb", r.fsys), open("flaky", committing{memfs.New()}),
 		Static(WorkspaceInfo{Name: "broken", Root: "/roots/broken", Err: fmt.Errorf("workspace %q: %w", "broken", workspace.ErrNotADirectory)})}
 	r.sock = shortSocket(t) // macOS bounds a socket's path at 104 bytes; a test's TempDir can pass it
-	ln, err := net.Listen("unix", r.sock)
+	ln, err := ipc.Listen(r.sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +115,7 @@ func serveWith(t *testing.T, opts ...Option) *rig {
 // false.
 func (r *rig) dial(hello bool) *golibrpc.Client {
 	r.t.Helper()
-	cli, err := golibrpc.Dial(context.Background(), r.sock, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"),
+	cli, err := golibrpc.Dial(context.Background(), r.sock, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer),
 		golibrpc.OnNotification(func(string, []any) { r.notes.Add(1) }))
 	if err != nil {
 		r.t.Fatal(err)
@@ -413,12 +414,12 @@ func TestShutdownStopsTheServer(t *testing.T) {
 func TestProbe(t *testing.T) {
 	r := serve(t)
 	ctx := context.Background()
-	if v, err := ProbeOn(ctx, "unix", r.sock); err != nil || v != "v-test" {
+	if v, err := ProbeOn(ctx, ipc.Network, r.sock); err != nil || v != "v-test" {
 		t.Errorf("probing autodoc: %q, %v", v, err)
 	}
 	// the probe admitted nothing, and a probe leaves no session behind that another client could use
-	other := filepath.Join(t.TempDir(), "o.sock")
-	ln, err := net.Listen("unix", other)
+	other := ipc.ScratchAddr(t.TempDir(), "o.sock")
+	ln, err := ipc.Listen(other, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -430,10 +431,10 @@ func TestProbe(t *testing.T) {
 			_ = c.Close()
 		}
 	}()
-	if _, err := ProbeOn(ctx, "unix", other); !errors.Is(err, ErrNotAutodoc) {
+	if _, err := ProbeOn(ctx, ipc.Network, other); !errors.Is(err, ErrNotAutodoc) {
 		t.Errorf("probing a foreign occupant: %v", err)
 	}
-	if _, err := ProbeOn(ctx, "unix", filepath.Join(t.TempDir(), "none.sock")); err == nil || errors.Is(err, ErrNotAutodoc) {
+	if _, err := ProbeOn(ctx, ipc.Network, ipc.ScratchAddr(t.TempDir(), "none.sock")); err == nil || errors.Is(err, ErrNotAutodoc) {
 		t.Errorf("probing nothing: %v", err)
 	}
 }
@@ -467,8 +468,8 @@ func (p *memPrefs) SetPreference(_ context.Context, name, value string) error {
 // TestPreferenceVerbs: a preference set reads back in the listing; a nameless one is invalid; a
 // server given no Preferences says it keeps none.
 func TestPreferenceVerbs(t *testing.T) {
-	sock := filepath.Join(t.TempDir(), "p.sock")
-	ln, err := net.Listen("unix", sock)
+	sock := ipc.ScratchAddr(t.TempDir(), "p.sock")
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}

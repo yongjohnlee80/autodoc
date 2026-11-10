@@ -2,7 +2,6 @@ package rpc
 
 import (
 	"context"
-	"net"
 	"path/filepath"
 	"testing"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // TestTheIndexVerbsFailAsTheirReads: a read of the index that fails (the store closed under the
@@ -31,7 +31,7 @@ func TestTheIndexVerbsFailAsTheirReads(t *testing.T) {
 	ws := Static(WorkspaceInfo{Name: "kb", Root: "/roots/kb", Index: index.New(index.NewStore(db, row.ID), fsys, index.WithMatch(md)),
 		Docs: docs.New(fsys, md)})
 	r := &rig{t: t, sock: shortSocket(t)}
-	ln, err := net.Listen("unix", r.sock)
+	ln, err := ipc.Listen(r.sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}

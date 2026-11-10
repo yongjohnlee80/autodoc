@@ -13,6 +13,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // fakeModule is a Module of the verbs and errors it is given.
@@ -78,7 +79,7 @@ func moduleServer(t *testing.T, ms ...module.Module) (*golibrpc.Client, *recorde
 	t.Helper()
 	ev := &recordedEvents{}
 	sock := shortSocket(t)
-	ln, err := net.Listen("unix", sock)
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}

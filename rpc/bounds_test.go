@@ -3,7 +3,6 @@ package rpc
 import (
 	"context"
 	"errors"
-	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -16,6 +15,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/fsbounds"
 	"github.com/yongjohnlee80/autodoc/core/module"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // TestAnUndeclaredVerbIsBoundedToo: enforcement is where the files are reached, so a verb that
@@ -135,7 +135,7 @@ func TestABoundedFileCallIsRoutedIntoItsWorkspace(t *testing.T) {
 	guarded := g.Wrap(func() string { return "kb" }, root, disk)
 	ws := Static(WorkspaceInfo{Name: "kb", Root: root, Docs: docs.New(guarded, func(p string) bool { return strings.HasSuffix(p, ".md") }), Files: docs.New(guarded, nil)})
 	sock := shortSocket(t)
-	ln, err := net.Listen("unix", sock)
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}

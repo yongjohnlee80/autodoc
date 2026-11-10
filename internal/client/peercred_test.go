@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
@@ -22,7 +21,7 @@ func TestASessionRefusesAnotherUsersDaemon(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	sock := filepath.Join(shortDir(t), "s.sock")
+	sock := ipc.ScratchAddr(shortDir(t), "s.sock")
 	daemonSaying(t, sock, "")
 
 	restore := ipc.PlayUser(os.Getuid() + 1)

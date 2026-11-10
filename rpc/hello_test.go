@@ -3,10 +3,10 @@ package rpc
 import (
 	"bufio"
 	"context"
-	"net"
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 )
@@ -23,7 +23,7 @@ type pipe struct {
 func rawServer(t *testing.T) *pipe {
 	t.Helper()
 	sock := shortSocket(t)
-	ln, err := net.Listen("unix", sock)
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func rawServer(t *testing.T) *pipe {
 	srv := New(Fixed(), "v1", WithListener(ln))
 	done := make(chan struct{})
 	go func() { _ = srv.Run(ctx); close(done) }()
-	conn, err := net.Dial("unix", sock)
+	conn, err := ipc.Dial(context.Background(), sock)
 	if err != nil {
 		t.Fatal(err)
 	}
