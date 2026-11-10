@@ -16,6 +16,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/internal/userdirs"
 	"github.com/yongjohnlee80/autodoc/internal/userperm"
+	"github.com/yongjohnlee80/autodoc/internal/usershell"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/pty"
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
@@ -313,12 +314,14 @@ func (h *agents) stopAgent() bool {
 	return true
 }
 
-// fillAgentCommand fills {root} and {workspace} in a profile's command, each quoted for the shell.
-func fillAgentCommand(command string, ws wsInfo) string {
-	return strings.NewReplacer("{root}", shellQuote(ws.root), "{workspace}", shellQuote(ws.name)).Replace(command)
+// fillAgentCommand fills {root} and {workspace} in a profile's command, each quoted for the shell
+// that runs it in env (internal/usershell).
+func fillAgentCommand(env procenv.Env, command string, ws wsInfo) string {
+	sh := usershell.Commands(env)
+	return strings.NewReplacer("{root}", sh.Quote(ws.root), "{workspace}", sh.Quote(ws.name)).Replace(command)
 }
 
-// shellQuote is s as one shell word.
+// shellQuote is s as one word of a POSIX shell: for AutoDoc's own sh scripts (a wrapper, a hook).
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
 // agentKinds are the kinds a profile can be set to, "" first: the command's (agentKind).
@@ -501,23 +504,26 @@ func shellWords(command string) []shellWord {
 	return out
 }
 
-// agentArgv is how the terminal runs command: the shell on the command as the user wrote it, so
-// its quoting and arguments are the shell's. Its variables are never on a command line, which
+// agentArgv is how the terminal runs command: the shell that runs command lines in env
+// (internal/usershell: /bin/sh on Unix, PowerShell on Windows) on the command as the user wrote it,
+// so its quoting and arguments are the shell's. Its variables are never on a command line, which
 // /proc/<pid>/cmdline shows every user of the machine (AUTODOC_EDITOR_TOKEN among them): the
 // process gets them in its environment (agentEnviron, runAgent).
-func agentArgv(command string) (string, []string) {
-	return "/bin/sh", []string{"-c", command}
+func agentArgv(env procenv.Env, command string) (string, []string) {
+	return usershell.Commands(env).Run(command)
 }
 
 // withCommandArgs is agentArgv's args with extra appended to the program's own command line, each
-// one shell-quoted, so a setup's argument (a JSON config, a prompt) reaches the program as one word.
-func withCommandArgs(args, extra []string) []string {
+// one quoted for env's shell, so a setup's argument (a JSON config, a prompt) reaches the program
+// as one word.
+func withCommandArgs(env procenv.Env, args, extra []string) []string {
 	if len(extra) == 0 || len(args) == 0 {
 		return args
 	}
+	sh := usershell.Commands(env)
 	out := slices.Clone(args)
 	for _, e := range extra {
-		out[len(out)-1] += " " + shellQuote(e)
+		out[len(out)-1] += " " + sh.Quote(e)
 	}
 	return out
 }
@@ -818,7 +824,8 @@ const editorGuide = "## The page the user is writing\n\n" +
 	"- `editor.terminal_run '[\"command line\"]'`: run a step that needs the user (sudo, an installer) in AutoDoc's " +
 	"terminal. It needs `terminal`, and the user sees the exact line and clicks Run: it answers `{started, tab, " +
 	"exit_by_mail}`, or is refused. They type any passphrase there; never ask for one. The exit code comes as mail. " +
-	"At most 5 lines of 60 cells, printable only.\n\n" +
+	"At most 5 lines of 60 cells, printable only. The line is `sh -c`'s on Linux and macOS, and PowerShell's on " +
+	"Windows: write it for the shell of the user's OS.\n\n" +
 	"The user can switch the editor to another workspace while you work. You stay in yours: `$AUTODOC_WORKSPACE` and " +
 	"`$AUTODOC_ROOT` don't change. Before you act on each message from the user, run `autodoc --editor editor.workspace`, " +
 	"and when it has a `switch`, tell the user what changed (a Claude Code session in this folder is told by a hook " +
