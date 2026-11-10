@@ -93,13 +93,18 @@ func managerCore(t *testing.T, m *todo.Manager) *featuretest.ScriptedCore {
 // spelling, shown as the store at its canonical place; New… makes that store's buckets there.
 func TestALoadedFolderIsShownByTheStoreTheDaemonResolves(t *testing.T) {
 	disk := todotest.NewDisk()
-	for _, d := range []string{"/fresh", "/canon", "/made", "/madecanon"} {
+	for _, d := range []string{"/before", "/fresh", "/canon", "/made", "/madecanon"} {
 		disk.MkdirAll(slashFile(d))
 	}
 	m := todo.New(todotest.Roots{}, aliasDisk{disk, map[string]string{
 		slashFile("/alias"): slashFile("/canon"), slashFile("/madealias"): slashFile("/madecanon"),
 	}}, todotest.NewJournal())
 	t.Cleanup(func() { _ = m.Close() })
+	// a store listed first, so a store not found among them (the panel's fallback is the first) is
+	// never taken for the one each case wants
+	if _, err := m.Register(context.Background(), slashFile("/before")); err != nil {
+		t.Fatal(err)
+	}
 	v := newTodos(managerCore(t, m))
 	v.list()
 	for _, c := range []struct{ as, chosen, want string }{
