@@ -251,9 +251,9 @@ jobs:
         if: ${{ !inputs.discover }}
         continue-on-error: true
         run: |
-          T='^(TestAMoveTheFeedReadIsFollowedWithoutTheDiskWatch|TestARemovedTasksCleanBufferCloses|TestATaskMovedWhileUnwatchedIsFollowedOnANewConnection|TestARemovedTasksModifiedBufferKeepsItsEditsAndRefusesItsSave|TestAFileThatIsNoTaskIsStillDeleted|TestAModifiedTaskFollowsItsMoveAndAsks|TestThePickerKeepsTheFileName|TestAnOpenTaskFollowsItsStatusMove)$'
+          T='^(TestAMoveTheFeedReadIsFollowedWithoutTheDiskWatch|TestARemovedTasksCleanBufferCloses|TestATaskMovedWhileUnwatchedIsFollowedOnANewConnection|TestARemovedTasksModifiedBufferKeepsItsEditsAndRefusesItsSave|TestAFileThatIsNoTaskIsStillDeleted|TestAModifiedTaskFollowsItsMoveAndAsks|TestAnOpenTaskFollowsItsStatusMove)$'
           go test -count=1 -timeout 15m -v -parallel 1 -run "$T" ./tui/ > "$RUNNER_TEMP/t.txt" 2>&1 && rt=0 || rt=$?
-          grep -E '^(=== RUN|--- |\s+[a-z_]+_test\.go:[0-9]+:|panic)' "$RUNNER_TEMP/t.txt" | cut -c1-400 | head -120 || true
+          grep -vE '^=== (RUN|PAUSE|CONT)' "$RUNNER_TEMP/t.txt" | cut -c1-300 | head -400 || true
           echo "== tasks rc=$rt"
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
