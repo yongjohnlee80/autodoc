@@ -17,8 +17,10 @@ func TestHideClosesTheAgentPanelAndKeepsTheAgents(t *testing.T) {
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	shown := func() bool { return onLoop(r, func() bool { return r.h.panelOpen["agent"] }) }
-	token := func() string { return onLoop(r, func() string { return r.h.agents.instances["heron"].token }) }
-	tab := onLoop(r, func() terminal.TerminalTabID { return r.h.agents.instances["heron"].tab })
+	token := func() string {
+		return onLoop(r, func() string { return r.h.agents.Snapshot().Instances["heron"].Token })
+	}
+	tab := onLoop(r, func() terminal.TerminalTabID { return r.h.agents.Snapshot().Instances["heron"].Tab })
 	was := token()
 	rows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.agents.tabRows(tab) })
 	row, ok := menuRow(rows, "tabs.hide")
