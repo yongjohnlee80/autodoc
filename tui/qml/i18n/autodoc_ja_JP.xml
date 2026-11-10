@@ -1347,6 +1347,10 @@
         <source>This window lost its crew scope %1 while away; its agents now live under %2.</source>
         <translation>このウィンドウは離れている間にクルーのスコープ %1 を失いました。エージェントは現在 %2 の下にあります。</translation>
     </message>
+    <message id="autodoc.crew.names_kept">
+        <source>Agent folders from an earlier AutoDoc kept their old names, since their new ones were already there: %1</source>
+        <translation>以前の AutoDoc のエージェントフォルダーの一部は、新しい名前がすでにあったため、古い名前のまま残しました: %1</translation>
+    </message>
     <message id="autodoc.crew.scope_unlisted">
         <source>This window's crew scope is held, but not listed for a successor: %1</source>
         <translation>このウィンドウのクルーのスコープは保持されていますが、後継のために記録されていません: %1</translation>
