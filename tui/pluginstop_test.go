@@ -78,3 +78,18 @@ func TestAnExitWaitIsBounded(t *testing.T) {
 		t.Fatalf("the wait took %s, want its bound, 2.02s", took)
 	}
 }
+
+// TestARunThatEndedAsTheDeadlineCameEnded: a shutdown done when the deadline has fired too is no
+// timeout, however select picks between the two (each try is a fresh pick).
+func TestARunThatEndedAsTheDeadlineCameEnded(t *testing.T) {
+	t.Parallel()
+	done := &pluginRun{shutDone: make(chan struct{})}
+	close(done.shutDone)
+	for range 200 {
+		fired := make(chan time.Time, 1)
+		fired <- time.Now()
+		if err := awaitShutdownBy([]*pluginRun{done}, fired, 0); err != nil {
+			t.Fatalf("a run shut down, the deadline fired too: %v", err)
+		}
+	}
+}
