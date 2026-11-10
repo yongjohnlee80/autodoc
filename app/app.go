@@ -54,6 +54,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/derived"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 )
 
 // Options is what a main hands Main: what makes its build its own.
@@ -132,7 +133,7 @@ func Main(ctx context.Context, args []string, o Options) int {
 
 func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer) int {
 	if rest, configPath, ok := crewCommandArgs(args); ok { // an agent's `autodoc crew|mail …` (docs/decisions/crew.md#the-agent-guide-and-commands), not a mode
-		return crewMainIn(ctx, configPath, rest, os.Stdin, stdout, stderr)
+		return crewMainIn(ctx, configFrom(configPath, procenv.Env(nil)), rest, os.Stdin, stdout, stderr)
 	}
 	chunkers, err := registrations.Builtin(o.Chunkers)
 	var reg *registrations.Table
@@ -153,7 +154,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	fs.Bool("ui", false, "run the TUI (starts --serve when nothing answers); a workspace name after the flags opens it")
 	fs.Bool("gui", false, "run the UI in a window instead of the terminal, as --ui does (a build with the GUI: make build on macOS, or on Linux with its window libraries); a workspace name after the flags opens it")
 	dev := fs.String("dev", "", "--ui and --gui: read the TUI's QML from this directory, and follow edits to it")
-	configPath := fs.String("config", "", "config file (default $XDG_CONFIG_HOME/autodoc/config.toml)")
+	configPath := fs.String("config", "", "config file (default $AUTODOC_CONFIG, else $XDG_CONFIG_HOME/autodoc/config.toml)")
 	fs.Bool("version", false, "print the version")
 	fs.Bool("contracts", false, `print the daemon's verb contracts and error codes, with no daemon; a verb or "domain.*" after the flags narrows them (AGENTS.md's tables)`)
 	fs.Bool("theme-reference", false, "print the installed agent-ready user-theme reference, with no UI or daemon")
@@ -363,7 +364,23 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	if !ok {
 		return code
 	}
+	*configPath = configFrom(*configPath, procenv.Env(nil))
 	return m.run(arg)
+}
+
+// EnvConfig names the config file a run reads when no --config names one: an agent's autodoc is
+// told its window's this way (on Windows the build itself is on the agent's PATH, with no wrapper to
+// pass --config).
+const EnvConfig = "AUTODOC_CONFIG"
+
+// configFrom is the config file a run reads: --config's (flag), else $AUTODOC_CONFIG's in env (an
+// empty one is none), else "" for the default. A relative one is the working directory's, as a
+// relative --config is.
+func configFrom(flag string, env procenv.Env) string {
+	if flag != "" {
+		return flag
+	}
+	return env.Get(EnvConfig)
 }
 
 // uiMode is --ui and --gui. SIGTERM and SIGHUP (the terminal gone): the program ends and keeps
