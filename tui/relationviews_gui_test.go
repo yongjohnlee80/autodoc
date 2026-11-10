@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/relations"
+
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
@@ -22,13 +24,13 @@ func TestTheRelationViewsOpenInTheHost(t *testing.T) {
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
 	for _, v := range []struct{ panel, view, title string }{
-		{globeMapPanelID, globeMapViewID, "kb · 3 documents, 0 links · relations"},
-		{mindmapPanelID, mindmapViewID, "a.md · 2 documents · depth 1 · d depth"},
+		{relations.GlobeMapPanelID, relations.GlobeMapViewID, "kb · 3 documents, 0 links · relations"},
+		{relations.MindmapPanelID, relations.MindmapViewID, "a.md · 2 documents · depth 1 · d depth"},
 	} {
 		onLoop(r, func() bool { core{r.h}.TogglePanel(v.panel); return true })
 		r.s.WaitForText(t, v.title)
 		r.s.WaitFor(t, v.panel+" open with the keyboard", func(string) bool { return r.panelIsOpen(v.panel) && r.focusedOn(v.view) })
-		if v.panel == mindmapPanelID {
+		if v.panel == relations.MindmapPanelID {
 			r.keys(t, key('d'))
 			r.s.WaitForText(t, "a.md · 3 documents · depth 2 · d depth")
 			r.keys(t, key('d'))
@@ -49,18 +51,18 @@ func TestTheRelationViewsFollowATheme(t *testing.T) {
 	r.waitListed(t, 2)
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
-	var g *globeMap
-	var m *mindmap
+	var g *relations.GlobeMap
+	var m *relations.Mindmap
 	onLoop(r, func() bool {
 		for _, f := range r.h.relationViews {
 			switch f := f.(type) {
-			case *globeMap:
+			case *relations.GlobeMap:
 				g = f
-			case *mindmap:
+			case *relations.Mindmap:
 				m = f
 			}
 		}
-		core{r.h}.TogglePanel(globeMapPanelID)
+		core{r.h}.TogglePanel(relations.GlobeMapPanelID)
 		return true
 	})
 	r.s.WaitForText(t, "kb · 2 documents, 0 links · relations")
@@ -73,7 +75,7 @@ func TestTheRelationViewsFollowATheme(t *testing.T) {
 			return r.h.theme == "light" && s.Viewed && s.Background != before
 		})
 	})
-	if !r.panelIsOpen(globeMapPanelID) || onLoop(r, func() bool { return g.Snapshot().Counts[0] != 2 }) {
+	if !r.panelIsOpen(relations.GlobeMapPanelID) || onLoop(r, func() bool { return g.Snapshot().Counts[0] != 2 }) {
 		t.Fatal("the theme switch closed the GlobeMap or lost its map")
 	}
 	if onLoop(r, func() uint64 { return m.Snapshot().Builds }) != builds {
@@ -139,10 +141,10 @@ func TestTheGlobeMapDragEndsWhereverItIsReleased(t *testing.T) {
 	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "[[b]]\n", "b.md", "bbb\n"}})
 	r := windowed(t, d)
-	var g *globeMap
+	var g *relations.GlobeMap
 	onLoop(r, func() bool {
-		g = r.h.relationViews[0].(*globeMap)
-		core{r.h}.TogglePanel(globeMapPanelID)
+		g = r.h.relationViews[0].(*relations.GlobeMap)
+		core{r.h}.TogglePanel(relations.GlobeMapPanelID)
 		return true
 	})
 	r.s.WaitForText(t, "kb · 2 documents, 0 links · relations")
@@ -179,10 +181,10 @@ func TestTheGlobeMapDragEndsWhereverItIsReleased(t *testing.T) {
 	ended("the window's focus lost")
 
 	press("the panel closed")
-	onLoop(r, func() bool { core{r.h}.TogglePanel(globeMapPanelID); return true })
-	r.s.WaitFor(t, "the GlobeMap closed", func(string) bool { return !r.panelIsOpen(globeMapPanelID) })
-	onLoop(r, func() bool { core{r.h}.TogglePanel(globeMapPanelID); return true })
-	r.s.WaitFor(t, "the GlobeMap open again", func(string) bool { return r.panelIsOpen(globeMapPanelID) })
+	onLoop(r, func() bool { core{r.h}.TogglePanel(relations.GlobeMapPanelID); return true })
+	r.s.WaitFor(t, "the GlobeMap closed", func(string) bool { return !r.panelIsOpen(relations.GlobeMapPanelID) })
+	onLoop(r, func() bool { core{r.h}.TogglePanel(relations.GlobeMapPanelID); return true })
+	r.s.WaitFor(t, "the GlobeMap open again", func(string) bool { return r.panelIsOpen(relations.GlobeMapPanelID) })
 	ended("the panel closed")
 }
 
@@ -201,14 +203,14 @@ func TestTheGlobeMapReadsEveryPage(t *testing.T) {
 	}})
 	r := windowed(t, d)
 	r.waitListed(t, 7)
-	var g *globeMap
+	var g *relations.GlobeMap
 	onLoop(r, func() bool {
 		for _, f := range r.h.relationViews {
-			if f, ok := f.(*globeMap); ok {
+			if f, ok := f.(*relations.GlobeMap); ok {
 				g = f
 			}
 		}
-		core{r.h}.TogglePanel(globeMapPanelID)
+		core{r.h}.TogglePanel(relations.GlobeMapPanelID)
 		return true
 	})
 	r.s.WaitForText(t, "kb · 7 documents, 6 links · relations")

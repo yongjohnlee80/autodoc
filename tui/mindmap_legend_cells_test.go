@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/relations"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 )
@@ -65,7 +66,7 @@ func TestTheTerminalsMindmapHasItsLegend(t *testing.T) {
 				return false
 			}
 			ground := snap[gy][gx].Attrs.BG
-			want := onGround(hexColour(yellow), color.NRGBA{R: ground.R, G: ground.G, B: ground.B, A: 0xff})
+			want := relations.OnGround(relations.HexColour(yellow), color.NRGBA{R: ground.R, G: ground.G, B: ground.B, A: 0xff})
 			group, betaEdge := snap[gy][gx].Attrs.FG, snap[by-1][bx].Attrs.FG
 			other, gammaEdge := snap[oy][ox].Attrs.FG, snap[cy-1][cx].Attrs.FG
 			switch {

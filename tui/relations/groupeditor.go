@@ -1,10 +1,11 @@
-package tui
+package relations
 
 import (
-	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"image/color"
 	"slices"
 	"strings"
+
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE GROUPS EDITOR — the part of the GlobeMap's and the Mindmap's settings that edits a view's
@@ -16,7 +17,7 @@ import (
 
 type groupEditor struct {
 	c       feature.Core
-	store   *graphStore
+	store   *GraphStore
 	view    string // viewGlobeMap or viewMindmap
 	name    string // the App names' stem: "globe", "mind"
 	shapes  bool   // the Mindmap's: a group has an outline
@@ -94,7 +95,7 @@ func (e *groupEditor) edit(list []Group) {
 	}
 }
 
-func (e *groupEditor) moved(i int) {
+func (e *groupEditor) Moved(i int) {
 	if i >= 0 && i < len(e.list) && i != e.row {
 		e.row = i
 		e.show("")
@@ -102,7 +103,7 @@ func (e *groupEditor) moved(i int) {
 }
 
 // setQuery is the query field, as it is typed: a query that reads applies at once.
-func (e *groupEditor) setQuery(text string) {
+func (e *groupEditor) SetQuery(text string) {
 	if e.row >= len(e.list) {
 		return
 	}
@@ -116,7 +117,7 @@ func (e *groupEditor) setQuery(text string) {
 }
 
 // setColour is the colour field, as it is typed: #rrggbb applies at once.
-func (e *groupEditor) setColour(text string) {
+func (e *groupEditor) SetColour(text string) {
 	if e.row >= len(e.list) {
 		return
 	}
@@ -142,14 +143,14 @@ func (e *groupEditor) setShape(i int) {
 
 // add is a new group after the one selected, a tag's for the user to name, in a colour of the
 // palette none of the groups wears when there is one, legible on the view's ground.
-func (e *groupEditor) add() {
+func (e *groupEditor) Add() {
 	if e.loading {
 		return
 	}
 	ground := e.ground()
-	col := onGround(groupPalette[len(e.list)%len(groupPalette)], ground)
+	col := OnGround(groupPalette[len(e.list)%len(groupPalette)], ground)
 	for _, c := range groupPalette {
-		if c = onGround(c, ground); !slices.ContainsFunc(e.list, func(g Group) bool { return g.Colour == c }) {
+		if c = OnGround(c, ground); !slices.ContainsFunc(e.list, func(g Group) bool { return g.Colour == c }) {
 			col = c
 			break
 		}
@@ -178,12 +179,12 @@ func (e *groupEditor) move(d int) {
 }
 
 // addMissing adds a group for each schema type and folder no group queries.
-func (e *groupEditor) addMissing() {
+func (e *groupEditor) AddMissing() {
 	if e.store == nil || e.ws == "" || e.loading {
 		return
 	}
 	ws := e.ws
-	e.store.addMissing(ws, e.view, e.list, e.types, e.ground(), func(list []Group) {
+	e.store.AddMissing(ws, e.view, e.list, e.types, e.ground(), func(list []Group) {
 		if e.ws != ws || e.loading { // bound to another workspace meanwhile: its own groups stand
 			return
 		}
@@ -206,14 +207,14 @@ func (e *groupEditor) state() map[string]any {
 // commands are the dialog's.
 func (e *groupEditor) commands() map[string]feature.Command {
 	return map[string]feature.Command{
-		e.source("GroupMoved"):       feature.OneNumber("a row", e.moved),
-		e.source("GroupQuerySet"):    feature.OneString("type:<type>, tag:#<tag> or path:<folder>", e.setQuery),
-		e.source("GroupColourSet"):   feature.OneString("#rrggbb", e.setColour),
+		e.source("GroupMoved"):       feature.OneNumber("a row", e.Moved),
+		e.source("GroupQuerySet"):    feature.OneString("type:<type>, tag:#<tag> or path:<folder>", e.SetQuery),
+		e.source("GroupColourSet"):   feature.OneString("#rrggbb", e.SetColour),
 		e.source("GroupShapeSet"):    feature.OneNumber("a row", e.setShape),
-		e.source("GroupAdd"):         feature.None(e.add),
+		e.source("GroupAdd"):         feature.None(e.Add),
 		e.source("GroupRemove"):      feature.None(e.remove),
 		e.source("GroupUp"):          feature.None(func() { e.move(-1) }),
 		e.source("GroupDown"):        feature.None(func() { e.move(1) }),
-		e.source("GroupsAddMissing"): feature.None(e.addMissing),
+		e.source("GroupsAddMissing"): feature.None(e.AddMissing),
 	}
 }

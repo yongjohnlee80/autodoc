@@ -1,4 +1,4 @@
-package tui
+package relations
 
 import (
 	"context"
@@ -30,7 +30,7 @@ import (
 // The Mindmap's settings, in either build: the window's choose its theme too (mindsettings_gui.go).
 const (
 	prefMindTheme = "tui.mindmap.theme"
-	prefMindDepth = "tui.mindmap.depth"
+	PrefMindDepth = "tui.mindmap.depth"
 )
 
 // mindChoices are the Mindmap's settings' fixed choosers, by their App.* source (language.go's
@@ -45,7 +45,7 @@ func mindChoices() map[string][]string {
 
 // mindDepth is the depth the Mindmap's settings open it at: 1, or 2.
 func mindDepth(c feature.Core) int {
-	if c.Prefs().Value(prefMindDepth) == "2" {
+	if c.Prefs().Value(PrefMindDepth) == "2" {
 		return 2
 	}
 	return 1
@@ -66,7 +66,7 @@ type cellMind struct {
 
 // cellMindmap is the Mindmap feature in cells: its builds, fenced (load), the selection and the
 // view's scroll.
-type cellMindmap struct {
+type CellMindmap struct {
 	c         feature.Core
 	seq       uint64
 	open      bool
@@ -79,32 +79,32 @@ type cellMindmap struct {
 	selected  int                   // a Boxes index: the root once a build is installed
 	x0, y0    int                   // the scroll: the grid's cell at the view's top left
 	opens     func(ws, path string) // Enter's: the panel hidden, the document opened
-	store     *graphStore           // the workspaces' graph files: the groups; nil for none
+	store     *GraphStore           // the workspaces' graph files: the groups; nil for none
 	editor    *groupEditor          // the settings' groups
 	groups    *relGroups            // groupsWS's groups: each document's outline and colour
 	groupsWS  string
 	ground    color.NRGBA // the page's background, as last painted: what new groups are legible on
 }
 
-func newCellMindmap(c feature.Core, store *graphStore) *cellMindmap {
-	m := &cellMindmap{c: c, depth: 1, store: store, ground: themeGround(nil)}
-	m.editor = &groupEditor{c: c, store: store, view: viewMindmap, name: "mind", shapes: true,
+func newCellMindmap(c feature.Core, store *GraphStore) *CellMindmap {
+	m := &CellMindmap{c: c, depth: 1, store: store, ground: themeGround(nil)}
+	m.editor = &groupEditor{c: c, store: store, view: ViewMindmap, name: "mind", shapes: true,
 		changed: m.groupsEdited, ground: func() color.NRGBA { return m.ground }}
 	m.opens = func(ws, path string) {
-		m.c.HidePanel(mindmapPanelID) // hidden, not closed, as the window's: the dock shows it again
+		m.c.HidePanel(MindmapPanelID) // hidden, not closed, as the window's: the dock shows it again
 		m.c.OpenRef(ws, path)
 	}
 	return m
 }
 
-func (*cellMindmap) Name() string { return "mindmap" }
+func (*CellMindmap) Name() string { return "mindmap" }
 
-func (m *cellMindmap) Panels() []feature.PanelSpec {
-	return []feature.PanelSpec{{ID: mindmapPanelID, View: mindmapViewID, Priority: 71, Icon: "⎇",
+func (m *CellMindmap) Panels() []feature.PanelSpec {
+	return []feature.PanelSpec{{ID: MindmapPanelID, View: MindmapViewID, Priority: 71, Icon: "⎇",
 		Edge: func(feature.PrefsView) string { return "center" },
 		Opened: func(feature.PanelHost) {
 			m.open, m.depth = true, mindDepth(m.c) // it opens at the depth its settings choose
-			m.load()
+			m.Load()
 		},
 		Closed: func(c feature.PanelHost) {
 			m.open = false
@@ -113,13 +113,13 @@ func (m *cellMindmap) Panels() []feature.PanelSpec {
 		}}}
 }
 
-func (*cellMindmap) Prefs() []feature.PrefSpec {
-	return []feature.PrefSpec{feature.ValuePref(prefMindDepth, "1", []string{"1", "2"}).Chooser("App.mindDepthIndex", "App.setMindDepth")}
+func (*CellMindmap) Prefs() []feature.PrefSpec {
+	return []feature.PrefSpec{feature.ValuePref(PrefMindDepth, "1", []string{"1", "2"}).Chooser("App.mindDepthIndex", "App.setMindDepth")}
 }
 
 // State is the panel's heading and the settings' sources: the theme chooser, which a terminal
 // hides, has no rows.
-func (m *cellMindmap) State() map[string]any {
+func (m *CellMindmap) State() map[string]any {
 	st := m.editor.state()
 	maps.Copy(st, map[string]any{
 		"App.mindmapTitle": "Mindmap", "App.mindThemes": feature.Choices(), "App.mindThemeIndex": 0,
@@ -128,22 +128,22 @@ func (m *cellMindmap) State() map[string]any {
 	return st
 }
 
-func (m *cellMindmap) Commands() map[string]feature.Command {
+func (m *CellMindmap) Commands() map[string]feature.Command {
 	c := m.editor.commands()
-	c["App.toggleMindmap"] = feature.None(m.toggle)
-	c["App.openMindmapSettings"] = feature.None(m.openSettings)
+	c["App.toggleMindmap"] = feature.None(m.Toggle)
+	c["App.openMindmapSettings"] = feature.None(m.OpenSettings)
 	c["App.setMindTheme"] = feature.OneNumber("a row", func(int) {}) // a terminal's map is in the page's theme
 	return c
 }
 
-func (m *cellMindmap) Catalog() []feature.Entry {
-	return []feature.Entry{feature.Builtin("mindmap.toggle", "the Mindmap", "App.toggleMindmap()", m.toggle),
-		feature.Builtin("mindmap.settings", "the Mindmap's settings", "App.openMindmapSettings()", m.openSettings)}
+func (m *CellMindmap) Catalog() []feature.Entry {
+	return []feature.Entry{feature.Builtin("mindmap.toggle", "the Mindmap", "App.toggleMindmap()", m.Toggle),
+		feature.Builtin("mindmap.settings", "the Mindmap's settings", "App.openMindmapSettings()", m.OpenSettings)}
 }
 
 // openSettings is Relations › Mindmap settings…: the workspace's groups, read first when this
 // workspace's are not yet (the page's neighbourhood names the schema's types).
-func (m *cellMindmap) openSettings() {
+func (m *CellMindmap) OpenSettings() {
 	ws := m.c.Workspace()
 	m.c.Open("mindmapSettings")
 	if ws == "" || (m.groupsWS == ws && m.editor.ws == ws && !m.editor.loading) {
@@ -159,32 +159,32 @@ func (m *cellMindmap) openSettings() {
 }
 
 // groupsEdited lays the map out again in list: the settings' edit.
-func (m *cellMindmap) groupsEdited(list []Group) {
+func (m *CellMindmap) groupsEdited(list []Group) {
 	gs := newRelGroups(list)
 	m.groups = &gs
 	if m.open {
-		m.load()
+		m.Load()
 	}
 }
 
-func (m *cellMindmap) toggle() { m.c.TogglePanel(mindmapPanelID) }
+func (m *CellMindmap) Toggle() { m.c.TogglePanel(MindmapPanelID) }
 
 // Shown roots the map at the page shown, while it is open.
-func (m *cellMindmap) Shown(p feature.Page) {
+func (m *CellMindmap) Shown(p feature.Page) {
 	m.page = p
 	if m.open {
-		m.load()
+		m.Load()
 	}
 }
 
-func (*cellMindmap) Edited(feature.Page) {}
-func (*cellMindmap) Moved(int, int)      {}
-func (*cellMindmap) Reread(feature.Page) {}
-func (*cellMindmap) Closed()             {}
+func (*CellMindmap) Edited(feature.Page) {}
+func (*CellMindmap) Moved(int, int)      {}
+func (*CellMindmap) Reread(feature.Page) {}
+func (*CellMindmap) Closed()             {}
 
 // LanguageChanged composes again, in the UI's language, the heading and the settings' choosers'
 // rows.
-func (m *cellMindmap) LanguageChanged() {
+func (m *CellMindmap) LanguageChanged() {
 	for _, src := range []string{"App.mindDepths", "App.mindShapeChoices"} {
 		m.c.Set(src, relationChoice(m.c, src))
 	}
@@ -192,9 +192,9 @@ func (m *cellMindmap) LanguageChanged() {
 }
 
 // toggleDepth is d: two links out, or one again, read afresh at the page shown.
-func (m *cellMindmap) toggleDepth() {
+func (m *CellMindmap) toggleDepth() {
 	m.depth = 3 - m.depth
-	m.load()
+	m.Load()
 }
 
 // cellMindShape is a document's outline in cells: the root a bang, every other a rounded box.
@@ -235,11 +235,11 @@ func cellMindTints(rm relMap, grid *tuimermaid.Grid, gs *relGroups) map[string]c
 // readGroups takes ws's groups from the store: its graph file's, or its first, made of the
 // schema's types and the workspace's folders, legible on the page last painted. The map is laid
 // out again in them.
-func (m *cellMindmap) readGroups(ws string, types []string) {
+func (m *CellMindmap) readGroups(ws string, types []string) {
 	if m.store == nil {
 		return
 	}
-	m.store.groups(ws, viewMindmap, types, m.ground, func(list []Group) {
+	m.store.Groups(ws, ViewMindmap, types, m.ground, func(list []Group) {
 		if ws != m.c.Workspace() {
 			return
 		}
@@ -252,7 +252,7 @@ func (m *cellMindmap) readGroups(ws string, types []string) {
 // load reads the page's document's neighbourhood and lays it out off the loop; on the loop it
 // installs the build whole, the root selected and the scroll at the top, or drops it when a newer
 // load, another page or the panel's closing came first.
-func (m *cellMindmap) load() {
+func (m *CellMindmap) Load() {
 	ref := m.page.Ref
 	tk := m.c.Ticket(&m.seq, feature.TicketFile)
 	if ref.Path == "" || ref.WS == "" || m.page.Outside {
@@ -307,7 +307,7 @@ func (m *cellMindmap) load() {
 
 // title is the panel's heading: the build's root, its documents and depth and the keys, or what a
 // load says.
-func (m *cellMindmap) title() {
+func (m *CellMindmap) title() {
 	t := "Mindmap"
 	switch {
 	case m.status != "":
@@ -319,7 +319,7 @@ func (m *cellMindmap) title() {
 	m.dirty()
 }
 
-func (m *cellMindmap) dirty() {
+func (m *CellMindmap) dirty() {
 	if m.view != nil && m.view.ctx != nil {
 		m.view.ctx.MarkDirty()
 	}
@@ -328,7 +328,7 @@ func (m *cellMindmap) dirty() {
 // step selects the nearest box from the selected one in direction (dx, dy), by box centres: of
 // those whose centre lies that way, the one nearest along it, a cell aside counting twice. None that
 // way keeps the selection.
-func (m *cellMindmap) step(dx, dy int) {
+func (m *CellMindmap) step(dx, dy int) {
 	if m.cur == nil || len(m.cur.grid.Boxes) == 0 {
 		return
 	}
@@ -359,7 +359,7 @@ func (m *cellMindmap) step(dx, dy int) {
 }
 
 // reveal scrolls the selected box into the view.
-func (m *cellMindmap) reveal() {
+func (m *CellMindmap) reveal() {
 	if m.cur == nil || m.view == nil || m.selected >= len(m.cur.grid.Boxes) {
 		return
 	}
@@ -382,7 +382,7 @@ func (m *cellMindmap) reveal() {
 }
 
 // scroll moves the view by dy rows, within the map.
-func (m *cellMindmap) scroll(dy int) {
+func (m *CellMindmap) scroll(dy int) {
 	if m.cur == nil || m.view == nil {
 		return
 	}
@@ -392,7 +392,7 @@ func (m *cellMindmap) scroll(dy int) {
 
 // openSelected opens the selected box's document, the panel hidden, as a click in the window does:
 // the document mindIndex names by the box's ID.
-func (m *cellMindmap) openSelected() {
+func (m *CellMindmap) openSelected() {
 	cur := m.cur
 	if cur == nil || m.selected >= len(cur.grid.Boxes) {
 		return
@@ -404,7 +404,7 @@ func (m *cellMindmap) openSelected() {
 
 // cellMindView is the Mindmap's view in its panel: the build painted at the scroll.
 type cellMindView struct {
-	m     *cellMindmap
+	m     *CellMindmap
 	ctx   *tuicore.Context
 	cells tuicore.Size
 	// tinted is the build whose tints were made legible on ground, as tints: made again when the
@@ -414,7 +414,7 @@ type cellMindView struct {
 	tints  map[string]style.ColorSpec
 }
 
-func (m *cellMindmap) newView() tuicore.Component {
+func (m *CellMindmap) newView() tuicore.Component {
 	v := &cellMindView{m: m}
 	m.view = v
 	return v
@@ -422,7 +422,7 @@ func (m *cellMindmap) newView() tuicore.Component {
 
 // cellMindmapType is the view's QML type, CellMindmap: built once per document, it joins its
 // feature, and leaves it when the document drops it.
-func (m *cellMindmap) viewType() tuidecl.Type {
+func (m *CellMindmap) viewType() tuidecl.Type {
 	return tuidecl.Type{Name: "CellMindmap", Destroyed: func(c tuicore.Component) {
 		if m.view == c {
 			m.view = nil
@@ -482,7 +482,7 @@ func (v *cellMindView) legible(cur *cellMind, ground color.NRGBA) map[string]sty
 	if v.tinted != cur || v.ground != ground || v.tints == nil {
 		v.tints = make(map[string]style.ColorSpec, len(cur.tints))
 		for id, c := range cur.tints {
-			c = onGround(c, ground)
+			c = OnGround(c, ground)
 			v.tints[id] = style.RGB(c.R, c.G, c.B)
 		}
 		v.tinted, v.ground = cur, ground
@@ -507,7 +507,7 @@ func themeGround(th *style.Theme) color.NRGBA {
 }
 
 // statusText is what a load says, in the UI's language; "" none.
-func (m *cellMindmap) statusText() string {
+func (m *CellMindmap) statusText() string {
 	if m.status == "" {
 		return ""
 	}
@@ -579,14 +579,14 @@ func cellLegendMark(s pm.MindShape) string {
 
 // legendEntries are the legend of cur, laid out in its groups, its colours made legible on
 // ground, its words in the UI's language: the window's (mindLegend), in cells.
-func (m *cellMindmap) legendEntries(cur *cellMind, ground color.NRGBA) []cellLegendEntry {
+func (m *CellMindmap) legendEntries(cur *cellMind, ground color.NRGBA) []cellLegendEntry {
 	var out []cellLegendEntry
 	if cur.groups == nil || len(cur.groups.list) == 0 {
 		out = append(out, cellLegendEntry{text: m.c.Trf("autodoc.text.relationviews_gui.no_groups_no_schema_types_or_folders_settings_ad")})
 	} else {
 		shown, more := legendGroups(cur.groups, cur.m)
 		for _, g := range shown {
-			c := onGround(g.Colour, ground)
+			c := OnGround(g.Colour, ground)
 			out = append(out, cellLegendEntry{cellLegendMark(g.Shape), style.PageText().Foreground(style.RGB(c.R, c.G, c.B)), groupLabel(g.Query)})
 		}
 		if more > 0 {

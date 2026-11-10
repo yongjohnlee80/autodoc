@@ -1,4 +1,4 @@
-package tui
+package relations
 
 import (
 	"github.com/yongjohnlee80/autodoc/tui/feature"
@@ -11,13 +11,13 @@ import (
 
 // cellViews are a terminal's relation views, in cells: the GlobeMap and the Mindmap. files reads
 // the documents' own files, userFile is the user's graph.toml, and page the GlobeMap's page size.
-func cellViews(c feature.Core, files absoluteFiles, userFile string, page int) []feature.Feature {
-	store := newGraphStore(c, files, userFile)
+func CellViews(c feature.Core, files AbsoluteFiles, userFile string, page int) []feature.Feature {
+	store := NewGraphStore(c, files, userFile)
 	return []feature.Feature{newCellGlobeMap(c, store, page), newCellMindmap(c, store)}
 }
 
 // viewTypes are the QML types of fs's views: each built view joins its feature.
-func viewTypes(fs []feature.Feature) []tuidecl.Type {
+func ViewTypes(fs []feature.Feature) []tuidecl.Type {
 	var out []tuidecl.Type
 	for _, f := range fs {
 		if v, ok := f.(interface{ viewType() tuidecl.Type }); ok {
@@ -29,10 +29,10 @@ func viewTypes(fs []feature.Feature) []tuidecl.Type {
 
 // openGlobeSettings opens the settings of the GlobeMap among fs; false with none (a build or a
 // run without one).
-func openGlobeSettings(fs []feature.Feature) bool {
+func OpenGlobeSettings(fs []feature.Feature) bool {
 	for _, f := range fs {
 		if g, ok := globeOf(f); ok {
-			g.openSettings()
+			g.OpenSettings()
 			return true
 		}
 	}

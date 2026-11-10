@@ -230,7 +230,7 @@ func TestRelationsEdges(t *testing.T) {
 	r.waitFile(t, "doc.md")
 	r.s.WaitFor(t, "doc's relations", func(string) bool { return slices.Equal(r.relationLabels(), docRelations) })
 	gen := r.file().gen
-	if g := onLoop(r, func() uint64 { r.h.rel.open(0); return r.h.file.gen }); g != gen {
+	if g := onLoop(r, func() uint64 { r.h.rel.Open(0); return r.h.file.gen }); g != gen {
 		t.Errorf("Enter on the heading %q opened something", docRelations[0])
 	}
 

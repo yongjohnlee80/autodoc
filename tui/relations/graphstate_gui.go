@@ -1,6 +1,6 @@
 //go:build gui
 
-package tui
+package relations
 
 import (
 	"image/color"
@@ -28,7 +28,7 @@ type GlobeState struct {
 }
 
 // Snapshot is the window GlobeMap's.
-func (g *globeMap) Snapshot() GlobeState {
+func (g *GlobeMap) Snapshot() GlobeState {
 	l := g.currentLook()
 	s := GlobeState{
 		ViewState: ViewState{Open: g.open, Viewed: g.view != nil, Groups: groupsOf(g.groups), Builds: g.seq, Editor: editorState(g.editor)},
@@ -42,7 +42,7 @@ func (g *globeMap) Snapshot() GlobeState {
 }
 
 // Snapshot is the window Mindmap's.
-func (m *mindmap) Snapshot() ViewState {
+func (m *Mindmap) Snapshot() ViewState {
 	s := ViewState{Open: m.open, Viewed: m.view != nil, Workspace: m.groupsWS, Groups: groupsOf(m.groups),
 		Depth: m.depth, Builds: m.seq, Editor: editorState(m.editor)}
 	if m.cur != nil {
@@ -52,14 +52,14 @@ func (m *mindmap) Snapshot() ViewState {
 }
 
 // EditGroups is the window GlobeMap's settings' group editor.
-func (g *globeMap) EditGroups() *groupEditor { return g.editor }
+func (g *GlobeMap) EditGroups() *groupEditor { return g.editor }
 
 // EditGroups is the window Mindmap's settings' group editor.
-func (m *mindmap) EditGroups() *groupEditor { return m.editor }
+func (m *Mindmap) EditGroups() *groupEditor { return m.editor }
 
 // PressNode presses the document at path in the frame on screen, as a click on its dot does; false
 // with no frame, or none of its documents at path.
-func (g *globeMap) PressNode(path string) bool {
+func (g *GlobeMap) PressNode(path string) bool {
 	if g.cur == nil {
 		return false
 	}
