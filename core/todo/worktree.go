@@ -1,7 +1,6 @@
 package todo
 
 import (
-	"path"
 	"strings"
 
 	"github.com/yongjohnlee80/autodoc/core/paths"
@@ -34,11 +33,14 @@ func (s scope) movedFromWorktree(abs string) (string, bool) {
 	if s.exists == nil || s.read == nil || s.list == nil || !paths.IsAbs(abs) {
 		return "", false
 	}
-	abs = path.Clean(abs)
+	abs = paths.Clean(abs)
 	if s.exists(abs) {
 		return "", false
 	}
 	if repo, rest, ok := strings.Cut(abs, "/.claude/worktrees/"); ok {
+		if paths.IsRoot(repo + "/") {
+			repo += "/" // a repository at a volume's root: "/", "C:/"
+		}
 		name, rel, ok := strings.Cut(rest, "/")
 		if !ok || name == "" || rel == "" || !s.exists(repo) || s.exists(repo+"/.claude/worktrees/"+name) {
 			return "", false // not a path in a removed Claude worktree
@@ -48,7 +50,7 @@ func (s scope) movedFromWorktree(abs string) (string, bool) {
 	// gone is the topmost missing directory on abs's path: the worktree, when abs was in one
 	gone := abs
 	for {
-		parent := path.Dir(gone)
+		parent := paths.Dir(gone)
 		if parent == gone {
 			return "", false
 		}
@@ -60,11 +62,12 @@ func (s scope) movedFromWorktree(abs string) (string, bool) {
 	if gone == abs {
 		return "", false // only the file is missing: no directory was removed
 	}
-	parent := path.Dir(gone)
+	parent := paths.Dir(gone)
 	if !s.isBareContainer(parent) {
 		return "", false
 	}
-	return s.inMain(s.mainWorktreeOfBare(parent+"/.git"), strings.TrimPrefix(abs, gone+"/"))
+	rel, _ := paths.Rel(gone, abs)
+	return s.inMain(s.mainWorktreeOfBare(paths.Join(parent, ".git")), rel)
 }
 
 // mainWorktreeOf is repo's main worktree: its container's main for a bare repository's container, the
@@ -84,7 +87,7 @@ func (s scope) inMain(main, rel string) (string, bool) {
 	if main == "" {
 		return "", false
 	}
-	to := main + "/" + rel
+	to := paths.Join(main, rel)
 	if !s.exists(to) {
 		return "", false
 	}
@@ -124,8 +127,8 @@ func (s scope) mainWorktreeOfBare(gitDir string) string {
 		if !ok {
 			continue
 		}
-		dir := path.Dir(strings.TrimSpace(string(dotGit))) // gitdir names <worktree>/.git
-		if strings.HasPrefix(dir, "/") && s.exists(dir) {
+		dir := paths.Dir(paths.Slash(strings.TrimSpace(string(dotGit)))) // gitdir names <worktree>/.git, in the OS's own form
+		if paths.IsAbs(dir) && s.exists(dir) {
 			byBranch[ref] = dir
 		}
 	}
@@ -147,7 +150,7 @@ func (s scope) worktreeRefs(t Task, file string) []RefCandidate {
 	}{{"adr", t.ADR}, {"review", t.Review}} {
 		for i, p := range f.list {
 			r := s.resolve(p)
-			if r.unresolved || !strings.HasPrefix(r.path, "/") {
+			if r.unresolved || !paths.IsAbs(r.path) {
 				continue
 			}
 			to, ok := s.movedFromWorktree(r.path)

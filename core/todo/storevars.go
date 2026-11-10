@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"path"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -146,7 +145,7 @@ func (sv storeVars) render() []byte {
 
 // isAbsValue reports a value that names a machine's path, not one relative to the KB: absolute, or
 // under ~.
-func isAbsValue(v string) bool { return strings.HasPrefix(v, "/") || strings.HasPrefix(v, "~") }
+func isAbsValue(v string) bool { return paths.IsAbs(v) || strings.HasPrefix(v, "~") }
 
 // readVarsFile reads the variable file in dir. ok is false for an absent file or directory; a file
 // that cannot be read or parsed is its error.
@@ -187,8 +186,8 @@ func (m *Manager) readVarsFile(ctx context.Context, dir string) (sv storeVars, o
 func (m *Manager) containing(dir string) string {
 	best := ""
 	for _, name := range m.roots.Names() {
-		if r, ok := m.roots.Root(name); ok && paths.Under(dir, path.Clean(r)) && len(r) > len(best) {
-			best = path.Clean(r)
+		if r, ok := m.roots.Root(name); ok && paths.Under(dir, paths.Clean(r)) && len(r) > len(best) {
+			best = paths.Clean(r)
 		}
 	}
 	return best
@@ -197,7 +196,7 @@ func (m *Manager) containing(dir string) string {
 // nameOf is the name of the workspace whose root is root, "" for none.
 func (m *Manager) nameOf(root string) string {
 	for _, name := range m.roots.Names() {
-		if r, ok := m.roots.Root(name); ok && path.Clean(r) == root {
+		if r, ok := m.roots.Root(name); ok && paths.Clean(r) == root {
 			return name
 		}
 	}
@@ -260,7 +259,7 @@ func (m *Manager) SetKB(ctx context.Context, at At, workspace string) error {
 	if err != nil {
 		return err
 	}
-	root = path.Clean(root)
+	root = paths.Clean(root)
 	err = m.j.UpdateSettings(ctx, func(s *Settings) error {
 		r, ok := s.Stores[w.rec.ID]
 		if !ok {
@@ -367,7 +366,7 @@ func (l layers) value(name string, env func(string) string) (string, string) {
 		return "", "conflict"
 	}
 	if v := l.file.Vars[name]; v != "" {
-		return path.Join(l.kb, v), "kb"
+		return paths.Join(l.kb, v), "kb"
 	}
 	if isBuiltin(name) {
 		if v := l.derived[name]; v != "" {
@@ -443,7 +442,7 @@ func (m *Manager) scope(ctx context.Context, w where) (scope, error) {
 		return scope{}, err
 	}
 	sc := m.scopeOf(l)
-	sc.storeHome = path.Dir(w.rec.Path)
+	sc.storeHome = paths.Dir(w.rec.Path)
 	return sc, nil
 }
 
@@ -486,7 +485,7 @@ func (m *Manager) WorkspaceVars(ctx context.Context, workspace string) ([]Var, e
 		if !ok {
 			return nil, fmt.Errorf("%w: %s", ErrNoWorkspace, workspace)
 		}
-		kb = path.Clean(root)
+		kb = paths.Clean(root)
 	}
 	l, err := m.layersOf(ctx, kb)
 	if err != nil {
@@ -517,7 +516,7 @@ func (m *Manager) AllEffectiveVars(ctx context.Context) (map[string]map[string]s
 	roots := map[string]bool{"": true}
 	for _, name := range m.roots.Names() {
 		if r, ok := m.roots.Root(name); ok {
-			roots[path.Clean(r)] = true
+			roots[paths.Clean(r)] = true
 		}
 	}
 	st, err := m.j.Settings(ctx)
@@ -691,7 +690,7 @@ func (m *Manager) kbFor(ctx context.Context, o SetVarOpts) (string, error) {
 		if !ok {
 			return "", fmt.Errorf("%w: %s", ErrNoWorkspace, o.Workspace)
 		}
-		return path.Clean(root), nil
+		return paths.Clean(root), nil
 	case o.At != nil:
 		w, err := m.writable(ctx, *o.At)
 		if err != nil {
@@ -710,11 +709,11 @@ func (m *Manager) kbFor(ctx context.Context, o SetVarOpts) (string, error) {
 func (m *Manager) absValue(kb, v string) string {
 	switch {
 	case v == "~" || strings.HasPrefix(v, "~/"):
-		return path.Join(m.o.home, strings.TrimPrefix(v, "~"))
+		return paths.Join(m.o.home, strings.TrimPrefix(v, "~"))
 	case paths.IsAbs(v):
 		return paths.Slash(v)
 	}
-	return path.Join(kb, v)
+	return paths.Join(kb, v)
 }
 
 // editKBFile changes the KB's file at kb through fn, written atomically at the version it was read
@@ -754,7 +753,7 @@ func (m *Manager) editKBFile(ctx context.Context, kb string, fn func(*storeVars)
 	}
 	_, err = d.Write(ctx, varsFile, sv.render(), ver)
 	if err == nil {
-		m.event(Event{Kind: "todos.vars", Path: kb + "/" + varsFile})
+		m.event(Event{Kind: "todos.vars", Path: paths.Join(kb, varsFile)})
 		m.storesChanged()
 	}
 	return err
@@ -779,10 +778,10 @@ func (m *Manager) reportVarsFile(key, dir string, err error) {
 		store = key
 	}
 	if msg != "" && msg != prev {
-		logger.Warning(m.o.log, err, logger.Fields{"event": "todos.vars_invalid", "path": dir + "/" + varsFile})
-		m.event(Event{Kind: "todos.vars_invalid", Store: store, Path: dir + "/" + varsFile, Detail: msg})
+		logger.Warning(m.o.log, err, logger.Fields{"event": "todos.vars_invalid", "path": paths.Join(dir, varsFile)})
+		m.event(Event{Kind: "todos.vars_invalid", Store: store, Path: paths.Join(dir, varsFile), Detail: msg})
 	} else if msg == "" && seen && prev != "" {
-		m.event(Event{Kind: "todos.vars_valid", Store: store, Path: dir + "/" + varsFile})
+		m.event(Event{Kind: "todos.vars_valid", Store: store, Path: paths.Join(dir, varsFile)})
 	}
 }
 
@@ -798,7 +797,7 @@ func (m *Manager) reportRefused(kb string, names []string) {
 	m.varsErr[key] = msg
 	m.mu.Unlock()
 	if msg != "" && msg != prev {
-		m.event(Event{Kind: "todos.vars_refused", Path: kb + "/" + varsFile,
+		m.event(Event{Kind: "todos.vars_refused", Path: paths.Join(kb, varsFile),
 			Detail: "absolute values are a machine's, not the KB's (set them with scope \"machine\"): " + msg})
 	}
 }
@@ -806,8 +805,11 @@ func (m *Manager) reportRefused(kb string, names []string) {
 // relTo is target relative to dir, the form a KB's file carries to another machine; target as it is
 // when no relative form exists.
 func relTo(dir, target string) string {
+	if rel, ok := paths.Rel(dir, target); ok {
+		return rel
+	}
 	if rel, err := filepath.Rel(dir, target); err == nil && !filepath.IsAbs(rel) {
-		return filepath.ToSlash(rel)
+		return filepath.ToSlash(rel) // outside dir, on its volume: "../x"
 	}
 	return target
 }
@@ -818,7 +820,7 @@ func relTo(dir, target string) string {
 // KB serves: nothing is recorded.
 func (m *Manager) recordProjectRoot(ctx context.Context, w where, project string) error {
 	kb, err := m.owner(ctx, w.rec.ID)
-	if err != nil || kb == "" || paths.Under(path.Clean(project), kb) {
+	if err != nil || kb == "" || paths.Under(paths.Clean(project), kb) {
 		return err
 	}
 	m.varsMu.Lock()
@@ -919,7 +921,7 @@ func (m *Manager) fold(ctx context.Context, kb string) map[string]bool {
 				add(rows, n, m.absValue(kb, v))
 				machineOnly[n] = true
 			default:
-				add(portable, n, relTo(kb, path.Join(s.dir, v)))
+				add(portable, n, relTo(kb, paths.Join(s.dir, v)))
 			}
 		}
 		for _, n := range s.file.Machine {
@@ -951,7 +953,7 @@ func (m *Manager) fold(ctx context.Context, kb string) map[string]bool {
 		m.varsErr[key] = msg
 		m.mu.Unlock()
 		if msg != prev {
-			m.event(Event{Kind: "todos.vars_conflict", Path: kb + "/" + varsFile, Detail: "stores of this workspace set " + msg +
+			m.event(Event{Kind: "todos.vars_conflict", Path: paths.Join(kb, varsFile), Detail: "stores of this workspace set " + msg +
 				" differently: set each in the KB's file (scope kb) or declare it machine-only (scope machine, machine_only)"})
 		}
 		return conflict
@@ -1010,8 +1012,8 @@ func (m *Manager) fold(ctx context.Context, kb string) map[string]bool {
 			logger.Warning(m.o.log, err, logger.Fields{"event": "todos.vars_migrate.failed", "store": s.id})
 			return nil // the next read folds again: the carried values are settled now, so only the rename is left
 		}
-		m.event(Event{Kind: "todos.vars_migrated", Store: s.id, Path: s.dir + "/" + varsFile,
-			Detail: "carried into " + kb + "/" + varsFile + " and this machine's rows; renamed " + varsFile + migratedSuffix})
+		m.event(Event{Kind: "todos.vars_migrated", Store: s.id, Path: paths.Join(s.dir, varsFile),
+			Detail: "carried into " + paths.Join(kb, varsFile) + " and this machine's rows; renamed " + varsFile + migratedSuffix})
 	}
 	m.storesChanged()
 	return nil
@@ -1045,7 +1047,7 @@ func (m *Manager) MigrateVars(ctx context.Context) {
 		}
 		sp := rr.Override
 		if sp == "" {
-			sp = root + "/" + todoDir
+			sp = paths.Join(root, todoDir)
 		}
 		if m.nameOf(paths.Slash(rr.KBRoot)) != "" { // recorded as a client sent it: in the OS's own form
 			hint[sp] = paths.Slash(rr.KBRoot)

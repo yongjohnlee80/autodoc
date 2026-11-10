@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/core/paths"
 )
 
 // Journal is the daemon's durable state for todos: each store's change log, its snapshot, its
@@ -161,7 +163,7 @@ func (s *Settings) ApplyRepath(store string, r Repath) {
 		s.Stores[store] = rec
 	}
 	for root, rr := range s.Roots {
-		if rr.Override == r.From || (rr.Override == "" && root+"/"+todoDir == r.From) {
+		if rr.Override == r.From || (rr.Override == "" && paths.Join(root, todoDir) == r.From) {
 			rr.Override = r.To
 			s.Roots[root] = rr
 		}

@@ -20,3 +20,26 @@ func TestADrivesPathIsAbsoluteInEitherForm(t *testing.T) {
 		}
 	}
 }
+
+// A drive's root, through the functions with this OS's rule: it stays "C:/" (never "C:", the
+// drive's current directory) through Slash, Join, Dir, Clean and Root.
+func TestADrivesRootStaysItsRoot(t *testing.T) {
+	if got := paths.Slash(`C:\`); got != "C:/" {
+		t.Errorf(`Slash(C:\) = %q, want C:/`, got)
+	}
+	if got := paths.Join("C:/", ".todo-list"); got != "C:/.todo-list" {
+		t.Errorf("Join(C:/, .todo-list) = %q", got)
+	}
+	if got := paths.Dir("C:/.todo-list"); got != "C:/" {
+		t.Errorf("Dir(C:/.todo-list) = %q", got)
+	}
+	if got := paths.Clean("C:/kb/.."); got != "C:/" {
+		t.Errorf("Clean(C:/kb/..) = %q", got)
+	}
+	if !paths.IsRoot("C:/") || paths.IsRoot("C:") || !paths.IsAbs("C:/") {
+		t.Error("C:/ is a root and absolute; C: is neither")
+	}
+	if got := paths.Slash(`\\srv\sh\kb`); got != "//srv/sh/kb" || paths.Dir(got) != "//srv/sh/" {
+		t.Errorf(`Slash(\\srv\sh\kb) = %q, its Dir %q`, got, paths.Dir(got))
+	}
+}
