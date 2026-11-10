@@ -9,8 +9,12 @@ import (
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 )
 
+// HomeVariable is the environment variable that names the user's home folder: $HOME, as
+// os.UserHomeDir reads it on Unix.
+const HomeVariable = "HOME"
+
 func home(env procenv.Env) (string, error) {
-	if v := env.Get("HOME"); v != "" {
+	if v := env.Get(HomeVariable); v != "" {
 		return v, nil
 	}
 	return "", errors.New("$HOME is not defined")

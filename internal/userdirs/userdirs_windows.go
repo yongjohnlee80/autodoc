@@ -10,9 +10,13 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// HomeVariable is the environment variable that names the user's home folder: %USERPROFILE%, as
+// os.UserHomeDir reads it on Windows.
+const HomeVariable = "USERPROFILE"
+
 // home is %USERPROFILE%, as os.UserHomeDir reads it on Windows.
 func home(env procenv.Env) (string, error) {
-	if v := env.Get("USERPROFILE"); v != "" {
+	if v := env.Get(HomeVariable); v != "" {
 		return v, nil
 	}
 	return "", errors.New("%userprofile% is not defined")
