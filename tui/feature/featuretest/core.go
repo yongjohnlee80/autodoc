@@ -212,6 +212,25 @@ func (s *ScriptedCore) UseText(text func(id string) string) {
 	s.Textf = func(id string, args ...any) string { return feature.Fill(text(id), args...) }
 }
 
+// HeldCore is a ScriptedCore whose Go holds the worker itself, not only its answer, until Run: a
+// worker started earlier runs after what happened since, as a slow daemon makes it.
+type HeldCore struct {
+	*ScriptedCore
+	Held []func()
+}
+
+// Go holds the worker and its answer.
+func (h *HeldCore) Go(fn func(context.Context) any, then func(any)) {
+	h.Held = append(h.Held, func() { then(fn(context.Background())) })
+}
+
+// Run runs the held worker i, and its answer, once.
+func (h *HeldCore) Run(i int) {
+	f := h.Held[i]
+	h.Held[i] = func() {}
+	f()
+}
+
 // noPrefs is a preferences view with nothing set.
 type noPrefs struct{}
 

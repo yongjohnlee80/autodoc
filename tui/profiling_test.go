@@ -247,17 +247,17 @@ func TestTheBackendsToggleRunsOnceAtATime(t *testing.T) {
 // the close is for good, so the start is refused and the item stays off.
 func TestAWindowStartQueuedPastTheCloseStartsNothing(t *testing.T) {
 	shortRuntime(t)
-	c := &heldCore{ScriptedCore: newScripted("kb")} // embedsetup_test.go's: Go holds the worker
+	c := &featuretest.HeldCore{ScriptedCore: newScripted("kb")} // Go holds the worker
 	prof := profiling.New(context.Background(), "gui")
 	f := newProfiling(c, prof, nil)
 	f.toggleWindow()
-	if len(c.held) != 1 {
-		t.Fatalf("%d works queued; want the start", len(c.held))
+	if len(c.Held) != 1 {
+		t.Fatalf("%d works queued; want the start", len(c.Held))
 	}
 	if err := prof.Close(); err != nil { // the owner's close at exit
 		t.Fatal(err)
 	}
-	c.run(0)
+	c.Run(0)
 	if prof.Dir() != "" || c.Sets["App.profilingWindow"] == true || len(c.Failures) != 1 {
 		t.Errorf("a start run after the close: dir %q, state %v, failed %v", prof.Dir(), c.Sets, c.Failures)
 	}
