@@ -268,14 +268,14 @@ func (m *Manager) resolve(ctx context.Context, at At) (where, error) {
 		return w, err
 	}
 	rr := st.Roots[canon]
-	storePath := canon + "/" + todoDir
+	storePath := paths.Join(canon, todoDir)
 	if rr.Override != "" {
 		storePath, w.override = rr.Override, rr.Override
 	} else if sf, c, err := m.disk.Open(ctx, storePath); err == nil {
 		storePath = c // a .todo-list that is a symlink resolves elsewhere, and is not writable
 		sf.Close()
 	}
-	w.writable = (w.override != "") || (storePath == canon+"/"+todoDir && (w.workspace || !rr.Registered.IsZero()))
+	w.writable = (w.override != "") || (storePath == paths.Join(canon, todoDir) && (w.workspace || !rr.Registered.IsZero()))
 	if rec, ok := st.storeByPath(storePath); ok {
 		w.rec = rec
 	} else if w.rec, err = m.newStore(ctx, storePath); err != nil {
@@ -433,7 +433,7 @@ func (m *Manager) Stores(ctx context.Context) ([]StoreInfo, error) {
 			Roots: []string{}, KB: m.ownerOf(rec)}
 		for _, root := range slices.Sorted(maps.Keys(st.Roots)) {
 			rr := st.Roots[root]
-			if rr.Override == rec.Path || (rr.Override == "" && root+"/"+todoDir == rec.Path) {
+			if rr.Override == rec.Path || (rr.Override == "" && paths.Join(root, todoDir) == rec.Path) {
 				info.Roots = append(info.Roots, root)
 			}
 		}
@@ -475,7 +475,7 @@ func (m *Manager) Claim(ctx context.Context, at At, opts ...ClaimOpts) error {
 		o.automatic = o.automatic || x.automatic
 	}
 	o.LegacyWorkspace = filepath.ToSlash(o.LegacyWorkspace) // in the form core/todo keeps, still to be found clean
-	if o.LegacyWorkspace != "" && (!paths.IsAbs(o.LegacyWorkspace) || path.Clean(o.LegacyWorkspace) != o.LegacyWorkspace) {
+	if o.LegacyWorkspace != "" && (!paths.IsAbs(o.LegacyWorkspace) || paths.Clean(o.LegacyWorkspace) != o.LegacyWorkspace) {
 		return fmt.Errorf("%w: legacy_workspace %q is not a clean absolute path", ErrInvalid, o.LegacyWorkspace)
 	}
 	w, err := m.resolve(ctx, at)
@@ -644,8 +644,8 @@ func (m *Manager) Scaffold(ctx context.Context, at At) (Opened, error) {
 	made := false
 	fsys, _, err := m.disk.Open(ctx, w.rec.Path)
 	if errors.Is(err, vfs.ErrNotExist) {
-		parent, base := path.Split(w.rec.Path)
-		pfs, _, perr := m.disk.Open(ctx, path.Clean(parent))
+		parent, base := paths.Dir(w.rec.Path), path.Base(w.rec.Path)
+		pfs, _, perr := m.disk.Open(ctx, parent)
 		if perr != nil {
 			return Opened{}, fmt.Errorf("%w: the store's parent directory: %w", ErrNotAStore, perr)
 		}
@@ -685,20 +685,24 @@ func (m *Manager) Scaffold(ctx context.Context, at At) (Opened, error) {
 // withExists gives sc a stat, a small read and a listing of absolute paths, through the disk; done
 // releases them.
 func (m *Manager) withExists(ctx context.Context, sc scope) (scope, func()) {
-	var root vfs.FS
+	roots := map[string]vfs.FS{} // a volume's root each, opened at its first use: "/", "C:/", "//server/share/"
 	open := func(abs string) (vfs.FS, string, bool) {
-		if root == nil {
-			fsys, _, err := m.disk.Open(ctx, "/")
+		root, name := paths.Root(abs)
+		if root == "" {
+			return nil, "", false
+		}
+		fsys, ok := roots[root]
+		if !ok {
+			f, _, err := m.disk.Open(ctx, root)
 			if err != nil {
 				return nil, "", false
 			}
-			root = fsys
+			fsys, roots[root] = f, f
 		}
-		name := strings.TrimPrefix(path.Clean(abs), "/")
 		if name == "" {
 			name = "."
 		}
-		return root, name, true
+		return fsys, name, true
 	}
 	sc.exists = func(abs string) bool {
 		fsys, name, ok := open(abs)
@@ -741,8 +745,8 @@ func (m *Manager) withExists(ctx context.Context, sc scope) (scope, func()) {
 		return out
 	}
 	return sc, func() {
-		if root != nil {
-			root.Close()
+		for _, fsys := range roots {
+			fsys.Close()
 		}
 	}
 }

@@ -355,7 +355,7 @@ func (m *Manager) MoveStore(ctx context.Context, at At, to string) (Resolved, er
 		return Resolved{}, err
 	}
 	to = filepath.ToSlash(to) // in the form core/todo keeps, still to be found clean
-	if !paths.IsAbs(to) || path.Clean(to) != to || to == "/" {
+	if !paths.IsAbs(to) || paths.Clean(to) != to || paths.IsRoot(to) {
 		return Resolved{}, fmt.Errorf("%w: %q is not a clean absolute path", ErrInvalid, to)
 	}
 	st, err := m.openLocked(ctx, w)
@@ -366,13 +366,13 @@ func (m *Manager) MoveStore(ctx context.Context, at At, to string) (Resolved, er
 	if err := m.ready(ctx, st); err != nil {
 		return Resolved{}, err
 	}
-	parent, base := path.Split(to)
-	pfs, canonParent, err := m.disk.Open(ctx, path.Clean(parent))
+	parent, base := paths.Dir(to), path.Base(to)
+	pfs, canonParent, err := m.disk.Open(ctx, parent)
 	if err != nil {
 		return Resolved{}, fmt.Errorf("%w: %s's parent must be an existing directory: %w", ErrInvalid, to, err)
 	}
 	pfs.Close()
-	target := path.Join(canonParent, base)
+	target := paths.Join(canonParent, base)
 	if paths.Under(target, st.path) {
 		return Resolved{}, fmt.Errorf("%w: %s is inside the store", ErrInvalid, target)
 	}
@@ -415,21 +415,21 @@ func (m *Manager) MoveStore(ctx context.Context, at At, to string) (Resolved, er
 
 // commonDir is the deepest directory holding both a and b.
 func commonDir(a, b string) string {
-	as, bs := strings.Split(a, "/"), strings.Split(b, "/")
+	ra, xa := paths.Root(a)
+	rb, xb := paths.Root(b)
+	if ra != rb {
+		return "" // on two volumes: no directory holds both
+	}
+	as, bs := strings.Split(xa, "/"), strings.Split(xb, "/")
 	n := 0
 	for n < len(as)-1 && n < len(bs)-1 && as[n] == bs[n] {
 		n++
 	}
-	if d := strings.Join(as[:n], "/"); d != "" {
-		return d
-	}
-	return "/"
+	return paths.Join(ra, as[:n]...)
 }
 
 // rel is p relative to dir, which holds it.
 func rel(dir, p string) string {
-	if dir == "/" {
-		return strings.TrimPrefix(p, "/")
-	}
-	return strings.TrimPrefix(p, dir+"/")
+	r, _ := paths.Rel(dir, p)
+	return r
 }

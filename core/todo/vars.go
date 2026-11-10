@@ -100,7 +100,7 @@ func (s scope) resolve(input string) resolved {
 		}
 		return resolved{path: trailSlashe.ReplaceAllString(val, "") + "/" + leadSlashes.ReplaceAllString(rest, ""), varName: name}
 	}
-	if strings.HasPrefix(input, "/") || strings.HasPrefix(input, "~") {
+	if paths.IsAbs(input) || strings.HasPrefix(input, "~") {
 		return resolved{path: s.expandHome(input)}
 	}
 	return resolved{path: input}
@@ -146,7 +146,7 @@ func (s scope) symbolize(p string) string {
 	}
 	add(VarHome, s.home)
 
-	if strings.HasPrefix(p, "/") || strings.HasPrefix(p, "~") {
+	if paths.IsAbs(p) || strings.HasPrefix(p, "~") {
 		abs := s.expandHome(p)
 		var best *root
 		for i, r := range roots {
@@ -172,7 +172,7 @@ func joinPath(a, b string) string {
 	switch {
 	case b == "":
 		return a
-	case strings.HasPrefix(b, "/"):
+	case paths.IsAbs(b):
 		return b
 	case strings.HasSuffix(a, "/"):
 		return a + b
@@ -231,7 +231,7 @@ func (s scope) refErrors(t Task, now string, hasTask func(id string) bool) []Err
 			}
 			abs := ""
 			switch {
-			case strings.HasPrefix(r.path, "/"):
+			case paths.IsAbs(r.path):
 				abs = r.path
 			case s.kbRoot != "":
 				abs = joinPath(s.kbRoot, p) // a relative ref is the KB's, and only the KB's
