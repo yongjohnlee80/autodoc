@@ -126,6 +126,11 @@ func (c core) Workspace() string { return c.h.ws }
 
 func (c core) Prefs() feature.PrefsView { return c.h.prefs }
 
+// LayoutRows is Layout › for the window id (feature.LayoutRows): the host's tiling windows'.
+func (c core) LayoutRows(id string, row feature.RowMaker) []widgetcore.MenuItemModel {
+	return layoutRows(c, id, row)
+}
+
 // Env is the program's environment as it is now (seams.go): a test may change it while the
 // program runs.
 func (c core) Env() procenv.Env { return c.h.seams.env }

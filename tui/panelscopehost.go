@@ -12,6 +12,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/errs"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 )
 
 type scopedPanelHost struct {
@@ -39,7 +40,12 @@ func (s *scopedPanelHost) Trf(id string, args ...any) string {
 func (s *scopedPanelHost) Ask(q feature.Question) feature.Asked { return s.core.Ask(q) }
 
 func (s *scopedPanelHost) Prefs() feature.PrefsView { return s.core.Prefs() }
-func (s *scopedPanelHost) Env() procenv.Env         { return s.core.Env() }
+
+// LayoutRows is Layout › for the window id (feature.LayoutRows), set through this panel's scope.
+func (s *scopedPanelHost) LayoutRows(id string, row feature.RowMaker) []widgetcore.MenuItemModel {
+	return layoutRows(s, id, row)
+}
+func (s *scopedPanelHost) Env() procenv.Env { return s.core.Env() }
 
 func (s *scopedPanelHost) Keep(err error) { s.core.Keep(err) }
 
