@@ -264,7 +264,7 @@ func (m *mindmap) LanguageChanged() {
 	names, labels := viewThemeChoices(m.c)
 	m.c.Set("App.mindThemes", keyedChoices(names, labels))
 	for _, src := range []string{"App.mindDepths", "App.mindShapeChoices"} {
-		m.c.Set(src, choiceModel(m.c, src))
+		m.c.Set(src, relationChoice(m.c, src))
 	}
 	if m.editor.ws != "" {
 		m.editor.show("")
