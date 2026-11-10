@@ -395,8 +395,11 @@ the fast picker over the workspace in use.
   daemon can read.
 - An outside file has an empty workspace and an absolute path. It stays open when the workspace
   changes, and has no search, links, backlinks or frontmatter check; the status line says so.
+- The daemon's disk is a tree per volume. On Unix there's one, at `/`. On Windows each drive
+  (`C:`) and share (`\\server\share`) is its own tree, opened the first time a path on it is asked
+  for, and a file's name in it is its path below that root.
 
-In the code: `rpc/files.go`, `app/serve.go`, `tui/outside.go`, `tui/files.go`
+In the code: `rpc/files.go`, `rpc/disks.go`, `app/serve.go`, `tui/outside.go`, `tui/files.go`
 
 ## The Relations drawer
 
