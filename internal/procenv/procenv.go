@@ -11,6 +11,7 @@ package procenv
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -90,3 +91,8 @@ func Resolve(e Env, name string) string {
 	}
 	return name
 }
+
+// ProgramName is the name of the program file is, as the OS names a program: its base name, and on
+// Windows that name lower-cased, less an extension e's PATHEXT names (claude.cmd and CLAUDE.EXE are
+// claude there). A crew kind, or a wrapper such as env or mise, is matched by it.
+func ProgramName(e Env, file string) string { return programName(e, filepath.Base(file)) }
