@@ -247,14 +247,15 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: scratch (not for merge) the plugin cells on Windows, each read whole
+      - name: scratch (not for merge) the plugin fixture cells on Windows x3
         if: ${{ !inputs.discover }}
-        continue-on-error: true
         run: |
-          for c in TestAPluginsMenuRows TestAPluginsNotices TestANoticeQueuedBeforeAStopPostsNothing TestAPluginOpensAPathAndUpdatesItself TestTheSlotIsFencedToTheLiveRun TestTheSlotOutlivesARunNotItsPlugin TestAPluginIsToldWhyItCloses TestAPluginThatFailsClosesItsDialogAndSaysWhy TestAPluginRedrawsTheRenderedView TestAPluginOpensADraftWithBufferNew TestAProtocolTwoPluginsCallIsDropped TestPastSixtyFourWaitingCallsTheHostIsBusy TestACallReusingAWaitingNumberIsNeverAnswered TestTheCloseStopsAStubbornPluginAndWhatItStarted TestAGatedOpenIsHeldToTheWorkspace; do
-            echo "==== $c"; go test -count=1 -timeout 5m -v -run "^$c\$" ./tui/ 2>&1 | grep -vE '^=== (RUN|PAUSE|CONT)' | grep -vE '^\s*│\s*│?\s*$' | cut -c1-240 | head -30 || true
-          done
-          for f in $(find "$TEMP" -name 'silent.log' 2>/dev/null | head -3); do echo "==== $f"; head -c 2000 "$f"; done || true
+          T='^(TestAPluginsMenuRows|TestAPluginsNotices|TestANoticeQueuedBeforeAStopPostsNothing|TestAPluginOpensAPathAndUpdatesItself|TestAPluginThatFailsClosesItsDialogAndSaysWhy|TestAPluginRedrawsTheRenderedView|TestAPluginOpensADraftWithBufferNew|TestAProtocolTwoPluginsCallIsDropped|TestPastSixtyFourWaitingCallsTheHostIsBusy|TestACallReusingAWaitingNumberIsNeverAnswered)$'
+          go test -count=3 -timeout 20m -v -run "$T" ./tui/ > "$RUNNER_TEMP/t.txt" 2>&1 && rt=0 || rt=$?
+          echo "== PASS $(grep -cE '^--- PASS' "$RUNNER_TEMP/t.txt" || true) FAIL $(grep -cE '^--- FAIL' "$RUNNER_TEMP/t.txt" || true)"
+          grep -E '^--- FAIL|_test\.go:[0-9]+:' "$RUNNER_TEMP/t.txt" | sort -u | cut -c1-260 | head -10 || true
+          echo "== rc=$rt"
+          [ $rt = 0 ]
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
         run: |
