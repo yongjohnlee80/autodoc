@@ -15,16 +15,14 @@ func Expose(t testing.TB, path string) {
 	}
 }
 
-// Unreadable makes path one this user may write but not read: mode 0200. Root reads any file, so
-// a test run as root is skipped.
+// Unreadable makes path one this user may write but not read: mode 0200. A process that reads it
+// all the same (root) has no such file, and the test is skipped (unreadable).
 func Unreadable(t testing.TB, path string) {
 	t.Helper()
-	if os.Geteuid() == 0 {
-		t.Skip("root reads a file whatever its mode")
-	}
 	if err := os.Chmod(path, 0o200); err != nil {
 		t.Fatal(err)
 	}
+	unreadable(t, path)
 }
 
 // ExposeNew is a folder whose new files would be readable by others: on Unix a file's mode is its
