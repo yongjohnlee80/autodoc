@@ -95,7 +95,7 @@ func writeFolderFiles(dir string, files []crew.FolderFile) error {
 		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 			return err
 		}
-		if err := writeAtomic(p, []byte(f.Content), 0o600); err != nil {
+		if err := writePrivate(p, []byte(f.Content)); err != nil {
 			return err
 		}
 	}

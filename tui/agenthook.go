@@ -145,7 +145,7 @@ func mergeClaudeSettings(path string, m claudeMerge) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	return writeAtomic(path, append(out, '\n'), 0o600)
+	return writePrivate(path, append(out, '\n'))
 }
 
 // withoutCommand is the hook group g with every hook running command taken out: nil only when that
