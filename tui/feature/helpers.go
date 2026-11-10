@@ -2,6 +2,8 @@ package feature
 
 import (
 	"fmt"
+	"regexp"
+	"strconv"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
@@ -22,6 +24,27 @@ func Choices(labels ...string) *tuidecl.ListModel {
 type Wording interface {
 	Tr(id string) string
 	Trf(id string, args ...any) string
+}
+
+// argRef is a %1 … %99 in a message, which Fill fills.
+var argRef = regexp.MustCompile(`%[1-9][0-9]?`)
+
+// Fill is s with each %N its argument, in one pass, so an argument that says "%1" itself (a path, a
+// command, a search) is shown as it is. A %N past the arguments stays, but for a two-digit one whose
+// first digit names one ("%10" with one argument): the argument, then the digit, as Qt's arg.
+func Fill(s string, args ...any) string {
+	if len(args) == 0 {
+		return s
+	}
+	return argRef.ReplaceAllStringFunc(s, func(ref string) string {
+		if n, _ := strconv.Atoi(ref[1:]); n <= len(args) {
+			return fmt.Sprint(args[n-1])
+		}
+		if n := int(ref[1] - '0'); len(ref) == 3 && n <= len(args) {
+			return fmt.Sprint(args[n-1]) + ref[2:]
+		}
+		return ref
+	})
 }
 
 // BytesText is a size as the list shows it.

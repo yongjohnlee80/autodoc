@@ -761,5 +761,5 @@ func (w *inboxWindow) Trf(id string, args ...any) string {
 	if w.marked {
 		return markedText(id, args...)
 	}
-	return fill(englishText(id), args...)
+	return feature.Fill(englishText(id), args...)
 }
