@@ -88,14 +88,14 @@ func TestALauncherRunsThroughEachWindowsShell(t *testing.T) {
 func TestThePathEntryIsTheFolderOnWindows(t *testing.T) {
 	target := t.TempDir()
 	link := filepath.Join(t.TempDir(), ".bin", "x")
-	if got, err := PathEntry(link, target); err != nil || got != target {
+	if got, err := PathEntry(link, target), MakePathEntry(link, target); err != nil || got != target {
 		t.Fatalf("%q, %v; want the folder %s", got, err, target)
 	}
 	if _, err := os.Lstat(link); err == nil {
 		t.Fatal("a link was made")
 	}
 	odd := filepath.Join(t.TempDir(), "a;b")
-	if _, err := PathEntry(link, odd); err == nil || !strings.Contains(err.Error(), `";"`) {
+	if err := MakePathEntry(link, odd); err == nil || !strings.Contains(err.Error(), `";"`) {
 		t.Fatalf("a folder holding ';': %v; want it refused, naming ';'", err)
 	}
 }

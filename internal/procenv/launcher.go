@@ -2,6 +2,8 @@ package procenv
 
 import (
 	"errors"
+	"fmt"
+	"os"
 	"strings"
 )
 
@@ -32,12 +34,21 @@ func Launcher(name string, argv []string) ([]LauncherFile, error) {
 	return launcher(name, argv)
 }
 
-// PathEntry is the folder to put first on a PATH for the programs in target. Where target's own
-// path can sit on a PATH, it is target; else (on Unix, where a folder's name may hold ':') it is
-// link, made a symbolic link to target, replacing one that points elsewhere or nowhere. An entry
-// that would hold the PATH separator itself is refused, naming it: a PATH split there finds the
-// programs of some other folder.
-func PathEntry(link, target string) (string, error) { return pathEntry(link, target) }
+// PathEntry is the folder to put first on a PATH for the programs in target: target itself where
+// its path can sit on a PATH (Windows), else link (Unix, where a folder's name may hold ':'), a
+// symbolic link to target that MakePathEntry makes.
+func PathEntry(link, target string) string { return pathEntry(link, target) }
+
+// MakePathEntry makes PathEntry(link, target) lead to target: on Unix the link, replacing one that
+// points elsewhere or nowhere; on Windows nothing. An entry that would hold the PATH separator
+// itself is refused, naming it: a PATH split there finds the programs of some other folder.
+func MakePathEntry(link, target string) error {
+	entry := pathEntry(link, target)
+	if strings.ContainsRune(entry, os.PathListSeparator) {
+		return fmt.Errorf("the PATH folder %s holds %q, which splits a PATH: move it to a path without it", entry, string(os.PathListSeparator))
+	}
+	return makePathEntry(link, target)
+}
 
 // quotePOSIX is s as one word of a /bin/sh line, standing for itself.
 func quotePOSIX(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
