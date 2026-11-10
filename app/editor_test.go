@@ -3,7 +3,6 @@ package app
 import (
 	"bytes"
 	"context"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,7 +20,7 @@ import (
 // says what is missing.
 func TestEditorCallsThePageAsTheAgent(t *testing.T) {
 	sock := ipc.ScratchAddr(t.TempDir(), "e.sock")
-	ln, err := net.Listen("unix", sock)
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +58,7 @@ func TestEditorCallsThePageAsTheAgent(t *testing.T) {
 // variable, when set, still wins.
 func TestEditorReadsTheTokenFromItsFileWhenTheVariableIsDropped(t *testing.T) {
 	sock := ipc.ScratchAddr(t.TempDir(), "e.sock")
-	ln, err := net.Listen("unix", sock)
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +116,7 @@ func TestEditorReadsTheTokenFromItsFileWhenTheVariableIsDropped(t *testing.T) {
 // as a hook must.
 func TestTheWorkspaceNoticePrintsALineOrNothing(t *testing.T) {
 	sock := ipc.ScratchAddr(t.TempDir(), "e.sock")
-	ln, err := net.Listen("unix", sock)
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -210,7 +209,7 @@ func TestTheCodexServerRPCOverItsSocket(t *testing.T) {
 	}
 	defer os.RemoveAll(sockDir)
 	sock := ipc.ScratchAddr(sockDir, "s.sock")
-	ln, err := net.Listen("unix", sock)
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
