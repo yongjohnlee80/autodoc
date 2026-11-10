@@ -56,8 +56,8 @@ func TestTodosAssignListsEveryConnectedAgent(t *testing.T) {
 	v.list()
 	onTask(t, v, "open")
 	v.assign()
-	if !slices.Contains(c.opened, "agentAssignPicker") || c.set["App.agentAssignStatus"] != "agents (4 of 4)" {
-		t.Fatalf("A opened %v, listing %v; want the picker with the window's agent and 3 others", c.opened, c.set["App.agentAssignStatus"])
+	if !slices.Contains(c.Opened, "agentAssignPicker") || c.Sets["App.agentAssignStatus"] != "agents (4 of 4)" {
+		t.Fatalf("A opened %v, listing %v; want the picker with the window's agent and 3 others", c.Opened, c.Sets["App.agentAssignStatus"])
 	}
 	var keys, labels []string
 	for i, e := range v.assignPick.List.Items {
@@ -78,8 +78,8 @@ func TestTodosAssignListsEveryConnectedAgent(t *testing.T) {
 	w.list()
 	onTask(t, w, "open")
 	w.assign()
-	if none.set["App.agentAssignStatus"] != "agents (1 of 1)" {
-		t.Errorf("a window holding no crew scope lists %v, want its own agent alone", none.set["App.agentAssignStatus"])
+	if none.Sets["App.agentAssignStatus"] != "agents (1 of 1)" {
+		t.Errorf("a window holding no crew scope lists %v, want its own agent alone", none.Sets["App.agentAssignStatus"])
 	}
 }
 
@@ -95,8 +95,8 @@ func TestTodosAssignHandsAnotherHostsAgentATaskAsTheUser(t *testing.T) {
 	onTask(t, v, "open")
 	v.assign()
 	v.assignPick.Accept(1, "")
-	if c.set["App.todoAssignTitle"] != "assign to jarvis@plugins" {
-		t.Errorf("the Instructions: line's title %q", c.set["App.todoAssignTitle"])
+	if c.Sets["App.todoAssignTitle"] != "assign to jarvis@plugins" {
+		t.Errorf("the Instructions: line's title %q", c.Sets["App.todoAssignTitle"])
 	}
 	v.assignSet("Go.")
 	if len(*assigned) != 1 {
@@ -116,8 +116,8 @@ func TestTodosAssignHandsAnotherHostsAgentATaskAsTheUser(t *testing.T) {
 	if len(c.handed) != 0 {
 		t.Errorf("handed to the window's own agents %d times", len(c.handed))
 	}
-	if !slices.ContainsFunc(c.notes, func(n string) bool { return strings.Contains(n, "jarvis@plugins") && strings.Contains(n, "sent") }) {
-		t.Errorf("the notices %v, want one saying it was sent to jarvis@plugins", c.notes)
+	if !slices.ContainsFunc(c.Notes, func(n string) bool { return strings.Contains(n, "jarvis@plugins") && strings.Contains(n, "sent") }) {
+		t.Errorf("the notices %v, want one saying it was sent to jarvis@plugins", c.Notes)
 	}
 }
 
@@ -135,10 +135,10 @@ func TestTodosAssignQueuesForAnAgentNoWakeReaches(t *testing.T) {
 	if len(c.sent) != 1 || !strings.Contains(c.sent[0].body, "Instruction: "+assignDefault) {
 		t.Fatalf("sent %+v, want the task, with the default instruction", c.sent)
 	}
-	if !slices.ContainsFunc(c.notes, func(n string) bool {
+	if !slices.ContainsFunc(c.Notes, func(n string) bool {
 		return strings.Contains(n, "queued") && strings.Contains(n, "lector@plugins") && strings.Contains(n, "no_endpoint")
 	}) {
-		t.Errorf("the notices %v, want queued: lector@plugins can't be woken now (no_endpoint)", c.notes)
+		t.Errorf("the notices %v, want queued: lector@plugins can't be woken now (no_endpoint)", c.Notes)
 	}
 
 	r, _ := newPeerCore("autodoc:0123456789abcdef", peer("jarvis", "autovim:plugins", "plugins", true, ""))
@@ -149,10 +149,10 @@ func TestTodosAssignQueuesForAnAgentNoWakeReaches(t *testing.T) {
 	w.assign()
 	w.assignPick.Accept(1, "")
 	w.assignSet("Go.")
-	if !slices.ContainsFunc(r.notes, func(n string) bool {
+	if !slices.ContainsFunc(r.Notes, func(n string) bool {
 		return strings.Contains(n, "not sent") && strings.Contains(n, "mail.no_recipient")
 	}) {
-		t.Errorf("the notices %v, want assigned but not sent, with why", r.notes)
+		t.Errorf("the notices %v, want assigned but not sent, with why", r.Notes)
 	}
 }
 
@@ -216,8 +216,8 @@ func TestTodosAssignAnsweredAfterAWorkspaceSwitchOpensNothing(t *testing.T) {
 		t.Fatal("A never asked the crew for the other hosts' agents")
 	}
 	c.pending()
-	if slices.Contains(c.opened, "agentAssignPicker") {
-		t.Errorf("A opened its picker for a workspace no longer in use: %v", c.opened)
+	if slices.Contains(c.Opened, "agentAssignPicker") {
+		t.Errorf("A opened its picker for a workspace no longer in use: %v", c.Opened)
 	}
 	v.assignPick.Accept(1, "")
 	v.assignSet("Go.")
