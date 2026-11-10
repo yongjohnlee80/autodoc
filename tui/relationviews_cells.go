@@ -2,7 +2,6 @@ package tui
 
 import (
 	"embed"
-	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"strings"
 )
 
@@ -10,13 +9,6 @@ import (
 // in cells (globemap_cells.go, mindmap_cells.go) and the Mindmap's settings, beside Relations ›
 // Links (relationmap.go). withRelationViews writes them into main.qml on a terminal; a window
 // writes the window's (relationviews_gui.go).
-
-// cellRelationViews are a terminal's relation views, one graph store for both: the GlobeMap and
-// the Mindmap, in cells.
-func cellRelationViews(h *Host) []feature.Feature {
-	store := newGraphStore(core{h}, core{h}, h.graphUserFile)
-	return []feature.Feature{newCellGlobeMap(core{h}, store, h.seams.globeMapPage), newCellMindmap(core{h}, store)}
-}
 
 // cellRelationMenuQML is the terminal's Relations menu items for its GlobeMap and Mindmap.
 const cellRelationMenuQML = `            MenuItem { text: qsTrId("autodoc.gui.relations.globemap"); onTriggered: App.toggleGlobeMap() }
