@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -57,7 +59,10 @@ func TestAPathTheShellResolvesIsNotJudged(t *testing.T) {
 		})
 	}
 	t.Run("an absolute path that doesn't exist", func(t *testing.T) {
-		a, c, w := startingCrewAgents(t, `[{"name":"One","command":"/autodoc-no-such/agent","codename":"one"}]`)
+		// absolute on this OS: on Windows a path from a drive's root (\autodoc-no-such is the current
+		// drive's, which the shell resolves)
+		missing := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "autodoc-no-such", "agent")
+		a, c, w := startingCrewAgents(t, `[{"name":"One","command":`+strconv.Quote(missing)+`,"codename":"one"}]`)
 		a.commandCheck = commandOnPath
 		p, _ := a.profile("one")
 		instance, err := a.startInstance(p)
@@ -65,7 +70,7 @@ func TestAPathTheShellResolvesIsNotJudged(t *testing.T) {
 			t.Fatalf("%v, the tab showed %q; want it refused, naming the path", err, c.panel.reported)
 		}
 		if instance.running || calledTimes(w, "crew.register") != 0 || len(c.panel.reported) != 1 ||
-			!strings.Contains(c.panel.reported[0], "/autodoc-no-such/agent") {
+			!strings.Contains(c.panel.reported[0], missing) {
 			t.Fatalf("running %v, registered %d, the tab showed %q; want it refused, naming the path",
 				instance.running, calledTimes(w, "crew.register"), c.panel.reported)
 		}
