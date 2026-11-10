@@ -107,8 +107,8 @@ func TestAPeersRemovalKeepsTheUnsavedText(t *testing.T) {
 		t := one.frameTitle()
 		return strings.Contains(t, "┌ "+untitled) && !strings.Contains(t, "conf.yaml") && !strings.Contains(t, "›")
 	})
-	one.h.p.Post(func() { one.h.outline.open() })
-	if p := onLoop(one, func() feature.Page { return one.h.outline.page }); p.Kind != kind.Markdown || p.Ref.Path != "" {
+	one.h.p.Post(func() { one.h.outline.Open() })
+	if p := onLoop(one, func() feature.Page { return one.h.outline.Page }); p.Kind != kind.Markdown || p.Ref.Path != "" {
 		t.Fatalf("the outline reads the kept draft as %v of %q, want the Markdown draft", p.Kind, p.Ref.Path)
 	}
 }

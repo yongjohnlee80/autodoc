@@ -62,7 +62,7 @@ func TestADerivedDocumentOpensReadOnly(t *testing.T) {
 	if got := d.read(t, "kb", "manual.pdf"); got != manualPDF {
 		t.Fatalf("the PDF was written: %q", got)
 	}
-	if n := onLoop(r, func() int { return len(r.h.outline.doc.Headings()) }); n != 2 {
+	if n := onLoop(r, func() int { return len(r.h.outline.Doc.Headings()) }); n != 2 {
 		t.Fatalf("the outline has %d headings, want the derived text's 2", n)
 	}
 	r.h.p.Post(r.h.openWithDefaultApp) // File › Open with Default App
@@ -110,10 +110,10 @@ func holdCapabilities(sock string) (*Session, func()) {
 // headings is the page's outline's count, -1 while it has none.
 func (r *running) headings() int {
 	return onLoop(r, func() int {
-		if r.h.outline.doc == nil {
+		if r.h.outline.Doc == nil {
 			return -1
 		}
-		return len(r.h.outline.doc.Headings())
+		return len(r.h.outline.Doc.Headings())
 	})
 }
 

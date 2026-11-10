@@ -16,6 +16,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/internal/localfs"
 	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/autodoc/tui/explorer"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -1149,7 +1150,7 @@ func (h *Host) quit() { h.guardAll(h.askBefore("quit"), h.p.Quit) }
 func (h *Host) listFiles() {
 	tk, ws := h.ticket(&h.listSeq, feature.TicketWorkspace), h.ws
 	do(h, func(ctx context.Context) feature.AnswerOf[[]string] {
-		paths, err := listAll(ctx, h.call, ws)
+		paths, err := explorer.ListAll(ctx, h.call, ws)
 		return feature.Answered(paths, err)
 	}, func(a feature.AnswerOf[[]string]) {
 		if !tk.Current() {

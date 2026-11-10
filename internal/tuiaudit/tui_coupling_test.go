@@ -35,13 +35,12 @@ const (
 
 // tuiExact assigns a file by its whole stem (its name less .go and _test): the host's glue files,
 // which a feature's prefix would otherwise take. The kit is its own package, tui/feature, and so is
-// the startup and its profiling, tui/system: tui imports them, and they can import nothing of tui's.
-// Their tests that drive a whole program stay in tui, the host's.
+// each feature moved so far (tui/searchsetup, tui/system, tui/explorer): tui imports them, and they
+// can import nothing of tui's. Their tests that drive a whole program stay in tui, the host's.
 var tuiExact = map[string]string{
 	"todomove": "host", "scripts": "host", "relationmap": "host",
 	"relationviews_tui": "host", "relationviews_gui": "host", "relationviews_cells": "host",
 	"relations": "relations",
-	"explorer":  "explorer", "recent": "explorer", "outline": "explorer",
 }
 
 // tuiPrefixes assign the other files by their stem's prefix, the first that matches winning; a
@@ -56,8 +55,6 @@ var tuiPrefixes = []struct{ prefix, group string }{
 	{"notepage", "page"}, {"cardpage", "page"}, {"noteembeds", "page"}, {"embeds_gui", "page"}, {"embedretry", "page"},
 	{"chartnotice", "page"}, {"diagram", "page"}, {"mermaidjs", "page"}, {"htmlpane", "page"}, {"rendered_", "page"},
 	{"tabledoc", "page"}, {"labcells", "page"},
-	{"embedsetup", "searchsetup"}, {"providers", "searchsetup"}, {"rankers", "searchsetup"},
-	{"endpoints", "searchsetup"}, {"aimodels", "searchsetup"},
 }
 
 // tuiMayUse is what each feature may use besides itself: the decision's import graph. The host may
@@ -345,8 +342,8 @@ func TestTuiGroupsAssignAsTheMapSays(t *testing.T) {
 		"luapackages.go": "plugins", "luacard.go": "scripting", "lua.go": "scripting",
 		"relationviews_gui.go": "host", "relations.go": "relations", "relationmap.go": "host",
 		"agentserver.go": "crew", "pluginsurface_linux.go": "plugins", "notepage.go": "page",
-		"rendered_cells.go": "page", "embeds_gui.go": "page", "explorer.go": "explorer",
-		"outline.go": "explorer", "app.go": "host", "files.go": "host", "prefspec_test.go": "host",
+		"rendered_cells.go": "page", "embeds_gui.go": "page", "mindmap_gui.go": "relations",
+		"groups.go": "relations", "app.go": "host", "files.go": "host", "prefspec_test.go": "host",
 	} {
 		if got := tuiGroupOf(base); got != want {
 			t.Errorf("tuiGroupOf(%q) = %s, want %s", base, got, want)

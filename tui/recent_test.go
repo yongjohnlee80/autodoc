@@ -2,9 +2,10 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/tui/explorer"
 )
 
 // recent_test.go: File › Recent files… (SPC r) — the files opened, newest first, across
@@ -19,8 +20,8 @@ func runRecentTUI(t *testing.T, prefs map[string]string) (*daemon, *running) {
 	return d, attached(t, d)
 }
 
-func (r *running) recentListedNow() []recentDoc {
-	return onLoop(r, func() []recentDoc { return append([]recentDoc(nil), r.h.recent.rows.All()...) })
+func (r *running) recentListedNow() []explorer.RecentDoc {
+	return onLoop(r, func() []explorer.RecentDoc { return append([]explorer.RecentDoc(nil), r.h.recent.Rows.All()...) })
 }
 
 // waitRecentStored waits for the daemon's store to hold the recent files want.
@@ -29,7 +30,7 @@ func (d *daemon) waitRecentStored(t *testing.T, want string) {
 	var got string
 	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
 		all, _ := d.db.Preferences(context.Background())
-		if got = all[prefRecent]; got == want {
+		if got = all[explorer.PrefRecent]; got == want {
 			return
 		}
 	}
@@ -54,7 +55,7 @@ func TestRecentFilesAreTheOnesOpenedNewestFirstAcrossWorkspaces(t *testing.T) {
 	r.s.WaitForText(t, "3 recent files, the newest first")
 	r.s.WaitForText(t, "notes")
 	// The row of another workspace opens there.
-	onLoop(r, func() bool { r.h.recent.choose(1); return true })
+	onLoop(r, func() bool { r.h.recent.Choose(1); return true })
 	r.waitFile(t, "c.md")
 	if ws := onLoop(r, func() string { return r.h.ws }); ws != "notes" {
 		t.Fatalf("the recent file of notes opened in %q", ws)
@@ -65,16 +66,16 @@ func TestRecentFilesAreTheOnesOpenedNewestFirstAcrossWorkspaces(t *testing.T) {
 
 	// Kept: a new TUI lists them.
 	again := attached(t, d)
-	if n := onLoop(again, func() int { return len(again.h.recent.docs()) }); n != 3 {
+	if n := onLoop(again, func() int { return len(again.h.recent.Docs()) }); n != 3 {
 		t.Errorf("a new TUI reads %d recent files, want 3", n)
 	}
 
 	// Clear list forgets them, at once: reopening the dialog, and a listing of the workspace's
 	// files, bring none back (the live list is the preference, set through its row).
-	onLoop(r, func() bool { r.h.recent.open(); r.h.recent.clear(); return true })
+	onLoop(r, func() bool { r.h.recent.Open(); r.h.recent.Clear(); return true })
 	r.s.WaitForText(t, "no recent files")
 	d.waitRecentStored(t, "[]")
-	if n := onLoop(r, func() int { r.h.recent.open(); r.h.listFiles(); return r.h.recent.rows.Len() + len(r.h.recent.docs()) }); n != 0 {
+	if n := onLoop(r, func() int { r.h.recent.Open(); r.h.listFiles(); return r.h.recent.Rows.Len() + len(r.h.recent.Docs()) }); n != 0 {
 		t.Errorf("after Clear list and a reopening, %d recent files came back", n)
 	}
 }
@@ -82,47 +83,19 @@ func TestRecentFilesAreTheOnesOpenedNewestFirstAcrossWorkspaces(t *testing.T) {
 // A file of a workspace that is gone, or gone from the workspace in use, is not listed; it stays
 // kept, as its workspace may come back.
 func TestRecentFilesThatAreGoneAreNotListed(t *testing.T) {
-	_, r := runRecentTUI(t, map[string]string{prefRecent: recentJSON([]recentDoc{
+	_, r := runRecentTUI(t, map[string]string{explorer.PrefRecent: explorer.RecentJSON([]explorer.RecentDoc{
 		{Workspace: "old", Path: "x.md"}, {Workspace: "kb", Path: "gone.md"},
 		{Workspace: "kb", Path: "b.md"}, {Workspace: "notes", Path: "c.md"},
 	})})
 	r.s.WaitFor(t, "kb in use", func(string) bool { return onLoop(r, func() string { return r.h.ws }) == "kb" })
-	onLoop(r, func() bool { r.h.recent.open(); return true })
+	onLoop(r, func() bool { r.h.recent.Open(); return true })
 	r.s.WaitForText(t, "2 recent files")
 	got := r.recentListedNow()
-	if len(got) != 2 || got[0] != (recentDoc{"kb", "b.md"}) || got[1] != (recentDoc{"notes", "c.md"}) {
+	if len(got) != 2 || got[0] != (explorer.RecentDoc{Workspace: "kb", Path: "b.md"}) || got[1] != (explorer.RecentDoc{Workspace: "notes", Path: "c.md"}) {
 		t.Fatalf("listed %v, want kb/b.md and notes/c.md", got)
 	}
-	if n := onLoop(r, func() int { return len(r.h.recent.docs()) }); n != 4 {
+	if n := onLoop(r, func() int { return len(r.h.recent.Docs()) }); n != 4 {
 		t.Fatalf("listing dropped kept files: %d left of 4", n)
-	}
-}
-
-// The list keeps the newest maxRecent, each once; a preference that is not a list reads as none.
-func TestRecentFilesKeepTheNewestOnce(t *testing.T) {
-	var docs []recentDoc
-	for i := range maxRecent + 5 {
-		docs = withRecent(docs, recentDoc{"kb", fmt.Sprintf("%d.md", i)})
-	}
-	if len(docs) != maxRecent || docs[0].Path != fmt.Sprintf("%d.md", maxRecent+4) || docs[maxRecent-1].Path != "5.md" {
-		t.Fatalf("kept %d, first %v, last %v", len(docs), docs[0], docs[len(docs)-1])
-	}
-	docs = withRecent(docs, recentDoc{"kb", "10.md"})
-	if len(docs) != maxRecent || docs[0].Path != "10.md" || docs[1].Path != fmt.Sprintf("%d.md", maxRecent+4) {
-		t.Fatalf("again: kept %d, first %v, %v", len(docs), docs[0], docs[1])
-	}
-	for _, d := range docs[1:] {
-		if d.Path == "10.md" {
-			t.Fatal("10.md listed twice")
-		}
-	}
-	for _, bad := range []string{"nope", `{"workspace":"kb"}`, `[{"workspace":"kb","path":"a.md"},5]`} {
-		if got := recentOf(bad); got != nil {
-			t.Fatalf("read %v from %s", got, bad)
-		}
-	}
-	if recentJSON(nil) != "[]" {
-		t.Fatal("no recent files written as other than []")
 	}
 }
 
@@ -140,7 +113,7 @@ func TestTheRecentListFollowsTheFilesOfAWorkspaceJustEntered(t *testing.T) {
 	r.waitFile(t, "c.md")
 	d.waitRecentStored(t, `[{"workspace":"notes","path":"c.md"},{"workspace":"kb","path":"b.md"},{"workspace":"kb","path":"a.md"}]`)
 	// notes in use, its files not listed yet: as just after entering it
-	onLoop(r, func() bool { r.h.resetFiles(); r.h.recent.open(); return true })
+	onLoop(r, func() bool { r.h.resetFiles(); r.h.recent.Open(); return true })
 	r.s.WaitForText(t, "2 recent files, the newest first") // kb's two; c.md waits for notes' files
 	onLoop(r, func() bool { r.h.listFiles(); return true })
 	r.s.WaitForText(t, "3 recent files, the newest first")

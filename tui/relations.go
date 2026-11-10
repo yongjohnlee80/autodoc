@@ -213,7 +213,7 @@ func (*related) Closed()             {}
 // it shows it already (panels.go: togglePanelTab). Showing the tab reads the relations again.
 func (r *related) toggle() {
 	r.ofPage()
-	r.c.TogglePanelTab(feature.ExplorerPanelSpec().ID, linksTab)
+	r.c.TogglePanelTab(feature.ExplorerPanelSpec().ID, feature.ExplorerLinksTab)
 }
 
 // moved is the drawer's cursor moving.
