@@ -491,7 +491,7 @@ func (h *crewHost) publish(s crewSession) (string, error) {
 		r.store != h.c.StoreID() || r.socket != h.c.DaemonAddress() {
 		return "", errCrewStale
 	}
-	path, err := crew.WriteContextWith(userperm.CreatePrivateTemp, s.Dir, crew.Context{Store: r.store, Socket: r.socket, Scope: s.Scope, Profile: s.Profile,
+	path, err := crew.WriteContextWith(os.CreateTemp, /* MUTANT */ s.Dir, crew.Context{Store: r.store, Socket: r.socket, Scope: s.Scope, Profile: s.Profile,
 		Session: s.ID, Credential: crew.Credential(s.ID, r.secret), Kind: r.kind})
 	r.secret = "" // kept no longer than it is needed
 	return path, err
@@ -577,3 +577,5 @@ func (h *crewHost) settle() {
 		h.resolve(r)
 	}
 }
+
+var _ = userperm.ErrExposed // MUTANT: keeps the import
