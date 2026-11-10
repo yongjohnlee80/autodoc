@@ -772,6 +772,26 @@ func writeAtomic(path string, text []byte, mode os.FileMode) error {
 	return os.Rename(tmp, path)
 }
 
+// writePrivate writes text to path through a rename, private to this user from its creation on
+// every OS (internal/userperm): a file holding a credential, a session's state or an agent's
+// settings, which mode bits alone keep private nowhere but Unix.
+func writePrivate(path string, text []byte) error {
+	f, err := userperm.CreatePrivateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	defer func() { _ = os.Remove(tmp) }() // after the rename, nothing is there: a no-op
+	if _, err := f.Write(text); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
 // agentGuide is what the agent is told: the workspace, what to help with, and how to call AutoDoc
 // (its own AGENTS.md): as wrapper, the build bin on the TUI's config. A crew agent (crewKind its
 // CLI's kind) is also told the crew and mail procedure for its CLI in the form its session reads its

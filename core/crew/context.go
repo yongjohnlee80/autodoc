@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/yongjohnlee80/autodoc/internal/userperm"
 )
 
 // ContextDir is the folder of an agent folder's session contexts
@@ -57,16 +59,14 @@ func WriteContext(dir string, c Context) (string, error) {
 	if err := os.MkdirAll(folder, 0o700); err != nil {
 		return "", err
 	}
-	f, err := os.CreateTemp(folder, "."+c.Session+".*") // a dot file: never taken for a context
+	// private from its creation (it holds the session's credential), on every OS; a dot file, never
+	// taken for a context
+	f, err := userperm.CreatePrivateTemp(folder, "."+c.Session+".*")
 	if err != nil {
 		return "", err
 	}
 	tmp := f.Name()
 	defer func() { _ = os.Remove(tmp) }() // after the rename, nothing is there: a no-op
-	if err := f.Chmod(0o600); err != nil {
-		_ = f.Close()
-		return "", err
-	}
 	if _, err := f.Write(b); err != nil {
 		_ = f.Close()
 		return "", err

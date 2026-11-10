@@ -263,7 +263,7 @@ func (h *crewHost) claimScope(ctx context.Context) claimed {
 	r := claimed{scope: id, epoch: epoch}
 	if err := os.MkdirAll(h.dir, 0o700); err != nil {
 		r.warn = err
-	} else if err := writeAtomic(filepath.Join(h.dir, crewFileName(id)), nil, 0o600); err != nil {
+	} else if err := writePrivate(filepath.Join(h.dir, crewFileName(id)), nil); err != nil {
 		r.warn = err
 	}
 	return r
