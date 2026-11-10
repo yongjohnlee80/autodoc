@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/url"
 	"path"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -36,9 +35,9 @@ type DocLink struct {
 	// Keys are a relation link's names, tried in order, Name being the first; nil for a body link,
 	// which has the one name
 	Keys []string
-	// Target is an external link's file, absolute: a todo task's ref outside the workspace
-	// (docs/decisions/todos.md#task-relations-and-external-links). It reaches no document. "" for
-	// every other link.
+	// Target is an external link's file, absolute in the slash form (core/paths): a ref outside the
+	// workspace (docs/decisions/todos.md#task-relations-and-external-links). It reaches no
+	// document. "" for every other link.
 	Target string
 }
 
@@ -153,7 +152,7 @@ func varLink(raw, dest string, vars *Vars, root string, targetsFile func(string)
 	if v == "" {
 		return unresolvedVar(raw, ref, LinkMarkdown, false), true
 	}
-	abs := filepath.Join(v, ref.Target)
+	abs := varPath(v, ref.Target)
 	if rel, in := inside(root, abs); in {
 		if !targetsFile(rel) {
 			return DocLink{}, true

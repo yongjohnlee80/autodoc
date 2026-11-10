@@ -2,11 +2,13 @@ package index
 
 import (
 	"context"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/core/paths"
 	"github.com/yongjohnlee80/autodoc/core/schema"
 )
 
@@ -254,6 +256,53 @@ func TestVarLink(t *testing.T) {
 		got, ok := varLink("r", c.dest, c.vars, "/ws", md)
 		if ok != c.ok || !reflect.DeepEqual(got, c.want) {
 			t.Errorf("%s: %+v %v, want %+v %v", c.dest, got, ok, c.want, c.ok)
+		}
+	}
+}
+
+// TestARefIsInsideTheRootByWholeSegments: a $NAME or absolute ref is inside the workspace root when
+// it lies under it by whole segments, in whichever form the root and the ref are written (the OS's
+// own or the slash form), on every OS: a name beginning ".." is inside, a ".." segment that leaves
+// the root and a sibling sharing the root's prefix are outside, and the root itself is no document.
+// A path outside is an external link in the slash form.
+func TestARefIsInsideTheRootByWholeSegments(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "kb") // the OS's own form
+	sibling := filepath.Join(filepath.Dir(root), "kbx")
+	for _, c := range []struct {
+		abs  string
+		rel  string
+		want bool
+	}{
+		{filepath.Join(root, "a", "b.md"), "a/b.md", true},
+		{paths.Slash(filepath.Join(root, "a", "b.md")), "a/b.md", true},
+		{filepath.Join(root, "..x", "b.md"), "..x/b.md", true},
+		{filepath.Join(root, "..", "b.md"), "", false},
+		{filepath.Join(sibling, "b.md"), "", false},
+		{paths.Slash(filepath.Join(sibling, "b.md")), "", false},
+		{filepath.Dir(root), "", false},
+		{root, "", false},
+	} {
+		for _, r := range []string{root, paths.Slash(root)} {
+			if rel, ok := inside(r, c.abs); ok != c.want || rel != c.rel {
+				t.Errorf("inside(%q, %q) = %q, %v; want %q, %v", r, c.abs, rel, ok, c.rel, c.want)
+			}
+		}
+	}
+	if _, ok := inside("", filepath.Join(root, "a.md")); ok {
+		t.Error("no root holds a path")
+	}
+
+	vars := NewVars(map[string]string{"KB_ROOT": root, "OUT": sibling})
+	md := func(p string) bool { return strings.HasSuffix(p, ".md") }
+	out := paths.Join(paths.Slash(sibling), "x.md")
+	for dest, want := range map[string]DocLink{
+		"$KB_ROOT/a/b.md":      {Raw: "r", Name: "a/b.md", Kind: LinkMarkdown},
+		"$KB_ROOT/..x/b.md":    {Raw: "r", Name: "..x/b.md", Kind: LinkMarkdown},
+		"$OUT/x.md":            {Raw: "r", Name: externalPrefix + out, Kind: LinkMarkdown, Target: out},
+		"$KB_ROOT/../kbx/x.md": {Raw: "r", Name: externalPrefix + out, Kind: LinkMarkdown, Target: out},
+	} {
+		if got, ok := varLink("r", dest, vars, root, md); !ok || !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: %+v %v, want %+v", dest, got, ok, want)
 		}
 	}
 }
