@@ -159,7 +159,7 @@ func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
 	r.link, err = plugin.NewLink(r.ctx, plugin.FileConn(hostIn, hostOut), r.onNote)
 	if err != nil {
 		r.stop()
-		go r.shutdown()
+		pl.shutDown(r)
 		return nil, err
 	}
 	go r.sender()
@@ -502,7 +502,7 @@ func (r *pluginRun) stopFor(reason, why string) {
 	if r.surface != nil {
 		r.surface.Close() // retires its buffers; each is destroyed at its last holder
 	}
-	go r.shutdown()
+	r.pl.shutDown(r)
 	if why != "" {
 		msg := why // the plugin's name and what became of it, a sentence
 		if last := r.log.last(); last != "" {
@@ -546,8 +546,58 @@ func (r *pluginRun) shutdown() {
 	})
 }
 
+// shutDown runs r's shutdown off the loop, r among pl.stopping until it is done.
+func (pl *plugins) shutDown(r *pluginRun) {
+	if pl.stopping == nil {
+		pl.stopping = map[*pluginRun]struct{}{}
+	}
+	pl.stopping[r] = struct{}{}
+	go func() {
+		r.shutdown()
+		pl.c.Post(func() { delete(pl.stopping, r) })
+	}()
+}
+
+// stoppingIn is the runs of the plugin in dir that are stopping: the one a removal or an update
+// just stopped, and any earlier run still in its close.
+func (pl *plugins) stoppingIn(dir string) []*pluginRun {
+	var runs []*pluginRun
+	for r := range pl.stopping {
+		if r.e.dir == dir {
+			runs = append(runs, r)
+		}
+	}
+	return runs
+}
+
+// pluginExitMargin is how long past a run's close deadlines its shutdown may take: the kill's
+// reaping.
+const pluginExitMargin = 2 * time.Second
+
+// awaitShutdown waits, off the loop, until every run in runs is shut down, its process gone: bounded
+// by the longest run's close deadlines and pluginExitMargin, so a process that outlives its kill
+// cannot hold a removal or an update for ever. An error says which run is still there; its folder
+// is to be left as it is.
+func awaitShutdown(runs []*pluginRun) error {
+	var bound time.Duration
+	for _, r := range runs {
+		bound = max(bound, r.grace+r.termGrace+pluginExitMargin)
+	}
+	// NOTE: each shutdown is itself bounded, but its last step waits on the kill's reaping, which
+	// nothing bounds: the deadline keeps a process that outlives its kill from holding the folder.
+	deadline := time.After(bound)
+	for _, r := range runs {
+		select {
+		case <-r.shutDone:
+		case <-deadline:
+			return fmt.Errorf("%s did not exit within %s: its folder was left as it is", r.e.m.Name, bound)
+		}
+	}
+	return nil
+}
+
 // stopPlugins stops every open plugin and waits for them, as the TUI quits: bounded by the close's
-// deadlines, since they run at once.
+// deadlines, since they run at once. A run stopped before, still in its close, is waited for too.
 func (pl *plugins) stopPlugins() {
 	for _, r := range pl.running {
 		// the quit's stop transition, as stopFor's: fenced and its reason frozen before the
@@ -565,7 +615,10 @@ func (pl *plugins) stopPlugins() {
 	for _, r := range pl.running {
 		<-r.shutDone
 	}
-	pl.running = map[string]*pluginRun{}
+	for r := range pl.stopping {
+		<-r.shutDone
+	}
+	pl.running, pl.stopping = map[string]*pluginRun{}, nil
 }
 
 // acceptSession is a session slot's one writer, on the loop: a write from a run that is stopping, or
