@@ -26,6 +26,11 @@ func crewFileName(identity string) string { return paths.Encode(identity) }
 // once between them.
 const crewNamesLock = ".crew-names.lock"
 
+// agentsOwnEntries are the agents' folder's own entries, beside its workspaces' folders: the crew's
+// scope and todo-feed files, the fallbacks, the agents' PATH links and the rename's lock. Every other
+// folder there is a workspace's, a dot-named one (.kb) too.
+var agentsOwnEntries = map[string]bool{".crew-scopes": true, ".crew-todos": true, ".crew-fallbacks": true, ".bin": true, crewNamesLock: true}
+
 // migrateCrewNames renames, under base, what an earlier build named by a scope's own spelling to
 // crewFileName's: .crew-scopes/<scope>, .crew-todos/<scope>, and each workspace's <scope>/ folder of
 // agents. Only a name holding a colon is a scope's old name: every scope has one (autodoc:, autovim:,
@@ -79,7 +84,7 @@ func migrateCrewNames(base string) (kept []string, err error) {
 		errs = append(errs, err)
 	}
 	for _, ws := range workspaces {
-		if ws.IsDir() && !strings.HasPrefix(ws.Name(), ".") {
+		if ws.IsDir() && !agentsOwnEntries[ws.Name()] {
 			rename(filepath.Join(base, ws.Name()), true)
 		}
 	}
