@@ -44,12 +44,8 @@ import (
 
 const testPluginArg = "autodoc-test-plugin"
 
-// argvPrinterEnv, set to 1, makes this test binary print its arguments as JSON and exit: an agent
-// CLI stand-in that says what it was given (agentargs_test.go).
-const argvPrinterEnv = "AUTODOC_TUI_ARGV_PRINTER"
-
 func TestMain(m *testing.M) {
-	if os.Getenv(argvPrinterEnv) == "1" {
+	if os.Getenv(argvPrinterEnvCopy) == "1" {
 		_ = json.NewEncoder(os.Stdout).Encode(os.Args[1:])
 		os.Exit(0)
 	}

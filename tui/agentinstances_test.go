@@ -61,10 +61,11 @@ type fakeSeams struct {
 	vimPending      bool
 }
 
-// newFakeSeams are the program's own seams for the agents: a server's socket waited for 10 s, the
-// agent setup offered, no Vim question pending.
+// newFakeSeams are the program's seams as the agents' cells start from them, as the host's test
+// program sets its own: a server's socket waited for 10 s, no first-run setup offered (a setup cell
+// turns it on), no Vim question pending.
 func newFakeSeams() *fakeSeams {
-	return &fakeSeams{serverReady: 10 * time.Second, offerAgentSetup: true}
+	return &fakeSeams{serverReady: 10 * time.Second}
 }
 
 func (s *fakeSeams) Env() procenv.Env                           { return s.env }
