@@ -26,15 +26,20 @@ import (
 // over the whole disk, file.locate's routing into a workspace, and what such a file keeps and
 // lacks.
 
-// diskFiles is the daemon's documents of the whole disk, as app/serve.go serves them.
-func diskFiles(t *testing.T, opts ...docs.Option) *docs.Docs {
+// diskVolumes are the daemon's documents of the whole disk, as app/serve.go serves them: each
+// volume's tree opened the first time a path on it is asked for, "/" on Unix, each drive or share
+// on Windows.
+func diskVolumes(t *testing.T, opts ...docs.Option) *rpc.Disks {
 	t.Helper()
-	disk, err := local.New("/")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = disk.Close() })
-	return docs.New(disk, nil, opts...)
+	k := rpc.NewDisks(func(root string) (*docs.Docs, func(), error) {
+		disk, err := local.New(root)
+		if err != nil {
+			return nil, nil, err
+		}
+		return docs.New(disk, nil, opts...), func() { _ = disk.Close() }, nil
+	})
+	t.Cleanup(k.Close)
+	return k
 }
 
 // runOutside is the TUI on a managed daemon serving kb and notes from real folders, and a folder
