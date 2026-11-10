@@ -77,6 +77,9 @@ func WriteContextWith(create func(folder, pattern string) (*os.File, error), dir
 	if err := os.MkdirAll(folder, 0o700); err != nil {
 		return "", err
 	}
+	if create == nil {
+		return "", fmt.Errorf("%w: no private create for the context of session %q", ErrInvalid, c.Session)
+	}
 	f, err := create(folder, "."+c.Session+".*") // a dot file: never taken for a context
 	if err != nil {
 		return "", err

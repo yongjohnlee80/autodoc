@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/internal/userperm"
+	"github.com/yongjohnlee80/autodoc/internal/userperm/userpermtest"
 	"github.com/yongjohnlee80/golib/gui/record"
 )
 
@@ -69,6 +70,7 @@ func TestOpenDebugRecordingNamesTheFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	userpermtest.ExposeNew(t, dir) // a file made there the ordinary way is exposed: only a private create keeps it private
 	path := filepath.Join(dir, "rec.jsonl")
 	pipeR, pipeW, err := os.Pipe()
 	if err != nil {
