@@ -29,6 +29,13 @@ var alphaTodos = todo.At{Workspace: "alpha"}
 func onTodoDisk(t *testing.T) (r *running, root string, m *todo.Manager, task todo.Task) {
 	t.Helper()
 	root = fileDir(t, "a.md", "one\n")
+	// the manager closed once the daemon has stopped, before root is removed, as the daemon closes
+	// its own at its end: a store left open keeps its folder in use, which Windows won't remove
+	t.Cleanup(func() {
+		if m != nil {
+			_ = m.Close()
+		}
+	})
 	d := startManagedIncludes(t, map[string]string{"alpha": root}, nil, serving.Options{}, serving.Supplied{},
 		func(ws *serving.Workspaces) module.Module {
 			m = todo.New(serving.TodoRoots{Workspaces: ws}, serving.TodoDisk{}, todotest.NewJournal())
