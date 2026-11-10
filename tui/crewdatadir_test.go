@@ -8,6 +8,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/internal/userperm"
+	"github.com/yongjohnlee80/autodoc/internal/userperm/userpermtest"
 )
 
 // TestACrewOpenCodeAgentWritesNothingIntoTheWorkingFolder: a crew OpenCode agent started from the
@@ -50,6 +51,7 @@ func TestACrewOpenCodeAgentWritesNothingIntoTheWorkingFolder(t *testing.T) {
 // absolute) is refused, nothing written outside.
 func TestFolderFilesStayInTheAgentsFolder(t *testing.T) {
 	root := t.TempDir()
+	userpermtest.ExposeNew(t, root) // a file made there the ordinary way is exposed: only a private create keeps it private
 	dir := filepath.Join(root, "agent")
 	if err := writeFolderFiles(dir, []crew.FolderFile{{Path: ".agents/mcp_config.json", Content: "{}"}}); err != nil {
 		t.Fatal(err)

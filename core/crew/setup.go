@@ -67,7 +67,7 @@ type MCPServer struct {
 // FolderFile is a file a host writes into the agent's own folder (SetupInput.AgentDir): a CLI's
 // folder-scoped configuration, never a user-level file and never the user's project. Its Path is
 // local (filepath.IsLocal: relative, no "..", nothing outside the folder): SetupFor refuses any
-// other. A host writes it with mode 0600, since it may name the session's context.
+// other. A host writes it private to its user, since it may name the session's context.
 type FolderFile struct {
 	Path    string `json:"path"` // relative to SetupInput.AgentDir
 	Content string `json:"content"`

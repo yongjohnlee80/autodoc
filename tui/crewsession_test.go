@@ -18,6 +18,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/internal/userperm"
+	"github.com/yongjohnlee80/autodoc/internal/userperm/userpermtest"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -32,7 +33,9 @@ func crewAgents(t *testing.T, profiles string) (*agents, *identityHost, *crewWin
 		s = &seams{}
 		*s = defaultSeams
 	}
-	a := testAgentsWith(c, s, t.TempDir(), "")
+	agentDir := t.TempDir()
+	userpermtest.ExposeNew(t, agentDir) // a file made there the ordinary way is exposed: only a private create keeps it private
+	a := testAgentsWith(c, s, agentDir, "")
 	// a crew start's setup, in-process from the same source `crew setup` answers from, offering no
 	// MCP server (a cell that wants one sets its own): every kind as it is without one, on CLI mail.
 	// A Codex agent still gets its own app-server (an agent folder gives one in every mail mode),

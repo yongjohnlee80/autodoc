@@ -479,11 +479,12 @@ func (h *crewHost) resolve(r *crewRegistration) {
 	})
 }
 
-// publish writes s's context file in its agent folder (0600, through a rename) for the process about
-// to start, and answers its path, once s is still this window's: registered here and not ended,
-// under the scope and epoch the window holds, on the daemon and store it was registered with. The
-// context names that daemon, and its credential the registration's secret, which is then dropped. A
-// session no longer the window's is refused (errCrewStale), and the caller ends it.
+// publish writes s's context file in its agent folder (private to this user, through a rename) for
+// the process about to start, and answers its path, once s is still this window's: registered here
+// and not ended, under the scope and epoch the window holds, on the daemon and store it was
+// registered with. The context names that daemon, and its credential the registration's secret,
+// which is then dropped. A session no longer the window's is refused (errCrewStale), and the caller
+// ends it.
 func (h *crewHost) publish(s crewSession) (string, error) {
 	r := s.reg
 	if _, live := h.sessions[s.ID]; !live || r == nil || r.secret == "" || s.Scope != h.scope || s.Epoch != h.epoch ||

@@ -84,8 +84,9 @@ type setupAnswer struct {
 	err error
 }
 
-// writeFolderFiles writes a setup's folder files into the agent's folder dir, 0600 (an MCP config
-// names the session's context): each path stays inside it (filepath.IsLocal), as SetupFor holds.
+// writeFolderFiles writes a setup's folder files into the agent's folder dir, private to this user
+// (an MCP config names the session's context): each path stays inside it (filepath.IsLocal), as
+// SetupFor holds.
 func writeFolderFiles(dir string, files []crew.FolderFile) error {
 	for _, f := range files {
 		if !filepath.IsLocal(f.Path) {

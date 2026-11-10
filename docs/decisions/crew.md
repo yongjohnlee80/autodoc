@@ -385,7 +385,8 @@ In the code: `core/crew/guard.go`, `core/crew/register.go`, `tui/agentinstances.
 
 The host writes a session context before the agent starts: the daemon's store id and socket, the
 scope, profile and session, the credential (`<session id>.<secret>`) and the CLI kind. It is a file of
-its own, mode 0600, written by rename so a reader sees all of it or none, in the agent folder's
+its own, private to this user (on Unix mode 0600; on Windows owned by this user, with an access list
+that grants this user alone), written by rename so a reader sees all of it or none, in the agent folder's
 `.autodoc-crew/` folder and named by the session id. `$AUTODOC_CREW_CONTEXT` names it, and it is
 removed once the session ends.
 
@@ -905,8 +906,8 @@ rules in its first 24,000 bytes too.
   kind's per-tool rules come from), and delivers it its own way. The server takes no environment of
   its own: started by the agent's CLI, it inherits the agent's, its session context with it.
 - What a kind writes into the agent's folder for it (a folder-scoped config) goes into that folder
-  only: `crew.SetupFor` refuses any path that isn't local to it, and hosts write the files with mode
-  0600, since they may name the session's context.
+  only: `crew.SetupFor` refuses any path that isn't local to it, and hosts write the files private to
+  their user, since they may name the session's context.
 
 In the code: `app/crewmcp.go`, `app/crewcli.go`, `app/crewsetup.go`, `core/crew/scheduler.go`,
 `core/crew/guide.go`, `core/crew/setup.go`
