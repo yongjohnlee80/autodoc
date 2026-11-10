@@ -19,10 +19,11 @@ import (
 // is the agent's (agentFolder); only Claude Code reads the file. mergeClaudeSettings writes
 // AutoDoc's other hooks and settings there the same way.
 
-// noticeCommand is the hook's command: dir's own autodoc (agentWrapper), so the TUI's build and
+// noticeCommand is the hook's command: the agent's own autodoc, own (its launcher, or on Windows
+// the build, its config from $AUTODOC_CONFIG in the agent's environment), so the TUI's build and
 // config answer.
-func noticeCommand(dir string) string {
-	return shellQuote(filepath.Join(dir, "bin", "autodoc")) + " --workspace-notice"
+func noticeCommand(own string) string {
+	return shellQuote(own) + " --workspace-notice"
 }
 
 // mergeClaudeHook makes path's hooks.UserPromptSubmit run command once (mergeClaudeSettings).
