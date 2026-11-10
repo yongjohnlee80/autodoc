@@ -5,6 +5,7 @@
 ./core/clock
 ./core/edition
 ./core/export/mermaid
+./core/hostprobe
 ./core/kbtype
 ./core/kind
 ./core/lab
