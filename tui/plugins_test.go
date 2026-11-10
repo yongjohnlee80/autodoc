@@ -253,9 +253,7 @@ func runTestPlugin(mode string) int {
 		signal.Ignore(syscall.SIGTERM)
 	case "stubborn": // ignores plugin.close and SIGTERM, and starts a child of its own
 		signal.Ignore(syscall.SIGTERM)
-		child := exec.Command("sleep", "60")
-		_ = child.Start()
-		fmt.Fprintf(os.Stderr, "child %d\n", child.Process.Pid)
+		startTestChild()
 	}
 	e := &echo{mode: mode}
 	if err := plugin.Serve(context.Background(), e); err != nil {
@@ -263,6 +261,22 @@ func runTestPlugin(mode string) int {
 		return 1
 	}
 	return 0
+}
+
+// startTestChild starts the test binary as a silent plugin, a child that sleeps until it is ended,
+// on every OS, and writes its pid to the plugin's log as "child <pid>".
+func startTestChild() {
+	exe, err := os.Executable()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "child:", err)
+		return
+	}
+	child := exec.Command(exe, testPluginArg, "silent")
+	if err := child.Start(); err != nil {
+		fmt.Fprintln(os.Stderr, "child:", err)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "child %d\n", child.Process.Pid)
 }
 
 // testStdio is the plugin's stdin and stdout as plugin.Serve makes them: pollable descriptors on
@@ -290,6 +304,10 @@ func (e *echo) Open(p *plugin.Peer, o plugin.Open) {
 	e.say(fmt.Sprintf("open %dx%d %s %s p%d", o.Width, o.Height, o.Theme.Name, o.Theme.Colors["document.cursor"], o.Protocol))
 	if e.mode == "stubborn" {
 		fmt.Fprintln(os.Stderr, "stubborn: opened")
+	}
+	if e.mode == "leaver" { // starts a child, then exits of itself, leaving the child running
+		startTestChild()
+		os.Exit(0)
 	}
 }
 
@@ -798,16 +816,7 @@ func TestTheCloseStopsAStubbornPluginAndWhatItStarted(t *testing.T) {
 	r, logs := pluginTUI(t, dir)
 	run := r.openPlugin("stubborn")
 	r.waitShown(t, "open 30x6")
-	var child int
-	deadline := time.Now().Add(5 * time.Second)
-	for child == 0 && time.Now().Before(deadline) {
-		b, _ := os.ReadFile(filepath.Join(logs, "stubborn.log"))
-		fmt.Sscanf(string(b), "child %d", &child)
-		time.Sleep(10 * time.Millisecond)
-	}
-	if child == 0 || !pidAlive(child) {
-		t.Fatalf("the plugin's child is not running (%d)", child)
-	}
+	child := waitTestChild(t, logs, "stubborn")
 	pid := run.cmd.Process.Pid
 	r.keys(t, esc())
 	select {
@@ -815,15 +824,92 @@ func TestTheCloseStopsAStubbornPluginAndWhatItStarted(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the close did not end")
 	}
+	// Unix: SIGKILL to its group. Windows: the job terminated with code 1, Stop and kill alike.
 	var ee *exec.ExitError
-	if !errors.As(run.exitErr, &ee) || ee.ProcessState.String() != "signal: killed" {
+	if !errors.As(run.exitErr, &ee) {
+		t.Errorf("the plugin ended with %v, want it ended by the stop", run.exitErr)
+	} else if runtime.GOOS == "windows" && ee.ExitCode() != 1 {
+		t.Errorf("the plugin ended with %v, want exit status 1 (its job terminated)", run.exitErr)
+	} else if runtime.GOOS != "windows" && ee.ProcessState.String() != "signal: killed" {
 		t.Errorf("the plugin ended with %v, want killed", run.exitErr)
 	}
-	time.Sleep(50 * time.Millisecond) // the child's reaping is init's
 	for _, p := range []int{pid, child} {
-		if pidAlive(p) && !zombie(p) {
+		if !waitGone(p, 2*time.Second) {
 			t.Errorf("process %d is still running", p)
 		}
+	}
+}
+
+// TestAPluginThatExitsLeavesItsChildAsEachOSHoldsIt: a plugin that starts a child, then exits of
+// itself, is closed. On Windows the close of its job ends the child it left; on Unix its group was
+// never signalled, so the child lives on (the stated difference between the two).
+func TestAPluginThatExitsLeavesItsChildAsEachOSHoldsIt(t *testing.T) {
+	t.Parallel()
+	shorten(t, 5*time.Second, 200*time.Millisecond, 200*time.Millisecond)
+	dir := t.TempDir()
+	installTestPlugin(t, dir, "leaver", "leaver", 30, 6)
+	r, logs := pluginTUI(t, dir)
+	run := r.openPlugin("leaver")
+	if run == nil {
+		t.Fatal("the plugin did not start")
+	}
+	child := waitTestChild(t, logs, "leaver")
+	t.Cleanup(func() {
+		if p, err := os.FindProcess(child); err == nil && pidAlive(child) {
+			_ = p.Kill()
+		}
+	})
+	select {
+	case <-run.shutDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the plugin's exit did not close it")
+	}
+	if run.exitErr != nil {
+		t.Errorf("the plugin ended with %v, want it to exit of itself", run.exitErr)
+	}
+	if runtime.GOOS == "windows" {
+		if !waitGone(child, 2*time.Second) {
+			t.Errorf("the child %d the plugin left is still running after its job closed", child)
+		}
+		return
+	}
+	time.Sleep(200 * time.Millisecond) // a group stop, were one sent, has landed by now
+	if !pidAlive(child) || zombie(child) {
+		t.Errorf("the child %d the plugin left was ended; on Unix it lives on", child)
+	}
+}
+
+// waitTestChild is the pid of the child the plugin name started (startTestChild), read from its log
+// in logs once it is there and running.
+func waitTestChild(t *testing.T, logs, name string) int {
+	t.Helper()
+	var child int
+	deadline := time.Now().Add(5 * time.Second)
+	for child == 0 && time.Now().Before(deadline) {
+		b, _ := os.ReadFile(filepath.Join(logs, name+".log"))
+		if i := strings.Index(string(b), "child "); i >= 0 {
+			fmt.Sscanf(string(b[i:]), "child %d", &child)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if child == 0 || !pidAlive(child) {
+		t.Fatalf("the plugin's child is not running (%d)", child)
+	}
+	return child
+}
+
+// waitGone says p ended within d: no longer running, or a zombie its parent has yet to reap (whose
+// reaping is init's once its parent is gone).
+func waitGone(p int, d time.Duration) bool {
+	deadline := time.Now().Add(d)
+	for {
+		if !pidAlive(p) || zombie(p) {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 
