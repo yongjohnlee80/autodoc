@@ -116,7 +116,11 @@ type served struct {
 	id       int64
 	override string // the provider it uses instead of the daemon's, by name; "" for the daemon's
 	// root, include and exclude are as it was opened with; err is why it could not be opened
-	root             string
+	root string
+	// canon is where root leads on the disk (canonicalDir), asked once as it was opened: the
+	// spelling the todo registry holds for it. "" for one that could not be opened, or whose root
+	// the disk could not resolve.
+	canon            string
 	include, exclude []string
 	err              error
 	// the rest is nil or zero for one that could not be opened
@@ -303,7 +307,7 @@ func (m *Workspaces) start(id int64, c workspace.Spec) (*served, error) {
 	if err != nil {
 		return nil, err
 	}
-	md := m.modesFor(id, c.Root, graphOnly, todoSearch)
+	md := m.modesFor(id, graphOnly, todoSearch)
 	text := m.textExtensionsFor(id)
 	text.store(stored)
 	m.noteCollisions(id, c.Name, stored)
@@ -311,13 +315,23 @@ func (m *Workspaces) start(id int64, c workspace.Spec) (*served, error) {
 	if err != nil {
 		return nil, err
 	}
+	// the root is open: where it leads is asked once, here, and that spelling is what the todo
+	// registry's stores and variables are compared with (modes, the excluded stores) and what the
+	// index takes beside the configured one. The configured root stays the workspace's own: its
+	// row, its guard, what it is listed as.
+	canon, err := canonicalDir(c.Root)
+	if err != nil {
+		logger.Warning(m.opts.Log, err, "workspace "+c.Name+": where its root leads could not be read: its todo stores and variables are looked up by the root as configured")
+		canon = ""
+	}
+	md.setRoot(diskRoot(c.Root, canon))
 	// the schema is read before the indexer runs, so its first pass compares the right fingerprint
 	sh := m.schemaHolder(id, c.Root)
 	sh.setPath(schemaPath)
 	sh.watch(m.ctx, schemaPoll)
 	override, provider, providerErr := m.providerOf(id)
 	ix := index.New(index.NewStore(m.db, id), ws.FS,
-		index.WithMatch(ws.Matcher.Match), index.WithModes(md.mode), index.WithRoot(c.Root),
+		index.WithMatch(ws.Matcher.Match), index.WithModes(md.mode), index.WithRoot(c.Root), index.WithCanonicalRoot(canon),
 		index.WithProvider(provider), index.WithBatching(0, m.opts.BatchDelay),
 		index.WithLogger(m.opts.Log), index.WithWorkspace(c.Name), index.WithSchema(sh.get),
 		index.WithTextExtensions(text.load), index.WithRegistrations(m.opts.Registrations), index.WithRank(m.opts.Rank),
@@ -347,7 +361,7 @@ func (m *Workspaces) start(id int64, c workspace.Spec) (*served, error) {
 		halt()
 		_ = ws.Close()
 	}
-	s := &served{id: id, override: override, root: c.Root, include: c.Include, exclude: c.Exclude,
+	s := &served{id: id, override: override, root: c.Root, canon: canon, include: c.Include, exclude: c.Exclude,
 		ix: ix, follower: f, schema: sh, text: text, sectionTokens: sectionTokens, policy: policy,
 		provider: rpc.ProviderChoice{Override: override, Err: errText(providerErr)},
 		ctx:      ctx, halt: halt, stop: stop}
