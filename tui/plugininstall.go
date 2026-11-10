@@ -58,7 +58,7 @@ func (pl *plugins) startAddPlugin() {
 		pl.c.Notify(pl.c.Tr("autodoc.notice.plugininstall.no_plugins_folder_autodoc_was_started_without_on"))
 		return
 	}
-	setField(pl.c, "App.pluginUrl", "")
+	feature.SetField(pl.c, "App.pluginUrl", "")
 	pl.c.Set("App.pluginRisk", pl.c.Tr("autodoc.text.plugininstall.a_plugin_is_a_program_that_runs_as_you_with_your"))
 	pl.c.Open("pluginAdd")
 }
