@@ -109,7 +109,7 @@ func TestARegisteredChunkerCutsItsFiles(t *testing.T) {
 	}
 	community := newEnv(t, options{Match: goAndMarkdown})
 	community.put("a.go", goSrc)
-	// unregistered, a.go is code a source language claims: plain text, so no relations (no ".r1")
+	// unregistered, a.go is code a source language claims: plain text, so no relations (no ".r2")
 	if got := community.indexerOf("a.go"); got != "c"+ChunkerVersion+".s3.t512" {
 		t.Errorf("the community build records a.go under %q", got)
 	}

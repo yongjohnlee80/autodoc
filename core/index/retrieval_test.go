@@ -26,9 +26,9 @@ func (e *env) setRetrieval(abstract, demote bool) {
 	}
 	e.eventually("every Markdown document rebuilt", func() bool {
 		var stale int
-		mark := "%.r1.m1"
+		mark := "%." + relationsVersion + ".m1"
 		if abstract {
-			mark = "%.r1.a1.m1"
+			mark = "%." + relationsVersion + ".a1.m1"
 		}
 		_ = scanOne(ctx, e.raw, &stale, "SELECT COUNT(*) FROM document WHERE path LIKE '%.md' AND indexer NOT LIKE ?", mark)
 		return stale == 0 && e.pendingJobs() == 0

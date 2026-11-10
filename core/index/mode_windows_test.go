@@ -43,7 +43,7 @@ t
 		out(`D:\ws\kb\a.md`, "D:/ws/kb/a.md"),
 		out("$OUT/x.md", "C:/out/x.md"),
 	}
-	if got := varRelations(doc, "notes/n.md", vars, `C:\ws`); !reflect.DeepEqual(got, want) {
+	if got := varRelations(doc, "notes/n.md", vars, roots{`C:/ws`}); !reflect.DeepEqual(got, want) {
 		t.Errorf("relations:\n got %+v\nwant %+v", got, want)
 	}
 	if rel, ok := inside(`C:\ws`, "C:x.md"); ok {
