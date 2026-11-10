@@ -450,7 +450,7 @@ func TestALiveCheckReadsTheKeyAfresh(t *testing.T) {
 	}{
 		"replaced":  {other, 0o600, "does not open"},
 		"cut short": {good[:5], 0o600, "5 bytes"},
-		"exposed":   {good, 0o644, "readable by others"},
+		"exposed":   {good, 0o644, "not private to this user"},
 	} {
 		if err := os.WriteFile(path+".key", c.key, 0o600); err != nil {
 			t.Fatal(err)

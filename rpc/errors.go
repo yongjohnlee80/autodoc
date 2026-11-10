@@ -86,7 +86,7 @@ var publicErrs = []module.PublicError{
 	{Err: store.ErrContextRange, Code: golibrpc.CodeInvalidParams, Message: fmt.Sprintf("a provider's context window is %d to %d tokens", store.MinContext, store.MaxContext)},
 	{Err: store.ErrProviderNeedsKey, Code: golibrpc.CodeInvalidParams, Message: "an Ollama Cloud provider needs its API key"},
 	{Err: store.ErrSealed, Code: CodeProviderRefused, Message: "the store's keyslot does not open this provider's key"},
-	{Err: store.ErrKeyslotExposed, Code: CodeProviderRefused, Message: "the store's keyslot file is readable by others: make it 0600"},
+	{Err: store.ErrKeyslotExposed, Code: CodeProviderRefused, Message: "the store's keyslot file is not private to this user (on Unix: make it 0600)"},
 	{Err: embed.ErrRateLimited, Code: CodeProviderRefused, Message: "the provider's usage limit is reached: switch provider, or wait"},
 	{Err: embed.ErrUnauthorized, Code: CodeProviderRefused, Message: "the provider refused the key"},
 	{Err: embed.ErrNoModel, Code: CodeProviderRefused, Message: "the provider has no such model: List models shows the ones it has"},

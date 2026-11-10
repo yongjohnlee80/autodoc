@@ -13,6 +13,10 @@ import (
 
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/errs"
+
+	"github.com/yongjohnlee80/autodoc/internal/userperm"
+
+	"io"
 )
 
 // THE STORE CHECK (AM-4): whether the store's file is sound, and whether its key still opens what
@@ -331,16 +335,17 @@ func (s *Store) secretsCheck(ctx context.Context) ([]string, error) {
 // one: a missing, exposed or wrong-sized key is the problem it names, and only a failure to read the
 // file at all is an error.
 func readKeyForCheck(path string) (key []byte, problem string, err error) {
-	fi, err := os.Stat(path)
+	f, err := userperm.OpenPrivate(path)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		return nil, fmt.Sprintf("the store's key %s is missing", path), nil
+	case errors.Is(err, userperm.ErrExposed):
+		return nil, fmt.Sprintf("the store's key is not private to this user: %v", err), nil
 	case err != nil:
 		return nil, "", err
-	case fi.Mode().Perm()&0o077 != 0:
-		return nil, fmt.Sprintf("the store's key %s is readable by others (%v): make it 0600", path, fi.Mode().Perm()), nil
 	}
-	key, err = os.ReadFile(path)
+	key, err = io.ReadAll(io.LimitReader(f, keySize+1)) // the handle checked is the one read
+	_ = f.Close()
 	if err != nil {
 		return nil, "", err
 	}
