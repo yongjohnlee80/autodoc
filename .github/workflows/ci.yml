@@ -255,6 +255,12 @@ jobs:
           go vet ./...
           mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
           go test -count=1 -timeout 20m "${pkgs[@]}"
+      - name: scratch (not for merge) the agent's autodoc under Git Bash and the other shells
+        if: ${{ !inputs.discover }}
+        run: |
+          go test -count=1 -timeout 10m -v -run '^(TestAnAgentsAutodocIsTheBuildWithItsConfigOnWindows|TestAnAgentsAutodocIsTheBuildUnderGitBash)$' ./internal/procenv/ > "$RUNNER_TEMP/p.txt" 2>&1 && rp=0 || rp=$?
+          grep -E '^\s*--- (PASS|FAIL|SKIP)|_test\.go:[0-9]+:' "$RUNNER_TEMP/p.txt" | cut -c1-300 || true
+          echo "== procenv rc=$rp"
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
