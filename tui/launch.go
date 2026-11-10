@@ -28,6 +28,9 @@ type LaunchOptions struct {
 	ConfigPath string
 	// GUI is set by --gui: the UI is in a window (Options.GUI).
 	GUI bool
+	// TitleBar is set by a window opened without the system's title bar: AutoDoc draws its own
+	// (Options.TitleBar).
+	TitleBar bool
 	// Dev reads the QML from that directory and follows it as it is edited (Options.Dev).
 	Dev string
 	// Workspace is the one to open, which the daemon must have; "" is the one last entered.
@@ -101,8 +104,14 @@ const guiRendererName = "gui-renderer"
 // tui.gui.renderer, for the GUI build to read as it opens its window, before the store can be read;
 // "" when the config cannot be read.
 func GUIRendererFile(configPath string) string {
+	return stateFile(configPath, guiRendererName)
+}
+
+// stateFile is the file name in the state directory of the config at configPath; "" when the config
+// cannot be read.
+func stateFile(configPath, name string) string {
 	if _, p, err := loadPaths(configPath); err == nil {
-		return filepath.Join(p.StateDir, guiRendererName)
+		return filepath.Join(p.StateDir, name)
 	}
 	return ""
 }
@@ -173,6 +182,8 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 		AgentDir:      filepath.Join(stateDir, "agent"),
 		RecoveryDir:   filepath.Join(stateDir, "recovery"),
 		RendererFile:  filepath.Join(stateDir, guiRendererName),
+		TitleBarFile:  filepath.Join(stateDir, guiTitleBarName),
+		TitleBar:      o.TitleBar,
 		CrashDir:      filepath.Join(stateDir, "crash"),
 		EditorDir:     filepath.Join(stateDir, "editor"),
 		// the user's Lua commands, beside the config as the plugins are

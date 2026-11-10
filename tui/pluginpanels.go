@@ -381,8 +381,10 @@ func (pl *plugins) cardType() tuidecl.Type {
 // every reload.
 type cardFS struct {
 	fs.FS
-	pl  *plugins
-	gui bool // the program runs as a window: the GUI's relation views are written in too
+	pl *plugins
+	// layout writes in what the program running as a window adds: the GUI's relation views and its
+	// own title bar (Host.windowLayout)
+	layout func([]byte) []byte
 }
 
 func (c cardFS) Open(name string) (fs.File, error) {
@@ -399,7 +401,7 @@ func (c cardFS) Open(name string) (fs.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	data := c.pl.withCardPanels(withRelationViews(src, c.gui))
+	data := c.pl.withCardPanels(c.layout(src))
 	return &memFile{Reader: bytes.NewReader(data), info: memInfo{FileInfo: info, size: int64(len(data))}}, nil
 }
 

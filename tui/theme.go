@@ -90,7 +90,7 @@ func (h *Host) switchTheme(name string) {
 }
 
 // layoutBaseNow is the layout before the card panels are written in: layoutBase, or -dev's
-// main.qml read again with the GUI's relation views.
+// main.qml read again with what a window writes in (windowLayout).
 func (h *Host) layoutBaseNow() ([]byte, error) {
 	if h.dev == "" {
 		return h.layoutBase, nil
@@ -99,7 +99,7 @@ func (h *Host) layoutBaseNow() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return withRelationViews(b, h.gui), nil
+	return h.windowLayout(b), nil
 }
 
 func (h *Host) defaultTheme() string {
