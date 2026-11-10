@@ -3972,6 +3972,18 @@ WHAT A KEY NEEDS
         <source>This &amp;machine</source>
         <translation>このマシン(&amp;m)</translation>
     </message>
+    <message id="autodoc.main.title_bar">
+        <source>Title &amp;bar</source>
+        <translation>タイトルバー(&amp;b)</translation>
+    </message>
+    <message id="autodoc.main.title_bar_own">
+        <source>&amp;2. AutoDoc's own</source>
+        <translation>&amp;2. AutoDoc 独自</translation>
+    </message>
+    <message id="autodoc.main.title_bar_system">
+        <source>&amp;1. The system's</source>
+        <translation>&amp;1. システムのもの</translation>
+    </message>
     <message id="autodoc.main.todos">
         <source>&amp;Todos</source>
         <translation>ToDo(&amp;t)</translation>
@@ -5423,6 +5435,14 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.theme.theme">
         <source>theme: %1</source>
         <translation>テーマ: %1</translation>
+    </message>
+    <message id="autodoc.notice.titlebar.from_the_next_start">
+        <source>the title bar changes at the next start: the window takes it as it opens</source>
+        <translation>タイトルバーは次回の起動時に変わります: ウィンドウが開くときに決まります</translation>
+    </message>
+    <message id="autodoc.notice.titlebar.no_title_bar_s">
+        <source>no title bar %1: system or own</source>
+        <translation>タイトルバー %1 はありません: system または own</translation>
     </message>
     <message id="autodoc.notice.todomove.moved_to">
         <source>%1 moved to %2 with its task: the buffer follows it</source>

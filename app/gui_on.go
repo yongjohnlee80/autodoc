@@ -25,6 +25,10 @@ func runGUI(ctx context.Context, o tui.LaunchOptions, owned []owner) error {
 	configureGUIPreferences()
 	gui.Main(func() error {
 		opts := append([]gui.Option{gui.WithTitle("AutoDoc")}, rendererOptions(tui.GUIRendererFile(o.ConfigPath))...)
+		// tui.gui.titlebar: AutoDoc's own title bar, in a window opened without the system's
+		if o.TitleBar = ownsTitleBar(tui.GUITitleBarFile(o.ConfigPath)); o.TitleBar {
+			opts = append(opts, gui.WithDecorations(false))
+		}
 		if o.DebugRecorder != nil {
 			// --debug: the window's input path records into the same file the TUI's
 			// trace does, but wrapped: the backend closes what it is given on window
