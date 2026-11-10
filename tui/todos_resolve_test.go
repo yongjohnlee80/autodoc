@@ -10,22 +10,33 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/todo"
 	"github.com/yongjohnlee80/autodoc/core/todo/todotest"
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/autodoc/tui/feature/featuretest"
 )
 
-// aliasDisk is the in-memory disk with one folder reached by a second spelling (a link, a short
-// name, another case): opening alias opens canon, and canon is the path it answers, as a real disk
-// answers a folder's canonical path.
+// aliasDisk is the in-memory disk with folders reached by a second spelling (a link, a short name,
+// another case): opening an alias opens its canonical folder, and that is the path it answers, as a
+// real disk answers a folder's canonical path.
 type aliasDisk struct {
 	*todotest.Disk
-	alias, canon string
+	canon map[string]string // alias → its canonical folder
 }
 
 func (d aliasDisk) Open(ctx context.Context, dir string) (vfs.FS, string, error) {
-	if dir == d.alias {
-		dir = d.canon
+	if c, ok := d.canon[dir]; ok {
+		dir = c
 	}
 	return d.Disk.Open(ctx, dir)
+}
+
+// atOf is a todos verb's place as the panel sends it: a workspace's name, or a {root} map.
+func atOf(p any) todo.At {
+	if m, ok := p.(map[string]any); ok {
+		root, _ := m["root"].(string)
+		return todo.At{Root: root}
+	}
+	ws, _ := p.(string)
+	return todo.At{Workspace: ws}
 }
 
 // asSent is v as the daemon sends it, through JSON.
@@ -58,27 +69,60 @@ func managerCore(t *testing.T, m *todo.Manager) *featuretest.ScriptedCore {
 		st, err := m.Stores(ctx)
 		return asSent(t, st), err
 	}
-	s.Answers["todos.list"] = func([]any) (any, error) { return map[string]any{"tasks": []any{}}, nil }
+	s.Answers["todos.scaffold"] = func(p []any) (any, error) {
+		o, err := m.Scaffold(ctx, atOf(p[0]))
+		return asSent(t, o), err
+	}
+	s.Answers["todos.list"] = func(p []any) (any, error) {
+		var buckets []string
+		if opts, ok := p[1].(map[string]any); ok {
+			for _, b := range feature.AsList(opts["buckets"]) {
+				if s, ok := b.(string); ok {
+					buckets = append(buckets, s)
+				}
+			}
+		}
+		l, err := m.List(ctx, atOf(p[0]), todo.ListOpts{Buckets: buckets})
+		return asSent(t, l), err
+	}
 	return s
 }
 
-// A folder loaded is shown as the store the daemon resolves for it: a folder never resolved before
-// (its store recorded as it is resolved), and one reached by another spelling, shown as the store at
-// its canonical place.
+// A folder loaded, or made a store with New…, is shown as the store the daemon resolves for it: a
+// folder never resolved before (its store recorded as it is resolved), and one reached by another
+// spelling, shown as the store at its canonical place; New… makes that store's buckets there.
 func TestALoadedFolderIsShownByTheStoreTheDaemonResolves(t *testing.T) {
 	disk := todotest.NewDisk()
-	fresh, canon, alias := slashFile("/fresh"), slashFile("/canon"), slashFile("/alias")
-	disk.MkdirAll(fresh)
-	disk.MkdirAll(canon)
-	m := todo.New(todotest.Roots{}, aliasDisk{disk, alias, canon}, todotest.NewJournal())
+	for _, d := range []string{"/fresh", "/canon", "/made", "/madecanon"} {
+		disk.MkdirAll(slashFile(d))
+	}
+	m := todo.New(todotest.Roots{}, aliasDisk{disk, map[string]string{
+		slashFile("/alias"): slashFile("/canon"), slashFile("/madealias"): slashFile("/madecanon"),
+	}}, todotest.NewJournal())
+	t.Cleanup(func() { _ = m.Close() })
 	v := newTodos(managerCore(t, m))
 	v.list()
-	for _, c := range []struct{ chosen, want string }{{taskFile("/fresh"), fresh}, {taskFile("/alias"), canon}} {
-		v.folderAs = "load"
-		v.folderChosen(c.chosen)
-		if v.cur == nil || v.cur.id != "root:"+c.want {
-			t.Errorf("%s loaded: shown %+v; want the store at %s", c.chosen, v.cur, c.want)
+	for _, c := range []struct{ as, chosen, want string }{
+		{"load", "/fresh", "/fresh"}, {"load", "/alias", "/canon"},
+		{"new", "/made", "/made"}, {"new", "/madealias", "/madecanon"},
+	} {
+		v.folderAs = c.as
+		v.folderChosen(taskFile(c.chosen))
+		if want := slashFile(c.want); v.cur == nil || v.cur.id != "root:"+want {
+			t.Errorf("%s %s: shown %+v; want the store at %s", c.as, c.chosen, v.cur, want)
 		}
+		if c.as != "new" {
+			continue
+		}
+		fsys, _, err := disk.Open(context.Background(), slashFile(c.want)+"/.todo-list")
+		if err != nil {
+			t.Errorf("new %s: no store at %s: %v", c.chosen, c.want, err)
+			continue
+		}
+		if _, err := fsys.Stat(context.Background(), "open"); err != nil {
+			t.Errorf("new %s: the store at %s has no open bucket: %v", c.chosen, c.want, err)
+		}
+		_ = fsys.Close()
 	}
 }
 
