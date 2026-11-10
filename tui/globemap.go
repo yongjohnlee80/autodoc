@@ -3,6 +3,7 @@ package tui
 import (
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	graphlayout "github.com/yongjohnlee80/golib/graph/layout"
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
 // THE GLOBEMAP'S MODEL, in either build: the links it follows (f), its links' classes, and the
@@ -107,4 +108,9 @@ func degrees(m relMap) []int {
 		deg[e.Dst]++
 	}
 	return deg
+}
+
+// relationChoice is the relation views' chooser src in w's language (relationViewChoices).
+func relationChoice(w feature.Wording, src string) *tuidecl.ListModel {
+	return feature.ChoiceRows(w, relationViewChoices()[src])
 }

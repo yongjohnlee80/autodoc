@@ -19,6 +19,18 @@ func Choices(labels ...string) *tuidecl.ListModel {
 	return m
 }
 
+// ChoiceRows are a chooser's rows in w's language: each key its English label, each label its
+// catalog text (autodoc.choice.<slug>).
+func ChoiceRows(w Wording, labels []string) *tuidecl.ListModel {
+	rows := make([]RowOf, len(labels))
+	for i, l := range labels {
+		rows[i] = RowOf{"key": l, "label": w.Tr("autodoc.choice." + SlugOf(l))}
+	}
+	m := tuidecl.NewListModel("key", "label")
+	m.Reset(rows)
+	return m
+}
+
 // Wording is a catalog's text for a function that composes it: a feature's Core in the UI's
 // language, or the host's English (tui's inEnglish).
 type Wording interface {
