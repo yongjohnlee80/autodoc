@@ -27,8 +27,8 @@ type GlobeState struct {
 	Background, Other color.NRGBA
 }
 
-// State is the window GlobeMap's.
-func (g *globeMap) State() GlobeState {
+// Snapshot is the window GlobeMap's.
+func (g *globeMap) Snapshot() GlobeState {
 	l := g.currentLook()
 	s := GlobeState{
 		ViewState: ViewState{Open: g.open, Viewed: g.view != nil, Groups: groupsOf(g.groups), Builds: g.seq, Editor: editorState(g.editor)},
@@ -36,17 +36,17 @@ func (g *globeMap) State() GlobeState {
 		Dragging: g.drag != nil, Look: l, Background: l.pal.background, Other: l.other,
 	}
 	if g.cur != nil {
-		s.Frame, s.Loaded, s.Nodes = g.cur, true, nodesOf(g.cur.m)
+		s.Frame, s.Loaded, s.Nodes = g.cur, true, nodePaths(g.cur.m)
 	}
 	return s
 }
 
-// State is the window Mindmap's.
-func (m *mindmap) State() ViewState {
+// Snapshot is the window Mindmap's.
+func (m *mindmap) Snapshot() ViewState {
 	s := ViewState{Open: m.open, Viewed: m.view != nil, Workspace: m.groupsWS, Groups: groupsOf(m.groups),
 		Depth: m.depth, Builds: m.seq, Editor: editorState(m.editor)}
 	if m.cur != nil {
-		s.Loaded, s.Nodes = true, nodesOf(m.cur.m)
+		s.Loaded, s.Nodes = true, nodePaths(m.cur.m)
 	}
 	return s
 }

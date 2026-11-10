@@ -37,7 +37,7 @@ func TestATerminalRunOpensTheCellMindmap(t *testing.T) {
 	r.waitFile(t, "a.md")
 	onLoop(r, func() bool { m.toggle(); return true })
 	r.s.WaitFor(t, "the cell Mindmap open", func(string) bool {
-		return onLoop(r, func() bool { s := m.State(); return s.Open && s.Viewed })
+		return onLoop(r, func() bool { s := m.Snapshot(); return s.Open && s.Viewed })
 	})
 }
 
@@ -62,13 +62,13 @@ func TestSPCMOpensTheMindmap(t *testing.T) {
 	r.waitFile(t, "a.md")
 	r.leader(t, 'M')
 	r.s.WaitFor(t, "SPC M opened the Mindmap", func(string) bool {
-		return onLoop(r, func() bool { s := m.State(); return s.Open && s.Viewed })
+		return onLoop(r, func() bool { s := m.Snapshot(); return s.Open && s.Viewed })
 	})
 	if onLoop(r, func() bool { return r.h.panelMax["terminal"] || r.h.panelMax["agent"] }) {
 		t.Error("SPC M maximized a panel")
 	}
 	r.leader(t, 'M')
-	r.s.WaitFor(t, "SPC M closed it", func(string) bool { return !onLoop(r, func() bool { return m.State().Open }) })
+	r.s.WaitFor(t, "SPC M closed it", func(string) bool { return !onLoop(r, func() bool { return m.Snapshot().Open }) })
 }
 
 // TestTheCellMindmapTakesTheKeyboard: Relations › Mindmap opened over a note's page (Rendered) or
@@ -105,21 +105,21 @@ func TestTheCellMindmapTakesTheKeyboard(t *testing.T) {
 				onLoop(r, func() bool { m.toggle(); return true })
 			}
 			r.s.WaitFor(t, "the Mindmap built", func(string) bool {
-				return onLoop(r, func() bool { s := m.State(); return s.Open && s.Loaded })
+				return onLoop(r, func() bool { s := m.Snapshot(); return s.Open && s.Loaded })
 			})
 			r.s.WaitFor(t, "the Mindmap has the keyboard", func(string) bool {
 				return onLoop(r, func() bool { return r.h.paneHasKeyboard(mindmapViewID) })
 			})
 			r.keys(t, key('d'))
 			r.s.WaitFor(t, "d reached the Mindmap (two links out)", func(string) bool {
-				return onLoop(r, func() int { return m.State().Depth }) == 2
+				return onLoop(r, func() int { return m.Snapshot().Depth }) == 2
 			})
 			if got := r.editorText(); got != before {
 				t.Fatalf("a key for the Mindmap changed the note:\n%q\nwant\n%q", got, before)
 			}
 			onLoop(r, func() bool { m.toggle(); return true })
 			r.s.WaitFor(t, "the editor has the keyboard again", func(string) bool {
-				return onLoop(r, func() bool { return !m.State().Open && r.h.paneHasKeyboard("editor") })
+				return onLoop(r, func() bool { return !m.Snapshot().Open && r.h.paneHasKeyboard("editor") })
 			})
 		})
 	}

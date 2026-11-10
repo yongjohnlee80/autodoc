@@ -37,7 +37,7 @@ var relationsKB = map[string][]string{"kb": {
 }}
 
 func (r *running) relationLabels() []string {
-	return onLoop(r, func() []string { return r.h.rel.State().Rows })
+	return onLoop(r, func() []string { return r.h.rel.Snapshot().Rows })
 }
 
 // waitRelations waits for the drawer's rows to be want.
@@ -76,7 +76,7 @@ func TestTheRelationsDrawerGroupsByKindAndDirection(t *testing.T) {
 	r.leader(t, 'l')
 	r.waitRelations(t, docRelations)
 	r.s.WaitForText(t, "links (10)")
-	if onLoop(r, func() bool { return r.h.rel.State().Deep }) {
+	if onLoop(r, func() bool { return r.h.rel.Snapshot().Deep }) {
 		t.Fatal("d in the explorer turned the drawer's depth 2 on")
 	}
 

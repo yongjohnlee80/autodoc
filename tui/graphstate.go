@@ -8,7 +8,7 @@ import (
 	tuimermaid "github.com/yongjohnlee80/golib/tui/mermaid"
 )
 
-// THE RELATION VIEWS' STATE, READ AT ONCE: what a view shows now, as plain values, for the
+// THE RELATION VIEWS' SNAPSHOTS: what a view shows now, as plain values, for the
 // whole-program tests that stay in the host's package (they read a view as the program left it).
 // Nothing draws from it.
 
@@ -53,7 +53,7 @@ func groupsOf(gs *relGroups) []Group {
 	return slices.Clone(gs.list)
 }
 
-func nodesOf(m relMap) []string {
+func nodePaths(m relMap) []string {
 	out := make([]string, len(m.Nodes))
 	for i, n := range m.Nodes {
 		out[i] = n.Path
@@ -61,12 +61,12 @@ func nodesOf(m relMap) []string {
 	return out
 }
 
-// State is the GlobeMap's in cells.
-func (g *cellGlobeMap) State() ViewState {
+// Snapshot is the GlobeMap's in cells.
+func (g *cellGlobeMap) Snapshot() ViewState {
 	s := ViewState{Open: g.open, Viewed: g.view != nil, Workspace: g.groupsWS, Groups: groupsOf(g.groups),
 		Builds: g.seq, Editor: editorState(g.editor)}
 	if g.cur != nil {
-		s.Loaded, s.Nodes = true, nodesOf(g.cur.m)
+		s.Loaded, s.Nodes = true, nodePaths(g.cur.m)
 		if g.selected >= 0 && g.selected < len(g.cur.m.Nodes) {
 			s.Selected = g.cur.m.label(g.selected)
 		}
@@ -74,12 +74,12 @@ func (g *cellGlobeMap) State() ViewState {
 	return s
 }
 
-// State is the Mindmap's in cells.
-func (m *cellMindmap) State() ViewState {
+// Snapshot is the Mindmap's in cells.
+func (m *cellMindmap) Snapshot() ViewState {
 	s := ViewState{Open: m.open, Viewed: m.view != nil, Workspace: m.groupsWS, Groups: groupsOf(m.groups),
 		Depth: m.depth, Builds: m.seq, Editor: editorState(m.editor)}
 	if m.cur != nil {
-		s.Loaded, s.Nodes, s.Tints = true, nodesOf(m.cur.m), maps.Clone(m.cur.tints)
+		s.Loaded, s.Nodes, s.Tints = true, nodePaths(m.cur.m), maps.Clone(m.cur.tints)
 		if m.cur.grid != nil {
 			s.Boxes = slices.Clone(m.cur.grid.Boxes)
 		}
@@ -96,11 +96,15 @@ func (m *cellMindmap) EditGroups() *groupEditor { return m.editor }
 // UseStore makes s the store the Mindmap and its editor read their groups from.
 func (m *cellMindmap) UseStore(s *graphStore) { m.store, m.editor.store = s, s }
 
-// RelatedState is the Links drawer's: its rows' labels, and whether it shows the second ring.
+// RelatedState is the Links drawer's: its rows' labels, whether it shows the second ring, and the
+// row under its cursor.
 type RelatedState struct {
 	Rows []string
 	Deep bool
+	At   int
 }
 
-// State is the Links drawer's.
-func (r *related) State() RelatedState { return RelatedState{Rows: r.labels(), Deep: r.deep} }
+// Snapshot is the Links drawer's.
+func (r *related) Snapshot() RelatedState {
+	return RelatedState{Rows: r.labels(), Deep: r.deep, At: r.at}
+}

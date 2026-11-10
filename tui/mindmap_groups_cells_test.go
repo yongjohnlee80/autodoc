@@ -72,7 +72,7 @@ func openCellMindmapOf(t *testing.T, kb string, listed int, before func(*running
 	onLoop(r, func() bool { m.toggle(); return true })
 	r.s.WaitFor(t, "the Mindmap built in the workspace's groups", func(string) bool {
 		return onLoop(r, func() bool {
-			s := m.State()
+			s := m.Snapshot()
 			return s.Open && s.Loaded && s.Workspace == "kb" && s.Groups != nil && len(s.Tints) > 0
 		})
 	})
@@ -81,7 +81,7 @@ func openCellMindmapOf(t *testing.T, kb string, listed int, before func(*running
 
 // boxOf is the box of the build shown labelled label.
 func boxOf(r *running, m *cellMindmap, label string) (tuimermaid.Box, bool) {
-	for _, b := range onLoop(r, func() []tuimermaid.Box { return m.State().Boxes }) {
+	for _, b := range onLoop(r, func() []tuimermaid.Box { return m.Snapshot().Boxes }) {
 		if b.Label == label {
 			return b, true
 		}
@@ -104,7 +104,7 @@ func TestTheTerminalsMindmapWearsItsGroups(t *testing.T) {
 	beta, ok := boxOf(r, m, "Beta")
 	alpha, aok := boxOf(r, m, "Alpha")
 	if !ok || !aok {
-		t.Fatalf("the map has no Beta or Alpha box: %+v", onLoop(r, func() []tuimermaid.Box { return m.State().Boxes }))
+		t.Fatalf("the map has no Beta or Alpha box: %+v", onLoop(r, func() []tuimermaid.Box { return m.Snapshot().Boxes }))
 	}
 	if beta.Form != tuimermaid.FormHexagon || alpha.Form != tuimermaid.FormBang {
 		t.Fatalf("Beta's outline %v, Alpha's %v; want the group's hexagon, and the root's bang (in no group)", beta.Form, alpha.Form)
@@ -169,7 +169,7 @@ func TestATerminalsMindmapWritesItsFirstGroups(t *testing.T) {
 	if beta, ok := boxOf(r, m, "Beta"); !ok || beta.Form != tuimermaid.FormHexagon {
 		t.Errorf("Beta's box %+v (%v); want its first group's hexagon", beta, ok)
 	}
-	if d := onLoop(r, func() int { return m.State().Depth }); d != 2 {
+	if d := onLoop(r, func() int { return m.Snapshot().Depth }); d != 2 {
 		t.Errorf("the map opened at depth %d; want its settings' 2", d)
 	}
 }
@@ -225,7 +225,7 @@ func TestATerminalsMindmapSettingsEditItsGroups(t *testing.T) {
 	r.s.WaitFor(t, "the edit written", func(string) bool { return strings.Contains(file(), `colour = "#123456"`) })
 	r.s.WaitFor(t, "the map drawn in the edit", func(string) bool {
 		return onLoop(r, func() bool {
-			for _, c := range m.State().Tints {
+			for _, c := range m.Snapshot().Tints {
 				if c == hexColour(0x123456) {
 					return true
 				}
@@ -362,7 +362,7 @@ func TestTheMindmapSettingsEditOnlyTheirWorkspace(t *testing.T) {
 	})
 	r.waitWithin(t, "a's groups listed", daemonWait, func() bool {
 		return onLoop(r, func() bool {
-			s := m.State()
+			s := m.Snapshot()
 			return s.Editor.Workspace == "a" && !s.Editor.Loading && len(s.Editor.Groups) == 1
 		})
 	})
@@ -378,7 +378,7 @@ func TestTheMindmapSettingsEditOnlyTheirWorkspace(t *testing.T) {
 	onLoop(r, func() bool { m.openSettings(); return true })
 	r.waitWithin(t, "the settings bound to b, reading", daemonWait, func() bool {
 		return onLoop(r, func() bool {
-			s := m.State()
+			s := m.Snapshot()
 			return s.Editor.Workspace == "b" && s.Editor.Loading && len(s.Editor.Groups) == 0
 		})
 	})
@@ -396,7 +396,7 @@ func TestTheMindmapSettingsEditOnlyTheirWorkspace(t *testing.T) {
 	close(open)
 	r.waitWithin(t, "b's groups listed", daemonWait, func() bool {
 		return onLoop(r, func() bool {
-			s := m.State()
+			s := m.Snapshot()
 			return s.Editor.Workspace == "b" && !s.Editor.Loading && len(s.Editor.Groups) == 1
 		})
 	})

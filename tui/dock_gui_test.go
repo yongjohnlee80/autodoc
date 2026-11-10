@@ -39,7 +39,7 @@ func TestAGlobeMapNodeHidesItAndTheDockShowsItAsItWas(t *testing.T) {
 		frame  any
 	}
 	viewOf := func() view {
-		return onLoop(r, func() view { s := g.State(); return view{s.Zoom, s.Offset, s.Moved, s.Filter, s.Frame} })
+		return onLoop(r, func() view { s := g.Snapshot(); return view{s.Zoom, s.Offset, s.Moved, s.Filter, s.Frame} })
 	}
 	before := viewOf()
 
@@ -49,7 +49,7 @@ func TestAGlobeMapNodeHidesItAndTheDockShowsItAsItWas(t *testing.T) {
 	r.s.WaitFor(t, "b.md open, the GlobeMap hidden", func(string) bool {
 		return r.shownPath() == "b.md" && r.panelIsOpen(globeMapPanelID) && r.hidden(globeMapPanelID)
 	})
-	if !onLoop(r, func() bool { return g.State().Open }) {
+	if !onLoop(r, func() bool { return g.Snapshot().Open }) {
 		t.Fatal("the GlobeMap's Closed hook ran: hiding it closed it")
 	}
 	name := onLoop(r, func() string { return r.h.widgetName(globeMapPanelID) })

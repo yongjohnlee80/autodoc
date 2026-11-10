@@ -11,6 +11,7 @@ import (
 	guimermaid "github.com/yongjohnlee80/golib/gui/mermaid"
 	pm "github.com/yongjohnlee80/golib/parse/mermaid"
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/style"
 )
 
