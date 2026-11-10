@@ -2,8 +2,9 @@ package tui
 
 import (
 	"encoding/json"
-	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"slices"
+
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // PLUGINS STARTED WITH AUTODOC (docs/plugins.md#starting-with-autodoc): a service whose manifest
@@ -18,7 +19,7 @@ import (
 
 const (
 	// launchCapability is the grant a plugin's start with AutoDoc is (lua.grants, plugin:<name>)
-	launchCapability = "launch"
+	launchCapability = feature.CapabilityLaunch
 	// prefPluginLaunchDeclined is the plugins whose start with AutoDoc the user refused: a JSON
 	// list of names. Outside tui.plugin.*, which a plugin may set itself (SetPluginPref).
 	prefPluginLaunchDeclined = "tui.plugins.launchDeclined"

@@ -5,15 +5,17 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // TestLuaGrantsOf: the preference's JSON is the grants; anything else is none.
 func TestLuaGrantsOf(t *testing.T) {
-	g := luaGrantsOf(`{"pkg":{"clipboard":true,"agents":false}}`)
+	g := feature.GrantsOf(`{"pkg":{"clipboard":true,"agents":false}}`)
 	if !g["pkg"]["clipboard"] || g["pkg"]["agents"] || len(g) != 1 {
 		t.Fatalf("%v", g)
 	}
-	if g := luaGrantsOf("not json"); g != nil {
+	if g := feature.GrantsOf("not json"); g != nil {
 		t.Fatalf("a broken preference gave %v", g)
 	}
 	if txt := luaGrantText(inEnglish{}.Trf, []string{"clipboard", "teleport"}); !strings.Contains(txt, "clipboard: read and write the clipboard") ||
