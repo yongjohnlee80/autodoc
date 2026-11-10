@@ -340,12 +340,13 @@ func TestADocumentCarriesItsRoot(t *testing.T) {
 	if got, err := ReadDocument(wire(DocumentParams(large))); err != nil || got.Root != d.Root || !got.TooLarge {
 		t.Errorf("a too-large document: %+v (%v)", got, err)
 	}
+	elsewhere := filepath.Join(t.TempDir(), "x.lab.md") // absolute in this OS's form
 	for _, c := range []struct {
 		d    Document
 		want string
 	}{
 		{d, filepath.Join("/home/u/kb", "lab", "plan.lab.md")},
-		{Document{Path: "/elsewhere/x.lab.md"}, "/elsewhere/x.lab.md"},
+		{Document{Path: elsewhere}, elsewhere}, // a file outside every workspace: its own absolute path
 		{Document{Path: "lab/plan.lab.md", Workspace: "kb"}, ""},
 		{Document{}, ""},
 	} {
