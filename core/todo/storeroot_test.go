@@ -19,7 +19,9 @@ func TestAStoreAtAVolumesRootListsThatRoot(t *testing.T) {
 		roots = append(roots, "//host/share/")
 	}
 	for _, root := range roots {
-		m := todo.New(todotest.Roots{"vol": root}, todotest.NewDisk(), todotest.NewJournal())
+		disk := todotest.NewDisk()
+		disk.MkdirAll(root) // a drive or a share is on the in-memory disk once made; "/" always is
+		m := todo.New(todotest.Roots{"vol": root}, disk, todotest.NewJournal())
 		t.Cleanup(func() { m.Close() })
 		vol := todo.At{Workspace: "vol"}
 		if err := m.Claim(ctx, vol); err != nil {
