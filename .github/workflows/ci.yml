@@ -247,6 +247,13 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: scratch (not for merge) groups 14 and 15 on Windows, each read whole
+        if: ${{ !inputs.discover }}
+        continue-on-error: true
+        run: |
+          for c in TestADebugLaunchRecordsTheTuisTrace TestLaunchRunsAnotherClientsLayoutAndDaemon TestTheInstalledVersionIsAutodocsAnswer TestUpdateRunsUpdateShAndOffersTheRestart TestAnUpdateThatChangedNothingSaysSo TestLuaHostEdges TestOpenPathsResolve TestAPagesResourcesComeFromItsWorkspace TestNewFolderMakesTheRoot TestOpenInBrowserOpensTheThemedPage TestUnsavedWorkIsKeptWhenTheProgramEndsUnasked TestTheResultsCommandsRunFromTheCatalogAndThePanel; do
+            echo "==== $c"; go test -count=1 -timeout 5m -v -run "^$c\$" ./tui/ 2>&1 | grep -vE '^=== (RUN|PAUSE|CONT)' | grep -vE '^\s*│\s*│?\s*$' | cut -c1-220 | head -45 || true
+          done
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
         run: |
