@@ -577,3 +577,5 @@ func (h *crewHost) settle() {
 		h.resolve(r)
 	}
 }
+
+var _ = userperm.ErrExposed // MUTANT: keeps the import
