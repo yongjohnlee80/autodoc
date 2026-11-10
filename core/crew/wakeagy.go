@@ -271,14 +271,19 @@ type agyStep struct {
 // than one step is held however long the answer is. An answer that is not the steps' object, whose
 // steps are not a list of objects, that has anything after the object, or is cut short (the
 // connection, or agyMaxTrajectory), is an error.
-func agySteps(r io.Reader) (n int, last agyStep, err error) {
+func agySteps(r io.Reader) (n int, last agyStep, err error) { return agyStepsWithin(r, agyMaxTrajectory) }
+
+// agyStepsWithin is agySteps with the answer bounded at limit bytes: an answer longer, its object
+// whole within the bound or not, is an error.
+func agyStepsWithin(r io.Reader, limit int64) (n int, last agyStep, err error) {
 	fail := func(err error) (int, agyStep, error) {
 		if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
-			return 0, agyStep{}, fmt.Errorf("crew: the agy trajectory was cut short, or is over %d bytes", agyMaxTrajectory)
+			return 0, agyStep{}, fmt.Errorf("crew: the agy trajectory was cut short, or is over %d bytes", limit)
 		}
 		return 0, agyStep{}, fmt.Errorf("crew: the agy trajectory: %w", err)
 	}
-	dec := json.NewDecoder(io.LimitReader(r, agyMaxTrajectory))
+	lr := &io.LimitedReader{R: r, N: limit}
+	dec := json.NewDecoder(lr)
 	if tok, err := dec.Token(); err != nil {
 		return fail(err)
 	} else if tok != json.Delim('{') {
@@ -329,6 +334,13 @@ func agySteps(r io.Reader) (n int, last agyStep, err error) {
 	}
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) { // nothing after it: one answer, whole
 		return 0, agyStep{}, errors.New("crew: the agy trajectory has more after its answer")
+	}
+	// the bound read to its end is the limiter's EOF, not the answer's: the answer ended only if
+	// nothing is left to read past it
+	if lr.N == 0 {
+		if k, _ := r.Read(make([]byte, 1)); k > 0 {
+			return 0, agyStep{}, fmt.Errorf("crew: the agy trajectory is over %d bytes", limit)
+		}
 	}
 	return n, last, nil
 }
