@@ -5496,6 +5496,10 @@ O QUE UMA TECLA PRECISA
         <source>todos: %1 is loaded, read-only: its store was released (todos.release)</source>
         <translation>tarefas: %1 está carregado, somente leitura: seu repositório foi liberado (todos.release)</translation>
     </message>
+    <message id="autodoc.notice.todos.todos_the_store_of_is_not_listed">
+        <source>todos: the store of %1 isn't listed, so no other is shown in its place</source>
+        <translation>tarefas: o repositório de %1 não está na lista, então nenhum outro é mostrado no lugar dele</translation>
+    </message>
     <message id="autodoc.notice.todos.todos_refreshed_moved_archived_rewritten">
         <source>todos: refreshed: %1 moved, %2 archived, %3 rewritten</source>
         <translation>tarefas: atualizado: %1 movidas, %2 arquivadas, %3 reescritas</translation>

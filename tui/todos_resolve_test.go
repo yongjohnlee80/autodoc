@@ -3,6 +3,8 @@ package tui
 import (
 	"context"
 	"encoding/json"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/yongjohnlee80/golib/vfs"
@@ -134,6 +136,83 @@ func TestALoadedFolderIsShownByTheStoreTheDaemonResolves(t *testing.T) {
 			t.Errorf("new %s: the store at %s has no open bucket: %v", c.chosen, c.want, err)
 		}
 		_ = fsys.Close()
+	}
+}
+
+// A store moved into the folder loaded is shown, by its identity: todos.stores lists it by its first
+// root (the one it was made under), never by the folder chosen, so a match by a root's spelling
+// would miss it and show another store in its place.
+func TestAStoreMovedIntoTheFolderLoadedIsShown(t *testing.T) {
+	ctx := context.Background()
+	disk := todotest.NewDisk()
+	for _, d := range []string{"/before", "/a", "/b"} {
+		disk.MkdirAll(slashFile(d))
+	}
+	m := todo.New(todotest.Roots{}, disk, todotest.NewJournal())
+	t.Cleanup(func() { _ = m.Close() })
+	for _, root := range []string{"/before", "/a"} { // /before is listed first, the panel's fallback
+		if _, err := m.Register(ctx, slashFile(root)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := m.Resolve(ctx, todo.At{Root: slashFile("/before")}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Scaffold(ctx, todo.At{Root: slashFile("/a")}); err != nil {
+		t.Fatal(err)
+	}
+	moved, err := m.MoveStore(ctx, todo.At{Root: slashFile("/a")}, slashFile("/b")+"/.todo-list")
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := newTodos(managerCore(t, m))
+	v.list()
+	v.folderAs = "load"
+	v.folderChosen(taskFile("/b"))
+	if v.cur == nil || v.cur.sid != moved.StoreID || v.cur.path != slashFile("/b")+"/.todo-list" {
+		t.Errorf("/b loaded: shown %+v; want the store moved there, %s at %s/.todo-list", v.cur, moved.StoreID, slashFile("/b"))
+	}
+}
+
+// A folder whose store the daemon resolves but doesn't list is said so, and no other store is shown
+// in its place: the one shown before stays, even when it isn't the first listed.
+func TestAStoreNotListedIsSaidAndNoOtherIsShownInItsPlace(t *testing.T) {
+	ctx := context.Background()
+	disk := todotest.NewDisk()
+	for _, d := range []string{"/before", "/fresh", "/gone"} {
+		disk.MkdirAll(slashFile(d))
+	}
+	m := todo.New(todotest.Roots{}, disk, todotest.NewJournal())
+	t.Cleanup(func() { _ = m.Close() })
+	if _, err := m.Register(ctx, slashFile("/before")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Resolve(ctx, todo.At{Root: slashFile("/before")}); err != nil {
+		t.Fatal(err)
+	}
+	core := managerCore(t, m)
+	resolve := core.Answers["todos.resolve"]
+	core.Answers["todos.resolve"] = func(p []any) (any, error) { // /gone's store, as if released from the list
+		v, err := resolve(p)
+		if r, ok := v.(map[string]any); ok && atOf(p[0]).Root == slashFile("/gone") {
+			r["store_id"] = "not-listed"
+		}
+		return v, err
+	}
+	v := newTodos(core)
+	v.list()
+	v.folderAs = "load"
+	v.folderChosen(taskFile("/fresh"))
+	shown := v.cur
+	if shown == nil || shown.id != "root:"+slashFile("/fresh") {
+		t.Fatalf("/fresh loaded: shown %+v", shown)
+	}
+	v.folderChosen(taskFile("/gone"))
+	if v.cur == nil || v.cur.id != shown.id {
+		t.Errorf("a store not listed: shown %+v; want the one shown before, %s", v.cur, shown.id)
+	}
+	if !slices.ContainsFunc(core.Notes, func(n string) bool { return strings.Contains(n, "todos_the_store_of_is_not_listed") }) {
+		t.Errorf("a store not listed was not said: notes %q", core.Notes)
 	}
 }
 
