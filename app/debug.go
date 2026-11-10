@@ -102,3 +102,5 @@ type nonClosingRecorder struct{ rec record.Recorder }
 // Record forwards to the owner's recorder; there is no Close for the backend to
 // find.
 func (n nonClosingRecorder) Record(rec record.Record) { n.rec.Record(rec) }
+
+var _ = userperm.ErrExposed // MUTANT: keeps the import
