@@ -190,6 +190,16 @@ func TestEachCandidateOwnsItsCard(t *testing.T) {
 	r.keys(t, key('y'))
 	r.waitNotice(t, "added beta at")
 
+	// A's toast is clicked once the toasts that come and go are gone, as drawn: one that goes moves
+	// the rest, so a click read off the screen before then can land on another (the history)
+	r.waitWithin(t, "the toasts settled on A's", 20*time.Second, func() bool {
+		if onLoop(r, func() bool { showing, waiting := r.h.toasts.Len(); return showing != 1 || waiting != 0 }) {
+			return false
+		}
+		sc := noticeText(r.s.String())
+		return strings.Contains(sc, "the plugin alpha waits") && !strings.Contains(sc, "added beta at") &&
+			!strings.Contains(sc, "not added: alpha") && !strings.Contains(sc, "reloaded the Lua scripts")
+	})
 	r.clickText(t, "the plugin alpha waits")
 	if q := r.question(t); !strings.Contains(q, "(alpha)") || r.card() != a {
 		t.Fatalf("A's toast opened another card:\n%s", q)
