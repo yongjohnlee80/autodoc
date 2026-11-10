@@ -83,7 +83,8 @@ user alone, as the daemon's does; a pipe goes with the TUI, so there is nothing 
 
 - An agent calls it as `autodoc --editor <verb> [params]`. Its environment names the socket
   (`AUTODOC_EDITOR`) and its token (`AUTODOC_EDITOR_TOKEN`). Codex's tool shells drop every variable
-  named `*TOKEN*`, so a Codex agent's token is also a 0600 file in its own folder, which
+  named `*TOKEN*`, so a Codex agent's token is also a file in its own folder, private to the user
+  from its creation (`internal/userperm`: 0600 on Unix, an access list on Windows), which
   `AUTODOC_EDITOR_CREDENTIAL_FILE` names. `autodoc --editor` reads that file when the token variable
   is missing, and refuses it if it is a link, isn't a regular file, another user owns it, others can
   open it, or it holds more than 256 bytes. It opens the file once, without following a link or
