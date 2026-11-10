@@ -17,7 +17,6 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
-	wsfilter "github.com/yongjohnlee80/autodoc/core/workspace"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -170,7 +169,7 @@ type settingsBase struct {
 
 // typeIndex is a file type's chooser as the rules have it: 0 when a file of each extension at the
 // root would be indexed.
-func typeIndex(m wsfilter.Matcher, exts ...string) int {
+func typeIndex(m workspace.Matcher, exts ...string) int {
 	for _, e := range exts {
 		if !m.Match("sample." + e) {
 			return 1
@@ -205,7 +204,7 @@ func textsNote(t wording, derived []string) string {
 // form is the dialog filled from the base: what Save would send nothing for.
 func (b settingsBase) form() settingsForm {
 	w := b.w
-	m := wsfilter.NewMatcher(w.include, w.exclude)
+	m := workspace.NewMatcher(w.include, w.exclude)
 	text, _ := asText(w.textExtensions)
 	f := settingsForm{
 		name: w.name, root: w.root, schema: w.schema.path, texts: strings.Join(text, ", "),
@@ -258,7 +257,7 @@ func setFileTypes(include, exclude []string, from, to settingsForm) ([]string, [
 }
 
 // registeredOn are the registered extensions the rules admit.
-func registeredOn(m wsfilter.Matcher, registered []string) []string {
+func registeredOn(m workspace.Matcher, registered []string) []string {
 	var on []string
 	for _, e := range registered {
 		if m.Match("sample" + e) {
@@ -315,7 +314,7 @@ func setTypes(include, exclude, was, now, extra []string) ([]string, []string) {
 // setTextTypes admits each new text type with an include, unless the rules already admit it, and
 // drops the include of each one taken away.
 func setTextTypes(include, exclude, was, now []string) ([]string, []string) {
-	m := wsfilter.NewMatcher(include, exclude)
+	m := workspace.NewMatcher(include, exclude)
 	for _, e := range now {
 		if slices.Contains(was, e) {
 			continue
@@ -372,14 +371,14 @@ func (b settingsBase) changes(f settingsForm) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if was := registeredOn(wsfilter.NewMatcher(w.include, w.exclude), b.registered); !slices.Equal(was, code) {
+	if was := registeredOn(workspace.NewMatcher(w.include, w.exclude), b.registered); !slices.Equal(was, code) {
 		include, exclude = setCodeTypes(include, exclude, was, code)
 	}
 	docs, err := offeredTypes("documents", f.docs, b.derived)
 	if err != nil {
 		return nil, err
 	}
-	if was := registeredOn(wsfilter.NewMatcher(w.include, w.exclude), b.derived); !slices.Equal(was, docs) {
+	if was := registeredOn(workspace.NewMatcher(w.include, w.exclude), b.derived); !slices.Equal(was, docs) {
 		include, exclude = setDocTypes(include, exclude, was, docs)
 	}
 	if !slices.Equal(include, w.include) || !slices.Equal(exclude, w.exclude) {
@@ -991,7 +990,7 @@ func managerDetail(t wording, w wsInfo, databases bool, registered []string) str
 		}
 		return s
 	}
-	m := wsfilter.NewMatcher(w.include, w.exclude)
+	m := workspace.NewMatcher(w.include, w.exclude)
 	var types []string
 	for _, ty := range []struct{ label, ext string }{{"Markdown", "md"}, {t.Tr("autodoc.text.settings.plain_text"), "txt"}, {"YAML", "yaml"}} {
 		if m.Match("sample." + ty.ext) {

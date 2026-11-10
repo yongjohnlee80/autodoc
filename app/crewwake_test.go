@@ -338,10 +338,8 @@ func TestFourCallsAtMostWithFiftyDue(t *testing.T) {
 	r := newWakeRig(t)
 	r.waker.block = make(chan struct{})
 	_, jarvis := r.agent("jarvis")
-	var sessions []string
 	for i := range 50 {
-		s, _ := r.agent(fmt.Sprintf("a%02d", i))
-		sessions = append(sessions, s)
+		r.agent(fmt.Sprintf("a%02d", i))
 		r.send(jarvis, fmt.Sprintf("a%02d", i), fmt.Sprintf("m%02d", i))
 	}
 	r.start(r.withWaker())

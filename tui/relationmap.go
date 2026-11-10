@@ -190,11 +190,8 @@ func mindmapModel(m relMap, root string, shape func(n mapNode) pm.MindShape) *pm
 	return d
 }
 
-// globeSettingsElsewhere is App.openGlobeSettings where there is no GlobeMap: a terminal. It is
-// English: globeSettingsElsewhereNotice says it in the UI's language.
-const globeSettingsElsewhere = "the GlobeMap and its settings are the window's: run autodoc --gui"
-
-// globeSettingsElsewhereNotice is globeSettingsElsewhere in the UI's language, the notice.
+// globeSettingsElsewhereNotice is App.openGlobeSettings where there is no GlobeMap (a terminal):
+// the notice that the GlobeMap and its settings are the window's, in the UI's language.
 func (h *Host) globeSettingsElsewhereNotice() string {
 	return h.tr("autodoc.notice.relationmap.the_globemap_and_its_settings_are_the_window_s_r")
 }
