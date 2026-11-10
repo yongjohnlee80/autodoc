@@ -45,7 +45,7 @@ func TestAgentValuePreferencesDecodeWithoutSharedMutableProfileState(t *testing.
 		prefAgentProfiles: `[{"name":"alpha","command":"alpha"}]`, prefAgentDefault: "alpha",
 		prefTermEdge: "right", prefAgentEdge: "center",
 	})
-	if p.Value(prefAgentDefault) != "alpha" || p.termEdge != "right" || p.agentEdge != "center" {
+	if p.Value(prefAgentDefault) != "alpha" || p.termEdge != "right" || p.Value(prefAgentEdge) != "center" {
 		t.Fatalf("existing preferences did not read through feature rows: %+v", p)
 	}
 	profiles := agentProfilesOf(p.Value(prefAgentProfiles))
@@ -54,7 +54,7 @@ func TestAgentValuePreferencesDecodeWithoutSharedMutableProfileState(t *testing.
 		t.Fatal("editing decoded profiles mutated the saved preference snapshot")
 	}
 	bad := prefsOf(map[string]any{prefAgentProfiles: "not JSON", prefTermEdge: "nowhere", prefAgentEdge: "nowhere"})
-	if len(agentProfilesOf(bad.Value(prefAgentProfiles))) != 0 || bad.termEdge != "bottom" || bad.agentEdge != defaultAgentEdge {
+	if len(agentProfilesOf(bad.Value(prefAgentProfiles))) != 0 || bad.termEdge != "bottom" || bad.Value(prefAgentEdge) != defaultAgentEdge {
 		t.Fatal("invalid saved values escaped the feature defaults")
 	}
 }
