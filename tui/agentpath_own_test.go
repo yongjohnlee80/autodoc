@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // pathOf is the PATH an agent's start sets (its argv's PATH=), "" for none.
@@ -25,7 +26,7 @@ func pathOf(args []string) string {
 // started on a PATH whose autodoc is someone else's.
 func TestAnAgentIsNotStartedOnABrokenPath(t *testing.T) {
 	c := newIdentityHost(oneTwo)
-	c.ws = wsInfo{id: 7, name: "kb", root: t.TempDir()}
+	c.ws = feature.Workspace{ID: 7, Name: "kb", Root: t.TempDir()}
 	a := testAgents(c, filepath.Join(t.TempDir(), "agents"+string(os.PathListSeparator)+"odd"), "")
 	// the PATH entry is the agents' (Unix) or the build's folder (Windows): each holds the separator
 	a.agentBinPath = fakeBuild(t, filepath.Join(t.TempDir(), "build"+string(os.PathListSeparator)+"odd"))
