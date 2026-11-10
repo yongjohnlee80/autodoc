@@ -259,20 +259,22 @@ jobs:
         if: ${{ !inputs.discover }}
         run: |
           U='^(TestAShellLooksUpOnlyABareName|TestDescribeIsTheProgramAndItsArguments|TestAnAbsolutePathIsLookedUpOnWindows)$'
-          C='^(TestACommandIsJudgedAsWindowsFindsAProgram|TestAPathTheShellResolvesIsNotJudged|TestAProfileCommandNotOnPathIsRefusedBeforeItsSession)$'
+          C='^(TestTheCommandCheckLeavesARelativePathEntryToTheShell|TestACommandIsJudgedAsWindowsFindsAProgram|TestAPathTheShellResolvesIsNotJudged|TestAProfileCommandNotOnPathIsRefusedBeforeItsSession)$'
           go test -count=1 -timeout 10m -v -run "$U" ./internal/usershell/ > "$RUNNER_TEMP/u.txt" 2>&1 && ru=0 || ru=$?
           go test -count=1 -timeout 10m -v -run "$C" ./tui/ > "$RUNNER_TEMP/t.txt" 2>&1 && rt=0 || rt=$?
           grep -E '^\s*--- (PASS|FAIL|SKIP)|_test\.go:[0-9]+:' "$RUNNER_TEMP/u.txt" "$RUNNER_TEMP/t.txt" | cut -c1-300 || true
           echo "== cells usershell rc=$ru tui rc=$rt"
-          cp internal/usershell/looksup.go "$RUNNER_TEMP/keep.go"
-          mut() { name=$1; echo "== mutant $name applied: $(grep -c "mutant $name" internal/usershell/looksup.go)"
+          cp internal/usershell/looksup.go "$RUNNER_TEMP/keep.go"; cp tui/agentinstances.go "$RUNNER_TEMP/keep-ai.go"
+          mut() { name=$1; echo "== mutant $name applied: $(cat internal/usershell/looksup.go tui/agentinstances.go | grep -c "mutant $name")"
             go test -count=1 -timeout 5m -run "$U" ./internal/usershell/ > "$RUNNER_TEMP/m-$name.txt" 2>&1 && mu=0 || mu=$?
             go test -count=1 -timeout 5m -run "$C" ./tui/ >> "$RUNNER_TEMP/m-$name.txt" 2>&1 && mt=0 || mt=$?
             grep -E '_test\.go:[0-9]+:' "$RUNNER_TEMP/m-$name.txt" | head -4 | cut -c1-260 || true
             echo "== mutant $name usershell rc=$mu tui rc=$mt (want a non-zero: killed)"
-            cp "$RUNNER_TEMP/keep.go" internal/usershell/looksup.go; }
+            cp "$RUNNER_TEMP/keep.go" internal/usershell/looksup.go; cp "$RUNNER_TEMP/keep-ai.go" tui/agentinstances.go; }
           python -c "p='internal/usershell/looksup.go'; s=open(p,encoding='utf-8').read(); o='case filepath.IsAbs(word):'; assert s.count(o)==1; open(p,'w',encoding='utf-8').write(s.replace(o,'case false && filepath.IsAbs(word): // mutant noabs'))"; mut noabs
           python -c "p='internal/usershell/looksup.go'; s=open(p,encoding='utf-8').read(); o='return \";&|\$\`()<>\'\\\\\"{}@\"'; assert s.count(o)==1, o; open(p,'w',encoding='utf-8').write(s.replace(o,'return \";&|\$\`()<>\\\\\\\\\'\\\\\"{}@\" // mutant bsyntax'))"; mut bsyntax
+          python -c "p='internal/usershell/looksup.go'; s=open(p,encoding='utf-8').read(); o='if s.ownWord(word) {'; assert s.count(o)==1; open(p,'w',encoding='utf-8').write(s.replace(o,'if false && s.ownWord(word) { // mutant noown'))"; mut noown
+          python -c "p='tui/agentinstances.go'; s=open(p,encoding='utf-8').read(); o='if !filepath.IsAbs(dir) {'; assert s.count(o)==1; open(p,'w',encoding='utf-8').write(s.replace(o,'if false && !filepath.IsAbs(dir) { // mutant norel'))"; mut norel
           [ $ru = 0 ] && [ $rt = 0 ]
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
