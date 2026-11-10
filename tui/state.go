@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"path/filepath"
+
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/internal/userdirs"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
@@ -208,12 +210,13 @@ func (h *Host) languageState() map[string]any {
 }
 
 // homeDir is where the folder picker starts: the home directory (env's, nil for AutoDoc's own),
-// or the root.
+// or, when no home is known, the root of the volume the temporary folder is on: "/" on Unix, a
+// drive's root on Windows (C:\), which the dialogs' drive source opens where it refuses "/".
 func homeDir(env procenv.Env) string {
 	if d, err := userdirs.Home(env); err == nil {
 		return d
 	}
-	return "/"
+	return filepath.VolumeName(userdirs.Temp(env)) + string(filepath.Separator)
 }
 
 // set publishes one source; a failure is kept for Run.

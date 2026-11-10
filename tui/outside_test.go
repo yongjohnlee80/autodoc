@@ -13,7 +13,6 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/vfs/local"
 
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/rpc"
@@ -31,13 +30,7 @@ import (
 // on Windows.
 func diskVolumes(t *testing.T, opts ...docs.Option) *rpc.Disks {
 	t.Helper()
-	k := rpc.NewDisks(func(root string) (*docs.Docs, func(), error) {
-		disk, err := local.New(root)
-		if err != nil {
-			return nil, nil, err
-		}
-		return docs.New(disk, nil, opts...), func() { _ = disk.Close() }, nil
-	})
+	k := rpc.LocalDisks(nil, opts...) // the daemon's own opener, its guard included
 	t.Cleanup(k.Close)
 	return k
 }
@@ -187,6 +180,26 @@ func TestOpenFileDialogOpensTheFileChosen(t *testing.T) {
 	r.s.WaitForText(t, "a.md")
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyDown}, enter()) // past ../
 	r.waitOpen(t, "kb", "a.md")
+}
+
+// TestOpenFileDialogOpensAnOutsideFile: SPC f over an outside file lists its folder (the disk's own
+// spelling: a drive's path on Windows), and Enter on another file there opens it outside every
+// workspace, at its absolute path.
+func TestOpenFileDialogOpensAnOutsideFile(t *testing.T) {
+	t.Parallel()
+	r, _, _, abs := runOutside(t)
+	other := filepath.Join(filepath.Dir(abs), "other.md")
+	if err := os.WriteFile(other, []byte("# Other\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	onLoop(r, func() bool { r.h.openAbsolute(abs); return true })
+	r.waitOpen(t, "", abs)
+	r.leader(t, 'f')
+	r.s.WaitForText(t, "open a file")
+	r.s.WaitForText(t, "other.md")
+	down := tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyDown}
+	r.keys(t, down, down, enter()) // ../, notes.md, other.md
+	r.waitOpen(t, "", other)
 }
 
 // TestTheFileDialogsFollowALinkToAFolder: a link to a folder, absolute, lists as a folder in
