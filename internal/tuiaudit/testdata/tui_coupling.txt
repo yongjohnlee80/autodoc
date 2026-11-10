@@ -237,7 +237,6 @@ gui	plugins	host	themeImport	var
 gui	plugins	host	toastPlugin	const
 gui	plugins	host	withRelationViews	func
 gui	plugins	page	Host.native	method
-gui	plugins	searchsetup	setField	func
 gui	plugins	todos	assignable	func
 gui	plugins	todos	newAgentPick	func
 gui	relations	explorer	linksTab	const
@@ -607,7 +606,6 @@ term	plugins	host	themeImport	var
 term	plugins	host	toastPlugin	const
 term	plugins	host	withRelationViews	func
 term	plugins	page	Host.native	method
-term	plugins	searchsetup	setField	func
 term	plugins	todos	assignable	func
 term	plugins	todos	newAgentPick	func
 term	relations	explorer	linksTab	const

@@ -208,7 +208,7 @@ func (p *providers) formOpened(r endpointRow) {
 	if window <= 0 {
 		window = store.DefaultContext
 	}
-	setField(p.c, "App.providerContext", strconv.FormatInt(window, 10))
+	feature.SetField(p.c, "App.providerContext", strconv.FormatInt(window, 10))
 	p.max = 0
 	p.c.Set("App.providerContextHint", p.c.Tr("autodoc.text.providers.list_models_shows_max_more_uses_gpu_memory"))
 	section := int64(store.SectionTokensDefault)
@@ -265,7 +265,7 @@ func (p *providers) checked(models []string, err error) {
 // pickModel writes model i into the form's model field.
 func (p *providers) pickModel(i int) {
 	if i >= 0 && i < len(p.modelList) {
-		setField(p.c, "App.providerModel", p.modelList[i])
+		feature.SetField(p.c, "App.providerModel", p.modelList[i])
 		p.model = p.modelList[i]
 		p.checkModelContext(p.base, p.key, p.modelList[i])
 	}
@@ -304,7 +304,7 @@ func (p *providers) checkModelContext(base, key, model string) {
 		p.max = a.Value
 		p.c.Set("App.providerContextHint", p.c.Trf("autodoc.text.providers.model_max_more_uses_gpu_memory", a.Value))
 		if p.editing == "" {
-			setField(p.c, "App.providerContext", fmt.Sprint(min(int64(store.DefaultContext), a.Value)))
+			feature.SetField(p.c, "App.providerContext", fmt.Sprint(min(int64(store.DefaultContext), a.Value)))
 		}
 	})
 }
