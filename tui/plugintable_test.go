@@ -208,7 +208,9 @@ func waitSaidN(t *testing.T, logs, name, prefix string, n int) []string {
 // waitResults waits until the results panel shows table id with at least rows rows.
 func (r *running) waitResults(t *testing.T, id string, rows int) {
 	t.Helper()
-	r.s.WaitFor(t, fmt.Sprintf("the table %s with %d rows", id, rows), func(string) bool {
+	// as long as waitShown's: the table's plugin may be a process starting now, and under -race this
+	// test binary, which is the plugin, is slow to start (a full -race run's load took past 10 s)
+	r.waitWithin(t, fmt.Sprintf("the table %s with %d rows", id, rows), 20*time.Second, func() bool {
 		return onLoop(r, func() bool { return r.h.plugins.results.id == id && len(r.h.plugins.results.model.rows) >= rows })
 	})
 }
