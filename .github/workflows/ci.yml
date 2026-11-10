@@ -260,7 +260,7 @@ jobs:
         run: |
           P='^(TestALauncherNeedsAProgram|TestSelfIsTheRunningProgram|TestALauncherIsNoFileOnWindows|TestThePathEntryIsTheBuildsFolderOnWindows|TestAnAgentsAutodocIsTheBuildWithItsConfigOnWindows)$'
           A='^(TestTheConfigIsTheFlagsThenTheEnvironmentsThenTheDefault|TestEveryModeReadsTheConfigFromTheEnvironmentWhenNoFlagNamesOne|TestARelativeConfigFromTheEnvironmentIsTheWorkingDirectorys)$'
-          T='^(TestAnAgentsPathHasItsOwnAutodocFirst|TestAnAgentIsNotStartedOnABrokenPath|TestAnAgentsStalePathLinkIsReplaced|TestAnAgentsAutodocWithoutAConfigIsTheBuildAlone|TestTheNoticeHookIsMergedIntoTheUsersSettings)$'
+          T='^(TestTheCommandsAutoDocWritesNameTheBuildByItsPath|TestAnEarlierBuildsHooksAreTakenOut|TestClaudeSettingsTakeOutAutoDocsOldHooks|TestAnAgentsPathHasItsOwnAutodocFirst|TestAnAgentIsNotStartedOnABrokenPath|TestAnAgentsStalePathLinkIsReplaced|TestAnAgentsAutodocWithoutAConfigIsTheBuildAlone|TestTheNoticeHookIsMergedIntoTheUsersSettings)$'
           cells() { go test -count=1 -timeout 10m -v -run "$P" ./internal/procenv/ > "$RUNNER_TEMP/$1-p.txt" 2>&1 && rp=0 || rp=$?
             go test -count=1 -timeout 10m -v -run "$A" ./app/ > "$RUNNER_TEMP/$1-a.txt" 2>&1 && ra=0 || ra=$?
             go test -count=1 -timeout 10m -v -run "$T" ./tui/ > "$RUNNER_TEMP/$1-t.txt" 2>&1 && rt=0 || rt=$?; }
@@ -268,14 +268,15 @@ jobs:
           grep -E '^\s*--- (PASS|FAIL|SKIP)|_test\.go:[0-9]+:' "$RUNNER_TEMP/base-p.txt" "$RUNNER_TEMP/base-a.txt" "$RUNNER_TEMP/base-t.txt" | sed 's/^.*txt://' | cut -c1-300 || true
           echo "== cells procenv rc=$rp app rc=$ra tui rc=$rt"
           b=$(( rp + ra + rt ))
-          cp internal/procenv/launcher_windows.go "$RUNNER_TEMP/keep-l.go"; cp app/app.go "$RUNNER_TEMP/keep-a.go"
-          mut() { name=$1; echo "== mutant $name applied: $(cat internal/procenv/launcher_windows.go app/app.go | grep -c "mutant $name")"; cells $name
+          cp internal/procenv/launcher_windows.go "$RUNNER_TEMP/keep-l.go"; cp app/app.go "$RUNNER_TEMP/keep-a.go"; cp tui/agentinstances.go "$RUNNER_TEMP/keep-ai.go"
+          mut() { name=$1; echo "== mutant $name applied: $(cat internal/procenv/launcher_windows.go app/app.go tui/agentinstances.go | grep -c "mutant $name")"; cells $name
             grep -E '_test\.go:[0-9]+:' "$RUNNER_TEMP/$name-p.txt" "$RUNNER_TEMP/$name-a.txt" "$RUNNER_TEMP/$name-t.txt" | sed 's/^.*txt://' | head -4 | cut -c1-260 || true
             echo "== mutant $name procenv rc=$rp app rc=$ra tui rc=$rt (want a non-zero: killed)"
-            cp "$RUNNER_TEMP/keep-l.go" internal/procenv/launcher_windows.go; cp "$RUNNER_TEMP/keep-a.go" app/app.go; }
+            cp "$RUNNER_TEMP/keep-l.go" internal/procenv/launcher_windows.go; cp "$RUNNER_TEMP/keep-a.go" app/app.go; cp "$RUNNER_TEMP/keep-ai.go" tui/agentinstances.go; }
           python -c "p='internal/procenv/launcher_windows.go'; s=open(p,encoding='utf-8').read(); o='func pathEntry(_, _, program string) string { return filepath.Dir(program) }'; assert s.count(o)==1; open(p,'w',encoding='utf-8').write(s.replace(o,'func pathEntry(_, target, program string) string { _ = filepath.Dir; return target } // mutant nobuilddir'))"; mut nobuilddir
           python -c "p='app/app.go'; s=open(p,encoding='utf-8').read(); o='return env.Get(EnvConfig)'; assert s.count(o)==1; open(p,'w',encoding='utf-8').write(s.replace(o,'_ = env; return \"\" // mutant noenvconfig'))"; mut noenvconfig
           python -c "p='app/app.go'; s=open(p,encoding='utf-8').read(); o='if flag != \"\" {'; assert s.count(o)==1; open(p,'w',encoding='utf-8').write(s.replace(o,'if v := env.Get(EnvConfig); v != \"\" { return v } // mutant reversed\n\tif flag != \"\" {'))"; mut reversed
+          python -c "p='tui/agentinstances.go'; s=open(p,encoding='utf-8').read(); o='writeWakeAcceptance(shellQuote(a.agentBin()),'; assert s.count(o)==1; open(p,'w',encoding='utf-8').write(s.replace(o,'writeWakeAcceptance(\\\"autodoc\\\" /* mutant bareautodoc */,'))"; mut bareautodoc
           [ $b = 0 ]
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
