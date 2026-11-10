@@ -861,11 +861,6 @@ func TestAPluginThatExitsLeavesItsChildAsEachOSHoldsIt(t *testing.T) {
 	}
 	r.waitShown(t, "open 30x6")
 	child := waitTestChild(t, logs, "leaver")
-	t.Cleanup(func() {
-		if p, err := os.FindProcess(child); err == nil && pidAlive(child) {
-			_ = p.Kill()
-		}
-	})
 	r.keys(t, key('e')) // the plugin exits of itself
 	select {
 	case <-run.shutDone:
@@ -888,7 +883,8 @@ func TestAPluginThatExitsLeavesItsChildAsEachOSHoldsIt(t *testing.T) {
 }
 
 // waitTestChild is the pid of the child the plugin name started (startTestChild), read from its log
-// in logs once it is there and running.
+// in logs once it is there and running. The test's end kills it if it still runs: a cell that fails
+// because the child outlived the stop leaves no sleeper behind.
 func waitTestChild(t *testing.T, logs, name string) int {
 	t.Helper()
 	var child int
@@ -903,6 +899,11 @@ func waitTestChild(t *testing.T, logs, name string) int {
 	if child == 0 || !pidAlive(child) {
 		t.Fatalf("the plugin's child is not running (%d)", child)
 	}
+	t.Cleanup(func() {
+		if p, err := os.FindProcess(child); err == nil && pidAlive(child) {
+			_ = p.Kill()
+		}
+	})
 	return child
 }
 
