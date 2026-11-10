@@ -131,6 +131,18 @@ func TestAnAgentRunsALineOnlyAfterTheUserSaysRun(t *testing.T) {
 		t.Fatalf("Run: %v %v, want started in tab zen: run, no crew to mail its exit", a.res, a.re)
 	}
 	r.s.WaitForText(t, "ran-42")
+	defer func() { // scratch: what the notices and the tab said, on Windows
+		for _, n := range onLoop(r, func() []string {
+			var out []string
+			for _, n := range r.h.noticeLog.items {
+				out = append(out, n.text)
+			}
+			return out
+		}) {
+			t.Logf("notice: %q", n)
+		}
+		t.Logf("screen:\n%s", r.s.String())
+	}()
 	r.s.WaitFor(t, "its exit told to the user", func(string) bool {
 		return onLoop(r, func() bool {
 			for _, n := range r.h.noticeLog.items {
