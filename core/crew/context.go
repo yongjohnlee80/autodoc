@@ -7,8 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/yongjohnlee80/autodoc/internal/userperm"
 )
 
 // ContextDir is the folder of an agent folder's session contexts
@@ -46,8 +44,28 @@ func checkSessionName(session string) error {
 
 // WriteContext writes c as its session's context file in the agent folder dir (ContextPath), mode
 // 0600, through a temporary file renamed over it: a reader sees the whole context or none. It
-// answers the file's path, which the agent is told ($AUTODOC_CREW_CONTEXT).
+// answers the file's path, which the agent is told ($AUTODOC_CREW_CONTEXT). Mode 0600 is private
+// on Unix alone: a program that runs elsewhere writes through WriteContextWith.
 func WriteContext(dir string, c Context) (string, error) {
+	return WriteContextWith(func(folder, pattern string) (*os.File, error) {
+		f, err := os.CreateTemp(folder, pattern)
+		if err != nil {
+			return nil, err
+		}
+		if err := f.Chmod(0o600); err != nil {
+			_ = f.Close()
+			_ = os.Remove(f.Name())
+			return nil, err
+		}
+		return f, nil
+	}, dir, c)
+}
+
+// WriteContextWith is WriteContext with the temporary file made by create, a new file in folder
+// named by pattern (os.CreateTemp's), private to this user from its creation: the context holds
+// the session's credential. The program hands its own private create (AutoDoc's is
+// internal/userperm's, which the comms module may not import).
+func WriteContextWith(create func(folder, pattern string) (*os.File, error), dir string, c Context) (string, error) {
 	if err := checkSessionName(c.Session); err != nil {
 		return "", err
 	}
@@ -59,9 +77,7 @@ func WriteContext(dir string, c Context) (string, error) {
 	if err := os.MkdirAll(folder, 0o700); err != nil {
 		return "", err
 	}
-	// private from its creation (it holds the session's credential), on every OS; a dot file, never
-	// taken for a context
-	f, err := userperm.CreatePrivateTemp(folder, "."+c.Session+".*")
+	f, err := create(folder, "."+c.Session+".*") // a dot file: never taken for a context
 	if err != nil {
 		return "", err
 	}
