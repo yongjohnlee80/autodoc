@@ -125,11 +125,6 @@ func TestABoundedFileCallIsRoutedIntoItsWorkspace(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer disk.Close()
-	slash, err := local.New("/")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer slash.Close()
 	g, _ := fsbounds.NewGuard()
 	g.SetServed(func() []fsbounds.Root { return []fsbounds.Root{{Name: "kb", Dir: root}} })
 	guarded := g.Wrap(func() string { return "kb" }, root, disk)
@@ -140,7 +135,7 @@ func TestABoundedFileCallIsRoutedIntoItsWorkspace(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	srv := New(Fixed(ws), "v-test", WithListener(ln), WithFiles(docs.New(slash, nil)), WithGuard(g))
+	srv := New(Fixed(ws), "v-test", WithListener(ln), WithDisks(localDisks(t)), WithGuard(g))
 	done := make(chan error, 1)
 	go func() { done <- srv.Run(ctx) }()
 	t.Cleanup(func() { cancel(); <-done })
