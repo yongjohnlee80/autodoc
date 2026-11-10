@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"slices"
+
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -42,7 +44,7 @@ func agentState(p feature.PrefsView) map[string]any {
 func (h *agents) syncAgentDialog() {
 	p := h.c.Prefs()
 	size, length := p.PanelGeometry("agent", p.Value(prefAgentEdge))
-	h.c.Set("App.agentEdgeIndex", indexOf(agentEdges, p.Value(prefAgentEdge)))
+	h.c.Set("App.agentEdgeIndex", max(slices.Index(agentEdges, p.Value(prefAgentEdge)), 0))
 	h.c.Set("App.agentSizeIndex", feature.Nearest(feature.PanelSizes, size))
 	h.c.Set("App.agentLengthIndex", feature.Nearest(feature.PanelLengths, length))
 }
