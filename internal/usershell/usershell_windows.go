@@ -52,3 +52,6 @@ func comspec(env procenv.Env) string {
 	}
 	return filepath.Join(systemRoot(env), "System32", "cmd.exe")
 }
+
+// commandWords is line's words as PowerShell reads them.
+func commandWords(line string) []Word { return powerShellWords(line) }
