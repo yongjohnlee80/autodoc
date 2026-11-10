@@ -423,19 +423,27 @@ func TestTheSettingsReopenedAtOnceShowTheSave(t *testing.T) {
 func heldFirstList(t *testing.T) (r *running, arm func(), held func() bool, release func()) {
 	t.Helper()
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
-	var n atomic.Int32
+	var n, lists atomic.Int32
 	var armed atomic.Bool
 	ch := make(chan struct{})
 	sess := NewSession(d.sock, nil)
 	sess.SetBeforeCall(func(method string, _ []any) {
-		if method == "workspace.list" && armed.Load() && n.Add(1) == 1 {
+		if method != "workspace.list" {
+			return
+		}
+		lists.Add(1)
+		if armed.Load() && n.Add(1) == 1 {
 			<-ch
 		}
 	})
 	r = runTUI(t, sess, Options{})
 	r.waitAttached(t, "kb")
+	before := lists.Load()
 	r.h.p.Post(func() { r.h.manageWorkspaces() })
 	r.s.WaitForText(t, "Advanced…")
+	// the manager lists the workspaces on a goroutine of its own, and can show before that call is
+	// made: arming before it would hold the manager's list, and the read under test would not be held
+	r.waitWithin(t, "the manager's own listing asked for", daemonWait, func() bool { return lists.Load() > before })
 	return r, func() { armed.Store(true) }, func() bool { return n.Load() >= 1 }, func() { close(ch) }
 }
 
