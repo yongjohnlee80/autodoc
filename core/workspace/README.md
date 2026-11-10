@@ -9,6 +9,7 @@ with bounded, non-nested brace alternatives (`*.{md,txt}`, at most 64 expansions
 | --- | --- |
 | `Spec` | a workspace as it is added: `Name`, `Root`, `Include`, `Exclude` |
 | `Normalize(s)` | checks a `Spec` and fills its defaults: a name with no path separator, a root absolute after `~/` is expanded, valid patterns (nil means the defaults) |
+| `ValidName(name)` | nil for a name `Normalize` accepts, else an `ErrInvalidSpec` saying why; a name alone, with no root, so a rename checks it the same on every OS |
 | `DefaultInclude()` | `**/*.md`, `**/*.txt`, `**/*.yaml`, `**/*.yml`; a fresh slice each call |
 | `DefaultExclude()` | `.git/**`, `**/node_modules/**`; a fresh slice each call |
 | `ErrInvalidSpec` | a `Spec` that cannot be added (`errs.ErrInvalidArgument`) |
@@ -24,7 +25,7 @@ with bounded, non-nested brace alternatives (`*.{md,txt}`, at most 64 expansions
 
 A pattern ending in `/**` also matches the directory itself.
 
-`ExpandPattern`, `ValidPattern`, the defaults and `Normalize` are functions of their arguments,
+`ExpandPattern`, `ValidPattern`, `ValidName`, the defaults and `Normalize` are functions of their arguments,
 safe for concurrent use (`Normalize` reads the home directory from the environment). `Open`
 reads the disk. A `Matcher` is read-only after `NewMatcher` and safe for concurrent use. An open
 `Workspace`'s `FS` is safe for concurrent use and its `Close` may be called more than once; a
