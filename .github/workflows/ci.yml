@@ -255,6 +255,13 @@ jobs:
           go vet ./...
           mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
           go test -count=1 -timeout 20m "${pkgs[@]}"
+      - name: scratch (not for merge) an agent's command quoting through the real entry
+        if: ${{ !inputs.discover }}
+        run: |
+          go build -o "$RUNNER_TEMP/printer.exe" ./internal/scratchargv/
+          PROBE_PRINTER="$RUNNER_TEMP/printer.exe" go test -count=1 -timeout 10m -v -run '^TestProbeAgentCommandQuoting$' ./tui/ > "$RUNNER_TEMP/q.txt" 2>&1 && rc=0 || rc=$?
+          grep -E 'PROBE|^(--- |ok |FAIL|panic)' "$RUNNER_TEMP/q.txt" | cut -c1-400 || true
+          echo "== rc=$rc"
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
