@@ -75,8 +75,9 @@ func TestTheSocketHasOneSpelling(t *testing.T) {
 	if a, b := socketID(filepath.Join(dir, "s.sock")), socketID(filepath.Join(link, "x", "..", "s.sock")); a != b {
 		t.Fatalf("one socket, two ids: %s, %s", a, b)
 	}
-	if got := socketID("/no/such/dir/../s.sock"); got != "/no/such/s.sock" {
-		t.Fatalf("an unresolvable directory: %s", got)
+	missing := filepath.Join(t.TempDir(), "no", "such") // absolute on any OS, and not there
+	if got, want := socketID(filepath.FromSlash(filepath.ToSlash(missing)+"/dir/../s.sock")), filepath.Join(missing, "s.sock"); got != want {
+		t.Fatalf("an unresolvable directory: %s, want %s", got, want)
 	}
 	state := t.TempDir()
 	if handoffPath(state, filepath.Join(dir, "s.sock")) != handoffPath(state, filepath.Join(link, "s.sock")) {
