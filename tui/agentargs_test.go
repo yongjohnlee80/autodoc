@@ -21,8 +21,8 @@ func TestARefusedAgentCommandIsNeverSpawned(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if instance.refusal == nil || !errors.Is(instance.refusal, usershell.ErrNotCarried) || calledTimes(w, "crew.register") != 0 {
-			t.Fatalf("refusal %v, registered %d; want refused before anything registers", instance.refusal, calledTimes(w, "crew.register"))
+		if instance.State().Refusal == nil || !errors.Is(instance.State().Refusal, usershell.ErrNotCarried) || calledTimes(w, "crew.register") != 0 {
+			t.Fatalf("refusal %v, registered %d; want refused before anything registers", instance.State().Refusal, calledTimes(w, "crew.register"))
 		}
 		if _, spawned, err := startedCmdCopy(a, c, instance); spawned || !errors.Is(err, usershell.ErrNotCarried) {
 			t.Fatalf("its tab's start: spawned %v, %v; want the refusal and no spawn", spawned, err)
@@ -30,8 +30,8 @@ func TestARefusedAgentCommandIsNeverSpawned(t *testing.T) {
 	})
 	t.Run("a setup's argument the command can't carry", func(t *testing.T) {
 		a, c, _ := crewAgents(t, crewKindsCopy)
-		setup := a.setupRun
-		a.setupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
+		setup := seamsOf(a).agentSetupRun
+		seamsOf(a).agentSetupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
 			s, err := setup(kind, dir, environ)
 			s.Argv = append(s.Argv, "--settings", "x\x00y")
 			return s, err

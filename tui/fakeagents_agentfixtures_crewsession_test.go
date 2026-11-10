@@ -22,9 +22,9 @@ func startedEnvCopy(a *agents, c *identityHostCopy, instance *agentInstance) (en
 // ends (as the cell's cleanup ends it).
 func startedCmdCopy(a *agents, c *identityHostCopy, instance *agentInstance) (started pty.Cmd, spawned bool, err error) {
 	cfg := c.panel.configs[instance.tab]
-	spawn := a.spawn
-	defer func() { a.spawn = spawn }()
-	a.spawn = func(cmd pty.Cmd) (terminal.TerminalProcess, error) {
+	spawn := seamsOf(a).agentSpawn
+	defer func() { seamsOf(a).agentSpawn = spawn }()
+	seamsOf(a).agentSpawn = func(cmd pty.Cmd) (terminal.TerminalProcess, error) {
 		started, spawned = cmd, true
 		return newFakeTerminalCopy(), nil
 	}

@@ -171,10 +171,10 @@ func (a *agents) submitter(to feature.AgentRef, refused func() error) func(featu
 }
 
 // promptsSeen is whether the window sees the agent's permission prompts now: the crew's answer
-// (reported), or a cell's promptsReported in its place.
+// (reported), or a test's seams' answer in its place (agentSeams.PromptsReported).
 func (a *agents) promptsSeen(kind string, reported bool) bool {
-	if a.promptsReported != nil {
-		return a.promptsReported(kind, reported)
+	if pr := a.seams.PromptsReported(); pr != nil {
+		return pr(kind, reported)
 	}
 	return reported
 }

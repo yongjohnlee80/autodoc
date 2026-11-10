@@ -8,7 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/internal/usershell"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/pty"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
@@ -59,13 +61,21 @@ type fakeSeams struct {
 	offerAgentSetup bool
 	lookAgentCLI    func(string) (string, error)
 	vimPending      bool
+	// the agents' hooks (agentSeams), each nil or "" for the program's own
+	setupRun        func(kind, dir string, environ []string) (crew.Setup, error)
+	spawn           func(pty.Cmd) (terminal.TerminalProcess, error)
+	commandCheck    func(shell usershell.Shell, command string, env []string) error
+	codexHere       func(environ []string, args ...string) error
+	promptsReported func(kind string, reported bool) bool
+	agentBin        string
 }
 
 // newFakeSeams are the program's seams as the agents' cells start from them, as the host's test
 // program sets its own: a server's socket waited for 10 s, no first-run setup offered (a setup cell
-// turns it on), no Vim question pending.
+// turns it on), no Vim question pending, and
+// no command looked up on a PATH (a cell of that check sets commandOnPath).
 func newFakeSeams() *fakeSeams {
-	return &fakeSeams{serverReady: 10 * time.Second}
+	return &fakeSeams{serverReady: 10 * time.Second, commandCheck: noCommandCheck}
 }
 
 func (s *fakeSeams) Env() procenv.Env                           { return s.env }
@@ -73,19 +83,34 @@ func (s *fakeSeams) ServerReady() time.Duration                 { return s.serve
 func (s *fakeSeams) OfferAgentSetup() bool                      { return s.offerAgentSetup }
 func (s *fakeSeams) LookAgentCLI() func(string) (string, error) { return s.lookAgentCLI }
 func (s *fakeSeams) VimQuestionPending(feature.PrefsView) bool  { return s.vimPending }
+func (s *fakeSeams) SetupRun() func(kind, dir string, environ []string) (crew.Setup, error) {
+	return s.setupRun
+}
+func (s *fakeSeams) Spawn() func(pty.Cmd) (terminal.TerminalProcess, error) { return s.spawn }
+func (s *fakeSeams) CommandCheck() func(shell usershell.Shell, command string, env []string) error {
+	return s.commandCheck
+}
+func (s *fakeSeams) CodexHere() func(environ []string, args ...string) error { return s.codexHere }
+func (s *fakeSeams) PromptsReported() func(kind string, reported bool) bool  { return s.promptsReported }
+func (s *fakeSeams) AgentBin() string                                        { return s.agentBin }
 
-// testAgents is newAgents for cells whose profiles name programs that don't exist ("one", "two"):
-// their commands aren't looked up on a PATH (commandCheck off); a cell of that check sets it. Its
-// seams are newFakeSeams'.
+// fakeSeamsOf is the fake seams a cell made a's agents with (testAgents): a cell sets its own hook
+// there before the agents use it.
+func fakeSeamsOf(a *agents) *fakeSeams { return a.seams.(*fakeSeams) }
+
+// noCommandCheck checks no command: the cells' profiles name programs that don't exist ("one",
+// "two").
+func noCommandCheck(usershell.Shell, string, []string) error { return nil }
+
+// testAgents is newAgents for cells whose profiles name programs that don't exist ("one", "two"),
+// on newFakeSeams: their commands aren't looked up on a PATH.
 func testAgents(c agentHost, dir, config string) *agents {
 	return testAgentsWith(c, newFakeSeams(), dir, config)
 }
 
 // testAgentsWith is testAgents with the seams s (a test's tune, its environment's included).
 func testAgentsWith(c agentHost, s agentSeams, dir, config string) *agents {
-	a := newAgents(c, s, dir, config)
-	a.commandCheck = nil
-	return a
+	return newAgents(c, s, dir, config)
 }
 
 func (p *modelPanel) SameOwner(other feature.TerminalPanel) bool {
@@ -326,8 +351,8 @@ func TestHandTaskAcceptedDeliverySnapshotsAndCompletesOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.opened = nil                                              // the start opened the panel: what the delivery opens is counted from here
-	a.promptsReported = func(string, bool) bool { return true } // a CLI that reports its prompts: the base sends
+	c.opened = nil                                                           // the start opened the panel: what the delivery opens is counted from here
+	fakeSeamsOf(a).promptsReported = func(string, bool) bool { return true } // a CLI that reports its prompts: the base sends
 	done := 0
 	task := feature.TaskRef{Title: "original", Path: taskFile("/tasks/one.md"), ID: "one"}
 	if err := a.HandTask(feature.AgentRef{Codename: "one"}, task, "inspect", func(err error) {
@@ -370,7 +395,7 @@ func TestHandTaskStoppedConsentRevalidatesAndNeverSendsAfterCancellation(t *test
 	for _, ending := range []string{"no", "workspace", "profile", "shutdown", "yes"} {
 		t.Run(ending, func(t *testing.T) {
 			a, c := modelAgents(t)
-			a.promptsReported = func(string, bool) bool { return true } // delivered is sent: the base presses Enter
+			fakeSeamsOf(a).promptsReported = func(string, bool) bool { return true } // delivered is sent: the base presses Enter
 			done := 0
 			var outcome error
 			if err := a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "task", Path: taskFile("/tasks/task.md")}, "work", func(err error) { done++; outcome = err }); err != nil {
@@ -447,7 +472,7 @@ func TestHandTaskQueuedTargetReplacementAndSendFailureAreCompletionErrors(t *tes
 // agentReadyPoll apart: taken once the program takes it, and never sent as keys meanwhile.
 func TestHandTaskWaitsForAStartedAgentToTakeBracketedPastes(t *testing.T) {
 	a, c := modelAgents(t)
-	a.promptsReported = func(string, bool) bool { return true } // a CLI that reports its prompts: the base sends
+	fakeSeamsOf(a).promptsReported = func(string, bool) bool { return true } // a CLI that reports its prompts: the base sends
 	c.panel = &modelPanel{owner: c, unbracketed: 3}
 	calls := 0
 	var outcome error
@@ -569,7 +594,7 @@ func TestSendTextIsSentWithItsEnter(t *testing.T) {
 	}
 	c.opened = nil // the start opened the panel
 	calls := 0
-	a.promptsReported = func(string, bool) bool { return true } // a CLI that reports its prompts: the base sends
+	fakeSeamsOf(a).promptsReported = func(string, bool) bool { return true } // a CLI that reports its prompts: the base sends
 	if err := a.SendText(feature.AgentRef{Codename: "one"}, "draft", func(err error) {
 		if err != nil {
 			t.Error(err)

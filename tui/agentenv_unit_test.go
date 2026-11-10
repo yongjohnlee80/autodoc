@@ -20,7 +20,7 @@ func TestAPluginRunsWithoutItsSpawnersIdentity(t *testing.T) {
 	if err := os.MkdirAll(plug, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	dump := "env > " + shellQuoteCopy(report) + ".part && mv " + shellQuoteCopy(report) + ".part " + shellQuoteCopy(report) + "; cat >/dev/null"
+	dump := "env > " + shellQuote(report) + ".part && mv " + shellQuote(report) + ".part " + shellQuote(report) + "; cat >/dev/null"
 	manifest := fmt.Sprintf("name = %q\ntitle = %q\nkind = %q\nprotocol = 2\ncommand = [%q, %q, %q]\n", "envdump", "Envdump", "dialog", "/bin/sh", "-c", dump)
 	if err := os.WriteFile(filepath.Join(plug, "plugin.toml"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)

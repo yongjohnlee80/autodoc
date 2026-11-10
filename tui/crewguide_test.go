@@ -32,11 +32,11 @@ func TestACrewAgentIsToldItsCLIsCrewProcedure(t *testing.T) {
 			if err == nil {
 				awaitStart(t, c, instance)
 			}
-			if err != nil || !instance.running {
+			if err != nil || !instance.State().Running {
 				t.Fatalf("start: %v", err)
 			}
-			dir := c.panel.configs[instance.tab].Dir
-			want := crew.GuideOfVia(kind, instance.setup.MailVia).Markdown // the mode its setup delivered
+			dir := c.panel.configs[instance.State().Tab].Dir
+			want := crew.GuideOfVia(kind, instance.State().Setup.MailVia).Markdown // the mode its setup delivered
 			for _, name := range []string{"AGENTS.md", "CLAUDE.md"} {
 				b, err := os.ReadFile(filepath.Join(dir, name))
 				if err != nil {
@@ -90,15 +90,15 @@ func TestACrewOpenCodeAgentLoadsTheAutoDocPlugin(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			a, c, _ := crewAgents(t, crewKindsCopy)
-			a.setupRun = func(string, string, []string) (crew.Setup, error) { return tc.setup, tc.err }
+			seamsOf(a).agentSetupRun = func(string, string, []string) (crew.Setup, error) { return tc.setup, tc.err }
 			p, _ := a.profile("opencode-one")
 			instance, err := a.startInstance(p)
 			if err != nil {
 				t.Fatal(err)
 			}
 			awaitStart(t, c, instance)
-			if instance.running != tc.runs {
-				t.Fatalf("running %v, want %v (notes %v)", instance.running, tc.runs, c.notes)
+			if instance.State().Running != tc.runs {
+				t.Fatalf("running %v, want %v (notes %v)", instance.State().Running, tc.runs, c.notes)
 			}
 			if tc.runs {
 				if args, _, err := startedEnvCopy(a, c, instance); err != nil || !slices.Contains(args, "OPENCODE_CONFIG_CONTENT="+v) {
@@ -115,7 +115,7 @@ func TestACrewOpenCodeAgentLoadsTheAutoDocPlugin(t *testing.T) {
 func TestTwoAgentsOfOneKindAskTheirOwnSetup(t *testing.T) {
 	a, c, _ := crewAgents(t, `[{"name":"One","command":"opencode","codename":"oc-one"},{"name":"Two","command":"opencode","codename":"oc-two"}]`)
 	var dirs []string
-	a.setupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
+	seamsOf(a).agentSetupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
 		dirs = append(dirs, dir)
 		return crew.Setup{Env: map[string]string{"OPENCODE_CONFIG_CONTENT": `{"for":"` + filepath.Base(dir) + `"}`}}, nil
 	}
@@ -127,7 +127,7 @@ func TestTwoAgentsOfOneKindAskTheirOwnSetup(t *testing.T) {
 		}
 		awaitStart(t, c, instance)
 		args, _, err := startedEnvCopy(a, c, instance)
-		want := `OPENCODE_CONFIG_CONTENT={"for":"` + filepath.Base(instance.dir) + `"}`
+		want := `OPENCODE_CONFIG_CONTENT={"for":"` + filepath.Base(instance.State().Dir) + `"}`
 		if err != nil || !slices.Contains(args, want) {
 			t.Fatalf("%s's spawn: %v, args %v; want its own setup's %s", codename, err, args, want)
 		}
@@ -147,7 +147,7 @@ func TestTwoAgentsOfOneKindAskTheirOwnSetup(t *testing.T) {
 func TestACrewClaudeAgentOnMCPMailStartsWithItsServer(t *testing.T) {
 	a, c, w := crewAgents(t, crewKindsCopy)
 	data := t.TempDir()
-	a.setupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
+	seamsOf(a).agentSetupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
 		// an earlier run's file, readable by others: the start replaces it whole, private
 		if err := os.WriteFile(filepath.Join(dir, crew.ClaudeMCPConfig), []byte(`{"stale": true}`), 0o644); err != nil {
 			return crew.Setup{}, err
@@ -171,8 +171,8 @@ func TestACrewClaudeAgentOnMCPMailStartsWithItsServer(t *testing.T) {
 	// read as its third argument: the command line names the file as the launch's working folder
 	// reaches it, its bare name, and never the folder (so the shell carries it on every OS)
 	line := args[len(args)-1]
-	if !strings.Contains(instance.dir, "%") {
-		t.Fatalf("the agent's folder %s holds no encoded name: the cell's premise", instance.dir)
+	if !strings.Contains(instance.State().Dir, "%") {
+		t.Fatalf("the agent's folder %s holds no encoded name: the cell's premise", instance.State().Dir)
 	}
 	if !strings.Contains(line, "--mcp-config") || strings.Contains(line, "--strict-mcp-config") || strings.Contains(line, "mcpServers") ||
 		!strings.Contains(line, crew.ClaudeMCPConfig) || strings.Contains(line, "%") {
@@ -190,10 +190,10 @@ func TestACrewClaudeAgentOnMCPMailStartsWithItsServer(t *testing.T) {
 		} `json:"mcpServers"`
 	}
 	if b, err := os.ReadFile(config); err != nil || json.Unmarshal(b, &mcp) != nil || len(mcp.Servers) != 1 ||
-		mcp.Servers[crew.MCPServerName].Command != filepath.Join(instance.dir, "bin", "autodoc") || !slices.Equal(mcp.Servers[crew.MCPServerName].Args, []string{"crew", "mcp"}) {
+		mcp.Servers[crew.MCPServerName].Command != filepath.Join(instance.State().Dir, "bin", "autodoc") || !slices.Equal(mcp.Servers[crew.MCPServerName].Args, []string{"crew", "mcp"}) {
 		t.Errorf("the MCP config: %s %v; want the crew server alone, by the agent's autodoc, the earlier run's replaced", b, err)
 	}
-	b, err := os.ReadFile(filepath.Join(instance.dir, ".claude", "settings.json"))
+	b, err := os.ReadFile(filepath.Join(instance.State().Dir, ".claude", "settings.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +205,7 @@ func TestACrewClaudeAgentOnMCPMailStartsWithItsServer(t *testing.T) {
 	if err := json.Unmarshal(b, &settings); err != nil || !slices.Equal(settings.Permissions.Allow, crew.ClaudeMCPAllow()) {
 		t.Errorf("the folder's allow %q (%v), want exactly the crew MCP tools %q", settings.Permissions.Allow, err, crew.ClaudeMCPAllow())
 	}
-	g, err := os.ReadFile(filepath.Join(instance.dir, "AGENTS.md"))
+	g, err := os.ReadFile(filepath.Join(instance.State().Dir, "AGENTS.md"))
 	if err != nil || !strings.Contains(string(g), crew.GuideOfVia(crew.KindClaude, crew.MailViaMCP).Markdown) {
 		t.Errorf("the guide isn't the MCP form (%v)", err)
 	}
@@ -224,7 +224,7 @@ func TestACrewClaudeAgentOnMCPMailStartsWithItsServer(t *testing.T) {
 // continues when its setup and then its registration answer, which post from off the loop.
 func awaitStart(t *testing.T, c *identityHostCopy, instance *agentInstance) {
 	t.Helper()
-	for deadline := time.Now().Add(5 * time.Second); instance.starting; time.Sleep(time.Millisecond) {
+	for deadline := time.Now().Add(5 * time.Second); instance.State().Starting; time.Sleep(time.Millisecond) {
 		if time.Now().After(deadline) {
 			t.Fatal("the agent's start was never answered")
 		}

@@ -20,10 +20,10 @@ func claudeRig(t *testing.T) (*agents, *identityHostCopy, *crewWindow, *agentIns
 	a, c, w := crewAgents(t, claudeOne)
 	p, _ := a.profile("cl")
 	instance, err := a.startInstance(p)
-	if err != nil || !instance.running {
+	if err != nil || !instance.State().Running {
 		t.Fatalf("start: %v", err)
 	}
-	a.promptsReported = func(string, bool) bool { return true }
+	seamsOf(a).agentPromptsReported = func(string, bool) bool { return true }
 	return a, c, w, instance
 }
 
@@ -136,8 +136,8 @@ func TestNothingIsTypedIntoAClaudeThatHasntStarted(t *testing.T) {
 	if len(heard) != 2 || heard[0] == nil || heard[1] == nil {
 		t.Fatalf("the deliveries heard %v: want each ended unsent", heard)
 	}
-	if n := notStartedNotices(c.notes, "Claude", instance.dir); n != 1 {
-		t.Fatalf("notices %q: want one that Claude hasn't finished starting in %s, once over two deliveries", c.notes, instance.dir)
+	if n := notStartedNotices(c.notes, "Claude", instance.State().Dir); n != 1 {
+		t.Fatalf("notices %q: want one that Claude hasn't finished starting in %s, once over two deliveries", c.notes, instance.State().Dir)
 	}
 
 	w.d.started(t, "cl")
@@ -197,8 +197,8 @@ func TestAClaudeWhoseHostsLeaseLapsedIsNotTakenForStarted(t *testing.T) {
 	if len(c.panel.pastes) != 0 || len(c.panel.keys) != 0 {
 		t.Fatalf("pasted %q, pressed %q into a Claude whose host's lease lapsed, with no endpoint: want nothing", c.panel.pastes, c.panel.keys)
 	}
-	if len(heard) != 1 || heard[0] == nil || instance.started != "" {
-		t.Fatalf("heard %v, kept as started %q: want it ended unsent, nothing kept", heard, instance.started)
+	if len(heard) != 1 || heard[0] == nil || instance.State().Started != "" {
+		t.Fatalf("heard %v, kept as started %q: want it ended unsent, nothing kept", heard, instance.State().Started)
 	}
 }
 
@@ -208,16 +208,16 @@ func TestTheNotStartedNoticeIsOncePerSession(t *testing.T) {
 	a, c, w, instance := claudeRig(t)
 	a.deliverFallback("cl", "one", func(error) {})
 	settleMessaging(c, w)
-	c.panel.exit(instance.tab, 0)
+	c.panel.exit(instance.State().Tab, 0)
 	settleMessaging(c, w)
 	p, _ := a.profile("cl")
 	again, err := a.startInstance(p)
-	if err != nil || !again.running {
+	if err != nil || !again.State().Running {
 		t.Fatalf("the start again: %v", err)
 	}
 	a.deliverFallback("cl", "two", func(error) {})
 	settleMessaging(c, w)
-	if n := notStartedNotices(c.notes, "Claude", again.dir); n != 2 {
+	if n := notStartedNotices(c.notes, "Claude", again.State().Dir); n != 2 {
 		t.Fatalf("notices %q: want one for each session, two", c.notes)
 	}
 }
@@ -226,7 +226,7 @@ func TestTheNotStartedNoticeIsOncePerSession(t *testing.T) {
 // is told so, with its exit code. One that had started and exits is told nothing of the kind.
 func TestAClaudeThatExitsBeforeItStartsIsToldWhy(t *testing.T) {
 	a, c, w, instance := claudeRig(t)
-	c.panel.exit(instance.tab, 3)
+	c.panel.exit(instance.State().Tab, 3)
 	settleMessaging(c, w)
 	declined := func() int {
 		n := 0
@@ -243,11 +243,11 @@ func TestAClaudeThatExitsBeforeItStartsIsToldWhy(t *testing.T) {
 
 	p, _ := a.profile("cl")
 	again, err := a.startInstance(p)
-	if err != nil || !again.running {
+	if err != nil || !again.State().Running {
 		t.Fatalf("the start again: %v", err)
 	}
 	w.d.started(t, "cl")
-	c.panel.exit(again.tab, 3)
+	c.panel.exit(again.State().Tab, 3)
 	settleMessaging(c, w)
 	if declined() != 1 {
 		t.Fatalf("notices %q: a Claude that had started is told nothing of its folder-trust question", c.notes)

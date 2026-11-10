@@ -160,3 +160,7 @@ type namedTB struct {
 }
 
 func (n namedTB) Name() string { return n.name }
+
+// seamsOf is the seams the host's cell made a's agents with (its rig's, or its program's): the cell
+// sets an agents' hook there (agentSeams) as it builds the rig, before the agents use it.
+func seamsOf(a *agents) *seams { return a.seams.(*seams) }
