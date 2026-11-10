@@ -65,6 +65,13 @@ type daemon struct {
 	todoDisk *todotest.Disk
 }
 
+// fakeRoot is the root folder of a test daemon's workspace whose files are in memory: absolute on
+// this OS, so a path the TUI joins to it is one (/kb on Unix; on Windows kb at the temp folder's
+// drive, C:\kb), and on no disk.
+func fakeRoot(ws string) string {
+	return filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), ws)
+}
+
 // startDaemon serves the workspaces named (each with its files, path then content). A name ending
 // in "!" is served on a filesystem whose writes land and then fail (Committed).
 func startDaemon(t *testing.T, workspaces map[string][]string) *daemon {
@@ -253,7 +260,7 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 				t.Fatal(err)
 			}
 		}
-		row, err := db.AddWorkspace(ctx, wsName, "/"+wsName, nil, nil)
+		row, err := db.AddWorkspace(ctx, wsName, fakeRoot(wsName), nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -263,7 +270,7 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 		ix.SetRescanner(f)
 		cores.Go(func() { _ = ix.Run(ctx) })
 		cores.Go(func() { _ = f.Run(ctx) })
-		served = append(served, rpc.Static(rpc.WorkspaceInfo{Name: wsName, Root: "/" + wsName, Include: []string{"**/*.md"}, Index: ix, Docs: docs.New(fsys, match, docOpts...), Following: f.Status, Warming: o.warming}))
+		served = append(served, rpc.Static(rpc.WorkspaceInfo{Name: wsName, Root: fakeRoot(wsName), Include: []string{"**/*.md"}, Index: ix, Docs: docs.New(fsys, match, docOpts...), Following: f.Status, Warming: o.warming}))
 		// wait until the files are indexed, so the first listing has them (a held daemon does not)
 		for deadline := time.Now().Add(indexWait); o.hold == nil; time.Sleep(10 * time.Millisecond) {
 			st, _ := ixs.Status(ctx)
