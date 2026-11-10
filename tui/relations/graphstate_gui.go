@@ -52,10 +52,10 @@ func (m *Mindmap) Snapshot() ViewState {
 }
 
 // EditGroups is the window GlobeMap's settings' group editor.
-func (g *GlobeMap) EditGroups() *groupEditor { return g.editor }
+func (g *GlobeMap) EditGroups() *GroupEditor { return g.editor }
 
 // EditGroups is the window Mindmap's settings' group editor.
-func (m *Mindmap) EditGroups() *groupEditor { return m.editor }
+func (m *Mindmap) EditGroups() *GroupEditor { return m.editor }
 
 // PressNode presses the document at path in the frame on screen, as a click on its dot does; false
 // with no frame, or none of its documents at path.

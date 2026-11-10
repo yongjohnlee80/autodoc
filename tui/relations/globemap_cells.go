@@ -114,7 +114,7 @@ type CellGlobeMap struct {
 	statusArg string
 	statusN   int
 	store     *GraphStore  // the workspaces' graph files: the groups; nil for none
-	editor    *groupEditor // the settings' groups
+	editor    *GroupEditor // the settings' groups
 	groups    *relGroups   // groupsWS's groups: each document's colour
 	groupsWS  string
 	view      *cellGlobeView
@@ -128,7 +128,7 @@ type CellGlobeMap struct {
 
 func newCellGlobeMap(c feature.Core, store *GraphStore, page int) *CellGlobeMap {
 	g := &CellGlobeMap{c: c, page: page, store: store, selected: -1, zoom: 1, ground: themeGround(nil)}
-	g.editor = &groupEditor{c: c, store: store, view: viewGlobeMap, name: "globe", changed: g.groupsEdited,
+	g.editor = &GroupEditor{c: c, store: store, view: viewGlobeMap, name: "globe", changed: g.groupsEdited,
 		ground: func() color.NRGBA { return g.ground }}
 	g.opens = func(ws, path string) {
 		g.c.HidePanel(GlobeMapPanelID) // hidden, not closed, as the window's: the dock shows it again

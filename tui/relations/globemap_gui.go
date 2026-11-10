@@ -464,7 +464,7 @@ type GlobeMap struct {
 	look      *globeLook // how it draws (globesettings_gui.go); nil until first used
 	groups    *relGroups // the workspace's groups (graphstore_gui.go); nil until read
 	store     *GraphStore
-	editor    *groupEditor // the settings' groups
+	editor    *GroupEditor // the settings' groups
 	counts    [2]int       // the load's documents and links, once its map is read
 	status    string       // what a load under way says, a catalog id statusArg fills; "" none
 	statusArg string       // fills status's %1
@@ -493,7 +493,7 @@ type globeDrag struct {
 
 func newGlobeMap(c feature.Core, present func() globePublisher, page int) *GlobeMap {
 	g := &GlobeMap{c: c, page: page, present: present, hover: -1}
-	g.editor = &groupEditor{c: c, view: viewGlobeMap, name: "globe", changed: g.groupsEdited,
+	g.editor = &GroupEditor{c: c, view: viewGlobeMap, name: "globe", changed: g.groupsEdited,
 		ground: func() color.NRGBA { return g.currentLook().pal.background }}
 	return g
 }
