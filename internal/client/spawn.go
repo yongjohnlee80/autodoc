@@ -64,19 +64,55 @@ func SpawnServe(configPath, stateDir string) (string, error) {
 	return logPath, nil
 }
 
-// openServeLog opens the daemon's log at path to append to it: one made private to this user on
-// every OS when new (internal/userperm: it holds what the daemon logged), else the one there. The
-// private create's handle shares nothing on Windows, and the log is read while the daemon writes
-// it, so the file is opened again as any log is; its access list stays its creation's.
+// openServeLog opens the daemon's log at path to append to it, private to this user on every OS
+// (internal/userperm: it holds what the daemon logged): made private when new, and one there that
+// isn't (an earlier version's, made 0600, which on Windows took its folder's access list) replaced
+// by a private copy of itself first. The private create's handle shares nothing on Windows, and the
+// log is read while the daemon writes it, so it is then opened again as any log is; its access list
+// stays the private one.
 func openServeLog(path string) (*os.File, error) {
-	f, err := userperm.CreatePrivate(path)
-	switch {
-	case err == nil:
-		if err := f.Close(); err != nil {
-			return nil, err
-		}
-	case !errors.Is(err, os.ErrExist):
+	if err := privateLog(path); err != nil {
 		return nil, err
 	}
 	return os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0)
+}
+
+// privateLog makes the log at path private to this user: a new one empty, one that isn't private
+// replaced by a private copy (its lines kept), one that is left as it is. One another process holds
+// open (Windows' sharing refusal) is left to be appended to.
+func privateLog(path string) error {
+	f, err := userperm.CreatePrivate(path)
+	if err == nil {
+		return f.Close()
+	}
+	if !errors.Is(err, os.ErrExist) {
+		return err
+	}
+	r, err := userperm.OpenPrivate(path)
+	if err == nil {
+		return r.Close()
+	}
+	if !errors.Is(err, userperm.ErrExposed) {
+		return nil
+	}
+	old, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	t, err := userperm.CreatePrivateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
+	if err != nil {
+		return err
+	}
+	tmp := t.Name()
+	_, werr := t.Write(old)
+	if cerr := t.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr == nil {
+		werr = os.Rename(tmp, path)
+	}
+	if werr != nil {
+		_ = os.Remove(tmp)
+	}
+	return werr
 }
