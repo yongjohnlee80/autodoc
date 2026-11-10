@@ -20,38 +20,6 @@ func Under(p, dir string) bool {
 	return dir == "." || p == dir || strings.HasPrefix(p, dir+"/")
 }
 
-// UnderAbs is Under for absolute paths, compared as this OS compares them: on Windows a volume and
-// its names without regard to case ("c:/KB/a.md" is under "C:/kb"), elsewhere byte for byte. A
-// path that matches is dir's own bytes long up to its rest, so p[len(dir):] is that rest.
-func UnderAbs(p, dir string) bool { return underAbs(p, dir, win) }
-
-// UnderAbsFor is UnderAbs under Windows' rule when windows is set, Unix' otherwise.
-func UnderAbsFor(p, dir string, windows bool) bool { return underAbs(p, dir, windows) }
-
-// SameAbs reports whether two absolute paths in the slash form name one path, compared as this OS
-// compares them: on Windows without regard to case.
-func SameAbs(a, b string) bool { return sameAbs(a, b, win) }
-
-func underAbs(p, dir string, win bool) bool {
-	if root, rel := rootOf(dir, win); root != "" && rel == "" {
-		return sameAbs(p, dir, win) || hasPrefix(p, root, win) // a volume's root: already ends in "/"
-	}
-	return sameAbs(p, dir, win) || hasPrefix(p, dir+"/", win)
-}
-
-func sameAbs(a, b string, win bool) bool {
-	if win {
-		return len(a) == len(b) && strings.EqualFold(a, b)
-	}
-	return a == b
-}
-
-// hasPrefix is strings.HasPrefix, without regard to case under Windows' rule: byte for byte as long
-// as prefix, so what follows it starts at len(prefix).
-func hasPrefix(s, prefix string, win bool) bool {
-	return len(s) >= len(prefix) && sameAbs(s[:len(prefix)], prefix, win)
-}
-
 // THE SLASH FORM. The core keeps an absolute path slash-separated and clean, with its volume kept
 // whole: "/srv/kb" on a Unix; on Windows a drive's "C:/Users/u" (its root "C:/", never "C:", which
 // names the drive's current directory) and a share's "//server/share/kb" (its root

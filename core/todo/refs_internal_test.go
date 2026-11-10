@@ -4,7 +4,8 @@ import "testing"
 
 // Under Windows' rule, run on every OS: a ref given in the OS's own form, a variable's value in it,
 // and what ~ or a variable expands to are read in the slash form, so a ref under a known root is
-// written as that root's variable, and one under none is kept in the slash form.
+// written as that root's variable, and one under none is kept in the slash form. Roots are compared
+// exactly: a ref in another case than the root's is under none.
 func TestARefInWindowsFormIsReadInTheSlashForm(t *testing.T) {
 	s := scope{windows: true, kbRoot: "C:/kb", home: "C:/Users/u", user: map[string]string{"DOCS": `D:\docs\`}}
 	for in, want := range map[string]string{
@@ -18,7 +19,8 @@ func TestARefInWindowsFormIsReadInTheSlashForm(t *testing.T) {
 	for in, want := range map[string]string{
 		`C:\kb\adrs\x.md`: "$KB_ROOT/adrs/x.md", `D:\docs\y.md`: "$DOCS/y.md", `\\srv\sh\r.md`: "//srv/sh/r.md",
 		"C:/kb/a.md": "$KB_ROOT/a.md", "$KB_ROOT/a.md": "$KB_ROOT/a.md", "~/n.md": "$HOME/n.md",
-		"c:/kb/a.md": "$KB_ROOT/a.md", `c:\KB\a.md`: "$KB_ROOT/a.md", "C:/kbx/a.md": "C:/kbx/a.md", // a volume and names without regard to case
+		// compared exactly: a ref in another case is another spelling, under no root, kept absolute
+		"c:/kb/a.md": "c:/kb/a.md", `C:\KB\a.md`: "C:/KB/a.md", "C:/kbx/a.md": "C:/kbx/a.md",
 	} {
 		if got := s.symbolize(in); got != want {
 			t.Errorf("symbolize(%q) = %q, want %q", in, got, want)

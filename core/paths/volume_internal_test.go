@@ -97,24 +97,3 @@ func TestEveryPathOnAVolumeIsUnderItsRoot(t *testing.T) {
 		}
 	}
 }
-
-// An absolute path is compared as its OS compares it: under Windows' rule without regard to case,
-// the volume included; under Unix' rule byte for byte.
-func TestAnAbsolutePathIsComparedAsItsOSComparesIt(t *testing.T) {
-	for _, c := range []struct {
-		p, dir string
-		win    bool
-		want   bool
-	}{
-		{"c:/kb/a.md", "C:/kb", true, true}, {"C:/KB/a.md", "c:/kb", true, true}, {"C:/kb", "c:/KB", true, true},
-		{"c:/x", "C:/", true, true}, {"//SRV/sh/kb", "//srv/SH/", true, true}, {"C:/kbx/a.md", "C:/KB", true, false},
-		{"/KB/a.md", "/kb", false, false}, {"/kb/a.md", "/kb", false, true}, {"/kb", "/KB", false, false},
-	} {
-		if got := underAbs(c.p, c.dir, c.win); got != c.want {
-			t.Errorf("underAbs(%q, %q, windows %v) = %v, want %v", c.p, c.dir, c.win, got, c.want)
-		}
-	}
-	if !sameAbs("C:/Users/U", "c:/users/u", true) || sameAbs("/Users/U", "/users/u", false) {
-		t.Error("sameAbs: one path without regard to case under Windows' rule only")
-	}
-}
