@@ -287,8 +287,8 @@ func commitSessionPlugin(t *testing.T, repo, title string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	toml := fmt.Sprintf("name = \"up\"\ntitle = %q\nkind = \"service\"\nprotocol = 7\ncommand = [%q, %q, \"session\"]\n%s[install]\nbuild = [\"true\"]\n",
-		title, exe, testPluginArg, sessionCommands)
+	toml := fmt.Sprintf("name = \"up\"\ntitle = %q\nkind = \"service\"\nprotocol = 7\ncommand = [%q, %q, \"session\"]\n%s[install]\nbuild = [%q, %q, \"true\"]\n",
+		title, exe, testPluginArg, sessionCommands, exe, testPluginArg)
 	if err := os.WriteFile(filepath.Join(repo, "plugin.toml"), []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
 	}

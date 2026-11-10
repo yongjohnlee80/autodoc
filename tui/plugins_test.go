@@ -78,6 +78,8 @@ func TestMain(m *testing.M) {
 // runTestPlugin is the test plugin, in one of its modes.
 func runTestPlugin(mode string) int {
 	switch mode {
+	case "true": // a build step that succeeds, on every OS (no true program on Windows)
+		return 0
 	case "silent": // never answers
 		select {}
 	case "otherprotocol": // answers in a protocol its manifest does not say
@@ -232,10 +234,11 @@ func runTestPlugin(mode string) int {
 	return 0
 }
 
-// testStdio is the plugin's stdin and stdout, pollable, as plugin.Serve makes them.
+// testStdio is the plugin's stdin and stdout as plugin.Serve makes them: pollable descriptors on
+// Unix, the process's own handles on Windows (testStdioFiles).
 func testStdio() net.Conn {
-	setStdioPollable()
-	return plugin.FileConn(os.NewFile(0, "stdin"), os.NewFile(1, "stdout"))
+	in, out := testStdioFiles()
+	return plugin.FileConn(in, out)
 }
 
 // echo draws what it has been sent: its size and theme, and the keys, one row each; q asks the host
