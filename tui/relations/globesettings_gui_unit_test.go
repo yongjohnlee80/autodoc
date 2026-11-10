@@ -22,7 +22,7 @@ import (
 // are each their setting's. A dot is its first matching group's colour, else no group's.
 func TestTheGlobeLookIsItsSettingsOverTheTheme(t *testing.T) {
 	pal := defaultPalette()
-	def := newGlobeLook(prefs{}, pal)
+	def := newGlobeLook(mapPrefs(nil), pal)
 	if !def.names || def.dot != 1 || def.steps != 2 || def.ring != pal.superseded || def.other != pal.text ||
 		def.edges[edgeBody] != mixNRGBA(pal.background, pal.muted, 0.8) {
 		t.Fatalf("no settings: %+v; want the theme's colours, names, medium dots, gentle pace", def)

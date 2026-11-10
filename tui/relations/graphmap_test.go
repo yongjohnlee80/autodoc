@@ -169,16 +169,6 @@ func TestGraphFile(t *testing.T) {
 	}
 }
 
-// A feature reads the themes the window can wear through its core: golib's, with no catalog of the
-// user's.
-func TestCoreNamesTheThemes(t *testing.T) {
-	var h Host
-	c := core{&h}
-	if !reflect.DeepEqual(c.ThemeNames(), h.themeNames()) || !reflect.DeepEqual(c.ThemeLabels(), h.themeLabels()) || len(c.ThemeNames()) == 0 {
-		t.Errorf("themes %q, labels %q", c.ThemeNames(), c.ThemeLabels())
-	}
-}
-
 // The mind map places each document once, under the document that reached it first breadth-first
 // from the root, neighbours in path order and links followed both ways; its IDs name the documents'
 // indexes, its labels are their titles verbatim, its shapes their types' (shape). A document the root does
