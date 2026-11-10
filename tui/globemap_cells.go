@@ -180,7 +180,7 @@ func (g *cellGlobeMap) State() map[string]any {
 	maps.Copy(st, map[string]any{
 		"App.globeMapTitle": "GlobeMap", "App.globeSettingsError": "",
 		"App.globeThemes": feature.Choices(), "App.globeDotSizes": feature.Choices(), "App.globeSpeeds": feature.Choices(),
-		"App.globeFilters":     choiceModel(g.c, "App.globeFilters"),
+		"App.globeFilters":     relationChoice(g.c, "App.globeFilters"),
 		"App.globeOtherColour": "", "App.globeBodyLinkColour": "", "App.globeSupersessionLinkColour": "",
 		"App.globeRelationLinkColour": "", "App.globeRingColour": "",
 	})
@@ -247,7 +247,7 @@ func (g *cellGlobeMap) Entered(ws string) {
 // LanguageChanged composes again, in the UI's language, the heading and the settings' filter
 // chooser's rows.
 func (g *cellGlobeMap) LanguageChanged() {
-	g.c.Set("App.globeFilters", choiceModel(g.c, "App.globeFilters"))
+	g.c.Set("App.globeFilters", relationChoice(g.c, "App.globeFilters"))
 	g.title()
 }
 

@@ -892,7 +892,7 @@ func (g *globeMap) LanguageChanged() {
 	names, labels := g.themeChoices()
 	g.c.Set("App.globeThemes", keyedChoices(names, labels))
 	for _, src := range []string{"App.globeFilters", "App.globeDotSizes", "App.globeSpeeds"} {
-		g.c.Set(src, choiceModel(g.c, src))
+		g.c.Set(src, relationChoice(g.c, src))
 	}
 	if g.editor.ws != "" {
 		g.editor.show("")
@@ -1130,4 +1130,24 @@ func (o globeOverlay) paint(c gui.Canvas) {
 		c.DrawText(t, gui.Pt(12, 10), gui.Solid(o.pal.muted))
 	}
 	paintLegend(c, sz, o.pal, o.legend)
+}
+
+// relationViewChoices are the GlobeMap's and the Mindmap's fixed choosers, by their App.* source:
+// relationChoice's rows (each key its English, its label in the UI's language), and the host's
+// featureChoiceLabels for a language switch.
+func relationViewChoices() map[string][]string {
+	names := func(n int, name func(int) string) []string {
+		out := make([]string, n)
+		for i := range out {
+			out[i] = name(i)
+		}
+		return out
+	}
+	return map[string][]string{
+		"App.globeFilters":     names(len(globeFilters), func(i int) string { return globeFilters[i].name }),
+		"App.globeDotSizes":    names(len(globeDotSizes), func(i int) string { return globeDotSizes[i].name }),
+		"App.globeSpeeds":      names(len(globeSpeeds), func(i int) string { return globeSpeeds[i].label }),
+		"App.mindDepths":       mindChoices()["App.mindDepths"],
+		"App.mindShapeChoices": mindChoices()["App.mindShapeChoices"],
+	}
 }

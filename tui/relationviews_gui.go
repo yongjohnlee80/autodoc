@@ -173,25 +173,6 @@ func defaultPalette() relPalette {
 
 // relationViewFeatures are the GlobeMap and the Mindmap, made once: only when the program runs as a
 // window. A build with the GUI running in a terminal (no --gui) has Links alone, as any terminal.
-// relationViewChoices are the GlobeMap's and the Mindmap's fixed choosers, by their App.* source
-// (language.go's choiceLabels): each row's key its English, its label in the UI's language.
-func relationViewChoices() map[string][]string {
-	names := func(n int, name func(int) string) []string {
-		out := make([]string, n)
-		for i := range out {
-			out[i] = name(i)
-		}
-		return out
-	}
-	return map[string][]string{
-		"App.globeFilters":     names(len(globeFilters), func(i int) string { return globeFilters[i].name }),
-		"App.globeDotSizes":    names(len(globeDotSizes), func(i int) string { return globeDotSizes[i].name }),
-		"App.globeSpeeds":      names(len(globeSpeeds), func(i int) string { return globeSpeeds[i].label }),
-		"App.mindDepths":       mindChoices()["App.mindDepths"],
-		"App.mindShapeChoices": mindChoices()["App.mindShapeChoices"],
-	}
-}
-
 func (h *Host) relationViewFeatures() []feature.Feature {
 	if !h.gui { // run as a terminal (--ui): the terminal's Mindmap, in cells (mindmap_cells.go)
 		if h.relationViews == nil {

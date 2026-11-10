@@ -287,8 +287,8 @@ func (g *globeMap) settingsState() map[string]any {
 	names, themes := g.themeChoices()
 	st := g.editor.state()
 	maps.Copy(st, map[string]any{
-		"App.globeThemes": keyedChoices(names, themes), "App.globeFilters": choiceModel(g.c, "App.globeFilters"),
-		"App.globeDotSizes": choiceModel(g.c, "App.globeDotSizes"), "App.globeSpeeds": choiceModel(g.c, "App.globeSpeeds"),
+		"App.globeThemes": keyedChoices(names, themes), "App.globeFilters": relationChoice(g.c, "App.globeFilters"),
+		"App.globeDotSizes": relationChoice(g.c, "App.globeDotSizes"), "App.globeSpeeds": relationChoice(g.c, "App.globeSpeeds"),
 		"App.globeSettingsError": "",
 	})
 	return st

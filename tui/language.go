@@ -176,13 +176,7 @@ func choiceModel(w feature.Wording, src string) *tuidecl.ListModel {
 	if !ok {
 		labels = featureChoiceLabels[src]
 	}
-	rows := make([]feature.RowOf, len(labels))
-	for i, l := range labels {
-		rows[i] = feature.RowOf{"key": l, "label": w.Tr("autodoc.choice." + feature.SlugOf(l))}
-	}
-	model := tuidecl.NewListModel("key", "label")
-	model.Reset(rows)
-	return model
+	return feature.ChoiceRows(w, labels)
 }
 
 // languageChanged composes again what AutoDoc composes in Go from catalog text and keeps on

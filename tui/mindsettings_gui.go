@@ -84,8 +84,8 @@ func (m *mindmap) settingsState() map[string]any {
 	names, themes := viewThemeChoices(m.c)
 	st := m.editor.state()
 	maps.Copy(st, map[string]any{
-		"App.mindThemes": keyedChoices(names, themes), "App.mindDepths": choiceModel(m.c, "App.mindDepths"),
-		"App.mindShapeChoices": choiceModel(m.c, "App.mindShapeChoices"),
+		"App.mindThemes": keyedChoices(names, themes), "App.mindDepths": relationChoice(m.c, "App.mindDepths"),
+		"App.mindShapeChoices": relationChoice(m.c, "App.mindShapeChoices"),
 	})
 	return st
 }
