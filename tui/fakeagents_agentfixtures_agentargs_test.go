@@ -49,3 +49,9 @@ func printingCLICopy(t *testing.T, folder, name string) string {
 	}
 	return path
 }
+
+// agentSetupArgs are arguments as an agent's setup gives them (crew.Setup's Argv): a JSON config
+// with a space inside a value, a quote followed by a space, an apostrophe, a last backslash, none
+// at all, and characters PowerShell would read outside a quoted word.
+var agentSetupArgsCopy = []string{`{"mcpServers":{"autodoc":{"command":"C:\\Program Files\\autodoc.exe","args":["mcp serve"]}}}`,
+	`say "hi" now`, "it's", `ends\`, "", "!x (a)"}

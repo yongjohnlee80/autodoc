@@ -24,7 +24,7 @@ echo "args=$*"
 echo "env=$AUTODOC_WORKSPACE|$AUTODOC_ROOT|$FAKE_GREETING"
 LC_ALL=C ls
 echo "autodoc=$(command -v autodoc)"
-} > ` + shellQuote(report) + `
+} > ` + shellQuoteCopy(report) + `
 autodoc --call workspace.list
 echo "started $1"
 while read line; do
