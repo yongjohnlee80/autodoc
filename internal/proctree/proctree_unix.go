@@ -30,3 +30,6 @@ func replace(path string, args, env []string) error { return syscall.Exec(path, 
 
 // releaseConsoleIfAlone has no console to give up.
 func releaseConsoleIfAlone() bool { return false }
+
+// setStderrHandle has nothing more to do: nothing on Unix gives up its descriptors this way.
+func setStderrHandle(*os.File) {}

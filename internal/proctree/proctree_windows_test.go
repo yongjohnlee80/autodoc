@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -78,6 +79,28 @@ func TestAProcessThatEndedWith259IsNotAlive(t *testing.T) {
 	}
 }
 
+// A program that gave up its console still has somewhere to fail: what it writes to standard error
+// and a runtime crash's report both reach the file SetStderr gave it. What the desktop shows is
+// another matter, for a check on one.
+func TestWhatFollowsGivingUpTheConsoleReachesTheLog(t *testing.T) {
+	report := filepath.Join(t.TempDir(), "log")
+	cmd := exec.Command(os.Args[0], "-test.run=^TestAProgramGivesUpItsConsoleOnlyWhenAlone$")
+	cmd.Env = procenv.Env(os.Environ()).With("PROCTREE_CONSOLE=crash", "PROCTREE_REPORT="+report)
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_CONSOLE}
+	if err := cmd.Run(); err == nil {
+		t.Error("the helper's panic did not end it with a failure")
+	}
+	got, err := os.ReadFile(report)
+	if err != nil {
+		t.Fatalf("no log: %v", err)
+	}
+	for _, want := range []string{"said on stderr", "a crash's report", "goroutine"} {
+		if !strings.Contains(string(got), want) {
+			t.Errorf("the log lacks %q:\n%s", want, got)
+		}
+	}
+}
+
 // reportConsole gives up the console if alone on it and writes what it saw to the report file:
 // whether it had a console, whether ReleaseConsoleIfAlone said it gave it up, and whether it has one
 // after. A file, since a program on its own console has no output the test can read.
@@ -102,6 +125,17 @@ func TestAProgramGivesUpItsConsoleOnlyWhenAlone(t *testing.T) {
 	case "report":
 		reportConsole()
 		os.Exit(0)
+	case "crash": // alone on the console: what it says after giving that up must reach the log
+		if ReleaseConsoleIfAlone() {
+			f, err := os.Create(os.Getenv("PROCTREE_REPORT"))
+			if err != nil {
+				os.Exit(3)
+			}
+			SetStderr(f)
+			fmt.Fprintln(os.Stderr, "said on stderr")
+			panic("a crash's report")
+		}
+		os.Exit(4)
 	case "share": // on the new console; the report comes from a child that inherits it
 		child := exec.Command(os.Args[0], run)
 		child.Env = procenv.Env(os.Environ()).With("PROCTREE_CONSOLE=report")

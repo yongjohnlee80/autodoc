@@ -9,7 +9,10 @@
 // plugins' process trees extend it later.
 package proctree
 
-import "os/exec"
+import (
+	"os"
+	"os/exec"
+)
 
 // StartDetached starts cmd in a session (on Windows, a process group and no console) of its own, so
 // it lives on when this process, its terminal or its console ends, and no signal sent to this one's
@@ -32,6 +35,13 @@ func Replace(path string, args, env []string) error { return replace(path, args,
 // shares the shell's console and keeps it, so its output and exit code stay. Windows alone has
 // consoles to give up: elsewhere it does nothing and returns false.
 func ReleaseConsoleIfAlone() bool { return releaseConsoleIfAlone() }
+
+// SetStderr sends this process's standard error to f: os.Stderr, and on Windows the OS's own handle
+// too, so a runtime crash's report lands there rather than on a console that has gone.
+func SetStderr(f *os.File) {
+	os.Stderr = f
+	setStderrHandle(f)
+}
 
 // Alive is whether a process with pid exists now. It sends nothing to the process.
 func Alive(pid int) bool { return pid > 0 && alive(pid) }
