@@ -12,7 +12,7 @@ import (
 // TestHideClosesTheAgentPanelAndKeepsTheAgents: Hide on an agent tab's menu closes the agent panel
 // (SPC g's own toggle), the agent running on, the same incarnation; opening it again shows its tab.
 func TestHideClosesTheAgentPanelAndKeepsTheAgents(t *testing.T) {
-	agent, _ := fakeAgent(t)
+	agent, _ := fakeAgentCopy(t)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
@@ -23,21 +23,21 @@ func TestHideClosesTheAgentPanelAndKeepsTheAgents(t *testing.T) {
 	tab := onLoop(r, func() terminal.TerminalTabID { return r.h.agents.Snapshot().Instances["heron"].Tab })
 	was := token()
 	rows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.agents.tabRows(tab) })
-	row, ok := menuRow(rows, "tabs.hide")
+	row, ok := menuRowCopy(rows, "tabs.hide")
 	if !ok {
-		t.Fatalf("no Hide in %v", rowIDs(rows))
+		t.Fatalf("no Hide in %v", rowIDsCopy(rows))
 	}
-	if _, ok := menuRow(rows, "tabs.look"); !ok {
-		t.Fatalf("no Theme and font… in %v", rowIDs(rows))
+	if _, ok := menuRowCopy(rows, "tabs.look"); !ok {
+		t.Fatalf("no Theme and font… in %v", rowIDsCopy(rows))
 	}
 	// Maximize first: the agent panel fills the dock area, and Hide still keeps the agent
-	max, ok := menuRow(rows, "tabs.maximize")
+	max, ok := menuRowCopy(rows, "tabs.maximize")
 	if !ok || max.Label != "Maximize" {
-		t.Fatalf("no Maximize in %v", rowIDs(rows))
+		t.Fatalf("no Maximize in %v", rowIDsCopy(rows))
 	}
 	onLoop(r, func() bool { max.Action.(terminal.TerminalTabsMenuAction).Run(tab); return true })
 	r.s.WaitFor(t, "the agent panel maximized", func(string) bool { return onLoop(r, func() bool { return r.h.panelMax["agent"] }) })
-	if again, _ := menuRow(onLoop(r, func() []widgetcore.MenuItemModel { return r.h.agents.tabRows(tab) }), "tabs.maximize"); again.Label != "Restore" {
+	if again, _ := menuRowCopy(onLoop(r, func() []widgetcore.MenuItemModel { return r.h.agents.tabRows(tab) }), "tabs.maximize"); again.Label != "Restore" {
 		t.Errorf("maximized, the row reads %q", again.Label)
 	}
 	onLoop(r, func() bool { row.Action.(terminal.TerminalTabsMenuAction).Run(tab); return true })
@@ -56,7 +56,7 @@ func TestHideClosesTheAgentPanelAndKeepsTheAgents(t *testing.T) {
 // on Maximize in the agents' ≡ menu maximizes the panel, and a click on Restore restores it; nothing
 // is refused.
 func TestAClickOnMaximizeInTheAgentsMenu(t *testing.T) {
-	agent, _ := fakeAgent(t)
+	agent, _ := fakeAgentCopy(t)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })

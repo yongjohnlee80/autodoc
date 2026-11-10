@@ -68,7 +68,7 @@ func printingCLI(t *testing.T, folder, name string) string {
 // itself, through each shell and kind of CLI this OS has (agentCommandCases), however the CLI's
 // path, the root and the arguments are spelled.
 func TestAnAgentsCommandReachesItsCLIWhole(t *testing.T) {
-	for _, c := range agentCommandCases(t) {
+	for _, c := range agentCommandCasesCopy(t) {
 		t.Run(c.label, func(t *testing.T) {
 			root := filepath.Join(t.TempDir(), "it's a root")
 			ws := feature.Workspace{ID: 1, Name: `say "hi" now it's`, Root: root} // quotes, but no space after an odd one
@@ -102,7 +102,7 @@ func TestAnAgentsCommandReachesItsCLIWhole(t *testing.T) {
 // it: a {root} holding one fails the fill, a setup's argument holding one fails the arguments. On
 // Unix both reach the CLI.
 func TestAnAgentsCommandRefusesAValueItCannotCarry(t *testing.T) {
-	for _, c := range agentCommandCases(t) {
+	for _, c := range agentCommandCasesCopy(t) {
 		t.Run(c.label, func(t *testing.T) {
 			refused := runtime.GOOS == "windows" // stated here, not asked of Carries, so a Carries that refuses nothing fails
 			ws := feature.Workspace{ID: 1, Name: "kb", Root: filepath.Join(t.TempDir(), "50% & more")}

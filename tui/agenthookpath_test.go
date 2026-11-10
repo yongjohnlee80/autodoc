@@ -42,7 +42,7 @@ func claudeHookCommands(t *testing.T, dir string) map[string][]string {
 // hooks and its workspace notice in its folder's settings; and the agent's environment carries the
 // build as AUTODOC_BIN.
 func TestTheCommandsAutoDocWritesNameTheBuildByItsPath(t *testing.T) {
-	build := fakeBuild(t, filepath.Join(t.TempDir(), "o'brien build"))
+	build := fakeBuildCopy(t, filepath.Join(t.TempDir(), "o'brien build"))
 	args := crewSetupArgs("", crew.KindClaude, t.TempDir(), build)
 	if i := slices.Index(args, "--autodoc"); i < 0 || i+1 >= len(args) || args[i+1] != shellQuote(build) {
 		t.Errorf("crew setup's arguments %q: want --autodoc %s", args, shellQuote(build))

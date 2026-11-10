@@ -9,9 +9,9 @@ import (
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
-func claudeRig(t *testing.T) (*agents, *identityHost, *crewWindow, *agentInstance) {
+func claudeRig(t *testing.T) (*agents, *identityHostCopy, *crewWindow, *agentInstance) {
 	t.Helper()
-	a, c, w := crewAgents(t, claudeOne)
+	a, c, w := crewAgents(t, claudeOneCopy)
 	p, _ := a.profile("cl")
 	instance, err := a.startInstance(p)
 	if err != nil || !instance.running {

@@ -17,7 +17,7 @@ import (
 // from offer once, then nothing; every mail.fallback_done is kept in reported.
 type fallbackRig struct {
 	a        *agents
-	c        *identityHost
+	c        *identityHostCopy
 	w        *crewWindow
 	offer    []map[string]any
 	reported [][]any
