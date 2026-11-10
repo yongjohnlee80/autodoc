@@ -7,7 +7,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"strings"
+
+	"github.com/yongjohnlee80/golib/tui/i18n"
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
@@ -184,6 +187,29 @@ func (s *ScriptedCore) Called(prefix string) bool {
 // NewScripted is a ScriptedCore in workspace ws, its tables empty.
 func NewScripted(ws string) *ScriptedCore {
 	return &ScriptedCore{WS: ws, Answers: map[string]func([]any) (any, error){}, Sets: map[string]any{}}
+}
+
+// EnglishFrom is AutoDoc's English text from its catalogs in fsys's dir (autodoc_<tag>.xml), an id
+// the catalog lacks being itself: a feature's test reads its words as the host shows them, from the
+// host's own catalogs (os.DirFS("../qml"), "i18n"). Catalogs that don't load panic: the test's
+// fixture is broken.
+func EnglishFrom(fsys fs.FS, dir string) func(id string) string {
+	set := &i18n.Set{}
+	if err := set.LoadDir(fsys, dir, "autodoc"); err != nil {
+		panic("featuretest: the English catalog: " + err.Error())
+	}
+	return func(id string) string {
+		if v, ok := set.Lookup(i18n.English, id); ok {
+			return v
+		}
+		return id
+	}
+}
+
+// UseText makes Tr answer from text, and Trf fill its %N as the host's does.
+func (s *ScriptedCore) UseText(text func(id string) string) {
+	s.Text = text
+	s.Textf = func(id string, args ...any) string { return feature.Fill(text(id), args...) }
 }
 
 // noPrefs is a preferences view with nothing set.
