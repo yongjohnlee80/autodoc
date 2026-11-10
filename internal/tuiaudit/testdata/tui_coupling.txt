@@ -224,7 +224,6 @@ gui	plugins	host	seams.surfaceSinkOf	field
 gui	plugins	host	stagePanels	func
 gui	plugins	host	themeImport	var
 gui	plugins	host	toastPlugin	const
-gui	plugins	host	withRelationViews	func
 gui	plugins	page	Host.native	method
 gui	plugins	todos	assignable	func
 gui	plugins	todos	newAgentPick	func
@@ -523,7 +522,6 @@ term	plugins	host	seams.surfaceSinkOf	field
 term	plugins	host	stagePanels	func
 term	plugins	host	themeImport	var
 term	plugins	host	toastPlugin	const
-term	plugins	host	withRelationViews	func
 term	plugins	page	Host.native	method
 term	plugins	todos	assignable	func
 term	plugins	todos	newAgentPick	func
