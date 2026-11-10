@@ -124,7 +124,7 @@ type Setup struct {
 //   - Claude Code: the settings ClaudeSettings builds for the Claude Code on in.Env's PATH, which
 //     names only the hook events it knows; with none found, ClaudeFloor's, prompts unreported, and a
 //     notice. A Neovim host gets them as --settings; a window writes them into the agent's folder
-//     itself, so it gets no Argv.
+//     itself, so its Argv holds only --mcp-config, when it takes the crew MCP server.
 //   - OpenCode: AutoDoc's plugin, written into in.DataDir (AutoDoc's own folder, so setup writes
 //     it), and the OPENCODE_CONFIG_CONTENT that loads it, in.Env's own value extended.
 //   - Codex: one step after its start, the agent's autodoc registering the folder's thread, looking
@@ -155,8 +155,8 @@ func SetupFor(in SetupInput, cache string) (Setup, error) {
 }
 
 // kindSetup adds kind's setup to s: its argv, env, files and allowance, and, once it takes them, the
-// MCP servers in.Servers names, delivered its own way (Claude's --mcp-config or the folder's
-// .mcp.json, OpenCode's mcp key, Antigravity's folder .agents/mcp_config.json found by --add-dir).
+// MCP servers in.Servers names, delivered its own way (Claude's --mcp-config naming a file of its
+// folder, OpenCode's mcp key, Antigravity's folder .agents/mcp_config.json found by --add-dir).
 type kindSetup func(in SetupInput, cache string, s *Setup) error
 
 // kindSetups are the kinds with a setup: a kind is added here, never by rewriting SetupFor.
@@ -257,14 +257,16 @@ const ClaudeMCPConfig = ".autodoc-crew-mcp.json"
 
 // claudeMCPConfigArg is ClaudeMCPConfig as the agent's working folder (in.Dir) reaches it: its bare
 // name when the agent works in its own folder (in.AgentDir, a window's agent), else its absolute
-// path (Neovim's agent works in the user's project, and its argv reaches it through no shell).
-// The bare name keeps the folder's own name off a command line a shell reads: a crew folder's name
-// holds a scope's ":" encoded (%3A), and on Windows a CLI's .cmd shim reads %3 as its third
-// argument, so no command line through cmd.exe may name that folder.
+// path (Neovim's agent works in the user's project; Neovim starts it from its argv, with no shell
+// of its own). The bare name keeps the folder's own name off the command line: a crew folder's name
+// holds a scope's ":" encoded (%3A), and on Windows a CLI's .cmd shim reads its arguments again
+// through cmd.exe, where %3 is its third argument, so no command line through a .cmd shim may name
+// that folder, from either host.
 func claudeMCPConfigArg(in SetupInput) string {
-	// compared as paths (filepath.Rel cleans both), never as strings; core/paths is outside the comms
-	// module, which may import only its own packages
-	if rel, err := filepath.Rel(in.AgentDir, in.Dir); err == nil && rel == "." && filepath.IsAbs(in.Dir) {
+	// compared as paths (filepath.Rel cleans both, and on Windows folds case as the disk does), never
+	// as strings; core/paths is outside the comms module, which may import only its own packages. A
+	// relative Dir never matches the absolute AgentDir: Rel refuses the pair
+	if rel, err := filepath.Rel(in.AgentDir, in.Dir); err == nil && rel == "." {
 		return ClaudeMCPConfig
 	}
 	return filepath.Join(in.AgentDir, ClaudeMCPConfig)
