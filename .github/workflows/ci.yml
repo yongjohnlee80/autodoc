@@ -263,9 +263,14 @@ jobs:
           echo "== base PASS $(grep -cE '^--- PASS' "$RUNNER_TEMP/base.txt" || true) FAIL $(grep -cE '^--- FAIL' "$RUNNER_TEMP/base.txt" || true) SKIP $(grep -cE '^--- SKIP' "$RUNNER_TEMP/base.txt" || true)"
           grep -E '^--- (FAIL|SKIP)|_test\.go:[0-9]+:' "$RUNNER_TEMP/base.txt" | cut -c1-260 | head -60 || true
           echo "== base tui rc=$rt"
-          for c in TestOpeningAnHTMLFileAsksSimplifiedOrRaw TestOpenFileDialogOpensTheFileChosen TestAGatedSaveIsHeldToTheWorkspace TestNewFileInAnyFolder TestTheFileDialogsFollowALinkToAFolder TestAQuestionsAnswerContinuesTheScriptsStep; do
-            echo "==== $c"; go test -count=1 -timeout 5m -v -run "^$c\$" ./tui/ 2>&1 | grep -vE '^(=== (RUN|PAUSE|CONT)|PASS|ok )' | cut -c1-200 | head -70 || true
-          done
+          cp tui/outside.go "$RUNNER_TEMP/keep-o.go"
+          python -c "p='tui/outside.go'; s=open(p,encoding='utf-8').read(); o='src := files.LocalFiles()'; assert s.count(o)==1; open(p,'w',encoding='utf-8').write(s.replace(o,'src := files.FileSource{FS: os.DirFS(\"/\"), Root: \"/\"} // mutant dirfs'))"
+          sed -i 's#^import (#import (\n\t"os"#' tui/outside.go
+          go test -count=1 -timeout 20m -run "$T" ./tui/ > "$RUNNER_TEMP/d.txt" 2>&1 && dt=0 || dt=$?
+          echo "== mutant dirfs applied: $(grep -c 'mutant dirfs' tui/outside.go) FAIL $(grep -cE '^--- FAIL' "$RUNNER_TEMP/d.txt" || true)"
+          grep -E '^--- FAIL' "$RUNNER_TEMP/d.txt" | sed 's/ (.*//' | sort | tr '\n' ' ' || true; echo
+          echo "== mutant dirfs tui rc=$dt (want a non-zero: killed)"
+          cp "$RUNNER_TEMP/keep-o.go" tui/outside.go
           python -c "p='tui/app_test.go'; s=open(p,encoding='utf-8').read(); o='rpc.WithDisks(diskVolumes(t, docOpts...))'; assert s.count(o)==1; open(p,'w',encoding='utf-8').write(s.replace(o,'rpc.WithFiles(onetree(t, docOpts...)) /* mutant onetree */'))"
           python -c "p='tui/manager_test.go'; s=open(p,encoding='utf-8').read(); o='rpc.WithDisks(diskVolumes(t, docs.WithRegistrations(o.Registrations.Kinds()), docs.WithDeriver(o.Registrations)))'; assert s.count(o)==1; open(p,'w',encoding='utf-8').write(s.replace(o,'rpc.WithFiles(onetree(t, docs.WithRegistrations(o.Registrations.Kinds()), docs.WithDeriver(o.Registrations))) /* mutant onetree */'))"
           go test -count=1 -timeout 20m -v -run "$T" ./tui/ > "$RUNNER_TEMP/m.txt" 2>&1 && mt=0 || mt=$?
