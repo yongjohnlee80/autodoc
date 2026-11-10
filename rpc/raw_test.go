@@ -10,7 +10,6 @@ import (
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
-	"github.com/yongjohnlee80/golib/vfs/local"
 	"github.com/yongjohnlee80/golib/vfs/memfs"
 
 	"github.com/yongjohnlee80/autodoc/core/derived"
@@ -36,11 +35,6 @@ func rawRig(t *testing.T, network string, proto int64) *golibrpc.Client {
 			t.Fatal(err)
 		}
 	}
-	disk, err := local.New("/")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = disk.Close() })
 	addr := shortSocket(t)
 	if network == "tcp" {
 		addr = "127.0.0.1:0"
@@ -50,7 +44,7 @@ func rawRig(t *testing.T, network string, proto int64) *golibrpc.Client {
 		t.Fatal(err)
 	}
 	srv := New(Fixed(Static(WorkspaceInfo{Name: "kb", Root: "/roots/kb", Docs: docs.New(fsys, nil, opts...)})), "v-test",
-		WithListener(ln), WithFiles(docs.New(disk, nil, opts...)))
+		WithListener(ln), WithDisks(localDisks(t, opts...)))
 	rctx, cancel := context.WithCancel(ctx)
 	done := make(chan error, 1)
 	go func() { done <- srv.Run(rctx) }()

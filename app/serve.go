@@ -98,7 +98,7 @@ type process struct {
 	ranking *serving.Ranking
 	ws      *serving.Workspaces
 	emb     *serving.Embedding
-	files   *docs.Docs
+	files   *rpc.Disks
 	guard   *fsbounds.Guard // a gated script's bounds (docs/decisions/contract.md#a-gated-scripts-files-stay-in-the-workspace), over every workspace's files
 	srv     *rpc.Server
 	deps    *moduleDeps     // the modules' dependencies, built with the workspaces
@@ -516,17 +516,22 @@ func newRunID() string {
 }
 
 // openFiles opens a local peer's files outside every workspace
-// (docs/decisions/editor.md#files-outside-every-workspace): the whole disk, every file.
+// (docs/decisions/editor.md#files-outside-every-workspace): the whole disk, every file. On Unix
+// that is the one tree at "/"; on Windows each drive or share is its own, opened when a path on it
+// is first asked for.
 func (d *process) openFiles() error {
-	disk, err := local.New("/", local.WithLogger(d.log))
-	if err != nil {
-		return err
-	}
-	d.stops.push(func() { _ = disk.Close() })
-	// a bounded file.* is routed into its workspace (rpc's boundedFile) and never reaches "/": behind no
-	// guard at all, every bounded operation here is refused, should a route ever skip that
-	var none *fsbounds.Guard
-	d.files = docs.New(none.Wrap(func() string { return "" }, "/", disk), nil, docs.WithRegistrations(d.b.reg.Kinds()), docs.WithDeriver(d.b.reg))
+	d.files = rpc.NewDisks(func(root string) (*docs.Docs, func(), error) {
+		disk, err := local.New(root, local.WithLogger(d.log))
+		if err != nil {
+			return nil, nil, err
+		}
+		// a bounded file.* is routed into its workspace (rpc's boundedFile) and never reaches a disk:
+		// behind no guard at all, every bounded operation here is refused, should a route ever skip that
+		var none *fsbounds.Guard
+		return docs.New(none.Wrap(func() string { return "" }, root, disk), nil, docs.WithRegistrations(d.b.reg.Kinds()), docs.WithDeriver(d.b.reg)),
+			func() { _ = disk.Close() }, nil
+	})
+	d.stops.push(d.files.Close)
 	return nil
 }
 
@@ -535,7 +540,7 @@ func (d *process) openFiles() error {
 func (d *process) buildServer() error {
 	b, db := d.b, d.db
 	d.srv = rpc.New(d.ws, b.version, rpc.WithListener(d.ln), rpc.WithLogger(d.log), rpc.WithPreferences(db), rpc.WithEmbeddings(d.emb), rpc.WithEvents(db), rpc.WithStoreCheck(db),
-		rpc.WithRegistrations(b.reg.Tables()), rpc.WithRankers(d.ranking), rpc.WithStoreID(d.storeID), rpc.WithFiles(d.files), rpc.WithGuard(d.guard),
+		rpc.WithRegistrations(b.reg.Tables()), rpc.WithRankers(d.ranking), rpc.WithStoreID(d.storeID), rpc.WithDisks(d.files), rpc.WithGuard(d.guard),
 		rpc.WithTaskFiles(taskFiles(d.deps.todos)), rpc.WithModules(d.mods...), rpc.WithProfiler(d.prof), rpc.WithOwnDirs(d.ownDirs()))
 	d.refreshTodos(d.deps.todos)
 	li := store.LeaseInfo{StoreID: d.storeID, StorePath: d.p.Store, Addr: d.p.Socket, PID: int64(os.Getpid()), Instance: d.srv.Instance(),

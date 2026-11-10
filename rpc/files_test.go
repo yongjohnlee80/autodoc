@@ -29,11 +29,6 @@ import (
 // "tcp"), with the workspaces ws. Its client has said hello at protocol proto.
 func filesRig(t *testing.T, network string, proto int64, ws ...Workspace) *golibrpc.Client {
 	t.Helper()
-	disk, err := local.New("/")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = disk.Close() })
 	addr := shortSocket(t)
 	if network == "tcp" {
 		addr = "127.0.0.1:0"
@@ -42,7 +37,7 @@ func filesRig(t *testing.T, network string, proto int64, ws ...Workspace) *golib
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := New(Fixed(ws...), "v-test", WithListener(ln), WithFiles(docs.New(disk, nil)))
+	srv := New(Fixed(ws...), "v-test", WithListener(ln), WithDisks(localDisks(t)))
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- srv.Run(ctx) }()
