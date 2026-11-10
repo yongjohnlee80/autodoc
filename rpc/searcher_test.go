@@ -2,7 +2,6 @@ package rpc
 
 import (
 	"context"
-	"net"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -18,6 +17,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // fakeSearcher answers every query with one hit of its own, and records what it was asked.
@@ -60,8 +60,8 @@ func TestASearcherSwappedInAnswersSearchQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	sock := filepath.Join(dir, "s.sock")
-	ln, err := net.Listen("unix", sock)
+	sock := ipc.ScratchAddr(dir, "s.sock")
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestASearcherSwappedInAnswersSearchQuery(t *testing.T) {
 		<-srvDone
 		<-ixDone
 	})
-	cli, err := golibrpc.Dial(ctx, sock, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	cli, err := golibrpc.Dial(ctx, sock, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -3,7 +3,6 @@ package client
 import (
 	"context"
 	"errors"
-	"net"
 	"path/filepath"
 	"testing"
 	"time"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -20,7 +20,7 @@ import (
 // store_id out).
 func daemonSaying(t *testing.T, sock, storeID string) {
 	t.Helper()
-	ln, err := net.Listen("unix", sock)
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestADaemonThatSaysNoStoreIsRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sock := filepath.Join(shortDir(t), "s.sock")
+	sock := ipc.ScratchAddr(shortDir(t), "s.sock")
 	daemonSaying(t, sock, "")
 	s := NewSession(sock, nil).As(rpc.CLIName).ForStore(sock, storePath)
 	if err := s.Connect(ctx); !errors.Is(err, endpoint.ErrNoStoreID) {
@@ -63,7 +63,7 @@ func TestADaemonThatSaysNoStoreIsRefused(t *testing.T) {
 		t.Fatalf("a daemon saying no store: %v, want ErrNoStoreID", err)
 	}
 
-	sock = filepath.Join(shortDir(t), "s.sock")
+	sock = ipc.ScratchAddr(shortDir(t), "s.sock")
 	daemonSaying(t, sock, id)
 	s = NewSession(sock, nil).As(rpc.CLIName).ForStore(sock, storePath)
 	if err := s.Connect(ctx); err != nil {
@@ -78,7 +78,7 @@ func TestADaemonThatSaysNoStoreIsRefused(t *testing.T) {
 func TestASessionSaysTheStoreItsHelloNamed(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	sock := filepath.Join(shortDir(t), "s.sock")
+	sock := ipc.ScratchAddr(shortDir(t), "s.sock")
 	daemonSaying(t, sock, "store-1")
 	s := NewSession(sock, nil).As(rpc.CLIName)
 	if id := s.StoreID(); id != "" {
@@ -93,7 +93,7 @@ func TestASessionSaysTheStoreItsHelloNamed(t *testing.T) {
 	}
 	s.Close()
 
-	sock = filepath.Join(shortDir(t), "s.sock")
+	sock = ipc.ScratchAddr(shortDir(t), "s.sock")
 	daemonSaying(t, sock, "")
 	s = NewSession(sock, nil).As(rpc.CLIName)
 	if err := s.Connect(ctx); err != nil {

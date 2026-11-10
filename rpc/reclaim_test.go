@@ -3,7 +3,6 @@ package rpc
 import (
 	"context"
 	"errors"
-	"net"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -12,6 +11,7 @@ import (
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // recordingEmbeddings counts the two verbs protocol 16 gates; the rest answer nothing.
@@ -54,7 +54,7 @@ func TestTheVerbsThatDeleteVectorsNeedProtocol16(t *testing.T) {
 	defer cancel()
 	emb := &recordingEmbeddings{}
 	sock := shortSocket(t)
-	ln, err := net.Listen("unix", sock)
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestTheVerbsThatDeleteVectorsNeedProtocol16(t *testing.T) {
 	go func() { done <- srv.Run(ctx) }()
 	t.Cleanup(func() { cancel(); <-done })
 	session := func(proto int64) *golibrpc.Client {
-		cli, err := golibrpc.Dial(ctx, sock, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+		cli, err := golibrpc.Dial(ctx, sock, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 		if err != nil {
 			t.Fatal(err)
 		}

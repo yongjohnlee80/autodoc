@@ -3,7 +3,6 @@ package rpc
 import (
 	"context"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"sort"
@@ -22,6 +21,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // THE WIRE GOLDENS: what every verb answers, as the encoder receives it, pinned per domain in
@@ -146,7 +146,7 @@ func (w *wireRec) call(verb string, params ...any) any {
 	if !ok {
 		w.t.Fatalf("no verb %s", verb)
 	}
-	out, err := w.srv.chain(v)(context.Background(), &golibrpc.Request{Method: verb, Params: params, Peer: unixPeer, Session: w.sess})
+	out, err := w.srv.chain(v)(context.Background(), &golibrpc.Request{Method: verb, Params: params, Peer: localPeer, Session: w.sess})
 	domain, _, _ := strings.Cut(verb, ".")
 	b := w.out[domain]
 	if b == nil {
@@ -295,7 +295,7 @@ func wireServer(t *testing.T) (*Server, *golibrpc.Client, *memfs.FS) {
 	broken := Static(WorkspaceInfo{Name: "broken", Root: "/roots/broken", Err: errFixed})
 	files := memfs.New()
 	sock := shortSocket(t)
-	ln, err := net.Listen("unix", sock)
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
