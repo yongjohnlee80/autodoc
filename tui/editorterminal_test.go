@@ -54,7 +54,7 @@ func TestAnAgentRunsALineOnlyAfterTheUserSaysRun(t *testing.T) {
 	r.connected(t)
 	path := onLoop(r, r.h.editorSocketPath)
 	onLoop(r, func() []string {
-		return r.h.agents.agentEnv(wsInfo{name: "kb"}, t.TempDir(), agentProfile{Codename: "zen"})
+		return r.h.agents.agentEnv(feature.Workspace{Name: "kb"}, t.TempDir(), agentProfile{Codename: "zen"})
 	})
 	ctx := context.Background()
 	cli, err := golibrpc.Dial(ctx, path, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))

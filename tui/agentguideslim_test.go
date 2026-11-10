@@ -7,6 +7,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc"
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // guideBudget is what the whole written guide may weigh, in bytes: every one is read at the start
@@ -23,7 +24,7 @@ var verbRow = regexp.MustCompile("(?m)^\\| `([a-z]+)\\.([a-z_]+)` \\|")
 // AGENTS.md (search.query's own section, the todos rules) stays as written; the repo's AGENTS.md
 // itself is whole.
 func TestTheWrittenGuideIndexesTheVerbsInsteadOfTablingThem(t *testing.T) {
-	g := agentGuide(wsInfo{name: "kb", root: "/kb"}, "/bin/autodoc", "", "/w/bin/autodoc", crew.KindClaude, crew.MailViaCLI)
+	g := agentGuide(feature.Workspace{Name: "kb", Root: "/kb"}, "/bin/autodoc", "", "/w/bin/autodoc", crew.KindClaude, crew.MailViaCLI)
 	if len(g) > guideBudget {
 		t.Errorf("the written guide is %d bytes, over its budget of %d", len(g), guideBudget)
 	}
