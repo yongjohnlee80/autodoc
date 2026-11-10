@@ -281,7 +281,7 @@ func (h *Host) editorBuffers(agent string, _ editorArgs) (any, error) {
 			if b.file.ws != "" {
 				row["workspace"] = b.file.ws
 			}
-			h.markForeign(agent, b.file.ws, row)
+			h.agents.markForeign(agent, b.file.ws, row)
 		}
 		out = append(out, row)
 	}
@@ -309,7 +309,7 @@ func (h *Host) editorDocument(agent string, a editorArgs) (any, error) {
 		case diskDeleted:
 			doc["disk"] = "deleted"
 		}
-		h.markForeign(agent, b.file.ws, doc)
+		h.agents.markForeign(agent, b.file.ws, doc)
 	}
 	if r, ok := c.Selection(); ok {
 		doc["selection"] = []any{r.From.Line + 1, r.From.Col + 1, r.To.Line + 1, r.To.Col + 1}
