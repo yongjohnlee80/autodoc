@@ -36,7 +36,12 @@ func TestOpenInBrowserOpensTheThemedPage(t *testing.T) {
 		if err != nil || !strings.Contains(string(content), `<h1 id="unsaved-heading">Unsaved heading</h1>`) || !strings.Contains(string(content), "color-scheme:dark") {
 			t.Fatalf("preview = %q, %v", content, err)
 		}
-		if want := `href="file://` + filepath.ToSlash(root) + `/other.md#s"`; !strings.Contains(string(content), want) {
+		// a file URL's path starts with a slash: file:///home/…, and on Windows file:///C:/…
+		slashed := filepath.ToSlash(root)
+		if !strings.HasPrefix(slashed, "/") {
+			slashed = "/" + slashed
+		}
+		if want := `href="file://` + slashed + `/other.md#s"`; !strings.Contains(string(content), want) {
 			t.Fatalf("the preview lacks %s", want)
 		}
 	case <-time.After(3 * time.Second):
