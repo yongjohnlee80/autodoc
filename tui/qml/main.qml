@@ -83,6 +83,7 @@ Window {
     Shortcut { sequence: keyId("autodoc.window.toggleVimKeys"); onActivated: App.toggleVimKeys() }
     // ---- end of the generated keys ----
 
+    // ---- the window's own title bar (the GUI's, tui.gui.titlebar) ----
     MenuBar {
         id: menuBar
         Dock.edge: Tui.Top
@@ -219,6 +220,13 @@ Window {
                 visible: App.gui
                 MenuItem { text: qsTrId("autodoc.main.renderer_auto");   group: "renderer"; checked: App.rendererAuto;   onTriggered: App.setRenderer("auto") }
                 MenuItem { text: qsTrId("autodoc.main.renderer_opengl"); group: "renderer"; checked: App.rendererOpenGL; onTriggered: App.setRenderer("opengl") }
+            }
+            // who draws the window's title bar (titlebar.go), taken as it opens: the system, or AutoDoc
+            Menu {
+                title: qsTrId("autodoc.main.title_bar")
+                visible: App.gui
+                MenuItem { text: qsTrId("autodoc.main.title_bar_system"); group: "titleBar"; checked: App.titleBarSystem; onTriggered: App.setTitleBar("system") }
+                MenuItem { text: qsTrId("autodoc.main.title_bar_own");    group: "titleBar"; checked: App.titleBarOwn;    onTriggered: App.setTitleBar("own") }
             }
             // the terminal and agent panels (terminal.go): Ctrl+h/j/k/l kept from their programs
             Menu {

@@ -28,6 +28,7 @@ const (
 	prefRuler      = "tui.ruler"
 	prefKeymap     = "tui.editor.keymap"
 	prefRenderer   = "tui.gui.renderer" // the window's renderer, taken as it opens (renderer.go)
+	prefTitleBar   = "tui.gui.titlebar" // who draws the window's title bar, taken as it opens (titlebar.go)
 	prefWrap       = "tui.editor.wrap"
 	prefNumbers    = "tui.editor.linenumbers"
 	prefIndent     = "tui.editor.indentmarks"
@@ -96,6 +97,7 @@ type prefs struct {
 	ruler                int
 	keymap               string
 	renderer             string                     // the window's renderer from the next start (renderer.go)
+	titleBar             string                     // who draws the window's title bar from the next start (titlebar.go)
 	keymapChosen         bool                       // a keymap was ever stored (tui.editor.keymap): the Vim question is not asked
 	wrap, lineNumbers    bool                       // the page: long lines wrapped at its width; each line's number
 	indentMarks          string                     // which lines show their indentation as marks (indentMarks)
@@ -286,6 +288,12 @@ func legacyPrefRows(h *Host, gui bool) []feature.PrefSpec {
 				p := asPrefs(v)
 				h.mirrorRenderer(p.renderer) // the next start's window reads it before the store is read
 				return map[string]any{"App.rendererAuto": p.renderer == RendererAuto, "App.rendererOpenGL": p.renderer == RendererOpenGL}
+			}),
+		choicePref(prefTitleBar, TitleBarSystem, titleBars, func(p *prefs) *string { return &p.titleBar }).
+			shows(func(v PrefsView) map[string]any {
+				p := asPrefs(v)
+				h.mirrorTitleBar(p.titleBar) // the next start's window reads it before the store is read
+				return map[string]any{"App.titleBarSystem": p.titleBar == TitleBarSystem, "App.titleBarOwn": p.titleBar == TitleBarOwn}
 			}),
 		boolPref(prefWrap, true, func(p *prefs) *bool { return &p.wrap }).
 			Chooser("App.wrapIndex", "App.setWrapIndex").

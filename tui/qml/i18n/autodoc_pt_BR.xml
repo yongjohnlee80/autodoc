@@ -3976,6 +3976,18 @@ O QUE UMA TECLA PRECISA
         <source>This &amp;machine</source>
         <translation>Esta &amp;máquina</translation>
     </message>
+    <message id="autodoc.main.title_bar">
+        <source>Title &amp;bar</source>
+        <translation>&amp;Barra de título</translation>
+    </message>
+    <message id="autodoc.main.title_bar_own">
+        <source>&amp;2. AutoDoc's own</source>
+        <translation>&amp;2. A própria do AutoDoc</translation>
+    </message>
+    <message id="autodoc.main.title_bar_system">
+        <source>&amp;1. The system's</source>
+        <translation>&amp;1. A do sistema</translation>
+    </message>
     <message id="autodoc.main.todos">
         <source>&amp;Todos</source>
         <translation>&amp;Tarefas</translation>
@@ -5427,6 +5439,14 @@ O QUE UMA TECLA PRECISA
     <message id="autodoc.notice.theme.theme">
         <source>theme: %1</source>
         <translation>tema: %1</translation>
+    </message>
+    <message id="autodoc.notice.titlebar.from_the_next_start">
+        <source>the title bar changes at the next start: the window takes it as it opens</source>
+        <translation>a barra de título muda no próximo início: a janela a escolhe ao abrir</translation>
+    </message>
+    <message id="autodoc.notice.titlebar.no_title_bar_s">
+        <source>no title bar %1: system or own</source>
+        <translation>nenhuma barra de título %1: system ou own</translation>
     </message>
     <message id="autodoc.notice.todomove.moved_to">
         <source>%1 moved to %2 with its task: the buffer follows it</source>

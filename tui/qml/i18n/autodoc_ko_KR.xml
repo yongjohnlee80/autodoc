@@ -3968,6 +3968,18 @@ WHAT A KEY NEEDS
         <source>This &amp;machine</source>
         <translation>이 컴퓨터(&amp;m)</translation>
     </message>
+    <message id="autodoc.main.title_bar">
+        <source>Title &amp;bar</source>
+        <translation>제목 표시줄(&amp;b)</translation>
+    </message>
+    <message id="autodoc.main.title_bar_own">
+        <source>&amp;2. AutoDoc's own</source>
+        <translation>&amp;2. AutoDoc 자체</translation>
+    </message>
+    <message id="autodoc.main.title_bar_system">
+        <source>&amp;1. The system's</source>
+        <translation>&amp;1. 시스템 기본</translation>
+    </message>
     <message id="autodoc.main.todos">
         <source>&amp;Todos</source>
         <translation>태스크(&amp;t)</translation>
@@ -5419,6 +5431,14 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.theme.theme">
         <source>theme: %1</source>
         <translation>테마: %1</translation>
+    </message>
+    <message id="autodoc.notice.titlebar.from_the_next_start">
+        <source>the title bar changes at the next start: the window takes it as it opens</source>
+        <translation>제목 표시줄은 다음 시작 때 바뀝니다: 창이 열릴 때 정해집니다</translation>
+    </message>
+    <message id="autodoc.notice.titlebar.no_title_bar_s">
+        <source>no title bar %1: system or own</source>
+        <translation>제목 표시줄 %1 없음: system 또는 own</translation>
     </message>
     <message id="autodoc.notice.todomove.moved_to">
         <source>%1 moved to %2 with its task: the buffer follows it</source>
