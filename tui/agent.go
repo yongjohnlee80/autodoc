@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -42,6 +43,9 @@ type CrewScope interface {
 	WhenExited(id string, fn func())
 	QueueSend(codename, kind, subject, body string, then func(error))
 	UserSend(codename, kind, subject, body string, then func(error))
+	// Go runs work off the loop as the crew host runs its calls, then on the loop with its answer:
+	// a crew start's setup.
+	Go(work func(context.Context) any, then func(any))
 }
 
 // CrewAttention is what the agents ask of the human's crew inbox: whether an agent waits on the
