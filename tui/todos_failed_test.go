@@ -7,12 +7,13 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
 	"github.com/yongjohnlee80/autodoc/core/todo"
+	"github.com/yongjohnlee80/autodoc/tui/feature/featuretest"
 )
 
 // listCalls is how many todos.list the feature has asked.
-func (s *scriptedCore) listCalls() int {
+func listCalls(s *featuretest.ScriptedCore) int {
 	n := 0
-	for _, c := range s.calls {
+	for _, c := range s.Calls {
 		if strings.HasPrefix(c, "todos.list") {
 			n++
 		}
@@ -27,16 +28,16 @@ func TestAFailedTodoWriteReadsThePanelAgain(t *testing.T) {
 	s := scriptedStore(true)
 	v := newTodos(s)
 	v.list()
-	s.answers["todos.remove"] = func([]any) (any, error) {
+	s.Answers["todos.remove"] = func([]any) (any, error) {
 		return nil, &golibrpc.Error{Code: todo.CodeStale, Message: "the task changed since it was read"}
 	}
-	before := s.listCalls()
+	before := listCalls(s)
 	v.remove()
-	s.yes()
-	if len(s.failed) != 1 || !strings.Contains(s.failed[0], "todos.remove") {
-		t.Fatalf("the refused remove was told as %v, want its notice", s.failed)
+	s.Yes()
+	if len(s.Failures) != 1 || !strings.Contains(s.Failures[0], "todos.remove") {
+		t.Fatalf("the refused remove was told as %v, want its notice", s.Failures)
 	}
-	if s.listCalls() == before {
-		t.Errorf("after the refused remove the store was not read again: %v", s.calls)
+	if listCalls(s) == before {
+		t.Errorf("after the refused remove the store was not read again: %v", s.Calls)
 	}
 }

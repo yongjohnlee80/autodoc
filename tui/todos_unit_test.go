@@ -1,163 +1,32 @@
 package tui
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
 	"testing"
 
-	"github.com/yongjohnlee80/autodoc/internal/procenv"
-	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/feature/featuretest"
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
-// scriptedCore answers a feature's daemon calls from a table and runs Go at once, recording what
-// the feature asked.
-type scriptedCore struct {
-	ws      string
-	answers map[string]func(params []any) (any, error)
-	calls   []string
-	set     map[string]any
-	opened  []string
-	asked   []feature.Question
-	closed  []string
-	files   []string
-	hidden  []string // HidePanel's
-	notes   []string
-	failed  []string
-	views   []string            // the view methods called, "id.method"
-	listing feature.FileList    // what Files answers
-	spaces  []feature.Workspace // what Workspaces answers
-	page    feature.Page        // what Page answers
-	crumbs  []string            // the breadcrumb last put on the frame
-	focused bool                // what HasFocus answers
-	viewErr error               // what View answers
-	shown   bool                // what PanelShown answers
-	// deferred holds each Go's answer until deliver runs it: answers late and in any order
-	deferred bool
-	pending  []func()
-}
-
-func newScripted(ws string) *scriptedCore {
-	return &scriptedCore{ws: ws, answers: map[string]func([]any) (any, error){}, set: map[string]any{}}
-}
-
-func (s *scriptedCore) Set(name string, v any)           { s.set[name] = v }
-func (*scriptedCore) AgentEntries() []feature.AgentEntry { return nil }
-func (*scriptedCore) HandTask(feature.AgentRef, feature.TaskRef, string, func(error)) error {
-	return ErrAgentUnavailable
-}
-func (*scriptedCore) SendText(feature.AgentRef, string, func(error)) error {
-	return ErrAgentUnavailable
-}
-func (s *scriptedCore) Open(id string)    { s.opened = append(s.opened, id) }
-func (s *scriptedCore) Close(id string)   { s.closed = append(s.closed, id) }
-func (s *scriptedCore) Notify(msg string) { s.notes = append(s.notes, msg) }
-func (*scriptedCore) Tr(id string) string { return englishText(id) }
-func (f *scriptedCore) Trf(id string, args ...any) string {
-	return (&Host{}).trf(id, args...)
-}
-func (s *scriptedCore) NotifyOngoing(_, msg string)                { s.notes = append(s.notes, msg) }
-func (s *scriptedCore) NotifyDone(_, msg string)                   { s.notes = append(s.notes, msg) }
-func (s *scriptedCore) NotifyOngoingClick(_, msg string, _ func()) { s.notes = append(s.notes, msg) }
-func (s *scriptedCore) WidgetsChanged()                            {}
-func (s *scriptedCore) HidePanel(id string)                        { s.hidden = append(s.hidden, id) }
-
-// Ask records the question and holds it for answer: its OnYes runs when the test says Yes.
-func (s *scriptedCore) Ask(q feature.Question) feature.Asked {
-	s.asked = append(s.asked, q)
-	return feature.Asked{}
-}
-
-// yes answers the latest question Yes.
-func (s *scriptedCore) yes()                            { s.asked[len(s.asked)-1].OnYes() }
-func (s *scriptedCore) Workspace() string               { return s.ws }
-func (s *scriptedCore) Prefs() feature.PrefsView        { return prefs{} }
-func (s *scriptedCore) Env() procenv.Env                { return nil } // the process's own
-func (s *scriptedCore) OpenFile(abs string)             { s.files = append(s.files, abs) }
-func (s *scriptedCore) OpenRef(ws, path string)         { s.files = append(s.files, ws+":"+path) }
-func (s *scriptedCore) OpenAbsolute(abs string)         { s.files = append(s.files, ":"+abs) }
-func (s *scriptedCore) Say(msg string)                  { s.notes = append(s.notes, msg) }
-func (s *scriptedCore) SetPref(name, value string)      { s.set[name] = value }
-func (s *scriptedCore) Files() feature.FileList         { return s.listing }
-func (s *scriptedCore) Workspaces() []feature.Workspace { return s.spaces }
-func (s *scriptedCore) HasFocus(string) bool            { return s.focused }
-func (s *scriptedCore) SearchModelsChanged(ranker bool) {
-	s.views = append(s.views, fmt.Sprint("search.changed ranker=", ranker))
-}
-func (s *scriptedCore) Post(fn func())         { fn() }
-func (s *scriptedCore) TogglePanel(id string)  { s.views = append(s.views, id+".toggle") }
-func (s *scriptedCore) PanelShown(string) bool { return s.shown }
-func (s *scriptedCore) TogglePanelTab(id string, tab int) {
-	s.views = append(s.views, fmt.Sprintf("%s.toggle(%d)", id, tab))
-}
-func (s *scriptedCore) Page() feature.Page    { return s.page }
-func (s *scriptedCore) Crumbs(parts []string) { s.crumbs = parts }
-func (s *scriptedCore) GoToLine(line int) {
-	s.views = append(s.views, fmt.Sprint("editor.line ", line))
-}
-func (s *scriptedCore) View(id, method string, _ ...any) error {
-	s.views = append(s.views, id+"."+method)
-	return s.viewErr
-}
-func (s *scriptedCore) Failed(what string, err error) {
-	s.failed = append(s.failed, what+": "+err.Error())
-}
-
-// Ticket is the host's latest-wins rule over the sequence (there is no connection to move).
-func (s *scriptedCore) Ticket(seq *uint64, _ feature.TicketScope) feature.Ticket {
-	if seq == nil {
-		return feature.Ticket{}
-	}
-	*seq++
-	n := *seq
-	return feature.NewTicket(func() bool { return *seq == n })
-}
-
-func (s *scriptedCore) Go(fn func(context.Context) any, then func(any)) {
-	v := fn(context.Background())
-	if s.deferred {
-		s.pending = append(s.pending, func() { then(v) })
-		return
-	}
-	then(v)
-}
-
-// deliver runs the held answers, in the order given (indexes into pending at the call).
-func (s *scriptedCore) deliver(order ...int) {
-	held := s.pending
-	s.pending = nil
-	for _, i := range order {
-		held[i]()
-	}
-}
-func (s *scriptedCore) Call(_ context.Context, verb string, params ...any) (any, error) {
-	s.calls = append(s.calls, fmt.Sprint(verb, params))
-	if a, ok := s.answers[verb]; ok {
-		return a(params)
-	}
-	return nil, nil
-}
-
-func (s *scriptedCore) called(prefix string) bool {
-	for _, c := range s.calls {
-		if strings.HasPrefix(c, prefix) {
-			return true
-		}
-	}
-	return false
+// newScripted is featuretest's Core answering the host's preferences.
+func newScripted(ws string) *featuretest.ScriptedCore {
+	c := featuretest.NewScripted(ws)
+	c.Preferences = prefs{} // the host's preferences, catalog and agents, as the cells were written against
+	c.Text, c.Textf, c.AgentErr = englishText, (&Host{}).trf, ErrAgentUnavailable
+	return c
 }
 
 // a store with one open task, claimed, or released (todos.release: the read-only case)
-func scriptedStore(claimed bool) *scriptedCore {
+func scriptedStore(claimed bool) *featuretest.ScriptedCore {
 	s := newScripted("kb")
-	s.answers["todos.resolve"] = func([]any) (any, error) {
+	s.Answers["todos.resolve"] = func([]any) (any, error) {
 		return map[string]any{"store": "/kb/.todo-list", "claimed": claimed, "released": !claimed}, nil
 	}
-	s.answers["todos.list"] = func(p []any) (any, error) {
+	s.Answers["todos.list"] = func(p []any) (any, error) {
 		opts := p[1].(map[string]any)
 		switch b := opts["buckets"].([]any)[0].(string); {
 		case b == "archived":
@@ -172,7 +41,7 @@ func scriptedStore(claimed bool) *scriptedCore {
 		}
 		return map[string]any{"tasks": []any{}}, nil
 	}
-	s.answers["todos.stores"] = func([]any) (any, error) {
+	s.Answers["todos.stores"] = func([]any) (any, error) {
 		return []any{map[string]any{"path": "/p/.todo-list", "roots": []any{"/p"}, "claimed": true},
 			map[string]any{"path": "/q/.todo-list", "roots": []any{}}}, nil
 	}
@@ -207,24 +76,24 @@ func storeLabels(v *todos) []string {
 func TestTodosShowsOneStoreChosenInADropdown(t *testing.T) {
 	none := newScripted("")
 	newTodos(none).toggle()
-	if len(none.notes) != 1 || len(none.views) != 0 {
-		t.Errorf("no workspace: notes %v, views %v", none.notes, none.views)
+	if len(none.Notes) != 1 || len(none.Views) != 0 {
+		t.Errorf("no workspace: notes %v, views %v", none.Notes, none.Views)
 	}
 	s := scriptedStore(false)
 	v := newTodos(s)
 	v.toggle()
-	if len(s.views) != 1 || s.views[0] != "todos.toggle" {
-		t.Errorf("SPC x: views %v", s.views)
+	if len(s.Views) != 1 || s.Views[0] != "todos.toggle" {
+		t.Errorf("SPC x: views %v", s.Views)
 	}
 	v.Panels()[0].Opened(nil)
 	if got, want := storeLabels(v), []string{"kb", "p"}; !slices.Equal(got, want) {
 		t.Fatalf("the dropdown %q, want %q (the rootless store left out)", got, want)
 	}
-	if s.set["App.todoStoreIndex"] != 0 || v.cur.id != "ws:kb" || s.set["App.todoHasStore"] != true {
-		t.Errorf("the store shown: index %v, %+v", s.set["App.todoStoreIndex"], v.cur)
+	if s.Sets["App.todoStoreIndex"] != 0 || v.cur.id != "ws:kb" || s.Sets["App.todoHasStore"] != true {
+		t.Errorf("the store shown: index %v, %+v", s.Sets["App.todoStoreIndex"], v.cur)
 	}
 	var reads []string
-	for _, c := range s.calls {
+	for _, c := range s.Calls {
 		if strings.HasPrefix(c, "todos.list") {
 			reads = append(reads, c)
 		}
@@ -240,27 +109,27 @@ func TestTodosShowsOneStoreChosenInADropdown(t *testing.T) {
 	}
 
 	// another store chosen: the tabs emptied, its Open read; the old store's late answer dropped
-	s.answers["todos.list"] = func(p []any) (any, error) {
+	s.Answers["todos.list"] = func(p []any) (any, error) {
 		return map[string]any{"tasks": []any{map[string]any{"id": "x", "title": fmt.Sprint(p[0])}}}, nil
 	}
-	s.deferred = true
+	s.Deferred = true
 	v.reload() // kb's Open, held
-	held := s.pending
-	s.pending = nil
-	s.deferred = false
+	held := s.Pending
+	s.Pending = nil
+	s.Deferred = false
 	v.storeChosen(1)
-	if v.cur.id != "root:/p" || !s.called("todos.list[map[root:/p] map[buckets:[open]]]") {
-		t.Fatalf("p chosen: %+v, calls %v", v.cur, s.calls)
+	if v.cur.id != "root:/p" || !s.Called("todos.list[map[root:/p] map[buckets:[open]]]") {
+		t.Fatalf("p chosen: %+v, calls %v", v.cur, s.Calls)
 	}
 	held[0]() // kb's Open, late
 	if got := tabRows(v, 0); !slices.Equal(got, []string{"1  map[root:/p]"}) {
 		t.Errorf("p's Open after kb's late answer: %q", got)
 	}
-	n := len(s.calls)
+	n := len(s.Calls)
 	v.storeChosen(1) // the same store: nothing read
 	v.storeChosen(9) // no such store
-	if len(s.calls) != n {
-		t.Errorf("the same store chosen again read %v", s.calls[n:])
+	if len(s.Calls) != n {
+		t.Errorf("the same store chosen again read %v", s.Calls[n:])
 	}
 }
 
@@ -270,7 +139,7 @@ func TestTodosShowsOneStoreChosenInADropdown(t *testing.T) {
 // a change; Enter opens the task's file and closes the panel.
 func TestTodosTabsAreNumberedTablesReadWhenShown(t *testing.T) {
 	s := scriptedStore(true)
-	s.answers["todos.list"] = func(p []any) (any, error) {
+	s.Answers["todos.list"] = func(p []any) (any, error) {
 		b := p[1].(map[string]any)["buckets"].([]any)[0].(string)
 		if b == "archived" {
 			return map[string]any{"partitions": []any{}}, nil
@@ -285,64 +154,64 @@ func TestTodosTabsAreNumberedTablesReadWhenShown(t *testing.T) {
 	if got, want := tabRows(v, 0), []string{"1  ⚠ Ship open", "2  Clean open"}; !slices.Equal(got, want) {
 		t.Fatalf("Open %q, want %q", got, want)
 	}
-	if s.set["App.todoOpenIndex"] != 0 {
-		t.Errorf("the cursor %v", s.set["App.todoOpenIndex"])
+	if s.Sets["App.todoOpenIndex"] != 0 {
+		t.Errorf("the cursor %v", s.Sets["App.todoOpenIndex"])
 	}
-	d := fmt.Sprint(s.set["App.todoDetail"])
+	d := fmt.Sprint(s.Sets["App.todoDetail"])
 	for _, want := range []string{"Ship open", "priority: high", "tags:", "errors:", "adr[0] not-found: gone", "the notes"} {
 		if !strings.Contains(d, want) {
 			t.Errorf("details lack %q:\n%s", want, d)
 		}
 	}
 	v.moved(0, 1)
-	if !strings.Contains(fmt.Sprint(s.set["App.todoDetail"]), "## Clean open") {
-		t.Errorf("the cursor moved: %v", s.set["App.todoDetail"])
+	if !strings.Contains(fmt.Sprint(s.Sets["App.todoDetail"]), "## Clean open") {
+		t.Errorf("the cursor moved: %v", s.Sets["App.todoDetail"])
 	}
 	v.moved(0, -1) // a table with rows moved away for a moment (selectRow): the cursor stays
 	if v.cursors[0] != 1 {
 		t.Errorf("a passing -1 took the cursor: %d", v.cursors[0])
 	}
 	v.moved(2, 0) // a table not shown moves its own cursor only
-	if !strings.Contains(fmt.Sprint(s.set["App.todoDetail"]), "## Clean open") {
-		t.Errorf("a hidden table moved the details: %v", s.set["App.todoDetail"])
+	if !strings.Contains(fmt.Sprint(s.Sets["App.todoDetail"]), "## Clean open") {
+		t.Errorf("a hidden table moved the details: %v", s.Sets["App.todoDetail"])
 	}
-	s.views = nil
+	s.Views = nil
 	v.showTab(2)
-	if s.set["App.todoTab"] != 2 || !s.called("todos.list[kb map[buckets:[deferred]]]") || !slices.Contains(s.views, "todoDeferredTable.forceActiveFocus") {
-		t.Fatalf("3: tab %v, views %v", s.set["App.todoTab"], s.views)
+	if s.Sets["App.todoTab"] != 2 || !s.Called("todos.list[kb map[buckets:[deferred]]]") || !slices.Contains(s.Views, "todoDeferredTable.forceActiveFocus") {
+		t.Fatalf("3: tab %v, views %v", s.Sets["App.todoTab"], s.Views)
 	}
 	if got := tabRows(v, 2); len(got) != 2 {
 		t.Errorf("Deferred %q", got)
 	}
 	for _, step := range []struct{ by, want int }{{1, 3}, {1, 4}, {1, varsTab}, {1, 0}, {-1, varsTab}, {-1, 4}, {-1, 3}} {
 		v.stepTab(step.by)
-		if v.tab != step.want || s.set["App.todoTab"] != step.want {
+		if v.tab != step.want || s.Sets["App.todoTab"] != step.want {
 			t.Fatalf("a step of %d: tab %d, want %d", step.by, v.tab, step.want)
 		}
 	}
-	s.views = nil
+	s.Views = nil
 	v.tabShown(3) // the bar's echo of the tab shown: nothing
-	if len(s.views) != 0 {
-		t.Errorf("the bar's echo took the keyboard: %v", s.views)
+	if len(s.Views) != 0 {
+		t.Errorf("the bar's echo took the keyboard: %v", s.Views)
 	}
 	v.tabShown(0) // a click on Open's title
-	if v.tab != 0 || !slices.Contains(s.views, "todoOpenTable.forceActiveFocus") {
-		t.Errorf("a click on a title: tab %d, views %v", v.tab, s.views)
+	if v.tab != 0 || !slices.Contains(s.Views, "todoOpenTable.forceActiveFocus") {
+		t.Errorf("a click on a title: tab %d, views %v", v.tab, s.Views)
 	}
 	v.showTab(2)
-	n := len(s.calls)
+	n := len(s.Calls)
 	v.showTab(2) // read already, nothing changed
 	v.showTab(7) // no such tab
-	if len(s.calls) != n {
-		t.Errorf("a tab read already was read again: %v", s.calls[n:])
+	if len(s.Calls) != n {
+		t.Errorf("a tab read already was read again: %v", s.Calls[n:])
 	}
 	v.activated(2, 1)
-	if !slices.Equal(s.files, []string{"/kb/.todo-list/deferred/1.md"}) || !slices.Contains(s.views, "todos.close") {
-		t.Errorf("Enter on a task: files %v, views %v", s.files, s.views)
+	if !slices.Equal(s.OpenedFiles, []string{"/kb/.todo-list/deferred/1.md"}) || !slices.Contains(s.Views, "todos.close") {
+		t.Errorf("Enter on a task: files %v, views %v", s.OpenedFiles, s.Views)
 	}
 	v.activated(2, 9) // no such row
-	if len(s.files) != 1 {
-		t.Errorf("Enter on no row opened %v", s.files)
+	if len(s.OpenedFiles) != 1 {
+		t.Errorf("Enter on no row opened %v", s.OpenedFiles)
 	}
 }
 
@@ -353,32 +222,32 @@ func TestTodosArchivedTabListsItsMonths(t *testing.T) {
 	s := scriptedStore(true)
 	v := newTodos(s)
 	v.list()
-	s.views = nil
+	s.Views = nil
 	v.showTab(archivedTab)
-	if v.months.Len() != 1 || !slices.Contains(s.views, "todoMonths.forceActiveFocus") {
-		t.Fatalf("months %d, views %v", v.months.Len(), s.views)
+	if v.months.Len() != 1 || !slices.Contains(s.Views, "todoMonths.forceActiveFocus") {
+		t.Fatalf("months %d, views %v", v.months.Len(), s.Views)
 	}
-	if s.called("todos.list[kb map[buckets:[archived/2026/09]]]") {
+	if s.Called("todos.list[kb map[buckets:[archived/2026/09]]]") {
 		t.Fatal("a month was read before it opened")
 	}
 	v.monthMoved(0)
 	v.enter() // Enter on the card: the month under the cursor opens
-	if !s.called("todos.list[kb map[buckets:[archived/2026/09]]]") || !slices.Equal(tabRows(v, archivedTab), []string{"1  Old"}) {
-		t.Fatalf("the month: calls %v, rows %q", s.calls, tabRows(v, archivedTab))
+	if !s.Called("todos.list[kb map[buckets:[archived/2026/09]]]") || !slices.Equal(tabRows(v, archivedTab), []string{"1  Old"}) {
+		t.Fatalf("the month: calls %v, rows %q", s.Calls, tabRows(v, archivedTab))
 	}
-	if !slices.Contains(s.views, "todoArchivedTable.forceActiveFocus") || !strings.Contains(fmt.Sprint(s.set["App.todoDetail"]), "## Old") {
-		t.Errorf("the month's tasks: views %v, details %v", s.views, s.set["App.todoDetail"])
+	if !slices.Contains(s.Views, "todoArchivedTable.forceActiveFocus") || !strings.Contains(fmt.Sprint(s.Sets["App.todoDetail"]), "## Old") {
+		t.Errorf("the month's tasks: views %v, details %v", s.Views, s.Sets["App.todoDetail"])
 	}
-	s.views = nil
+	s.Views = nil
 	v.monthsBack()
-	if !slices.Equal(s.views, []string{"todoMonths.forceActiveFocus"}) {
-		t.Errorf("Backspace: %v", s.views)
+	if !slices.Equal(s.Views, []string{"todoMonths.forceActiveFocus"}) {
+		t.Errorf("Backspace: %v", s.Views)
 	}
 	v.reload()
 	if v.month != "2026/09" || len(tabRows(v, archivedTab)) != 1 {
 		t.Errorf("read again: month %q, rows %q", v.month, tabRows(v, archivedTab))
 	}
-	s.answers["todos.list"] = func([]any) (any, error) {
+	s.Answers["todos.list"] = func([]any) (any, error) {
 		return map[string]any{"partitions": []any{map[string]any{"month": "2026/10", "files": int64(1)}}}, nil
 	}
 	v.reload()
@@ -387,10 +256,10 @@ func TestTodosArchivedTabListsItsMonths(t *testing.T) {
 	}
 	v.monthChosen(5) // no such month
 	v.showTab(0)
-	s.views = nil
+	s.Views = nil
 	v.monthsBack() // not on Archived: nothing
-	if len(s.views) != 0 {
-		t.Errorf("Backspace off Archived: %v", s.views)
+	if len(s.Views) != 0 {
+		t.Errorf("Backspace off Archived: %v", s.Views)
 	}
 }
 
@@ -399,63 +268,63 @@ func TestTodosArchivedTabListsItsMonths(t *testing.T) {
 // writes nothing and says nothing (the action row says it is read-only), and R reads it again.
 func TestTodosWritesAClaimedStoreAndNotAReadOnlyOne(t *testing.T) {
 	s := scriptedStore(true)
-	s.answers["todos.add"] = func([]any) (any, error) { return map[string]any{"id": "t1", "status": "open"}, nil }
-	s.answers["todos.refresh"] = func([]any) (any, error) { return map[string]any{"moved": int64(1)}, nil }
+	s.Answers["todos.add"] = func([]any) (any, error) { return map[string]any{"id": "t1", "status": "open"}, nil }
+	s.Answers["todos.refresh"] = func([]any) (any, error) { return map[string]any{"moved": int64(1)}, nil }
 	v := newTodos(s)
 	v.list()
 	v.showTab(2)
 	v.add()
-	if s.opened[len(s.opened)-1] != "todoNew" {
-		t.Fatalf("opened %v", s.opened)
+	if s.Opened[len(s.Opened)-1] != "todoNew" {
+		t.Fatalf("opened %v", s.Opened)
 	}
 	v.addTitle("  ")
-	if s.called("todos.add") {
+	if s.Called("todos.add") {
 		t.Error("an empty title was added")
 	}
 	v.addTitle(" Write it ")
-	if v.tab != 0 || s.set["App.todoTab"] != 0 || s.set["App.todoOpenIndex"] != 0 {
-		t.Errorf("the added task: tab %d, cursor %v", v.tab, s.set["App.todoOpenIndex"])
+	if v.tab != 0 || s.Sets["App.todoTab"] != 0 || s.Sets["App.todoOpenIndex"] != 0 {
+		t.Errorf("the added task: tab %d, cursor %v", v.tab, s.Sets["App.todoOpenIndex"])
 	}
 	v.remove()
-	if len(s.asked) != 1 || s.asked[0].Title != "remove the task?" {
-		t.Fatalf("asked %v", s.asked)
+	if len(s.Asked) != 1 || s.Asked[0].Title != "remove the task?" {
+		t.Fatalf("asked %v", s.Asked)
 	}
-	s.yes()
+	s.Yes()
 	v.chooseStatus()
 	v.statusPick.Accept(1, "") // in-progress
 	for _, want := range []string{"todos.add[kb map[title:Write it]]", "todos.remove[kb t1 r1]", "todos.status[kb t1 r1 in-progress]"} {
-		if !s.called(want) {
-			t.Errorf("no %s: %v", want, s.calls)
+		if !s.Called(want) {
+			t.Errorf("no %s: %v", want, s.Calls)
 		}
 	}
 	v.refresh()
-	if !s.called("todos.refresh") || !strings.Contains(strings.Join(s.notes, "|"), "refreshed: 1 moved") {
-		t.Errorf("refresh: %v %v", s.calls, s.notes)
+	if !s.Called("todos.refresh") || !strings.Contains(strings.Join(s.Notes, "|"), "refreshed: 1 moved") {
+		t.Errorf("refresh: %v %v", s.Calls, s.Notes)
 	}
 	v.toggleDetail()
-	if s.set["App.todoDetailShown"] != false {
-		t.Errorf("i: details shown %v", s.set["App.todoDetailShown"])
+	if s.Sets["App.todoDetailShown"] != false {
+		t.Errorf("i: details shown %v", s.Sets["App.todoDetailShown"])
 	}
-	s.answers["todos.remove"] = func([]any) (any, error) { return nil, errors.New("-32071 the task changed") }
-	s.yes()
-	if len(s.failed) != 1 || !strings.Contains(s.failed[0], "todos.remove") {
-		t.Errorf("failed %v", s.failed)
+	s.Answers["todos.remove"] = func([]any) (any, error) { return nil, errors.New("-32071 the task changed") }
+	s.Yes()
+	if len(s.Failures) != 1 || !strings.Contains(s.Failures[0], "todos.remove") {
+		t.Errorf("failed %v", s.Failures)
 	}
 
 	ro := scriptedStore(false)
 	w := newTodos(ro)
 	w.list()
-	n := len(ro.calls)
+	n := len(ro.Calls)
 	w.add()
 	w.remove()
 	w.chooseStatus()
 	w.chooseFolder("move")
-	if len(ro.calls) != n || len(ro.notes) != 0 || len(ro.opened) != 0 || len(ro.asked) != 0 {
-		t.Errorf("a read-only store was written: %v, notes %v, opened %v", ro.calls[n:], ro.notes, ro.opened)
+	if len(ro.Calls) != n || len(ro.Notes) != 0 || len(ro.Opened) != 0 || len(ro.Asked) != 0 {
+		t.Errorf("a read-only store was written: %v, notes %v, opened %v", ro.Calls[n:], ro.Notes, ro.Opened)
 	}
 	w.refresh() // read-only: the tab read again, nothing reconciled
-	if len(ro.calls) == n || ro.called("todos.refresh") {
-		t.Errorf("refresh on a read-only store: %v", ro.calls[n:])
+	if len(ro.Calls) == n || ro.Called("todos.refresh") {
+		t.Errorf("refresh on a read-only store: %v", ro.Calls[n:])
 	}
 }
 
@@ -466,40 +335,40 @@ func TestTodosEventsAndFolders(t *testing.T) {
 	s := scriptedStore(true)
 	v := newTodos(s)
 	v.list()
-	n := len(s.calls)
+	n := len(s.Calls)
 	v.Event("todos.changed", "kb", "")
 	v.Event("todos.changed", "elsewhere", "x")
-	if got := len(s.calls) - n; got != 1 {
+	if got := len(s.Calls) - n; got != 1 {
 		t.Errorf("%d reads after the events, want the one tab shown of kb", got)
 	}
 	v.storeChosen(1)
-	n = len(s.calls)
+	n = len(s.Calls)
 	v.Event("todos.changed", "", "/p#t9")
-	if got := len(s.calls) - n; got != 1 {
+	if got := len(s.Calls) - n; got != 1 {
 		t.Errorf("%d reads after /p's event", got)
 	}
 	v.chooseFolder("load")
-	if s.opened[len(s.opened)-1] != "todoFolder" {
-		t.Errorf("folder dialog %v", s.opened)
+	if s.Opened[len(s.Opened)-1] != "todoFolder" {
+		t.Errorf("folder dialog %v", s.Opened)
 	}
-	s.answers["todos.stores"] = func([]any) (any, error) {
+	s.Answers["todos.stores"] = func([]any) (any, error) {
 		return []any{map[string]any{"path": "/p/.todo-list", "roots": []any{"/p"}, "claimed": true},
 			map[string]any{"path": "/r/.todo-list", "roots": []any{"/r"}}}, nil
 	}
 	v.folderChosen("/r/.todo-list")
-	if !s.called("todos.register[/r]") || v.cur == nil || v.cur.id != "root:/r" || s.set["App.todoStoreIndex"] != 2 {
-		t.Errorf("load: calls %v, shown %+v, index %v", s.calls, v.cur, s.set["App.todoStoreIndex"])
+	if !s.Called("todos.register[/r]") || v.cur == nil || v.cur.id != "root:/r" || s.Sets["App.todoStoreIndex"] != 2 {
+		t.Errorf("load: calls %v, shown %+v, index %v", s.Calls, v.cur, s.Sets["App.todoStoreIndex"])
 	}
 	v.folderAs = "new"
 	v.folderChosen("/n")
-	if !s.called("todos.scaffold[map[root:/n]]") {
-		t.Errorf("new: %v", s.calls)
+	if !s.Called("todos.scaffold[map[root:/n]]") {
+		t.Errorf("new: %v", s.Calls)
 	}
 	v.storeChosen(0)
 	v.folderAs = "move"
 	v.folderChosen("/m")
-	if !s.called("todos.move_store[kb /m/.todo-list]") {
-		t.Errorf("move: %v", s.calls)
+	if !s.Called("todos.move_store[kb /m/.todo-list]") {
+		t.Errorf("move: %v", s.Calls)
 	}
 	v.folderChosen("")
 }
@@ -508,10 +377,10 @@ func TestTodosEventsAndFolders(t *testing.T) {
 // and its error; a write is never dropped.
 func TestTodosAnswersDoNotCancelEachOther(t *testing.T) {
 	s := scriptedStore(true)
-	s.deferred = true
+	s.Deferred = true
 	v := newTodos(s)
 	failing := true
-	s.answers["todos.stores"] = func([]any) (any, error) {
+	s.Answers["todos.stores"] = func([]any) (any, error) {
 		if failing {
 			failing = false
 			return nil, errors.New("-32060 the daemon is busy")
@@ -520,23 +389,23 @@ func TestTodosAnswersDoNotCancelEachOther(t *testing.T) {
 	}
 	v.list() // [0], fails
 	v.list() // [1]
-	s.deliver(1, 0)
-	if len(s.failed) != 0 {
-		t.Errorf("a stale answer's error was shown: %v", s.failed)
+	s.Deliver(1, 0)
+	if len(s.Failures) != 0 {
+		t.Errorf("a stale answer's error was shown: %v", s.Failures)
 	}
-	s.deliver(0) // the labels the newer listing asked for
-	s.deliver(0) // then the workspace's resolve
+	s.Deliver(0) // the labels the newer listing asked for
+	s.Deliver(0) // then the workspace's resolve
 	if got := storeLabels(v); len(got) != 1 {
 		t.Fatalf("stores %q", got)
 	}
 	// a write is never dropped: two adds both land
-	s.answers["todos.add"] = func([]any) (any, error) { return map[string]any{"id": "x"}, nil }
-	s.pending = nil
+	s.Answers["todos.add"] = func([]any) (any, error) { return map[string]any{"id": "x"}, nil }
+	s.Pending = nil
 	v.addTitle("one")
 	v.addTitle("two")
-	s.deliver(1, 0)
-	if n := strings.Count(strings.Join(s.notes, "|"), "todos: added x"); n != 2 {
-		t.Errorf("%d adds answered, want 2: %v", n, s.notes)
+	s.Deliver(1, 0)
+	if n := strings.Count(strings.Join(s.Notes, "|"), "todos: added x"); n != 2 {
+		t.Errorf("%d adds answered, want 2: %v", n, s.Notes)
 	}
 }
 
@@ -544,7 +413,7 @@ func TestTodosAnswersDoNotCancelEachOther(t *testing.T) {
 // nothing; a refused focus or close is said.
 func TestTodosAtTheEdges(t *testing.T) {
 	s := scriptedStore(true)
-	s.ws = ""
+	s.WS = ""
 	v := newTodos(s)
 	v.list()
 	if got := storeLabels(v); !slices.Equal(got, []string{"p"}) || v.cur.id != "root:/p" {
@@ -552,13 +421,13 @@ func TestTodosAtTheEdges(t *testing.T) {
 	}
 
 	idle := newScripted("")
-	idle.answers["todos.stores"] = func([]any) (any, error) { return []any{}, nil }
+	idle.Answers["todos.stores"] = func([]any) (any, error) { return []any{}, nil }
 	w := newTodos(idle)
 	w.list()
-	if w.cur != nil || idle.set["App.todoHasStore"] != false || idle.set["App.todoStoreIndex"] != -1 {
-		t.Errorf("no store: %+v, index %v", w.cur, idle.set["App.todoStoreIndex"])
+	if w.cur != nil || idle.Sets["App.todoHasStore"] != false || idle.Sets["App.todoStoreIndex"] != -1 {
+		t.Errorf("no store: %+v, index %v", w.cur, idle.Sets["App.todoStoreIndex"])
 	}
-	n := len(idle.calls)
+	n := len(idle.Calls)
 	w.add()
 	w.chooseStatus()
 	w.refresh()
@@ -567,8 +436,8 @@ func TestTodosAtTheEdges(t *testing.T) {
 	w.folderAs = "move"
 	w.folderChosen("/m")
 	w.Event("todos.changed", "kb", "")
-	if len(idle.calls) != n {
-		t.Errorf("with no store, the keys asked %v", idle.calls[n:])
+	if len(idle.Calls) != n {
+		t.Errorf("with no store, the keys asked %v", idle.Calls[n:])
 	}
 	cmds := w.Commands()
 	for _, c := range []string{"App.todoLoad", "App.todoNew", "App.todoMove", "App.todoFocusStore"} {
@@ -576,7 +445,7 @@ func TestTodosAtTheEdges(t *testing.T) {
 			t.Errorf("%s: %v", c, err)
 		}
 	}
-	if got := strings.Join(idle.opened, ","); got != "todoFolder,todoFolderNew" { // M on no store: nothing
+	if got := strings.Join(idle.Opened, ","); got != "todoFolder,todoFolderNew" { // M on no store: nothing
 		t.Errorf("the folder dialog opened %q", got)
 	}
 	if err := cmds["App.todoMoved"].Run([]qml.SpecValue{{Kind: qml.SpecValueNumber, Raw: "x"}, {Kind: qml.SpecValueNumber, Raw: "1"}}); err == nil {
@@ -585,10 +454,10 @@ func TestTodosAtTheEdges(t *testing.T) {
 	w.moved(9, 0) // no such tab
 
 	sc := newScripted("kb")
-	sc.viewErr = errors.New("no such view")
+	sc.ViewErr = errors.New("no such view")
 	x := newTodos(sc)
 	x.focus("todoMonths")
-	if len(sc.failed) != 1 || !strings.Contains(sc.failed[0], "todos: the keyboard") {
-		t.Errorf("a refused focus: %v", sc.failed)
+	if len(sc.Failures) != 1 || !strings.Contains(sc.Failures[0], "todos: the keyboard") {
+		t.Errorf("a refused focus: %v", sc.Failures)
 	}
 }

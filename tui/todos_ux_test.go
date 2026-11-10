@@ -58,7 +58,7 @@ func TestTodosPanelOpensLargeAndKeepsTheUsersSize(t *testing.T) {
 // another store shows.
 func TestTodosStatusLineSaysOnlyWhatNeedsTheUser(t *testing.T) {
 	s := scriptedStore(true)
-	s.answers["todos.list"] = func(p []any) (any, error) {
+	s.Answers["todos.list"] = func(p []any) (any, error) {
 		switch b := p[1].(map[string]any)["buckets"].([]any)[0].(string); b {
 		case "archived":
 			return map[string]any{"partitions": []any{map[string]any{"month": "2026/09", "files": int64(1)}}}, nil
@@ -70,8 +70,8 @@ func TestTodosStatusLineSaysOnlyWhatNeedsTheUser(t *testing.T) {
 	v := newTodos(s)
 	quiet := func(when string) {
 		t.Helper()
-		if s.set["App.todosStatus"] != "" || s.set["App.todosStatusShown"] != false || len(s.notes) != 0 {
-			t.Errorf("%s: status %q (shown %v), notes %q", when, s.set["App.todosStatus"], s.set["App.todosStatusShown"], s.notes)
+		if s.Sets["App.todosStatus"] != "" || s.Sets["App.todosStatusShown"] != false || len(s.Notes) != 0 {
+			t.Errorf("%s: status %q (shown %v), notes %q", when, s.Sets["App.todosStatus"], s.Sets["App.todosStatusShown"], s.Notes)
 		}
 	}
 	v.list()
@@ -85,20 +85,20 @@ func TestTodosStatusLineSaysOnlyWhatNeedsTheUser(t *testing.T) {
 	v.moved(archivedTab, 0)
 	v.chooseFolder("load")
 	quiet("the cursor moved, and Load…")
-	if s.opened[len(s.opened)-1] != "todoFolder" { // its title says what the folder is for
-		t.Errorf("Load… opened %v", s.opened)
+	if s.Opened[len(s.Opened)-1] != "todoFolder" { // its title says what the folder is for
+		t.Errorf("Load… opened %v", s.Opened)
 	}
 	v.showTab(2)
-	if got := s.set["App.todosStatus"]; got != "⚠ 2 malformed files not listed: 2 in Deferred" || s.set["App.todosStatusShown"] != true {
-		t.Errorf("malformed files: %q (shown %v)", got, s.set["App.todosStatusShown"])
+	if got := s.Sets["App.todosStatus"]; got != "⚠ 2 malformed files not listed: 2 in Deferred" || s.Sets["App.todosStatusShown"] != true {
+		t.Errorf("malformed files: %q (shown %v)", got, s.Sets["App.todosStatusShown"])
 	}
 	v.showTab(0)
-	if got := s.set["App.todosStatus"]; got != "⚠ 2 malformed files not listed: 2 in Deferred" {
+	if got := s.Sets["App.todosStatus"]; got != "⚠ 2 malformed files not listed: 2 in Deferred" {
 		t.Errorf("another tab shown: %q", got)
 	}
 	v.storeChosen(1)
 	quiet("another store")
-	for name, val := range s.set {
+	for name, val := range s.Sets {
 		if text := fmt.Sprint(val); strings.Contains(text, "open a section") || strings.Contains(text, "open one for its tasks") ||
 			strings.Contains(text, " tasks") || strings.Contains(text, "? keys") || strings.Contains(text, "stores:") {
 			t.Errorf("%s says %q", name, text)
@@ -112,7 +112,7 @@ func TestTodosStatusLineSaysOnlyWhatNeedsTheUser(t *testing.T) {
 // name for it). New… on a folder whose store was released loads it and says so.
 func TestTodosAReadOnlyStoreTakesNoKeyAsAnError(t *testing.T) {
 	writes := []string{"todos.add", "todos.remove", "todos.status", "todos.assign", "todos.move_store", "todos.scaffold", "todos.refresh"}
-	s := &agentCore{scriptedCore: scriptedStore(false), entries: []feature.AgentEntry{{Ref: feature.AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true}}}
+	s := &agentCore{ScriptedCore: scriptedStore(false), entries: []feature.AgentEntry{{Ref: feature.AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true}}}
 	v := newTodos(s)
 	v.list()
 	cmds := v.Commands()
@@ -137,31 +137,31 @@ func TestTodosAReadOnlyStoreTakesNoKeyAsAnError(t *testing.T) {
 				t.Errorf("on a read-only %s, %s: %v", where.kind, key.Show, err)
 			}
 			for _, d := range []string{"todoFolderMove", "todoNew", "todoStatusPicker", "agentAssignPicker"} {
-				if slices.Contains(s.opened, d) {
+				if slices.Contains(s.Opened, d) {
 					t.Errorf("on a read-only %s, %s opened %s", where.kind, key.Show, d)
 				}
 			}
 			place() // where the key left the tab, back
 		}
 		for _, w := range writes {
-			if s.called(w) {
-				t.Errorf("on a read-only %s, a key wrote: %v", where.kind, s.calls)
+			if s.Called(w) {
+				t.Errorf("on a read-only %s, a key wrote: %v", where.kind, s.Calls)
 			}
 		}
-		if len(s.notes) != 0 || len(s.failed) != 0 || len(s.asked) != 0 {
-			t.Errorf("on a read-only %s: notes %q, failed %q, asked %v", where.kind, s.notes, s.failed, s.asked)
+		if len(s.Notes) != 0 || len(s.Failures) != 0 || len(s.Asked) != 0 {
+			t.Errorf("on a read-only %s: notes %q, failed %q, asked %v", where.kind, s.Notes, s.Failures, s.Asked)
 		}
 	}
-	if !s.called("todos.list") || !slices.Contains(s.opened, "todoLabel") {
-		t.Errorf("R read nothing again, or L asked for no label: calls %v, opened %v", s.calls, s.opened)
+	if !s.Called("todos.list") || !slices.Contains(s.Opened, "todoLabel") {
+		t.Errorf("R read nothing again, or L asked for no label: calls %v, opened %v", s.Calls, s.Opened)
 	}
 
-	n := len(s.calls)
+	n := len(s.Calls)
 	v.folderAs = "new"
 	v.folderChosen("/n")
-	if s.called("todos.scaffold") || len(s.notes) != 1 || s.notes[0] != "todos: /n is loaded, read-only: its store was released (todos.release)" ||
-		!slices.Contains(s.calls[n:], "todos.stores[]") {
-		t.Errorf("New… on a folder whose store was released: calls %v, notes %q", s.calls[n:], s.notes)
+	if s.Called("todos.scaffold") || len(s.Notes) != 1 || s.Notes[0] != "todos: /n is loaded, read-only: its store was released (todos.release)" ||
+		!slices.Contains(s.Calls[n:], "todos.stores[]") {
+		t.Errorf("New… on a folder whose store was released: calls %v, notes %q", s.Calls[n:], s.Notes)
 	}
 }
 
@@ -175,15 +175,15 @@ func TestTodosEnterOnTheCardOfKeysOpensTheRow(t *testing.T) {
 	if err := v.Commands()["App.todoEnter"].Handler("App.todoEnter")(nil); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(s.files, []string{"/kb/.todo-list/open/t1.md"}) {
-		t.Errorf("Enter on a task: files %v", s.files)
+	if !slices.Equal(s.OpenedFiles, []string{"/kb/.todo-list/open/t1.md"}) {
+		t.Errorf("Enter on a task: files %v", s.OpenedFiles)
 	}
-	s.viewErr = errors.New("the panel is gone")
+	s.ViewErr = errors.New("the panel is gone")
 	v.enter()
-	if len(s.failed) != 1 || s.failed[0] != "todos: open: the panel is gone" {
-		t.Errorf("a refused close: failed %v", s.failed)
+	if len(s.Failures) != 1 || s.Failures[0] != "todos: open: the panel is gone" {
+		t.Errorf("a refused close: failed %v", s.Failures)
 	}
-	s.viewErr = nil
+	s.ViewErr = nil
 	v.showTab(archivedTab)
 	v.monthMoved(0)
 	v.enter()
@@ -191,18 +191,18 @@ func TestTodosEnterOnTheCardOfKeysOpensTheRow(t *testing.T) {
 		t.Errorf("Enter on a month: %q, rows %q", v.month, tabRows(v, archivedTab))
 	}
 	v.showTab(1) // empty
-	n := len(s.files)
+	n := len(s.OpenedFiles)
 	v.enter()
-	if len(s.files) != n {
-		t.Errorf("Enter on an empty tab opened %v", s.files[n:])
+	if len(s.OpenedFiles) != n {
+		t.Errorf("Enter on an empty tab opened %v", s.OpenedFiles[n:])
 	}
 
 	ro := scriptedStore(false)
 	w := newTodos(ro)
 	w.list()
-	n = len(ro.calls)
+	n = len(ro.Calls)
 	w.write(w.stores[0], "todos.add", []any{"kb", map[string]any{"title": "x"}}, nil)
-	if len(ro.calls) != n {
-		t.Errorf("a write to a store not claimed was sent: %v", ro.calls[n:])
+	if len(ro.Calls) != n {
+		t.Errorf("a write to a store not claimed was sent: %v", ro.Calls[n:])
 	}
 }
