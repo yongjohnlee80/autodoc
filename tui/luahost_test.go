@@ -220,7 +220,7 @@ autodoc.command{ name = "pk", run = function() autodoc.ui.pick({ items = { "afte
 func TestScriptsSendTextToAnAgent(t *testing.T) {
 	t.Parallel()
 	agent, report := recordingAgentCopy(t, true)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuoteCopy(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	r.s.WaitForText(t, "ready")
@@ -290,7 +290,7 @@ func (r *running) instruct(t *testing.T, title, text string) {
 func TestAPageIsHandedOverByItsPathNeverItsText(t *testing.T) {
 	t.Parallel()
 	agent, report := recordingAgentCopy(t, true)
-	_, r, _ := runAgentTUIIn(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron",
+	_, r, _ := runAgentTUIIn(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuoteCopy(agent), Codename: "heron"}}, "heron",
 		nil, Options{}, map[string][]string{"kb": {"a.md", "a\n", "plan.md", "the-saved-page-text\n"}})
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
@@ -370,7 +370,7 @@ func TestAPageIsHandedOverByItsPathNeverItsText(t *testing.T) {
 func TestScriptsAskALineAndSendARequest(t *testing.T) {
 	t.Parallel()
 	agent, report := recordingAgentCopy(t, true)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuoteCopy(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	r.s.WaitForText(t, "ready")
@@ -423,7 +423,7 @@ end }`)
 func TestScriptsSendALongRichTextThroughLua(t *testing.T) {
 	t.Parallel()
 	agent, report := recordingAgentCopy(t, true)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuoteCopy(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	r.s.WaitForText(t, "ready")
@@ -472,7 +472,7 @@ func TestScriptsSendALongRichTextThroughLua(t *testing.T) {
 func TestScriptsSendNothingToAnUnbracketedAgent(t *testing.T) {
 	t.Parallel()
 	agent, report := recordingAgentCopy(t, false)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuoteCopy(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	r.s.WaitForText(t, "ready")
@@ -531,7 +531,7 @@ func TestSendTextSharesHandTasksDelivery(t *testing.T) {
 func TestTheAgentsCardSendsThePage(t *testing.T) {
 	t.Parallel()
 	agent, report := recordingAgentCopy(t, true)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuoteCopy(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	r.s.WaitForText(t, "ready")

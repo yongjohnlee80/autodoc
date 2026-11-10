@@ -18,7 +18,7 @@ func recordingShell(t *testing.T) (shell, report string) {
 	t.Helper()
 	dir := t.TempDir()
 	shell, report = filepath.Join(dir, "recording-shell"), filepath.Join(dir, "report")
-	script := "#!/bin/sh\nstty raw -echo\nprintf 'ready\\r\\n'\nexec cat >> " + shellQuote(report) + "\n"
+	script := "#!/bin/sh\nstty raw -echo\nprintf 'ready\\r\\n'\nexec cat >> " + shellQuoteCopy(report) + "\n"
 	if err := os.WriteFile(shell, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -104,8 +104,8 @@ func TestCtrlTabMovesBetweenTheTerminalsTabs(t *testing.T) {
 func TestCtrlTabMovesBetweenTheAgentsTabs(t *testing.T) {
 	agent, _ := recordingAgentCopy(t, true)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{
-		{Name: "one", Command: shellQuote(agent), Codename: "one"},
-		{Name: "two", Command: shellQuote(agent), Codename: "two"},
+		{Name: "one", Command: shellQuoteCopy(agent), Codename: "one"},
+		{Name: "two", Command: shellQuoteCopy(agent), Codename: "two"},
 	}, "one")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "one running", func(string) bool { return onLoop(r, func() bool { return r.h.agents.Snapshot().Running == "one" }) })
