@@ -35,10 +35,10 @@ func localOnly(err error) error {
 	return err
 }
 
-// localDisk is what the file dialogs list: golib's local disk (files.LocalFiles: one tree at "/",
+// dialogDisk is what the file dialogs list: golib's local disk (files.LocalFiles: one tree at "/",
 // on Windows every drive, its paths Windows' own), read off the loop. Its Home is left unset, as
 // before: a typed ~ is the dialog's to refuse, as it was.
-func localDisk() files.FileSource {
+func dialogDisk() files.FileSource {
 	src := files.LocalFiles()
 	src.Async, src.Home = true, ""
 	return src
