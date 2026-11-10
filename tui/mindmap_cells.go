@@ -159,7 +159,7 @@ func (m *cellMindmap) openSettings() {
 }
 
 // groupsEdited lays the map out again in list: the settings' edit.
-func (m *cellMindmap) groupsEdited(list []relGroup) {
+func (m *cellMindmap) groupsEdited(list []Group) {
 	gs := newRelGroups(list)
 	m.groups = &gs
 	if m.open {
@@ -196,12 +196,6 @@ func (m *cellMindmap) toggleDepth() {
 	m.depth = 3 - m.depth
 	m.load()
 }
-
-// cellMeasure measures in the cells a terminal draws text in: a layout off the loop has no
-// surface to ask.
-type cellMeasure struct{}
-
-func (cellMeasure) StringWidth(s string) int { return tuicore.StringWidth(s) }
 
 // cellMindShape is a document's outline in cells: the root a bang, every other a rounded box.
 func cellMindShape(root string) func(mapNode) pm.MindShape {
@@ -245,7 +239,7 @@ func (m *cellMindmap) readGroups(ws string, types []string) {
 	if m.store == nil {
 		return
 	}
-	m.store.groups(ws, viewMindmap, types, m.ground, func(list []relGroup) {
+	m.store.groups(ws, viewMindmap, types, m.ground, func(list []Group) {
 		if ws != m.c.Workspace() {
 			return
 		}
@@ -283,7 +277,7 @@ func (m *cellMindmap) load() {
 		if model == nil {
 			return fmt.Errorf("%s is not in its own map", ref.Path)
 		}
-		grid, err := tuimermaid.LayMindmap(ctx, model, cellMeasure{})
+		grid, err := tuimermaid.LayMindmap(ctx, model, feature.CellMeasure{})
 		if err != nil {
 			return err
 		}

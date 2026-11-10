@@ -93,14 +93,14 @@ func (c graphConf) palette() []color.NRGBA {
 
 // groups are view's groups in c; nil for none. A colour that does not read is the default
 // palette's of its place, a shape that does not read a box.
-func (c graphConf) groups(view string) []relGroup {
+func (c graphConf) groups(view string) []Group {
 	stored := c.view(view).Groups
 	if len(stored) == 0 {
 		return nil
 	}
-	out := make([]relGroup, len(stored))
+	out := make([]Group, len(stored))
 	for k, s := range stored {
-		out[k] = relGroup{Query: s.Query, Colour: groupPalette[k%len(groupPalette)]}
+		out[k] = Group{Query: s.Query, Colour: groupPalette[k%len(groupPalette)]}
 		if col, ok := parseHex(s.Colour); ok {
 			out[k].Colour = col
 		}
@@ -114,7 +114,7 @@ func (c graphConf) groups(view string) []relGroup {
 }
 
 // setGroups puts list as view's groups in c. The GlobeMap's keep no shape.
-func (c *graphConf) setGroups(view string, list []relGroup) {
+func (c *graphConf) setGroups(view string, list []Group) {
 	stored := make([]confGroup, len(list))
 	for i, g := range list {
 		stored[i] = confGroup{Query: g.Query, Colour: hexOf(g.Colour)}
@@ -128,7 +128,7 @@ func (c *graphConf) setGroups(view string, list []relGroup) {
 // initialGroups are view's first groups, for the workspace file ws with the user's file user: the
 // user's groups for it, then a group each query of queries they lack, each a colour at random from
 // the palette (ws's, else the user's, else groupPalette), among those legible on ground.
-func initialGroups(view string, ws, user graphConf, queries []string, ground color.NRGBA, rnd *rand.Rand) []relGroup {
+func initialGroups(view string, ws, user graphConf, queries []string, ground color.NRGBA, rnd *rand.Rand) []Group {
 	pal := ws.palette()
 	if len(pal) == 0 {
 		pal = user.palette()

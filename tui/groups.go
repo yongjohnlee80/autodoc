@@ -21,8 +21,9 @@ import (
 // fullest first), so a document's type wins over its folder; each a colour at random from the
 // palette, among those legible on the view's ground.
 
-// relGroup is one group.
-type relGroup struct {
+// Group is one group of a relation view: the documents its query matches, worn in its colour (and,
+// in the Mindmap, its outline).
+type Group struct {
 	Query  string       // "type:adr", "tag:#project", "path:notes/"
 	Colour color.NRGBA  // what its documents wear
 	Shape  pm.MindShape // the Mindmap's outline for them
@@ -65,11 +66,11 @@ func groupQueries(types, files []string) []string {
 // ground. Legible first, then away: away only adds contrast, and a turn taken before legibility
 // would be pulled back to the very colour of turn 0. A colour another group already wears steps on
 // a turn more, so no two groups share one.
-func initGroups(queries []string, palette []color.NRGBA, ground color.NRGBA, rnd *rand.Rand) []relGroup {
+func initGroups(queries []string, palette []color.NRGBA, ground color.NRGBA, rnd *rand.Rand) []Group {
 	if len(palette) == 0 {
 		palette = groupPalette
 	}
-	out := make([]relGroup, len(queries))
+	out := make([]Group, len(queries))
 	worn := map[color.NRGBA]bool{}
 	var deck []color.NRGBA
 	turn := -1
@@ -86,7 +87,7 @@ func initGroups(queries []string, palette []color.NRGBA, ground color.NRGBA, rnd
 			c = away(base, ground, t)
 		}
 		worn[c] = true
-		out[k] = relGroup{Query: q, Colour: c, Shape: pm.MindDefault}
+		out[k] = Group{Query: q, Colour: c, Shape: pm.MindDefault}
 		if k < len(mindAutoShapes) {
 			out[k].Shape = mindAutoShapes[k]
 		}
@@ -172,12 +173,12 @@ func (g groupQuery) matches(n mapNode) bool {
 
 // relGroups are a view's groups, their queries read: the first that matches a document is its.
 type relGroups struct {
-	list    []relGroup
+	list    []Group
 	queries []groupQuery
 }
 
 // newRelGroups reads list's queries; a group whose query does not read matches nothing.
-func newRelGroups(list []relGroup) relGroups {
+func newRelGroups(list []Group) relGroups {
 	g := relGroups{list: list, queries: make([]groupQuery, len(list))}
 	for i, x := range list {
 		g.queries[i], _ = parseGroupQuery(x.Query)
@@ -222,7 +223,7 @@ const groupLegendRows = 12
 
 // legendGroups are the groups of gs that documents of m wear, in the groups' order: at most
 // groupLegendRows of them, and how many more there are. Both builds' Mindmap legends list them.
-func legendGroups(gs *relGroups, m relMap) (shown []relGroup, more int) {
+func legendGroups(gs *relGroups, m relMap) (shown []Group, more int) {
 	if gs == nil {
 		return nil, 0
 	}

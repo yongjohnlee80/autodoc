@@ -64,18 +64,19 @@ func TestTheRelationViewsFollowATheme(t *testing.T) {
 		return true
 	})
 	r.s.WaitForText(t, "kb · 2 documents, 0 links · relations")
-	before := onLoop(r, func() color.NRGBA { return g.currentLook().pal.background })
-	builds := onLoop(r, func() uint64 { return m.seq })
+	before := onLoop(r, func() color.NRGBA { return g.Snapshot().Background })
+	builds := onLoop(r, func() uint64 { return m.Snapshot().Builds })
 	onLoop(r, func() bool { r.h.useTheme("light"); return true })
 	r.s.WaitFor(t, "the light theme, the GlobeMap in it", func(string) bool {
 		return onLoop(r, func() bool {
-			return r.h.theme == "light" && g.view != nil && g.currentLook().pal.background != before
+			s := g.Snapshot()
+			return r.h.theme == "light" && s.Viewed && s.Background != before
 		})
 	})
-	if !r.panelIsOpen(globeMapPanelID) || onLoop(r, func() bool { return g.counts[0] != 2 }) {
+	if !r.panelIsOpen(globeMapPanelID) || onLoop(r, func() bool { return g.Snapshot().Counts[0] != 2 }) {
 		t.Fatal("the theme switch closed the GlobeMap or lost its map")
 	}
-	if onLoop(r, func() uint64 { return m.seq }) != builds {
+	if onLoop(r, func() uint64 { return m.Snapshot().Builds }) != builds {
 		t.Error("a closed Mindmap laid itself out on a theme switch")
 	}
 }
@@ -149,7 +150,7 @@ func TestTheGlobeMapDragEndsWhereverItIsReleased(t *testing.T) {
 	mouse := func(k tuicore.MouseKind, b tuicore.MouseButton, x, y int) tuicore.Event {
 		return tuicore.MouseEvent{Kind: k, Button: b, X: x, Y: y}
 	}
-	dragging := func() bool { return onLoop(r, func() bool { return g.drag != nil }) }
+	dragging := func() bool { return onLoop(r, func() bool { return g.Snapshot().Dragging }) }
 	press := func(what string) {
 		t.Helper()
 		r.keys(t, mouse(tuicore.MousePress, tuicore.MouseLeft, inX, inY), mouse(tuicore.MouseMotion, tuicore.MouseLeft, inX+3, inY+1))
@@ -211,7 +212,7 @@ func TestTheGlobeMapReadsEveryPage(t *testing.T) {
 		return true
 	})
 	r.s.WaitForText(t, "kb · 7 documents, 6 links · relations")
-	if c := onLoop(r, func() [2]int { return g.counts }); c != [2]int{7, 6} {
+	if c := onLoop(r, func() [2]int { return g.Snapshot().Counts }); c != [2]int{7, 6} {
 		t.Errorf("the GlobeMap counts %v, want 7 documents and 6 links", c)
 	}
 }

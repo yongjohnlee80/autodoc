@@ -41,12 +41,12 @@ func TestTheGlobeMapsSettingsApplyAtOnce(t *testing.T) {
 	}); v != "" || !strings.Contains(msg, "#rrggbb") {
 		t.Fatalf("a colour that does not read: kept %q, said %q", v, msg)
 	}
-	before := onLoop(r, func() *globeLook { return g.currentLook() })
+	before := onLoop(r, func() any { return g.Snapshot().Look })
 	onLoop(r, func() bool { g.setColour("other", " #123456 "); return true })
-	l := onLoop(r, func() *globeLook { return g.currentLook() })
-	if kept := onLoop(r, func() string { return r.h.prefs.Value(prefGlobeColour + "other") }); l == before ||
-		l.other != rgb(0x123456) || kept != "#123456" {
-		t.Fatalf("a colour that reads: look %v, kept %q", l.other, kept)
+	l := onLoop(r, func() GlobeState { return g.Snapshot() })
+	if kept := onLoop(r, func() string { return r.h.prefs.Value(prefGlobeColour + "other") }); l.Look == before ||
+		l.Other != rgb(0x123456) || kept != "#123456" {
+		t.Fatalf("a colour that reads: look %v, kept %q", l.Other, kept)
 	}
 
 	// the dialog closed, as the user does, so the panel's heading shows
@@ -66,9 +66,9 @@ func TestTheGlobeMapsSettingsApplyAtOnce(t *testing.T) {
 	r.s.WaitForText(t, "kb · 2 documents, 1 links · every link") // the open map follows the choice
 	r.s.WaitFor(t, "the GlobeMap has the keyboard", func(string) bool { return r.focusedOn(globeMapViewID) })
 	r.keys(t, key('l')) // the legend hidden, and shown again
-	r.s.WaitFor(t, "l hid the legend", func(string) bool { return onLoop(r, func() bool { return g.noKey }) })
+	r.s.WaitFor(t, "l hid the legend", func(string) bool { return onLoop(r, func() bool { return g.Snapshot().LegendHidden }) })
 	r.keys(t, key('l'))
-	r.s.WaitFor(t, "l showed the legend", func(string) bool { return onLoop(r, func() bool { return !g.noKey }) })
+	r.s.WaitFor(t, "l showed the legend", func(string) bool { return onLoop(r, func() bool { return !g.Snapshot().LegendHidden }) })
 	r.keys(t, key('f')) // this opening's own: body links
 	r.s.WaitForText(t, "kb · 2 documents, 1 links · body links")
 	onLoop(r, func() bool { core{r.h}.TogglePanel(globeMapPanelID); return true })
@@ -76,9 +76,9 @@ func TestTheGlobeMapsSettingsApplyAtOnce(t *testing.T) {
 	onLoop(r, func() bool { core{r.h}.TogglePanel(globeMapPanelID); return true })
 	r.s.WaitForText(t, "kb · 2 documents, 1 links · every link") // opened again: the settings' choice
 
-	was := onLoop(r, func() color.NRGBA { return g.currentLook().pal.background })
+	was := onLoop(r, func() color.NRGBA { return g.Snapshot().Background })
 	onLoop(r, func() bool { core{r.h}.SetPref(feature.PrefTermTheme, "light"); return true })
-	if now := onLoop(r, func() color.NRGBA { return g.currentLook().pal.background }); now == was {
+	if now := onLoop(r, func() color.NRGBA { return g.Snapshot().Background }); now == was {
 		t.Error("the terminals' theme set alone left the GlobeMap in the old one")
 	}
 }
@@ -111,15 +111,15 @@ func TestTheViewsGroupsAreTheWorkspacesGraphFile(t *testing.T) {
 		core{r.h}.TogglePanel(globeMapPanelID)
 		return true
 	})
-	queries := func(list []relGroup) []string {
+	queries := func(list []Group) []string {
 		var out []string
 		for _, x := range list {
 			out = append(out, x.Query)
 		}
 		return out
 	}
-	r.s.WaitFor(t, "the GlobeMap's groups", func(string) bool { return onLoop(r, func() bool { return g.groups != nil }) })
-	if got := onLoop(r, func() []string { return queries(g.groups.list) }); !slices.Equal(got, []string{"type:note", "type:adr", "path:notes/"}) {
+	r.s.WaitFor(t, "the GlobeMap's groups", func(string) bool { return onLoop(r, func() bool { return g.Snapshot().Groups != nil }) })
+	if got := onLoop(r, func() []string { return queries(g.Snapshot().Groups) }); !slices.Equal(got, []string{"type:note", "type:adr", "path:notes/"}) {
 		t.Fatalf("groups %q; want the schema's types, then the folder", got)
 	}
 	file := func() string { b, _ := os.ReadFile(filepath.Join(kb, ".autodoc", "graph.toml")); return string(b) }
@@ -128,13 +128,13 @@ func TestTheViewsGroupsAreTheWorkspacesGraphFile(t *testing.T) {
 		t.Fatalf("the graph file:\n%s", f)
 	}
 	// an edit in the settings: written, and drawn
-	onLoop(r, func() bool { g.editor.moved(1); g.editor.setColour("#123456"); return true })
+	onLoop(r, func() bool { g.EditGroups().moved(1); g.EditGroups().setColour("#123456"); return true })
 	r.s.WaitFor(t, "the edit written", func(string) bool { return strings.Contains(file(), `colour = "#123456"`) })
-	if c := onLoop(r, func() color.NRGBA { return g.groups.list[1].Colour }); c != rgb(0x123456) {
+	if c := onLoop(r, func() color.NRGBA { return g.Snapshot().Groups[1].Colour }); c != rgb(0x123456) {
 		t.Errorf("type:adr's colour in the view: %v", c)
 	}
-	onLoop(r, func() bool { g.editor.setQuery("nope"); return true })
-	if q := onLoop(r, func() string { return g.groups.list[1].Query }); q != "type:adr" {
+	onLoop(r, func() bool { g.EditGroups().setQuery("nope"); return true })
+	if q := onLoop(r, func() string { return g.Snapshot().Groups[1].Query }); q != "type:adr" {
 		t.Errorf("a query that does not read was kept: %q", q)
 	}
 	// the Mindmap: its own list, with outlines, in the same file
@@ -145,7 +145,7 @@ func TestTheViewsGroupsAreTheWorkspacesGraphFile(t *testing.T) {
 	if f := file(); !strings.Contains(f, `shape = "hexagon"`) {
 		t.Errorf("the Mindmap's groups have no outlines:\n%s", f)
 	}
-	if got := onLoop(r, func() []string { return queries(m.groups.list) }); !slices.Equal(got, []string{"type:note", "type:adr", "path:notes/"}) {
+	if got := onLoop(r, func() []string { return queries(m.Snapshot().Groups) }); !slices.Equal(got, []string{"type:note", "type:adr", "path:notes/"}) {
 		t.Errorf("the Mindmap's groups %q", got)
 	}
 }

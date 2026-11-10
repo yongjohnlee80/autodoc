@@ -504,7 +504,7 @@ func (g *globeMap) readGroups(ws string, types []string) {
 	if g.store == nil {
 		return
 	}
-	g.store.groups(ws, viewGlobeMap, types, g.currentLook().pal.background, func(list []relGroup) {
+	g.store.groups(ws, viewGlobeMap, types, g.currentLook().pal.background, func(list []Group) {
 		if ws == g.c.Workspace() {
 			g.editor.listed(ws, types, list)
 			g.groupsEdited(list)
@@ -513,7 +513,7 @@ func (g *globeMap) readGroups(ws string, types []string) {
 }
 
 // groupsEdited draws in list: the dots, and the legend.
-func (g *globeMap) groupsEdited(list []relGroup) {
+func (g *globeMap) groupsEdited(list []Group) {
 	gs := newRelGroups(list)
 	g.groups = &gs
 	if g.view != nil && g.view.ctx != nil {
@@ -1084,7 +1084,7 @@ func (g *globeMap) legend(l *globeLook) []legendRow {
 	if g.cur != nil {
 		m = g.cur.m
 	}
-	rows := groupLegend(g.groups, m, func(gr relGroup) func(gui.Canvas, gui.Rect) { return legendDot(gr.Colour, 8) })
+	rows := groupLegend(g.groups, m, func(gr Group) func(gui.Canvas, gui.Rect) { return legendDot(gr.Colour, 8) })
 	rows = append(rows, legendMsg(legendDot(l.other, 8), "autodoc.text.globemap_gui.any_other_document"))
 	rows = append(rows, legendMsg(legendRing(l.other, l.ring), "autodoc.text.globemap_gui.superseded"))
 	kinds := globeFilters[g.filter].kinds

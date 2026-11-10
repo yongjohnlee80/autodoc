@@ -225,7 +225,7 @@ func (g *cellGlobeMap) openSettings() {
 }
 
 // groupsEdited draws in list: the settings' edit.
-func (g *cellGlobeMap) groupsEdited(list []relGroup) {
+func (g *cellGlobeMap) groupsEdited(list []Group) {
 	gs := newRelGroups(list)
 	g.groups = &gs
 	g.dirty()
@@ -332,7 +332,7 @@ func (g *cellGlobeMap) readGroups(ws string, types []string) {
 	if g.store == nil {
 		return
 	}
-	g.store.groups(ws, viewGlobeMap, types, g.ground, func(list []relGroup) {
+	g.store.groups(ws, viewGlobeMap, types, g.ground, func(list []Group) {
 		if ws != g.c.Workspace() {
 			return
 		}

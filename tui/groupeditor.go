@@ -20,11 +20,11 @@ type groupEditor struct {
 	view    string // viewGlobeMap or viewMindmap
 	name    string // the App names' stem: "globe", "mind"
 	shapes  bool   // the Mindmap's: a group has an outline
-	changed func([]relGroup)
+	changed func([]Group)
 	ground  func() color.NRGBA // the view's ground, for a new group's colour
 
 	ws    string
-	list  []relGroup
+	list  []Group
 	types []string // the workspace's schema types, as graph.map last said
 	row   int
 	// loading: ws's groups are being read, and every edit is refused until they are listed, so
@@ -42,7 +42,7 @@ func (e *groupEditor) loadingFor(ws string) {
 func (e *groupEditor) source(s string) string { return "App." + e.name + s }
 
 // listed is the view's groups for ws, as read or edited: the dialog shows them.
-func (e *groupEditor) listed(ws string, types []string, list []relGroup) {
+func (e *groupEditor) listed(ws string, types []string, list []Group) {
 	e.ws, e.types, e.list, e.loading = ws, types, list, false
 	e.show("")
 }
@@ -80,7 +80,7 @@ func (e *groupEditor) show(note string) {
 }
 
 // edit puts list as the groups: saved, shown, and handed to the view.
-func (e *groupEditor) edit(list []relGroup) {
+func (e *groupEditor) edit(list []Group) {
 	if e.loading {
 		return
 	}
@@ -149,14 +149,14 @@ func (e *groupEditor) add() {
 	ground := e.ground()
 	col := onGround(groupPalette[len(e.list)%len(groupPalette)], ground)
 	for _, c := range groupPalette {
-		if c = onGround(c, ground); !slices.ContainsFunc(e.list, func(g relGroup) bool { return g.Colour == c }) {
+		if c = onGround(c, ground); !slices.ContainsFunc(e.list, func(g Group) bool { return g.Colour == c }) {
 			col = c
 			break
 		}
 	}
 	at := min(e.row+1, len(e.list))
 	e.row = at
-	e.edit(slices.Insert(slices.Clone(e.list), at, relGroup{Query: "tag:#tag", Colour: col}))
+	e.edit(slices.Insert(slices.Clone(e.list), at, Group{Query: "tag:#tag", Colour: col}))
 }
 
 func (e *groupEditor) remove() {
@@ -183,7 +183,7 @@ func (e *groupEditor) addMissing() {
 		return
 	}
 	ws := e.ws
-	e.store.addMissing(ws, e.view, e.list, e.types, e.ground(), func(list []relGroup) {
+	e.store.addMissing(ws, e.view, e.list, e.types, e.ground(), func(list []Group) {
 		if e.ws != ws || e.loading { // bound to another workspace meanwhile: its own groups stand
 			return
 		}

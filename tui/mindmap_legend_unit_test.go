@@ -11,13 +11,13 @@ import (
 // legendWorn is n documents, each in a group of its own (a folder each), and the groups.
 func legendWorn(n int) (relMap, *relGroups) {
 	var rm relMap
-	var list []relGroup
+	var list []Group
 	rm.Nodes = append(rm.Nodes, mapNode{Path: "root.md", Title: "Root"})
 	for i := range n {
 		dir := string(rune('a'+i)) + "/"
 		rm.Nodes = append(rm.Nodes, mapNode{Path: dir + "x.md", Title: "X" + dir})
 		rm.Edges = append(rm.Edges, mapEdge{Src: 0, Dst: i + 1})
-		list = append(list, relGroup{Query: "path:" + dir, Colour: hexColour(0x4e79a7), Shape: pm.MindSquare})
+		list = append(list, Group{Query: "path:" + dir, Colour: hexColour(0x4e79a7), Shape: pm.MindSquare})
 	}
 	gs := newRelGroups(list)
 	return rm, &gs
