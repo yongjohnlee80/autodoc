@@ -297,7 +297,7 @@ func (c *identityHostCopy) settle(t *testing.T, what string, done func() bool) {
 func modelAgentsCopy(t *testing.T) (*agents, *identityHostCopy) {
 	t.Helper()
 	c := newIdentityHostCopy(`[{"name":"One","command":"one","codename":"one"},{"name":"Two","command":"two","codename":"two"}]`)
-	c.ws = feature.Workspace{Name: "kb", Root: t.TempDir()}
+	c.ws = wsInfo{name: "kb", root: t.TempDir()}
 	a := testAgentsCopy(c, t.TempDir(), "")
 	return a, c
 }
