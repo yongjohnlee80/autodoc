@@ -151,9 +151,6 @@ func (r *wakeRig) agent(codename string) (string, string) {
 	pid := 100 + r.n // start is the pid's process reference, as registration requires
 	loc := fmt.Sprintf(`{"socket":"/run/user/%d/cc-socks/%s.sock","pid":%d,"start":"b:n:%d:9000","session":"c-%s"}`,
 		os.Getuid(), codename, pid, pid, codename)
-	if !crew.SocketWakes() {
-		return reg.Session, cred
-	}
 	if _, err := r.deps.crew.SetEndpoint(r.ctx, cred, "claude", loc); err != nil {
 		r.t.Fatal(err)
 	}
