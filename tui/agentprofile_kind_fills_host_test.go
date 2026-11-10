@@ -9,7 +9,7 @@ import (
 
 func formClick(t *testing.T, r *running, label string) {
 	t.Helper()
-	x, y := formAtCopy(r.s.String(), label)
+	x, y := formAt(r.s.String(), label)
 	if x < 0 {
 		t.Fatalf("no %q on screen:\n%s", label, r.s.String())
 	}
