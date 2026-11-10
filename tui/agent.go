@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/internal/userdirs"
@@ -27,10 +28,26 @@ import (
 )
 
 // agents owns profile forms and the running agent's identity. Its single panel
+// agentSeams are the program's seams the agents read (seams.go), each read when used: a test may
+// change one while the program runs.
+type agentSeams interface {
+	// Env is the program's environment: an agent's PATH, its CLI's lookup, its server's.
+	Env() procenv.Env
+	// ServerReady bounds the wait for a started agent server's socket.
+	ServerReady() time.Duration
+	// OfferAgentSetup is whether a first run offers the agent setup.
+	OfferAgentSetup() bool
+	// LookAgentCLI, when a test sets it, is how the setup's card finds the CLIs; nil is on the PATH.
+	LookAgentCLI() func(string) (string, error)
+	// VimQuestionPending is whether a first run's Vim question is still to be asked: the setup waits
+	// for it.
+	VimQuestionPending(p feature.PrefsView) bool
+}
+
 // remains one contribution even when the later agents model gains more tabs.
 type agents struct {
 	c                      agentHost
-	seams                  *seams // its host's (seams.go)
+	seams                  agentSeams // its host's (seams.go), read when used
 	agentDir, agentRunning string
 	agentRunningLabel      string // label captured at start; agentRunning itself is the codename
 	agentConfig            string
@@ -77,7 +94,7 @@ type agents struct {
 	stopping       bool
 }
 
-func newAgents(c agentHost, s *seams, dir, config string) *agents {
+func newAgents(c agentHost, s agentSeams, dir, config string) *agents {
 	return &agents{c: c, seams: s, agentDir: dir, agentConfig: config, instances: map[string]*agentInstance{}, deliveries: map[*agentDelivery]bool{},
 		agentRows: tuidecl.NewListModel("key", "default", "name", "codename", "command"),
 		spawn:     func(c pty.Cmd) (terminal.TerminalProcess, error) { return pty.Start(c) }, commandCheck: commandOnPath}
@@ -144,7 +161,7 @@ func agentPreferenceState(p feature.PrefsView) map[string]any {
 	st := agentState(p)
 	size, length := p.PanelGeometry("agent", p.Value(prefAgentEdge))
 	maps.Copy(st, map[string]any{
-		"App.agentEdgeIndex":   indexOf(agentEdges, p.Value(prefAgentEdge)),
+		"App.agentEdgeIndex":   max(slices.Index(agentEdges, p.Value(prefAgentEdge)), 0),
 		"App.agentSizeIndex":   feature.Nearest(feature.PanelSizes, size),
 		"App.agentLengthIndex": feature.Nearest(feature.PanelLengths, length),
 	})
@@ -553,7 +570,7 @@ func (h *agents) agentEnv(ws feature.Workspace, dir string, p agentProfile) []st
 		"AUTODOC_SOCKET=" + h.c.DaemonAddress(),
 		"AUTODOC_BIN=" + h.agentBin(),
 		"AUTODOC_CONFIG=" + h.agentConfig,
-		"PATH=" + h.agentPathDir(dir) + string(os.PathListSeparator) + p.agentPath(h.seams.env),
+		"PATH=" + h.agentPathDir(dir) + string(os.PathListSeparator) + p.agentPath(h.seams.Env()),
 	}
 	// the page in this TUI's editor, for `autodoc --editor`
 	// (docs/decisions/crew.md#the-editor-socket)
@@ -618,7 +635,7 @@ func newAgentFile(path string) (*os.File, error) { return userperm.CreatePrivate
 // user's installed one, not this build on this config.
 func (h *agents) agentPathDir(dir string) string {
 	sum := sha256.Sum256([]byte(dir))
-	return filepath.Join(agentBase(h.seams.env, h.agentDir), ".bin", hex.EncodeToString(sum[:])[:16])
+	return filepath.Join(agentBase(h.seams.Env(), h.agentDir), ".bin", hex.EncodeToString(sum[:])[:16])
 }
 
 // linkAgentPath makes link a symbolic link to target (the agent folder's bin), replacing one that
@@ -695,7 +712,7 @@ func agentWrapper(bin, config string) string {
 // the window holds a crew scope it is the agent's own, under the scope, the same across that agent's
 // sessions so its CLI keeps one project folder; else the workspace's, shared by its profiles.
 func (h *agents) agentFolder(ws feature.Workspace, codename string) string {
-	dir := filepath.Join(agentBase(h.seams.env, h.agentDir), safeName(ws.Name))
+	dir := filepath.Join(agentBase(h.seams.Env(), h.agentDir), safeName(ws.Name))
 	if h.crew == nil {
 		return dir
 	}

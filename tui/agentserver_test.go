@@ -377,7 +377,7 @@ func TestAPlainAgentsVariablesAreInItsEnvironment(t *testing.T) {
 	c := newIdentityHost(crewKinds)
 	c.ws = wsInfo{id: 7, name: "kb", root: t.TempDir()}
 	a := testAgents(c, t.TempDir(), "")
-	a.seams.env = procenv.Env(nil).With("AUTO_AGENTS_MAILBOX_ID=agent:the-window:1") // the window's spawner identity
+	a.seams.(*seams).env = procenv.Env(nil).With("AUTO_AGENTS_MAILBOX_ID=agent:the-window:1") // the window's spawner identity
 	a.editorPath = func() string { return "/run/the-editor.sock" }
 	p, _ := a.profile("claude-one")
 	instance, err := a.startInstance(p)

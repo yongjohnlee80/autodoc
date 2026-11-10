@@ -269,9 +269,9 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 	if err != nil {
 		return nil, err
 	}
-	env := append(p.envList(a.seams.env), a.agentEnv(ws, dir, p)...) // AutoDoc's own after the profile's: AutoDoc's win
-	filled, fillErr := fillAgentCommand(a.seams.env, p.Command, ws)  // refused below, once its tab is there
-	path, args := agentArgv(a.seams.env, filled)
+	env := append(p.envList(a.seams.Env()), a.agentEnv(ws, dir, p)...) // AutoDoc's own after the profile's: AutoDoc's win
+	filled, fillErr := fillAgentCommand(a.seams.Env(), p.Command, ws)  // refused below, once its tab is there
+	path, args := agentArgv(a.seams.Env(), filled)
 	if instance == nil {
 		instance = &agentInstance{profile: p, workspace: ws, owner: panel, dir: dir}
 		id, err := panel.Add(p.Codename, feature.TerminalConfig{Command: path, Args: args, Dir: dir,
@@ -292,7 +292,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 		return instance, nil
 	}
 	if a.commandCheck != nil {
-		if err := a.commandCheck(usershell.Commands(a.seams.env), filled, env); err != nil { // nothing set up or registered for it
+		if err := a.commandCheck(usershell.Commands(a.seams.Env()), filled, env); err != nil { // nothing set up or registered for it
 			a.c.Notify(a.c.Trf("autodoc.crew.did_not_start", p.Name, err.Error()))
 			a.refuse(panel, instance, err)
 			return instance, nil
@@ -312,7 +312,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 		// its setup first (crew setup, the agent's own build, as every host asks): how its session
 		// reads its mail is what the setup delivered, so the guide, the folder's settings and files,
 		// and the registration all follow it
-		a.askSetup(crewKind, dir, p.environ(a.seams.env), func(setup crew.Setup, err error) {
+		a.askSetup(crewKind, dir, p.environ(a.seams.Env()), func(setup crew.Setup, err error) {
 			if stale() {
 				instance.starting = false
 				a.listAgents()
@@ -475,20 +475,20 @@ func (a *agents) runAgent(instance *agentInstance, c pty.Cmd) (terminal.Terminal
 		if instance.profile.kind() == crew.KindOpenCode && instance.setup.Env["OPENCODE_CONFIG_CONTENT"] == "" {
 			return nil, errors.New("AutoDoc's OpenCode plugin: crew setup gave no OPENCODE_CONFIG_CONTENT")
 		}
-		args, err := withCommandArgs(a.seams.env, c.Args, instance.setup.Argv)
+		args, err := withCommandArgs(a.seams.Env(), c.Args, instance.setup.Argv)
 		if err != nil {
 			return nil, err
 		}
 		c.Args = args
 	}
-	c.Env = agentEnviron(a.seams.env, instance)
+	c.Env = agentEnviron(a.seams.Env(), instance)
 	// its setup's server (a Codex agent's own app-server), started before the CLI with the CLI's
 	// environment, and bound to it: stopped if the CLI fails to start or when it ends, and closing
 	// the CLI's terminal if it ends first (agentserver.go). A Codex shell runs under this server,
 	// not the CLI, so `autodoc --editor` there needs it.
 	var server *agentServer
 	if instance.crewed && len(instance.setup.Server) > 0 {
-		srv, err := startAgentServer(instance.setup.Server, instance.setup.ServerSocket, c.Dir, c.Env, a.seams.serverReady)
+		srv, err := startAgentServer(instance.setup.Server, instance.setup.ServerSocket, c.Dir, c.Env, a.seams.ServerReady())
 		if err != nil {
 			return nil, err
 		}
@@ -505,7 +505,7 @@ func (a *agents) runAgent(instance *agentInstance, c pty.Cmd) (terminal.Terminal
 	if err == nil && instance.crewed {
 		// the CLI's environment, its setup's included: a Codex agent's own app-server
 		// (crew.EnvCodexServer) is where its registration step looks
-		environ := instance.profile.environ(a.seams.env)
+		environ := instance.profile.environ(a.seams.Env())
 		for _, k := range slices.Sorted(maps.Keys(instance.setup.Env)) {
 			environ = append(environ, k+"="+instance.setup.Env[k])
 		}
