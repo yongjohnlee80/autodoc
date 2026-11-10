@@ -33,7 +33,7 @@ func TestTheServerIsStartedWithTheCLIsEnvironment(t *testing.T) {
 	var socket, envFile string
 	a.setupRun = func(_, dir string, _ []string) (crew.Setup, error) {
 		socket, envFile = filepath.Join(dir, crew.CodexServerSocket), filepath.Join(dir, "server.env")
-		endsWithTheTest(t, socket)
+		endsWithTheTestCopy(t, socket)
 		server := []string{"sh", "-c", `env > "$2"; touch "$1"; while :; do sleep 1; done`, "sh", socket, envFile}
 		return crew.Setup{Server: server, ServerSocket: socket, MailVia: crew.MailViaMCP, Env: map[string]string{"SVC_TOKEN": secret}}, nil
 	}
@@ -59,14 +59,14 @@ func TestTheServerIsStartedWithTheCLIsEnvironment(t *testing.T) {
 		k, v, _ := strings.Cut(kv, "=")
 		server[k] = v
 	}
-	cli := environMap(spawned.Env)
+	cli := environMapCopy(spawned.Env)
 	for _, k := range []string{crew.EnvContext, "AUTODOC_SOCKET", "AUTODOC_EDITOR", "AUTODOC_EDITOR_TOKEN", "PATH", "SVC_TOKEN"} {
 		if cli[k] == "" {
 			t.Fatalf("fixture: the CLI's environment has no %s: %q", k, spawned.Env)
 		}
 	}
 	for k, v := range cli {
-		if shellSets[k] {
+		if shellSetsCopy[k] {
 			continue // the server's shell sets its own, as the CLI's /bin/sh does
 		}
 		if server[k] != v {
@@ -100,7 +100,7 @@ func TestTheWindowStopsTheServerWhenItsCLIFailsToStart(t *testing.T) {
 	var socket string
 	a.setupRun = func(_, dir string, _ []string) (crew.Setup, error) {
 		socket = filepath.Join(dir, crew.CodexServerSocket)
-		return crew.Setup{Server: fakeServer(t, socket, true), ServerSocket: socket, MailVia: crew.MailViaMCP}, nil
+		return crew.Setup{Server: fakeServerCopy(t, socket, true), ServerSocket: socket, MailVia: crew.MailViaMCP}, nil
 	}
 	instance, err := a.startInstance(p)
 	if err != nil {
@@ -112,8 +112,8 @@ func TestTheWindowStopsTheServerWhenItsCLIFailsToStart(t *testing.T) {
 	if _, err := cfg.Start(pty.Cmd{Path: cfg.Command, Args: cfg.Args, Dir: cfg.Dir}); err == nil {
 		t.Fatal("a CLI that failed to start: started")
 	}
-	if !eventually(t, func() bool { return len(processesNaming(socket)) == 0 }) {
-		t.Fatalf("the CLI didn't start and its server still runs: %v", processesNaming(socket))
+	if !eventuallyCopy(t, func() bool { return len(processesNamingCopy(socket)) == 0 }) {
+		t.Fatalf("the CLI didn't start and its server still runs: %v", processesNamingCopy(socket))
 	}
 	if _, err := os.Stat(filepath.Join(cfg.Dir, serverPidFile)); !os.IsNotExist(err) {
 		t.Fatalf("its pid file: %v, want it gone", err)
@@ -130,7 +130,7 @@ func TestACellsServersEndWithIt(t *testing.T) {
 		if pgid <= 1 || pgid == syscall.Getpgrp() {
 			t.Fatalf("%s: no server's group (%d) to look for", name, pgid)
 		}
-		if !eventually(t, func() bool { return syscall.Kill(-pgid, 0) != nil }) {
+		if !eventuallyCopy(t, func() bool { return syscall.Kill(-pgid, 0) != nil }) {
 			_ = syscall.Kill(-pgid, syscall.SIGKILL)
 			t.Fatalf("%s: the server's group %d outlives its cell", name, pgid)
 		}
@@ -138,32 +138,32 @@ func TestACellsServersEndWithIt(t *testing.T) {
 
 	var pgid, child int
 	t.Run("a server never stopped, its child naming no socket", func(t *testing.T) {
-		dir, socket := serverDir(t)
-		endsWithTheTest(t, socket)
+		dir, socket := serverDirCopy(t)
+		endsWithTheTestCopy(t, socket)
 		childFile := filepath.Join(dir, "child.pid")
 		s, err := startAgentServer([]string{"sh", "-c", `touch "$1"; sleep 300 & echo $! > "$2"; while :; do sleep 1; done`, "sh", socket, childFile}, socket, dir, os.Environ(), defaultSeams.serverReady)
 		if err != nil {
 			t.Fatal(err)
 		}
 		pgid = s.cmd.Process.Pid
-		if !slices.Contains(liveProcessesNaming(socket), strconv.Itoa(pgid)) {
+		if !slices.Contains(liveProcessesNamingCopy(socket), strconv.Itoa(pgid)) {
 			t.Fatalf("fixture: the server %d doesn't name %s", pgid, socket)
 		}
 		// the child is live in the server's group, exec'd (its command line names no socket, so only
 		// the group kill reaches it) before the subtest ends: its pid is published once it is forked
 		var g int
-		if !eventually(t, func() bool {
+		if !eventuallyCopy(t, func() bool {
 			b, _ := os.ReadFile(childFile)
 			child, _ = strconv.Atoi(strings.TrimSpace(string(b)))
 			var err error
 			g, err = syscall.Getpgid(child)
-			return child > 1 && err == nil && g == pgid && !slices.Contains(liveProcessesNaming(socket), strconv.Itoa(child))
+			return child > 1 && err == nil && g == pgid && !slices.Contains(liveProcessesNamingCopy(socket), strconv.Itoa(child))
 		}) {
 			t.Fatalf("fixture: the server's child %d (group %d) isn't live in the server's group %d, its command line naming no socket", child, g, pgid)
 		}
 	})
 	groupEnded("a server never stopped", pgid)
-	if !eventually(t, func() bool { return !alive(child) }) {
+	if !eventuallyCopy(t, func() bool { return !aliveCopy(child) }) {
 		t.Fatalf("the server's child %d outlives its cell", child)
 	}
 
@@ -180,14 +180,14 @@ func TestACellsServersEndWithIt(t *testing.T) {
 			t.Fatal(err)
 		}
 		socket = instance.setup.ServerSocket
-		pids := liveProcessesNaming(socket)
+		pids := liveProcessesNamingCopy(socket)
 		if len(pids) != 1 {
 			t.Fatalf("fixture: %d processes name the agent's socket %q, want its server", len(pids), socket)
 		}
 		pgid, _ = strconv.Atoi(pids[0])
 	})
 	groupEnded("a crew Codex agent's server", pgid)
-	if pids := liveProcessesNaming(socket); len(pids) > 0 {
+	if pids := liveProcessesNamingCopy(socket); len(pids) > 0 {
 		t.Fatalf("the agent's server outlives its cell: %v", pids)
 	}
 }

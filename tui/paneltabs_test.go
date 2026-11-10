@@ -82,12 +82,12 @@ func TestCtrlTabMovesBetweenTheTerminalsTabs(t *testing.T) {
 	r.keys(t, decltest.Ctrl('t'))                         // Normal mode
 	to(ctrlTab(false), ids[0], "Ctrl+Tab in Normal mode") // the last's mode is its own: the first's is input
 	r.keys(t, decltest.Type("x")...)
-	r.s.WaitFor(t, "x typed", func(string) bool { return len(reported(report)) > 0 })
-	if got := reported(report); got != "x" {
+	r.s.WaitFor(t, "x typed", func(string) bool { return len(reportedCopy(report)) > 0 })
+	if got := reportedCopy(report); got != "x" {
 		t.Fatalf("the shells got %q, want only the x typed: Ctrl+Tab reached a program", got)
 	}
 	r.keys(t, decltest.Ctrl('\\'), ctrlTab(false))
-	r.s.WaitFor(t, "Ctrl+Tab sent through", func(string) bool { return len(reported(report)) > 1 })
+	r.s.WaitFor(t, "Ctrl+Tab sent through", func(string) bool { return len(reportedCopy(report)) > 1 })
 	if active() != ids[0] {
 		t.Error("Ctrl+\\ then Ctrl+Tab moved the tab")
 	}
@@ -102,7 +102,7 @@ func TestCtrlTabMovesBetweenTheTerminalsTabs(t *testing.T) {
 // round to the first, as Go to › would (the agents' selected agent follows), and Ctrl+Shift+Tab
 // back.
 func TestCtrlTabMovesBetweenTheAgentsTabs(t *testing.T) {
-	agent, _ := recordingAgent(t, true)
+	agent, _ := recordingAgentCopy(t, true)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{
 		{Name: "one", Command: shellQuote(agent), Codename: "one"},
 		{Name: "two", Command: shellQuote(agent), Codename: "two"},

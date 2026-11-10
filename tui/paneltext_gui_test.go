@@ -15,7 +15,7 @@ import (
 // natively, so none of it is in the grid's cells; a Fonts change rescales both panels' views, and a
 // panel without them gets them at the next apply.
 func TestTheShellsTextIsAViewOfItsOwnInTheGUI(t *testing.T) {
-	agent, _ := fakeAgent(t)
+	agent, _ := fakeAgentCopy(t)
 	_, r, _ := runAgentTUIWith(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake",
 		map[string]string{"tui.agent.text.scale": "80"}, Options{GUI: true, Fonts: &fakeFonts{}})
 	tabs := onLoop(r, func() *terminal.TerminalTabs {

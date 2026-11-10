@@ -13,7 +13,7 @@ import (
 
 // messagingRig is crewAgents with agent one started: a window holding a crew scope, one agent
 // running in it, its CLI reporting its prompts unless a cell says otherwise.
-func messagingRig(t *testing.T) (*agents, *identityHost, *crewWindow) {
+func messagingRig(t *testing.T) (*agents, *identityHostCopy, *crewWindow) {
 	t.Helper()
 	a, c, w := crewAgents(t, oneTwo)
 	p, _ := a.profile("one")
@@ -26,11 +26,11 @@ func messagingRig(t *testing.T) (*agents, *identityHost, *crewWindow) {
 
 // settleMessaging runs what the window and the crew host left for later: posted deliveries, the
 // base's Enter, the doorbell's asks again (settleRounds rounds of the crew host's timers).
-func settleMessaging(c *identityHost, w *crewWindow) {
+func settleMessaging(c *identityHostCopy, w *crewWindow) {
 	for round := 0; ; round++ {
 		c.drainPosts()
 		c.fireAfters()
-		if len(w.timers) == 0 || round == settleRounds {
+		if len(w.timers) == 0 || round == settleRoundsCopy {
 			return
 		}
 		due := w.timers
@@ -129,7 +129,7 @@ func TestTheEnterAsksTheCrewWhetherPromptsAreReported(t *testing.T) {
 			if c.enter && heard[0] != nil || !c.enter && !errors.Is(heard[0], ErrAgentTypedNotSent) {
 				t.Fatalf("heard %v", heard)
 			}
-			if c.notice != "" && !hasNote(cw.notes, c.notice) {
+			if c.notice != "" && !hasNoteCopy(cw.notes, c.notice) {
 				t.Fatalf("notes %q", cw.notes)
 			}
 		})
@@ -141,7 +141,7 @@ func TestASessionWithNoReporterIsNotReported(t *testing.T) {
 	a, cw, w := messagingRig(t)
 	var said []bool
 	done := false
-	crewOf(a).promptsReported("one", func(reported bool) { said = append(said, reported); done = true })
+	crewOf(a).promptsReported("one", func(reportedCopy bool) { said = append(said, reportedCopy); done = true })
 	settleMessaging(cw, w)
 	if !done || len(said) != 1 || said[0] {
 		t.Fatalf("one, of no reporting kind: %v", said)

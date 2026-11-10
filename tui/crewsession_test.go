@@ -25,9 +25,9 @@ import (
 
 // crewAgents is modelAgents whose window holds a crew scope on a real crew.Manager, in a workspace
 // with an id, so its agents start as crew sessions.
-func crewAgents(t *testing.T, profiles string) (*agents, *identityHost, *crewWindow) {
+func crewAgents(t *testing.T, profiles string) (*agents, *identityHostCopy, *crewWindow) {
 	t.Helper()
-	c := newIdentityHost(profiles)
+	c := newIdentityHostCopy(profiles)
 	c.ws = wsInfo{id: 7, name: "kb", root: t.TempDir()}
 	s := seamsFor(t)
 	if s == nil {
@@ -36,7 +36,7 @@ func crewAgents(t *testing.T, profiles string) (*agents, *identityHost, *crewWin
 	}
 	agentDir := t.TempDir()
 	userpermtest.ExposeNew(t, agentDir) // a file made there the ordinary way is exposed: only a private create keeps it private
-	a := testAgentsWith(c, s, agentDir, "")
+	a := testAgentsWithCopy(c, s, agentDir, "")
 	// a crew start's setup, in-process from the same source `crew setup` answers from, offering no
 	// MCP server (a cell that wants one sets its own): every kind as it is without one, on CLI mail.
 	// A Codex agent still gets its own app-server (an agent folder gives one in every mail mode),
@@ -46,7 +46,7 @@ func crewAgents(t *testing.T, profiles string) (*agents, *identityHost, *crewWin
 		s, err := crew.SetupFor(crew.SetupInput{Kind: kind, Host: crew.HostWindow, Env: map[string]string{"PATH": "/nonexistent"},
 			DataDir: data, Dir: dir, AgentDir: dir}, "")
 		if err == nil && len(s.Server) > 0 {
-			s.Server = fakeServer(t, s.ServerSocket, true)
+			s.Server = fakeServerCopy(t, s.ServerSocket, true)
 		}
 		return s, err
 	}
@@ -63,10 +63,10 @@ func crewAgents(t *testing.T, profiles string) (*agents, *identityHost, *crewWin
 // does, on a spawn that starts nothing: a start its starter refuses (a refused registration shown in
 // its tab) leaves the tab stopped, as the terminal leaves it. The process it starts is a fake
 // terminal, never nil: a Codex agent's server is bound to it, and closes it when it ends.
-func startingCrewAgents(t *testing.T, profiles string) (*agents, *identityHost, *crewWindow) {
+func startingCrewAgents(t *testing.T, profiles string) (*agents, *identityHostCopy, *crewWindow) {
 	t.Helper()
 	a, c, w := crewAgents(t, profiles)
-	c.panel = &modelPanel{owner: c, starts: true}
+	c.panel = &modelPanelCopy{owner: c, starts: true}
 	a.spawn = func(pty.Cmd) (terminal.TerminalProcess, error) { return newFakeTerminal(), nil }
 	return a, c, w
 }
@@ -121,7 +121,7 @@ func contextFiles(t *testing.T, dir string) []string {
 // startedEnv is the variables instance's tab starts its program with (its environment, a later
 // entry winning), through the tab's own start (runAgent), its program not run; err is the start's
 // refusal.
-func startedEnv(a *agents, c *identityHost, instance *agentInstance) (env []string, spawned bool, err error) {
+func startedEnv(a *agents, c *identityHostCopy, instance *agentInstance) (env []string, spawned bool, err error) {
 	cmd, spawned, err := startedCmd(a, c, instance)
 	return cmd.Env, spawned, err
 }
@@ -129,7 +129,7 @@ func startedEnv(a *agents, c *identityHost, instance *agentInstance) (env []stri
 // startedCmd is the command instance's tab starts its program with, as startedEnv. Its process
 // is a fake terminal, never nil: a Codex agent's server is bound to it, and closes it when it
 // ends (as the cell's cleanup ends it).
-func startedCmd(a *agents, c *identityHost, instance *agentInstance) (started pty.Cmd, spawned bool, err error) {
+func startedCmd(a *agents, c *identityHostCopy, instance *agentInstance) (started pty.Cmd, spawned bool, err error) {
 	cfg := c.panel.configs[instance.tab]
 	spawn := a.spawn
 	defer func() { a.spawn = spawn }()
@@ -220,7 +220,7 @@ func TestARefusedRegistrationStartsNothing(t *testing.T) {
 // session (start_failed) and removes its context.
 func TestAFailedSpawnEndsItsSession(t *testing.T) {
 	a, c, _ := crewAgents(t, oneTwo)
-	c.panel = &modelPanel{owner: c, startErr: errors.New("no such program")}
+	c.panel = &modelPanelCopy{owner: c, startErr: errors.New("no such program")}
 	p, _ := a.profile("one")
 	instance, err := a.startInstance(p)
 	if err != nil {
@@ -338,9 +338,9 @@ func TestAClaudeSessionAcceptsWakes(t *testing.T) {
 		// and its permission prompts are reported, on each of the hooks that tell of them
 		hooks, _ := s["hooks"].(map[string]any)
 		for _, event := range claudeHookEvents[1:] {
-			reported := strings.Contains(fmt.Sprint(hooks[event]), "crew attention --claude-hook")
-			if reported != wants {
-				t.Errorf("%s's %s hook reports its permission prompts %v, want %v", code, event, reported, wants)
+			reportedCopy := strings.Contains(fmt.Sprint(hooks[event]), "crew attention --claude-hook")
+			if reportedCopy != wants {
+				t.Errorf("%s's %s hook reports its permission prompts %v, want %v", code, event, reportedCopy, wants)
 			}
 		}
 		// the one allowance is the guide's own commands, exactly (crew.ClaudeAllow): never a deny
@@ -493,7 +493,7 @@ func TestAQuitRemovesEverySessionsContext(t *testing.T) {
 // agent's crew session is registered, and reaches the agent once it runs, never as a stale send.
 func TestADeliveryWaitsForItsAgentsRegistration(t *testing.T) {
 	a, c, w := crewAgents(t, oneTwo)
-	c.panel = &modelPanel{owner: c}                             // takes a bracketed paste at once
+	c.panel = &modelPanelCopy{owner: c}                         // takes a bracketed paste at once
 	a.promptsReported = func(string, bool) bool { return true } // delivered is sent: the base presses Enter
 	w.hold = true
 	calls := 0
@@ -690,7 +690,7 @@ func TestALostExitIsAskedAgain(t *testing.T) {
 // the session ends with the process.
 func TestAStartedAgentKeepsItsSessionWhenItsTabCantBeShown(t *testing.T) {
 	a, c, _ := crewAgents(t, oneTwo)
-	c.panel = &modelPanel{owner: c, selectErr: errors.New("the panel is not mounted")}
+	c.panel = &modelPanelCopy{owner: c, selectErr: errors.New("the panel is not mounted")}
 	p, _ := a.profile("one")
 	instance, err := a.startInstance(p)
 	if err != nil {

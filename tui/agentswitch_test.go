@@ -28,7 +28,7 @@ import (
 // switch either. editor.document and editor.buffers mark the notes buffer foreign_workspace, and
 // the kb one not. A parameter is refused. The folder's .claude/settings.json runs the notice hook.
 func TestAnAgentIsToldOfAWorkspaceSwitch(t *testing.T) {
-	agent, report := recordingAgent(t, true)
+	agent, report := recordingAgentCopy(t, true)
 	dir := t.TempDir()
 	files := map[string][]string{"kb": {"a.md", "a\n"}, "notes": {"b.md", "b\n"}}
 	_, r, _ := runAgentTUIIn(t, dir, []agentProfile{{Name: "zen", Command: shellQuote(agent), Codename: "zen"}}, "zen", nil,
@@ -123,7 +123,7 @@ func TestAnAgentIsToldOfAWorkspaceSwitch(t *testing.T) {
 	}
 
 	time.Sleep(200 * time.Millisecond) // anything typed on the switch would have reached it by now
-	if got := reported(report); got != "" {
+	if got := reportedCopy(report); got != "" {
 		t.Errorf("the switch typed into the agent's terminal: %q", got)
 	}
 	guide, err := os.ReadFile(filepath.Join(dir, "kb", "CLAUDE.md"))
