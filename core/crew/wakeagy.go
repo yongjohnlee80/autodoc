@@ -271,7 +271,9 @@ type agyStep struct {
 // than one step is held however long the answer is. An answer that is not the steps' object, whose
 // steps are not a list of objects, that has anything after the object, or is cut short (the
 // connection, or agyMaxTrajectory), is an error.
-func agySteps(r io.Reader) (n int, last agyStep, err error) { return agyStepsWithin(r, agyMaxTrajectory) }
+func agySteps(r io.Reader) (n int, last agyStep, err error) {
+	return agyStepsWithin(r, agyMaxTrajectory)
+}
 
 // agyStepsWithin is agySteps with the answer bounded at limit bytes: an answer longer, its object
 // whole within the bound or not, is an error.
