@@ -106,7 +106,7 @@ func startManagedIncludes(t *testing.T, roots map[string]string, include []strin
 	emb.Start(ctx)
 	opts := []rpc.Option{rpc.WithListener(ln), rpc.WithPreferences(db), rpc.WithEmbeddings(emb), rpc.WithEvents(db),
 		rpc.WithRegistrations(o.Registrations.Tables()), rpc.WithRankers(ranking),
-		rpc.WithFiles(diskFiles(t, docs.WithRegistrations(o.Registrations.Kinds()), docs.WithDeriver(o.Registrations)))}
+		rpc.WithDisks(diskVolumes(t, docs.WithRegistrations(o.Registrations.Kinds()), docs.WithDeriver(o.Registrations)))}
 	for _, mod := range mods {
 		opts = append(opts, rpc.WithModules(mod(ws)))
 	}
