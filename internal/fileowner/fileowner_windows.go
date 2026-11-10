@@ -3,6 +3,8 @@
 package fileowner
 
 import (
+	"os"
+
 	"golang.org/x/sys/windows"
 )
 
@@ -20,6 +22,15 @@ func owner(path string) (string, bool, error) {
 		return "", false, err
 	}
 	defer windows.CloseHandle(h)
+	return handleOwner(h)
+}
+
+// ownerOfFile is the owner SID of the object f holds, and whether it is this process's user's: read
+// through the handle itself, so what is checked is what f reads.
+func ownerOfFile(f *os.File) (string, bool, error) { return handleOwner(windows.Handle(f.Fd())) }
+
+// handleOwner is the owner SID of the object h holds, and whether it is this process's user's.
+func handleOwner(h windows.Handle) (string, bool, error) {
 	sd, err := windows.GetSecurityInfo(h, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION)
 	if err != nil {
 		return "", false, err

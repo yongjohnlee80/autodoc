@@ -26,6 +26,7 @@
 ./internal/luarefgen
 ./internal/profiling
 ./internal/tuiaudit
+./internal/userperm/...
 ./plugin/...
 ./plugin/card
 ./plugin/decl

@@ -12,6 +12,8 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/internal/fileid"
 	"github.com/yongjohnlee80/autodoc/internal/filelock"
+
+	"github.com/yongjohnlee80/autodoc/internal/userperm"
 )
 
 // ErrBusy is a store another AutoDoc instance already serves: its lease is held.
@@ -125,15 +127,11 @@ func WriteLeaseInfo(path string, li LeaseInfo) error {
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(dest), ".autodoc-lease-info-*")
+	tmp, err := userperm.CreatePrivateTemp(filepath.Dir(dest), ".autodoc-lease-info-*") // private from its creation
 	if err != nil {
 		return fmt.Errorf("store: writing the lease-info: %w", err)
 	}
 	defer os.Remove(tmp.Name())
-	if err := tmp.Chmod(0o600); err != nil {
-		_ = tmp.Close()
-		return err
-	}
 	if _, err := tmp.Write(data); err != nil {
 		_ = tmp.Close()
 		return err
