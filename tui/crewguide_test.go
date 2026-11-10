@@ -185,9 +185,10 @@ func TestTwoAgentsOfOneKindAskTheirOwnSetup(t *testing.T) {
 }
 
 // TestACrewClaudeAgentOnMCPMailStartsWithItsServer: a Claude agent whose setup delivers the crew MCP
-// server starts with it named on its command line (--mcp-config and the path of its folder's
-// crew.ClaudeMCPConfig, never the JSON itself), that file written private to this user over an
-// earlier run's, holding the server's command; its folder's settings allow exactly the
+// server starts with it named on its command line (--mcp-config and crew.ClaudeMCPConfig's bare
+// name, never the JSON, never the folder, whose name holds a scope's encoded ":"), that file in the
+// launch's working folder, written private to this user over an earlier run's, holding the
+// server's command; its folder's settings allow exactly the
 // crew MCP tools, never a guide shell command (least privilege); its guide is the MCP form; and its
 // session is registered as reading its mail via MCP, which crew.list says.
 func TestACrewClaudeAgentOnMCPMailStartsWithItsServer(t *testing.T) {
@@ -210,11 +211,22 @@ func TestACrewClaudeAgentOnMCPMailStartsWithItsServer(t *testing.T) {
 	awaitStart(t, c, instance)
 	cmd, _, err := startedCmd(a, c, instance)
 	args := cmd.Args
-	config := filepath.Join(instance.dir, crew.ClaudeMCPConfig)
-	if err != nil || len(args) == 0 || !strings.Contains(args[len(args)-1], "--mcp-config") || strings.Contains(args[len(args)-1], "--strict-mcp-config") ||
-		!strings.Contains(args[len(args)-1], config) || strings.Contains(args[len(args)-1], "mcpServers") {
-		t.Fatalf("the spawn: %v, args %v; want --mcp-config naming %s on its command line, never the JSON, never --strict-mcp-config", err, args, config)
+	if err != nil || len(args) == 0 {
+		t.Fatalf("the spawn: %v, args %v", err, args)
 	}
+	// the folder's name holds the scope's ":" encoded (%3A), which a CLI's .cmd shim on Windows would
+	// read as its third argument: the command line names the file as the launch's working folder
+	// reaches it, its bare name, and never the folder (so the shell carries it on every OS)
+	line := args[len(args)-1]
+	if !strings.Contains(instance.dir, "%") {
+		t.Fatalf("the agent's folder %s holds no encoded name: the cell's premise", instance.dir)
+	}
+	if !strings.Contains(line, "--mcp-config") || strings.Contains(line, "--strict-mcp-config") || strings.Contains(line, "mcpServers") ||
+		!strings.Contains(line, crew.ClaudeMCPConfig) || strings.Contains(line, "%") {
+		t.Fatalf("the spawn's line %q: want --mcp-config naming %s by its bare name, never the folder, the JSON or --strict-mcp-config", line, crew.ClaudeMCPConfig)
+	}
+	// reached from where the program is launched, never re-derived: the file is in its working folder
+	config := filepath.Join(cmd.Dir, crew.ClaudeMCPConfig)
 	if err := privateFile(config); err != nil {
 		t.Errorf("the MCP config is not private to this user: %v", err)
 	}

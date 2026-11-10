@@ -353,7 +353,8 @@ func TestSetupForRefusesADataDirThatIsntAbsolute(t *testing.T) {
 
 // TestSetupForClaudeTakesTheCrewMCPServer: a Claude agent given the crew's MCP server gets it on both
 // hosts as a file of its own folder (ClaudeMCPConfig: the server's command and args, no env of its
-// own), named by its absolute path on its command line (--mcp-config), never
+// own), named on its command line (--mcp-config) as its working folder reaches it (its bare name for
+// a window's agent, which works in that folder; its absolute path for Neovim's), never
 // --strict-mcp-config (which would take the user's own servers away), exactly its tools allowed by
 // their mcp__<server>__<tool> rules and no shell rule for its mail (least privilege; Neovim's
 // --settings carries them), and its mail via MCP; without servers it keeps the guide's commands
@@ -363,8 +364,14 @@ func TestSetupForClaudeTakesTheCrewMCPServer(t *testing.T) {
 	servers := []crew.MCPServer{{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"}, Tools: []string{"mail_receive", "mail_ack"}}}
 	rules := []string{"Bash(autodoc --contracts:*)", "mcp__autodoc__mail_receive", "mcp__autodoc__mail_ack"}
 	for _, host := range []string{crew.HostWindow, crew.HostNvim} {
-		agent := t.TempDir()
-		in := crew.SetupInput{Kind: crew.KindClaude, Host: host, Autodoc: "a", Env: map[string]string{"PATH": full}, Dir: t.TempDir(), DataDir: t.TempDir(), AgentDir: agent, Servers: servers}
+		// a window's agent works in its own folder (here spelled another way: the rule compares paths);
+		// Neovim's in the user's project
+		agent, dir := t.TempDir(), t.TempDir()
+		want := filepath.Join(agent, crew.ClaudeMCPConfig)
+		if host == crew.HostWindow {
+			dir, want = agent+string(filepath.Separator)+".", crew.ClaudeMCPConfig
+		}
+		in := crew.SetupInput{Kind: crew.KindClaude, Host: host, Autodoc: "a", Env: map[string]string{"PATH": full}, Dir: dir, DataDir: t.TempDir(), AgentDir: agent, Servers: servers}
 		s, err := crew.SetupFor(in, "")
 		if err != nil {
 			t.Fatal(err)
@@ -373,10 +380,11 @@ func TestSetupForClaudeTakesTheCrewMCPServer(t *testing.T) {
 		if i < 0 || i+1 >= len(s.Argv) || slices.Contains(s.Argv, "--strict-mcp-config") {
 			t.Fatalf("%s: argv %q, want --mcp-config and never --strict-mcp-config", host, s.Argv)
 		}
-		// the argument is the file's absolute path, never the JSON: no shell quoting can change a path
-		// that holds no quote, and the file is the folder's own, never its .mcp.json
-		if want := filepath.Join(agent, crew.ClaudeMCPConfig); s.Argv[i+1] != want || crew.ClaudeMCPConfig == ".mcp.json" {
-			t.Errorf("%s: --mcp-config %q, want the folder file's path %q", host, s.Argv[i+1], want)
+		// the argument names the file as the agent's working folder reaches it, never the JSON: its
+		// bare name in its own folder (no folder name reaches a shell), else its absolute path; and the
+		// file is the folder's own, never its .mcp.json
+		if s.Argv[i+1] != want || crew.ClaudeMCPConfig == ".mcp.json" {
+			t.Errorf("%s: --mcp-config %q, want %q", host, s.Argv[i+1], want)
 		}
 		if len(s.FolderFiles) != 1 || s.FolderFiles[0].Path != crew.ClaudeMCPConfig {
 			t.Fatalf("%s: folder files %+v, want the MCP config alone", host, s.FolderFiles)
