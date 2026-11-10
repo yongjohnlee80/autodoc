@@ -40,3 +40,30 @@ func TestOwnedByReadsTheLinkNotItsTarget(t *testing.T) {
 		t.Errorf("OwnedBy(this user's link to another user's file): %v, want nil: the link is read, not its target", err)
 	}
 }
+
+// OwnedByFile reads the owner of the object an open file holds: this process's file is its user's;
+// another user's, opened, is refused with ErrNotOurs.
+func TestOwnedByFileReadsTheHandlesOwner(t *testing.T) {
+	mine := filepath.Join(t.TempDir(), "mine")
+	if err := os.WriteFile(mine, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(mine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := OwnedByFile(f); err != nil {
+		t.Errorf("OwnedByFile(a file this process made): %v, want nil", err)
+	}
+	other := othersFile(t)
+	g, err := os.Open(other)
+	if err != nil {
+		t.Logf("another user's file can't be opened here (%v): the refusal is covered by OwnedBy only", err)
+		return
+	}
+	defer g.Close()
+	if err := OwnedByFile(g); !errors.Is(err, ErrNotOurs) {
+		t.Errorf("OwnedByFile(%s, another user's): %v, want ErrNotOurs", other, err)
+	}
+}

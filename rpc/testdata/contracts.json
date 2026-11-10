@@ -1917,7 +1917,7 @@
         "the ranker refused the request",
         "the request is over the size a ranker is sent",
         "the store's keyslot does not open this provider's key",
-        "the store's keyslot file is readable by others: make it 0600",
+        "the store's keyslot file is not private to this user (on Unix: make it 0600)",
         "the provider's usage limit is reached: switch provider, or wait",
         "the provider refused the key",
         "the provider has no such model: List models shows the ones it has",
