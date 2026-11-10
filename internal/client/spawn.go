@@ -64,12 +64,19 @@ func SpawnServe(configPath, stateDir string) (string, error) {
 	return logPath, nil
 }
 
-// openServeLog opens the daemon's log at path to append to it: a new one made private to this user
-// on every OS (internal/userperm: it holds what the daemon logged), else the one there.
+// openServeLog opens the daemon's log at path to append to it: one made private to this user on
+// every OS when new (internal/userperm: it holds what the daemon logged), else the one there. The
+// private create's handle shares nothing on Windows, and the log is read while the daemon writes
+// it, so the file is opened again as any log is; its access list stays its creation's.
 func openServeLog(path string) (*os.File, error) {
 	f, err := userperm.CreatePrivate(path)
-	if errors.Is(err, os.ErrExist) {
-		return os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0)
+	switch {
+	case err == nil:
+		if err := f.Close(); err != nil {
+			return nil, err
+		}
+	case !errors.Is(err, os.ErrExist):
+		return nil, err
 	}
-	return f, err
+	return os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0)
 }
