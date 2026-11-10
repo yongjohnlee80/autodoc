@@ -151,10 +151,8 @@ func (t *tiles) tileChanged(node, operation string, size float64) {
 	t.c.SetPref(tileSizeKey(w.id), strconv.Itoa(n))
 }
 
-// rowMaker makes a row of the menu Layout › goes in, run when chosen. Each menu runs its own action
-// type (a buffer strip's, a panel's tabs', a TabView's, a table's), so Layout › is built of rows its
-// menu makes.
-type rowMaker func(id, label string, run func()) widgetcore.MenuItemModel
+// rowMaker makes a row of the menu Layout › goes in (feature.RowMaker).
+type rowMaker = feature.RowMaker
 
 // layoutHost is what Layout › needs of its host: the preferences, and setting one through its row.
 type layoutHost interface {
