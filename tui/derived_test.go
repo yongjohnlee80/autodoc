@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"io"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -65,7 +66,7 @@ func TestADerivedDocumentOpensReadOnly(t *testing.T) {
 		t.Fatalf("the outline has %d headings, want the derived text's 2", n)
 	}
 	r.h.p.Post(r.h.openWithDefaultApp) // File › Open with Default App
-	if p := <-opened; p != "/kb/manual.pdf" {
+	if p := <-opened; p != filepath.Join(fakeRoot("kb"), "manual.pdf") {
 		t.Fatalf("the default app opened %q", p)
 	}
 	r.h.p.Post(func() { r.h.openPath("a.md") })
