@@ -108,10 +108,6 @@ func (s *fakeSeamsCopy) PromptsReported() func(kind string, reportedCopy bool) b
 
 func (s *fakeSeamsCopy) AgentBin() string { return s.agentBin }
 
-// fakeSeamsOf is the fake seams a cell made a's agents with (testAgents): a cell sets its own hook
-// there before the agents use it.
-func fakeSeamsOfCopy(a *agents) *fakeSeamsCopy { return a.seams.(*fakeSeamsCopy) }
-
 // noCommandCheck checks no command: the cells' profiles name programs that don't exist ("one",
 // "two").
 func noCommandCheckCopy(usershell.Shell, string, []string) error { return nil }
