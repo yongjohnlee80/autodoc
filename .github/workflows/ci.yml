@@ -255,6 +255,13 @@ jobs:
           go vet ./...
           mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
           go test -count=1 -timeout 20m "${pkgs[@]}"
+      - name: scratch (not for merge) the agent cells that hand a task, on Windows
+        if: ${{ !inputs.discover }}
+        run: |
+          go test -count=1 -timeout 15m -v -run '^(TestAgentInstancesRunTogetherAndRefsDoNotFollowRestarts|TestHandTaskAcceptedDeliverySnapshotsAndCompletesOnce|TestHandTaskStoppedConsentRevalidatesAndNeverSendsAfterCancellation|TestHandTaskQueuedTargetReplacementAndSendFailureAreCompletionErrors|TestHandTaskWaitsForAStartedAgentToTakeBracketedPastes|TestHandTaskToAnUnbracketedProgramSendsNothing|TestHandTaskIsCheckedAgainInTheWait|TestStoppedAgentDoesNotRelabelItsOldWorkspaceConfiguration|TestParentRebuildRetiresOldRefsAndCreatesCurrentOwnerInstances|TestAnAgentInAnotherWorkspaceIsRung|TestARungTaskInTheWindowsWorkspaceIsPresented|TestADeliveryWaitsForItsAgentsRegistration|TestAMessageRingsTheAgentsDoorbell|TestUsingAnotherAgentKeepsBothInstancesRunning)$' ./tui/ > "$RUNNER_TEMP/t.txt" 2>&1 && rt=0 || rt=$?
+          grep -E '^\s*--- (PASS|FAIL|SKIP)|_test\.go:[0-9]+:' "$RUNNER_TEMP/t.txt" | cut -c1-260 || true
+          echo "== cells tui rc=$rt"
+          [ $rt = 0 ]
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
