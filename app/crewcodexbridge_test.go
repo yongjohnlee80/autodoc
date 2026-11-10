@@ -18,7 +18,6 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
-	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // codexStatusConn stands in for a connection to the app-server: each thread/read answers the next
@@ -194,7 +193,7 @@ func TestTheCodexBridgeNeverDialsAServerOutsideCodexsSocketFolder(t *testing.T) 
 	if err := os.WriteFile(outside, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	link := ipc.ScratchAddr(agent, "codex.sock")
+	link := filepath.Join(agent, "codex.sock")
 	if err := os.Symlink(outside, link); err != nil {
 		t.Fatal(err)
 	}
