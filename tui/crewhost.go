@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/golib/paths"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
@@ -51,14 +53,17 @@ type crewCore interface {
 
 // crewHost holds the window's scope. Its fields are the loop's: work off it answers through Go.
 type crewHost struct {
-	c        crewCore
-	dir      string // <agentDir>/.crew-scopes: the scope ids this machine's windows claimed
-	run      string // this process's run token: in memory only, never written
-	proc     string // this process's reference (crew.ProcRef), "" when unknown
-	scope    string // the scope held, "" before the first claim
-	epoch    int64
-	gen      uint64 // bumped by each claim: an earlier claim's renewals stop
-	claiming bool
+	c   crewCore
+	dir string // <agentDir>/.crew-scopes: the scope ids this machine's windows claimed, by crewFileName
+	// namesWarn is what renaming an earlier build's folders could not do (crewnames.go), said at the
+	// first claim
+	namesWarn error
+	run       string // this process's run token: in memory only, never written
+	proc      string // this process's reference (crew.ProcRef), "" when unknown
+	scope     string // the scope held, "" before the first claim
+	epoch     int64
+	gen       uint64 // bumped by each claim: an earlier claim's renewals stop
+	claiming  bool
 	// claimFailing is that the claims have failed since the last one that held: the outage was told
 	// of (autodoc.crew.no_scope), once, and its retries say nothing
 	claimFailing bool
@@ -123,12 +128,18 @@ type crewSession struct {
 var errNoCrewScope = errors.New("this window holds no crew scope")
 
 func newCrewHost(c crewCore, env procenv.Env, agentDir string) *crewHost {
+	// before anything reads the folders: an earlier build's names (crewnames.go)
+	kept, migrateErr := migrateCrewNames(agentBase(env, agentDir))
 	b := make([]byte, 32)
 	_, _ = rand.Read(b) // crypto/rand: never fails on the platforms AutoDoc runs on
 	proc, _ := crew.ProcRef(os.Getpid())
 	h := &crewHost{c: c, dir: filepath.Join(agentBase(env, agentDir), ".crew-scopes"), run: hex.EncodeToString(b), proc: proc,
 		sessions: map[string]crewSession{}, pending: map[string]*crewRegistration{}, owed: map[string]crewOwedExit{}}
 	h.todos = &todoFeed{h: h, dir: filepath.Join(agentBase(env, agentDir), ".crew-todos"), start: time.Now()}
+	if len(kept) > 0 {
+		migrateErr = errors.Join(migrateErr, fmt.Errorf("%s", strings.Join(kept, ", ")))
+	}
+	h.namesWarn = migrateErr
 	return h
 }
 
@@ -180,6 +191,10 @@ func (h *crewHost) claim() {
 			return
 		}
 		h.claimFailing = false
+		if h.namesWarn != nil { // said once, at the first claim: the window's notices are up by then
+			h.c.Notify(h.c.Trf("autodoc.crew.names_kept", h.namesWarn.Error()))
+			h.namesWarn = nil
+		}
 		if r.warn != nil {
 			h.c.Notify(h.c.Trf("autodoc.crew.scope_unlisted", r.warn.Error()))
 		}
@@ -248,7 +263,7 @@ func (h *crewHost) claimScope(ctx context.Context) claimed {
 	r := claimed{scope: id, epoch: epoch}
 	if err := os.MkdirAll(h.dir, 0o700); err != nil {
 		r.warn = err
-	} else if err := writeAtomic(filepath.Join(h.dir, id), nil, 0o600); err != nil {
+	} else if err := writeAtomic(filepath.Join(h.dir, crewFileName(id)), nil, 0o600); err != nil {
 		r.warn = err
 	}
 	return r
@@ -276,14 +291,16 @@ func (h *crewHost) listed() []string {
 	}
 	var out []listedScope
 	for _, e := range entries {
-		if !e.Type().IsRegular() || !strings.HasPrefix(e.Name(), "autodoc:") {
+		// a name is crewFileName's; one that decodes to no window scope is not a claim
+		id, err := paths.Decode(e.Name())
+		if err != nil || !e.Type().IsRegular() || !strings.HasPrefix(id, "autodoc:") {
 			continue
 		}
 		info, err := e.Info()
 		if err != nil {
 			continue
 		}
-		out = append(out, listedScope{e.Name(), info.ModTime()})
+		out = append(out, listedScope{id, info.ModTime()})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].mod.Before(out[j].mod) })
 	ids := make([]string, len(out))

@@ -1347,6 +1347,10 @@
         <source>This window lost its crew scope %1 while away; its agents now live under %2.</source>
         <translation>此窗口离开期间失去了团队作用域 %1；其代理现在归属于 %2。</translation>
     </message>
+    <message id="autodoc.crew.names_kept">
+        <source>Agent folders from an earlier AutoDoc kept their old names, since their new ones were already there: %1</source>
+        <translation>由于新名称已存在，先前版本 AutoDoc 的部分代理文件夹保留了旧名称：%1</translation>
+    </message>
     <message id="autodoc.crew.scope_unlisted">
         <source>This window's crew scope is held, but not listed for a successor: %1</source>
         <translation>此窗口持有团队作用域，但未为后继窗口登记：%1</translation>

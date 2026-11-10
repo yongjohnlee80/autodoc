@@ -1291,6 +1291,10 @@
         <source>This window's crew inbox was refused by the daemon (%1): requests and attention show again at the next connection.</source>
         <translation>This window's crew inbox was refused by the daemon (%1): requests and attention show again at the next connection.</translation>
     </message>
+    <message id="autodoc.crew.names_kept">
+        <source>Agent folders from an earlier AutoDoc kept their old names, since their new ones were already there: %1</source>
+        <translation>Agent folders from an earlier AutoDoc kept their old names, since their new ones were already there: %1</translation>
+    </message>
     <message id="autodoc.crew.no_longer_waits">
         <source>%1 no longer waits on you</source>
         <translation>%1 no longer waits on you</translation>

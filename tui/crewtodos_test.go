@@ -179,7 +179,7 @@ func TestAStoreNeverReadSkipsItsHistoryOnce(t *testing.T) {
 		t.Fatalf("history mailed: %v", *sends)
 	}
 	scope, _, _ := a.crew.held()
-	if seen := readTodoSeen(filepath.Join(a.crew.todos.dir, scope)); len(seen) != 1 {
+	if seen := readTodoSeen(filepath.Join(a.crew.todos.dir, crewFileName(scope))); len(seen) != 1 {
 		t.Fatalf("stores kept as read: %v, want the one", seen)
 	}
 
@@ -295,7 +295,7 @@ func TestAResyncMailsOnlyAStoreReadBefore(t *testing.T) {
 	if len(*sends) != 0 {
 		t.Fatalf("a store never read: its resync mailed %v, want nothing", *sends)
 	}
-	if seen := readTodoSeen(filepath.Join(a.crew.todos.dir, scope)); len(seen) != 1 {
+	if seen := readTodoSeen(filepath.Join(a.crew.todos.dir, crewFileName(scope))); len(seen) != 1 {
 		t.Fatalf("stores kept as read: %v, want the one", seen)
 	}
 
