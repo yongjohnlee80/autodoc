@@ -587,12 +587,20 @@ const editorCredentialFile = ".autodoc-editor-credential"
 // Codex's tools see: only the file's path is.
 func writeEditorCredential(dir, token string) (string, error) {
 	path := filepath.Join(dir, editorCredentialFile)
-	f, err := userperm.CreatePrivateTemp(dir, editorCredentialFile+".*")
+	return path, writePrivate(path, []byte(token))
+}
+
+// writePrivate makes path hold text, private to this user from its creation (userperm: 0600 on
+// Unix, an access list on Windows): written into a new temporary file beside it, renamed over
+// whatever was there, so an earlier file, whatever its permissions, is replaced whole, never
+// opened or appended to.
+func writePrivate(path string, text []byte) error {
+	f, err := userperm.CreatePrivateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
 	if err != nil {
-		return "", err
+		return err
 	}
 	tmp := f.Name()
-	_, werr := f.WriteString(token)
+	_, werr := f.Write(text)
 	if cerr := f.Close(); werr == nil {
 		werr = cerr
 	}
@@ -601,9 +609,8 @@ func writeEditorCredential(dir, token string) (string, error) {
 	}
 	if werr != nil {
 		_ = os.Remove(tmp)
-		return "", werr
 	}
-	return path, nil
+	return werr
 }
 
 // newAgentFile makes a file an agent asked for (a command it offered, written at the user's Yes):
