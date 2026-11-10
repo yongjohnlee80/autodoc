@@ -9,6 +9,8 @@
 package usershell
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
@@ -50,12 +52,37 @@ func (s Shell) Run(line string) (string, []string) {
 	}
 }
 
+// ErrNotCarried is an argument a program s starts can't be given as itself (Carries).
+var ErrNotCarried = errors.New("an argument the shell can't hand a program as itself")
+
+// Carries reports whether arg can be given, as itself, to any program a line s runs starts. Under
+// either PowerShell on Windows the program may be a batch file (an agent CLI's npm .cmd shim),
+// which cmd.exe runs, reading its arguments again through %*: there a %, &, |, <, > or ^ is
+// cmd.exe's, whatever the quoting, and a line break ends the line. Such an argument is refused
+// (ErrNotCarried, naming the character) rather than handed on changed. Under /bin/sh only a NUL,
+// which no argument can hold, is refused.
+func (s Shell) Carries(arg string) error {
+	bad := "\x00"
+	if s.kind == powershell || s.kind == winps {
+		bad = "%&|<>^\r\n\x00"
+	}
+	if i := strings.IndexAny(arg, bad); i >= 0 {
+		return fmt.Errorf("%w: %q holds %q", ErrNotCarried, arg, arg[i:i+1])
+	}
+	return nil
+}
+
 // Args is args written after a command of a line s runs, so the program it starts receives each one
 // as itself: each Quote'd, or under Windows PowerShell 5.1 after its stop-parsing token (--%), each
 // as Windows writes a program's argument (quoteWindowsArg), since 5.1's own passing splits an
-// argument holding a quote and a space and drops an empty one. In 5.1's --% text a %NAME% naming a
-// variable it has is that variable's value. "" when args is empty.
-func (s Shell) Args(args []string) string {
+// argument holding a quote and a space and drops an empty one. An argument Carries refuses is an
+// error, and nothing is written. "" when args is empty.
+func (s Shell) Args(args []string) (string, error) {
+	for _, a := range args {
+		if err := s.Carries(a); err != nil {
+			return "", err
+		}
+	}
 	var b strings.Builder
 	if s.kind == winps && len(args) > 0 {
 		b.WriteString(" --%")
@@ -68,7 +95,7 @@ func (s Shell) Args(args []string) string {
 			b.WriteString(s.Quote(a))
 		}
 	}
-	return b.String()
+	return b.String(), nil
 }
 
 // Quote is arg as one word of a command line s runs, standing for itself: no character in it is

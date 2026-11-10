@@ -270,7 +270,8 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 		return nil, err
 	}
 	env := append(p.envList(a.seams.env), a.agentEnv(ws, dir, p)...) // AutoDoc's own after the profile's: AutoDoc's win
-	path, args := agentArgv(a.seams.env, fillAgentCommand(a.seams.env, p.Command, ws))
+	filled, fillErr := fillAgentCommand(a.seams.env, p.Command, ws)  // refused below, once its tab is there
+	path, args := agentArgv(a.seams.env, filled)
 	if instance == nil {
 		instance = &agentInstance{profile: p, workspace: ws, owner: panel, dir: dir}
 		id, err := panel.Add(p.Codename, feature.TerminalConfig{Command: path, Args: args, Dir: dir,
@@ -285,8 +286,13 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 	}
 	instance.profile, instance.workspace, instance.crewed, instance.env = p, ws, crewed, env
 	instance.refusal = nil
+	if fillErr != nil { // nothing set up or registered for it, and nothing started with a changed word
+		a.c.Notify(a.c.Trf("autodoc.crew.did_not_start", p.Name, fillErr.Error()))
+		a.refuse(panel, instance, fillErr)
+		return instance, nil
+	}
 	if a.commandCheck != nil {
-		if err := a.commandCheck(fillAgentCommand(a.seams.env, p.Command, ws), env); err != nil { // nothing set up or registered for it
+		if err := a.commandCheck(filled, env); err != nil { // nothing set up or registered for it
 			a.c.Notify(a.c.Trf("autodoc.crew.did_not_start", p.Name, err.Error()))
 			a.refuse(panel, instance, err)
 			return instance, nil
@@ -480,7 +486,11 @@ func (a *agents) runAgent(instance *agentInstance, c pty.Cmd) (terminal.Terminal
 		if instance.profile.kind() == crew.KindOpenCode && instance.setup.Env["OPENCODE_CONFIG_CONTENT"] == "" {
 			return nil, errors.New("AutoDoc's OpenCode plugin: crew setup gave no OPENCODE_CONFIG_CONTENT")
 		}
-		c.Args = withCommandArgs(a.seams.env, c.Args, instance.setup.Argv)
+		args, err := withCommandArgs(a.seams.env, c.Args, instance.setup.Argv)
+		if err != nil {
+			return nil, err
+		}
+		c.Args = args
 	}
 	c.Env = agentEnviron(a.seams.env, instance)
 	// its setup's server (a Codex agent's own app-server), started before the CLI with the CLI's
