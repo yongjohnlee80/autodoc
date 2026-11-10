@@ -165,7 +165,10 @@ func TestTheTerminalsPlaceAndSizeFollowThePreferences(t *testing.T) {
 		row, c := frameAt(sc)
 		return row == 4 && c == 15
 	})
-	onLoop(r, func() bool { r.h.terminals.setTerminalSize(indexOf(percentLabels(termSizes), "40%")); return true })
+	onLoop(r, func() bool {
+		r.h.terminals.setTerminalSize(indexOf(feature.PercentLabels(feature.PanelSizes), "40%"))
+		return true
+	})
 	r.s.WaitFor(t, "the centre's size changed", func(sc string) bool {
 		row, _ := frameAt(sc)
 		return row == 9 // 12 of 30 rows, centred

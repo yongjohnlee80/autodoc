@@ -43,8 +43,8 @@ func (h *agents) syncAgentDialog() {
 	p := h.c.Prefs()
 	size, length := p.PanelGeometry("agent", p.Value(prefAgentEdge))
 	h.c.Set("App.agentEdgeIndex", indexOf(agentEdges, p.Value(prefAgentEdge)))
-	h.c.Set("App.agentSizeIndex", nearest(termSizes, size))
-	h.c.Set("App.agentLengthIndex", nearest(termLengths, length))
+	h.c.Set("App.agentSizeIndex", feature.Nearest(feature.PanelSizes, size))
+	h.c.Set("App.agentLengthIndex", feature.Nearest(feature.PanelLengths, length))
 }
 
 func (h *agents) setAgentEdge(i int) {
@@ -58,13 +58,13 @@ func (h *agents) setAgentEdge(i int) {
 
 // setAgentSize and setAgentLength set the size at the place the agent opens from now.
 func (h *agents) setAgentSize(i int) {
-	if i >= 0 && i < len(termSizes) {
-		h.c.KeepPanelGeometry("agent", "size", termSizes[i])
+	if i >= 0 && i < len(feature.PanelSizes) {
+		h.c.KeepPanelGeometry("agent", "size", feature.PanelSizes[i])
 	}
 }
 
 func (h *agents) setAgentLength(i int) {
-	if i >= 0 && i < len(termLengths) {
-		h.c.KeepPanelGeometry("agent", "length", termLengths[i])
+	if i >= 0 && i < len(feature.PanelLengths) {
+		h.c.KeepPanelGeometry("agent", "length", feature.PanelLengths[i])
 	}
 }

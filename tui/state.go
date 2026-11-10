@@ -169,7 +169,7 @@ func (h *Host) state() map[string]any {
 		"App.terminalFonts": h.termFontModel,
 		"App.proseFonts":    h.proseFontModel,
 		"App.fontSizes":     feature.Choices(fontSizeLabels()...),
-		"App.agentScales":   feature.Choices(percentLabels(feature.AgentScales)...),
+		"App.agentScales":   feature.Choices(feature.PercentLabels(feature.AgentScales)...),
 		"App.zoomSteps":     feature.Choices(zoomLabels()...),
 		"App.cellFontIndex": 0, "App.proseFontIndex": 0, "App.terminalFontIndex": 0, "App.terminalLookNote": "",
 	}

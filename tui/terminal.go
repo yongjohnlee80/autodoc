@@ -64,8 +64,8 @@ func (t *terminals) State() map[string]any {
 	st := map[string]any{
 		"App.terminalShown":   false,
 		"App.terminalEdges":   feature.Choices(termEdgeLabels...),
-		"App.terminalSizes":   feature.Choices(percentLabels(termSizes)...),
-		"App.terminalLengths": feature.Choices(percentLabels(termLengths)...),
+		"App.terminalSizes":   feature.Choices(feature.PercentLabels(feature.PanelSizes)...),
+		"App.terminalLengths": feature.Choices(feature.PercentLabels(feature.PanelLengths)...),
 		"App.terminalThemes":  t.themeChooser(),
 	}
 	maps.Copy(st, t.lookState())
@@ -195,8 +195,8 @@ func terminalPreferenceState(p feature.PrefsView) map[string]any {
 	size, length := p.PanelGeometry("terminal", p.Value(prefTermEdge))
 	maps.Copy(st, map[string]any{
 		"App.terminalEdgeIndex":   indexOf(termEdges, p.Value(prefTermEdge)),
-		"App.terminalSizeIndex":   nearest(termSizes, size),
-		"App.terminalLengthIndex": nearest(termLengths, length),
+		"App.terminalSizeIndex":   feature.Nearest(feature.PanelSizes, size),
+		"App.terminalLengthIndex": feature.Nearest(feature.PanelLengths, length),
 	})
 	return st
 }
@@ -246,21 +246,6 @@ var termEdges = []string{"bottom", "top", "left", "right", "center"}
 
 var termEdgeLabels = []string{"bottom", "top", "left", "right", "centre"}
 
-// The choices the dialog offers for a size and a length, in percent, every tenth.
-var (
-	termSizes   = feature.Percents(10, 90, 10)
-	termLengths = feature.Percents(10, 100, 10)
-)
-
-// percentLabels are the choices as the dialog shows them.
-func percentLabels(ps []int) []string {
-	out := make([]string, len(ps))
-	for i, p := range ps {
-		out[i] = strconv.Itoa(p) + "%"
-	}
-	return out
-}
-
 // termDefault is the terminal's size and length at a place before the user sets them: a third of
 // the Window's height at the top or bottom, two fifths of its width at a side, both the full
 // length; 70 by 70 centred.
@@ -289,19 +274,8 @@ func (t *terminals) syncTermDialog() {
 	p := t.c.Prefs()
 	size, length := p.PanelGeometry("terminal", p.Value(prefTermEdge))
 	t.c.Set("App.terminalEdgeIndex", indexOf(termEdges, p.Value(prefTermEdge)))
-	t.c.Set("App.terminalSizeIndex", nearest(termSizes, size))
-	t.c.Set("App.terminalLengthIndex", nearest(termLengths, length))
-}
-
-// nearest is the row of the choice closest to v.
-func nearest(choices []int, v int) int {
-	best := 0
-	for i, c := range choices {
-		if abs(c-v) < abs(choices[best]-v) {
-			best = i
-		}
-	}
-	return best
+	t.c.Set("App.terminalSizeIndex", feature.Nearest(feature.PanelSizes, size))
+	t.c.Set("App.terminalLengthIndex", feature.Nearest(feature.PanelLengths, length))
 }
 
 func abs(n int) int {
@@ -322,8 +296,8 @@ func (t *terminals) setTerminalEdge(i int) {
 // setTerminalSize and setTerminalLength set the size at the place the terminal opens from now, the
 // panels' one way.
 func (t *terminals) setTerminalSize(i int) {
-	if i >= 0 && i < len(termSizes) {
-		t.c.KeepPanelGeometry("terminal", "size", termSizes[i])
+	if i >= 0 && i < len(feature.PanelSizes) {
+		t.c.KeepPanelGeometry("terminal", "size", feature.PanelSizes[i])
 	}
 }
 
@@ -335,8 +309,8 @@ func (t *terminals) setTerminalTheme(i int) {
 }
 
 func (t *terminals) setTerminalLength(i int) {
-	if i >= 0 && i < len(termLengths) {
-		t.c.KeepPanelGeometry("terminal", "length", termLengths[i])
+	if i >= 0 && i < len(feature.PanelLengths) {
+		t.c.KeepPanelGeometry("terminal", "length", feature.PanelLengths[i])
 	}
 }
 
