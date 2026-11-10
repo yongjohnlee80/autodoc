@@ -15,6 +15,7 @@ import (
 
 	regindex "github.com/yongjohnlee80/autodoc/core/registry"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/system"
 )
 
 const (
@@ -137,7 +138,7 @@ func TestABadIndexKeepsTheListAlreadyRead(t *testing.T) {
 	short.Audits = []regindex.IndexAudit{good.Audits[0]}
 	short.Audits[0].Commit = regC1[:7]
 	big := good
-	big.Description = strings.Repeat("x", httpMaxBody)
+	big.Description = strings.Repeat("x", system.HttpMaxBody)
 	for name, bad := range map[string][]byte{
 		"malformed":  []byte("{"),
 		"truncated":  whole[:len(whole)/2],

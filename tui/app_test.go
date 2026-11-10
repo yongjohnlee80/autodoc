@@ -38,6 +38,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/system"
 )
 
 func md(p string) bool { return strings.HasSuffix(p, ".md") }
@@ -213,7 +214,7 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	}
 	// a test's own preferences start quiet too, unless it names these itself
 	prefs = maps.Clone(prefs)
-	for _, k := range []string{prefAboutAt, prefUpdates} {
+	for _, k := range []string{system.PrefAboutAt, system.PrefUpdates} {
 		if _, set := prefs[k]; !set {
 			prefs[k] = "false"
 		}

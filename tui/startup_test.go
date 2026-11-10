@@ -11,6 +11,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/internal/install"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/system"
 )
 
 func TestReleaseVersionsCompare(t *testing.T) {
@@ -19,32 +20,32 @@ func TestReleaseVersionsCompare(t *testing.T) {
 		ok bool
 	}{{"v0.1.37", true}, {"v1.0.0", true}, {"dev", false}, {"", false}, {"0.1.37", false},
 		{"v0.1.37-5-gabc123", false}, {"v0.1.38-0.20261011-abcdef", false}, {"v0.1", false}, {"v0.x.1", false}} {
-		if _, ok := releaseVersion(tc.v); ok != tc.ok {
+		if _, ok := system.ReleaseVersion(tc.v); ok != tc.ok {
 			t.Errorf("releaseVersion(%q) ok %v, want %v", tc.v, ok, tc.ok)
 		}
 	}
-	v := func(s string) [3]int { n, _ := releaseVersion(s); return n }
+	v := func(s string) [3]int { n, _ := system.ReleaseVersion(s); return n }
 	for _, tc := range []struct {
 		a, b string
 		want bool
 	}{{"v0.1.38", "v0.1.37", true}, {"v0.2.0", "v0.1.99", true}, {"v1.0.0", "v0.9.9", true},
 		{"v0.1.37", "v0.1.37", false}, {"v0.1.36", "v0.1.37", false}} {
-		if got := newer(v(tc.a), v(tc.b)); got != tc.want {
+		if got := system.Newer(v(tc.a), v(tc.b)); got != tc.want {
 			t.Errorf("newer(%s, %s) %v, want %v", tc.a, tc.b, got, tc.want)
 		}
 	}
 }
 
 func TestHowToUpdateFollowsTheInstall(t *testing.T) {
-	r := release{Tag: "v0.1.38", URL: "https://example/releases/v0.1.38"}
+	r := system.Release{Tag: "v0.1.38", URL: "https://example/releases/v0.1.38"}
 	for path, want := range map[string]string{
 		"/opt/homebrew/Cellar/autodoc/0.1.37/bin/autodoc":              "brew upgrade autodoc",
 		"/home/linuxbrew/.linuxbrew/Cellar/autodoc/0.1.37/bin/autodoc": "brew upgrade autodoc",
 		"/home/u/.local/share/mise/installs/autodoc/0.1.37/autodoc":    "mise upgrade",
 		"/home/u/.local/bin/autodoc":                                   r.URL,
 	} {
-		s := &startup{exe: func() (string, error) { return path, nil }}
-		if got := s.how(r); got != want {
+		s := &system.Startup{Exe: func() (string, error) { return path, nil }}
+		if got := s.How(r); got != want {
 			t.Errorf("%s: %q, want %q", path, got, want)
 		}
 	}
@@ -58,20 +59,20 @@ func TestLatestReleaseReadsGitHubsAnswer(t *testing.T) {
 		w.Write([]byte(`{"tag_name":"v9.9.9","html_url":"https://example/r","body":"notes"}`))
 	}))
 	defer srv.Close()
-	r, err := latestRelease(context.Background(), srv.URL)
+	r, err := system.LatestRelease(context.Background(), srv.URL)
 	if err != nil || r.Tag != "v9.9.9" || r.URL != "https://example/r" {
 		t.Fatalf("release %+v, %v", r, err)
 	}
 	srv.Config.Handler = http.NotFoundHandler()
-	if _, err := latestRelease(context.Background(), srv.URL+"/missing"); err == nil {
+	if _, err := system.LatestRelease(context.Background(), srv.URL+"/missing"); err == nil {
 		t.Error("a 404 was taken as a release")
 	}
 }
 
 // startupOf is the running program's startup feature.
-func startupOf(r *running) *startup {
+func startupOf(r *running) *system.Startup {
 	for _, f := range r.h.reg.Features {
-		if s, ok := f.(*startup); ok {
+		if s, ok := f.(*system.Startup); ok {
 			return s
 		}
 	}
@@ -92,11 +93,11 @@ func TestStartingOpensAboutAndSaysANewerReleaseIsOut(t *testing.T) {
 		t.Fatal("About opened although the preference says no")
 	}
 	onLoop(r, func() bool {
-		s.version = "v0.1.37"
-		s.latest = func(context.Context) (release, error) {
-			return release{Tag: "v0.1.38", URL: "https://example/v0.1.38"}, nil
+		s.Version = "v0.1.37"
+		s.Latest = func(context.Context) (system.Release, error) {
+			return system.Release{Tag: "v0.1.38", URL: "https://example/v0.1.38"}, nil
 		}
-		s.exe = func() (string, error) { return "/x/bin/autodoc", nil }
+		s.Exe = func() (string, error) { return "/x/bin/autodoc", nil }
 		r.h.prefs.aboutAtStart, r.h.prefs.updateCheck = true, true
 		s.Started()
 		return true
@@ -117,22 +118,22 @@ func TestNoWordWhenUpToDateOfflineOrNotARelease(t *testing.T) {
 	for _, tc := range []struct {
 		name, version string
 		check         bool
-		answer        release
+		answer        system.Release
 		err           error
 		wantAsked     int
 	}{
-		{"up to date", "v0.1.38", true, release{Tag: "v0.1.38"}, nil, 1},
-		{"older on GitHub", "v0.1.38", true, release{Tag: "v0.1.37"}, nil, 1},
-		{"offline", "v0.1.37", true, release{}, errors.New("offline"), 1},
-		{"a dev build", "dev", true, release{Tag: "v9.0.0"}, nil, 0},
-		{"a commit after a tag", "v0.1.37-3-gabc", true, release{Tag: "v9.0.0"}, nil, 0},
-		{"the preference off", "v0.1.37", false, release{Tag: "v9.0.0"}, nil, 0},
+		{"up to date", "v0.1.38", true, system.Release{Tag: "v0.1.38"}, nil, 1},
+		{"older on GitHub", "v0.1.38", true, system.Release{Tag: "v0.1.37"}, nil, 1},
+		{"offline", "v0.1.37", true, system.Release{}, errors.New("offline"), 1},
+		{"a dev build", "dev", true, system.Release{Tag: "v9.0.0"}, nil, 0},
+		{"a commit after a tag", "v0.1.37-3-gabc", true, system.Release{Tag: "v9.0.0"}, nil, 0},
+		{"the preference off", "v0.1.37", false, system.Release{Tag: "v9.0.0"}, nil, 0},
 	} {
 		asked = 0
 		done := make(chan struct{}, 1)
 		onLoop(r, func() bool {
-			s.version = tc.version
-			s.latest = func(context.Context) (release, error) { asked++; done <- struct{}{}; return tc.answer, tc.err }
+			s.Version = tc.version
+			s.Latest = func(context.Context) (system.Release, error) { asked++; done <- struct{}{}; return tc.answer, tc.err }
 			r.h.prefs.aboutAtStart, r.h.prefs.updateCheck = false, tc.check
 			s.Started()
 			return true
@@ -180,17 +181,17 @@ func TestAboutsUpdateGoesWithTheLookForARelease(t *testing.T) {
 		name   string
 		record func() (install.Record, bool, error)
 		check  bool
-		answer release
+		answer system.Release
 		err    error
 		want   bool
 	}{
-		{"the latest", script, true, release{Tag: "v0.1.38"}, nil, false},
-		{"newer than GitHub's", script, true, release{Tag: "v0.1.37"}, nil, false},
-		{"a newer release is out", script, true, release{Tag: "v0.1.39", URL: "https://example/r"}, nil, true},
-		{"offline", script, true, release{}, errors.New("offline"), true},
-		{"the preference off", script, false, release{}, nil, true},
-		{"newer, but another way installed it", none, true, release{Tag: "v0.1.39", URL: "https://example/r"}, nil, false},
-		{"offline, and another way installed it", none, true, release{}, errors.New("offline"), false},
+		{"the latest", script, true, system.Release{Tag: "v0.1.38"}, nil, false},
+		{"newer than GitHub's", script, true, system.Release{Tag: "v0.1.37"}, nil, false},
+		{"a newer release is out", script, true, system.Release{Tag: "v0.1.39", URL: "https://example/r"}, nil, true},
+		{"offline", script, true, system.Release{}, errors.New("offline"), true},
+		{"the preference off", script, false, system.Release{}, nil, true},
+		{"newer, but another way installed it", none, true, system.Release{Tag: "v0.1.39", URL: "https://example/r"}, nil, false},
+		{"offline, and another way installed it", none, true, system.Release{}, errors.New("offline"), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
@@ -201,7 +202,7 @@ func TestAboutsUpdateGoesWithTheLookForARelease(t *testing.T) {
 			answer, answered := make(chan struct{}), make(chan struct{})
 			onLoop(r, func() bool {
 				sets := 0
-				s.c = setWatch{s.c, func(name string, _ any) {
+				s.Core = setWatch{s.Core, func(name string, _ any) {
 					if name != "App.aboutCanUpdate" {
 						return
 					}
@@ -209,14 +210,14 @@ func TestAboutsUpdateGoesWithTheLookForARelease(t *testing.T) {
 						close(answered)
 					}
 				}}
-				s.version = "v0.1.38"
-				s.exe = func() (string, error) { return "/x/bin/autodoc", nil }
-				s.latest = func(ctx context.Context) (release, error) {
+				s.Version = "v0.1.38"
+				s.Exe = func() (string, error) { return "/x/bin/autodoc", nil }
+				s.Latest = func(ctx context.Context) (system.Release, error) {
 					select {
 					case <-answer:
 						return tc.answer, tc.err
 					case <-ctx.Done():
-						return release{}, ctx.Err()
+						return system.Release{}, ctx.Err()
 					}
 				}
 				r.h.prefs.aboutAtStart, r.h.prefs.updateCheck = true, tc.check
