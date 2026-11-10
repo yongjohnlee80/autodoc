@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/pty"
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 
@@ -135,7 +136,7 @@ func serverDir(t *testing.T) (dir, socket string) {
 // the pid file not written).
 func TestAnAgentServerRunsInItsOwnGroupUntilStopped(t *testing.T) {
 	dir, socket := serverDir(t)
-	s, err := startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ(), defaultSeams.serverReady)
+	s, err := startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ(), newFakeSeams().serverReady)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +163,7 @@ func TestAnAgentServerRunsInItsOwnGroupUntilStopped(t *testing.T) {
 func TestStoppingAServerEndsItsWholeGroup(t *testing.T) {
 	dir, socket := serverDir(t)
 	child := `sh -c 'trap "" TERM; touch "$1"; while :; do sleep 1; done' child "$1" & exec sleep 300`
-	s, err := startAgentServer([]string{"sh", "-c", child, "sh", socket}, socket, dir, os.Environ(), defaultSeams.serverReady)
+	s, err := startAgentServer([]string{"sh", "-c", child, "sh", socket}, socket, dir, os.Environ(), newFakeSeams().serverReady)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +216,7 @@ func TestAStaleServerIsStoppedFirst(t *testing.T) {
 	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(stale.Process.Pid)+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s, err := startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ(), defaultSeams.serverReady)
+	s, err := startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ(), newFakeSeams().serverReady)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +234,7 @@ func TestAStaleServerIsStoppedFirst(t *testing.T) {
 	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(other.Process.Pid)+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s2, err := startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ(), defaultSeams.serverReady)
+	s2, err := startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ(), newFakeSeams().serverReady)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +269,7 @@ func TestTheServersPidFileStaysOutOfTheContextsFolder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s, err := startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ(), defaultSeams.serverReady)
+	s, err := startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ(), newFakeSeams().serverReady)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,9 +302,9 @@ func TestTheServersPidFileStaysOutOfTheContextsFolder(t *testing.T) {
 // in its environment, none on its command line, and the spawner's identity not in it.
 func TestAPlainAgentsVariablesAreInItsEnvironment(t *testing.T) {
 	c := newIdentityHost(crewKinds)
-	c.ws = wsInfo{id: 7, name: "kb", root: t.TempDir()}
+	c.ws = feature.Workspace{ID: 7, Name: "kb", Root: t.TempDir()}
 	a := testAgents(c, t.TempDir(), "")
-	a.seams.(*seams).env = procenv.Env(nil).With("AUTO_AGENTS_MAILBOX_ID=agent:the-window:1") // the window's spawner identity
+	a.seams.(*fakeSeams).env = procenv.Env(nil).With("AUTO_AGENTS_MAILBOX_ID=agent:the-window:1") // the window's spawner identity
 	a.editorPath = func() string { return "/run/the-editor.sock" }
 	p, _ := a.profile("claude-one")
 	instance, err := a.startInstance(p)
@@ -359,7 +360,7 @@ func environMap(environ []string) map[string]string {
 // dead --remote, and no server outlives its CLI (the mutants: either side's end not passed on).
 func TestTheServerAndItsCLIEndTogether(t *testing.T) {
 	dir, socket := serverDir(t)
-	s, err := startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ(), defaultSeams.serverReady)
+	s, err := startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ(), newFakeSeams().serverReady)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -372,7 +373,7 @@ func TestTheServerAndItsCLIEndTogether(t *testing.T) {
 	}
 
 	dir, socket = serverDir(t)
-	s, err = startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ(), defaultSeams.serverReady)
+	s, err = startAgentServer(fakeServer(t, socket, true), socket, dir, os.Environ(), newFakeSeams().serverReady)
 	if err != nil {
 		t.Fatal(err)
 	}
