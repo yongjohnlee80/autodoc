@@ -68,8 +68,8 @@ github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 github.com/yongjohnlee80/gio v0.1.6 h1:hBL/qtElceNRwifTj488rD9BnG5GHVTbpTwIIDF5f7U=
 github.com/yongjohnlee80/gio v0.1.6/go.mod h1:xdK1KMXzzmXQ6tTVMgCe0o5BVm003fo/u9yJ7OK6iko=
-github.com/yongjohnlee80/golib v0.8.43 h1:Lu7vedwbCqsWYKr3SzNQZHObn0bdo3V/tpr+4l8D3lE=
-github.com/yongjohnlee80/golib v0.8.43/go.mod h1:GG9nwIgYc9a3hu2BkNjN0JeJyqZO5bmuT8/7OewDTsM=
+github.com/yongjohnlee80/golib v0.8.44 h1:OkunrTAk7X2LHF7/0pfChgmGeiJaZG884khZT0UHe+I=
+github.com/yongjohnlee80/golib v0.8.44/go.mod h1:GG9nwIgYc9a3hu2BkNjN0JeJyqZO5bmuT8/7OewDTsM=
 github.com/yongjohnlee80/golib/gui v0.3.18 h1:DCxo2PWIBpL3MM5AqdMajUifTCDMZqSvyr/VVn1hrp0=
 github.com/yongjohnlee80/golib/gui v0.3.18/go.mod h1:C3PWWI07VBHtGCvDEahOdMzUUEbh99CrgIDJGzNI7Ok=
 github.com/yuin/gopher-lua v1.1.2 h1:yF/FjE3hD65tBbt0VXLE13HWS9h34fdzJmrWRXwobGA=
