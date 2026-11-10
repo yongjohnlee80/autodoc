@@ -41,7 +41,7 @@ func TestAnAgentInAnotherWorkspaceIsRung(t *testing.T) {
 			opened, modes := len(c.opened), len(c.panel.modes) // the start's own: only what the delivery adds counts
 			var err error
 			if via == "HandTask" {
-				err = a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "Re-sync", Path: "/cyber/.todo-list/in-progress/t1.md", ID: "t1"}, "Go.", done)
+				err = a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "Re-sync", Path: taskFile("/cyber/.todo-list/in-progress/t1.md"), ID: "t1"}, "Go.", done)
 			} else {
 				err = a.SendText(feature.AgentRef{Codename: "one"}, "hello one", done)
 			}
@@ -72,7 +72,7 @@ func TestARungTaskInTheWindowsWorkspaceIsPresented(t *testing.T) {
 	w.inboxSend = func([]any) (any, error) { return map[string]any{"message": "m1"}, nil }
 	var heard []error
 	opened, modes := len(c.opened), len(c.panel.modes) // the start's own: only what the delivery adds counts
-	if err := a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "Ship", Path: "/kb/.todo-list/in-progress/t1.md", ID: "t1"}, "Go.", func(err error) { heard = append(heard, err) }); err != nil {
+	if err := a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "Ship", Path: taskFile("/kb/.todo-list/in-progress/t1.md"), ID: "t1"}, "Go.", func(err error) { heard = append(heard, err) }); err != nil {
 		t.Fatal(err)
 	}
 	settleMessaging(c, w)
