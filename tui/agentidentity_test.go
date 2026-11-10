@@ -136,7 +136,7 @@ func TestDuplicateLabelsEditEachExactProfileAndResolveTargetsByCodename(t *testi
 		}
 		a.openAgentPanel()
 		if c.configuredCommand != got[row].Command || a.agentRunning != got[row].Codename {
-			t.Fatal("opening the default started another profile with the same label")
+			t.Fatalf("opening the default started another profile with the same label: command %q, want %q; running %q, want %q; notes %q", c.configuredCommand, got[row].Command, a.agentRunning, got[row].Codename, c.notes) // scratch
 		}
 		a.stopAgent()
 		c.configuredCommand = ""

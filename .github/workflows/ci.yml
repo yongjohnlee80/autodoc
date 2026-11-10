@@ -247,6 +247,11 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: scratch (not for merge) the duplicate-labels cell on Windows, read whole
+        if: ${{ !inputs.discover }}
+        continue-on-error: true
+        run: |
+          go test -count=1 -v -run '^TestDuplicateLabelsEditEachExactProfileAndResolveTargetsByCodename$' ./tui/ 2>&1 | grep -vE '^=== ' | cut -c1-400 | head -60 || true
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
         run: |
