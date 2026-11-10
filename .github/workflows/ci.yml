@@ -255,6 +255,12 @@ jobs:
           go vet ./...
           mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
           go test -count=1 -timeout 20m "${pkgs[@]}"
+      - name: scratch (not for merge) probe caller arguments through the launcher
+        if: ${{ !inputs.discover }}
+        run: |
+          go test -count=1 -timeout 10m -v -run '^TestProbeCallerArgs$' ./internal/procenv/ > "$RUNNER_TEMP/p.txt" 2>&1 && rc=0 || rc=$?
+          grep -E 'PROBE|^(--- |ok |FAIL|panic)' "$RUNNER_TEMP/p.txt" | cut -c1-300 || true
+          echo "== rc=$rc"
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
