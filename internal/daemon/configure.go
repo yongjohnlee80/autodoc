@@ -39,7 +39,7 @@ func (m *Workspaces) Configure(ctx context.Context, name string, c store.Changes
 		return edition.ErrDatabases
 	}
 	if c.Name != nil {
-		if _, err := workspace.Normalize(workspace.Spec{Name: *c.Name, Root: "/"}); err != nil {
+		if err := workspace.ValidName(*c.Name); err != nil {
 			return err
 		}
 	}

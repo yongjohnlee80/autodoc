@@ -701,7 +701,7 @@ func checkRoot(c workspace.Spec) error {
 
 // Rename gives a workspace a new name: one row. Its indexer keeps running.
 func (m *Workspaces) Rename(ctx context.Context, name, to string) error {
-	if _, err := workspace.Normalize(workspace.Spec{Name: to, Root: "/"}); err != nil {
+	if err := workspace.ValidName(to); err != nil {
 		return err
 	}
 	m.chg.Lock()
