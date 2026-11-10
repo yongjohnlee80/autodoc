@@ -247,6 +247,19 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: scratch (not for merge) the MCP config's working-folder rule on Windows, one mutant
+        if: ${{ !inputs.discover }}
+        run: |
+          go test -count=1 -v -run '^TestTheMCPConfigIsNamedAsTheWorkingFolderReachesIt$' ./core/crew/ > "$RUNNER_TEMP/b.txt" 2>&1 && rb=0 || rb=$?
+          grep -E '^\s*--- |_test\.go:[0-9]+:' "$RUNNER_TEMP/b.txt" | cut -c1-240 || true
+          echo "== base rc=$rb"
+          python -c "p='core/crew/setup.go'; s=open(p,encoding='utf-8').read(); o='if rel, err := filepath.Rel(in.AgentDir, in.Dir); err == nil && rel == \".\" {'; assert s.count(o)==1; open(p,'w',encoding='utf-8').write(s.replace(o,'if in.Dir == in.AgentDir { // mutant strings'))"
+          go test -count=1 -v -run '^TestTheMCPConfigIsNamedAsTheWorkingFolderReachesIt$' ./core/crew/ > "$RUNNER_TEMP/m.txt" 2>&1 && rm=0 || rm=$?
+          echo "== mutant strings applied: $(grep -c 'mutant strings' core/crew/setup.go)"
+          grep -E '^\s*--- FAIL' "$RUNNER_TEMP/m.txt" | sed 's/ (.*//' | tr '\n' ' ' || true; echo
+          echo "== mutant strings rc=$rm (want a non-zero: killed)"
+          git checkout -q -- core/crew/setup.go
+          [ $rb = 0 ]
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
         run: |
