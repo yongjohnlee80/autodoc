@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -358,6 +359,10 @@ func TestConfigure_SaysWhatItCouldNotDo(t *testing.T) {
 		t.Errorf("the failed reindex is not in the log:\n%s", log.String())
 	}
 
+	if runtime.GOOS == "windows" {
+		// the served workspace holds its root open, and Windows removes no folder a process holds
+		t.Skip("a served root can't be removed on Windows: the refusal of a gone root is checked on Unix")
+	}
 	if err := os.RemoveAll(w.Root()); err != nil {
 		t.Fatal(err)
 	}

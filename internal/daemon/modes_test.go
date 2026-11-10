@@ -22,9 +22,10 @@ import (
 // full. A store path has its store in every mode.
 func TestAPathsModeIsTheFirstRuleItMatches(t *testing.T) {
 	m, _ := open(t)
-	m.stores.Store(newRegistry(TodoRegistry{Stores: []TodoStore{{ID: "S", Dir: "/ws/tasks", KB: "/ws"}},
-		Vars: map[string]map[string]string{"/ws": {"KB_ROOT": "/ws"}}}))
-	h := &modes{m: m, root: "/ws"}
+	ws := t.TempDir() // an absolute root on any OS
+	m.stores.Store(newRegistry(TodoRegistry{Stores: []TodoStore{{ID: "S", Dir: filepath.Join(ws, "tasks"), KB: ws}},
+		Vars: map[string]map[string]string{ws: {"KB_ROOT": ws}}}))
+	h := &modes{m: m, root: ws}
 	type want struct {
 		path  string
 		graph bool
