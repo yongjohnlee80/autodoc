@@ -75,7 +75,7 @@ func runAgentTUIIn(t *testing.T, dir string, profiles []agentProfile, def string
 func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	agent, report := fakeAgent(t)
+	agent, report := fakeAgentCopy(t)
 	// as a user may write a command: a variable set before it, its program's path quoted
 	_, r, calls := runAgentTUI(t, dir, []agentProfile{
 		{Name: "other", Command: "false"},
@@ -474,7 +474,7 @@ func TestTheAgentOpensWherePreferencesSay(t *testing.T) {
 // agent printed (TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace exits with 3).
 func TestAnAgentsCleanExitClosesItsPanel(t *testing.T) {
 	t.Parallel()
-	agent, _ := fakeAgent(t)
+	agent, _ := fakeAgentCopy(t)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
 	r.leader(t, 'g')
 	r.s.WaitForText(t, "agent · fake")
@@ -493,7 +493,7 @@ func TestAnAgentsCleanExitClosesItsPanel(t *testing.T) {
 // bytes before it would make the line not match and the agent run on).
 func TestF11WorksWithTheKeyboardInARunningAgent(t *testing.T) {
 	t.Parallel()
-	agent, _ := fakeAgent(t)
+	agent, _ := fakeAgentCopy(t)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
 	r.leader(t, 'g')
 	r.s.WaitForText(t, "started")
@@ -517,7 +517,7 @@ func TestF11WorksWithTheKeyboardInARunningAgent(t *testing.T) {
 // needs, so it exits 6 (a w or a Ctrl+T sent to it would make the line not match).
 func TestCtrlTTogglesTheAgentsModeAndEscIsTheAgents(t *testing.T) {
 	t.Parallel()
-	agent, _ := fakeAgent(t)
+	agent, _ := fakeAgentCopy(t)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
 	r.leader(t, 'g')
 	r.s.WaitForText(t, "started")

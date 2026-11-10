@@ -95,7 +95,7 @@ func TestATextUsersNormalModeSaysHowToGetBack(t *testing.T) {
 // The agent panel's terminals follow the keymap too: under the text editor's keys, its normal mode
 // says how to get back.
 func TestATextUsersAgentNormalModeSaysHowToGetBack(t *testing.T) {
-	agent, _ := fakeAgent(t)
+	agent, _ := fakeAgentCopy(t)
 	_, r, _ := runAgentTUIWith(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake",
 		map[string]string{prefKeymap: "text"}, Options{})
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true }) // SPC g: the text editor's keys have no SPC

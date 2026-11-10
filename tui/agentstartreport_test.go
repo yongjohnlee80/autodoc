@@ -18,7 +18,7 @@ import (
 // was the only trace.
 func TestARefusedRegistrationIsShownInItsTab(t *testing.T) {
 	a, c, w := crewAgents(t, oneTwo)
-	c.panel = &modelPanel{owner: c, starts: true}
+	c.panel = &modelPanelCopy{owner: c, starts: true}
 	w.d.refuse = &golibrpc.Error{Code: crew.CodeCodenameBusy, Message: "the codename already has a live session"}
 	p, _ := a.profile("one")
 	instance, err := a.startInstance(p)
@@ -84,7 +84,7 @@ func TestAPathTheShellResolvesIsNotJudged(t *testing.T) {
 // its first word, so it isn't.
 func TestAProfileCommandNotOnPathIsRefusedBeforeItsSession(t *testing.T) {
 	a, c, w := crewAgents(t, `[{"name":"Sephiroth","command":"claude-work","codename":"sephiroth"},{"name":"Shell","command":"FOO=1 claude-work","codename":"shell"}]`)
-	c.panel = &modelPanel{owner: c, starts: true}
+	c.panel = &modelPanelCopy{owner: c, starts: true}
 	a.commandCheck = commandOnPath // as a window's agents are
 	p, _ := a.profile("sephiroth")
 	instance, err := a.startInstance(p)
@@ -103,12 +103,12 @@ func TestAProfileCommandNotOnPathIsRefusedBeforeItsSession(t *testing.T) {
 	if len(c.notes) == 0 || !strings.Contains(c.notes[len(c.notes)-1], "claude-work") {
 		t.Fatalf("notices %v, want claude-work named", c.notes)
 	}
-	reported := len(c.panel.reported)
+	reportedCopy := len(c.panel.reported)
 	shell, _ := a.profile("shell")
 	if _, err := a.startInstance(shell); err != nil {
 		t.Fatal(err)
 	}
-	if len(c.panel.reported) != reported && strings.Contains(c.panel.reported[len(c.panel.reported)-1], "isn't a program on") {
+	if len(c.panel.reported) != reportedCopy && strings.Contains(c.panel.reported[len(c.panel.reported)-1], "isn't a program on") {
 		t.Fatalf("a command in shell syntax was judged by its first word: %q", c.panel.reported)
 	}
 }

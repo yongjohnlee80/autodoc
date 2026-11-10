@@ -9,7 +9,7 @@ import (
 
 // elsewhereRig is messagingRig with the window switched to another workspace after agent one
 // started in kb: one runs on in kb, the window shows other (docs/decisions/crew.md#the-users-own-sends).
-func elsewhereRig(t *testing.T) (*agents, *identityHost, *crewWindow) {
+func elsewhereRig(t *testing.T) (*agents, *identityHostCopy, *crewWindow) {
 	t.Helper()
 	a, c, w := messagingRig(t)
 	c.ws = wsInfo{id: 8, name: "other", root: t.TempDir()}

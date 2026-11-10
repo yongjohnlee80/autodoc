@@ -219,7 +219,7 @@ autodoc.command{ name = "pk", run = function() autodoc.ui.pick({ items = { "afte
 // agents.lua's :agent-buffer sends the page to the one running, and :agent-forward the selection.
 func TestScriptsSendTextToAnAgent(t *testing.T) {
 	t.Parallel()
-	agent, report := recordingAgent(t, true)
+	agent, report := recordingAgentCopy(t, true)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
@@ -238,7 +238,7 @@ end }`)
 	r.s.WaitFor(t, "sent", func(string) bool { return r.noticed("sent true nil") })
 	// one paste, whole: its newline the text's, then the Enter that sends it (agentmessaging.go)
 	first := "\x1b[200~first-line\nsecond-line\x1b[201~\r"
-	r.s.WaitFor(t, "the paste heard", func(string) bool { return strings.HasSuffix(reported(report), first) })
+	r.s.WaitFor(t, "the paste heard", func(string) bool { return strings.HasSuffix(reportedCopy(report), first) })
 	r.s.WaitFor(t, "an unknown agent refused", func(string) bool { return r.noticed("nobody unavailable") })
 
 	// :agent-buffer asks the instruction, then sends a request: the untitled draft's text goes in it
@@ -249,7 +249,7 @@ end }`)
 	r.instruct(t, "hand the page to heron", "summarise it")
 	r.s.WaitFor(t, "said", func(string) bool { return r.noticed("sent the page to heron") })
 	r.s.WaitFor(t, "the page's request pasted", func(string) bool {
-		return strings.HasSuffix(reported(report), "\x1b[200~Page: the untitled draft (unsaved)\n"+
+		return strings.HasSuffix(reportedCopy(report), "\x1b[200~Page: the untitled draft (unsaved)\n"+
 			"From: SPC a b (:agent-buffer), sent by the user\nInstruction: summarise it\n"+
 			"File: the untitled draft (never saved)\nText:\npage-text-for-the-agent\x1b[201~\r")
 	})
@@ -265,11 +265,11 @@ end }`)
 	}
 	r.instruct(t, "hand the selection to heron", "explain this")
 	r.s.WaitFor(t, "the selection's request pasted", func(string) bool {
-		return strings.HasSuffix(reported(report), "\x1b[200~Selection: the untitled draft, lines 1 to 1\n"+
+		return strings.HasSuffix(reportedCopy(report), "\x1b[200~Selection: the untitled draft, lines 1 to 1\n"+
 			"From: SPC a f (:agent-forward), sent by the user\nInstruction: explain this\n"+
 			"File: the untitled draft, lines 1 to 1\nText:\nselected-part\x1b[201~\r")
 	})
-	if got := reported(report); strings.Contains(got, "ignored") || strings.Count(got, "\r") != 3 {
+	if got := reportedCopy(report); strings.Contains(got, "ignored") || strings.Count(got, "\r") != 3 {
 		t.Errorf("more than the selection, or other than one Enter per send, was sent: %q", got)
 	}
 }
@@ -289,7 +289,7 @@ func (r *running) instruct(t *testing.T, title, text string) {
 // for a saved page; no instruction asked; no bound; an empty instruction sent).
 func TestAPageIsHandedOverByItsPathNeverItsText(t *testing.T) {
 	t.Parallel()
-	agent, report := recordingAgent(t, true)
+	agent, report := recordingAgentCopy(t, true)
 	_, r, _ := runAgentTUIIn(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron",
 		nil, Options{}, map[string][]string{"kb": {"a.md", "a\n", "plan.md", "the-saved-page-text\n"}})
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
@@ -305,12 +305,12 @@ func TestAPageIsHandedOverByItsPathNeverItsText(t *testing.T) {
 	}
 	r.instruct(t, "hand the page to heron", "review it")
 	r.s.WaitFor(t, "the saved page's request pasted", func(string) bool {
-		got := reported(report)
+		got := reportedCopy(report)
 		return strings.Contains(got, "\x1b[200~Page: plan.md in kb\nFrom: SPC a b (:agent-buffer), sent by the user\n"+
 			"Instruction: review it\nWorkspace: kb\nFile: plan.md\nVersion: ") &&
 			strings.HasSuffix(got, "Its text is not in this message: read the file in the workspace.\x1b[201~\r")
 	})
-	if got := reported(report); strings.Contains(got, "the-saved-page-text") {
+	if got := reportedCopy(report); strings.Contains(got, "the-saved-page-text") {
 		t.Fatalf("a saved page's text was sent: %q", got)
 	}
 
@@ -328,11 +328,11 @@ func TestAPageIsHandedOverByItsPathNeverItsText(t *testing.T) {
 	}
 	r.instruct(t, "hand the page to heron", "check the edit")
 	r.s.WaitFor(t, "the unsaved page's request pasted", func(string) bool {
-		return strings.HasSuffix(reported(report), "File: plan.md (with unsaved changes: the text below is the page now)\n"+
+		return strings.HasSuffix(reportedCopy(report), "File: plan.md (with unsaved changes: the text below is the page now)\n"+
 			"Text:\nan-unsaved-edit the-saved-page-text\n\x1b[201~\r")
 	})
 
-	before := reported(report)
+	before := reportedCopy(report)
 	// over 8 KiB, an untitled draft: refused before anything is asked
 	if err := r.newBufferRun("", strings.Repeat("x", 8*1024+1)); err != nil {
 		t.Fatal(err)
@@ -358,7 +358,7 @@ func TestAPageIsHandedOverByItsPathNeverItsText(t *testing.T) {
 	r.s.WaitForText(t, "hand the page to heron")
 	r.keys(t, esc())
 	r.s.WaitFor(t, "the line closed", func(sc string) bool { return !strings.Contains(sc, "hand the page to heron") })
-	if got := reported(report); got != before {
+	if got := reportedCopy(report); got != before {
 		t.Errorf("a refused, empty or cancelled hand-over sent something: %q", strings.TrimPrefix(got, before))
 	}
 }
@@ -369,7 +369,7 @@ func TestAPageIsHandedOverByItsPathNeverItsText(t *testing.T) {
 // break, or none, is the script's error, nothing sent.
 func TestScriptsAskALineAndSendARequest(t *testing.T) {
 	t.Parallel()
-	agent, report := recordingAgent(t, true)
+	agent, report := recordingAgentCopy(t, true)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
@@ -402,15 +402,15 @@ end }`)
 	}
 	r.s.WaitFor(t, "the request sent", func(string) bool { return r.noticed("request true nil") })
 	r.s.WaitFor(t, "its paste, the subject first", func(string) bool {
-		return strings.HasSuffix(reported(report), "\x1b[200~Task: count\ncount the birds\x1b[201~\r")
+		return strings.HasSuffix(reportedCopy(report), "\x1b[200~Task: count\ncount the birds\x1b[201~\r")
 	})
-	before := reported(report)
+	before := reportedCopy(report)
 	for _, bad := range []string{`{ subject = "two\nlines", body = "b" }`, `{ body = "no subject" }`, `{ subject = "no body" }`} {
 		if err := r.luaRun(`:lua autodoc.agents.send("heron", ` + bad + `)`); err == nil {
 			t.Errorf("a bad request %s ran as ok", bad)
 		}
 	}
-	if got := reported(report); got != before {
+	if got := reportedCopy(report); got != before {
 		t.Errorf("a bad request sent something: %q", strings.TrimPrefix(got, before))
 	}
 }
@@ -422,7 +422,7 @@ end }`)
 // callback that fails is a notice.
 func TestScriptsSendALongRichTextThroughLua(t *testing.T) {
 	t.Parallel()
-	agent, report := recordingAgent(t, true)
+	agent, report := recordingAgentCopy(t, true)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
@@ -434,7 +434,7 @@ func TestScriptsSendALongRichTextThroughLua(t *testing.T) {
 	}
 	r.s.WaitFor(t, "the long send", func(string) bool { return r.noticed("long true nil") })
 	r.s.WaitFor(t, "2,600 x's pasted", func(string) bool {
-		return strings.HasSuffix(reported(report), "\x1b[200~"+strings.Repeat("x", 2600)+"\x1b[201~\r")
+		return strings.HasSuffix(reportedCopy(report), "\x1b[200~"+strings.Repeat("x", 2600)+"\x1b[201~\r")
 	})
 
 	var b strings.Builder
@@ -448,7 +448,7 @@ func TestScriptsSendALongRichTextThroughLua(t *testing.T) {
 	}
 	r.s.WaitFor(t, "the rich send", func(string) bool { return r.noticed("rich true nil") })
 	r.s.WaitFor(t, "the rich text pasted whole", func(string) bool {
-		return strings.HasSuffix(reported(report), "\x1b[200~"+rich+"\x1b[201~\r")
+		return strings.HasSuffix(reportedCopy(report), "\x1b[200~"+rich+"\x1b[201~\r")
 	})
 
 	// the escapes decoded once too often: a raw newline inside a Lua string no longer parses
@@ -471,7 +471,7 @@ func TestScriptsSendALongRichTextThroughLua(t *testing.T) {
 // (docs/decisions/todos.md#text-reaches-an-agent-only-as-a-bracketed-paste).
 func TestScriptsSendNothingToAnUnbracketedAgent(t *testing.T) {
 	t.Parallel()
-	agent, report := recordingAgent(t, false)
+	agent, report := recordingAgentCopy(t, false)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
@@ -486,8 +486,8 @@ end }`)
 	r.s.WaitFor(t, "the refusal heard", func(string) bool { return r.noticed("sent nil unbracketed") })
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
 	r.keys(t, decltest.Type("k")...) // a key the user types still reaches it: the agent reads on
-	r.s.WaitFor(t, "the key typed", func(string) bool { return strings.Contains(reported(report), "k") })
-	if got := reported(report); strings.Contains(got, "never-keys") {
+	r.s.WaitFor(t, "the key typed", func(string) bool { return strings.Contains(reportedCopy(report), "k") })
+	if got := reportedCopy(report); strings.Contains(got, "never-keys") {
 		t.Errorf("an unbracketed agent was sent the text: %q", got)
 	}
 }
@@ -496,7 +496,7 @@ end }`)
 // and a stopped one is asked about, naming what will be sent.
 func TestSendTextSharesHandTasksDelivery(t *testing.T) {
 	t.Parallel()
-	a, c := modelAgents(t)
+	a, c := modelAgentsCopy(t)
 	a.promptsReported = func(string, bool) bool { return true } // its prompts reported: the base sends with its Enter
 	one, _ := a.profile("one")
 	first, _ := a.startInstance(one)
@@ -530,7 +530,7 @@ func TestSendTextSharesHandTasksDelivery(t *testing.T) {
 // selection, each with the instruction asked, and Backspace goes back to SPC's card.
 func TestTheAgentsCardSendsThePage(t *testing.T) {
 	t.Parallel()
-	agent, report := recordingAgent(t, true)
+	agent, report := recordingAgentCopy(t, true)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
@@ -550,7 +550,7 @@ func TestTheAgentsCardSendsThePage(t *testing.T) {
 	r.keys(t, key('b'))
 	r.instruct(t, "hand the page to heron", "read it")
 	r.s.WaitFor(t, "the page's request pasted", func(string) bool {
-		return strings.Contains(reported(report), "Instruction: read it\nFile: the untitled draft (never saved)\nText:\ncard-sent-page\x1b[201~")
+		return strings.Contains(reportedCopy(report), "Instruction: read it\nFile: the untitled draft (never saved)\nText:\ncard-sent-page\x1b[201~")
 	})
 	r.s.WaitFor(t, "said", func(string) bool { return r.noticed("sent the page to heron") })
 
@@ -565,7 +565,7 @@ func TestTheAgentsCardSendsThePage(t *testing.T) {
 	r.keys(t, key('f'))
 	r.instruct(t, "hand the selection to heron", "use it")
 	r.s.WaitFor(t, "the selection's request pasted", func(string) bool {
-		return strings.Contains(reported(report), "Instruction: use it\nFile: the untitled draft, lines 1 to 1\nText:\ncard-selected\x1b[201~")
+		return strings.Contains(reportedCopy(report), "Instruction: use it\nFile: the untitled draft, lines 1 to 1\nText:\ncard-selected\x1b[201~")
 	})
 
 	// g: the agent panel; covered by the page that has the keyboard, it comes to the front, and

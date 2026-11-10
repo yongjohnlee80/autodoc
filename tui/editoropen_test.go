@@ -123,7 +123,7 @@ func TestAnAgentOpensAFileByItsPath(t *testing.T) {
 // agent started in kb, the editor switched to notes, opens notes's file by its path there, and
 // editor.document says it is foreign to the agent.
 func TestAnAgentOpensARelativePathInTheEditorsWorkspace(t *testing.T) {
-	agent, _ := recordingAgent(t, true)
+	agent, _ := recordingAgentCopy(t, true)
 	files := map[string][]string{"kb": {"a.md", "a\n"}, "notes": {"b.md", "b\n", "only.md", "notes only\n"}}
 	_, r, _ := runAgentTUIIn(t, t.TempDir(), []agentProfile{{Name: "zen", Command: shellQuote(agent), Codename: "zen"}}, "zen", nil,
 		Options{EditorDir: t.TempDir(), Workspace: "kb"}, files)
