@@ -8,6 +8,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/feature/featuretest"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
@@ -38,17 +39,17 @@ func TestStoreNamesDeriveFromTheirFolders(t *testing.T) {
 
 // labelledStores is a daemon of three stores, two of them KB folders, keeping preferences as the
 // daemon does: preference.set's values are preference.list's.
-func labelledStores(prefs map[string]any) *scriptedCore {
+func labelledStores(prefs map[string]any) *featuretest.ScriptedCore {
 	s := newScripted("")
-	s.answers["todos.stores"] = func([]any) (any, error) {
+	s.Answers["todos.stores"] = func([]any) (any, error) {
 		return []any{
 			map[string]any{"id": "S1", "path": "/src/WebShop/.auto-agents/kb/.todo-list", "roots": []any{"/src/WebShop/.auto-agents/kb"}, "claimed": true},
 			map[string]any{"id": "S2", "path": "/home/j/.config/nvim/.auto-agents-config/kb/.todo-list", "roots": []any{"/home/j/.config/nvim/.auto-agents-config/kb"}},
 			map[string]any{"id": "S3", "path": "/home/j/html-archives/.todo-list", "roots": []any{"/home/j/html-archives"}},
 		}, nil
 	}
-	s.answers["preference.list"] = func([]any) (any, error) { return prefs, nil }
-	s.answers["preference.set"] = func(p []any) (any, error) { prefs[p[0].(string)] = p[1]; return nil, nil }
+	s.Answers["preference.list"] = func([]any) (any, error) { return prefs, nil }
+	s.Answers["preference.set"] = func(p []any) (any, error) { prefs[p[0].(string)] = p[1]; return nil, nil }
 	return s
 }
 
@@ -66,29 +67,29 @@ func TestTodosLabelAStoreAndClearIt(t *testing.T) {
 		t.Fatalf("the dropdown %q, want %q", got, want)
 	}
 	v.storeChosen(1)
-	if got := s.set["App.todosTitle"]; got != "todos · /home/j/.config/nvim/.auto-agents-config/kb/.todo-list" {
+	if got := s.Sets["App.todosTitle"]; got != "todos · /home/j/.config/nvim/.auto-agents-config/kb/.todo-list" {
 		t.Errorf("heading %v", got)
 	}
 	v.label()
-	if s.opened[len(s.opened)-1] != "todoLabel" || s.set["App.todoLabelText"] != "" {
-		t.Fatalf("L: opened %v, text %v", s.opened, s.set["App.todoLabelText"])
+	if s.Opened[len(s.Opened)-1] != "todoLabel" || s.Sets["App.todoLabelText"] != "" {
+		t.Fatalf("L: opened %v, text %v", s.Opened, s.Sets["App.todoLabelText"])
 	}
 	v.labelSet("  Config  ")
 	if prefs["tui.todos.label.S2"] != "Config" {
 		t.Fatalf("prefs %v", prefs)
 	}
-	if got := storeLabels(v)[1]; got != "Config" || v.cur.id != "root:/home/j/.config/nvim/.auto-agents-config/kb" || s.set["App.todoStoreIndex"] != 1 {
-		t.Errorf("labelled: %q, shown %+v, index %v", got, v.cur, s.set["App.todoStoreIndex"])
+	if got := storeLabels(v)[1]; got != "Config" || v.cur.id != "root:/home/j/.config/nvim/.auto-agents-config/kb" || s.Sets["App.todoStoreIndex"] != 1 {
+		t.Errorf("labelled: %q, shown %+v, index %v", got, v.cur, s.Sets["App.todoStoreIndex"])
 	}
 	// the same label on another store: both show it, and their headings differ
-	h1 := s.set["App.todosTitle"]
+	h1 := s.Sets["App.todosTitle"]
 	v.storeChosen(2)
 	v.label()
 	v.labelSet("Config")
 	if got := storeLabels(v); got[1] != got[2] {
 		t.Errorf("two stores labelled alike: %q", got)
 	}
-	if h2 := s.set["App.todosTitle"]; h1 == h2 {
+	if h2 := s.Sets["App.todosTitle"]; h1 == h2 {
 		t.Errorf("both headings %v", h1)
 	}
 	// a restart: a new panel on the same daemon reads the labels again
@@ -100,27 +101,27 @@ func TestTodosLabelAStoreAndClearIt(t *testing.T) {
 	// cleared: the derived name, and the label shown in L's prompt as it was
 	again.storeChosen(1)
 	again.label()
-	if s.set["App.todoLabelText"] != "Config" {
-		t.Errorf("L's prompt holds %v", s.set["App.todoLabelText"])
+	if s.Sets["App.todoLabelText"] != "Config" {
+		t.Errorf("L's prompt holds %v", s.Sets["App.todoLabelText"])
 	}
 	again.labelSet("")
 	if got := storeLabels(again)[1]; got != "nvim" {
 		t.Errorf("cleared: %q", got)
 	}
-	if !strings.Contains(strings.Join(s.notes, "|"), "shows as nvim again") {
-		t.Errorf("notes %v", s.notes)
+	if !strings.Contains(strings.Join(s.Notes, "|"), "shows as nvim again") {
+		t.Errorf("notes %v", s.Notes)
 	}
 	// only preferences were written: no todos.* write reached a store
-	for _, c := range s.calls {
+	for _, c := range s.Calls {
 		if strings.HasPrefix(c, "todos.") && !strings.HasPrefix(c, "todos.stores") && !strings.HasPrefix(c, "todos.list") {
 			t.Errorf("a store was asked %s", c)
 		}
 	}
 	// a label prompt answered after its store is gone writes nothing
-	n := len(s.calls)
+	n := len(s.Calls)
 	again.labelSet("late")
-	if len(s.calls) != n {
-		t.Errorf("a label with no store asked: %v", s.calls[n:])
+	if len(s.Calls) != n {
+		t.Errorf("a label with no store asked: %v", s.Calls[n:])
 	}
 }
 
@@ -128,20 +129,20 @@ func TestTodosLabelAStoreAndClearIt(t *testing.T) {
 // derived names.
 func TestTodosListWithoutPreferences(t *testing.T) {
 	s := labelledStores(nil)
-	s.answers["preference.list"] = func([]any) (any, error) { return nil, fmt.Errorf("-32004 no preferences") }
+	s.Answers["preference.list"] = func([]any) (any, error) { return nil, fmt.Errorf("-32004 no preferences") }
 	v := newTodos(s)
 	v.list()
-	if got := storeLabels(v); len(got) != 3 || got[0] != "WebShop" || len(s.failed) != 0 {
-		t.Errorf("stores %q, failed %v", got, s.failed)
+	if got := storeLabels(v); len(got) != 3 || got[0] != "WebShop" || len(s.Failures) != 0 {
+		t.Errorf("stores %q, failed %v", got, s.Failures)
 	}
 }
 
 // movingStore is a claimed workspace store whose one task moves as todos.status says: its tab is the
 // task's status, an archived one under 2026/10.
-func movingStore(status string) (*scriptedCore, *string) {
+func movingStore(status string) (*featuretest.ScriptedCore, *string) {
 	s := scriptedStore(true)
 	cur := status
-	s.answers["todos.list"] = func(p []any) (any, error) {
+	s.Answers["todos.list"] = func(p []any) (any, error) {
 		b := p[1].(map[string]any)["buckets"].([]any)[0].(string)
 		switch {
 		case b == "archived" && cur == "archived":
@@ -155,7 +156,7 @@ func movingStore(status string) (*scriptedCore, *string) {
 		}
 		return map[string]any{"tasks": []any{map[string]any{"id": "t1", "rev": "r1", "title": "Ship", "status": cur, "path": cur + "/t1.md"}}}, nil
 	}
-	s.answers["todos.status"] = func(p []any) (any, error) {
+	s.Answers["todos.status"] = func(p []any) (any, error) {
 		cur = p[3].(string)
 		path := cur + "/t1.md"
 		if cur == "archived" {
@@ -215,21 +216,21 @@ func TestTodosStatusPickerSetsEveryStatus(t *testing.T) {
 			v.list()
 			onTask(t, v, from)
 			v.chooseStatus()
-			if !slices.Contains(s.opened, "todoStatusPicker") {
-				t.Fatalf("s opened %v", s.opened)
+			if !slices.Contains(s.Opened, "todoStatusPicker") {
+				t.Fatalf("s opened %v", s.Opened)
 			}
 			marked := slices.IndexFunc(statusRows(v), func(r string) bool { return strings.HasPrefix(r, "● ") })
 			if got := statusRows(v); len(got) != 5 || marked != slices.Index(todoStatuses, from) {
 				t.Fatalf("from %s, the statuses offered: %q", from, got)
 			}
-			s.views = nil
+			s.Views = nil
 			v.statusPick.Accept(slices.Index(todoStatuses, want), "")
-			if *cur != want || !s.called("todos.status[kb t1 r1 "+want+"]") || !slices.Contains(s.closed, "todoStatusPicker") {
-				t.Fatalf("%s → %s: the task is %s, calls %v, closed %v", from, want, *cur, s.calls, s.closed)
+			if *cur != want || !s.Called("todos.status[kb t1 r1 "+want+"]") || !slices.Contains(s.Closed, "todoStatusPicker") {
+				t.Fatalf("%s → %s: the task is %s, calls %v, closed %v", from, want, *cur, s.Calls, s.Closed)
 			}
 			tab := tabOf(want)
-			if v.tab != tab || s.set["App.todoTab"] != tab || !slices.Contains(s.views, todoTabs[tab].table+".forceActiveFocus") {
-				t.Errorf("%s → %s: tab %d (shown %v), views %v", from, want, v.tab, s.set["App.todoTab"], s.views)
+			if v.tab != tab || s.Sets["App.todoTab"] != tab || !slices.Contains(s.Views, todoTabs[tab].table+".forceActiveFocus") {
+				t.Errorf("%s → %s: tab %d (shown %v), views %v", from, want, v.tab, s.Sets["App.todoTab"], s.Views)
 			}
 			if _, x := v.cursor(); feature.Str(x, "id") != "t1" || feature.Str(x, "status") != want {
 				t.Errorf("%s → %s: the cursor is on %v", from, want, x)
@@ -253,8 +254,8 @@ func TestTodosStatusPickerSetsEveryStatus(t *testing.T) {
 		} else {
 			v.statusPick.Accept(2, "")
 		}
-		if s.called("todos.status") || v.statusing != nil {
-			t.Errorf("%s: calls %v, statusing %v", way, s.calls, v.statusing)
+		if s.Called("todos.status") || v.statusing != nil {
+			t.Errorf("%s: calls %v, statusing %v", way, s.Calls, v.statusing)
 		}
 	}
 }
@@ -267,14 +268,14 @@ func TestTodosStatusPickerPreviewsTheMove(t *testing.T) {
 	v.list()
 	onTask(t, v, "open")
 	v.chooseStatus()
-	if got := s.set["App.todoStatusPreviewText"]; got != "## open\n\nits status now:\nchoosing it\nchanges nothing\n" || s.set["App.todoStatusPreviewTitle"] != "Ship" {
-		t.Errorf("the first row's preview: %q, titled %q", got, s.set["App.todoStatusPreviewTitle"])
+	if got := s.Sets["App.todoStatusPreviewText"]; got != "## open\n\nits status now:\nchoosing it\nchanges nothing\n" || s.Sets["App.todoStatusPreviewTitle"] != "Ship" {
+		t.Errorf("the first row's preview: %q, titled %q", got, s.Sets["App.todoStatusPreviewTitle"])
 	}
 	v.statusPick.Move(2)
-	if got := s.set["App.todoStatusPreviewText"]; got != "## deferred\n\nfrom open\nto deferred\n" {
+	if got := s.Sets["App.todoStatusPreviewText"]; got != "## deferred\n\nfrom open\nto deferred\n" {
 		t.Errorf("deferred's preview: %q", got)
 	}
-	if got := s.set["App.todoStatusList"]; got != "statuses (5 of 5)" {
+	if got := s.Sets["App.todoStatusList"]; got != "statuses (5 of 5)" {
 		t.Errorf("the list's title: %q", got)
 	}
 	v.statusPick.Filter("arch")
@@ -288,13 +289,13 @@ func TestTodosStatusPickerPreviewsTheMove(t *testing.T) {
 }
 
 // actions is the action row as syncActions last set it: the actions shown, and the read-only note.
-func actions(s *scriptedCore) string {
+func actions(s *featuretest.ScriptedCore) string {
 	var on []string
-	if s.set["App.todoReadOnly"] == true {
+	if s.Sets["App.todoReadOnly"] == true {
 		on = append(on, "read-only")
 	}
 	for _, a := range []string{"Status", "Assign", "Remove", "Add"} {
-		if s.set["App.todoAct"+a] == true {
+		if s.Sets["App.todoAct"+a] == true {
 			on = append(on, a)
 		}
 	}
@@ -353,20 +354,20 @@ func TestTodosActionRowFollowsTheCursor(t *testing.T) {
 	w.list()
 	onTask(t, w, "in-progress")
 	w.chooseStatus()
-	s.deferred = true
+	s.Deferred = true
 	w.statusPick.Accept(slices.Index(todoStatuses, "completed"), "")
-	if s.set["App.todoActStatus"] != true {
+	if s.Sets["App.todoActStatus"] != true {
 		t.Fatal("Status… changed inside its own choice")
 	}
-	for len(s.pending) > 0 { // every answer held, in the order asked, until none is left
-		order := make([]int, len(s.pending))
+	for len(s.Pending) > 0 { // every answer held, in the order asked, until none is left
+		order := make([]int, len(s.Pending))
 		for i := range order {
 			order[i] = i
 		}
-		s.deliver(order...)
+		s.Deliver(order...)
 	}
-	if s.set["App.todoActStatus"] != true || w.tab != tabOf("completed") {
-		t.Errorf("after the move landed: Status… %v, tab %d", s.set["App.todoActStatus"], w.tab)
+	if s.Sets["App.todoActStatus"] != true || w.tab != tabOf("completed") {
+		t.Errorf("after the move landed: Status… %v, tab %d", s.Sets["App.todoActStatus"], w.tab)
 	}
 }
 
@@ -391,18 +392,18 @@ func TestTodosTheCursorFollowsWhenTheTabLands(t *testing.T) {
 	v.list()
 	onTask(t, v, "in-progress")
 	v.chooseStatus()
-	s.deferred = true
+	s.Deferred = true
 	v.statusPick.Accept(slices.Index(todoStatuses, "completed"), "")
-	s.deliver(0) // the move's answer: Completed shown, its read held
-	if v.tab != tabOf("completed") || len(s.pending) != 1 || v.follow.id != "t1" {
-		t.Fatalf("after the move: tab %d, held %d, follow %+v", v.tab, len(s.pending), v.follow)
+	s.Deliver(0) // the move's answer: Completed shown, its read held
+	if v.tab != tabOf("completed") || len(s.Pending) != 1 || v.follow.id != "t1" {
+		t.Fatalf("after the move: tab %d, held %d, follow %+v", v.tab, len(s.Pending), v.follow)
 	}
 	if _, x := v.cursor(); x != nil {
 		t.Errorf("the cursor is on %v before Completed landed", x)
 	}
-	s.deliver(0)
-	if _, x := v.cursor(); feature.Str(x, "id") != "t1" || v.follow.id != "" || s.set["App.todoCompletedIndex"] != 0 {
-		t.Errorf("after Completed landed: %v, follow %+v, index %v", x, v.follow, s.set["App.todoCompletedIndex"])
+	s.Deliver(0)
+	if _, x := v.cursor(); feature.Str(x, "id") != "t1" || v.follow.id != "" || s.Sets["App.todoCompletedIndex"] != 0 {
+		t.Errorf("after Completed landed: %v, follow %+v, index %v", x, v.follow, s.Sets["App.todoCompletedIndex"])
 	}
 }
 
@@ -432,7 +433,7 @@ func TestTodosLabelsAndMovesAtTheEdges(t *testing.T) {
 
 	// the workspace's store not placed yet: named for the workspace
 	s := scriptedStore(true)
-	s.answers["todos.resolve"] = func([]any) (any, error) { return map[string]any{"claimed": false}, nil }
+	s.Answers["todos.resolve"] = func([]any) (any, error) { return map[string]any{"claimed": false}, nil }
 	v := newTodos(s)
 	v.list()
 	if got := storeLabels(v)[0]; got != "kb" {
@@ -441,19 +442,19 @@ func TestTodosLabelsAndMovesAtTheEdges(t *testing.T) {
 
 	// a labels answer for a listing since replaced is dropped
 	d := labelledStores(map[string]any{"tui.todos.label.S1": "Old"})
-	d.deferred = true
+	d.Deferred = true
 	w := newTodos(d)
 	w.list()
-	d.deliver(0) // the stores: the labels asked for, held
+	d.Deliver(0) // the stores: the labels asked for, held
 	w.list()     // listed again before they answer
-	held := d.pending
-	d.pending = nil
+	held := d.Pending
+	d.Pending = nil
 	held[0]() // the first listing's labels: dropped
 	if len(storeLabels(w)) != 0 {
 		t.Fatalf("a stale labels answer showed the stores: %q", storeLabels(w))
 	}
 	held[1]() // the second listing's stores
-	d.deliver(0)
+	d.Deliver(0)
 	if got := storeLabels(w); len(got) != 3 || got[0] != "Old" {
 		t.Errorf("the second listing: %q", got)
 	}
@@ -462,23 +463,23 @@ func TestTodosLabelsAndMovesAtTheEdges(t *testing.T) {
 	m, _ := movingStore("in-progress")
 	x := newTodos(m)
 	x.list() // Open: empty
-	n := len(m.calls)
+	n := len(m.Calls)
 	if err := x.Commands()["App.todoChooseStatus"].Handler("App.todoChooseStatus")(nil); err != nil {
 		t.Fatal(err)
 	}
-	if len(m.calls) != n || slices.Contains(m.opened, "todoStatusPicker") {
-		t.Errorf("s with no task asked %v, opened %v", m.calls[n:], m.opened)
+	if len(m.Calls) != n || slices.Contains(m.Opened, "todoStatusPicker") {
+		t.Errorf("s with no task asked %v, opened %v", m.Calls[n:], m.Opened)
 	}
 	none := newTodos(newScripted(""))
 	none.label()
-	if len(none.c.(*scriptedCore).opened) != 0 {
+	if len(none.c.(*featuretest.ScriptedCore).Opened) != 0 {
 		t.Error("L with no store opened the prompt")
 	}
 
 	// the moved task not in its new tab's read (another client moved it on): the cursor on the row
 	// the read gives
 	g, _ := movingStore("open")
-	g.answers["todos.status"] = func([]any) (any, error) { return nil, nil } // the read still finds it nowhere new
+	g.Answers["todos.status"] = func([]any) (any, error) { return nil, nil } // the read still finds it nowhere new
 	y := newTodos(g)
 	y.list()
 	onTask(t, y, "open")

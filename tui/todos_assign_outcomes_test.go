@@ -33,8 +33,8 @@ func TestTheHandOverSaysHowItWent(t *testing.T) {
 	} {
 		s := newScripted("kb")
 		newTodos(s).handedOver("Scribe", "autodoc:scribe", c.err)
-		if !slices.Equal(s.notes, []string{c.want}) {
-			t.Errorf("%v: notices %q, want %q", c.err, s.notes, c.want)
+		if !slices.Equal(s.Notes, []string{c.want}) {
+			t.Errorf("%v: notices %q, want %q", c.err, s.Notes, c.want)
 		}
 	}
 }
@@ -44,8 +44,8 @@ func TestTheHandOverSaysHowItWent(t *testing.T) {
 func TestAnAgentChosenWithNoAssignOpenIsNothing(t *testing.T) {
 	s := newScripted("kb")
 	newTodos(s).assignTo(feature.AgentEntry{Ref: feature.AgentRef{Codename: "scribe"}, Name: "Scribe"})
-	if len(s.opened) != 0 || s.set["App.todoAssignTitle"] != nil {
-		t.Errorf("opened %v, title %v: want nothing asked, nothing set", s.opened, s.set["App.todoAssignTitle"])
+	if len(s.Opened) != 0 || s.Sets["App.todoAssignTitle"] != nil {
+		t.Errorf("opened %v, title %v: want nothing asked, nothing set", s.Opened, s.Sets["App.todoAssignTitle"])
 	}
 }
 
