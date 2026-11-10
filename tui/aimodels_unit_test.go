@@ -175,6 +175,21 @@ func TestAKeylessKindKeepsNoKey(t *testing.T) {
 	}
 }
 
+// A kind past the form's list, or before it, changes nothing: the form keeps its kind and its
+// address.
+func TestAKindOutsideTheListChangesNothing(t *testing.T) {
+	c := newScripted("kb")
+	r := newRankers(c, func() {})
+	r.startAdd()
+	r.kindChosen(1, defaultTEIURL)
+	for _, i := range []int{len(rankerKinds), -1} {
+		r.kindChosen(i, "")
+		if r.kind != 1 || c.Sets["App.rankerBase"] != rankerKinds[1].base {
+			t.Errorf("kind %d chosen: the form's kind %d, address %v; want kind 1 and its address", i, r.kind, c.Sets["App.rankerBase"])
+		}
+	}
+}
+
 // A provider's context window is a number of tokens, at most its model's maximum when it is known.
 func TestAProvidersWindowIsBounded(t *testing.T) {
 	c := newScripted("kb")
