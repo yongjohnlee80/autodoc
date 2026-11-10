@@ -28,6 +28,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/internal/client"
 	"github.com/yongjohnlee80/autodoc/internal/ipc"
+	"github.com/yongjohnlee80/autodoc/internal/userperm"
 	"github.com/yongjohnlee80/autodoc/rpc"
 	"github.com/yongjohnlee80/autodoc/tui"
 )
@@ -659,10 +660,6 @@ func TestSpawnServeStartsADetachedDaemon(t *testing.T) {
 			t.Errorf("the daemon is not its own session leader: stat %q, pid %d", rest, p)
 		}
 	}
-	fi, err := os.Stat(logPath)
-	if err != nil || fi.Mode().Perm() != 0o600 {
-		t.Errorf("serve.log %v, %v", fi, err)
-	}
 	call(t, cli, "sys.shutdown")
 	eventually(t, "the daemon gone", func() bool {
 		_, err := probeOn(sock)
@@ -670,6 +667,20 @@ func TestSpawnServeStartsADetachedDaemon(t *testing.T) {
 	})
 	if b, _ := os.ReadFile(logPath); !strings.Contains(string(b), "serving msgpack-RPC on "+sock) {
 		t.Errorf("the log: %q", b)
+	}
+	// private as this OS keeps a file private; checked once the spawner lets its handle go, since
+	// Windows opens a file to check it only while no one writes it
+	var private error
+	eventually(t, "serve.log let go", func() bool {
+		f, err := userperm.OpenPrivate(logPath)
+		if err == nil {
+			_ = f.Close()
+		}
+		private = err
+		return err == nil || errors.Is(err, userperm.ErrExposed)
+	})
+	if private != nil {
+		t.Errorf("serve.log is not private to this user: %v", private)
 	}
 }
 

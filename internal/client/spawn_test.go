@@ -3,10 +3,13 @@ package client
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/internal/userperm"
 )
 
 // TestMain is a spawned daemon's stand-in when SpawnServe runs this test binary with --serve: it
@@ -42,5 +45,41 @@ func TestASpawnedDaemonDoesNotInheritTheProfileSwitch(t *testing.T) {
 	}
 	if env := serveEnv([]string{"A=1", ProfileEnv + "=/x", ProfileEnv + "_OTHER=y", "B=2"}); !slices.Equal(env, []string{"A=1", ProfileEnv + "_OTHER=y", "B=2"}) {
 		t.Errorf("serveEnv kept or dropped the wrong names: %v", env)
+	}
+}
+
+// TestTheDaemonsLogIsPrivateAndReadWhileWritten: the detached daemon's log is made private to this
+// user when new, as the OS keeps a file private (internal/userperm), and another reader opens it
+// while it is being written, as one reads a log; one that is there is appended to, kept.
+func TestTheDaemonsLogIsPrivateAndReadWhileWritten(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "serve.log")
+	f, err := openServeLog(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("one\n"); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(path); err != nil || string(b) != "one\n" { // a second reader, the log open
+		t.Fatalf("the log read while written: %q, %v", b, err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := userperm.OpenPrivate(path); err != nil {
+		t.Fatalf("the log is not private to this user: %v", err)
+	} else {
+		_ = p.Close()
+	}
+	again, err := openServeLog(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := again.WriteString("two\n"); err != nil {
+		t.Fatal(err)
+	}
+	_ = again.Close()
+	if b, _ := os.ReadFile(path); string(b) != "one\ntwo\n" {
+		t.Fatalf("the log reopened: %q, want it appended to", b)
 	}
 }
