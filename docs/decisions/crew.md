@@ -35,6 +35,13 @@ account is `{"name": "Sephiroth", "command": "claude", "env": {"CLAUDE_CONFIG_DI
 startup file, so a `.bashrc` alias never reaches it. A wrapper script would, but its name would
 be the agent's kind, so it would not get Claude's crew setup.
 
+On Windows a profile's command is PowerShell's: AutoDoc runs it with PowerShell's `-Command`, and
+reads it (its kind, its program) as PowerShell reads a line, where a backslash is a path's
+separator. A path with spaces runs through the call operator: `& 'C:\Program Files\x\claude.cmd'
+--model haiku`. cmd.exe's syntax is not supported: `%VAR%` and a `^` escape reach PowerShell as
+written, and a line that starts with a quoted path (`"C:\x\claude.cmd" --model haiku`) is a string
+to PowerShell, not a command, so it starts nothing.
+
 - The profile's variables come before AutoDoc's own, so AutoDoc's win. A key AutoDoc sets for every
   agent (`AUTODOC_*`), or for a crew OpenCode agent (`OPENCODE_CONFIG_CONTENT`), is refused when the
   profile is saved, and dropped from a profile written into the preference by hand.
