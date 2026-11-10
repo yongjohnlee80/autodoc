@@ -1,4 +1,4 @@
-package tui
+package relations
 
 import (
 	"context"
@@ -103,7 +103,7 @@ type cellGlobe struct {
 
 // cellGlobeMap is the GlobeMap feature in cells: its builds, fenced (load), the selection and the
 // view's place and zoom over the layout.
-type cellGlobeMap struct {
+type CellGlobeMap struct {
 	c         feature.Core
 	page      int // documents per page of the map (seams.go: globeMapPage); 0 is the daemon's
 	seq       uint64
@@ -113,8 +113,8 @@ type cellGlobeMap struct {
 	status    string // what a load says, a catalog id statusArg (and statusN) fill; "" none
 	statusArg string
 	statusN   int
-	store     *graphStore  // the workspaces' graph files: the groups; nil for none
-	editor    *groupEditor // the settings' groups
+	store     *GraphStore  // the workspaces' graph files: the groups; nil for none
+	editor    *GroupEditor // the settings' groups
 	groups    *relGroups   // groupsWS's groups: each document's colour
 	groupsWS  string
 	view      *cellGlobeView
@@ -126,25 +126,25 @@ type cellGlobeMap struct {
 	opens     func(ws, path string) // Enter's and a press's: the panel hidden, the document opened
 }
 
-func newCellGlobeMap(c feature.Core, store *graphStore, page int) *cellGlobeMap {
-	g := &cellGlobeMap{c: c, page: page, store: store, selected: -1, zoom: 1, ground: themeGround(nil)}
-	g.editor = &groupEditor{c: c, store: store, view: viewGlobeMap, name: "globe", changed: g.groupsEdited,
+func newCellGlobeMap(c feature.Core, store *GraphStore, page int) *CellGlobeMap {
+	g := &CellGlobeMap{c: c, page: page, store: store, selected: -1, zoom: 1, ground: themeGround(nil)}
+	g.editor = &GroupEditor{c: c, store: store, view: viewGlobeMap, name: "globe", changed: g.groupsEdited,
 		ground: func() color.NRGBA { return g.ground }}
 	g.opens = func(ws, path string) {
-		g.c.HidePanel(globeMapPanelID) // hidden, not closed, as the window's: the dock shows it again
+		g.c.HidePanel(GlobeMapPanelID) // hidden, not closed, as the window's: the dock shows it again
 		g.c.OpenRef(ws, path)
 	}
 	return g
 }
 
-func (*cellGlobeMap) Name() string { return "globemap" }
+func (*CellGlobeMap) Name() string { return "globemap" }
 
-func (g *cellGlobeMap) Panels() []feature.PanelSpec {
-	return []feature.PanelSpec{{ID: globeMapPanelID, View: globeMapViewID, Priority: 70, Icon: "❂",
+func (g *CellGlobeMap) Panels() []feature.PanelSpec {
+	return []feature.PanelSpec{{ID: GlobeMapPanelID, View: GlobeMapViewID, Priority: 70, Icon: "❂",
 		Edge: func(feature.PrefsView) string { return "center" },
 		Opened: func(feature.PanelHost) {
 			g.open, g.filter = true, globeFilterPref(g.c) // it opens following the links its settings choose
-			g.load()
+			g.Load()
 		},
 		Closed: func(c feature.PanelHost) {
 			g.open = false
@@ -153,20 +153,20 @@ func (g *cellGlobeMap) Panels() []feature.PanelSpec {
 		}}}
 }
 
-func (g *cellGlobeMap) Prefs() []feature.PrefSpec {
+func (g *CellGlobeMap) Prefs() []feature.PrefSpec {
 	return []feature.PrefSpec{
-		feature.ValuePref(prefGlobeNames, "true", []string{"true", "false"}).Chooser("App.globeNamesIndex", "App.setGlobeNames").
+		feature.ValuePref(PrefGlobeNames, "true", []string{"true", "false"}).Chooser("App.globeNamesIndex", "App.setGlobeNames").
 			Then(func(feature.PrefsView) { g.dirty() }),
-		feature.ValuePref(prefGlobeFilter, globeFilters[0].key, globeFilterKeys()).Chooser("App.globeFilterIndex", "App.setGlobeFilter").
+		feature.ValuePref(PrefGlobeFilter, globeFilters[0].key, globeFilterKeys()).Chooser("App.globeFilterIndex", "App.setGlobeFilter").
 			Then(func(feature.PrefsView) { g.filterChosen() }),
 	}
 }
 
 // filterChosen: the map shown follows the links chosen in its settings.
-func (g *cellGlobeMap) filterChosen() {
+func (g *CellGlobeMap) filterChosen() {
 	if f := globeFilterPref(g.c); g.open && f != g.filter {
 		g.filter = f
-		g.load()
+		g.Load()
 	}
 }
 
@@ -175,12 +175,12 @@ func (g *cellGlobeMap) filterChosen() {
 var globeWindowSources = []string{"App.globeThemeIndex", "App.globeDotsIndex", "App.globeSpeedIndex"}
 
 // State is the panel's heading and the settings' sources.
-func (g *cellGlobeMap) State() map[string]any {
+func (g *CellGlobeMap) State() map[string]any {
 	st := g.editor.state()
 	maps.Copy(st, map[string]any{
 		"App.globeMapTitle": "GlobeMap", "App.globeSettingsError": "",
 		"App.globeThemes": feature.Choices(), "App.globeDotSizes": feature.Choices(), "App.globeSpeeds": feature.Choices(),
-		"App.globeFilters":     choiceModel(g.c, "App.globeFilters"),
+		"App.globeFilters":     relationChoice(g.c, "App.globeFilters"),
 		"App.globeOtherColour": "", "App.globeBodyLinkColour": "", "App.globeSupersessionLinkColour": "",
 		"App.globeRelationLinkColour": "", "App.globeRingColour": "",
 	})
@@ -192,9 +192,9 @@ func (g *cellGlobeMap) State() map[string]any {
 
 // Commands are the map's and its settings' (App.openGlobeSettings is the host's in every build,
 // which opens these: relationviews_tui.go, globesettings_gui.go).
-func (g *cellGlobeMap) Commands() map[string]feature.Command {
+func (g *CellGlobeMap) Commands() map[string]feature.Command {
 	c := g.editor.commands()
-	c["App.toggleGlobeMap"] = feature.None(g.toggle)
+	c["App.toggleGlobeMap"] = feature.None(g.Toggle)
 	for _, name := range []string{"App.setGlobeTheme", "App.setGlobeDots", "App.setGlobeSpeed"} {
 		c[name] = feature.OneNumber("a row", func(int) {}) // a window's alone: its row hides here
 	}
@@ -202,14 +202,14 @@ func (g *cellGlobeMap) Commands() map[string]feature.Command {
 	return c
 }
 
-func (g *cellGlobeMap) Catalog() []feature.Entry {
-	return []feature.Entry{feature.Builtin("globemap.toggle", "the GlobeMap", "App.toggleGlobeMap()", g.toggle),
-		feature.Builtin("globemap.settings", "the GlobeMap's settings", "App.openGlobeSettings()", g.openSettings)}
+func (g *CellGlobeMap) Catalog() []feature.Entry {
+	return []feature.Entry{feature.Builtin("globemap.toggle", "the GlobeMap", "App.toggleGlobeMap()", g.Toggle),
+		feature.Builtin("globemap.settings", "the GlobeMap's settings", "App.openGlobeSettings()", g.OpenSettings)}
 }
 
 // openSettings is Relations › GlobeMap settings… and Preferences › GlobeMap…: the workspace's
 // groups, read first when this workspace's are not yet.
-func (g *cellGlobeMap) openSettings() {
+func (g *CellGlobeMap) OpenSettings() {
 	ws := g.c.Workspace()
 	g.c.Open("globeMapSettings")
 	if ws == "" || (g.groupsWS == ws && g.editor.ws == ws && !g.editor.loading) {
@@ -225,36 +225,36 @@ func (g *cellGlobeMap) openSettings() {
 }
 
 // groupsEdited draws in list: the settings' edit.
-func (g *cellGlobeMap) groupsEdited(list []relGroup) {
+func (g *CellGlobeMap) groupsEdited(list []Group) {
 	gs := newRelGroups(list)
 	g.groups = &gs
 	g.dirty()
 }
 
-func (g *cellGlobeMap) toggle() { g.c.TogglePanel(globeMapPanelID) }
+func (g *CellGlobeMap) Toggle() { g.c.TogglePanel(GlobeMapPanelID) }
 
 // Entered: another workspace's map, when it shows; its settings' groups are that workspace's, read
 // with its map or as the settings open, and nothing is edited meanwhile.
-func (g *cellGlobeMap) Entered(ws string) {
+func (g *CellGlobeMap) Entered(ws string) {
 	if ws != g.editor.ws {
 		g.editor.loadingFor(ws)
 	}
 	if g.open {
-		g.load()
+		g.Load()
 	}
 }
 
 // LanguageChanged composes again, in the UI's language, the heading and the settings' filter
 // chooser's rows.
-func (g *cellGlobeMap) LanguageChanged() {
-	g.c.Set("App.globeFilters", choiceModel(g.c, "App.globeFilters"))
+func (g *CellGlobeMap) LanguageChanged() {
+	g.c.Set("App.globeFilters", relationChoice(g.c, "App.globeFilters"))
 	g.title()
 }
 
 // load reads the workspace's map and settles it off the loop; on the loop it installs the build
 // whole, fitted, its most linked document selected, or drops it when a newer load or the panel's
 // closing came first.
-func (g *cellGlobeMap) load() {
+func (g *CellGlobeMap) Load() {
 	ws, filter := g.c.Workspace(), g.filter
 	tk := g.c.Ticket(&g.seq, feature.TicketWorkspace)
 	if ws == "" {
@@ -328,11 +328,11 @@ func hub(m relMap) int {
 
 // readGroups takes ws's groups from the store: its graph file's, or its first, made of the
 // schema's types and the workspace's folders, legible on the page last painted.
-func (g *cellGlobeMap) readGroups(ws string, types []string) {
+func (g *CellGlobeMap) readGroups(ws string, types []string) {
 	if g.store == nil {
 		return
 	}
-	g.store.groups(ws, viewGlobeMap, types, g.ground, func(list []relGroup) {
+	g.store.Groups(ws, viewGlobeMap, types, g.ground, func(list []Group) {
 		if ws != g.c.Workspace() {
 			return
 		}
@@ -344,7 +344,7 @@ func (g *cellGlobeMap) readGroups(ws string, types []string) {
 
 // title is the panel's heading: the workspace, its documents and links, the links followed and the
 // keys, or what a load says.
-func (g *cellGlobeMap) title() {
+func (g *CellGlobeMap) title() {
 	t := "GlobeMap"
 	switch {
 	case g.status == "autodoc.text.globemap_gui.reading_documents":
@@ -359,14 +359,14 @@ func (g *cellGlobeMap) title() {
 	g.dirty()
 }
 
-func (g *cellGlobeMap) dirty() {
+func (g *CellGlobeMap) dirty() {
 	if g.view != nil && g.view.ctx != nil {
 		g.view.ctx.MarkDirty()
 	}
 }
 
 // scale is dots per layout unit: the fitted scale, with a margin of a cell, times the zoom.
-func (g *cellGlobeMap) scale() float64 {
+func (g *CellGlobeMap) scale() float64 {
 	if g.cur == nil || g.view == nil {
 		return 1
 	}
@@ -377,7 +377,7 @@ func (g *cellGlobeMap) scale() float64 {
 }
 
 // fit puts the whole map in view, about its centre.
-func (g *cellGlobeMap) fit() {
+func (g *CellGlobeMap) fit() {
 	if g.cur == nil {
 		return
 	}
@@ -387,14 +387,14 @@ func (g *cellGlobeMap) fit() {
 }
 
 // dot is document i's place in the view's dot space (2 a cell across, 4 down).
-func (g *cellGlobeMap) dot(i int) (int, int) {
+func (g *CellGlobeMap) dot(i int) (int, int) {
 	s, p := g.scale(), g.cur.at[i]
 	w, h := 2*g.view.cells.W, 4*g.view.cells.H
 	return int(math.Round(float64(w)/2 + (float64(p.X)-g.cx)*s)), int(math.Round(float64(h)/2 + (float64(p.Y)-g.cy)*s))
 }
 
 // cellOf is document i's cell in the view.
-func (g *cellGlobeMap) cellOf(i int) (int, int) {
+func (g *CellGlobeMap) cellOf(i int) (int, int) {
 	x, y := g.dot(i)
 	return floorDiv(x, 2), floorDiv(y, 4)
 }
@@ -408,7 +408,7 @@ func floorDiv(a, b int) int {
 }
 
 // inView reports whether document i's cell is in the view.
-func (g *cellGlobeMap) inView(i int) bool {
+func (g *CellGlobeMap) inView(i int) bool {
 	x, y := g.cellOf(i)
 	return x >= 0 && y >= 0 && x < g.view.cells.W && y < g.view.cells.H
 }
@@ -416,7 +416,7 @@ func (g *cellGlobeMap) inView(i int) bool {
 // step selects the nearest document from the selected one in direction (dx, dy), by their places
 // in the layout: of those that lie that way, the one nearest along it, aside counting twice. None
 // that way keeps the selection. The view follows a selection that leaves it.
-func (g *cellGlobeMap) step(dx, dy int) {
+func (g *CellGlobeMap) step(dx, dy int) {
 	if g.cur == nil || g.selected < 0 {
 		return
 	}
@@ -443,7 +443,7 @@ func (g *cellGlobeMap) step(dx, dy int) {
 }
 
 // reveal centres the view on the selected document when it is out of view.
-func (g *cellGlobeMap) reveal() {
+func (g *CellGlobeMap) reveal() {
 	if g.cur == nil || g.view == nil || g.selected < 0 || g.inView(g.selected) {
 		return
 	}
@@ -452,7 +452,7 @@ func (g *cellGlobeMap) reveal() {
 }
 
 // pan moves the view a quarter of itself by (dx, dy).
-func (g *cellGlobeMap) pan(dx, dy int) {
+func (g *CellGlobeMap) pan(dx, dy int) {
 	if g.cur == nil || g.view == nil {
 		return
 	}
@@ -463,27 +463,27 @@ func (g *cellGlobeMap) pan(dx, dy int) {
 }
 
 // zoomBy zooms by f about the view's centre, within a sixteenth and sixty-four times the fit.
-func (g *cellGlobeMap) zoomBy(f float64) {
+func (g *CellGlobeMap) ZoomBy(f float64) {
 	g.zoom = math.Min(math.Max(g.zoom*f, 1.0/16), 64)
 	g.dirty()
 }
 
 // openSelected opens the selected document, the panel hidden.
-func (g *cellGlobeMap) openSelected() {
+func (g *CellGlobeMap) openSelected() {
 	if cur := g.cur; cur != nil && g.selected >= 0 {
 		g.opens(cur.ws, cur.m.Nodes[g.selected].Path)
 	}
 }
 
 // at is the document whose dot is in cell (x, y) or a cell beside it, the nearest; -1 none.
-func (g *cellGlobeMap) at(x, y int) int {
+func (g *CellGlobeMap) at(x, y int) int {
 	if g.cur == nil || g.view == nil {
 		return -1
 	}
 	best, bestD := -1, 3
 	for i := range g.cur.at {
 		cx, cy := g.cellOf(i)
-		if d := max(abs(cx-x), abs(cy-y)); d < bestD {
+		if d := max(absInt(cx-x), absInt(cy-y)); d < bestD {
 			best, bestD = i, d
 		}
 	}
@@ -492,12 +492,12 @@ func (g *cellGlobeMap) at(x, y int) int {
 
 // cellGlobeView is the GlobeMap's view in its panel.
 type cellGlobeView struct {
-	g     *cellGlobeMap
+	g     *CellGlobeMap
 	ctx   *tuicore.Context
 	cells tuicore.Size
 }
 
-func (g *cellGlobeMap) newView() tuicore.Component {
+func (g *CellGlobeMap) newView() tuicore.Component {
 	v := &cellGlobeView{g: g}
 	g.view = v
 	return v
@@ -505,7 +505,7 @@ func (g *cellGlobeMap) newView() tuicore.Component {
 
 // viewType is the view's QML type, CellGlobeMap: built once per document, it joins its feature,
 // and leaves it when the document drops it.
-func (g *cellGlobeMap) viewType() tuidecl.Type {
+func (g *CellGlobeMap) viewType() tuidecl.Type {
 	return tuidecl.Type{Name: "CellGlobeMap", Destroyed: func(c tuicore.Component) {
 		if g.view == c {
 			g.view = nil
@@ -541,10 +541,10 @@ var edgeStyles = [edgeClasses]style.Style{
 
 // docStyle is document i's dot's style: its group's colour made legible on ground, a superseded
 // one's the error's, any other the document's accent.
-func (g *cellGlobeMap) docStyle(i int, ground color.NRGBA) style.Style {
+func (g *CellGlobeMap) docStyle(i int, ground color.NRGBA) style.Style {
 	n := g.cur.m.Nodes[i]
 	if k := g.groups.ofOr(n); k >= 0 {
-		c := onGround(g.groups.list[k].Colour, ground)
+		c := OnGround(g.groups.list[k].Colour, ground)
 		return style.PageText().Foreground(style.RGB(c.R, c.G, c.B))
 	}
 	if n.Superseded {
@@ -631,7 +631,7 @@ func (v *cellGlobeView) Render(s tuicore.Surface) {
 		taken[[2]int{x, y}] = true
 		name(g.selected, page.Reverse(true))
 	}
-	if inView <= cellGlobeNames && g.c.Prefs().Value(prefGlobeNames) != "false" {
+	if inView <= cellGlobeNames && g.c.Prefs().Value(PrefGlobeNames) != "false" {
 		for i := range g.cur.at {
 			if i != g.selected && g.inView(i) {
 				name(i, page.Foreground(style.TokenTextMuted))
@@ -660,7 +660,7 @@ func (v *cellGlobeView) legend(s tuicore.Surface) {
 			rows = append(rows, row{g.c.Trf("autodoc.text.globemap_tui.more_groups", len(g.groups.list)-k), style.Style{}})
 			break
 		}
-		c := onGround(gr.Colour, g.ground)
+		c := OnGround(gr.Colour, g.ground)
 		rows = append(rows, row{groupLabel(gr.Query), style.PageText().Foreground(style.RGB(c.R, c.G, c.B))})
 	}
 	w := 0
@@ -685,7 +685,7 @@ func (v *cellGlobeView) legend(s tuicore.Surface) {
 }
 
 // statusText is what a load says, in the UI's language; "" none.
-func (g *cellGlobeMap) statusText() string {
+func (g *CellGlobeMap) statusText() string {
 	switch g.status {
 	case "":
 		return ""
@@ -706,9 +706,9 @@ func (v *cellGlobeView) HandleEvent(ev tuicore.Event) bool {
 				g.openSelected()
 			}
 		case e.Kind == tuicore.MouseWheel && e.Button == tuicore.WheelUp:
-			g.zoomBy(1.25)
+			g.ZoomBy(1.25)
 		case e.Kind == tuicore.MouseWheel && e.Button == tuicore.WheelDown:
-			g.zoomBy(1 / 1.25)
+			g.ZoomBy(1 / 1.25)
 		default:
 			return false
 		}
@@ -738,14 +738,14 @@ func (v *cellGlobeView) HandleEvent(ev tuicore.Event) bool {
 		case e.Code == tuicore.KeyEnter:
 			g.openSelected()
 		case e.Text == "+" || e.Text == "=":
-			g.zoomBy(1.25)
+			g.ZoomBy(1.25)
 		case e.Text == "-":
-			g.zoomBy(1 / 1.25)
+			g.ZoomBy(1 / 1.25)
 		case e.Text == "0":
 			g.fit()
 		case e.Text == "f":
 			g.filter = (g.filter + 1) % len(globeFilters)
-			g.load()
+			g.Load()
 		case e.Text == "g":
 			g.noLegend = !g.noLegend
 			g.dirty()
@@ -755,4 +755,12 @@ func (v *cellGlobeView) HandleEvent(ev tuicore.Event) bool {
 		return true
 	}
 	return false
+}
+
+// absInt is n's distance from 0.
+func absInt(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }

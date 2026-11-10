@@ -1,23 +1,16 @@
-package tui
+package relations
 
 import (
 	"errors"
-	"github.com/yongjohnlee80/autodoc/tui/feature"
-	"github.com/yongjohnlee80/autodoc/tui/feature/featuretest"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/feature/featuretest"
+	"github.com/yongjohnlee80/golib/parse/qml"
 )
-
-// Use the host's actual workspace/file tickets while controlling callback delivery.
-type relatedTicketCore struct {
-	*featuretest.ScriptedCore
-	h *Host
-}
-
-func (c relatedTicketCore) Ticket(seq *uint64, scope feature.TicketScope) feature.Ticket {
-	return c.h.ticket(seq, scope)
-}
 
 // scriptedGraph answers the graph verbs: a.md links to b.md, c.md links back to it, and at depth 2
 // b.md links on to d.md.
@@ -40,7 +33,7 @@ func scriptedGraph(c *featuretest.ScriptedCore) {
 func TestTheRelationsFollowThePageShown(t *testing.T) {
 	c := newScripted("kb")
 	scriptedGraph(c)
-	r := newRelated(c)
+	r := NewRelated(c)
 	c.Deferred = true
 	a := feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}}
 	r.Shown(a)
@@ -70,7 +63,7 @@ func TestTheRelationsFollowThePageShown(t *testing.T) {
 		t.Fatalf("the draft: rows %q, title %q", r.labels(), c.Sets["App.relationsTitle"])
 	}
 	r.Shown(feature.Page{Ref: feature.FileRef{WS: "", Path: "/tmp/x.md"}, Outside: true})
-	if c.Sets["App.relationsTitle"] != "links · "+outsideBadge {
+	if c.Sets["App.relationsTitle"] != "links · "+feature.OutsideBadge {
 		t.Fatalf("a file in no workspace: title %q", c.Sets["App.relationsTitle"])
 	}
 }
@@ -79,7 +72,7 @@ func TestTheRelationsFollowThePageShown(t *testing.T) {
 func TestTheRelationsDepthAndOpen(t *testing.T) {
 	c := newScripted("kb")
 	scriptedGraph(c)
-	r := newRelated(c)
+	r := NewRelated(c)
 	r.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}})
 	r.depth() // the keyboard elsewhere: d is not the drawer's
 	if r.deep || slices.ContainsFunc(c.Calls, func(s string) bool { return strings.HasPrefix(s, "graph.neighborhood") }) {
@@ -91,12 +84,12 @@ func TestTheRelationsDepthAndOpen(t *testing.T) {
 		t.Fatalf("depth 2: deep %v, rows %q, title %q", r.deep, got, c.Sets["App.relationsTitle"])
 	}
 	c.Views = nil
-	r.open(0) // a heading: nothing opens, and the drawer stays
+	r.Open(0) // a heading: nothing opens, and the drawer stays
 	if len(c.Views) != 0 || len(c.OpenedFiles) != 0 || len(c.Hidden) != 0 {
 		t.Fatalf("a heading: views %v, files %v, hidden %v; want none", c.Views, c.OpenedFiles, c.Hidden)
 	}
 	// b.md, the drawer hidden, not closed (docs/decisions/editor.md#dock-clicks-hide-and-show)
-	r.open(1)
+	r.Open(1)
 	if !slices.Equal(c.OpenedFiles, []string{"kb:b.md"}) || !slices.Equal(c.Hidden, []string{"explorer"}) || len(c.Views) != 0 {
 		t.Fatalf("opened files %v, hidden %v, views %v; want b.md, the drawer hidden", c.OpenedFiles, c.Hidden, c.Views)
 	}
@@ -107,7 +100,7 @@ func TestTheRelationsDepthAndOpen(t *testing.T) {
 func TestTheRelationsDropAStaleAnswer(t *testing.T) {
 	c := newScripted("kb")
 	scriptedGraph(c)
-	r := newRelated(c)
+	r := NewRelated(c)
 	c.Deferred = true
 	r.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}}) // read 0, held
 	r.Shown(feature.Page{})                                             // the file kept as the draft
@@ -122,7 +115,7 @@ func TestTheRelationsDropAStaleAnswer(t *testing.T) {
 func TestTheLaterRelationsReadWins(t *testing.T) {
 	c := newScripted("kb")
 	scriptedGraph(c)
-	r := newRelated(c)
+	r := NewRelated(c)
 	c.Deferred = true
 	r.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}})
 	c.Deliver(0)
@@ -135,34 +128,31 @@ func TestTheLaterRelationsReadWins(t *testing.T) {
 	}
 }
 
-// A stale or failed refresh must preserve the currently displayed relations.
-// This replaces the former Host.applyRelations test after relations became a Feature.
+// A stale or failed refresh must preserve the currently displayed relations: an answer for a file
+// no longer shown, or a workspace no longer in use, and a read that failed.
 func TestRelationsCallbackKeepsRowsForStaleOrFailedAnswers(t *testing.T) {
-	c := relatedTicketCore{newScripted("kb"), newHost(NewSession("unused", nil), Options{Workspace: "kb"})}
-	defer c.h.cancel()
-	scriptedGraph(c.ScriptedCore)
-	r := newRelated(c)
+	c := newScripted("kb")
+	scriptedGraph(c)
+	r := NewRelated(c)
 	r.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}})
 	c.Deferred = true
 	for _, scope := range []string{"document", "workspace", "graph.links", "graph.backlinks", "graph.unresolved", "graph.neighborhood"} {
 		before, of := slices.Clone(r.rows.All()), r.of
-		gen, epoch := c.h.file.gen, c.h.epoch
-		scriptedGraph(c.ScriptedCore)
+		scriptedGraph(c)
 		r.deep = scope == "graph.neighborhood"
 		if strings.HasPrefix(scope, "graph.") {
 			c.Answers[scope] = func([]any) (any, error) {
 				return nil, errors.New(scope + " refused")
 			}
 		}
-		r.load("kb", "a.md")
+		r.Load("kb", "a.md")
 		switch scope {
 		case "document":
-			c.h.file.gen++
+			c.File++
 		case "workspace":
-			c.h.epoch++
+			c.Epoch++
 		}
 		c.Deliver(0)
-		c.h.file.gen, c.h.epoch = gen, epoch
 		if !slices.Equal(before, r.rows.All()) || r.of != of {
 			t.Fatalf("%s answer replaced the current relations", scope)
 		}
@@ -192,7 +182,7 @@ func TestATasksRelationsInTheDrawer(t *testing.T) {
 		return []any{map[string]any{"path": ".todo-list/open/w.md", "raw": "t", "kind": "blocked", "resolved": true}}, nil
 	}
 	c.Answers["graph.unresolved"] = func([]any) (any, error) { return []any{}, nil }
-	r := newRelated(c)
+	r := NewRelated(c)
 	r.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: ".todo-list/open/t.md"}})
 	want := []string{
 		"adr (1)", "  /src/p/docs/d.md  (outside the workspace)",
@@ -204,8 +194,8 @@ func TestATasksRelationsInTheDrawer(t *testing.T) {
 	if got := r.labels(); !slices.Equal(got, want) {
 		t.Fatalf("rows\n got %q\nwant %q", got, want)
 	}
-	r.open(1) // the external file: by its absolute path
-	r.open(3) // the review: as the workspace's file
+	r.Open(1) // the external file: by its absolute path
+	r.Open(3) // the review: as the workspace's file
 	if !slices.Equal(c.OpenedFiles, []string{":/src/p/docs/d.md", "kb:reviews/r.md"}) {
 		t.Fatalf("opened %v", c.OpenedFiles)
 	}
@@ -230,7 +220,7 @@ func TestTheRelationsReadEveryPageOfTheUnresolved(t *testing.T) {
 		return map[string]any{"unresolved": []any{map[string]any{"src": "a.md", "raw": "loop.md", "reason": "cycle"}},
 			"count": int64(2)}, nil
 	}
-	r := newRelated(c)
+	r := NewRelated(c)
 	r.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}})
 	if !slices.ContainsFunc(r.labels(), func(l string) bool { return strings.Contains(l, "loop.md") }) {
 		t.Fatalf("a.md's loop on the second page is not shown: %q", r.labels())
@@ -259,12 +249,65 @@ func TestTheRelationsReadAtMostAThousandPagesOfTheUnresolved(t *testing.T) {
 		return map[string]any{"unresolved": []any{map[string]any{"src": "a.md", "raw": "loop.md", "reason": "cycle"}},
 			"count": int64(1 << 40), "next": offset + 1}, nil
 	}
-	r := newRelated(c)
+	r := NewRelated(c)
 	r.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}})
 	if calls != 1000 {
 		t.Errorf("graph.unresolved asked %d times, want 1000", calls)
 	}
 	if !slices.ContainsFunc(r.labels(), func(l string) bool { return strings.Contains(l, "loop.md") }) {
 		t.Errorf("the loops read are not shown: %q", r.labels())
+	}
+}
+
+// The links of the page read again (SPC l reads them while the drawer may already show them)
+// leave the cursor on the row it was on, moved there by find or a key; another document's rows
+// put it on their first document.
+func TestReadingTheLinksAgainKeepsTheCursorsRow(t *testing.T) {
+	rel := NewRelated(newScripted("kb"))
+	back := func(paths ...string) relations {
+		var rl relations
+		for _, p := range paths {
+			rl.in = append(rl.in, relEdge{path: p, raw: "[[a]]", kind: "wikilink", resolved: true})
+		}
+		return rl
+	}
+	got := func() [4]int {
+		rel.show("kb", "a.md", back("b.md", "x.md")) // the heading, b.md, x.md
+		first := rel.at
+		rel.moveTo(2)
+		rel.show("kb", "a.md", back("b.md", "x.md"))
+		kept := rel.at
+		rel.show("kb", "a.md", back("x.md")) // the heading, x.md: the row moved up with it
+		moved := rel.at
+		rel.show("kb", "b.md", back("c.md", "x.md"))
+		return [4]int{first, kept, moved, rel.at}
+	}()
+	if got != [4]int{1, 2, 1, 1} {
+		t.Fatalf("the cursor's rows: first %d, read again %d, x.md moved up %d, another document's %d; want 1, 2, 1, 1", got[0], got[1], got[2], got[3])
+	}
+}
+
+// The drawer's cursor is the row its view says it moved to (App.relationsMoved): find starts from
+// it, and the drawer reports it. A row the view moves back to is the cursor's again.
+func TestTheLinksDrawersCursorIsTheRowTheViewMovedTo(t *testing.T) {
+	c := newScripted("kb")
+	scriptedGraph(c)
+	r := NewRelated(c)
+	r.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}})
+	rows := r.Snapshot().Rows
+	if len(rows) < 4 || r.Snapshot().At != 1 {
+		t.Fatalf("fixture: rows %q, the cursor on %d; want 4 rows or more, the cursor on the first document (1)", rows, r.Snapshot().At)
+	}
+	moved := r.Commands()["App.relationsMoved"]
+	for _, row := range []int{3, 0} {
+		if err := moved.Run([]qml.SpecValue{{Kind: qml.SpecValueNumber, Raw: strconv.Itoa(row)}}); err != nil {
+			t.Fatal(err)
+		}
+		if at := r.Snapshot().At; at != row {
+			t.Fatalf("the view moved to row %d; the drawer's cursor is on %d", row, at)
+		}
+		if _, from, _ := r.FindPane().Rows(); from != row {
+			t.Fatalf("the view moved to row %d; find starts from row %d", row, from)
+		}
 	}
 }

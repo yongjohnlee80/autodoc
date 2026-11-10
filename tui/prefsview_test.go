@@ -1,9 +1,10 @@
 package tui
 
 import (
-	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"slices"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // A feature's view of the preferences is a snapshot: one taken before a change keeps the old
@@ -27,7 +28,7 @@ func TestAPreferencesViewIsASnapshot(t *testing.T) {
 	}
 
 	p := defaultPrefs()
-	for name, want := range map[string]string{prefTermEdge: "bottom", feature.PrefExplorer: "left", prefWrap: "true", prefTermTheme: "page"} {
+	for name, want := range map[string]string{prefTermEdge: "bottom", feature.PrefExplorer: "left", prefWrap: "true", feature.PrefTermTheme: "page"} {
 		if v := p.Value(name); v != want {
 			t.Errorf("the default of %s read by name: %q, want %q", name, v, want)
 		}

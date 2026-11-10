@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/relations"
 	"github.com/yongjohnlee80/golib/highlight"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/style"
@@ -210,11 +211,11 @@ func TestThePagesTextCarriesItsThemesBase(t *testing.T) {
 }
 
 // openMindmap opens the cell Mindmap pane and answers it.
-func openMindmap(t *testing.T, r *running) *cellMindmap {
+func openMindmap(t *testing.T, r *running) *relations.CellMindmap {
 	t.Helper()
-	m := onLoop(r, func() *cellMindmap {
+	m := onLoop(r, func() *relations.CellMindmap {
 		for _, f := range r.h.reg.Features {
-			if m, ok := f.(*cellMindmap); ok {
+			if m, ok := f.(*relations.CellMindmap); ok {
 				return m
 			}
 		}
@@ -223,23 +224,23 @@ func openMindmap(t *testing.T, r *running) *cellMindmap {
 	if m == nil {
 		t.Fatal("a terminal host has no cell Mindmap registered")
 	}
-	onLoop(r, func() bool { m.toggle(); return true })
+	onLoop(r, func() bool { m.Toggle(); return true })
 	r.s.WaitFor(t, "the cell Mindmap open", func(string) bool {
-		return onLoop(r, func() bool { return m.open && m.view != nil })
+		return onLoop(r, func() bool { s := m.Snapshot(); return s.Open && s.Viewed })
 	})
 	return m
 }
 
 // checkMindmap is a box of the pane's map against the theme's base: its label and its outline.
-func checkMindmap(t *testing.T, r *running, m *cellMindmap, theme string) {
+func checkMindmap(t *testing.T, r *running, m *relations.CellMindmap, theme string) {
 	t.Helper()
 	settlesOnBase(t, r, theme, func(snap [][]tuicore.Cell) ([]probe, string) {
 		// the root's label, as the laid-out map has it: a title or a file's name
 		label := onLoop(r, func() string {
-			if m.cur == nil || len(m.cur.grid.Boxes) == 0 {
-				return ""
+			if boxes := m.Snapshot().Boxes; len(boxes) > 0 {
+				return boxes[0].Label
 			}
-			return m.cur.grid.Boxes[0].Label
+			return ""
 		})
 		if label == "" {
 			return nil, "the Mindmap's map"

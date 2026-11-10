@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -358,6 +359,22 @@ func TestConfigure_SaysWhatItCouldNotDo(t *testing.T) {
 		t.Errorf("the failed reindex is not in the log:\n%s", log.String())
 	}
 
+	if runtime.GOOS == "windows" {
+		// Windows refuses to remove a served root: the daemon holds it open while it serves it (the
+		// local driver's root, which Go opens without FILE_SHARE_DELETE), so it can't be gone under
+		// the daemon there. Once the workspace is removed, it can go. The refusal of a gone root is
+		// checked on Unix, below.
+		if err := os.RemoveAll(w.Root()); !heldOpen(err) {
+			t.Fatalf("removing a served root on Windows: %v; want a sharing violation", err)
+		}
+		if err := m.Remove(context.Background(), "kb"); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.RemoveAll(w.Root()); err != nil {
+			t.Fatalf("removing the root of a workspace no longer served: %v", err)
+		}
+		return
+	}
 	if err := os.RemoveAll(w.Root()); err != nil {
 		t.Fatal(err)
 	}

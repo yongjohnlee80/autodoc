@@ -3,9 +3,11 @@
 package tui
 
 import (
-	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"strings"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/relations"
 )
 
 // TestRelationsGlobeMapSettingsOpensTheTerminals: App.openGlobeSettings, which the Relations menu
@@ -28,7 +30,7 @@ func TestRelationsGlobeMapSettingsOpensTheTerminals(t *testing.T) {
 	onLoop(r, func() bool {
 		var others []feature.Feature
 		for _, f := range r.h.relationViewFeatures() {
-			if _, globe := f.(*cellGlobeMap); !globe {
+			if _, globe := f.(*relations.CellGlobeMap); !globe {
 				others = append(others, f)
 			}
 		}

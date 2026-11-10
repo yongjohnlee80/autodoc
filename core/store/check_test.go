@@ -280,6 +280,11 @@ func lastPage(t *testing.T, path string) int64 {
 	return fi.Size() / 4096
 }
 
+// noWait is a start's wait already over when the check begins, so a bounded check never finishes
+// in it on any clock. A nanosecond is over at once only where the clock reads nanoseconds: on a
+// coarser one it arms a timer that a quick check of a small store can beat.
+const noWait = 0
+
 func noWAL(t *testing.T, path string) {
 	t.Helper()
 	if _, err := os.Stat(path + "-wal"); err == nil {
@@ -296,7 +301,7 @@ func TestTheStartCheckIsBoundedAndFinishedLater(t *testing.T) {
 	withFiller(t, path, 300)
 	spoil(t, path, lastPage(t, path))
 	noWAL(t, path)
-	s, err := Open(ctx, path, WithStartCheckWait(time.Nanosecond))
+	s, err := Open(ctx, path, WithStartCheckWait(noWait))
 	if err != nil {
 		t.Fatalf("a bounded start of a store damaged far from its schema: %v; want it opened unverified", err)
 	}
@@ -356,7 +361,7 @@ func TestAnEmptyWriteAheadLogIsNoCrash(t *testing.T) {
 	if err := os.WriteFile(path+"-wal", nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s, err := Open(ctx, path, WithStartCheckWait(time.Nanosecond))
+	s, err := Open(ctx, path, WithStartCheckWait(noWait))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -444,19 +449,21 @@ func TestALiveCheckReadsTheKeyAfresh(t *testing.T) {
 	other := make([]byte, keySize)
 	_, _ = rand.Read(other)
 	for name, c := range map[string]struct {
-		key  []byte
-		mode os.FileMode
-		want string
+		key     []byte
+		exposed bool
+		want    string
 	}{
-		"replaced":  {other, 0o600, "does not open"},
-		"cut short": {good[:5], 0o600, "5 bytes"},
-		"exposed":   {good, 0o644, "not private to this user"},
+		"replaced":  {other, false, "does not open"},
+		"cut short": {good[:5], false, "5 bytes"},
+		"exposed":   {good, true, "not private to this user"},
 	} {
 		if err := os.WriteFile(path+".key", c.key, 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.Chmod(path+".key", c.mode); err != nil {
-			t.Fatal(err)
+		if c.exposed {
+			expose(t, path+".key")
+		} else {
+			makePrivate(t, path+".key")
 		}
 		if r, err := s.Check(ctx); err != nil || len(r.Secrets) != 1 || !strings.Contains(r.Secrets[0], c.want) {
 			t.Errorf("the key %s: %+v, %v; want %q", name, r.Secrets, err, c.want)
@@ -465,9 +472,7 @@ func TestALiveCheckReadsTheKeyAfresh(t *testing.T) {
 	if err := os.WriteFile(path+".key", good, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(path+".key", 0o600); err != nil {
-		t.Fatal(err)
-	}
+	makePrivate(t, path+".key")
 	if r, err := s.Check(ctx); err != nil || !r.OK() {
 		t.Fatalf("the key put back: %+v, %v; want it sound", r, err)
 	}

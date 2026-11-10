@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"regexp"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/tui/relations"
 )
 
 // A terminal writes its own relation views into main.qml, run as a window or not: Relations ›
@@ -34,10 +36,10 @@ func TestATerminalsRelationViewsAreItsCellViews(t *testing.T) {
 	if len(fs) != 2 || len(ty) != 2 || ty[0].Name != "CellGlobeMap" || ty[1].Name != "CellMindmap" {
 		t.Fatalf("a terminal's relation views: %v, %v", fs, ty)
 	}
-	if _, ok := fs[0].(*cellGlobeMap); !ok {
+	if _, ok := fs[0].(*relations.CellGlobeMap); !ok {
 		t.Fatalf("a terminal's first relation view is %T, want its cell GlobeMap", fs[0])
 	}
-	if _, ok := fs[1].(*cellMindmap); !ok {
+	if _, ok := fs[1].(*relations.CellMindmap); !ok {
 		t.Fatalf("a terminal's second relation view is %T, want its cell Mindmap", fs[1])
 	}
 }
