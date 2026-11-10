@@ -4,13 +4,25 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
+	"github.com/yongjohnlee80/autodoc/internal/userdirs"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
+
+// socketIn is the daemon's address when its runtime directory is dir: the socket in it on Unix; on
+// Windows the user's named pipe, which no folder holds.
+func socketIn(dir string) string {
+	if runtime.GOOS == "windows" {
+		return ipc.DefaultAddr(dir)
+	}
+	return filepath.Join(dir, "autodoc.sock")
+}
 
 // TestLoadResolvesAndMakesNothing: Load reads the default config where XDG_CONFIG_HOME puts it and
 // resolves its paths under the XDG directories; the directories are made only when a mode asks,
@@ -31,7 +43,7 @@ func TestLoadResolvesAndMakesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := endpoint.Paths{
-		Socket:   filepath.Join(home, "XDG_RUNTIME_DIR", "autodoc.sock"),
+		Socket:   socketIn(filepath.Join(home, "XDG_RUNTIME_DIR")),
 		Store:    filepath.Join(home, "XDG_DATA_HOME", "autodoc", "autodoc.db"),
 		StateDir: filepath.Join(home, "XDG_STATE_HOME", "autodoc"),
 	}
@@ -46,8 +58,12 @@ func TestLoadResolvesAndMakesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, d := range []string{p.StateDir, filepath.Dir(p.Store)} {
-		if fi, err := os.Stat(d); err != nil || fi.Mode().Perm() != 0o700 {
-			t.Errorf("%s: %v, %v; want a 0700 directory", d, fi, err)
+		fi, err := os.Stat(d)
+		if err != nil || !fi.IsDir() {
+			t.Errorf("%s: %v, %v; want a directory", d, fi, err)
+		} else if runtime.GOOS != "windows" && fi.Mode().Perm() != 0o700 {
+			// Windows keeps no permission bits in a folder's mode: its access is its ACL
+			t.Errorf("%s: %v; want a 0700 directory", d, fi.Mode())
 		}
 	}
 	bad := filepath.Join(home, "bad.toml")
@@ -66,7 +82,8 @@ func TestMakeDirSaysWhichFailed(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := filepath.Join(t.TempDir(), "config.toml")
-	if err := os.WriteFile(cfg, []byte("[server]\nstate_dir = \""+filepath.Join(file, "state")+"\"\ndata_dir = \""+filepath.Join(file, "data")+"\"\n"), 0o600); err != nil {
+	// TOML literal strings: a path is as written, its backslashes no escapes
+	if err := os.WriteFile(cfg, []byte("[server]\nstate_dir = '"+filepath.Join(file, "state")+"'\ndata_dir = '"+filepath.Join(file, "data")+"'\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	e, err := endpoint.Load(cfg)
@@ -125,7 +142,7 @@ func TestTheStoresTempFilesGoBesideIt(t *testing.T) {
 // its default does not resolve, and a mode asking for it (Paths, MakeStateDir, MakeDataDir) says
 // so instead of making anything; a socket path over the limit is refused the same way.
 func TestAPathThatDoesNotResolveIsSaid(t *testing.T) {
-	for _, d := range []string{"HOME", "XDG_STATE_HOME", "XDG_DATA_HOME", "XDG_RUNTIME_DIR"} {
+	for _, d := range []string{userdirs.HomeVariable, "XDG_STATE_HOME", "XDG_DATA_HOME", "XDG_RUNTIME_DIR"} {
 		t.Setenv(d, "")
 	}
 	dir := t.TempDir()
