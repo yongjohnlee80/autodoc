@@ -123,7 +123,7 @@ func (s *graphStore) pathsOf(ws string) []string {
 // groups hands done view's groups in ws: the file's, or, with none, its first groups (the user's,
 // then one a type of types and one a folder of the workspace's files, as they were when it was
 // asked), each a colour legible on ground, written into the file.
-func (s *graphStore) groups(ws, view string, types []string, ground color.NRGBA, done func([]relGroup)) {
+func (s *graphStore) groups(ws, view string, types []string, ground color.NRGBA, done func([]Group)) {
 	paths := s.pathsOf(ws)
 	s.with(ws, func(g *graphWS) {
 		if list := g.conf.groups(view); list != nil {
@@ -142,7 +142,7 @@ func (s *graphStore) groups(ws, view string, types []string, ground color.NRGBA,
 
 // addMissing hands done view's groups in ws with a group added for each type of types and each
 // folder no group of them queries (its files as they were when it was asked), written into the file.
-func (s *graphStore) addMissing(ws, view string, current []relGroup, types []string, ground color.NRGBA, done func([]relGroup)) {
+func (s *graphStore) addMissing(ws, view string, current []Group, types []string, ground color.NRGBA, done func([]Group)) {
 	paths := s.pathsOf(ws)
 	s.with(ws, func(g *graphWS) {
 		have := map[string]bool{}
@@ -167,7 +167,7 @@ func (s *graphStore) addMissing(ws, view string, current []relGroup, types []str
 
 // save writes list as view's groups in ws's file, the palette in with them when the file names
 // none, so the file says what a new group takes its colour from.
-func (s *graphStore) save(ws, view string, list []relGroup) {
+func (s *graphStore) save(ws, view string, list []Group) {
 	s.with(ws, func(g *graphWS) {
 		g.conf.setGroups(view, list)
 		if len(g.conf.Palette) == 0 {

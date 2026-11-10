@@ -42,7 +42,7 @@ func TestTheTerminalsGlobeMapWearsItsGroups(t *testing.T) {
 	r.s.WaitFor(t, "sepia", func(string) bool { return onLoop(r, func() string { return r.h.theme }) == "sepia" })
 	onLoop(r, func() bool { g.toggle(); return true })
 	r.s.WaitFor(t, "the GlobeMap built in the workspace's groups", func(string) bool {
-		return onLoop(r, func() bool { return g.open && g.cur != nil && len(g.cur.m.Nodes) == 2 && g.groupsWS == "kb" })
+		return onLoop(r, func() bool { s := g.Snapshot(); return s.Open && s.Loaded && len(s.Nodes) == 2 && s.Workspace == "kb" })
 	})
 	var seen []tuicore.CellColor
 	for _, theme := range []string{"sepia", "dark"} {
@@ -114,7 +114,7 @@ func TestATerminalsGlobeMapSettingsEditItsGroups(t *testing.T) {
 	})
 	onLoop(r, func() bool { g.toggle(); return true })
 	r.s.WaitFor(t, "the GlobeMap built in its groups", func(s string) bool {
-		return strings.Contains(s, "Beta") && onLoop(r, func() bool { return g.cur != nil && g.groupsWS == "kb" })
+		return strings.Contains(s, "Beta") && onLoop(r, func() bool { s := g.Snapshot(); return s.Loaded && s.Workspace == "kb" })
 	})
 	onLoop(r, func() bool { g.openSettings(); return true })
 	r.s.WaitFor(t, "the settings, the group listed", func(s string) bool {
@@ -127,15 +127,15 @@ func TestATerminalsGlobeMapSettingsEditItsGroups(t *testing.T) {
 	r.keys(t, key('q'))
 	r.s.WaitFor(t, "the settings closed", func(s string) bool { return !strings.Contains(s, "GlobeMap settings") })
 
-	onLoop(r, func() bool { g.editor.setColour("#123456"); return true })
+	onLoop(r, func() bool { g.EditGroups().setColour("#123456"); return true })
 	file := func() string { b, _ := os.ReadFile(graphFile(kb)); return string(b) }
 	r.s.WaitFor(t, "the edit written", func(string) bool { return strings.Contains(file(), `colour = "#123456"`) })
-	if c := onLoop(r, func() color.NRGBA { return g.groups.list[0].Colour }); c != hexColour(0x123456) {
+	if c := onLoop(r, func() color.NRGBA { return g.Snapshot().Groups[0].Colour }); c != hexColour(0x123456) {
 		t.Fatalf("the map's group colour %v; want the edit's", c)
 	}
 
 	// names off: the selected document's name alone
-	sel := onLoop(r, func() string { return g.cur.m.label(g.selected) })
+	sel := onLoop(r, func() string { return g.Snapshot().Selected })
 	other := "Beta"
 	if sel == "Beta" {
 		other = "Alpha"
@@ -184,7 +184,10 @@ func TestTheGlobeMapSettingsListACachedWorkspacesGroups(t *testing.T) {
 	}
 	listedIn := func(ws string) func() bool {
 		return func() bool {
-			return onLoop(r, func() bool { return g.editor.ws == ws && !g.editor.loading && len(g.editor.list) == 1 })
+			return onLoop(r, func() bool {
+				s := g.Snapshot()
+				return s.Editor.Workspace == ws && !s.Editor.Loading && len(s.Editor.Groups) == 1
+			})
 		}
 	}
 	enter("b")
@@ -195,7 +198,7 @@ func TestTheGlobeMapSettingsListACachedWorkspacesGroups(t *testing.T) {
 	enter("b")
 	onLoop(r, func() bool { g.openSettings(); return true })
 	r.waitWithin(t, "b's groups listed again on its revisit", daemonWait, listedIn("b"))
-	onLoop(r, func() bool { g.editor.setColour("#123456"); return true })
+	onLoop(r, func() bool { g.EditGroups().setColour("#123456"); return true })
 	file := func() string { bs, _ := os.ReadFile(graphFile(b)); return string(bs) }
 	r.waitWithin(t, "the edit written to b", daemonWait, func() bool { return strings.Contains(file(), `colour = "#123456"`) })
 }

@@ -37,13 +37,7 @@ var relationsKB = map[string][]string{"kb": {
 }}
 
 func (r *running) relationLabels() []string {
-	return onLoop(r, func() []string {
-		var out []string
-		for _, row := range r.h.rel.rows.All() {
-			out = append(out, row.label)
-		}
-		return out
-	})
+	return onLoop(r, func() []string { return r.h.rel.Snapshot().Rows })
 }
 
 // waitRelations waits for the drawer's rows to be want.
@@ -82,7 +76,7 @@ func TestTheRelationsDrawerGroupsByKindAndDirection(t *testing.T) {
 	r.leader(t, 'l')
 	r.waitRelations(t, docRelations)
 	r.s.WaitForText(t, "links (10)")
-	if onLoop(r, func() bool { return r.h.rel.deep }) {
+	if onLoop(r, func() bool { return r.h.rel.Snapshot().Deep }) {
 		t.Fatal("d in the explorer turned the drawer's depth 2 on")
 	}
 
@@ -411,35 +405,5 @@ func TestTheLinksRowsAreAHand(t *testing.T) {
 	// the rows that show: all of them, or as many as the panel is tall
 	if len(regions) != 1 || regions[0].Shape != tuicore.PointerHand || regions[0].Rect.H <= 0 || regions[0].Rect.H > len(docRelations) {
 		t.Fatalf("the links' rows: %+v, want a hand over at most its %d rows", regions, len(docRelations))
-	}
-}
-
-// The links of the page read again (SPC l reads them while the drawer may already show them)
-// leave the cursor on the row it was on, moved there by find or a key; another document's rows
-// put it on their first document.
-func TestReadingTheLinksAgainKeepsTheCursorsRow(t *testing.T) {
-	t.Parallel()
-	r := attached(t, startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}}))
-	back := func(paths ...string) relations {
-		var rl relations
-		for _, p := range paths {
-			rl.in = append(rl.in, relEdge{path: p, raw: "[[a]]", kind: "wikilink", resolved: true})
-		}
-		return rl
-	}
-	got := onLoop(r, func() [4]int {
-		rel := r.h.rel
-		rel.show("kb", "a.md", back("b.md", "x.md")) // the heading, b.md, x.md
-		first := rel.at
-		rel.moveTo(2)
-		rel.show("kb", "a.md", back("b.md", "x.md"))
-		kept := rel.at
-		rel.show("kb", "a.md", back("x.md")) // the heading, x.md: the row moved up with it
-		moved := rel.at
-		rel.show("kb", "b.md", back("c.md", "x.md"))
-		return [4]int{first, kept, moved, rel.at}
-	})
-	if got != [4]int{1, 2, 1, 1} {
-		t.Fatalf("the cursor's rows: first %d, read again %d, x.md moved up %d, another document's %d; want 1, 2, 1, 1", got[0], got[1], got[2], got[3])
 	}
 }

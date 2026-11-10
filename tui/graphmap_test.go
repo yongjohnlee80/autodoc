@@ -60,7 +60,7 @@ func TestGroupsMatchFirst(t *testing.T) {
 			t.Errorf("%q read", bad)
 		}
 	}
-	gs := newRelGroups([]relGroup{{Query: "#Project"}, {Query: "type:adr"}, {Query: "path:/notes/"}, {Query: "nope"}})
+	gs := newRelGroups([]Group{{Query: "#Project"}, {Query: "type:adr"}, {Query: "path:/notes/"}, {Query: "nope"}})
 	for _, c := range []struct {
 		n    mapNode
 		want int
@@ -134,8 +134,8 @@ func TestInitialGroups(t *testing.T) {
 func TestGraphFile(t *testing.T) {
 	var c graphConf
 	c.Palette = []string{"#112233"}
-	c.setGroups(viewGlobeMap, []relGroup{{Query: "type:adr", Colour: hexColour(0x010203), Shape: pm.MindHexagon}})
-	c.setGroups(viewMindmap, []relGroup{{Query: "path:notes/", Colour: hexColour(0x040506), Shape: pm.MindCircle}})
+	c.setGroups(viewGlobeMap, []Group{{Query: "type:adr", Colour: hexColour(0x010203), Shape: pm.MindHexagon}})
+	c.setGroups(viewMindmap, []Group{{Query: "path:notes/", Colour: hexColour(0x040506), Shape: pm.MindCircle}})
 	text := c.format()
 	if !strings.HasPrefix(text, "# AutoDoc's graph groups") || strings.Contains(text, `shape = "hexagon"`) {
 		t.Errorf("the file:\n%s", text)
@@ -144,10 +144,10 @@ func TestGraphFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if g := back.groups(viewGlobeMap); len(g) != 1 || g[0] != (relGroup{Query: "type:adr", Colour: hexColour(0x010203)}) {
+	if g := back.groups(viewGlobeMap); len(g) != 1 || g[0] != (Group{Query: "type:adr", Colour: hexColour(0x010203)}) {
 		t.Errorf("the GlobeMap's back: %+v", g)
 	}
-	if g := back.groups(viewMindmap); len(g) != 1 || g[0] != (relGroup{Query: "path:notes/", Colour: hexColour(0x040506), Shape: pm.MindCircle}) {
+	if g := back.groups(viewMindmap); len(g) != 1 || g[0] != (Group{Query: "path:notes/", Colour: hexColour(0x040506), Shape: pm.MindCircle}) {
 		t.Errorf("the Mindmap's back: %+v", g)
 	}
 	if !slices.Equal(back.palette(), []color.NRGBA{hexColour(0x112233)}) {
@@ -157,7 +157,7 @@ func TestGraphFile(t *testing.T) {
 		t.Error("a file that does not read read")
 	}
 	user := graphConf{Palette: []string{"#f0f0f0"}}
-	user.setGroups(viewGlobeMap, []relGroup{{Query: "#todo", Colour: hexColour(0xabcdef)}})
+	user.setGroups(viewGlobeMap, []Group{{Query: "#todo", Colour: hexColour(0xabcdef)}})
 	rnd := rand.New(rand.NewPCG(3, 4))
 	got := initialGroups(viewGlobeMap, graphConf{}, user, []string{"#todo", "type:adr"}, hexColour(0x101010), rnd)
 	if len(got) != 2 || got[0].Query != "#todo" || got[0].Colour != hexColour(0xabcdef) || got[1].Query != "type:adr" || got[1].Colour != hexColour(0xf0f0f0) {
