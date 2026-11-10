@@ -3,6 +3,7 @@ package tui
 import (
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -16,7 +17,7 @@ func TestSPCaiOpensTheInbox(t *testing.T) {
 		t.Fatal(err)
 	}
 	var on []feature.Key
-	for _, k := range feature.KeyCatalog(fs).On(agentsCard) {
+	for _, k := range feature.KeyCatalog(fs).On(agents.AgentsCard) {
 		if k.Seq == "i" {
 			on = append(on, k)
 		}

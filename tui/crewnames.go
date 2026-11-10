@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/yongjohnlee80/autodoc/internal/filelock"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 )
 
 // CREW NAMES ON DISK (docs/decisions/crew.md#crew-names-on-disk): a crew identity from data, a scope or
@@ -58,7 +59,7 @@ func migrateCrewNames(base string) (kept []string, err error) {
 			if !strings.Contains(name, ":") || e.IsDir() != dirs || e.Type()&fs.ModeSymlink != 0 {
 				continue
 			}
-			from, to := filepath.Join(dir, name), filepath.Join(dir, crewFileName(name))
+			from, to := filepath.Join(dir, name), filepath.Join(dir, agents.CrewFileName(name))
 			switch _, err := os.Lstat(to); {
 			case err == nil:
 				kept = append(kept, from)

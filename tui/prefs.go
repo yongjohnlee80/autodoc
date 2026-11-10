@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/autodoc/tui/system"
 )
@@ -165,7 +166,7 @@ func hostField(name string) (read func(feature.PrefsView) string, ok bool) {
 	hostFields.once.Do(func() {
 		hostFields.value = map[string]func(feature.PrefsView) string{}
 		for _, rows := range [][]feature.PrefSpec{legacyPrefRows(nil, false), legacyPrefRows(nil, true), terminalPrefRows(nil),
-			{panelKeysRow()}, agentPrefRows(nil), agentBellRows()} {
+			{panelKeysRow()}, agents.AgentPrefRows(nil), agentBellRows()} {
 			for _, s := range rows {
 				if !s.ByName && s.Value != nil {
 					hostFields.value[s.Name] = s.Value
@@ -222,7 +223,7 @@ func defaultPrefsFor(gui bool) prefs {
 	p := prefs{searchStages: allStagesChecked()}
 	feature.ReadRows(&p, nil, legacyPrefRows(nil, gui))
 	feature.ReadRows(&p, nil, terminalPrefRows(nil))
-	feature.ReadRows(&p, nil, agentPrefRows(nil))
+	feature.ReadRows(&p, nil, agents.AgentPrefRows(nil))
 	return p
 }
 
@@ -365,7 +366,7 @@ func prefsFor(m map[string]any, gui bool) prefs {
 }
 
 func prefsForPanels(m map[string]any, gui bool, specs []feature.PanelSpec) prefs {
-	m, _ = migrateAgentDefault(m)
+	m, _ = agents.MigrateAgentDefault(m)
 	m = migrateLinksPanel(m)
 	p := defaultPrefsFor(gui)
 	p.panelDefs = specs
@@ -382,7 +383,7 @@ func prefsForPanels(m map[string]any, gui bool, specs []feature.PanelSpec) prefs
 		readPluginPref(&p, k, v)
 	}
 	feature.ReadRows(&p, m, terminalPrefRows(nil))
-	feature.ReadRows(&p, m, agentPrefRows(nil))
+	feature.ReadRows(&p, m, agents.AgentPrefRows(nil))
 	readPanelPrefs(&p, m)
 	readPanelFloats(&p, m)
 	readFontPrefs(&p, m)
@@ -434,7 +435,7 @@ func (h *Host) loadPrefs() {
 		for name, value := range meanwhile {
 			a.Value[name] = value
 		}
-		values, migrated := migrateAgentDefault(a.Value)
+		values, migrated := agents.MigrateAgentDefault(a.Value)
 		values = migrateLinksPanel(values) // ReadRows reads the explorer's edge from it too
 		p := prefsForPanels(values, h.gui, h.panelSpecs())
 		feature.ReadRows(&p, values, h.prefRows) // the features' own rows too
@@ -445,7 +446,7 @@ func (h *Host) loadPrefs() {
 		h.decideLaunches() // so does a plugin's start with AutoDoc (pluginlaunch.go)
 		if migrated {
 			// The row setter persists even when the projected value already matches.
-			core{h}.SetPref(prefAgentDefaultCodename, p.Value(prefAgentDefaultCodename))
+			core{h}.SetPref(agents.PrefAgentDefaultCodename, p.Value(agents.PrefAgentDefaultCodename))
 		}
 	})
 }

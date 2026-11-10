@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/autodoc/tui/system"
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -141,7 +142,7 @@ func (h *Host) startupSeams() system.StartupSeams {
 	return system.StartupSeams{
 		LatestURL:          h.seams.latestURL,
 		VimQuestionPending: func(p feature.PrefsView) bool { return vimQuestionPending(&h.seams, p) },
-		AgentSetupPending:  func(p feature.PrefsView) bool { return agentSetupPending(&h.seams, p) },
+		AgentSetupPending:  func(p feature.PrefsView) bool { return agents.AgentSetupPending(&h.seams, p) },
 	}
 }
 

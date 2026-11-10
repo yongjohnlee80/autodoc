@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
@@ -160,7 +161,7 @@ func (v *inboxView) Catalog() []feature.Entry {
 
 // Keys: SPC a i, on the agents' card.
 func (*inboxView) Keys() []feature.Key {
-	return []feature.Key{{Card: agentsCard, Seq: "i", Show: "i", Does: "the inbox: your mail", Run: "App.openInbox()"}}
+	return []feature.Key{{Card: agents.AgentsCard, Seq: "i", Show: "i", Does: "the inbox: your mail", Run: "App.openInbox()"}}
 }
 
 // Cards: none of its own; its key is on the agents' card.

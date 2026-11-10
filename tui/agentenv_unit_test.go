@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 )
 
 // A plugin AutoDoc runs is third-party code started on AutoDoc's behalf: the spawner's identity,
@@ -20,7 +22,7 @@ func TestAPluginRunsWithoutItsSpawnersIdentity(t *testing.T) {
 	if err := os.MkdirAll(plug, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	dump := "env > " + shellQuote(report) + ".part && mv " + shellQuote(report) + ".part " + shellQuote(report) + "; cat >/dev/null"
+	dump := "env > " + agents.ShellQuote(report) + ".part && mv " + agents.ShellQuote(report) + ".part " + agents.ShellQuote(report) + "; cat >/dev/null"
 	manifest := fmt.Sprintf("name = %q\ntitle = %q\nkind = %q\nprotocol = 2\ncommand = [%q, %q, %q]\n", "envdump", "Envdump", "dialog", "/bin/sh", "-c", dump)
 	if err := os.WriteFile(filepath.Join(plug, "plugin.toml"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)

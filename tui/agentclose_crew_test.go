@@ -3,11 +3,13 @@ package tui
 import (
 	"context"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 )
 
 // presenceOf is codename's crew session state in the window's scope, as crew.list has it ("" for
 // no row).
-func presenceOf(t *testing.T, a *agents, w *crewWindow, codename string) string {
+func presenceOf(t *testing.T, a *agents.Agents, w *crewWindow, codename string) string {
 	t.Helper()
 	scope, _, _ := crewOf(a).held()
 	entries, err := w.d.m.List(context.Background())
@@ -38,11 +40,11 @@ func TestAnAgentTheWindowTakesAwayEndsItsCrewSession(t *testing.T) {
 			asked := len(c.questions)
 			switch how {
 			case "close":
-				a.closeAgent("one")
+				a.CloseAgent("one")
 			case "restart":
-				a.restartAgent("one")
+				a.RestartAgent("one")
 			case "stop all":
-				a.stopAllAgents()
+				a.StopAllAgents()
 			}
 			if len(c.questions) != asked+1 {
 				t.Fatalf("%s of a running agent asked %d questions, want one", how, len(c.questions)-asked)
@@ -79,7 +81,7 @@ func TestARestartRegistersAfterTheOldSessionsExit(t *testing.T) {
 	a, c, w := messagingRig(t)
 	before := a.Snapshot().Instances["one"].Session.ID
 	registered := calledTimes(w, "crew.register")
-	a.restartAgent("one")
+	a.RestartAgent("one")
 	w.hold, w.late = true, true // calls run at once, their answers wait
 	callsBefore := len(w.calls)
 	c.questions[len(c.questions)-1].OnYes()

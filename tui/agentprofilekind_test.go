@@ -21,8 +21,8 @@ func TestAProfileSetToClaudeUnderAnotherCommandIsAClaudeAgent(t *testing.T) {
 	}
 	tuneEnv(t, "PATH=/usr/bin:/bin") // the wrapper and its Claude Code are on the profile's PATH alone
 	a, c, w := crewAgents(t, `[{"name":"Sephiroth","command":"claude-work","codename":"sephiroth","kind":"claude","env":{"PATH":"`+bin+`:$PATH"}}]`)
-	p, _ := a.profile("sephiroth")
-	instance, err := a.startInstance(p)
+	p, _ := a.Profile("sephiroth")
+	instance, err := a.StartInstance(p)
 	if err != nil {
 		t.Fatal(err)
 	}

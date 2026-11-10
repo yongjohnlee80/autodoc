@@ -7,13 +7,14 @@ import (
 	"errors"
 
 	"github.com/yongjohnlee80/autodoc/core/inbox"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 )
 
 // elsewhereRig is messagingRig with the window switched to another workspace after agent one
 // started in kb: one runs on in kb, the window shows other (docs/decisions/crew.md#the-users-own-sends).
-func elsewhereRig(t *testing.T) (*agents, *identityHostCopy, *crewWindow) {
+func elsewhereRig(t *testing.T) (*agents.Agents, *identityHost, *crewWindow) {
 	t.Helper()
 	a, c, w := messagingRig(t)
 	c.ws = wsInfo{id: 8, name: "other", root: t.TempDir()}
@@ -41,7 +42,7 @@ func TestAnAgentInAnotherWorkspaceIsRung(t *testing.T) {
 			opened, modes := len(c.opened), len(c.panel.modes) // the start's own: only what the delivery adds counts
 			var err error
 			if via == "HandTask" {
-				err = a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "Re-sync", Path: taskFileCopy("/cyber/.todo-list/in-progress/t1.md"), ID: "t1"}, "Go.", done)
+				err = a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "Re-sync", Path: taskFile("/cyber/.todo-list/in-progress/t1.md"), ID: "t1"}, "Go.", done)
 			} else {
 				err = a.SendText(feature.AgentRef{Codename: "one"}, "hello one", done)
 			}
@@ -72,7 +73,7 @@ func TestARungTaskInTheWindowsWorkspaceIsPresented(t *testing.T) {
 	w.inboxSend = func([]any) (any, error) { return map[string]any{"message": "m1"}, nil }
 	var heard []error
 	opened, modes := len(c.opened), len(c.panel.modes) // the start's own: only what the delivery adds counts
-	if err := a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "Ship", Path: taskFileCopy("/kb/.todo-list/in-progress/t1.md"), ID: "t1"}, "Go.", func(err error) { heard = append(heard, err) }); err != nil {
+	if err := a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "Ship", Path: taskFile("/kb/.todo-list/in-progress/t1.md"), ID: "t1"}, "Go.", func(err error) { heard = append(heard, err) }); err != nil {
 		t.Fatal(err)
 	}
 	settleMessaging(c, w)
@@ -98,9 +99,9 @@ func TestAnAgentInAnotherWorkspaceIsNeverTyped(t *testing.T) {
 	if len(c.panel.pastes)+len(c.panel.keys) != 0 {
 		t.Fatalf("typed %q and pressed %q into another workspace's agent, want nothing", c.panel.pastes, c.panel.keys)
 	}
-	var e *agentElsewhere
-	if len(heard) != 1 || !errors.As(heard[0], &e) || !errors.Is(heard[0], ErrAgentElsewhere) || errors.Is(heard[0], ErrAgentStale) ||
-		e.workspace != "kb" || !errors.Is(e.why, errDoorbellNotSent) {
+	var e *agents.AgentElsewhere
+	if len(heard) != 1 || !errors.As(heard[0], &e) || !errors.Is(heard[0], agents.ErrAgentElsewhere) || errors.Is(heard[0], agents.ErrAgentStale) ||
+		e.Workspace != "kb" || !errors.Is(e.Why, agents.ErrDoorbellNotSent) {
 		t.Fatalf("done heard %v, want one ErrAgentElsewhere (kb) carrying the doorbell's refusal, not stale", heard)
 	}
 	if agentErr(heard[0]) != "elsewhere" {
@@ -111,10 +112,10 @@ func TestAnAgentInAnotherWorkspaceIsNeverTyped(t *testing.T) {
 // What only the base delivers (a fallback job, or a window with no crew) is refused at once for an
 // agent in another workspace, as ErrAgentElsewhere with no doorbell, never stale; nothing is typed.
 func TestTheBaseAloneRefusesAnotherWorkspacesAgent(t *testing.T) {
-	check := func(t *testing.T, c *identityHostCopy, heard []error) {
+	check := func(t *testing.T, c *identityHost, heard []error) {
 		t.Helper()
-		var e *agentElsewhere
-		if len(heard) != 1 || !errors.As(heard[0], &e) || errors.Is(heard[0], ErrAgentStale) || e.workspace != "kb" || !errors.Is(e.why, errNoDoorbell) {
+		var e *agents.AgentElsewhere
+		if len(heard) != 1 || !errors.As(heard[0], &e) || errors.Is(heard[0], agents.ErrAgentStale) || e.Workspace != "kb" || !errors.Is(e.Why, agents.ErrNoDoorbell) {
 			t.Fatalf("done heard %v, want one ErrAgentElsewhere (kb, no doorbell)", heard)
 		}
 		if len(c.panel.pastes)+len(c.panel.keys) != 0 {
@@ -124,13 +125,13 @@ func TestTheBaseAloneRefusesAnotherWorkspacesAgent(t *testing.T) {
 	t.Run("fallback job", func(t *testing.T) {
 		a, c, w := elsewhereRig(t)
 		var heard []error
-		a.deliverFallback("one", "from two: hello", func(err error) { heard = append(heard, err) })
+		a.DeliverFallback("one", "from two: hello", func(err error) { heard = append(heard, err) })
 		settleMessaging(c, w)
 		check(t, c, heard)
 	})
 	t.Run("no crew", func(t *testing.T) {
 		a, c, w := elsewhereRig(t)
-		a.crew = nil
+		a.Crew = nil
 		var heard []error
 		err := a.SendText(feature.AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) })
 		if err == nil {

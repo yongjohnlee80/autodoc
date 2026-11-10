@@ -56,6 +56,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/internal/profiling"
 	"github.com/yongjohnlee80/autodoc/internal/usertheme"
 	"github.com/yongjohnlee80/autodoc/script"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/explorer"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/autodoc/tui/relations"
@@ -160,7 +161,7 @@ type Host struct {
 	arranged                               string             // the panel an arrangement kept, given the keyboard as its card closes (arrange.go)
 	// Stateful terminal and agent behavior is owned by these Features.
 	terminals  *terminals
-	agents     *agents
+	agents     *agents.Agents
 	crew       *crewHost   // the window's crew scope (crewhost.go)
 	crewInbox  *crewInbox  // the human's crew inbox in this window (crewinbox.go)
 	inboxView  *inboxView  // the inbox dialog: the user's mail, SPC a i (crewinboxview.go)
@@ -548,15 +549,15 @@ func newHost(session *Session, opt Options) *Host {
 	}
 	h.terminals = newTerminals(unboundPanelHost(core{h}))
 	h.terminals.startLua = h.startLuaShell
-	h.agents = newAgents(unboundPanelHost(core{h}), &h.seams, opt.AgentDir, opt.ConfigPath)
+	h.agents = agents.NewAgents(unboundPanelHost(core{h}), &h.seams, opt.AgentDir, opt.ConfigPath)
 	h.crew = newCrewHost(core{h}, h.seams.env, opt.AgentDir)
-	h.agents.crew = h.crew
-	h.crew.deliverJob = h.agents.deliverFallback
+	h.agents.Crew = h.crew
+	h.crew.deliverJob = h.agents.DeliverFallback
 	h.crew.onTodoFiles = h.todoFilesChanged
-	h.crewInbox = newCrewInbox(core{h}, h.agents.raiseSession)
+	h.crewInbox = newCrewInbox(core{h}, h.agents.RaiseSession)
 	h.crewInbox.took = h.crew.tookJob
 	h.crew.onClaim = h.crewInbox.recheckFallbacks // the scope changed hands: what waited for a host may not
-	h.agents.inbox = h.crewInbox
+	h.agents.Inbox = h.crewInbox
 	h.inboxView = newInboxView(core{h}, h.crewInbox)
 	h.crewInbox.view = h.inboxView
 	h.grantsView = newGrantsView(core{h}) // one for the program: the registry is built again, the dialog is not
@@ -568,7 +569,7 @@ func newHost(session *Session, opt Options) *Host {
 			h.cfgDir = abs
 		}
 	}
-	h.agents.editorPath = h.editorSocketPath // AUTODOC_EDITOR for the agents it starts
+	h.agents.EditorPath = h.editorSocketPath // AUTODOC_EDITOR for the agents it starts
 	h.cands = newCandidates(core{h})
 	h.plugins = newPlugins(core{h}, &h.seams, opt.Plugins)
 	h.plugins.cands = h.cands

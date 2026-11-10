@@ -5,6 +5,7 @@ import (
 	"go/build"
 	"go/parser"
 	"go/token"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
@@ -12,27 +13,29 @@ import (
 	"testing"
 )
 
-// Every preference a file of this build reads by name (PrefsView.Value with a pref… constant) is a
-// row the program declares: Value answers "" for a name no row declares, so a misspelt or a
-// forgotten one would read as unset without a word. The names are this build's (the GUI's rows
+// Every preference a file of this build reads by name (PrefsView.Value with a pref… constant, the
+// agents' in tui/agents too) is a row the program declares: Value answers "" for a name no row
+// declares, so a misspelt or a forgotten one would read as unset without a word. The names are this build's (the GUI's rows
 // are -tags gui's); a name built at run time (prefGlobeColour + key) must begin with a row's name.
 func TestEveryPreferenceReadByNameIsADeclaredRow(t *testing.T) {
 	ctx := build.Default
 	if guiBuild() {
 		ctx.BuildTags = append(ctx.BuildTags, "gui")
 	}
-	pkg, err := ctx.ImportDir(".", 0)
-	if err != nil {
-		t.Fatal(err)
-	}
 	fset := token.NewFileSet()
 	var files []*ast.File
-	for _, name := range pkg.GoFiles {
-		f, err := parser.ParseFile(fset, name, nil, parser.SkipObjectResolution)
+	for _, dir := range []string{".", "agents"} { // the host and the agents, whose rows the program declares
+		pkg, err := ctx.ImportDir(dir, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
-		files = append(files, f)
+		for _, name := range pkg.GoFiles {
+			f, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, parser.SkipObjectResolution)
+			if err != nil {
+				t.Fatal(err)
+			}
+			files = append(files, f)
+		}
 	}
 	consts := map[string]string{} // the package's string constants
 	for _, f := range files {
@@ -60,6 +63,7 @@ func TestEveryPreferenceReadByNameIsADeclaredRow(t *testing.T) {
 	}
 	var reads []read
 	for _, f := range files {
+		inAgents := strings.HasPrefix(fset.File(f.Pos()).Name(), "agents"+string(filepath.Separator))
 		ast.Inspect(f, func(n ast.Node) bool {
 			call, ok := n.(*ast.CallExpr)
 			if !ok || len(call.Args) != 1 {
@@ -72,8 +76,15 @@ func TestEveryPreferenceReadByNameIsADeclaredRow(t *testing.T) {
 			if b, ok := arg.(*ast.BinaryExpr); ok && b.Op == token.ADD {
 				arg, prefix = b.X, true
 			}
+			agentsName := inAgents // the agents' exported constants (Pref…), in their files or as agents.Pref…
+			if sel, ok := arg.(*ast.SelectorExpr); ok {
+				if x, ok := sel.X.(*ast.Ident); !ok || x.Name != "agents" {
+					return true // another package's name (feature.PrefGrants) or a field (h.prefs)
+				}
+				arg, agentsName = sel.Sel, true
+			}
 			id, ok := arg.(*ast.Ident)
-			if !ok || !strings.HasPrefix(id.Name, "pref") {
+			if !ok || !strings.HasPrefix(id.Name, "pref") && !(agentsName && strings.HasPrefix(id.Name, "Pref")) {
 				return true
 			}
 			v, ok := consts[id.Name]

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
@@ -44,8 +45,8 @@ done
 func runSuspendingAgent(t *testing.T) *running {
 	t.Helper()
 	agent := suspendingAgent(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron")
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	r.s.WaitForText(t, "ready")
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
@@ -168,7 +169,7 @@ func TestPanelResumeOnAnExitedAgentKeepsWhy(t *testing.T) {
 // panel.resume on an open panel with no tab says so in a notice, and keeps no error.
 func TestPanelResumeOnAnEmptyPanelIsANotice(t *testing.T) {
 	r := exitedAgent(t)
-	onLoop(r, func() bool { return r.h.agents.removeInstance("heron") == nil })
+	onLoop(r, func() bool { return r.h.agents.RemoveInstance("heron") == nil })
 	r.s.WaitFor(t, "its tab gone", func(string) bool {
 		return onLoop(r, func() bool { tabs, ok := r.h.tabsOf("agentView"); return ok && tabs.Active() == "" })
 	})

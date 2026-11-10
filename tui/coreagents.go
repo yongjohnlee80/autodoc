@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -35,7 +36,7 @@ func (c core) peerAgents(then func([]feature.AgentEntry)) {
 // sendTask sends another host's agent a task as the user's request (todos_assign.go).
 func (c core) sendTask(codename, scope, subject, body, key string, then func(error)) {
 	if c.h.crew == nil {
-		then(fmt.Errorf("%w: the window holds no crew scope", errDoorbellNotSent))
+		then(fmt.Errorf("%w: the window holds no crew scope", agents.ErrDoorbellNotSent))
 		return
 	}
 	c.h.crew.sendTask(codename, scope, subject, body, key, then)
