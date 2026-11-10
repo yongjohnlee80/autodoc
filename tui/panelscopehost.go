@@ -64,7 +64,7 @@ func (s *scopedPanelHost) SetPref(name, value string) { s.core.SetPref(name, val
 func (s *scopedPanelHost) ActiveWorkspace() (feature.Workspace, bool) {
 	return s.core.ActiveWorkspace()
 }
-func (s *scopedPanelHost) ActiveWorkspaceInfo() (wsInfo, bool) {
+func (s *scopedPanelHost) ActiveWorkspaceInfo() (feature.Workspace, bool) {
 	return s.core.ActiveWorkspaceInfo()
 }
 
