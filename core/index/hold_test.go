@@ -45,7 +45,7 @@ func TestIdentitiesParseOneWay(t *testing.T) {
 			for _, abstract := range []bool{false, true} {
 				id, err := ParseIdentity(docVersion(indexerVersion(tok), true, fp, abstract))
 				wantA := map[bool]string{false: "", true: "a1"}[abstract]
-				if err != nil || id.Form != BuiltIn || id.SchemaFP != fp || id.Relations != "r1" || id.Abstract != wantA || id.Diagrams != "m1" {
+				if err != nil || id.Form != BuiltIn || id.SchemaFP != fp || id.Relations != relationsVersion || id.Abstract != wantA || id.Diagrams != "m1" {
 					t.Errorf("docVersion(%d, %q, %v) reads back as %+v, %v", tok, fp, abstract, id, err)
 				}
 			}

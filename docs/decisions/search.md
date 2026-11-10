@@ -190,6 +190,11 @@ derived string splits at its last `+` and a registered one is read from the righ
 parses one way. Versions are 1 to 32 characters of letters, digits, `.`, `_`, `+` or `-`; a deriver
 id may also contain `/`. The hold, the skip check and reindexing all read this string.
 
+`.r` N is the reading of a Markdown document's links and relations. When what the same bytes read
+as changes, N is raised: every Markdown document is then read again at the next start, its file
+unchanged, and its links are replaced; its unchanged chunks keep their rows and their vectors, so
+nothing is embedded again.
+
 In the code: `core/index/hold.go`, `core/index/store.go`, `core/registrations/registrations.go`
 
 ## Stored embed text

@@ -51,9 +51,13 @@ type options struct {
 	// Modes says how an eligible path is indexed (docs/decisions/todos.md#graph-only-indexing):
 	// graph-only, and the todo store it lies in. Nil: every path in full, in no store.
 	Modes func(path string) Mode
-	// Root is the workspace's root, absolute: a todo task's ref to an absolute path under it is a
-	// workspace path. "": every such ref is an external link.
+	// Root is the workspace's root, absolute, as it was configured: a ref to an absolute path under
+	// it is a workspace path. "": every such ref is an external link, unless Canon holds it.
 	Root string
+	// Canon is where Root leads on the disk (its symlinks resolved; on Windows its long names in the
+	// disk's own case), when the caller asked the disk: the spelling a workspace's variables carry.
+	// "": Root alone is compared.
+	Canon string
 	// RetryDelay is how long a job whose file could not be read first waits before it runs again
 	// (default 1 s); each failure after that doubles the wait, up to MaxRetryDelay (default 5 min).
 	RetryDelay    time.Duration
@@ -136,8 +140,13 @@ func WithMatch(match func(path string) bool) Option { return func(o *options) { 
 // changed.
 func WithModes(modes func(path string) Mode) Option { return func(o *options) { o.Modes = modes } }
 
-// WithRoot is the workspace's root, absolute, for a todo task's absolute refs.
+// WithRoot is the workspace's root, absolute, as configured, for absolute and $NAME refs.
 func WithRoot(root string) Option { return func(o *options) { o.Root = root } }
+
+// WithCanonicalRoot is where the workspace's root leads on the disk, absolute: a ref under it is
+// the workspace's as one under WithRoot's is. The caller asks the disk once, where it opens the
+// root; the index never resolves a path itself.
+func WithCanonicalRoot(root string) Option { return func(o *options) { o.Canon = root } }
 
 // WithClock is the clock the index's recorded times read (default time.Now).
 func WithClock(c clock.Clock) Option { return func(o *options) { o.Now = c } }
@@ -825,12 +834,12 @@ func cutMarkdown(x *Indexer, p *prepared, s source) error {
 		}
 	}
 	p.indexer += varsVersion(varNames(doc), s.mode.Vars)
-	p.links = extractLinks(doc, p.path, x.opts.Match, s.mode.Vars, x.opts.Root)
+	p.links = extractLinks(doc, p.path, x.opts.Match, s.mode.Vars, x.opts.roots())
 	switch {
 	case s.mode.Store != nil:
-		p.links = append(p.links, taskRelations(doc, p.path, s.mode.Store, s.mode.Vars, x.opts.Root)...)
+		p.links = append(p.links, taskRelations(doc, p.path, s.mode.Store, s.mode.Vars, x.opts.roots())...)
 	case s.mode.Vars != nil:
-		p.links = append(p.links, varRelations(doc, p.path, s.mode.Vars, x.opts.Root)...)
+		p.links = append(p.links, varRelations(doc, p.path, s.mode.Vars, x.opts.roots())...)
 	default:
 		p.links = append(p.links, extractRelations(doc, p.path)...)
 	}
