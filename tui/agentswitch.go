@@ -57,43 +57,27 @@ const (
 	switchLeft    = "left"    // no workspace in use: none is ready, or the one in use was deleted
 )
 
-// wsRefOf is the workspace name names, with its root; the name alone for one the TUI doesn't list.
-func (h *Host) wsRefOf(name string) wsRef {
-	if name == "" {
-		return wsRef{}
-	}
-	for _, w := range h.workspaces.All() {
-		if w.name == name {
-			return wsRef{Name: w.name, Root: w.root}
-		}
-	}
-	return wsRef{Name: name}
-}
-
-// takeSwitch is the switch agent hasn't been told of, and marks the workspace in use as told: false
-// for none, or when agent has no instance. A workspace the list doesn't name yet has no root to
-// compare: its switch waits for the next ask. Loop only.
-func (h *Host) takeSwitch(agent string) (wsSwitch, bool) {
-	inst := h.agents.instances[agent]
+// takeSwitch is the switch agent hasn't been told of, and marks cur, the workspace in use, as told:
+// false for none, or when agent has no instance. cur's root is "" while the TUI's list doesn't name
+// it yet: it has no root to compare, so its switch waits for the next ask. document is the active
+// buffer's path when it is a file of the workspace named, else "". Loop only.
+func (a *agents) takeSwitch(agent string, cur wsRef, document func(ws string) string) (wsSwitch, bool) {
+	inst := a.instances[agent]
 	if inst == nil {
 		return wsSwitch{}, false
 	}
 	if inst.seenToken != inst.token { // a new incarnation: it knows only the workspace it started in
 		inst.seen, inst.seenToken = wsRef{Name: inst.workspace.name, Root: inst.workspace.root}, inst.token
 	}
-	cur := h.wsRefOf(h.ws)
 	if cur == inst.seen || (cur.Name != "" && cur.Root == "") {
 		return wsSwitch{}, false
 	}
-	sw := wsSwitch{Kind: switchEntered, From: inst.seen, To: cur}
+	sw := wsSwitch{Kind: switchEntered, From: inst.seen, To: cur, Document: document(cur.Name)}
 	switch {
 	case cur.Name == "":
 		sw.Kind = switchLeft
 	case cur.Root == inst.seen.Root:
 		sw.Kind = switchRenamed // the same files under another name: never told as a switch
-	}
-	if b := h.active; b != nil && b.file.open && b.file.ws == cur.Name {
-		sw.Document = b.file.path
 	}
 	inst.seen = cur
 	return sw, true
@@ -109,29 +93,26 @@ func (a *agents) spawnWorkspace(codename string) (wsRef, bool) {
 	return wsRef{Name: inst.workspace.name, Root: inst.workspace.root}, true
 }
 
-// editorWorkspace is editor.workspace: the asking agent's workspace (spawn_workspace), the TUI's
-// (workspace_in_use) and, when it has moved since the agent last asked, the one switch between
-// (takeSwitch). It takes no parameter: spawn is the asking token's instance's.
-func (h *Host) editorWorkspace(agent string, a editorArgs) (any, error) {
-	if len(a) > 0 {
-		return nil, invalid("editor.workspace takes no params: the workspace you started in is your token's")
-	}
-	out := map[string]any{"workspace_in_use": h.wsRefOf(h.ws).value()}
-	spawn, ok := h.agents.spawnWorkspace(agent)
+// workspaceAnswer is editor.workspace's answer to agent: its own workspace (spawn_workspace), the
+// TUI's (workspace_in_use, cur) and, when that has moved since agent last asked, the one switch
+// between (takeSwitch). spawn is the asking token's instance's.
+func (a *agents) workspaceAnswer(agent string, cur wsRef, document func(ws string) string) map[string]any {
+	out := map[string]any{"workspace_in_use": cur.value()}
+	spawn, ok := a.spawnWorkspace(agent)
 	if ok {
 		out["spawn_workspace"] = spawn.value()
 	}
-	if sw, ok := h.takeSwitch(agent); ok {
+	if sw, ok := a.takeSwitch(agent, cur, document); ok {
 		out["switch"] = sw.value(spawn)
 	}
-	return out, nil
+	return out
 }
 
 // markForeign adds to an editor answer about a buffer in ws the asking agent's own workspace, and
 // foreign_workspace when the buffer's is another: its path is then that workspace's root's, not
 // $AUTODOC_ROOT's.
-func (h *Host) markForeign(agent, ws string, doc map[string]any) {
-	spawn, ok := h.agents.spawnWorkspace(agent)
+func (a *agents) markForeign(agent, ws string, doc map[string]any) {
+	spawn, ok := a.spawnWorkspace(agent)
 	if !ok {
 		return
 	}
