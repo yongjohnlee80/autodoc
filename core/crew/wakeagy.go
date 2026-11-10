@@ -268,8 +268,9 @@ type agyStep struct {
 
 // agySteps reads a GetCascadeTrajectorySteps answer as a stream: how many steps it holds, and the
 // last. Each step is decoded alone and dropped, and every other field is passed over, so no more
-// than one step is held however long the answer is. An answer that is not the steps' object, or is
-// cut short (the connection, or agyMaxTrajectory), is an error.
+// than one step is held however long the answer is. An answer that is not the steps' object, whose
+// steps are not a list of objects, that has anything after the object, or is cut short (the
+// connection, or agyMaxTrajectory), is an error.
 func agySteps(r io.Reader) (n int, last agyStep, err error) {
 	fail := func(err error) (int, agyStep, error) {
 		if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
@@ -306,8 +307,15 @@ func agySteps(r io.Reader) (n int, last agyStep, err error) {
 			return fail(errors.New("its steps are not a list"))
 		}
 		for dec.More() {
+			var raw json.RawMessage
+			if err := dec.Decode(&raw); err != nil {
+				return fail(err)
+			}
 			var s agyStep
-			if err := dec.Decode(&s); err != nil {
+			if len(raw) == 0 || raw[0] != '{' { // a step is an object: null, a string or a list is no step
+				return fail(errors.New("a step is not an object"))
+			}
+			if err := json.Unmarshal(raw, &s); err != nil {
 				return fail(err)
 			}
 			n, last = n+1, s
@@ -318,6 +326,9 @@ func agySteps(r io.Reader) (n int, last agyStep, err error) {
 	}
 	if _, err := dec.Token(); err != nil { // the object's end
 		return fail(err)
+	}
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) { // nothing after it: one answer, whole
+		return 0, agyStep{}, errors.New("crew: the agy trajectory has more after its answer")
 	}
 	return n, last, nil
 }

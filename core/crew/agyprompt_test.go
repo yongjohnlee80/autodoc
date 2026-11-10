@@ -124,6 +124,9 @@ func TestAgyPromptOfRefusesAnAnswerThatIsNotTheSteps(t *testing.T) {
 		"not an object":       `[]`,
 		"steps are no list":   `{"steps":{"status":"CORTEX_STEP_STATUS_WAITING"}}`,
 		"a step is no object": `{"steps":["CORTEX_STEP_STATUS_WAITING"]}`,
+		"a null step":         `{"steps":[{"status":"CORTEX_STEP_STATUS_DONE"},null]}`,
+		"more after it":       `{"steps":[{"status":"CORTEX_STEP_STATUS_DONE"}]}{"steps":[]}`,
+		"trailing junk":       `{"steps":[]} x`,
 	} {
 		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = io.Copy(io.Discard, r.Body)
