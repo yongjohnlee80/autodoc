@@ -35,9 +35,11 @@ func (w *grantsWindow) Ask(q feature.Question) feature.Asked {
 	w.asked = append(w.asked, q)
 	return feature.Asked{}
 }
-func (w *grantsWindow) Notify(msg string)                 { w.notices = append(w.notices, msg) }
-func (w *grantsWindow) Tr(id string) string               { return w.Trf(id) }
-func (w *grantsWindow) Trf(id string, args ...any) string { return fill(englishText(id), args...) }
+func (w *grantsWindow) Notify(msg string)   { w.notices = append(w.notices, msg) }
+func (w *grantsWindow) Tr(id string) string { return w.Trf(id) }
+func (w *grantsWindow) Trf(id string, args ...any) string {
+	return feature.Fill(englishText(id), args...)
+}
 func (w *grantsWindow) RevokeGrants(holder string, caps []string) {
 	w.revoked = append(w.revoked, append([]string{holder}, caps...))
 	for _, c := range caps {

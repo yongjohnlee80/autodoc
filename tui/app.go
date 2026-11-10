@@ -57,7 +57,9 @@ import (
 	"github.com/yongjohnlee80/autodoc/internal/profiling"
 	"github.com/yongjohnlee80/autodoc/internal/usertheme"
 	"github.com/yongjohnlee80/autodoc/script"
+	"github.com/yongjohnlee80/autodoc/tui/explorer"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/searchsetup"
 )
 
 // Host is the program behind qml/main.qml.
@@ -164,15 +166,15 @@ type Host struct {
 	inboxView  *inboxView  // the inbox dialog: the user's mail, SPC a i (crewinboxview.go)
 	grantsView *grantsView // Agent permissions: the grants given, and Revoke (grants.go)
 	// The recent-files Feature owns its rows and persisted list.
-	recent *recent
+	recent *explorer.Recent
 	tiles  *tiles // the base's Layout: each window's tiling preferences (tilelayout.go)
 	// the explorer (explorer.go), a feature of its own: find searches its rows (FindPane)
-	explorer *explorer
+	explorer *explorer.Explorer
 
 	// the AI models dialog (aimodels.go), a feature of its own: the host lists its providers again
 	// when the workspace's vectors change under them (vectors.go), and its rankers when the daemon
 	// says the ranker in use changed (events.go)
-	ai *aiModels
+	ai *searchsetup.AIModels
 
 	hitsRanked string // the hits' title's note of their order (rankedTitle)
 	// the search's stages (stages.go): the ranker in use, who it is and how its box names it ("" for
@@ -216,7 +218,7 @@ type Host struct {
 	rasterizeOverride func(context.Context, []byte, htmlview.Page) ([]byte, error)
 	// the outline and the breadcrumb (outline.go), a feature of its own; crumbs is the breadcrumb
 	// it puts after the file's name (Core.Crumbs)
-	outline   *outliner
+	outline   *explorer.Outliner
 	crumbs    []string
 	focusSent time.Time
 	entered   bool // ws was entered on this connection's listing
@@ -520,11 +522,11 @@ func newHost(session *Session, opt Options) *Host {
 	first.buf = nil
 	h.active, h.file, h.bufRecent = first, &first.file, []*openBuffer{first}
 	h.noticeLog = feature.NewNotices(core{h})
-	h.recent = newRecent(core{h})
+	h.recent = explorer.NewRecent(core{h})
 	h.tiles = newTiles(core{h})
-	h.explorer = newExplorer(core{h})
-	h.ai = newAIModels(core{h})
-	h.outline = newOutline(core{h})
+	h.explorer = explorer.NewExplorer(core{h})
+	h.ai = searchsetup.NewAIModels(core{h})
+	h.outline = explorer.NewOutline(core{h})
 	h.rel = newRelated(core{h})
 	h.searchPick, h.openPick, h.newPick = h.newSearchPick(), h.newOpenPick(), h.newNewPick()
 	h.bufferPick = h.newBufferPick()

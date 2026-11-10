@@ -75,9 +75,9 @@ func (h *Host) loadVectors() {
 				unused += r.size()
 			}
 		}
-		status := h.trf("autodoc.text.vectors.models_in_all", len(a.rows), bytesText(total))
+		status := h.trf("autodoc.text.vectors.models_in_all", len(a.rows), feature.BytesText(total))
 		if unused > 0 {
-			status = h.trf("autodoc.text.vectors.models_in_all_purge_removes_one", len(a.rows), bytesText(total), bytesText(unused))
+			status = h.trf("autodoc.text.vectors.models_in_all_purge_removes_one", len(a.rows), feature.BytesText(total), feature.BytesText(unused))
 		}
 		h.set("App.vectorsStatus", status)
 		details := make([]string, len(a.refusals))
@@ -95,21 +95,8 @@ func (r vectorRow) size() int64 { return r.f32 + r.bits + r.keys }
 // vectorRowOf is a model as the list shows it.
 func vectorRowOf(_ int, r vectorRow) feature.RowOf {
 	return feature.RowOf{"key": r.fp, "state": r.state, "model": r.name, "dims": fmt.Sprint(r.dims),
-		"vectors": fmt.Sprint(r.vectors), "f32": bytesText(r.f32), "bits": bytesText(r.bits),
-		"keys": bytesText(r.keys), "total": bytesText(r.size())}
-}
-
-// bytesText is a size as the list shows it.
-func bytesText(n int64) string {
-	switch {
-	case n >= 1<<30:
-		return fmt.Sprintf("%.1f GiB", float64(n)/(1<<30))
-	case n >= 1<<20:
-		return fmt.Sprintf("%.1f MiB", float64(n)/(1<<20))
-	case n >= 1<<10:
-		return fmt.Sprintf("%.1f KiB", float64(n)/(1<<10))
-	}
-	return fmt.Sprintf("%d B", n)
+		"vectors": fmt.Sprint(r.vectors), "f32": feature.BytesText(r.f32), "bits": feature.BytesText(r.bits),
+		"keys": feature.BytesText(r.keys), "total": feature.BytesText(r.size())}
 }
 
 // startPurge asks before model i's vectors go; only a model no longer used can be purged.
@@ -127,7 +114,7 @@ func (h *Host) startPurge(i int) {
 		return
 	}
 	ws := h.ws
-	h.ask(feature.Question{Title: h.tr("autodoc.question.vectors.purge_the_model"), Text: h.trf("autodoc.question.vectors.purge_s_vectors_from_switching_back_to_it_would", r.name, r.vectors, bytesText(r.size()), ws), OnYes: func() { h.purgeConfirmed(r, ws) }})
+	h.ask(feature.Question{Title: h.tr("autodoc.question.vectors.purge_the_model"), Text: h.trf("autodoc.question.vectors.purge_s_vectors_from_switching_back_to_it_would", r.name, r.vectors, feature.BytesText(r.size()), ws), OnYes: func() { h.purgeConfirmed(r, ws) }})
 }
 
 func (h *Host) purgeConfirmed(r vectorRow, ws string) {
@@ -161,7 +148,7 @@ func (h *Host) cancelIndexing() {
 				return
 			}
 			h.notify(h.trf("autodoc.notice.vectors.switch_cancelled_semantic_search_with_again_s_ve", a.Value, target))
-			h.ai.providers.load()
+			h.ai.ReloadProviders()
 		})
 	case e.working() > 0:
 		do(h, func(ctx context.Context) error {
@@ -173,7 +160,7 @@ func (h *Host) cancelIndexing() {
 				return
 			}
 			h.notify(h.tr("autodoc.notice.vectors.embedding_stopped_the_vectors_made_kept_use_carr"))
-			h.ai.providers.load()
+			h.ai.ReloadProviders()
 		})
 	default:
 		h.say(h.tr("autodoc.notice.vectors.nothing_is_being_embedded"))

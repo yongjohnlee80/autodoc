@@ -392,7 +392,7 @@ func TestACardPanelMovesAndResizesAndKeepsThem(t *testing.T) {
 	installPlugin2(t, dir, "card", "dialog", "echo", rightCard)
 	d, r, logs := cardTUI(t, dir, nil)
 	r.openPlugin("card")
-	top, left, _, bottom := waitFrame(t, r, "Card")
+	top, left, _, _ := waitFrame(t, r, "Card")
 	w, h := openSize(t, logs, "card")
 
 	altDrag(t, r, tuicore.MouseLeft, left+3, top+2, -20, 3)

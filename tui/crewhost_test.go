@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/msgpack"
+	"github.com/yongjohnlee80/golib/paths"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
@@ -264,7 +265,11 @@ func listedScopes(t *testing.T, dir string) []string {
 	es, _ := os.ReadDir(filepath.Join(dir, ".crew-scopes"))
 	var out []string
 	for _, e := range es {
-		out = append(out, e.Name())
+		id, err := paths.Decode(e.Name()) // crewFileName's
+		if err != nil {
+			t.Fatalf("a name in .crew-scopes that is not crewFileName's: %q: %v", e.Name(), err)
+		}
+		out = append(out, id)
 	}
 	return out
 }
@@ -312,7 +317,7 @@ func TestACrashedWindowsScopeComesBack(t *testing.T) {
 	crashed.Connected()
 	scope, epoch, _ := crashed.held()
 	past := time.Now().Add(-time.Hour) // listed earlier than any other: the successor tries it first
-	if err := os.Chtimes(filepath.Join(dir, ".crew-scopes", scope), past, past); err != nil {
+	if err := os.Chtimes(filepath.Join(dir, ".crew-scopes", crewFileName(scope)), past, past); err != nil {
 		t.Fatal(err)
 	}
 	early := newCrewHost(&crewWindow{d: d}, nil, dir)
@@ -422,7 +427,7 @@ func (w *crewWindow) Trf(id string, args ...any) string {
 	if w.marked {
 		return markedText(id, args...)
 	}
-	return fill(englishText(id), args...)
+	return feature.Fill(englishText(id), args...)
 }
 
 // optString is p's i-th parameter as a string, "" when it isn't sent (an optional one).

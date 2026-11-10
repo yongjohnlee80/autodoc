@@ -54,10 +54,6 @@ func (s *Server) boundedFile(ctx context.Context, abs string) (w Workspace, name
 // errNotText is a file the editor cannot hold: not UTF-8, or with a NUL in it.
 var errNotText = invalid("not a text file: AutoDoc opens UTF-8 text files")
 
-// WithFiles serves file.read and file.write on d, the documents of a vfs rooted at "/" (the
-// daemon's own disk). Without it they answer that the server serves no outside files.
-func WithFiles(d *docs.Docs) Option { return func(o *options) { o.files = d } }
-
 // WithGuard holds a bounded file.* to g
 // (docs/decisions/contract.md#a-gated-scripts-files-stay-in-the-workspace): the guard the
 // workspaces' files are wrapped in, which routes a bounded path into its workspace.
@@ -76,13 +72,13 @@ func (s *Server) local(method string, lo, hi int, h func(context.Context, Worksp
 	}
 }
 
-// absName is abs when it is an absolute, clean path, and Files' name for it: the path without its
-// leading "/".
-func absName(abs string) (string, error) {
-	if !filepath.IsAbs(abs) || filepath.Clean(abs) != abs || abs == "/" {
-		return "", invalid("path must be an absolute, clean file path")
+// disk is the documents of volume's tree outside every workspace: for the user's call only, once
+// boundedFile has said the call is not bounded.
+func (s *Server) disk(volume string) (*docs.Docs, error) {
+	if s.disks == nil {
+		return nil, errNoFiles
 	}
-	return strings.TrimPrefix(abs, "/"), nil
+	return s.disks.For(volume)
 }
 
 // fileErr is a Files error as the client sees it: Docs' "not a file of this workspace" means, for
@@ -117,20 +113,20 @@ func (s *Server) fileVerbs() []module.Verb {
 	local := module.ScopeLocalPeer
 	read := func(c module.Contract, raw bool) module.Verb {
 		return module.Handle(c, func(ctx context.Context, p filePath) (*contentJSON, error) {
-			if s.files == nil {
-				return nil, errNoFiles
-			}
-			name, err := absName(p.Path)
+			volume, name, err := diskName(p.Path)
 			if err != nil {
 				return nil, err
 			}
-			files := s.files
+			// a bounded call is routed into its workspace, or refused, before any disk is opened
 			w, rel, bounded, err := s.boundedFile(ctx, p.Path)
 			if err != nil {
 				return nil, err
 			}
+			var files *docs.Docs
 			if bounded {
 				files, name = w.Files(), rel
+			} else if files, err = s.disk(volume); err != nil {
+				return nil, err
 			}
 			read := files.Read
 			if raw {
@@ -148,17 +144,15 @@ func (s *Server) fileVerbs() []module.Verb {
 	}
 	write := func(c module.Contract, raw bool) module.Verb {
 		return module.Handle(c, func(ctx context.Context, p fileWrite) (*versionJSON, error) {
-			if s.files == nil {
-				return nil, errNoFiles
-			}
-			name, err := absName(p.Path)
+			volume, name, err := diskName(p.Path)
 			if err != nil {
 				return nil, err
 			}
 			if !kind.Textual(p.Content) {
 				return nil, errNotText
 			}
-			files := s.files
+			// a bounded call is routed into its workspace, or refused, before any disk is opened
+			var files *docs.Docs
 			bw, brel, bounded, err := s.boundedFile(ctx, p.Path)
 			if err != nil {
 				return nil, err
@@ -178,6 +172,8 @@ func (s *Server) fileVerbs() []module.Verb {
 					return nil, err
 				}
 				return &versionJSON{Version: string(v)}, nil
+			} else if files, err = s.disk(volume); err != nil {
+				return nil, err
 			}
 			write := files.Write
 			if raw {
@@ -211,7 +207,7 @@ func (s *Server) fileVerbs() []module.Verb {
 			Result: "{workspace, path} | nil", Errors: []int64{golibrpc.CodeAccessDenied},
 			Doc: "The workspace that indexes the file (the most specific root, symlinks resolved) and its path there; nil for none. Under a gated script's bounds, the workspace that holds any file the script may read, indexed or not."},
 			func(ctx context.Context, p filePath) (*locatedJSON, error) {
-				if _, err := absName(p.Path); err != nil {
+				if _, _, err := diskName(p.Path); err != nil {
 					return nil, err
 				}
 				if b, ok := fsbounds.From(ctx); ok { // membership, not admission: a gated open of data.csv

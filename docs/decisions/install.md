@@ -101,7 +101,7 @@ On Windows, Update runs the record's `update.ps1` the same way, with PowerShell
 binary on the same console and handles, waits for it, and exits with its exit code. The old process
 stays until the new one ends, and whoever waits on it sees the new binary's exit code.
 
-In the code: `internal/install`, `tui/update.go`, `tui/startup.go`, `app/relaunch.go`,
+In the code: `internal/install`, `tui/update.go`, `tui/system/startup.go`, `app/relaunch.go`,
 `internal/proctree` (`Replace`)
 
 ## Windows

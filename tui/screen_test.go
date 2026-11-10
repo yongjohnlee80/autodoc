@@ -33,6 +33,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/searchsetup"
 )
 
 // THE WRITING SCREEN — the page alone until asked for more, centred at the ruler; the panels as
@@ -617,7 +618,7 @@ func TestTheProviderForm(t *testing.T) {
 		return strings.Contains(sc, "nomic-embed-text") && !strings.Contains(sc, "nomic-embed-text, say")
 	})
 	r.s.WaitForText(t, "model max 4096")
-	r.h.p.Post(func() { r.h.ai.providers.save("cloud", ollama.URL, "nomic-embed-text", "", "8192") })
+	r.app(t, "App.saveProvider", str("cloud"), str(ollama.URL), str("nomic-embed-text"), str(""), str("8192"))
 	r.s.WaitForText(t, "exceeds this model's maximum of 4096")
 	r.keys(t, key('s'))
 	r.s.WaitForText(t, "saved the provider cloud")
@@ -633,9 +634,9 @@ func TestTheProviderForm(t *testing.T) {
 	// list is read again after the save's notice, so wait for its row: "cloud" is on the screen
 	// already (the notice, the name typed), and editing row 0 of a list not yet read does nothing.
 	r.s.WaitFor(t, "cloud listed, its key sealed", func(string) bool {
-		return onLoop(r, func() bool { p, ok := r.h.ai.providers.at(0); return ok && p.name == "cloud" && p.hasKey })
+		return onLoop(r, func() bool { p, ok := r.h.ai.Providers.At(0); return ok && p.Name == "cloud" && p.HasKey })
 	})
-	r.h.p.Post(func() { r.h.ai.providers.startEdit(0) })
+	r.app(t, "App.startEditProvider", num(0))
 	r.s.WaitForText(t, "API key (sealed; leave empty to keep it)")
 	r.keys(t, tab(), enter()) // the kind
 	r.s.WaitForText(t, "OpenAI-compatible")
@@ -648,7 +649,7 @@ func TestTheProviderForm(t *testing.T) {
 	r.s.WaitFor(t, "Ollama Cloud again", func(sc string) bool {
 		return strings.Contains(sc, "Ollama Cloud") && !strings.Contains(sc, "OpenAI-compatible")
 	})
-	r.h.p.Post(func() { r.h.ai.providers.listModels(ollama.URL, "") })
+	r.app(t, "App.listProviderModels", str(ollama.URL), str(""))
 	r.s.WaitForText(t, "2 models")
 	mu.Lock()
 	last := auth[len(auth)-1]
@@ -657,7 +658,7 @@ func TestTheProviderForm(t *testing.T) {
 		t.Errorf("an edited provider's models were asked for with %q, not its stored key", last)
 	}
 	// a context window that is not a number is refused in the form, the store unchanged
-	r.h.p.Post(func() { r.h.ai.providers.save("cloud", ollama.URL, "nomic-embed-text", "", "lots") })
+	r.app(t, "App.saveProvider", str("cloud"), str(ollama.URL), str("nomic-embed-text"), str(""), str("lots"))
 	r.s.WaitForText(t, "the context window is a number of tokens")
 	if info, _, err := d.db.ProviderWithKey(context.Background(), "cloud"); err != nil || info.Context != 4096 {
 		t.Errorf("after the refused window: %+v, %v", info, err)
@@ -1038,7 +1039,7 @@ func TestAProviderInUse(t *testing.T) {
 	// its calls, metered and written every flushEvery (2s) by the daemon, under the list: the
 	// daemon's clock, not a frame's
 	r.waitWithin(t, "local's usage", daemonWait, func() bool {
-		r.h.p.Post(func() { r.h.ai.providers.detail(0) })
+		r.h.p.Post(func() { _ = r.h.reg.Handlers["App.showProvider"]([]qml.SpecValue{num(0)}) })
 		sc := r.s.String()
 		return strings.Contains(sc, "requests ·") && strings.Contains(sc, "latest calls") && strings.Contains(sc, "· ok")
 	})
@@ -1051,7 +1052,7 @@ func TestAProviderInUse(t *testing.T) {
 	}
 	// the file followed, its embedding refused, the call written at the next flush: the daemon's clock
 	r.waitWithin(t, "the refused call", daemonWait, func() bool {
-		r.h.p.Post(func() { r.h.ai.providers.detail(0) })
+		r.h.p.Post(func() { _ = r.h.reg.Handlers["App.showProvider"]([]qml.SpecValue{num(0)}) })
 		text := strings.Join(strings.Fields(strings.ReplaceAll(r.s.String(), "│", " ")), " ") // wrapped: running text
 		return strings.Contains(text, "at the usage limit") && strings.Contains(text, "rate limited")
 	})
@@ -1063,13 +1064,13 @@ func TestAProviderInUse(t *testing.T) {
 	}
 
 	// a provider that does not set up: refused, and local stays in use
-	r.h.p.Post(func() { r.h.ai.providers.use(1) })
+	r.app(t, "App.useProvider", num(1))
 	r.s.WaitFor(t, "missing refused", func(sc string) bool {
 		// the reason, not the model's name in the list, wrapped: read as running text
 		text := strings.Join(strings.Fields(strings.ReplaceAll(sc, "│", " ")), " ")
 		return strings.Contains(text, "missing not used: the provider has no such model")
 	})
-	if got := onLoop(r, func() string { return r.h.ai.providers.active }); got != "local" {
+	if got := onLoop(r, func() string { return r.h.ai.Providers.Active }); got != "local" {
 		t.Fatalf("after a refused Use the provider in use is %q", got)
 	}
 
@@ -1774,16 +1775,18 @@ func TestRemovingAProviderSaysWhatItDeletes(t *testing.T) {
 	// ask opens the removal's question for name, once the list holds listed too
 	ask := func(name, listed string) {
 		t.Helper()
-		onLoop(r, func() bool { r.h.ai.providers.load(); return true })
+		onLoop(r, func() bool { r.h.ai.ReloadProviders(); return true })
 		r.s.WaitFor(t, "the providers listed", func(string) bool {
 			return onLoop(r, func() bool {
-				return slices.ContainsFunc(r.h.ai.providers.rows.All(), func(p endpointRow) bool { return p.name == listed })
+				return slices.ContainsFunc(r.h.ai.Providers.Rows.All(), func(p searchsetup.EndpointRow) bool { return p.Name == listed })
 			})
 		})
-		onLoop(r, func() bool {
-			r.h.ai.providers.startRemove(slices.IndexFunc(r.h.ai.providers.rows.All(), func(p endpointRow) bool { return p.name == name }))
-			return true
-		})
+		if err := onLoop(r, func() error { // the row and its removal in one turn, as a click is
+			i := slices.IndexFunc(r.h.ai.Providers.Rows.All(), func(p searchsetup.EndpointRow) bool { return p.Name == name })
+			return r.h.reg.Handlers["App.startRemoveProvider"]([]qml.SpecValue{num(i)})
+		}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	question := func() string {
 		return onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.askText"); return v.Raw })
@@ -2062,7 +2065,7 @@ func TestFindInThePanes(t *testing.T) {
 	r.keys(t, decltest.Type("b.md")...)
 	r.keys(t, enter())
 	r.s.WaitForText(t, `find "b.md": 1 of 1 in the explorer`)
-	if at := onLoop(r, func() []string { return r.h.explorer.at }); len(at) == 0 || !strings.HasSuffix(at[len(at)-1], "b.md") {
+	if at := onLoop(r, func() []string { return r.h.explorer.At }); len(at) == 0 || !strings.HasSuffix(at[len(at)-1], "b.md") {
 		t.Fatalf("the explorer's cursor is on %q, want b.md", at)
 	}
 	// from the cursor on: ".md" first holds b.md, under it; n goes on to x.md, N back to b.md
@@ -2076,7 +2079,7 @@ func TestFindInThePanes(t *testing.T) {
 	r.s.WaitForText(t, `find ".md": 3 of 3 in the explorer`)
 	r.keys(t, key('N'))
 	r.s.WaitForText(t, `find ".md": 2 of 3 in the explorer`)
-	if at := onLoop(r, func() []string { return r.h.explorer.at }); len(at) == 0 || !strings.HasSuffix(at[len(at)-1], "b.md") {
+	if at := onLoop(r, func() []string { return r.h.explorer.At }); len(at) == 0 || !strings.HasSuffix(at[len(at)-1], "b.md") {
 		t.Fatalf("after n and N the explorer's cursor is on %q, want b.md", at)
 	}
 	r.keys(t, esc())

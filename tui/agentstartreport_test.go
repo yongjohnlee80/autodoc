@@ -47,9 +47,12 @@ func TestAPathTheShellResolvesIsNotJudged(t *testing.T) {
 			a.commandCheck = commandOnPath // as a window's agents are
 			p, _ := a.profile("one")
 			instance, err := a.startInstance(p)
-			if err != nil || !instance.running || calledTimes(w, "crew.register") != 1 || len(c.panel.reported) != 0 {
-				t.Fatalf("%q: %v, running %v, registered %d, the tab showed %q; want it started, unjudged",
-					command, err, instance.running, calledTimes(w, "crew.register"), c.panel.reported)
+			if err != nil { // no instance to read: the start itself failed
+				t.Fatalf("%q: %v, the tab showed %q; want it started, unjudged", command, err, c.panel.reported)
+			}
+			if !instance.running || calledTimes(w, "crew.register") != 1 || len(c.panel.reported) != 0 {
+				t.Fatalf("%q: running %v, registered %d, the tab showed %q; want it started, unjudged",
+					command, instance.running, calledTimes(w, "crew.register"), c.panel.reported)
 			}
 		})
 	}
@@ -58,10 +61,13 @@ func TestAPathTheShellResolvesIsNotJudged(t *testing.T) {
 		a.commandCheck = commandOnPath
 		p, _ := a.profile("one")
 		instance, err := a.startInstance(p)
-		if err != nil || instance.running || calledTimes(w, "crew.register") != 0 || len(c.panel.reported) != 1 ||
+		if err != nil { // no instance to read: the start itself failed, rather than being refused
+			t.Fatalf("%v, the tab showed %q; want it refused, naming the path", err, c.panel.reported)
+		}
+		if instance.running || calledTimes(w, "crew.register") != 0 || len(c.panel.reported) != 1 ||
 			!strings.Contains(c.panel.reported[0], "/autodoc-no-such/agent") {
-			t.Fatalf("%v, running %v, registered %d, the tab showed %q; want it refused, naming the path",
-				err, instance.running, calledTimes(w, "crew.register"), c.panel.reported)
+			t.Fatalf("running %v, registered %d, the tab showed %q; want it refused, naming the path",
+				instance.running, calledTimes(w, "crew.register"), c.panel.reported)
 		}
 	})
 }

@@ -97,9 +97,11 @@ func (w *mailWindow) Ask(q feature.Question) feature.Asked {
 	w.asked = append(w.asked, q)
 	return feature.Asked{}
 }
-func (w *mailWindow) Notify(msg string)                 { w.notices = append(w.notices, msg) }
-func (w *mailWindow) Tr(id string) string               { return w.Trf(id) }
-func (w *mailWindow) Trf(id string, args ...any) string { return fill(englishText(id), args...) }
+func (w *mailWindow) Notify(msg string)   { w.notices = append(w.notices, msg) }
+func (w *mailWindow) Tr(id string) string { return w.Trf(id) }
+func (w *mailWindow) Trf(id string, args ...any) string {
+	return feature.Fill(englishText(id), args...)
+}
 
 // verbs is how many times the window called verb.
 func (w *mailWindow) verbs(verb string) [][]any {

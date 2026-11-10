@@ -1,11 +1,13 @@
-package tui
+package searchsetup
 
 import (
 	"errors"
-	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/feature/featuretest"
 )
 
 // endpointCase is one of the AI models' lists, built over a scripted core.
@@ -21,9 +23,9 @@ var endpointCases = []endpointCase{
 
 // scriptedList answers e's list verb: a, of the list's second kind (one that takes a key, its key
 // sealed) and in use, and b, of its first.
-func scriptedList(c *scriptedCore, e *endpoints) {
+func scriptedList(c *featuretest.ScriptedCore, e *endpoints) {
 	k0, k1 := e.spec.kinds[0], e.spec.kinds[1]
-	c.answers[e.spec.list] = func([]any) (any, error) {
+	c.Answers[e.spec.list] = func([]any) (any, error) {
 		return map[string]any{e.spec.noun + "s": []any{
 			map[string]any{"name": "a", "kind": k1.kind, "base_url": k1.base, "model": "m1", "has_key": true},
 			map[string]any{"name": "b", "kind": k0.kind, "base_url": k0.base, "model": "m0"},
@@ -37,15 +39,15 @@ func TestEndpointDetailsReportUsageAndLogFailures(t *testing.T) {
 			t.Run(endpoint.name+"/"+stage, func(t *testing.T) {
 				c := newScripted("kb")
 				e := endpoint.make(c)
-				e.rows.Reset([]endpointRow{{name: "a", kind: e.spec.kinds[0].kind}})
-				c.answers[e.spec.verb+"."+stage] = func([]any) (any, error) {
+				e.Rows.Reset([]EndpointRow{{Name: "a", kind: e.spec.kinds[0].kind}})
+				c.Answers[e.spec.verb+"."+stage] = func([]any) (any, error) {
 					return nil, errors.New(stage + " unavailable")
 				}
 				e.detail(0)
-				if got := c.set[e.src("Detail")]; got != "a: "+stage+" unavailable" {
+				if got := c.Sets[e.src("Detail")]; got != "a: "+stage+" unavailable" {
 					t.Fatalf("detail after %s failed: %v", stage, got)
 				}
-				if stage == "usage" && c.called(e.spec.verb+".log") {
+				if stage == "usage" && c.Called(e.spec.verb+".log") {
 					t.Fatal("log was read after usage failed")
 				}
 			})
@@ -53,7 +55,8 @@ func TestEndpointDetailsReportUsageAndLogFailures(t *testing.T) {
 	}
 }
 
-func (s *scriptedCore) saw(view string) bool { return slices.Contains(s.views, view) }
+// saw is whether the Core was told view (a view method called, "id.method").
+func saw(s *featuretest.ScriptedCore, view string) bool { return slices.Contains(s.Views, view) }
 
 // Every step the providers and the rankers share runs once, in the endpoints core, the same for
 // both: the list and the one in use, a choice and a refused one, a removal asked first, the form on
@@ -68,82 +71,82 @@ func TestTheEndpointsCoreServesBothLists(t *testing.T) {
 			noun, changed := e.spec.noun, "search.changed ranker="+map[bool]string{true: "true", false: "false"}[e.spec.ranker]
 
 			e.load()
-			if e.rows.Len() != 2 || e.active != "a" || !strings.Contains(c.set[e.src("sStatus")].(string), "a") {
-				t.Fatalf("listed %d, in use %q, status %q", e.rows.Len(), e.active, c.set[e.src("sStatus")])
+			if e.Rows.Len() != 2 || e.Active != "a" || !strings.Contains(c.Sets[e.src("sStatus")].(string), "a") {
+				t.Fatalf("listed %d, in use %q, status %q", e.Rows.Len(), e.Active, c.Sets[e.src("sStatus")])
 			}
-			if row := e.rowOf(0, e.rows.All()[0]); row["use"] != "●" || row["apiKey"] != "sealed" || row["kind"] != e.spec.kinds[1].label {
+			if row := e.rowOf(0, e.Rows.All()[0]); row["use"] != "●" || row["apiKey"] != "sealed" || row["kind"] != e.spec.kinds[1].label {
 				t.Fatalf("a's row %v", row)
 			}
-			if !c.called(e.spec.verb + ".usage[a") {
+			if !c.Called(e.spec.verb + ".usage[a") {
 				t.Fatal("the row under the cursor's usage was not read")
 			}
 
 			// a choice refused leaves the one in use; one taken lists again and tells the search
-			c.answers[e.spec.verb+".use"] = func([]any) (any, error) { return nil, errors.New("no") }
+			c.Answers[e.spec.verb+".use"] = func([]any) (any, error) { return nil, errors.New("no") }
 			var refused, used bool
 			e.choose("b", func(error) { refused = true }, func() { used = true })
-			if !refused || used || c.saw(changed) {
-				t.Fatalf("a refused choice: refused %v, used %v, search told %v", refused, used, c.saw(changed))
+			if !refused || used || saw(c, changed) {
+				t.Fatalf("a refused choice: refused %v, used %v, search told %v", refused, used, saw(c, changed))
 			}
-			c.answers[e.spec.verb+".use"] = func([]any) (any, error) { return nil, nil }
+			c.Answers[e.spec.verb+".use"] = func([]any) (any, error) { return nil, nil }
 			e.choose("b", func(error) { refused = true }, func() { used = true })
-			if !used || !c.saw(changed) {
-				t.Fatalf("a choice taken: used %v, search told %v", used, c.saw(changed))
+			if !used || !saw(c, changed) {
+				t.Fatalf("a choice taken: used %v, search told %v", used, saw(c, changed))
 			}
 
 			// a removal asks first, and Yes removes the row asked about
-			c.views = nil
+			c.Views = nil
 			e.startRemove(1)
-			if len(c.asked) != 1 || !strings.Contains(c.asked[0].Text, "Remove the "+noun+" b?") {
-				t.Fatalf("asked %+v", c.asked)
+			if len(c.Asked) != 1 || !strings.Contains(c.Asked[0].Text, "Remove the "+noun+" b?") {
+				t.Fatalf("asked %+v", c.Asked)
 			}
 			e.cursor = 0 // the cursor moving while the question is open changes nothing
-			c.yes()
-			if !c.called(e.spec.verb+".remove[b]") || !slices.Contains(c.notes, "removed the "+noun+" b") || !c.saw(changed) {
-				t.Fatalf("Yes: calls %v, notes %v, views %v", c.calls, c.notes, c.views)
+			c.Yes()
+			if !c.Called(e.spec.verb+".remove[b]") || !slices.Contains(c.Notes, "removed the "+noun+" b") || !saw(c, changed) {
+				t.Fatalf("Yes: calls %v, notes %v, views %v", c.Calls, c.Notes, c.Views)
 			}
 
 			// the form on Add…: the spec's blank, its key label, and the form's dialog
 			e.startAdd()
-			if c.set[e.src("FormTitle")] != e.spec.addTitle || c.set[e.src("Name")] != "" || c.opened[len(c.opened)-1] != noun+"Edit" {
-				t.Fatalf("Add…: title %q, name %q, opened %v", c.set[e.src("FormTitle")], c.set[e.src("Name")], c.opened)
+			if c.Sets[e.src("FormTitle")] != e.spec.addTitle || c.Sets[e.src("Name")] != "" || c.Opened[len(c.Opened)-1] != noun+"Edit" {
+				t.Fatalf("Add…: title %q, name %q, opened %v", c.Sets[e.src("FormTitle")], c.Sets[e.src("Name")], c.Opened)
 			}
 			// on Edit…, a's key sealed: kept unless one is typed
 			e.startEdit(0)
-			if c.set[e.src("Name")] != "a" || c.set[e.src("KeyLabel")] != "API key (sealed; leave empty to keep it)" {
-				t.Fatalf("Edit… a: name %q, key label %q", c.set[e.src("Name")], c.set[e.src("KeyLabel")])
+			if c.Sets[e.src("Name")] != "a" || c.Sets[e.src("KeyLabel")] != "API key (sealed; leave empty to keep it)" {
+				t.Fatalf("Edit… a: name %q, key label %q", c.Sets[e.src("Name")], c.Sets[e.src("KeyLabel")])
 			}
 			e.startEdit(1) // b has no key sealed: nothing to keep
-			if c.set[e.src("KeyLabel")] == "API key (sealed; leave empty to keep it)" {
+			if c.Sets[e.src("KeyLabel")] == "API key (sealed; leave empty to keep it)" {
 				t.Fatal("Edit… b, with no key, says its key is sealed")
 			}
 			e.startEdit(0)
 			// the kind chooser swaps a kind's default base URL, and keeps one typed
 			e.kindChosen(0, e.spec.kinds[1].base)
-			if c.set[e.src("Base")] != e.spec.kinds[0].base {
-				t.Fatalf("the default base URL was not swapped: %q", c.set[e.src("Base")])
+			if c.Sets[e.src("Base")] != e.spec.kinds[0].base {
+				t.Fatalf("the default base URL was not swapped: %q", c.Sets[e.src("Base")])
 			}
 			e.kindChosen(1, "http://mine:9000")
-			if c.set[e.src("Base")] == e.spec.kinds[1].base {
+			if c.Sets[e.src("Base")] == e.spec.kinds[1].base {
 				t.Fatal("a typed base URL was replaced by the kind's default")
 			}
 			// Check, no key typed: the edited entry lends its stored one
 			e.check("http://mine:9000", "")
-			if !c.called(e.spec.verb + ".models[a map[") {
-				t.Fatalf("Check asked %v", c.calls)
+			if !c.Called(e.spec.verb + ".models[a map[") {
+				t.Fatalf("Check asked %v", c.Calls)
 			}
 
 			// a save refused opens the form again, saying why; one taken tells the search
-			c.answers[e.spec.verb+".update"] = func([]any) (any, error) { return nil, errors.New("bad url") }
-			c.opened, c.views = nil, nil
+			c.Answers[e.spec.verb+".update"] = func([]any) (any, error) { return nil, errors.New("bad url") }
+			c.Opened, c.Views = nil, nil
 			e.save("a", "http://mine:9000", "m", "", "")
-			if !strings.Contains(c.set[e.src("FormError")].(string), "not saved: bad url") || !slices.Equal(c.opened, []string{noun + "Edit"}) || c.saw(changed) {
-				t.Fatalf("a refused save: error %q, opened %v, views %v", c.set[e.src("FormError")], c.opened, c.views)
+			if !strings.Contains(c.Sets[e.src("FormError")].(string), "not saved: bad url") || !slices.Equal(c.Opened, []string{noun + "Edit"}) || saw(c, changed) {
+				t.Fatalf("a refused save: error %q, opened %v, views %v", c.Sets[e.src("FormError")], c.Opened, c.Views)
 			}
-			c.answers[e.spec.verb+".update"] = func([]any) (any, error) { return nil, nil }
+			c.Answers[e.spec.verb+".update"] = func([]any) (any, error) { return nil, nil }
 			e.save("a", "http://mine:9000", "m", "", "")
-			if !slices.Contains(c.notes, "saved the "+noun+" a") || !c.saw(changed) {
-				t.Fatalf("a save: notes %v, views %v", c.notes, c.views)
+			if !slices.Contains(c.Notes, "saved the "+noun+" a") || !saw(c, changed) {
+				t.Fatalf("a save: notes %v, views %v", c.Notes, c.Views)
 			}
 		})
 	}
@@ -155,7 +158,7 @@ func TestAKeylessKindKeepsNoKey(t *testing.T) {
 	c := newScripted("kb")
 	p := newProviders(c)
 	var sent []map[string]any
-	c.answers["embedding.add"] = func(params []any) (any, error) { sent = append(sent, params[0].(map[string]any)); return nil, nil }
+	c.Answers["embedding.add"] = func(params []any) (any, error) { sent = append(sent, params[0].(map[string]any)); return nil, nil }
 	p.startAdd() // a local Ollama: no key
 	p.save("local", "http://127.0.0.1:11434", "nomic", "typed", "")
 	p.kindChosen(1, "") // Ollama Cloud: a key
@@ -173,19 +176,34 @@ func TestAKeylessKindKeepsNoKey(t *testing.T) {
 	}
 }
 
+// A kind past the form's list, or before it, changes nothing: the form keeps its kind and its
+// address.
+func TestAKindOutsideTheListChangesNothing(t *testing.T) {
+	c := newScripted("kb")
+	r := newRankers(c, func() {})
+	r.startAdd()
+	r.kindChosen(1, defaultTEIURL)
+	for _, i := range []int{len(rankerKinds), -1} {
+		r.kindChosen(i, "")
+		if r.kind != 1 || c.Sets["App.rankerBase"] != rankerKinds[1].base {
+			t.Errorf("kind %d chosen: the form's kind %d, address %v; want kind 1 and its address", i, r.kind, c.Sets["App.rankerBase"])
+		}
+	}
+}
+
 // A provider's context window is a number of tokens, at most its model's maximum when it is known.
 func TestAProvidersWindowIsBounded(t *testing.T) {
 	c := newScripted("kb")
 	p := newProviders(c)
 	p.startAdd()
 	p.save("local", "http://127.0.0.1:11434", "nomic", "", "lots")
-	if !strings.Contains(c.set["App.providerFormError"].(string), "a number of tokens") || c.called("embedding.add") {
-		t.Fatalf("a window of lots: error %q, calls %v", c.set["App.providerFormError"], c.calls)
+	if !strings.Contains(c.Sets["App.providerFormError"].(string), "a number of tokens") || c.Called("embedding.add") {
+		t.Fatalf("a window of lots: error %q, calls %v", c.Sets["App.providerFormError"], c.Calls)
 	}
 	p.max = 4096
 	p.save("local", "http://127.0.0.1:11434", "nomic", "", "8192")
-	if !strings.Contains(c.set["App.providerFormError"].(string), "maximum of 4096") || c.called("embedding.add") {
-		t.Fatalf("a window over the maximum: error %q, calls %v", c.set["App.providerFormError"], c.calls)
+	if !strings.Contains(c.Sets["App.providerFormError"].(string), "maximum of 4096") || c.Called("embedding.add") {
+		t.Fatalf("a window over the maximum: error %q, calls %v", c.Sets["App.providerFormError"], c.Calls)
 	}
 }
 
@@ -193,20 +211,20 @@ func TestAProvidersWindowIsBounded(t *testing.T) {
 // Window… do nothing, and the dialog's buttons say so on the rankers' tab.
 func TestASuppliedRankerCannotBeChosen(t *testing.T) {
 	c := newScripted("kb")
-	a := newAIModels(c)
-	c.answers["ranker.list"] = func([]any) (any, error) {
+	a := NewAIModels(c)
+	c.Answers["ranker.list"] = func([]any) (any, error) {
 		return map[string]any{"rankers": []any{map[string]any{"name": "r", "kind": "tei"}}, "supplied": "build-ranker", "window": int64(10)}, nil
 	}
 	a.tabMoved(rankerTab)
-	if a.rankers.supplied != "build-ranker" || c.set["App.aiRankerChoice"] != false || c.set["App.aiUseEnabled"] != false {
-		t.Fatalf("supplied %q, choice %v, Use %v", a.rankers.supplied, c.set["App.aiRankerChoice"], c.set["App.aiUseEnabled"])
+	if a.rankers.supplied != "build-ranker" || c.Sets["App.aiRankerChoice"] != false || c.Sets["App.aiUseEnabled"] != false {
+		t.Fatalf("supplied %q, choice %v, Use %v", a.rankers.supplied, c.Sets["App.aiRankerChoice"], c.Sets["App.aiUseEnabled"])
 	}
-	c.calls = nil
+	c.Calls = nil
 	a.use(0)
 	a.rankers.stop()
 	a.rankers.startWindow()
-	if len(c.calls) != 0 {
-		t.Fatalf("a supplied ranker was chosen or windowed: %v", c.calls)
+	if len(c.Calls) != 0 {
+		t.Fatalf("a supplied ranker was chosen or windowed: %v", c.Calls)
 	}
 }
 
@@ -214,14 +232,14 @@ func TestASuppliedRankerCannotBeChosen(t *testing.T) {
 // on the rankers' the row under the rankers' cursor.
 func TestTheSharedButtonsActOnTheTabShowing(t *testing.T) {
 	c := newScripted("kb")
-	a := newAIModels(c)
-	scriptedList(c, a.providers.endpoints)
+	a := NewAIModels(c)
+	scriptedList(c, a.Providers.endpoints)
 	scriptedList(c, a.rankers.endpoints)
-	a.providers.load()
+	a.Providers.load()
 	a.rankers.load()
 	a.edit(1)
-	if a.providers.editing != "b" {
-		t.Fatalf("Edit… on the providers' tab edits %q, want the row passed, b", a.providers.editing)
+	if a.Providers.editing != "b" {
+		t.Fatalf("Edit… on the providers' tab edits %q, want the row passed, b", a.Providers.editing)
 	}
 	a.tabMoved(rankerTab)
 	a.rankers.cursor = 0

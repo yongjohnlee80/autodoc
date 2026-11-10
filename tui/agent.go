@@ -97,9 +97,9 @@ func (a *agents) State() map[string]any {
 		"App.agentSetupSome": false, "App.agentSetupReject": "&No",
 		"App.agentTitle":          "agent",
 		"App.agentShown":          false,
-		"App.agentEdges":          choices(agentEdgeLabels...),
-		"App.agentSizes":          choices(percentLabels(termSizes)...),
-		"App.agentLengths":        choices(percentLabels(termLengths)...),
+		"App.agentEdges":          feature.Choices(agentEdgeLabels...),
+		"App.agentSizes":          feature.Choices(percentLabels(termSizes)...),
+		"App.agentLengths":        feature.Choices(percentLabels(termLengths)...),
 		"App.agentProfiles":       a.agentRows,
 		"App.agentProfilesStatus": "",
 		"App.agentFormTitle":      "",
@@ -700,7 +700,7 @@ func (h *agents) agentFolder(ws wsInfo, codename string) string {
 		return dir
 	}
 	if scope, _, ok := h.crew.held(); ok {
-		return filepath.Join(dir, safeName(scope), safeName(codename))
+		return filepath.Join(dir, crewFileName(scope), crewFileName(codename))
 	}
 	return dir
 }

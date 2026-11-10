@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"fmt"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -94,28 +92,7 @@ func (h *Host) tr(id string) string {
 
 // trf is tr with its %1, %2 … filled with args, as Qt's QString::arg: a sentence is translated whole
 // and then filled, so no language sees it assembled from fragments.
-func (h *Host) trf(id string, args ...any) string { return fill(h.tr(id), args...) }
-
-// argRef is a %1 … %99 in a message, which fill fills.
-var argRef = regexp.MustCompile(`%[1-9][0-9]?`)
-
-// fill is s with each %N its argument, in one pass, so an argument that says "%1" itself (a path, a
-// command, a search) is shown as it is. A %N past the arguments stays, but for a two-digit one whose
-// first digit names one ("%10" with one argument): the argument, then the digit, as Qt's arg.
-func fill(s string, args ...any) string {
-	if len(args) == 0 {
-		return s
-	}
-	return argRef.ReplaceAllStringFunc(s, func(ref string) string {
-		if n, _ := strconv.Atoi(ref[1:]); n <= len(args) {
-			return fmt.Sprint(args[n-1])
-		}
-		if n := int(ref[1] - '0'); len(ref) == 3 && n <= len(args) {
-			return fmt.Sprint(args[n-1]) + ref[2:]
-		}
-		return ref
-	})
-}
+func (h *Host) trf(id string, args ...any) string { return feature.Fill(h.tr(id), args...) }
 
 // englishCatalog is autodoc_en.xml, for text composed before the program has its App.
 var englishCatalog = sync.OnceValue(func() *i18n.Set {
@@ -134,19 +111,12 @@ func englishText(id string) string {
 	return id
 }
 
-// wording is a catalog's text for a function that composes it: core{h} (or a feature's Core) in the
-// UI's language, or inEnglish.
-type wording interface {
-	Tr(id string) string
-	Trf(id string, args ...any) string
-}
-
 // inEnglish is wording in the English catalog's words, filled as trf fills: for text no screen
 // shows (a test's, a script's, an agent's task).
 type inEnglish struct{}
 
 func (inEnglish) Tr(id string) string               { return englishText(id) }
-func (inEnglish) Trf(id string, args ...any) string { return fill(englishText(id), args...) }
+func (inEnglish) Trf(id string, args ...any) string { return feature.Fill(englishText(id), args...) }
 
 // trOr is id's text in the language now, when the English catalog holds id as english: AutoDoc's own
 // text. Anything else is shown as written: a plugin's or a script's text, which no catalog holds, or
@@ -201,7 +171,7 @@ func (h *Host) choiceState() map[string]any {
 
 // choiceModel is the chooser src's rows (choiceLabels) in w's language, for a feature that sets them
 // again: each key its English, each label its catalog text (autodoc.choice.<slug>).
-func choiceModel(w wording, src string) *tuidecl.ListModel {
+func choiceModel(w feature.Wording, src string) *tuidecl.ListModel {
 	labels, ok := choiceLabels[src]
 	if !ok {
 		labels = featureChoiceLabels[src]

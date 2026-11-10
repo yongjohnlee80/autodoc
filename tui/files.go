@@ -16,6 +16,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/internal/localfs"
 	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/autodoc/tui/explorer"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -80,8 +81,8 @@ type openedFile struct {
 	crlf bool
 }
 
-// untitled is the draft's name wherever a file's path would show.
-const untitled = "untitled"
+// untitled is the draft's name wherever a file's path would show (the kit's, feature.Untitled).
+const untitled = feature.Untitled
 
 // name is the file's path; for the draft, its hint, or untitled.
 func (n openedFile) name() string {
@@ -110,7 +111,7 @@ func (n openedFile) outside() bool { return n.open && n.ws == "" }
 // (h.tr): a derived document's carries its read-only badge, an outside file's that it is in no
 // workspace.
 func (n openedFile) title(tr func(string) string) string {
-	trf := func(id, arg string) string { return fill(tr(id), arg) }
+	trf := func(id, arg string) string { return feature.Fill(tr(id), arg) }
 	badges := []string{}
 	if n.outside() {
 		badges = append(badges, tr("autodoc.text.files.no_workspace"))
@@ -1149,7 +1150,7 @@ func (h *Host) quit() { h.guardAll(h.askBefore("quit"), h.p.Quit) }
 func (h *Host) listFiles() {
 	tk, ws := h.ticket(&h.listSeq, feature.TicketWorkspace), h.ws
 	do(h, func(ctx context.Context) feature.AnswerOf[[]string] {
-		paths, err := listAll(ctx, h.call, ws)
+		paths, err := explorer.ListAll(ctx, h.call, ws)
 		return feature.Answered(paths, err)
 	}, func(a feature.AnswerOf[[]string]) {
 		if !tk.Current() {

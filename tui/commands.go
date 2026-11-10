@@ -1,6 +1,8 @@
 package tui
 
-import "github.com/yongjohnlee80/autodoc/tui/feature"
+import (
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+)
 
 // THE APP SINGLETON'S COMMANDS — what the document invokes.
 //

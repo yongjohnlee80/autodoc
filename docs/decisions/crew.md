@@ -248,6 +248,34 @@ scope has one owner at a time: one process of its host, fenced by an epoch.
 
 In the code: `core/crew/claim.go`, `core/crew/proc.go`, `tui/crewhost.go`
 
+## Crew names on disk
+
+A crew identity becomes a file or folder name only through one function, `crewFileName`, which is
+golib's `paths.Encode`: the same name on every OS. A byte other than a lower-case letter, a digit,
+`.`, `_` or `-` becomes `%XX`, so a scope's colon (`autodoc:1f2e…` → `autodoc%3A1f2e…`), a
+separator or a name Windows reserves can't reach a path, and two identities never share a name.
+For now that covers the scope (an agent's folder under its workspace, `.crew-scopes/`,
+`.crew-todos/`) and the codename (an agent's folder under its scope). Codenames are lower case,
+digits and hyphens, so theirs are unchanged.
+
+Builds before this one wrote a scope as it is, which Windows can't hold. Every window renames those
+names once at its start, before anything reads the folders:
+
+- Only a name holding a colon is renamed, since every scope has one and nothing else AutoDoc writes
+  there does.
+- Each rename is a single rename in its own folder, under a file lock in the agents' folder
+  (`.crew-names.lock`), so two windows starting together rename once.
+- A run cut short leaves each name old or new, never half, and the next start renames the rest.
+- An old name whose new one is already there is left as it is, and so is the new one: nothing is
+  written over. The window says which were kept.
+- It is one way: no build writes an old name again. An agent's folder moves with its scope's
+  name, so a CLI that keys its state on the folder's path (Claude Code's project memory, say) sees
+  it as a new folder once. The release notes say so.
+- A scope whose name held `/` or `\` was written with `_` there, so it can't be read back. Its old
+  folder is renamed as it stands, and the agent starts in a new one.
+
+In the code: `tui/crewnames.go`, `tui/agent.go`, `tui/crewhost.go`, `tui/crewtodos.go`
+
 ## One daemon is one crew
 
 Agents in an AutoDoc window and in Neovim reach each other by codename, wherever each runs: one
@@ -561,7 +589,8 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
   frees its codename at the next start. One under another epoch is still `crew.codename_busy`.
 - `crew.list` says why a session can't be woken now: `ended`, `host_gone`, `host` (a host's own session, kind
   `host`: Neovim's gateway forwards mail and takes no replies, so it is never woken; `crew list` and `crew_list` leave
-  it out unless `--all` / `all`), `no_endpoint`, `wakes_failing` (with
+  it out unless `--all` / `all`), `no_endpoint`, `no_wake_on_this_os` (a Claude, Codex or OpenCode
+  session on an OS that can't wake one: [Wakes an OS can't offer](#wakes-an-os-cant-offer)), `wakes_failing` (with
   the last failure's cause, once one is known), or `backoff_until` the next try, while a failed
   wake's backoff runs. The store keeps the count of failures, never their reasons: the cause is in
   the daemon's memory, and after a restart `wakes_failing` names none until the next failure.
@@ -611,6 +640,23 @@ In the code: `core/crew/scheduler.go`, `core/crew/scheduler_run.go`, `core/crew/
 `core/crew/wakecodex.go`, `core/crew/wakeagy.go`, `core/crew/wakeopencode.go`,
 `app/crewbridge.go`, `app/crewcodexbridge.go`, `app/crewopencode.go`, `core/crew/opencodeplugin.go`,
 `core/crew/opencode/autodoc-crew.js`, `app/serve.go`
+
+## Wakes an OS can't offer
+
+Claude Code, Codex's app-server and AutoDoc's OpenCode plugin are woken through a Unix socket each
+binds under the user's runtime folders. Windows can't offer that wake yet: the folders are no paths
+there. It is a capability crew states (`crew.SocketWakes`, read from the standard library's own
+reading of a path, so crew keeps no OS rule), not a build tag at each call site:
+- a socket locator is refused as a bad endpoint (`ErrBadEndpoint`, an invalid argument), saying the wake isn't available on this OS and
+  that the agent's mail waits until it reads it;
+- `crew.list` gives such a live session the why `no_wake_on_this_os`, not `no_endpoint`, so the
+  user isn't left guessing why it isn't woken;
+- its mail waits, queued: a Claude whose endpoint never registered never falls back to a host typing
+  into it, and its next receive gets the mail;
+- agy's wake, over loopback, is every OS's.
+
+In the code: `core/crew/wakes.go`, `core/crew/endpoint.go` (`SetEndpointWith`), `core/crew/list.go`,
+`core/mail/mailtest/fallback.go` (`testMailWaitsForAnAgentItsOSCantWake`)
 
 ## The human inbox
 

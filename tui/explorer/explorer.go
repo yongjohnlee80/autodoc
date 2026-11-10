@@ -1,4 +1,4 @@
-package tui
+package explorer
 
 import (
 	"context"
@@ -80,84 +80,79 @@ func childrenOf(ws, dir string, paths []string) []tuidecl.TreeRow {
 	return rows
 }
 
-// The explorer's tabs (main.qml's sideTabs): the workspaces' files, and the page's links, the
-// relations feature's list (relations.go).
-const (
-	explorerTab = iota
-	linksTab
-)
-
 // explorer is the explorer, a feature of its own: the tree, what it listed, and its cursor; and the
 // drawer it shares with the links, its tab shown.
-type explorer struct {
+type Explorer struct {
 	c     feature.Core
-	tab   int // the tab shown: explorerTab or linksTab
-	model *tuidecl.TreeListModel
+	Tab   int // the tab shown: explorerTab or linksTab
+	Model *tuidecl.TreeListModel
 	top   []feature.Workspace // the workspaces the top level shows
-	paths map[string][]string // by workspace: its files, once listed
-	at    []string            // the row under the cursor, by its keys (FindPane reads it)
+	Paths map[string][]string // by workspace: its files, once listed
+	At    []string            // the row under the cursor, by its keys (FindPane reads it)
 	gen   uint64              // the workspace's files last taken from Core.Files, by their Gen
 }
 
-func newExplorer(c feature.Core) *explorer {
-	e := &explorer{c: c, model: tuidecl.NewTreeListModel("key", "label"), paths: map[string][]string{}}
-	e.model.OnFetch = e.fetch
+func NewExplorer(c feature.Core) *Explorer {
+	e := &Explorer{c: c, Model: tuidecl.NewTreeListModel("key", "label"), Paths: map[string][]string{}}
+	e.Model.OnFetch = e.fetch
 	return e
 }
 
-func (*explorer) Name() string { return "explorer" }
+func (*Explorer) Name() string { return "explorer" }
 
-func (e *explorer) State() map[string]any {
-	return map[string]any{"App.explorer": e.model, "App.explorerTab": explorerTab, "App.linksTabShown": false}
+func (e *Explorer) State() map[string]any {
+	return map[string]any{"App.explorer": e.Model, "App.explorerTab": feature.ExplorerFilesTab, "App.linksTabShown": false}
 }
 
-func (e *explorer) Commands() map[string]feature.Command {
+func (e *Explorer) Commands() map[string]feature.Command {
 	return map[string]feature.Command{
 		"App.toggleExplorer":    feature.None(e.toggle),
-		"App.explorerTabShown":  feature.OneNumber("a tab", e.tabShown),
+		"App.explorerTabShown":  feature.OneNumber("a tab", e.TabShown),
 		"App.hideExplorer":      feature.None(e.hide),
-		"App.closeExplorer":     feature.None(e.close),
+		"App.closeExplorer":     feature.None(e.Close),
 		"App.explorerActivated": feature.OneIndex(e.activated),
 		"App.explorerMoved":     feature.OneIndex(e.moved),
 	}
 }
 
 // Catalog is the explorer's user command (feature/catalog.go): it runs what App.toggleExplorer runs.
-func (e *explorer) Catalog() []feature.Entry {
+func (e *Explorer) Catalog() []feature.Entry {
 	return []feature.Entry{feature.Builtin("explorer.toggle", "the explorer", "App.toggleExplorer()", e.toggle)}
 }
 
 // toggle is SPC e: the drawer opened on the Explorer tab, or switched to it, or closed when it
 // shows it already (relations.go's toggle is SPC l's, for the Links tab).
-func (e *explorer) toggle() { e.c.TogglePanelTab(feature.ExplorerPanelSpec().ID, explorerTab) }
+func (e *Explorer) toggle() {
+	e.c.TogglePanelTab(feature.ExplorerPanelSpec().ID, feature.ExplorerFilesTab)
+}
 
 // tabShown is tab i shown, however it was: a click on its title, Ctrl+PageDown in the view, or
 // SPC e and SPC l (showTab). The heading is the tab's (main.qml), and on screen its list takes the
 // keyboard once the tab is laid out; closed or hidden, the drawer gives it the list when it opens or
 // is shown again (PanelSpec.Focus).
-func (e *explorer) tabShown(i int) {
-	if i != explorerTab && i != linksTab {
+func (e *Explorer) TabShown(i int) {
+	if i != feature.ExplorerFilesTab && i != feature.ExplorerLinksTab {
 		return
 	}
-	e.tab = i
+	e.Tab = i
 	e.c.Set("App.explorerTab", i)
-	e.c.Set("App.linksTabShown", i == linksTab)
+	e.c.Set("App.linksTabShown", i == feature.ExplorerLinksTab)
 	e.c.Post(func() {
-		if e.tab != i || !e.c.PanelShown(feature.ExplorerPanelSpec().ID) {
+		if e.Tab != i || !e.c.PanelShown(feature.ExplorerPanelSpec().ID) {
 			return // another tab since, or nowhere to give the keyboard to
 		}
-		if err := e.c.View(e.view(), "forceActiveFocus"); err != nil {
+		if err := e.c.View(e.View(), "forceActiveFocus"); err != nil {
 			e.c.Failed("explorer: the keyboard", err)
 		}
 	})
 }
 
 // showTab shows tab i: the panel's ShowTab, which SPC e and SPC l reach (togglePanelTab).
-func (e *explorer) showTab(i int) { e.tabShown(i) }
+func (e *Explorer) ShowTab(i int) { e.TabShown(i) }
 
 // view is what in the drawer takes the keyboard: the tab shown's tree or list.
-func (e *explorer) view() string {
-	if e.tab == linksTab {
+func (e *Explorer) View() string {
+	if e.Tab == feature.ExplorerLinksTab {
 		return feature.RelationsView
 	}
 	return feature.ExplorerPanelSpec().View
@@ -165,10 +160,10 @@ func (e *explorer) view() string {
 
 // hide is the strip's _: the drawer hidden, as the dock's click hides it, its icon kept to show it
 // again as it was, on its tab, scrolled where it was.
-func (e *explorer) hide() { e.c.HidePanel(feature.ExplorerPanelSpec().ID) }
+func (e *Explorer) hide() { e.c.HidePanel(feature.ExplorerPanelSpec().ID) }
 
 // close is the strip's x: the drawer closed, and out of the dock; SPC e or SPC l opens it again.
-func (e *explorer) close() {
+func (e *Explorer) Close() {
 	if err := e.c.View(feature.ExplorerPanelSpec().ID, "close"); err != nil {
 		e.c.Failed("explorer: closing", err)
 	}
@@ -176,7 +171,7 @@ func (e *explorer) close() {
 
 // Listed shows the workspaces when they changed, and the workspace in use's files when the host
 // listed them anew.
-func (e *explorer) Listed() {
+func (e *Explorer) Listed() {
 	e.showWorkspaces(e.c.Workspaces())
 	if f := e.c.Files(); f.Loaded && f.Gen != e.gen {
 		e.gen = f.Gen
@@ -188,22 +183,22 @@ func (e *explorer) Listed() {
 // only when they changed: the same workspaces in the same states, over the same files, leave the
 // tree as it is, its open rows open (the workspaces are listed again on every connect, create and
 // manager change).
-func (e *explorer) showWorkspaces(list []feature.Workspace) {
+func (e *Explorer) showWorkspaces(list []feature.Workspace) {
 	if e.top != nil && slices.EqualFunc(e.top, list, feature.Workspace.Same) {
 		return
 	}
 	e.top = slices.Clone(list)
-	e.paths = map[string][]string{}
-	e.model.SetChildren(nil, explorerRows(list))
+	e.Paths = map[string][]string{}
+	e.Model.SetChildren(nil, explorerRows(list))
 }
 
 // fetch lists a row's children when the view first opens it: a folder's from its workspace's list,
 // a workspace's from the daemon.
-func (e *explorer) fetch(ix tuidecl.Index) {
-	key := e.model.Key(ix)
+func (e *Explorer) fetch(ix tuidecl.Index) {
+	key := e.Model.Key(ix)
 	kind, ws, dir := splitKey(key)
 	if kind == "dir" {
-		e.model.SetChildren(&ix, childrenOf(ws, dir, e.paths[ws]))
+		e.Model.SetChildren(&ix, childrenOf(ws, dir, e.Paths[ws]))
 		return
 	}
 	if kind != "ws" {
@@ -211,7 +206,7 @@ func (e *explorer) fetch(ix tuidecl.Index) {
 	}
 	tk := e.c.Ticket(nil, feature.TicketSession)
 	e.c.Go(func(ctx context.Context) any {
-		paths, err := listAll(ctx, e.c.Call, ws)
+		paths, err := ListAll(ctx, e.c.Call, ws)
 		return feature.Answered(paths, err)
 	}, func(v any) {
 		a := v.(feature.AnswerOf[[]string])
@@ -224,25 +219,25 @@ func (e *explorer) fetch(ix tuidecl.Index) {
 		}
 		// the row may have moved while the list was coming: put the children under it only if it
 		// is still the one asked about
-		if e.model.Key(ix) != key {
+		if e.Model.Key(ix) != key {
 			return
 		}
-		e.paths[ws] = a.Value
-		e.model.SetChildren(&ix, childrenOf(ws, "", a.Value))
+		e.Paths[ws] = a.Value
+		e.Model.SetChildren(&ix, childrenOf(ws, "", a.Value))
 	})
 }
 
 // relist puts workspace ws's files, listed again, under its row, when the explorer has listed them,
 // and only when they changed: the view closes a row whose children are replaced (a folder open
 // under it).
-func (e *explorer) relist(ws string, paths []string) {
-	if old, listed := e.paths[ws]; !listed || slices.Equal(old, paths) {
+func (e *Explorer) relist(ws string, paths []string) {
+	if old, listed := e.Paths[ws]; !listed || slices.Equal(old, paths) {
 		return
 	}
-	for i := range e.model.RowCount(nil) {
-		if ix := (tuidecl.Index{Row: i}); e.model.Key(ix) == wsKey(ws) {
-			e.paths[ws] = paths
-			e.model.SetChildren(&ix, childrenOf(ws, "", paths))
+	for i := range e.Model.RowCount(nil) {
+		if ix := (tuidecl.Index{Row: i}); e.Model.Key(ix) == wsKey(ws) {
+			e.Paths[ws] = paths
+			e.Model.SetChildren(&ix, childrenOf(ws, "", paths))
 			return
 		}
 	}
@@ -250,8 +245,8 @@ func (e *explorer) relist(ws string, paths []string) {
 
 // activated is Enter on a row: a file opens, entering its workspace first when it is another, and
 // the drawer closes; a workspace or a folder opens or closes.
-func (e *explorer) activated(ix tuidecl.Index) error {
-	kind, ws, p := splitKey(e.model.Key(ix))
+func (e *Explorer) activated(ix tuidecl.Index) error {
+	kind, ws, p := splitKey(e.Model.Key(ix))
 	switch kind {
 	case "file":
 		err := e.c.View("explorer", "close")
@@ -264,24 +259,24 @@ func (e *explorer) activated(ix tuidecl.Index) error {
 }
 
 // moved is the cursor moving: the row under it, kept by its keys.
-func (e *explorer) moved(ix tuidecl.Index) error {
-	e.at = e.keys(ix)
+func (e *Explorer) moved(ix tuidecl.Index) error {
+	e.At = e.keys(ix)
 	return nil
 }
 
 // keys is a row's identity in the tree: the keys from the top row down to it.
-func (e *explorer) keys(ix tuidecl.Index) []string {
+func (e *Explorer) keys(ix tuidecl.Index) []string {
 	var keys []string
 	for p := &ix; p != nil; p = p.Parent {
-		keys = append([]string{e.model.Key(*p)}, keys...)
+		keys = append([]string{e.Model.Key(*p)}, keys...)
 	}
 	return keys
 }
 
 // loaded are the loaded rows in the order the tree shows them, each with its Index: a row's loaded
 // children follow it, whether or not its folder is open now.
-func (e *explorer) loaded() ([]string, []tuidecl.Index) {
-	m := e.model
+func (e *Explorer) loaded() ([]string, []tuidecl.Index) {
+	m := e.Model
 	var labels []string
 	var at []tuidecl.Index
 	var walk func(parent *tuidecl.Index)
@@ -300,33 +295,33 @@ func (e *explorer) loaded() ([]string, []tuidecl.Index) {
 }
 
 // moveTo puts the cursor on row ix (a find's hit).
-func (e *explorer) moveTo(ix tuidecl.Index) error {
-	e.at = e.keys(ix)
+func (e *Explorer) moveTo(ix tuidecl.Index) error {
+	e.At = e.keys(ix)
 	return e.c.View(feature.ExplorerPanelSpec().View, "setCurrentIndex", ix)
 }
 
 // FindPane is the explorer's rows for find: those it has loaded, in the order the tree shows them, a
 // closed folder's loaded rows included. A hit is moved to by the Index it was listed at, revealed, its
 // folders opened.
-func (e *explorer) FindPane() feature.FindPane {
+func (e *Explorer) FindPane() feature.FindPane {
 	return feature.FindPane{Name: "explorer", View: feature.ExplorerPanelSpec().View, Scope: feature.ExplorerPanelSpec().ID, Rows: func() ([]string, int, func(int, int) error) {
 		rows, at := e.loaded()
-		cur := slices.IndexFunc(at, func(ix tuidecl.Index) bool { return slices.Equal(e.keys(ix), e.at) })
+		cur := slices.IndexFunc(at, func(ix tuidecl.Index) bool { return slices.Equal(e.keys(ix), e.At) })
 		return rows, cur, func(row, _ int) error { return e.moveTo(at[row]) }
 	}}
 }
 
-func (e *explorer) Panels() []feature.PanelSpec {
+func (e *Explorer) Panels() []feature.PanelSpec {
 	s := feature.ExplorerPanelSpec()
-	s.Focus = e.view
-	s.Tab = func() int { return e.tab }
-	s.ShowTab = e.showTab
-	s.GoTabs = []string{linksTab: "relations"}
+	s.Focus = e.View
+	s.Tab = func() int { return e.Tab }
+	s.ShowTab = e.ShowTab
+	s.GoTabs = []string{feature.ExplorerLinksTab: "relations"}
 	return []feature.PanelSpec{s}
 }
 
 // listAll is every file of workspace ws, in path order.
-func listAll(ctx context.Context, call func(context.Context, string, ...any) (any, error), ws string) ([]string, error) {
+func ListAll(ctx context.Context, call func(context.Context, string, ...any) (any, error), ws string) ([]string, error) {
 	var out []string
 	after := ""
 	for {

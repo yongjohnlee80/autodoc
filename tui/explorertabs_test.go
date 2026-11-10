@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/explorer"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
@@ -17,7 +18,7 @@ import (
 // dock and x closes it; the links' kept place became the explorer's where it kept none.
 
 // explorerTab is the tab the explorer's drawer shows, as its feature has it.
-func (r *running) explorerTab() int { return onLoop(r, func() int { return r.h.explorer.tab }) }
+func (r *running) explorerTab() int { return onLoop(r, func() int { return r.h.explorer.Tab }) }
 
 // SPC e and SPC l are the drawer's two tabs: each opens it on its tab, goes to its tab from the other,
 // and closes it from its own, the keyboard in the tab's list and the heading the tab's. The dock has
@@ -37,18 +38,18 @@ func TestTheExplorerAndTheLinksAreTabsOfOneDrawer(t *testing.T) {
 	}
 
 	r.leader(t, 'e')
-	onTab("SPC e: the Explorer tab", explorerTab, "explorerTree", "explorer")
+	onTab("SPC e: the Explorer tab", feature.ExplorerFilesTab, "explorerTree", "explorer")
 	r.waitDock(t, "one icon", "editor", "explorer")
 	r.leader(t, 'l')
-	onTab("SPC l from the Explorer tab: the Links tab", linksTab, "relationsList", "links (1)")
+	onTab("SPC l from the Explorer tab: the Links tab", feature.ExplorerLinksTab, "relationsList", "links (1)")
 	r.waitDock(t, "still one icon", "editor", "explorer")
 	r.leader(t, 'e')
-	onTab("SPC e from the Links tab: the Explorer tab", explorerTab, "explorerTree", "explorer")
+	onTab("SPC e from the Links tab: the Explorer tab", feature.ExplorerFilesTab, "explorerTree", "explorer")
 	r.leader(t, 'e')
 	r.s.WaitFor(t, "SPC e on its own tab closed it", func(string) bool { return !r.panelIsOpen("explorer") && r.focusedOn("editor") })
 
 	r.leader(t, 'l')
-	onTab("SPC l, closed: open on the Links tab", linksTab, "relationsList", "links (1)")
+	onTab("SPC l, closed: open on the Links tab", feature.ExplorerLinksTab, "relationsList", "links (1)")
 	r.leader(t, 'l')
 	r.s.WaitFor(t, "SPC l on its own tab closed it", func(string) bool { return !r.panelIsOpen("explorer") && r.focusedOn("editor") })
 	r.waitDock(t, "the closed drawer gone", "editor")
@@ -57,7 +58,7 @@ func TestTheExplorerAndTheLinksAreTabsOfOneDrawer(t *testing.T) {
 	if err := r.luaRun("go relations"); err != nil {
 		t.Fatal(err)
 	}
-	onTab(":go relations: the Links tab", linksTab, "relationsList", "links (1)")
+	onTab(":go relations: the Links tab", feature.ExplorerLinksTab, "relationsList", "links (1)")
 }
 
 // The strip's _ hides the drawer, as the dock's own click does: open and in the dock, dimmed, and the
@@ -80,7 +81,7 @@ func TestTheExplorersStripHidesToTheDockAndCloses(t *testing.T) {
 	r.s.WaitFor(t, "the keyboard in the editor", func(string) bool { return r.focusedOn("editor") })
 	onLoop(r, func() bool { r.h.goDock("explorer"); return true })
 	r.s.WaitFor(t, "its icon showed it again on the Links tab", func(sc string) bool {
-		return !r.hidden("explorer") && r.explorerTab() == linksTab && r.focusedOn("relationsList") && strings.Contains(sc, "┌ links (1)")
+		return !r.hidden("explorer") && r.explorerTab() == feature.ExplorerLinksTab && r.focusedOn("relationsList") && strings.Contains(sc, "┌ links (1)")
 	})
 
 	windowControl(t, r, "x") // closed at once: a question would hold it open
@@ -136,26 +137,26 @@ func TestTheLinksPanelsPlaceMovesToTheExplorer(t *testing.T) {
 // is said, not lost.
 func TestTheExplorersTabRefusesWhatTheViewNeverSends(t *testing.T) {
 	c := newScripted("kb")
-	e := newExplorer(c)
-	e.tabShown(linksTab) // the drawer not on screen: no keyboard to give
-	if len(c.views) != 0 {
-		t.Fatalf("a tab shown off screen called %v; want nothing", c.views)
+	e := explorer.NewExplorer(c)
+	e.TabShown(feature.ExplorerLinksTab) // the drawer not on screen: no keyboard to give
+	if len(c.Views) != 0 {
+		t.Fatalf("a tab shown off screen called %v; want nothing", c.Views)
 	}
-	c.shown = true // on screen: a tab shown gives its list the keyboard
-	e.tabShown(linksTab)
-	e.tabShown(7) // no such tab
-	if e.tab != linksTab || c.set["App.explorerTab"] != linksTab || c.set["App.linksTabShown"] != true || e.view() != feature.RelationsView {
+	c.Shown = true // on screen: a tab shown gives its list the keyboard
+	e.TabShown(feature.ExplorerLinksTab)
+	e.TabShown(7) // no such tab
+	if e.Tab != feature.ExplorerLinksTab || c.Sets["App.explorerTab"] != feature.ExplorerLinksTab || c.Sets["App.linksTabShown"] != true || e.View() != feature.RelationsView {
 		t.Fatalf("after tab 7: tab %d, App.explorerTab %v, App.linksTabShown %v, view %q; want the Links tab kept",
-			e.tab, c.set["App.explorerTab"], c.set["App.linksTabShown"], e.view())
+			e.Tab, c.Sets["App.explorerTab"], c.Sets["App.linksTabShown"], e.View())
 	}
-	c.viewErr = errors.New("no such view")
-	e.showTab(explorerTab) // the scripted core runs a Post at once
-	e.close()
-	if want := []string{"relationsList.forceActiveFocus", "explorerTree.forceActiveFocus", "explorer.close"}; !slices.Equal(c.views, want) {
-		t.Errorf("views called %v, want %v", c.views, want)
+	c.ViewErr = errors.New("no such view")
+	e.ShowTab(feature.ExplorerFilesTab) // the scripted core runs a Post at once
+	e.Close()
+	if want := []string{"relationsList.forceActiveFocus", "explorerTree.forceActiveFocus", "explorer.close"}; !slices.Equal(c.Views, want) {
+		t.Errorf("views called %v, want %v", c.Views, want)
 	}
-	if want := []string{"explorer: the keyboard: no such view", "explorer: closing: no such view"}; !slices.Equal(c.failed, want) {
-		t.Errorf("failures said %v, want %v", c.failed, want)
+	if want := []string{"explorer: the keyboard: no such view", "explorer: closing: no such view"}; !slices.Equal(c.Failures, want) {
+		t.Errorf("failures said %v, want %v", c.Failures, want)
 	}
 }
 
@@ -182,26 +183,26 @@ func TestATabChosenInTheViewGivesItsListTheKeyboard(t *testing.T) {
 		r.s.WaitFor(t, what+": d again, the first", func(sc string) bool { return !strings.Contains(sc, "depth 2") })
 	}
 	r.leader(t, 'e')
-	onTab("SPC e: the Explorer tab", explorerTab, "explorerTree")
+	onTab("SPC e: the Explorer tab", feature.ExplorerFilesTab, "explorerTree")
 
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageDown, Mods: tuicore.ModCtrl})
-	onTab("Ctrl+PageDown: the Links tab, its list has the keyboard", linksTab, "relationsList")
+	onTab("Ctrl+PageDown: the Links tab, its list has the keyboard", feature.ExplorerLinksTab, "relationsList")
 	depth("after Ctrl+PageDown")
 
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageUp, Mods: tuicore.ModCtrl})
-	onTab("Ctrl+PageUp: the Explorer tab, the tree has the keyboard", explorerTab, "explorerTree")
+	onTab("Ctrl+PageUp: the Explorer tab, the tree has the keyboard", feature.ExplorerFilesTab, "explorerTree")
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageDown, Mods: tuicore.ModCtrl})
-	onTab("Ctrl+PageDown: the Links tab, its list has the keyboard", linksTab, "relationsList")
+	onTab("Ctrl+PageDown: the Links tab, its list has the keyboard", feature.ExplorerLinksTab, "relationsList")
 	depth("after Ctrl+PageDown")
 
 	onLoop(r, func() bool { r.h.goDock("explorer"); return true })
 	r.s.WaitFor(t, "hidden, the editor's keyboard", func(string) bool { return r.hidden("explorer") && r.focusedOn("editor") })
-	onLoop(r, func() bool { r.h.explorer.tabShown(explorerTab); return true })
+	onLoop(r, func() bool { r.h.explorer.TabShown(feature.ExplorerFilesTab); return true })
 	if kept := onLoop(r, func() bool {
-		return r.h.explorer.tab == explorerTab && r.h.within("editor") && r.h.panelHidden("explorer")
+		return r.h.explorer.Tab == feature.ExplorerFilesTab && r.h.within("editor") && r.h.panelHidden("explorer")
 	}); !kept {
 		t.Fatal("a tab shown with the drawer hidden took the keyboard from the editor, or showed the drawer")
 	}
 	onLoop(r, func() bool { r.h.goDock("explorer"); return true })
-	onTab("its icon: shown on the Explorer tab, the tree has the keyboard", explorerTab, "explorerTree")
+	onTab("its icon: shown on the Explorer tab, the tree has the keyboard", feature.ExplorerFilesTab, "explorerTree")
 }

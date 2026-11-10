@@ -14,6 +14,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/system"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/i18n"
@@ -41,17 +42,17 @@ func (h *Host) assembleFeatures(fs ...feature.Feature) error {
 func (h *Host) features() []feature.Feature {
 	h.asker = feature.NewAsker(core{h})
 	h.asker.OnIdle = func() { h.p.Post(h.askLuaGrants) } // a Lua grant waiting for the card (luagate.go)
-	fs := []feature.Feature{pageFind{h}, legacy{h}, h.terminals, h.agents, h.crew, h.crewInbox, h.asker, h.noticeLog, h.recent, h.tiles, h.explorer, h.outline, h.rel, h.ai, h.plugins, newStartup(core{h}, h.startupSeams(), h.aboutInfo.Version, h.canUpdate), newTodos(core{h}), h.luaFeature()}
-	fs = append(fs, newRegistryBrowse(h))                                                                                      // Plugins › Browse the registry… (registrybrowse.go)
-	fs = append(fs, h.cands)                                                                                                   // the installs' candidates, and Audit… (candidate.go)
-	fs = append(fs, newCellNotePage(h))                                                                                        // a note's Rendered view on a terminal (notepage.go)
-	fs = append(fs, newCardPage(h))                                                                                            // a card's Rendered view on a terminal (cardpage.go)
-	fs = append(fs, &htmlPaneCells{h: h})                                                                                      // the HTML preview pane on a terminal (htmlpane_cells.go)
-	fs = append(fs, h.relationViewFeatures()...)                                                                               // the GUI's GlobeMap and Mindmap (relationmap.go)
-	fs = append(fs, newProfiling(core{h}, h.profiler, func(ctx context.Context, p string) error { return h.browser(ctx, p) })) // System › Profiling (profiling.go)
-	fs = append(fs, newCrewBridges(core{h}, h.crew))                                                                           // System › Crew Bridges (crewbridges.go)
-	fs = append(fs, h.inboxView)                                                                                               // SPC a i, :inbox (crewinboxview.go)
-	fs = append(fs, h.grantsView)                                                                                              // Go › Agent permissions, :permissions (grants.go)
+	fs := []feature.Feature{pageFind{h}, legacy{h}, h.terminals, h.agents, h.crew, h.crewInbox, h.asker, h.noticeLog, h.recent, h.tiles, h.explorer, h.outline, h.rel, h.ai, h.plugins, system.NewStartup(core{h}, h.startupSeams(), h.aboutInfo.Version, h.canUpdate), newTodos(core{h}), h.luaFeature()}
+	fs = append(fs, newRegistryBrowse(h))                                                                                             // Plugins › Browse the registry… (registrybrowse.go)
+	fs = append(fs, h.cands)                                                                                                          // the installs' candidates, and Audit… (candidate.go)
+	fs = append(fs, newCellNotePage(h))                                                                                               // a note's Rendered view on a terminal (notepage.go)
+	fs = append(fs, newCardPage(h))                                                                                                   // a card's Rendered view on a terminal (cardpage.go)
+	fs = append(fs, &htmlPaneCells{h: h})                                                                                             // the HTML preview pane on a terminal (htmlpane_cells.go)
+	fs = append(fs, h.relationViewFeatures()...)                                                                                      // the GUI's GlobeMap and Mindmap (relationmap.go)
+	fs = append(fs, system.NewProfiling(core{h}, h.profiler, func(ctx context.Context, p string) error { return h.browser(ctx, p) })) // System › Profiling (profiling.go)
+	fs = append(fs, newCrewBridges(core{h}, h.crew))                                                                                  // System › Crew Bridges (crewbridges.go)
+	fs = append(fs, h.inboxView)                                                                                                      // SPC a i, :inbox (crewinboxview.go)
+	fs = append(fs, h.grantsView)                                                                                                     // Go › Agent permissions, :permissions (grants.go)
 	fs = append(fs, h.moreFeatures...)
 	// the preferences every feature declares, read over their defaults until the store's arrive;
 	// their choosers are one feature of their own
@@ -131,11 +132,11 @@ func (c core) Env() procenv.Env { return c.h.seams.env }
 
 // startupSeams is startup's part of the program's seams: the latest release's address, and the
 // first run's two questions, read from the seams when startup asks.
-func (h *Host) startupSeams() startupSeams {
-	return startupSeams{
-		latestURL:          h.seams.latestURL,
-		vimQuestionPending: func(p feature.PrefsView) bool { return vimQuestionPending(&h.seams, p) },
-		agentSetupPending:  func(p feature.PrefsView) bool { return agentSetupPending(&h.seams, p) },
+func (h *Host) startupSeams() system.StartupSeams {
+	return system.StartupSeams{
+		LatestURL:          h.seams.latestURL,
+		VimQuestionPending: func(p feature.PrefsView) bool { return vimQuestionPending(&h.seams, p) },
+		AgentSetupPending:  func(p feature.PrefsView) bool { return agentSetupPending(&h.seams, p) },
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/searchsetup"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
@@ -129,7 +130,7 @@ func (h *Host) searchLive(q string) {
 			h.searchWaitToast = false
 		}
 		// the order first: a narrow pane keeps what is read first
-		ranked := rankedTitle(core{h}, a.rank)
+		ranked := searchsetup.RankedTitle(core{h}, a.rank)
 		h.hitsRanked = ranked
 		h.rankedBy(a.rankedBy)
 		h.set("App.hitsTitle", h.trf("autodoc.text.searchpick.hits_semantic", len(a.hits), ranked, a.mode, a.semantic))

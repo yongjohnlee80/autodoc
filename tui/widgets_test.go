@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
@@ -105,7 +106,7 @@ func TestF6CyclesTheOpenWidgets(t *testing.T) {
 		r.keys(t, f6(false))
 		r.s.WaitFor(t, "F6 to "+want, func(string) bool { return r.focusedOn(want) })
 	}
-	onLoop(r, func() bool { r.h.explorer.showTab(linksTab); return true })
+	onLoop(r, func() bool { r.h.explorer.ShowTab(feature.ExplorerLinksTab); return true })
 	r.s.WaitFor(t, "the Links tab's list", func(string) bool { return r.focusedOn("relationsList") })
 	for _, want := range []string{"editor", "relationsList"} {
 		r.keys(t, f6(true))

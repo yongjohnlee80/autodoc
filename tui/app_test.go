@@ -38,6 +38,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/system"
 )
 
 func md(p string) bool { return strings.HasSuffix(p, ".md") }
@@ -213,7 +214,7 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	}
 	// a test's own preferences start quiet too, unless it names these itself
 	prefs = maps.Clone(prefs)
-	for _, k := range []string{prefAboutAt, prefUpdates} {
+	for _, k := range []string{system.PrefAboutAt, system.PrefUpdates} {
 		if _, set := prefs[k]; !set {
 			prefs[k] = "false"
 		}
@@ -1123,10 +1124,10 @@ func TestProgressWhileIndexing(t *testing.T) {
 	r.s.WaitForText(t, "explorer")
 	r.keys(t, enter())
 	under := func() int {
-		return onLoop(r, func() int { return r.h.explorer.model.RowCount(&tuidecl.Index{Row: 0}) })
+		return onLoop(r, func() int { return r.h.explorer.Model.RowCount(&tuidecl.Index{Row: 0}) })
 	}
 	r.s.WaitFor(t, "kb listed", func(string) bool {
-		return onLoop(r, func() bool { _, ok := r.h.explorer.paths["kb"]; return ok })
+		return onLoop(r, func() bool { _, ok := r.h.explorer.Paths["kb"]; return ok })
 	})
 	if n := under(); n >= 40 {
 		t.Fatalf("the explorer had %d notes mid-scan: the cell needs a partial list", n)

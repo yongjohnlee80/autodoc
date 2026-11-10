@@ -2,9 +2,11 @@ package tui
 
 import (
 	"context"
-	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"slices"
 	"strings"
+
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/searchsetup"
 )
 
 // THE SEARCH'S STAGES — the row of checkboxes along the search picker's foot: Lexical, Semantic and
@@ -197,7 +199,7 @@ func (h *Host) loadStageRanker(refresh bool) {
 // when the list knows it.
 func rankerInUse(m map[string]any) (id, model string) {
 	if s := feature.Str(m, "supplied"); s != "" {
-		return s, shortModel(s)
+		return s, searchsetup.ShortModel(s)
 	}
 	active := feature.Str(m, "active")
 	if active == "" {
@@ -205,7 +207,7 @@ func rankerInUse(m map[string]any) (id, model string) {
 	}
 	for _, x := range feature.AsList(m["rankers"]) {
 		if r := feature.AsMap(x); feature.Str(r, "name") == active && feature.Str(r, "model") != "" {
-			return active, shortModel(feature.Str(r, "model"))
+			return active, searchsetup.ShortModel(feature.Str(r, "model"))
 		}
 	}
 	return active, ""
@@ -213,7 +215,7 @@ func rankerInUse(m map[string]any) (id, model string) {
 
 // rankedBy names the Rerank box by the model an answer says ranked its hits.
 func (h *Host) rankedBy(model string) {
-	if model = shortModel(model); model != "" && model != h.stageRanker && h.stageRankerID != "" {
+	if model = searchsetup.ShortModel(model); model != "" && model != h.stageRanker && h.stageRankerID != "" {
 		h.stageRanker = model
 		h.syncStages(false)
 	}

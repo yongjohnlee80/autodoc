@@ -307,7 +307,7 @@ func bar(done, total int64) string {
 // switch's fill) as the texts covered of all of them, the spinner turning while the model works.
 // Each names the workspace it is for; while the daemon's one embedding queue serves another
 // workspace, the text names that one, the workspace being processed. It is in t's language.
-func progressText(t wording, p progress) string {
+func progressText(t feature.Wording, p progress) string {
 	var parts []string
 	if p.pending > 0 {
 		done := bar(p.docs, p.docs+p.pending)

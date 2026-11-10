@@ -410,6 +410,18 @@ func TestExportingTheLoadedRowsAsCSV(t *testing.T) {
 	}
 }
 
+// saidFetches is how many plugin.table.fetch the plugin has said it was sent so far, counted once a
+// witness it says after them is in its log: its stderr reaches the log through a copy of its own (an
+// os/exec goroutine), so a line said before an answer already on screen may not be in the file yet.
+// The plugin says its lines in order, so when the witness is there, every fetch before it is too.
+func (r *running) saidFetches(t *testing.T, logs string) int {
+	t.Helper()
+	n := len(saidLines(t, logs, "rows", "witness"))
+	onLoop(r, func() bool { r.h.plugins.runPluginCommand("rows", "witness"); return true })
+	waitSaidN(t, logs, "rows", "witness", n+1)
+	return len(saidLines(t, logs, "rows", "fetch "))
+}
+
 // wantNoFetchSince checks the plugin was sent no plugin.table.fetch past the first fetches: the
 // witness command, sent now, reaches it after anything sent before it, so a fetch sent earlier
 // would be said first.
@@ -822,13 +834,13 @@ func TestThePanelHoldsAtMostItsCap(t *testing.T) {
 	r.s.WaitFor(t, "the heading at the cap", func(string) bool {
 		return strings.Contains(title(), "the first 250 rows shown; the result has more: change the query to change what is returned")
 	})
-	onLoop(r, func() bool { // at the last row again: at the cap, nothing is asked
+	fetches := r.saidFetches(t, logs) // before the ask that must send nothing
+	onLoop(r, func() bool {           // at the last row again: at the cap, nothing is asked
 		tc := r.h.plugins.c.TableCore(resultsView)
 		tc.SetCursor(table.TablePos{Row: tc.Len() - 1})
 		r.h.plugins.results.model.FetchMore(tuidecl.Index{})
 		return true
 	})
-	fetches := len(saidLines(t, logs, "rows", "fetch "))
 	r.wantNoFetchSince(t, logs, fetches)
 	if n := onLoop(r, func() int { return len(r.h.plugins.results.model.rows) }); n != 250 || onLoop(r, func() bool {
 		return r.h.plugins.results.model.CanFetchMore(tuidecl.Index{})

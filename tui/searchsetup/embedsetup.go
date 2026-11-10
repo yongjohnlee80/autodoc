@@ -1,4 +1,4 @@
-package tui
+package searchsetup
 
 import (
 	"context"
@@ -233,11 +233,11 @@ func (s *embedSetup) machine(host map[string]any) string {
 	case vendor == "":
 		g = s.c.Tr("autodoc.text.embedsetup.no_gpu")
 	case vram > 0:
-		g = s.c.Trf("autodoc.text.embedsetup.gpu_with_memory", strings.TrimSpace(vendor+" "+feature.Str(gpu, "name")), bytesText(vram))
+		g = s.c.Trf("autodoc.text.embedsetup.gpu_with_memory", strings.TrimSpace(vendor+" "+feature.Str(gpu, "name")), feature.BytesText(vram))
 	default:
 		g = s.c.Trf("autodoc.text.embedsetup.gpu_memory_unknown", strings.TrimSpace(vendor+" "+feature.Str(gpu, "name")))
 	}
-	return s.c.Trf("autodoc.text.embedsetup.this_machine", g, bytesText(feature.Num(host, "ram")), bytesText(feature.Num(host, "free")), feature.Str(host, "ollama"))
+	return s.c.Trf("autodoc.text.embedsetup.this_machine", g, feature.BytesText(feature.Num(host, "ram")), feature.BytesText(feature.Num(host, "free")), feature.Str(host, "ollama"))
 }
 
 // fitText is a card's fit as the dropdown says it.
@@ -256,7 +256,7 @@ func (s *embedSetup) fitText(fit string) string {
 func (s *embedSetup) listModels() {
 	rows := make([]feature.RowOf, len(s.cards))
 	for i, c := range s.cards {
-		label := s.c.Trf("autodoc.text.embedsetup.model_row", feature.Str(c, "name"), s.fitText(feature.Str(c, "fit")), bytesText(feature.Num(c, "download")))
+		label := s.c.Trf("autodoc.text.embedsetup.model_row", feature.Str(c, "name"), s.fitText(feature.Str(c, "fit")), feature.BytesText(feature.Num(c, "download")))
 		if c["installed"] == true {
 			label += s.c.Tr("autodoc.text.embedsetup.installed")
 		}
@@ -335,7 +335,7 @@ func (s *embedSetup) estimate() {
 		s.listRows()
 		switch {
 		case !s.installed():
-			s.c.Set("App.embedSetupStatus", s.c.Trf("autodoc.text.embedsetup.to_download", bytesText(feature.Num(s.card(), "download"))))
+			s.c.Set("App.embedSetupStatus", s.c.Trf("autodoc.text.embedsetup.to_download", feature.BytesText(feature.Num(s.card(), "download"))))
 		case s.exactFor == model:
 			s.c.Set("App.embedSetupStatus", s.c.Trf("autodoc.text.embedsetup.ready_to_use", model))
 		}
@@ -356,7 +356,7 @@ func (s *embedSetup) listRows() {
 			t = s.c.Trf("autodoc.text.embedsetup.about", durationText(*r.seconds))
 		}
 		rows[i] = feature.RowOf{"key": r.name, "mark": mark, "workspace": r.name, "now": s.nowText(r), "will": s.willText(r),
-			"texts": fmt.Sprint(r.texts), "room": bytesText(r.room), "time": t}
+			"texts": fmt.Sprint(r.texts), "room": feature.BytesText(r.room), "time": t}
 	}
 	s.rows.Reset(rows)
 }
@@ -441,9 +441,9 @@ func (s *embedSetup) poll(chain uint64) {
 		case "running":
 			done, total := feature.Num(a.Value, "completed"), feature.Num(a.Value, "total")
 			if eta, ok := a.Value["eta"].(float64); ok {
-				s.c.Set("App.embedSetupStatus", s.c.Trf("autodoc.text.embedsetup.downloading_eta", bytesText(done), bytesText(total), durationText(eta)))
+				s.c.Set("App.embedSetupStatus", s.c.Trf("autodoc.text.embedsetup.downloading_eta", feature.BytesText(done), feature.BytesText(total), durationText(eta)))
 			} else {
-				s.c.Set("App.embedSetupStatus", s.c.Trf("autodoc.text.embedsetup.downloading", bytesText(done), bytesText(total)))
+				s.c.Set("App.embedSetupStatus", s.c.Trf("autodoc.text.embedsetup.downloading", feature.BytesText(done), feature.BytesText(total)))
 			}
 			if s.after != nil {
 				s.after(pollPullEvery, func() { s.poll(chain) })

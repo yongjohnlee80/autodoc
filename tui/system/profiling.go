@@ -1,4 +1,4 @@
-package tui
+package system
 
 import (
 	"context"
@@ -29,7 +29,7 @@ type profilingFeature struct {
 	backendSeq      uint64 // sys.profile's answers: only the latest asked is applied (Ticket)
 }
 
-func newProfiling(c feature.Core, prof *profiling.Profiler, open func(context.Context, string) error) *profilingFeature {
+func NewProfiling(c feature.Core, prof *profiling.Profiler, open func(context.Context, string) error) *profilingFeature {
 	f := &profilingFeature{c: c, prof: prof, open: open}
 	if prof != nil {
 		f.window = prof.Dir() // --profile started it at launch

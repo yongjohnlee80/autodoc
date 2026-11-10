@@ -53,17 +53,18 @@ func TestAnAgentsPathHasItsOwnAutodocFirst(t *testing.T) {
 		t.Fatalf("the agent's PATH %q: its first folder %q; a shell finds autodoc at %q (%q), want the window's wrapper there",
 			path, first, found, string(wrapper))
 	}
-	if !strings.Contains(instance.dir, "autodoc:") {
+	if !strings.Contains(instance.dir, crewFileName("autodoc:")) { // a scope by its file name
 		t.Fatalf("the agent's folder %q holds no scope: the cell doesn't hold the case it is for", instance.dir)
 	}
 }
 
-// A folder for the agents whose own path holds the PATH separator can't be put on a PATH whole:
-// the start is refused, saying why, rather than started on a PATH whose autodoc is someone else's.
+// A folder for the agents whose own path holds the PATH separator (':', or ';' on Windows, where a
+// name can't hold ':') can't be put on a PATH whole: the start is refused, saying why, rather than
+// started on a PATH whose autodoc is someone else's.
 func TestAnAgentIsNotStartedOnABrokenPath(t *testing.T) {
 	c := newIdentityHost(oneTwo)
 	c.ws = wsInfo{id: 7, name: "kb", root: t.TempDir()}
-	a := testAgents(c, filepath.Join(t.TempDir(), "agents:odd"), "")
+	a := testAgents(c, filepath.Join(t.TempDir(), "agents"+string(os.PathListSeparator)+"odd"), "")
 	data := t.TempDir()
 	a.setupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
 		return crew.SetupFor(crew.SetupInput{Kind: kind, Host: crew.HostWindow, Env: map[string]string{"PATH": "/nonexistent"},
