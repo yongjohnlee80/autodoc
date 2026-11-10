@@ -314,13 +314,15 @@ func (e *echo) Open(p *plugin.Peer, o plugin.Open) {
 	if e.mode == "stubborn" {
 		fmt.Fprintln(os.Stderr, "stubborn: opened")
 	}
-	if e.mode == "leaver" { // starts a child, then exits of itself, leaving the child running
+	if e.mode == "leaver" { // starts a child; a key then ends it of itself, leaving the child running
 		startTestChild()
-		os.Exit(0)
 	}
 }
 
 func (e *echo) Key(k plugin.Key) {
+	if e.mode == "leaver" { // exits of itself, its child left running
+		os.Exit(0)
+	}
 	if e.mode == "snap" && k.Key == "w" {
 		e.hold()
 		return
@@ -850,7 +852,7 @@ func TestTheCloseStopsAStubbornPluginAndWhatItStarted(t *testing.T) {
 }
 
 // TestAPluginThatExitsLeavesItsChildAsEachOSHoldsIt: a plugin that starts a child, then exits of
-// itself, is closed. On Windows the close of its job ends the child it left; on Unix its group was
+// itself at a key (once the child is seen running), is closed. On Windows the close of its job ends the child it left; on Unix its group was
 // never signalled, so the child lives on (the stated difference between the two).
 func TestAPluginThatExitsLeavesItsChildAsEachOSHoldsIt(t *testing.T) {
 	t.Parallel()
@@ -862,12 +864,14 @@ func TestAPluginThatExitsLeavesItsChildAsEachOSHoldsIt(t *testing.T) {
 	if run == nil {
 		t.Fatal("the plugin did not start")
 	}
+	r.waitShown(t, "open 30x6")
 	child := waitTestChild(t, logs, "leaver")
 	t.Cleanup(func() {
 		if p, err := os.FindProcess(child); err == nil && pidAlive(child) {
 			_ = p.Kill()
 		}
 	})
+	r.keys(t, key('e')) // the plugin exits of itself
 	select {
 	case <-run.shutDone:
 	case <-time.After(5 * time.Second):
