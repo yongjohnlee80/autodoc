@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/pty"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
@@ -48,16 +49,39 @@ type modelPanel struct {
 	reported []string
 }
 
-// testAgents is newAgents for cells whose profiles name programs that don't exist ("one", "two"):
-// their commands aren't looked up on a PATH (commandCheck off); a cell of that check sets it.
-func testAgents(c agentHost, dir, config string) *agents {
-	s := defaultSeams
-	return testAgentsWith(c, &s, dir, config)
+// fakeSeams are the program's seams as the agents' cells set them (agentSeams): its environment
+// (nil, AutoDoc's own), the wait for an agent server's socket, whether a first run offers the agent
+// setup, how the setup finds the CLIs (nil, on the PATH) and whether a first run's Vim question is
+// still to be asked.
+type fakeSeams struct {
+	env             procenv.Env
+	serverReady     time.Duration
+	offerAgentSetup bool
+	lookAgentCLI    func(string) (string, error)
+	vimPending      bool
 }
 
-// testAgentsWith is testAgents with the seams s (seamsFor: a test's tune, its environment's
-// included).
-func testAgentsWith(c agentHost, s *seams, dir, config string) *agents {
+// newFakeSeams are the program's own seams for the agents: a server's socket waited for 10 s, the
+// agent setup offered, no Vim question pending.
+func newFakeSeams() *fakeSeams {
+	return &fakeSeams{serverReady: 10 * time.Second, offerAgentSetup: true}
+}
+
+func (s *fakeSeams) Env() procenv.Env                           { return s.env }
+func (s *fakeSeams) ServerReady() time.Duration                 { return s.serverReady }
+func (s *fakeSeams) OfferAgentSetup() bool                      { return s.offerAgentSetup }
+func (s *fakeSeams) LookAgentCLI() func(string) (string, error) { return s.lookAgentCLI }
+func (s *fakeSeams) VimQuestionPending(feature.PrefsView) bool  { return s.vimPending }
+
+// testAgents is newAgents for cells whose profiles name programs that don't exist ("one", "two"):
+// their commands aren't looked up on a PATH (commandCheck off); a cell of that check sets it. Its
+// seams are newFakeSeams'.
+func testAgents(c agentHost, dir, config string) *agents {
+	return testAgentsWith(c, newFakeSeams(), dir, config)
+}
+
+// testAgentsWith is testAgents with the seams s (a test's tune, its environment's included).
+func testAgentsWith(c agentHost, s agentSeams, dir, config string) *agents {
 	a := newAgents(c, s, dir, config)
 	a.commandCheck = nil
 	return a
@@ -250,7 +274,7 @@ func (c *identityHost) settle(t *testing.T, what string, done func() bool) {
 func modelAgents(t *testing.T) (*agents, *identityHost) {
 	t.Helper()
 	c := newIdentityHost(`[{"name":"One","command":"one","codename":"one"},{"name":"Two","command":"two","codename":"two"}]`)
-	c.ws = wsInfo{name: "kb", root: t.TempDir()}
+	c.ws = feature.Workspace{Name: "kb", Root: t.TempDir()}
 	a := testAgents(c, t.TempDir(), "")
 	return a, c
 }
@@ -263,7 +287,7 @@ func retainModelInstance(a *agents, c *identityHost, code, label string) {
 	if !exists {
 		p = agentProfile{Name: label, Codename: code, Command: "orphan"}
 	}
-	a.instances[code] = &agentInstance{profile: p, tab: id, token: "retained-" + code, running: true, owner: panel, generation: 1, workspace: workspaceOf(c.ws)}
+	a.instances[code] = &agentInstance{profile: p, tab: id, token: "retained-" + code, running: true, owner: panel, generation: 1, workspace: c.ws}
 	a.instanceOrder = append(a.instanceOrder, code)
 	a.selectedAgent, a.agentRunning, a.agentRunningLabel = code, code, label
 }
@@ -573,7 +597,7 @@ func TestStoppedAgentDoesNotRelabelItsOldWorkspaceConfiguration(t *testing.T) {
 	}
 	oldConfig := c.panel.configs[instance.tab]
 	c.panel.exit(instance.tab, 3)
-	c.ws = wsInfo{name: "other", root: t.TempDir()}
+	c.ws = feature.Workspace{Name: "other", Root: t.TempDir()}
 	c.epoch++
 	done := 0
 	var outcome error
