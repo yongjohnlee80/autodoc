@@ -166,8 +166,9 @@ func TestTheLoadersFilesystemRefusesWhatIsNotAThemesFile(t *testing.T) {
 
 // Directory is themes/ beside the config file named, or beside the default config.
 func TestDirectoryIsBesideTheConfig(t *testing.T) {
-	got, err := Directory(filepath.Join("/etc", "autodoc", "config.toml"))
-	if err != nil || got != filepath.Join("/etc", "autodoc", "themes") {
+	etc := t.TempDir() // an absolute directory on any OS
+	got, err := Directory(filepath.Join(etc, "autodoc", "config.toml"))
+	if err != nil || got != filepath.Join(etc, "autodoc", "themes") {
 		t.Errorf("Directory of a named config: %q, %v", got, err)
 	}
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "cfg"))

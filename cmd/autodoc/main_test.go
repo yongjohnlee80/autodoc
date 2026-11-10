@@ -31,7 +31,7 @@ func TestAStampedBuildSaysItsVersion(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds the binary")
 	}
-	bin := filepath.Join(t.TempDir(), "autodoc")
+	bin := filepath.Join(t.TempDir(), "autodoc"+exeSuffix)
 	build := exec.Command("go", "build", "-ldflags", "-X main.version=v9.8.7-stamped", "-o", bin, ".")
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)
