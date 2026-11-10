@@ -125,8 +125,19 @@ func (r *wakeRig) start(wakers map[string]crew.Waker) (stop func()) {
 
 func (r *wakeRig) withWaker() map[string]crew.Waker { return map[string]crew.Waker{"claude": r.waker} }
 
-// agent registers codename with a Claude endpoint, as a host and the CLI's hook do; it answers the
-// session and its credential.
+// skipWithoutSocketWakes skips, before anything else, a cell about waking a session through its
+// CLI's socket where the OS has no such wake (crew.SocketWakes: Windows): there no session has a
+// socket endpoint, so nothing is woken, and an agent's mail waits until it reads it.
+func skipWithoutSocketWakes(t *testing.T) {
+	t.Helper()
+	if !crew.SocketWakes() {
+		t.Skip("waking a session through its CLI's socket: this OS has no such wake (crew.SocketWakes)")
+	}
+}
+
+// agent registers codename with a Claude endpoint, as a host and the CLI's hook do, where the OS
+// wakes a session through its CLI's socket (crew.SocketWakes); elsewhere (Windows) a session has no
+// such endpoint, and its mail waits until it reads it. It answers the session and its credential.
 func (r *wakeRig) agent(codename string) (string, string) {
 	r.t.Helper()
 	r.n++
@@ -140,6 +151,9 @@ func (r *wakeRig) agent(codename string) (string, string) {
 	pid := 100 + r.n // start is the pid's process reference, as registration requires
 	loc := fmt.Sprintf(`{"socket":"/run/user/%d/cc-socks/%s.sock","pid":%d,"start":"b:n:%d:9000","session":"c-%s"}`,
 		os.Getuid(), codename, pid, pid, codename)
+	if !crew.SocketWakes() {
+		return reg.Session, cred
+	}
 	if _, err := r.deps.crew.SetEndpoint(r.ctx, cred, "claude", loc); err != nil {
 		r.t.Fatal(err)
 	}
@@ -236,6 +250,7 @@ func (r *wakeRig) advance(d time.Duration) {
 // unseen, with no keypress and no unrelated send, ends with the scheduler reaching the agent, which
 // drains to more=false.
 func TestNoMailIsStranded(t *testing.T) {
+	skipWithoutSocketWakes(t)
 	t.Run("commit, then a crash before the wake", func(t *testing.T) {
 		r := newWakeRig(t)
 		_, jarvis := r.agent("jarvis")
@@ -335,6 +350,7 @@ func TestNoMailIsStranded(t *testing.T) {
 // sessions due at once and every call held, no more than four calls run; released, every session is
 // woken.
 func TestFourCallsAtMostWithFiftyDue(t *testing.T) {
+	skipWithoutSocketWakes(t)
 	r := newWakeRig(t)
 	r.waker.block = make(chan struct{})
 	_, jarvis := r.agent("jarvis")
@@ -380,6 +396,7 @@ func TestFourCallsAtMostWithFiftyDue(t *testing.T) {
 // pending_gen on an in_flight row, which leaves no row due; the session's mail.wait must still hear
 // it, at once, not at its timeout.
 func TestAWaitHearsASendWhileAWakeIsOut(t *testing.T) {
+	skipWithoutSocketWakes(t)
 	r := newWakeRig(t)
 	r.waker.block = make(chan struct{})
 	t.Cleanup(func() { close(r.waker.block) })
@@ -602,6 +619,7 @@ func TestServeWakesClaudeSessions(t *testing.T) {
 // but the notice may not print ($PWD, which a shell or an agent could read as a variable) is
 // counted, never printed.
 func TestTheWakeNoticeNamesItsSenders(t *testing.T) {
+	skipWithoutSocketWakes(t)
 	r := newWakeRig(t)
 	gold, goldCred := r.agent("gold")
 	tifa, tifaCred := r.agent("tifa")
