@@ -55,5 +55,5 @@ func (x *crewInbox) ring() {
 
 // agentBellRows are the bell's preference, bound to the host's field (hostRows reads it by name).
 func agentBellRows() []feature.PrefSpec {
-	return []feature.PrefSpec{boolPref(prefAgentBell, false, func(p *prefs) *bool { return &p.agentBell })}
+	return []feature.PrefSpec{feature.ValuePref(prefAgentBell, "false", []string{"true", "false"})}
 }
