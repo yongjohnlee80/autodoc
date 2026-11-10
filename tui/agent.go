@@ -45,7 +45,7 @@ type agents struct {
 	spawn func(pty.Cmd) (terminal.TerminalProcess, error)
 	// commandCheck refuses a start whose command's program the agent can't find (commandOnPath);
 	// nil checks nothing
-	commandCheck func(command string, env []string) error
+	commandCheck func(shell usershell.Shell, command string, env []string) error
 	agentBinPath string
 	// setupRun replaces a crew start's run of the agent's autodoc as `crew setup` (crewSetupOf, a
 	// cell's); nil in production

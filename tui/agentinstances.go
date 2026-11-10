@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -15,6 +14,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/internal/usershell"
 	"github.com/yongjohnlee80/golib/errs"
 	"github.com/yongjohnlee80/golib/tui/pty"
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
@@ -286,7 +286,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 	instance.profile, instance.workspace, instance.crewed, instance.env = p, ws, crewed, env
 	instance.refusal = nil
 	if a.commandCheck != nil {
-		if err := a.commandCheck(fillAgentCommand(a.seams.env, p.Command, ws), env); err != nil { // nothing set up or registered for it
+		if err := a.commandCheck(usershell.Commands(a.seams.env), fillAgentCommand(a.seams.env, p.Command, ws), env); err != nil { // nothing set up or registered for it
 			a.c.Notify(a.c.Trf("autodoc.crew.did_not_start", p.Name, err.Error()))
 			a.refuse(panel, instance, err)
 			return instance, nil
@@ -348,48 +348,27 @@ func (a *agents) refuse(panel feature.TerminalPanel, instance *agentInstance, wh
 }
 
 // commandOnPath refuses a command whose program isn't on the PATH in env (the agent's: its own
-// autodoc's link, then its profile's), naming it. AutoDoc runs the command with /bin/sh -c, which
-// reads none of the user's shell aliases or functions: an alias for another account's Claude Code
-// (e.g. claude-work) is not found there. Only a bare name (looked up on that PATH) and an absolute
-// path are judged. The shell resolves the rest itself, and they pass: a command in shell syntax (an
-// assignment first, a pipe, a substitution, a redirection), a leading ~ (from HOME), a relative
-// path (from the agent's folder, its process's working directory, never AutoDoc's), a glob.
-func commandOnPath(command string, env []string) error {
-	if strings.ContainsAny(command, ";&|$`()<>\\'\"") {
+// autodoc's link, then its profile's), naming it. AutoDoc runs the command with shell (/bin/sh -c;
+// PowerShell's -NoProfile -Command on Windows), which reads none of the user's shell aliases or
+// functions: an alias for another account's Claude Code (e.g. claude-work) is not found there. Only
+// what shell looks up as it is written is judged (usershell.Shell.LooksUp): a bare name, found as
+// the OS finds a program (PATHEXT on Windows), and an absolute path. The shell resolves the rest
+// itself, and they pass: its own syntax, a leading ~, a relative path (from the agent's folder, its
+// process's working directory, never AutoDoc's), a glob; so does a name found only through a
+// relative PATH entry, which is the agent's folder's to resolve too.
+func commandOnPath(shell usershell.Shell, command string, env []string) error {
+	word, judged := shell.LooksUp(command)
+	if !judged {
 		return nil
 	}
-	fields := strings.Fields(command)
-	if len(fields) == 0 || strings.Contains(fields[0], "=") {
+	if _, err := procenv.LookPath(procenv.Env(env), word); err == nil || errors.Is(err, exec.ErrDot) {
 		return nil
 	}
-	word, path := fields[0], ""
-	for _, kv := range env {
-		if v, ok := strings.CutPrefix(kv, "PATH="); ok {
-			path = v // the last one: what the agent gets
-		}
-	}
-	if strings.HasPrefix(word, "/") {
-		if executable(word) {
-			return nil
-		}
+	if filepath.IsAbs(word) {
 		return fmt.Errorf("its command %s is not an executable file", word)
 	}
-	if strings.ContainsAny(word, "/~*?[") { // the shell's to resolve: from HOME, the agent's folder, a glob
-		return nil
-	}
-	for _, dir := range filepath.SplitList(path) {
-		if dir != "" && executable(filepath.Join(dir, word)) {
-			return nil
-		}
-	}
-	return fmt.Errorf("its command %q isn't a program on its PATH. AutoDoc runs the command with /bin/sh -c, which sees none of your shell's aliases or functions. "+
-		"For another account's Claude Code, use the program itself: command claude, with CLAUDE_CONFIG_DIR=<that account's folder> in the profile's environment (Space G; tutorial 12, the agents panel)", word)
-}
-
-// executable reports whether path is a regular file someone may execute.
-func executable(path string) bool {
-	fi, err := os.Stat(path)
-	return err == nil && fi.Mode().IsRegular() && fi.Mode().Perm()&0o111 != 0
+	return fmt.Errorf("its command %q isn't a program on its PATH. AutoDoc runs the command with %s, which sees none of your shell's aliases or functions. "+
+		"For another account's Claude Code, use the program itself: command claude, with CLAUDE_CONFIG_DIR=<that account's folder> in the profile's environment (Space G; tutorial 12, the agents panel)", word, shell.Describe())
 }
 
 // registerCrew registers instance's crew session, as its setup said it reads its mail
