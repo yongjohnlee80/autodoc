@@ -297,7 +297,7 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	opts := []rpc.Option{rpc.WithListener(ln), rpc.WithStoreID(storeID), rpc.WithPreferences(db), rpc.WithRegistrations(o.reg), rpc.WithFiles(diskFiles(t, docOpts...))}
+	opts := []rpc.Option{rpc.WithListener(ln), rpc.WithStoreID(storeID), rpc.WithPreferences(db), rpc.WithRegistrations(o.reg), rpc.WithDisks(diskVolumes(t, docOpts...))}
 	if o.emb != nil {
 		opts = append(opts, rpc.WithEmbeddings(o.emb))
 	}
