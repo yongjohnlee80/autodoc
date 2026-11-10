@@ -3,12 +3,13 @@ package tui
 import (
 	"context"
 	"fmt"
-	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // A TASK'S FILE FOLLOWS ITS TASK (docs/decisions/editor.md#a-tasks-file-follows-its-task). A todo
@@ -30,14 +31,6 @@ import (
 // saved. Removed (todos.get finds no such task), a clean buffer closes; one with unsaved edits keeps
 // them, badged deleted on disk, and its save is refused: a removed task is never written again from
 // a buffer. A file that is no task's is gone as before.
-
-// todoFileChange is a change of the todo change log as the open buffers take it: a task's file
-// moved (from → to), rewritten in place (to == from), or removed (removed, to ""), its paths
-// relative to the store at store.
-type todoFileChange struct {
-	store, from, to string
-	removed         bool
-}
 
 // todoMovesKept is how many of the latest moves the feed read are kept, to name where a gone file
 // went.

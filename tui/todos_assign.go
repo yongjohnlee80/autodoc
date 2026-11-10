@@ -10,8 +10,6 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 
-	"github.com/yongjohnlee80/autodoc/core/crew"
-	"github.com/yongjohnlee80/autodoc/core/mail"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -25,9 +23,6 @@ import (
 
 // assignDefault is the instruction an empty Instructions: line gives, as AutoVim's A does.
 const assignDefault = "Task assigned to you."
-
-// assigneePrefix is an AutoDoc agent's assignee: autodoc:<codename>, never AutoVim's agent:<name>.
-const assigneePrefix = "autodoc:"
 
 // todoAssign is one A in progress: the task, the agent once the picker has chosen it, and the
 // workspace it began in: HandTask delivers to the workspace in use, so an assign answered after a
@@ -240,28 +235,6 @@ func (t *todos) sendToPeer(a *todoAssign, s *todoStore, task map[string]any, ins
 type crewPeers interface {
 	peerAgents(then func([]feature.AgentEntry))
 	sendTask(codename, scope, subject, body, key string, then func(error))
-}
-
-// peersOf are crew.list's rows (rows) A may hand a task to beside the window's own agents: every
-// live agent of a scope other than own.
-func peersOf(rows any, own string) []feature.AgentEntry {
-	var out []feature.AgentEntry
-	for _, r := range feature.AsList(rows) {
-		m := feature.AsMap(r)
-		code, scope, presence := feature.Str(m, "codename"), feature.Str(m, "scope"), feature.Str(m, "presence")
-		if code == "" || scope == "" || scope == own || scope == mail.GlobalScope || // the user's and the daemon's own
-			(presence != crew.PresenceLive && presence != crew.PresenceReconnecting) {
-			continue
-		}
-		project := scope
-		if name, ok := strings.CutPrefix(scope, "autovim:"); ok {
-			project = name
-		}
-		reachable, _ := m["reachable"].(bool)
-		out = append(out, feature.AgentEntry{Ref: feature.AgentRef{Codename: code}, Name: code,
-			Peer: &feature.PeerAgent{Scope: scope, Project: project, Reachable: reachable, Why: feature.Str(m, "why")}})
-	}
-	return out
 }
 
 // windowScoped is a Core that knows the window's crew scope ("" while it holds none): A assigns
