@@ -11,11 +11,6 @@ import (
 // (globemap_cells.go, mindmap_cells.go, relationviews_cells.go), beside Relations › Links
 // (relationmap.go).
 
-const (
-	globeMapPanelID, globeMapViewID = "globeMap", "globeMapView"
-	mindmapPanelID, mindmapViewID   = "mindmap", "mindmapView"
-)
-
 // relationMenuQML and relationViewsQML are the window's: a build without the GUI has none, and
 // writes the terminal's (relationviews_cells.go).
 const relationMenuQML, relationViewsQML = "", ""

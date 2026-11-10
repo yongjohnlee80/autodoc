@@ -69,6 +69,10 @@ func Fill(s string, args ...any) string {
 // Untitled is the draft's name wherever a file's path would show: the page no file holds.
 const Untitled = "untitled"
 
+// OutsideBadge marks a file outside every workspace (autodoc.text.files.no_workspace in the UI's
+// language): the host's file title and the relations feature's links title both show it.
+const OutsideBadge = "no workspace"
+
 // BytesText is a size as the list shows it.
 func BytesText(n int64) string {
 	switch {
