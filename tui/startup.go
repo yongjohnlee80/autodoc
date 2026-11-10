@@ -17,6 +17,13 @@ import (
 // and how to get it; when install-autodoc.sh installed it, how is About's Update (update.go), which
 // the user starts.
 
+// The startup's own preferences, which the host's table declares (prefs.go): the About card at
+// start, and the check for a newer release.
+const (
+	prefAboutAt = "tui.about.atstart"
+	prefUpdates = "tui.update.check"
+)
+
 // release is a published release: its tag and its page.
 type release struct {
 	Tag string `json:"tag_name"`
