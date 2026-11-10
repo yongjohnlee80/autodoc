@@ -255,6 +255,28 @@ jobs:
           go vet ./...
           mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
           go test -count=1 -timeout 20m "${pkgs[@]}"
+      - name: scratch (not for merge) #465's cells on Windows and four mutants
+        if: ${{ !inputs.discover }}
+        run: |
+          D='^(TestTheDiskKeepsEachVolumeApartUnderWindowsRule|TestTheDiskUnderUnixRuleIsAsItWas|TestTheDiskWritesWindowsOwnFormUnderWindowsRule|TestAStoreAtADrivesRootIsClaimedOnTheDisk)$'
+          T='^(TestALoadedFolderIsShownByTheStoreTheDaemonResolves|TestTheRootsAndHomeOfAStoreAtAVolumesRoot|TestTheRootsAndHomeOfAStoreAtADrivesRoot|TestTodos.*|TestHandTask.*)$'
+          cells() { go test -count=1 -timeout 10m -v -run "$D" ./core/todo/todotest/ > "$RUNNER_TEMP/$1-d.txt" 2>&1 && rd=0 || rd=$?
+            go test -count=1 -timeout 15m -v -run "$T" ./tui/ > "$RUNNER_TEMP/$1-t.txt" 2>&1 && rt=0 || rt=$?; }
+          cells base
+          echo "== base: todotest PASS $(grep -cE '^--- PASS' "$RUNNER_TEMP/base-d.txt" || true) tui PASS $(grep -cE '^--- PASS' "$RUNNER_TEMP/base-t.txt" || true) FAIL $(grep -cE '^--- FAIL' "$RUNNER_TEMP/base-t.txt" || true)"
+          grep -E '^--- (FAIL|SKIP)|_test\.go:[0-9]+:' "$RUNNER_TEMP/base-d.txt" "$RUNNER_TEMP/base-t.txt" | sed 's/^.*txt://' | cut -c1-260 || true
+          echo "== cells todotest rc=$rd tui rc=$rt"
+          b=$(( rd + rt ))
+          cp tui/todos.go "$RUNNER_TEMP/keep-t.go"; cp core/todo/todotest/todotest.go "$RUNNER_TEMP/keep-d.go"
+          mut() { name=$1; echo "== mutant $name applied: $(cat tui/todos.go core/todo/todotest/todotest.go | grep -c "mutant $name")"; cells $name
+            grep -E '_test\.go:[0-9]+:|panic:' "$RUNNER_TEMP/$name-d.txt" "$RUNNER_TEMP/$name-t.txt" | sed 's/^.*txt://' | head -3 | cut -c1-240 || true
+            echo "== mutant $name todotest rc=$rd tui rc=$rt (want a non-zero: killed)"
+            cp "$RUNNER_TEMP/keep-t.go" tui/todos.go; cp "$RUNNER_TEMP/keep-d.go" core/todo/todotest/todotest.go; }
+          python -c "p='tui/todos.go'; s=open(p,encoding='utf-8').read(); o='canon, _ := resolved(v)'; assert s.count(o)==1; open(p,'w',encoding='utf-8').write(s.replace(o,'canon := root; _ = v // mutant noresolve'))"; mut noresolve
+          python -c "p='tui/todos.go'; s=open(p,encoding='utf-8').read(); o='\t\t\tt.call(\"todos.resolve\", []any{at}, nil, func(v any) {\n\t\t\t\tcanon, _ := resolved(v)\n\t\t\t\tt.want = \"root:\" + canon\n\t\t\t\tt.list()\n\t\t\t})'; assert s.count(o)==1, 'oldload'; open(p,'w',encoding='utf-8').write(s.replace(o,'\t\t\tt.want = \"root:\" + root // mutant oldload\n\t\t\tt.list()'))"; mut oldload
+          python -c "p='core/todo/todotest/todotest.go'; s=open(p,encoding='utf-8').read(); o='\tif dir := path.Dir(key); dir != \".\" {\n\t\tif err := d.FS.MkdirAll(context.Background(), dir); err != nil {\n\t\t\tpanic(err)\n\t\t}\n\t}'; assert s.count(o)==1, 'rawsplit'; open(p,'w',encoding='utf-8').write(s.replace(o,'\tdir, _ := path.Split(abs) // mutant rawsplit\n\td.MkdirAll(dir)'))"; mut rawsplit
+          python -c "p='tui/todos.go'; s=open(p,encoding='utf-8').read(); o='return paths.Dir(p)'; assert s.count(o)==1; open(p,'w',encoding='utf-8').write(s.replace(o,'return strings.TrimSuffix(p, \"/.todo-list\") // mutant cutroot'))"; mut cutroot
+          [ $b = 0 ] || echo "== base not green"
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
