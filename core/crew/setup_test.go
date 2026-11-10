@@ -877,7 +877,7 @@ func TestSetupForJunieGivesItsMailAsMCPTools(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(s.FolderFiles) != 1 || s.FolderFiles[0].Path != ".junie-crew/mcp/mcp.json" || s.FolderFiles[0].Path != crew.JunieMCPConfig {
+		if len(s.FolderFiles) != 1 || s.FolderFiles[0].Path != ".junie-crew/mcp/mcp.json" || crew.JunieMCPConfig != ".junie-crew/mcp/mcp.json" {
 			t.Fatalf("%s: folder files %+v, want .junie-crew/mcp/mcp.json alone", host, s.FolderFiles)
 		}
 		var cfg map[string]map[string]struct {
