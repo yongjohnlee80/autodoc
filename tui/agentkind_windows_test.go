@@ -23,11 +23,13 @@ func TestAgentKindReadsPowerShellsWordsOnWindows(t *testing.T) {
 		`C:\Users\u\AppData\Roaming\npm\claude.cmd`:    "claude",
 		`& 'C:\Program Files\x\claude.cmd' --resume`:   "claude",
 		`& "C:\Program Files\x\codex.exe" --full-auto`: "codex",
-		`'it''s' --x`:                    "it's",
-		"mise x -- claude":               "claude",
-		"mise.exe exec node@22 -- codex": "codex",
-		"firejail claude":                "firejail",
-		"":                               "agent",
+		"&claude --model haiku":                        "claude",
+		`&'C:\Program Files\x\claude.cmd';exit`:        "claude",
+		`'it''s' --x`:                                  "it's",
+		"mise x -- claude":                             "claude",
+		"mise.exe exec node@22 -- codex":               "codex",
+		"firejail claude":                              "firejail",
+		"":                                             "agent",
 	} {
 		if got := agentKind(command); got != want {
 			t.Errorf("agentKind(%q) = %q, want %q", command, got, want)

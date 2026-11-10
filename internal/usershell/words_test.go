@@ -31,13 +31,20 @@ func TestPOSIXWordsAreReadAsShDoes(t *testing.T) {
 }
 
 // PowerShell's words: a backslash is a character (a Windows path's separator); '…' with ” a quote;
-// "…" and outside quotes, ` escapes; the call operator & is a word of its own.
+// "…" and outside quotes, ` escapes; an operator (& ; | && ||) is a word of its own.
 func TestPowerShellWordsKeepABackslash(t *testing.T) {
 	ps := Shell{kind: powershell}
 	for line, want := range map[string][]string{
 		`& 'C:\Program Files\x\claude.cmd' --model "haiku 4"`: {"&", `C:\Program Files\x\claude.cmd`, "--model", "haiku 4"},
 		`C:\tools\claude.exe --x`:                             {`C:\tools\claude.exe`, "--x"},
 		`'it''s' "a""b" "c` + "`" + `"d" e` + "`" + ` f`:      {"it's", `a"b`, `c"d`, "e f"},
+		// an operator is a word with blanks around it or none
+		`&claude --model haiku`:                     {"&", "claude", "--model", "haiku"},
+		`&"C:\Program Files\x\claude.cmd" --resume`: {"&", `C:\Program Files\x\claude.cmd`, "--resume"},
+		`claude;codex|more&&a||b`:                   {"claude", ";", "codex", "|", "more", "&&", "a", "||", "b"},
+		`'a;b' "c|d&e"`:                             {"a;b", "c|d&e"},
+		// a ` ending a line joins it to the next; inside quotes the newline is the string's
+		"claude `\n--resume \"a`\nb\"": {"claude", "--resume", "a\nb"},
 	} {
 		if got := texts(ps.Words(line)); !slices.Equal(got, want) {
 			t.Errorf("PowerShell's Words(%q) = %q, want %q", line, got, want)

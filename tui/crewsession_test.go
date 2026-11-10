@@ -444,7 +444,10 @@ func TestAClaudeThatCantBeReadGetsTheFloor(t *testing.T) {
 	if err := os.WriteFile(wrapper, []byte(wrapperScript), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	a, c, w := crewAgents(t, `[{"name":"Claude","command":`+strconv.Quote(wrapper)+`,"codename":"cl"}]`)
+	// its PATH holds no Claude Code: on Windows the wrapper's name (claude.cmd) isn't claude's, so
+	// the claude on its PATH is asked next, and a machine's own would be read
+	path := strconv.Quote(t.TempDir())
+	a, c, w := crewAgents(t, `[{"name":"Claude","command":`+strconv.Quote(wrapper)+`,"codename":"cl","env":{"PATH":`+path+`}}]`)
 	p, _ := a.profile("cl")
 	for range 2 {
 		instance, err := a.startInstance(p)
