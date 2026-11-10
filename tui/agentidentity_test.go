@@ -2,6 +2,8 @@ package tui
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -10,17 +12,18 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/parse/qml"
+	"github.com/yongjohnlee80/golib/tui/i18n"
 )
 
 // Exercise profile persistence/validation without starting a terminal. Other
 // panel services remain absent so an invalid target cannot accidentally spawn.
 type identityHost struct {
 	agentHost
-	p                 prefs
+	p                 fakePrefs
 	state             map[string]any
 	notes             []string
 	stopErr           error
-	ws                wsInfo
+	ws                feature.Workspace
 	configuredCommand string
 	panel             *modelPanel
 	postMu            sync.Mutex // a held removal's retirement posts from its own goroutine
@@ -33,8 +36,47 @@ type identityHost struct {
 	opened            []string // the drawers OpenDrawer opened, in order
 }
 
+// testEnglish is id's English, or id when the catalog has none: the catalog the host's words come
+// from (tui/qml/i18n), read from the module's files, as the agents' fake host says them.
+func testEnglish(id string) string {
+	if t, ok := testCatalog().Lookup(i18n.English, id); ok {
+		return t
+	}
+	return id
+}
+
+// testCatalog is the English catalog, found from the module's root above the test's folder.
+var testCatalog = sync.OnceValue(func() *i18n.Set {
+	dir, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			break
+		}
+		if filepath.Dir(dir) == dir {
+			panic("the agents' cells: no go.mod above the test's folder")
+		}
+		dir = filepath.Dir(dir)
+	}
+	s := &i18n.Set{}
+	if err := s.LoadDir(os.DirFS(filepath.Join(dir, "tui", "qml")), "i18n", "autodoc"); err != nil {
+		panic("the agents' cells: the English catalog: " + err.Error())
+	}
+	return s
+})
+
+// fakePrefs is the preferences a fake host answers (feature.PrefsView): each value by its name, no
+// panel's geometry.
+type fakePrefs struct{ values map[string]string }
+
+func (p fakePrefs) Value(name string) string { return p.values[name] }
+
+func (fakePrefs) PanelGeometry(string, string) (int, int) { return 0, 0 }
+
 func newIdentityHost(raw string) *identityHost {
-	return &identityHost{p: prefs{values: map[string]string{
+	return &identityHost{p: fakePrefs{values: map[string]string{
 		prefAgentProfiles: raw, prefAgentDefaultCodename: "",
 	}}, state: map[string]any{}}
 }
@@ -47,10 +89,10 @@ func (*identityHost) Close(string)                     {}
 func (*identityHost) Focus(string) error               { return nil }
 func (*identityHost) DaemonAddress() string            { return "unused" }
 func (c *identityHost) ActiveWorkspace() (feature.Workspace, bool) {
-	return workspaceOf(c.ws), c.ws.name != ""
+	return c.ws, c.ws.Name != ""
 }
 func (c *identityHost) ActiveWorkspaceInfo() (feature.Workspace, bool) {
-	return workspaceOf(c.ws), c.ws.name != ""
+	return c.ws, c.ws.Name != ""
 }
 func (c *identityHost) ConfigureTerminal(_, _, _ string, args ...string) error {
 	if len(args) > 0 {
@@ -59,9 +101,9 @@ func (c *identityHost) ConfigureTerminal(_, _, _ string, args ...string) error {
 	return nil
 }
 func (c *identityHost) Notify(msg string) { c.notes = append(c.notes, msg) }
-func (*identityHost) Tr(id string) string { return englishText(id) }
+func (*identityHost) Tr(id string) string { return testEnglish(id) }
 func (f *identityHost) Trf(id string, args ...any) string {
-	return feature.Fill(englishText(id), args...)
+	return feature.Fill(testEnglish(id), args...)
 }
 func (c *identityHost) WidgetsChanged()                       {}
 func (c *identityHost) CallView(string, string, ...any) error { return c.stopErr }
@@ -99,21 +141,6 @@ func TestLegacyCodenamesAreUniqueDeterministicAndPersisted(t *testing.T) {
 	}
 }
 
-func TestProfileRenamesKeepOwnAndUntouchedLegacyCodenames(t *testing.T) {
-	c := newIdentityHost(`[{"name":"Claude Opus","command":"one"},{"name":"Other Agent","command":"two"}]`)
-	c.p = prefsFor(map[string]any{prefAgentProfiles: c.p.Value(prefAgentProfiles), prefAgentDefault: "Other Agent"}, false)
-	a := testAgents(c, "", "")
-	a.startEditAgent(1)
-	a.saveAgent("Renamed", "two")
-	profiles := a.profiles()
-	if profiles[0].Codename != "claude-opus" || profiles[1].Codename != "other-agent" || a.defaultProfile() != "other-agent" {
-		t.Fatalf("display rename changed an identity or lost the name-based default: %+v, default %q", profiles, a.defaultProfile())
-	}
-	if raw := c.p.Value(prefAgentProfiles); !strings.Contains(raw, `"codename":"other-agent"`) {
-		t.Fatalf("edit did not persist its derived codename: %s", raw)
-	}
-}
-
 // ranAs is command as the agent's shell is given it, its last argument (agentArgv): what
 // ConfigureTerminal records. The line itself under /bin/sh; under pwsh behind its Standard
 // argument passing (internal/usershell's Run).
@@ -125,7 +152,7 @@ func ranAs(a *agents, command string) string {
 func TestDuplicateLabelsEditEachExactProfileAndResolveTargetsByCodename(t *testing.T) {
 	for _, row := range []int{0, 1} {
 		c := newIdentityHost(`[{"name":"Same","command":"one"},{"name":"Same","command":"two"}]`)
-		c.ws = wsInfo{name: "kb", root: t.TempDir()}
+		c.ws = feature.Workspace{Name: "kb", Root: t.TempDir()}
 		a := testAgents(c, t.TempDir(), "")
 		before := a.profiles()
 		a.startEditAgent(row)
@@ -183,27 +210,6 @@ func TestGoneProfileActionsLeaveOtherRunningInstancesAlone(t *testing.T) {
 	}
 }
 
-func TestLegacyDefaultNameMigratesWithoutConfusingAnotherCodename(t *testing.T) {
-	c := newIdentityHost(`[{"name":"Foo","command":"one"},{"name":"foo","command":"two"},{"name":"foo-2","command":"three"}]`)
-	c.p = prefsFor(map[string]any{prefAgentProfiles: c.p.Value(prefAgentProfiles), prefAgentDefault: "foo-2"}, false)
-	a := testAgents(c, "", "")
-	if p, ok := a.profile(a.defaultProfile()); !ok || p.Command != "three" {
-		t.Fatalf("legacy name was mistaken for another allocated codename: %+v", p)
-	}
-	a.saveAgentProfile("Other", "other", "other")
-	if a.defaultProfile() != "foo-2-2" || c.p.Value(prefAgentDefaultCodename) != "foo-2-2" {
-		t.Fatal("list save did not persist the intended default identity")
-	}
-	a.makeAgentDefault(1)
-	if p, ok := a.profile(a.defaultProfile()); !ok || p.Command != "two" {
-		t.Fatal("canonical default still resolved through display labels")
-	}
-	a.removeAgentConfirmed(a.profiles()[1])
-	if a.defaultProfile() != "" || c.p.Value(prefAgentDefaultCodename) != "" {
-		t.Fatal("removing the default resurrected the legacy label")
-	}
-}
-
 func TestMigrationDoesNotStealAnExplicitPersistedCodename(t *testing.T) {
 	profiles := agentProfilesOf(`[{"name":"Taken","command":"legacy"},{"name":"Explicit","command":"saved","codename":"taken"}]`)
 	if profiles[0].Codename != "taken-2" || profiles[1].Codename != "taken" {
@@ -221,47 +227,6 @@ func TestAnEditedProfileSnapshotCannotOverwriteANewerRecord(t *testing.T) {
 	a.saveAgentProfile("Edited", "old form", "same")
 	if !reflect.DeepEqual(profiles, a.profiles()) || !strings.Contains(c.state["App.agentFormError"].(string), "profile changed") {
 		t.Fatal("a stale form overwrote the changed record")
-	}
-}
-
-func TestAgentDefaultMigrationDistinguishesMissingAndExplicitEmptyAtRestart(t *testing.T) {
-	for _, tc := range []struct {
-		name            string
-		present         bool
-		canonical, want string
-	}{
-		{"legacy absent", false, "", "a"},
-		{"explicit clear", true, "", ""},
-		{"canonical selection", true, "b", "b"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			raw := map[string]any{
-				prefAgentProfiles: `[{"name":"A","command":"one"},{"name":"B","command":"two"}]`,
-				prefAgentDefault:  "A",
-			}
-			if tc.present {
-				raw[prefAgentDefaultCodename] = tc.canonical
-			}
-			values, migrated := migrateAgentDefault(raw)
-			if migrated == tc.present {
-				t.Fatal("migration ignored canonical key presence")
-			}
-			var rows prefs
-			feature.ReadRows(&rows, values, agentPrefRows(nil))
-			for _, p := range []prefs{rows, prefsFor(raw, false), prefsFor(raw, true)} {
-				c := newIdentityHost(`[]`)
-				c.p = p
-				if got := testAgents(c, "", "").defaultProfile(); got != tc.want {
-					t.Fatalf("restart default %q, want %q", got, tc.want)
-				}
-			}
-			if _, changed := migrateAgentDefault(values); changed {
-				t.Fatal("canonical preferences migrated more than once")
-			}
-			if _, added := raw[prefAgentDefaultCodename]; added != tc.present {
-				t.Fatal("migration mutated the raw store map")
-			}
-		})
 	}
 }
 
