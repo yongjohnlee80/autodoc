@@ -19,14 +19,14 @@ import (
 const crewSetupTimeout = 10 * time.Second
 
 // crewSetupOf is the setup of a crew agent of kind whose folder is dir, as the agent's own autodoc
-// (bin, on config) answers it: `autodoc crew setup --kind K --host window --autodoc <its wrapper>
+// (bin, on config) answers it: `autodoc crew setup --kind K --host window --autodoc <bin>
 // --agent-dir <dir>` (docs/decisions/crew.md: every host asks, none builds). Its mail mode, argv,
 // env, allowance, folder files and after-steps are that build's. The profile's environment
 // (environ) is the process's own, never on its command line, which any user can read.
 func crewSetupOf(bin, config, kind, dir string, environ []string) (crew.Setup, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), crewSetupTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, bin, crewSetupArgs(config, kind, dir)...)
+	cmd := exec.CommandContext(ctx, bin, crewSetupArgs(config, kind, dir, bin)...)
 	cmd.Dir = dir
 	cmd.Env = environ
 	out, err := cmd.Output()
@@ -44,17 +44,18 @@ func crewSetupOf(bin, config, kind, dir string, environ []string) (crew.Setup, e
 	return s, nil
 }
 
-// crewSetupArgs is crewSetupOf's command line: the config, the kind, the window's host, the agent's
-// own wrapper as the command its hooks and its MCP server run, its folder, and --mail-via mcp (the
-// window registers the session with the mail_via it is answered). Never an environment value of
-// the profile's.
-func crewSetupArgs(config, kind, dir string) []string {
+// crewSetupArgs is crewSetupOf's command line: the config, the kind, the window's host, the build
+// by its absolute path (bin) as the command its hooks and its MCP server run, never a bare autodoc
+// a PATH could make another (its config reaches it through $AUTODOC_CONFIG in the agent's
+// environment), its folder, and --mail-via mcp (the window registers the session with the mail_via
+// it is answered). Never an environment value of the profile's.
+func crewSetupArgs(config, kind, dir, bin string) []string {
 	args := []string{}
 	if config != "" {
 		args = append(args, "--config", config)
 	}
 	return append(args, "crew", "setup", "--kind", kind, "--host", crew.HostWindow,
-		"--autodoc", shellQuote(filepath.Join(dir, "bin", "autodoc")), "--agent-dir", dir, "--mail-via", "mcp")
+		"--autodoc", shellQuote(bin), "--agent-dir", dir, "--mail-via", "mcp")
 }
 
 // askSetup runs kind's setup for the agent folder dir under environ off the loop, as the crew

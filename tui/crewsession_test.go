@@ -791,7 +791,7 @@ func TestTheGuidesAllowanceIsMergedIntoTheFolderAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 	for range 2 { // a second write changes nothing
-		if _, err := writeWakeAcceptance(dir, crew.KindClaude, crew.ClaudeFloor(), crew.ClaudeAllow()); err != nil {
+		if _, err := writeWakeAcceptance(shellQuote("/opt/autodoc/autodoc"), dir, crew.KindClaude, crew.ClaudeFloor(), crew.ClaudeAllow()); err != nil {
 			t.Fatal(err)
 		}
 	}
