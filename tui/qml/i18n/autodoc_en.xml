@@ -5755,10 +5755,6 @@ WHAT A KEY NEEDS
         <source>todos: %1 is loaded, read-only: its store was released (todos.release)</source>
         <translation>todos: %1 is loaded, read-only: its store was released (todos.release)</translation>
     </message>
-    <message id="autodoc.notice.todos.todos_the_store_of_is_not_listed">
-        <source>todos: the store of %1 isn't listed, so no other is shown in its place</source>
-        <translation>todos: the store of %1 isn't listed, so no other is shown in its place</translation>
-    </message>
     <message id="autodoc.notice.todos.todos_refreshed_moved_archived_rewritten">
         <source>todos: refreshed: %1 moved, %2 archived, %3 rewritten</source>
         <translation>todos: refreshed: %1 moved, %2 archived, %3 rewritten</translation>
@@ -5774,6 +5770,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.todos.todos_the_store_is_now_in">
         <source>todos: the store is now in %1</source>
         <translation>todos: the store is now in %1</translation>
+    </message>
+    <message id="autodoc.notice.todos.todos_the_store_of_is_not_listed">
+        <source>todos: the store of %1 isn't listed, so no other is shown in its place</source>
+        <translation>todos: the store of %1 isn't listed, so no other is shown in its place</translation>
     </message>
     <message id="autodoc.notice.todos_assign.todos_assigned_to_but_not_delivered_it_runs_in">
         <source>todos: assigned to %1, but not delivered: it runs in workspace %2, and its crew mail didn't reach it (%3); switch to %2, then A on the task to deliver it again</source>
