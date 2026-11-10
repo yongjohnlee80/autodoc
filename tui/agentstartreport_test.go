@@ -25,14 +25,14 @@ func TestARefusedRegistrationIsShownInItsTab(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if instance.running || c.panel.tabs[0].Running {
-		t.Fatalf("a refused registration started the agent: running %v", instance.running)
+	if instance.State().Running || c.panel.tabs[0].Running {
+		t.Fatalf("a refused registration started the agent: running %v", instance.State().Running)
 	}
 	if len(c.panel.reported) != 1 || !strings.Contains(c.panel.reported[0], "the codename already has a live session") {
 		t.Fatalf("the agent's tab showed %q, want the daemon's refusal", c.panel.reported)
 	}
-	if c.panel.active != instance.tab {
-		t.Fatalf("the selected tab %q, want the refused agent's %q", c.panel.active, instance.tab)
+	if c.panel.active != instance.State().Tab {
+		t.Fatalf("the selected tab %q, want the refused agent's %q", c.panel.active, instance.State().Tab)
 	}
 	if len(c.notes) == 0 || !strings.Contains(c.notes[len(c.notes)-1], "the codename already has a live session") {
 		t.Fatalf("notices %v, want the refusal said", c.notes)
@@ -46,15 +46,15 @@ func TestAPathTheShellResolvesIsNotJudged(t *testing.T) {
 	for _, command := range []string{"~/autodoc-no-such/agent --x", "./autodoc-no-such-agent", "bin/autodoc-no-such-agent", "autodoc-no-such-agent*"} {
 		t.Run(command, func(t *testing.T) {
 			a, c, w := startingCrewAgents(t, `[{"name":"One","command":`+strconv.Quote(command)+`,"codename":"one"}]`)
-			a.commandCheck = commandOnPath // as a window's agents are
+			seamsOf(a).agentCommandCheck = commandOnPath // as a window's agents are
 			p, _ := a.profile("one")
 			instance, err := a.startInstance(p)
 			if err != nil { // no instance to read: the start itself failed
 				t.Fatalf("%q: %v, the tab showed %q; want it started, unjudged", command, err, c.panel.reported)
 			}
-			if !instance.running || calledTimes(w, "crew.register") != 1 || len(c.panel.reported) != 0 {
+			if !instance.State().Running || calledTimes(w, "crew.register") != 1 || len(c.panel.reported) != 0 {
 				t.Fatalf("%q: running %v, registered %d, the tab showed %q; want it started, unjudged",
-					command, instance.running, calledTimes(w, "crew.register"), c.panel.reported)
+					command, instance.State().Running, calledTimes(w, "crew.register"), c.panel.reported)
 			}
 		})
 	}
@@ -63,16 +63,16 @@ func TestAPathTheShellResolvesIsNotJudged(t *testing.T) {
 		// drive's, which the shell resolves)
 		missing := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "autodoc-no-such", "agent")
 		a, c, w := startingCrewAgents(t, `[{"name":"One","command":`+strconv.Quote(missing)+`,"codename":"one"}]`)
-		a.commandCheck = commandOnPath
+		seamsOf(a).agentCommandCheck = commandOnPath
 		p, _ := a.profile("one")
 		instance, err := a.startInstance(p)
 		if err != nil { // no instance to read: the start itself failed, rather than being refused
 			t.Fatalf("%v, the tab showed %q; want it refused, naming the path", err, c.panel.reported)
 		}
-		if instance.running || calledTimes(w, "crew.register") != 0 || len(c.panel.reported) != 1 ||
+		if instance.State().Running || calledTimes(w, "crew.register") != 0 || len(c.panel.reported) != 1 ||
 			!strings.Contains(c.panel.reported[0], missing) {
 			t.Fatalf("running %v, registered %d, the tab showed %q; want it refused, naming the path",
-				instance.running, calledTimes(w, "crew.register"), c.panel.reported)
+				instance.State().Running, calledTimes(w, "crew.register"), c.panel.reported)
 		}
 	})
 }
@@ -85,7 +85,7 @@ func TestAPathTheShellResolvesIsNotJudged(t *testing.T) {
 func TestAProfileCommandNotOnPathIsRefusedBeforeItsSession(t *testing.T) {
 	a, c, w := crewAgents(t, `[{"name":"Sephiroth","command":"claude-work","codename":"sephiroth"},{"name":"Shell","command":"FOO=1 claude-work","codename":"shell"}]`)
 	c.panel = &modelPanelCopy{owner: c, starts: true}
-	a.commandCheck = commandOnPath // as a window's agents are
+	seamsOf(a).agentCommandCheck = commandOnPath // as a window's agents are
 	p, _ := a.profile("sephiroth")
 	instance, err := a.startInstance(p)
 	if err != nil {
@@ -94,8 +94,8 @@ func TestAProfileCommandNotOnPathIsRefusedBeforeItsSession(t *testing.T) {
 	if n := calledTimes(w, "crew.register"); n != 0 {
 		t.Fatalf("a command not on PATH was registered %d times, want none", n)
 	}
-	if instance.running || instance.starting {
-		t.Fatalf("a command not on PATH: running %v starting %v", instance.running, instance.starting)
+	if instance.State().Running || instance.State().Starting {
+		t.Fatalf("a command not on PATH: running %v starting %v", instance.State().Running, instance.State().Starting)
 	}
 	if len(c.panel.reported) != 1 || !strings.Contains(c.panel.reported[0], "claude-work") || !strings.Contains(c.panel.reported[0], "alias") {
 		t.Fatalf("the agent's tab showed %q, want claude-work named and the alias said", c.panel.reported)

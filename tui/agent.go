@@ -68,6 +68,20 @@ type agentSeams interface {
 	// VimQuestionPending is whether a first run's Vim question is still to be asked: the setup waits
 	// for it.
 	VimQuestionPending(p feature.PrefsView) bool
+	// The rest are a test's, each nil (or "") for the program's own: SetupRun runs a crew start's
+	// setup in place of the agent's autodoc (`crew setup`, crewSetupOf); Spawn starts an agent's
+	// program in place of a pseudo-terminal (pty.Start, as a terminal tab's own start is);
+	// CommandCheck refuses a start whose command's program the agent can't find, in place of
+	// commandOnPath (one answering nil checks nothing); CodexHere runs a setup's after-steps in place
+	// of the agent's autodoc (runAfterSteps); PromptsReported replaces the crew's answer of whether
+	// the window sees the agent's permission prompts (promptsSeen); AgentBin is the autodoc build
+	// an agent calls in place of this one.
+	SetupRun() func(kind, dir string, environ []string) (crew.Setup, error)
+	Spawn() func(pty.Cmd) (terminal.TerminalProcess, error)
+	CommandCheck() func(shell usershell.Shell, command string, env []string) error
+	CodexHere() func(environ []string, args ...string) error
+	PromptsReported() func(kind string, reported bool) bool
+	AgentBin() string
 }
 
 // remains one contribution even when the later agents model gains more tabs.
@@ -79,28 +93,11 @@ type agents struct {
 	agentConfig            string
 	crew                   CrewScope     // the window's crew scope; nil in a program without one
 	inbox                  CrewAttention // the human's crew inbox: which agents wait on a prompt; nil without one
-	// promptsReported replaces the crew's answer (a cell's: whether the window sees the agent's
-	// permission prompts, so the messaging base may press Enter, given what the crew said); nil in
-	// production
-	promptsReported func(kind string, reported bool) bool
-	// spawn starts an agent's program on a pseudo-terminal (runAgent): pty.Start, as a terminal
-	// tab's own start is
-	spawn func(pty.Cmd) (terminal.TerminalProcess, error)
-	// commandCheck refuses a start whose command's program the agent can't find (commandOnPath);
-	// nil checks nothing
-	commandCheck func(shell usershell.Shell, command string, env []string) error
-	agentBinPath string
-	// setupRun replaces a crew start's run of the agent's autodoc as `crew setup` (crewSetupOf, a
-	// cell's); nil in production
-	setupRun func(kind, dir string, environ []string) (crew.Setup, error)
 	// claudeAnswers are what each Claude Code program knows (warmClaude), by the word that runs it,
 	// on the loop; claudeWarned the programs a failed read was told of
 	claudeAnswers map[string]*claudeAnswer
 	claudeWarned  map[string]bool
-	// codexHere replaces runAfterSteps's runs of the agent's autodoc (a setup's after-steps, a cell's);
-	// nil in production
-	codexHere  func(environ []string, args ...string) error
-	editorPath func() string // the TUI's editor socket, "" without one (editorsocket.go)
+	editorPath    func() string // the TUI's editor socket, "" without one (editorsocket.go)
 	// editorTokens are the agents' secrets on the editor socket, by codename: made at an agent's
 	// first start in this run, and what the socket knows an agent by (editorsocket.go)
 	editorTokens        map[string]string
@@ -122,8 +119,7 @@ type agents struct {
 
 func newAgents(c agentHost, s agentSeams, dir, config string) *agents {
 	return &agents{c: c, seams: s, agentDir: dir, agentConfig: config, instances: map[string]*agentInstance{}, deliveries: map[*agentDelivery]bool{},
-		agentRows: tuidecl.NewListModel("key", "default", "name", "codename", "command"),
-		spawn:     func(c pty.Cmd) (terminal.TerminalProcess, error) { return pty.Start(c) }, commandCheck: commandOnPath}
+		agentRows: tuidecl.NewListModel("key", "default", "name", "codename", "command")}
 }
 func (a *agents) BindPanelHost(c feature.PanelHost) error {
 	host, ok := c.(agentHost)
@@ -620,10 +616,11 @@ func (h *agents) agentOfToken(t string) string {
 	return ""
 }
 
-// agentBin is the autodoc binary the agent calls: this one, unless a test says otherwise.
+// agentBin is the autodoc binary the agent calls: this one, unless a test's seams say otherwise
+// (agentSeams.AgentBin).
 func (h *agents) agentBin() string {
-	if h.agentBinPath != "" {
-		return h.agentBinPath
+	if bin := h.seams.AgentBin(); bin != "" {
+		return bin
 	}
 	bin, _ := procenv.Self()
 	return bin

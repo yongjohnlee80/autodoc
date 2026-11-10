@@ -13,7 +13,7 @@ import (
 // (SPC g's own toggle), the agent running on, the same incarnation; opening it again shows its tab.
 func TestHideClosesTheAgentPanelAndKeepsTheAgents(t *testing.T) {
 	agent, _ := fakeAgentCopy(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuoteCopy(agent), Codename: "heron"}}, "heron")
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	shown := func() bool { return onLoop(r, func() bool { return r.h.panelOpen["agent"] }) }
@@ -57,7 +57,7 @@ func TestHideClosesTheAgentPanelAndKeepsTheAgents(t *testing.T) {
 // is refused.
 func TestAClickOnMaximizeInTheAgentsMenu(t *testing.T) {
 	agent, _ := fakeAgentCopy(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuoteCopy(agent), Codename: "heron"}}, "heron")
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	r.s.WaitFor(t, "the agents' panel open", func(string) bool { return onLoop(r, func() bool { return r.h.panelOpen["agent"] }) })

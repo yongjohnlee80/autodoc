@@ -29,9 +29,9 @@ func TestAnAgentIsNotStartedOnABrokenPath(t *testing.T) {
 	c.ws = feature.Workspace{ID: 7, Name: "kb", Root: t.TempDir()}
 	a := testAgents(c, filepath.Join(t.TempDir(), "agents"+string(os.PathListSeparator)+"odd"), "")
 	// the PATH entry is the agents' (Unix) or the build's folder (Windows): each holds the separator
-	a.agentBinPath = fakeBuild(t, filepath.Join(t.TempDir(), "build"+string(os.PathListSeparator)+"odd"))
+	fakeSeamsOf(a).agentBin = fakeBuild(t, filepath.Join(t.TempDir(), "build"+string(os.PathListSeparator)+"odd"))
 	data := t.TempDir()
-	a.setupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
+	fakeSeamsOf(a).setupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
 		return crew.SetupFor(crew.SetupInput{Kind: kind, Host: crew.HostWindow, Env: map[string]string{"PATH": "/nonexistent"},
 			DataDir: data, Dir: dir, AgentDir: dir}, "")
 	}

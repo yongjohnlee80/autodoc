@@ -22,7 +22,7 @@ func TestAClaudeProfileOnAnotherAccountIsAClaudeAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dir := c.panel.configs[instance.tab].Dir
+	dir := c.panel.configs[instance.State().Tab].Dir
 	if ctx, _, ok := readContext(t, dir); !ok || ctx.Kind != "claude" {
 		t.Fatalf("its session's kind: %+v (%v), want claude", ctx, ok)
 	}

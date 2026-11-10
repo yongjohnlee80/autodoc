@@ -20,7 +20,7 @@ func recordingAgentCopy(t *testing.T, bracketed bool) (agent, report string) {
 	if bracketed {
 		mode = `printf '\033[?2004h'` + "\n"
 	}
-	script := "#!/bin/sh\nstty raw -echo\n" + mode + "printf 'ready\\r\\n'\nexec cat > " + shellQuoteCopy(report) + "\n"
+	script := "#!/bin/sh\nstty raw -echo\n" + mode + "printf 'ready\\r\\n'\nexec cat > " + shellQuote(report) + "\n"
 	if err := os.WriteFile(agent, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
