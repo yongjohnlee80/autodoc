@@ -28,6 +28,28 @@ import (
 )
 
 // agents owns profile forms and the running agent's identity. Its single panel
+// CrewScope is what the agents ask of the window's crew scope (the host's crew host, crewhost.go):
+// its scope while held, an agent's session registered, its context published and its exit told,
+// what the crew says of an agent (its prompts reported, its start, its exit), and mail sent
+// through it, queued as a task or as the user's own.
+type CrewScope interface {
+	Held() (scope string, epoch int64, ok bool)
+	Register(codename, kind string, prompts bool, via crew.MailVia, workspace int64, instance, dir string, then func(crewSession, error))
+	Publish(s crewSession) (string, error)
+	Exit(s crewSession, why string)
+	PromptsReported(codename string, then func(reported bool))
+	StartedOf(codename string, then func(started bool))
+	WhenExited(id string, fn func())
+	QueueSend(codename, kind, subject, body string, then func(error))
+	UserSend(codename, kind, subject, body string, then func(error))
+}
+
+// CrewAttention is what the agents ask of the human's crew inbox: whether an agent waits on the
+// user (a decision or a permission prompt).
+type CrewAttention interface {
+	AwaitsUser(codename string) bool
+}
+
 // agentSeams are the program's seams the agents read (seams.go), each read when used: a test may
 // change one while the program runs.
 type agentSeams interface {
@@ -51,8 +73,8 @@ type agents struct {
 	agentDir, agentRunning string
 	agentRunningLabel      string // label captured at start; agentRunning itself is the codename
 	agentConfig            string
-	crew                   *crewHost  // the window's crew scope; nil in a program without one
-	inbox                  *crewInbox // the human's crew inbox: which agents wait on a prompt; nil without one
+	crew                   CrewScope     // the window's crew scope; nil in a program without one
+	inbox                  CrewAttention // the human's crew inbox: which agents wait on a prompt; nil without one
 	// promptsReported replaces the crew's answer (a cell's: whether the window sees the agent's
 	// permission prompts, so the messaging base may press Enter, given what the crew said); nil in
 	// production
@@ -716,7 +738,7 @@ func (h *agents) agentFolder(ws feature.Workspace, codename string) string {
 	if h.crew == nil {
 		return dir
 	}
-	if scope, _, ok := h.crew.held(); ok {
+	if scope, _, ok := h.crew.Held(); ok {
 		return filepath.Join(dir, crewFileName(scope), crewFileName(codename))
 	}
 	return dir

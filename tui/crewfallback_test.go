@@ -38,13 +38,13 @@ func newFallbackRig(t *testing.T, offer ...map[string]any) *fallbackRig {
 		return map[string]any{"jobs": jobs}, nil
 	}
 	r.w.fallbackDone = func(p []any) (any, error) { r.reported = append(r.reported, p); return map[string]any{}, nil }
-	r.a.crew.deliverJob = r.a.deliverFallback
+	crewOf(r.a).deliverJob = r.a.deliverFallback
 	return r
 }
 
 // start polls, as a claim does, and settles what it left.
 func (r *fallbackRig) start() {
-	r.a.crew.pollFallbacks(r.a.crew.gen)
+	crewOf(r.a).pollFallbacks(crewOf(r.a).gen)
 	settleMessaging(r.c, r.w)
 }
 
@@ -70,8 +70,8 @@ func (r *fallbackRig) outcome(id string) string {
 func TestAFallbackJobIsTypedOnceAndReported(t *testing.T) {
 	r := newFallbackRig(t, job("j1", 0))
 	var atTyping string // the record as the job is handed to the base
-	r.a.crew.deliverJob = func(codename, text string, done func(error)) {
-		atTyping, _ = r.a.crew.fallbackRecord("j1")
+	crewOf(r.a).deliverJob = func(codename, text string, done func(error)) {
+		atTyping, _ = crewOf(r.a).fallbackRecord("j1")
 		r.a.deliverFallback(codename, text, done)
 	}
 	r.start()
@@ -84,7 +84,7 @@ func TestAFallbackJobIsTypedOnceAndReported(t *testing.T) {
 	if got := r.outcome("j1"); got != string(mail.FallbackDelivered) {
 		t.Fatalf("reported %v, want j1 delivered", r.reported)
 	}
-	if _, ok := r.a.crew.fallbackRecord("j1"); ok {
+	if _, ok := crewOf(r.a).fallbackRecord("j1"); ok {
 		t.Fatal("the record outlived the report the daemon took")
 	}
 	if r.polls < 2 {
@@ -100,7 +100,7 @@ func TestAFallbackJobIsTypedOnceAndReported(t *testing.T) {
 // unread, the job typed or reported unknown).
 func TestARecordedJobOfferedAgainIsNeverTypedTwice(t *testing.T) {
 	r := newFallbackRig(t, job("j2", 1))
-	if err := r.a.crew.writeFallbackRecord("j2", fallbackTyping); err != nil {
+	if err := crewOf(r.a).writeFallbackRecord("j2", fallbackTyping); err != nil {
 		t.Fatal(err)
 	}
 	r.start()
@@ -137,7 +137,7 @@ func TestARecordStaysUntilTheDaemonTakesTheReport(t *testing.T) {
 		return nil, &golibrpc.Error{Code: mail.CodeLeaseLost, Message: "the lease is lost"}
 	}
 	r.start()
-	if rec, ok := r.a.crew.fallbackRecord("j4"); !ok || rec != string(mail.FallbackDelivered) {
+	if rec, ok := crewOf(r.a).fallbackRecord("j4"); !ok || rec != string(mail.FallbackDelivered) {
 		t.Fatalf("the record after an untaken report: %q %v, want delivered", rec, ok)
 	}
 }
@@ -165,13 +165,13 @@ func TestAHandedOverSendTypesNothing(t *testing.T) {
 // A daemon before protocol 42 has no jobs: the window asks once and never again.
 func TestAnOlderDaemonIsAskedForJobsOnce(t *testing.T) {
 	a, c, w := messagingRig(t)
-	a.crew.deliverJob = a.deliverFallback
-	a.crew.pollFallbacks(a.crew.gen)
+	crewOf(a).deliverJob = a.deliverFallback
+	crewOf(a).pollFallbacks(crewOf(a).gen)
 	settleMessaging(c, w)
 	if n := strings.Count(strings.Join(w.calls, " "), "mail.fallbacks"); n != 1 {
 		t.Fatalf("%d asks for jobs of an older daemon, want 1", n)
 	}
-	if _, err := os.Stat(a.crew.fallbackPath("x")); err == nil {
+	if _, err := os.Stat(crewOf(a).fallbackPath("x")); err == nil {
 		t.Fatal("a record was written")
 	}
 }

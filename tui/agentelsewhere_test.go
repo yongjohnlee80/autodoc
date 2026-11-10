@@ -33,7 +33,7 @@ func TestAnAgentInAnotherWorkspaceIsRung(t *testing.T) {
 	for _, via := range []string{"HandTask", "SendText"} {
 		t.Run(via, func(t *testing.T) {
 			a, c, w := elsewhereRig(t)
-			scope, _, _ := a.crew.held()
+			scope, _, _ := crewOf(a).held()
 			var sends [][]any
 			w.inboxSend = func(p []any) (any, error) { sends = append(sends, p); return map[string]any{"message": "m1"}, nil }
 			var heard []error

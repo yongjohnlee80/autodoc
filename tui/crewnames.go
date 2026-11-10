@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/yongjohnlee80/golib/paths"
-
 	"github.com/yongjohnlee80/autodoc/internal/filelock"
 )
 
@@ -17,10 +15,6 @@ import (
 // a codename, becomes a file or folder name only through crewFileName, the same on every OS. Builds
 // before this one wrote a scope as it is (autodoc:1f2e…), which Windows cannot hold;
 // migrateCrewNames renames those once, before anything reads the folders.
-
-// crewFileName is identity as one path element: paths.Encode's, so a colon, a separator or a name
-// Windows reserves is escaped, and two identities never share a name.
-func crewFileName(identity string) string { return paths.Encode(identity) }
 
 // crewNamesLock is the lock migrateCrewNames holds in base, so two windows starting together rename
 // once between them.

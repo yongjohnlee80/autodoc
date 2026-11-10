@@ -47,8 +47,8 @@ func crewAgents(t *testing.T, profiles string) (*agents, *identityHost, *crewWin
 	}
 	w := &crewWindow{d: newCrewDaemonForHost()}
 	a.crew = newCrewHost(w, s.env, t.TempDir())
-	a.crew.Connected()
-	if _, _, ok := a.crew.held(); !ok {
+	crewOf(a).Connected()
+	if _, _, ok := crewOf(a).held(); !ok {
 		t.Fatalf("the window holds no scope: %v", w.notices)
 	}
 	return a, c, w
@@ -143,7 +143,7 @@ func startedCmd(a *agents, c *identityHost, instance *agentInstance) (started pt
 // dead session's credential, and the codename is free for its next session.
 func TestAnAgentIsRegisteredBeforeItStarts(t *testing.T) {
 	a, c, _ := crewAgents(t, oneTwo)
-	scope, _, _ := a.crew.held()
+	scope, _, _ := crewOf(a).held()
 	p, _ := a.profile("one")
 	instance, err := a.startInstance(p)
 	if err != nil {
@@ -201,8 +201,8 @@ func TestARefusedRegistrationStartsNothing(t *testing.T) {
 	if len(c.notes) == 0 || !strings.Contains(c.notes[len(c.notes)-1], "did not start") {
 		t.Fatalf("notices %v, want one saying the agent did not start", c.notes)
 	}
-	if len(a.crew.pending) != 0 {
-		t.Fatalf("a refused registration is kept to be replayed: %v", a.crew.pending)
+	if len(crewOf(a).pending) != 0 {
+		t.Fatalf("a refused registration is kept to be replayed: %v", crewOf(a).pending)
 	}
 }
 
@@ -222,8 +222,8 @@ func TestAFailedSpawnEndsItsSession(t *testing.T) {
 	if _, _, ok := readContext(t, a.agentFolder(workspaceOf(c.ws), "one")); ok {
 		t.Fatal("a failed spawn left its context")
 	}
-	if len(a.crew.sessions) != 0 {
-		t.Fatalf("a failed spawn's session is still counted live: %v", a.crew.sessions)
+	if len(crewOf(a).sessions) != 0 {
+		t.Fatalf("a failed spawn's session is still counted live: %v", crewOf(a).sessions)
 	}
 	c.panel.startErr = nil
 	if again, err := a.startInstance(p); err != nil || !again.running {
@@ -468,7 +468,7 @@ func TestAQuitRemovesEverySessionsContext(t *testing.T) {
 		}
 		dirs = append(dirs, c.panel.configs[instance.tab].Dir)
 	}
-	a.crew.Stopped()
+	crewOf(a).Stopped()
 	for _, dir := range dirs {
 		if _, _, ok := readContext(t, dir); ok {
 			t.Errorf("%s's context outlived the quit", dir)
@@ -526,8 +526,8 @@ func TestALostRegistrationReplyIsReplayed(t *testing.T) {
 	if first.running || first.starting {
 		t.Fatalf("a lost answer: running %v, starting %v", first.running, first.starting)
 	}
-	if len(a.crew.pending) != 1 {
-		t.Fatalf("the lost registration is not kept: %v", a.crew.pending)
+	if len(crewOf(a).pending) != 1 {
+		t.Fatalf("the lost registration is not kept: %v", crewOf(a).pending)
 	}
 	again, err := a.startInstance(p)
 	if err != nil {
@@ -543,8 +543,8 @@ func TestALostRegistrationReplyIsReplayed(t *testing.T) {
 	if id, err := w.d.m.Whoami(context.Background(), ctx.Credential, ""); err != nil || id.Session != again.session.ID {
 		t.Fatalf("the replayed credential: %+v, %v", id, err)
 	}
-	if len(a.crew.pending) != 0 {
-		t.Fatalf("still pending after its replay: %v", a.crew.pending)
+	if len(crewOf(a).pending) != 0 {
+		t.Fatalf("still pending after its replay: %v", crewOf(a).pending)
 	}
 }
 
@@ -558,8 +558,8 @@ func TestALostRegistrationNobodyStartsIsEnded(t *testing.T) {
 		t.Fatalf("a lost answer: %v", err)
 	}
 	w.fire() // the renewal: the daemon answers
-	if len(a.crew.pending) != 0 || len(a.crew.owed) != 0 || calledTimes(w, "crew.register") != 2 || calledTimes(w, "crew.exit") != 1 {
-		t.Fatalf("after the renewal: pending %v, owed %v, calls %v; want it replayed and ended", a.crew.pending, a.crew.owed, w.calls)
+	if len(crewOf(a).pending) != 0 || len(crewOf(a).owed) != 0 || calledTimes(w, "crew.register") != 2 || calledTimes(w, "crew.exit") != 1 {
+		t.Fatalf("after the renewal: pending %v, owed %v, calls %v; want it replayed and ended", crewOf(a).pending, crewOf(a).owed, w.calls)
 	}
 	again, err := a.startInstance(p)
 	if err != nil {
@@ -576,12 +576,12 @@ func TestALostRegistrationNobodyStartsIsEnded(t *testing.T) {
 func TestALateRegistrationStartsNothing(t *testing.T) {
 	for name, change := range map[string]func(t *testing.T, a *agents, w *crewWindow){
 		"the scope taken over": func(t *testing.T, a *agents, w *crewWindow) {
-			if _, err := w.d.m.Takeover(context.Background(), a.crew.scope, "replacement-owner", ""); err != nil {
+			if _, err := w.d.m.Takeover(context.Background(), crewOf(a).scope, "replacement-owner", ""); err != nil {
 				t.Fatal(err)
 			}
-			a.crew.scope, a.crew.epoch = "autodoc:0000000000000001", 1 // the window claimed another
+			crewOf(a).scope, crewOf(a).epoch = "autodoc:0000000000000001", 1 // the window claimed another
 		},
-		"a new epoch":    func(_ *testing.T, a *agents, _ *crewWindow) { a.crew.epoch++ },
+		"a new epoch":    func(_ *testing.T, a *agents, _ *crewWindow) { crewOf(a).epoch++ },
 		"another store":  func(_ *testing.T, _ *agents, w *crewWindow) { w.store = "store-2" },
 		"another daemon": func(_ *testing.T, _ *agents, w *crewWindow) { w.socket = "/run/test/other.sock" },
 	} {
@@ -603,8 +603,8 @@ func TestALateRegistrationStartsNothing(t *testing.T) {
 			if _, _, ok := readContext(t, instance.dir); ok {
 				t.Fatal("a late registration wrote its context")
 			}
-			if len(a.crew.sessions) != 0 || calledTimes(w, "crew.exit") != 1 {
-				t.Fatalf("its session: live %v, exits sent %d; want it ended", a.crew.sessions, calledTimes(w, "crew.exit"))
+			if len(crewOf(a).sessions) != 0 || calledTimes(w, "crew.exit") != 1 {
+				t.Fatalf("its session: live %v, exits sent %d; want it ended", crewOf(a).sessions, calledTimes(w, "crew.exit"))
 			}
 		})
 	}
@@ -625,7 +625,7 @@ func TestAnEndedSessionLeavesAReplacementsContext(t *testing.T) {
 	if _, err := crew.WriteContext(dir, crew.Context{Session: "newer", Scope: instance.session.Scope}); err != nil {
 		t.Fatal(err)
 	}
-	a.crew.exit(instance.session, crew.EndedExit)
+	crewOf(a).exit(instance.session, crew.EndedExit)
 	if ctx, _, ok := readContext(t, dir); !ok || ctx.Session != "newer" {
 		t.Fatalf("the replacement's context: present %v, %+v", ok, ctx)
 	}
@@ -646,14 +646,14 @@ func TestALostExitIsAskedAgain(t *testing.T) {
 	dir := c.panel.configs[instance.tab].Dir
 	w.down = map[string]int{"crew.exit": 1}
 	c.panel.exit(instance.tab, 0)
-	if len(a.crew.owed) != 1 {
-		t.Fatalf("a lost exit is not owed: %v", a.crew.owed)
+	if len(crewOf(a).owed) != 1 {
+		t.Fatalf("a lost exit is not owed: %v", crewOf(a).owed)
 	}
 	if _, _, ok := readContext(t, dir); ok {
 		t.Fatal("the context outlived the exit")
 	}
 	var old string
-	for id := range a.crew.owed {
+	for id := range crewOf(a).owed {
 		old = id
 	}
 	again, err := a.startInstance(p)
@@ -664,8 +664,8 @@ func TestALostExitIsAskedAgain(t *testing.T) {
 		t.Fatalf("the session the daemon never heard end (%s) is still live after the new start", old)
 	}
 	w.fire()
-	if len(a.crew.owed) != 0 {
-		t.Fatalf("the exit is still owed after the daemon answered: %v", a.crew.owed)
+	if len(crewOf(a).owed) != 0 {
+		t.Fatalf("the exit is still owed after the daemon answered: %v", crewOf(a).owed)
 	}
 	if !again.running {
 		t.Fatal("the late exit of the old session stopped the new one")
@@ -684,8 +684,8 @@ func TestAStartedAgentKeepsItsSessionWhenItsTabCantBeShown(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir := c.panel.configs[instance.tab].Dir
-	if !instance.running || instance.session.ID == "" || len(a.crew.sessions) != 1 {
-		t.Fatalf("a started agent whose tab can't be shown: running %v, session %q, live %v", instance.running, instance.session.ID, a.crew.sessions)
+	if !instance.running || instance.session.ID == "" || len(crewOf(a).sessions) != 1 {
+		t.Fatalf("a started agent whose tab can't be shown: running %v, session %q, live %v", instance.running, instance.session.ID, crewOf(a).sessions)
 	}
 	if ctx, _, ok := readContext(t, dir); !ok || ctx.Session != instance.session.ID {
 		t.Fatalf("its context: present %v, %+v", ok, ctx)
@@ -694,7 +694,7 @@ func TestAStartedAgentKeepsItsSessionWhenItsTabCantBeShown(t *testing.T) {
 		t.Fatalf("notices %v, want the tab's failure said", c.notes)
 	}
 	c.panel.exit(instance.tab, 0)
-	if len(a.crew.sessions) != 0 {
+	if len(crewOf(a).sessions) != 0 {
 		t.Fatal("its session outlived the process")
 	}
 }
@@ -810,3 +810,6 @@ func TestTheGuidesAllowanceIsMergedIntoTheFolderAlone(t *testing.T) {
 		t.Errorf("the allowance was written into the user's home: %v", es)
 	}
 }
+
+// crewOf is a's crew scope as the crew host it is, for a cell that reads or sets the host's own state.
+func crewOf(a *agents) *crewHost { return a.crew.(*crewHost) }
