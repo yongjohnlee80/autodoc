@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -477,6 +478,7 @@ func TestADraftClosedWhileItIsNamedIsSavedStill(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	sess := NewSession(d.sock, nil)
 	held, release := make(chan struct{}, 1), make(chan struct{})
+	letGo := releaseOnce(t, release)
 	var hold atomic.Bool
 	sess.SetBeforeCall(func(method string, params []any) {
 		if method == "doc.write" && hold.Load() {
@@ -492,13 +494,13 @@ func TestADraftClosedWhileItIsNamedIsSavedStill(t *testing.T) {
 	hold.Store(true)
 	r.keys(t, decltest.Type("kept")...)
 	r.keys(t, enter())
-	<-held
+	waitHeld(t, held, "doc.write")
 	onLoop(r, func() bool { r.h.closeShownBuffer(); return true })
 	r.s.WaitForText(t, "unsaved file")
 	r.keys(t, key('d'))
 	r.s.WaitFor(t, "the question gone", func(sc string) bool { return !strings.Contains(sc, "unsaved file") })
 	hold.Store(false)
-	close(release)
+	letGo()
 	r.waitNoticed(t, "saved the draft as kept.md")
 	if got := d.read(t, "kb", "kept.md"); got != "draft text" {
 		t.Fatalf("kept.md: %q", got)
@@ -672,6 +674,7 @@ func TestADraftEditedWhileItIsNamedKeepsTheEdit(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	sess := NewSession(d.sock, nil)
 	held, release := make(chan struct{}, 1), make(chan struct{})
+	letGo := releaseOnce(t, release)
 	var hold atomic.Bool
 	sess.SetBeforeCall(func(method string, params []any) {
 		if method == "doc.write" && hold.Load() {
@@ -687,7 +690,7 @@ func TestADraftEditedWhileItIsNamedKeepsTheEdit(t *testing.T) {
 	hold.Store(true)
 	r.keys(t, decltest.Type("kept")...)
 	r.keys(t, enter())
-	<-held
+	waitHeld(t, held, "doc.write")
 	r.typeInEditor(t, "more ")
 	// the draft is modified already: waitTyped would not wait for these keys; the text does
 	r.s.WaitFor(t, "the edit typed during the write", func(string) bool {
@@ -695,7 +698,7 @@ func TestADraftEditedWhileItIsNamedKeepsTheEdit(t *testing.T) {
 	})
 	newer := r.editorText()
 	hold.Store(false)
-	close(release)
+	letGo()
 	r.waitNoticed(t, "it changed again while it was saved")
 	if f := r.file(); f.path != "kept.md" || !f.open || !f.dirty || r.editorText() != newer {
 		t.Fatalf("after the write: %+v %q; want kept.md, unsaved, with the newer text", f, r.editorText())
@@ -712,6 +715,7 @@ func TestAQuitThatSavesADraftEditedMeanwhileAsksAgain(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	sess := NewSession(d.sock, nil)
 	held, release := make(chan struct{}, 1), make(chan struct{})
+	letGo := releaseOnce(t, release)
 	var hold atomic.Bool
 	sess.SetBeforeCall(func(method string, params []any) {
 		if method == "doc.write" && hold.Load() {
@@ -730,7 +734,7 @@ func TestAQuitThatSavesADraftEditedMeanwhileAsksAgain(t *testing.T) {
 	hold.Store(true)
 	r.keys(t, decltest.Type("kept")...)
 	r.keys(t, enter())
-	<-held
+	waitHeld(t, held, "doc.write")
 	r.typeInEditor(t, "more ")
 	// the draft is modified already: waitTyped would not wait for these keys; the text does
 	r.s.WaitFor(t, "the edit typed during the write", func(string) bool {
@@ -738,7 +742,7 @@ func TestAQuitThatSavesADraftEditedMeanwhileAsksAgain(t *testing.T) {
 	})
 	newer := r.editorText()
 	hold.Store(false)
-	close(release)
+	letGo()
 	r.s.WaitForText(t, "kept.md changed again while it was saved")
 	select {
 	case <-r.s.Quit():
@@ -813,4 +817,24 @@ func TestLaterAsksAboutTheNextCopy(t *testing.T) {
 	r.s.WaitForText(t, "b.md had unsaved changes")
 	r.keys(t, key('l'))
 	r.s.WaitForText(t, "a.md had unsaved changes")
+}
+
+// waitHeld waits, bounded, for a held call to arrive. An unbounded wait turned a save that failed
+// before its call into a hang until the package's timeout, which named no cause.
+func waitHeld(t *testing.T, held <-chan struct{}, call string) {
+	t.Helper()
+	select {
+	case <-held:
+	case <-time.After(daemonWait):
+		t.Fatalf("%s was never called", call)
+	}
+}
+
+// releaseOnce lets a held call go at most once: when the test does, or at its cleanup, so a test that
+// fails while holding one doesn't leave the call, and its program, waiting.
+func releaseOnce(t *testing.T, release chan struct{}) func() {
+	var once sync.Once
+	letGo := func() { once.Do(func() { close(release) }) }
+	t.Cleanup(letGo)
+	return letGo
 }
