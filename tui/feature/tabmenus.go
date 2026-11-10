@@ -151,6 +151,40 @@ func WithLabelMessage(row widgetcore.MenuItemModel, label string) widgetcore.Men
 // is slightly smaller than the editor's.
 var AgentScales = Percents(50, 150, 10)
 
+// PanelSizes and PanelLengths are the choices a panel's dialog offers for its size and its length,
+// in percent, every tenth.
+var (
+	PanelSizes   = Percents(10, 90, 10)
+	PanelLengths = Percents(10, 100, 10)
+)
+
+// PercentLabels are the choices ps as a dialog shows them.
+func PercentLabels(ps []int) []string {
+	out := make([]string, len(ps))
+	for i, p := range ps {
+		out[i] = strconv.Itoa(p) + "%"
+	}
+	return out
+}
+
+// Nearest is the row of the choice closest to v.
+func Nearest(choices []int, v int) int {
+	best := 0
+	for i, c := range choices {
+		if abs(c-v) < abs(choices[best]-v) {
+			best = i
+		}
+	}
+	return best
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
 // percents are lo to hi in steps of step.
 func Percents(lo, hi, step int) []int {
 	var out []int
