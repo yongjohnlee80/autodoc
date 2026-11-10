@@ -2,12 +2,12 @@ package tui
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 )
 
 // pathOf is the PATH an agent's start sets (its argv's PATH=), "" for none.
@@ -21,14 +21,14 @@ func pathOf(args []string) string {
 	return path
 }
 
-// An agent's PATH has its own autodoc first: split on ':', as every shell splits it, the first
-// folder holds the wrapper that runs the window's build on its config, and a shell asking for
-// autodoc in that environment finds it. A crew agent's folder holds the window's scope in its name
-// (autodoc:<id>), so that folder can't be the entry itself: split there, PATH's first entries named
-// nothing, and every bare `autodoc` an agent ran (agy's bridge, its mail) was the user's installed
-// one.
+// An agent's PATH has its own autodoc first: split on the OS's separator, the first folder holds the
+// autodoc that runs the window's build on its config, found there as the OS finds a program (on Unix
+// the launcher, through the agent folder's link; on Windows the build itself, its config through
+// $AUTODOC_CONFIG). A crew agent's folder holds the window's scope in its name, so on Unix that
+// folder can't be the entry itself.
 func TestAnAgentsPathHasItsOwnAutodocFirst(t *testing.T) {
 	a, c, _ := crewAgents(t, oneTwo)
+	a.agentBinPath = fakeBuild(t, filepath.Join(t.TempDir(), "build"))
 	p, _ := a.profile("one")
 	instance, err := a.startInstance(p)
 	if err != nil {
@@ -40,18 +40,13 @@ func TestAnAgentsPathHasItsOwnAutodocFirst(t *testing.T) {
 	}
 	path := pathOf(args)
 	first, _, _ := strings.Cut(path, string(os.PathListSeparator))
-	sh, err := exec.LookPath("sh")
-	if err != nil {
-		t.Skip("no sh")
+	// found as the OS finds a program on that PATH: the launcher on Unix, the build itself on Windows
+	found, err := procenv.LookPath(procenv.Env(nil).With("PATH="+path), "autodoc")
+	if err != nil || filepath.Dir(found) != first {
+		t.Fatalf("the agent's PATH %q: its first folder %q; autodoc is found at %q, %v; want it there", path, first, found, err)
 	}
-	cmd := exec.Command(sh, "-c", "command -v autodoc")
-	cmd.Env = []string{"PATH=" + path}
-	out, _ := cmd.Output()
-	found := strings.TrimSpace(string(out))
-	wrapper, _ := os.ReadFile(found)
-	if found != filepath.Join(first, "autodoc") || !strings.Contains(string(wrapper), "exec "+shellQuote(a.agentBin())) {
-		t.Fatalf("the agent's PATH %q: its first folder %q; a shell finds autodoc at %q (%q), want the window's wrapper there",
-			path, first, found, string(wrapper))
+	if b, _ := os.ReadFile(found); found != a.agentBin() && !strings.Contains(string(b), a.agentBin()) {
+		t.Fatalf("autodoc at %s is neither the build %s nor a launcher of it: %q", found, a.agentBin(), b)
 	}
 	if !strings.Contains(instance.dir, crewFileName("autodoc:")) { // a scope by its file name
 		t.Fatalf("the agent's folder %q holds no scope: the cell doesn't hold the case it is for", instance.dir)
@@ -65,6 +60,8 @@ func TestAnAgentIsNotStartedOnABrokenPath(t *testing.T) {
 	c := newIdentityHost(oneTwo)
 	c.ws = wsInfo{id: 7, name: "kb", root: t.TempDir()}
 	a := testAgents(c, filepath.Join(t.TempDir(), "agents"+string(os.PathListSeparator)+"odd"), "")
+	// the PATH entry is the agents' (Unix) or the build's folder (Windows): each holds the separator
+	a.agentBinPath = fakeBuild(t, filepath.Join(t.TempDir(), "build"+string(os.PathListSeparator)+"odd"))
 	data := t.TempDir()
 	a.setupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
 		return crew.SetupFor(crew.SetupInput{Kind: kind, Host: crew.HostWindow, Env: map[string]string{"PATH": "/nonexistent"},
@@ -84,7 +81,10 @@ func TestAnAgentsStalePathLinkIsReplaced(t *testing.T) {
 			a, c, _ := crewAgents(t, oneTwo)
 			p, _ := a.profile("one")
 			dir := a.agentFolder(c.ws, "one")
-			link := a.agentPathDir(dir)
+			link := a.agentPathLink(dir)
+			if a.agentPathDir(dir) != link {
+				t.Skip("this OS puts the build's folder on the agent's PATH, with no link")
+			}
 			if err := os.MkdirAll(filepath.Dir(link), 0o700); err != nil {
 				t.Fatal(err)
 			}
@@ -111,4 +111,22 @@ func TestAnAgentsStalePathLinkIsReplaced(t *testing.T) {
 			}
 		})
 	}
+}
+
+// fakeBuild makes an empty autodoc build in a new folder dir, named as this OS names a program
+// (autodoc.exe on Windows), and answers its path: what an agent's PATH leads to.
+func fakeBuild(t *testing.T, dir string) string {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	name := "autodoc"
+	if filepath.Separator == '\\' {
+		name += ".exe"
+	}
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
