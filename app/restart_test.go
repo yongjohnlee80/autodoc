@@ -142,7 +142,7 @@ func TestRestartReplacesAnOlderDaemon(t *testing.T) {
 	if n := spawns.Load(); n != 1 {
 		t.Fatalf("%d daemons spawned, want one", n)
 	}
-	info, err := rpc.Probe(context.Background(), ipc.Network, sock)
+	info, err := rpc.Probe(context.Background(), "unix", sock)
 	if err != nil || info.Protocol != rpc.Protocol {
 		t.Errorf("after the restart the socket answers %+v (%v), want this build's protocol %d", info, err, rpc.Protocol)
 	}
@@ -155,7 +155,7 @@ func TestRestartReplacesACurrentDaemon(t *testing.T) {
 	sock := ipc.ScratchAddr(dir, "s.sock")
 	cfgPath := configSharing(t, sock, filepath.Join(dir, "state"), filepath.Join(dir, "data"))
 	old := start(t, cfgPath, sock)
-	before, err := rpc.Probe(context.Background(), ipc.Network, sock)
+	before, err := rpc.Probe(context.Background(), "unix", sock)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +176,7 @@ func TestRestartReplacesACurrentDaemon(t *testing.T) {
 	if _, err := restartOnce(t, r, cfgPath); err != nil {
 		t.Fatalf("--restart: %v", err)
 	}
-	after, err := rpc.Probe(context.Background(), ipc.Network, sock)
+	after, err := rpc.Probe(context.Background(), "unix", sock)
 	if err != nil {
 		t.Fatalf("nothing answers after the restart: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestRestartLeavesAnotherStoresDaemonAlone(t *testing.T) {
 	dir := short(t)
 	sock := ipc.ScratchAddr(dir, "s.sock")
 	start(t, configSharing(t, sock, filepath.Join(dir, "state-a"), filepath.Join(dir, "data-a")), sock)
-	before, err := rpc.Probe(context.Background(), ipc.Network, sock)
+	before, err := rpc.Probe(context.Background(), "unix", sock)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +222,7 @@ func TestRestartLeavesAnotherStoresDaemonAlone(t *testing.T) {
 	if !errors.As(err, &mm) {
 		t.Errorf("--restart over another store's daemon: %v, want a store mismatch", err)
 	}
-	after, perr := rpc.Probe(context.Background(), ipc.Network, sock)
+	after, perr := rpc.Probe(context.Background(), "unix", sock)
 	if perr != nil || after.Instance != before.Instance {
 		t.Errorf("another store's daemon was disturbed: %+v (%v)", after, perr)
 	}
