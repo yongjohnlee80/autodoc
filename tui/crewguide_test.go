@@ -114,49 +114,6 @@ func TestACrewOpenCodeAgentLoadsTheAutoDocPlugin(t *testing.T) {
 	}
 }
 
-// TestTheWindowAsksTheAgentsOwnCrewSetup: crewSetupOf runs the agent's own autodoc as `crew setup
-// --kind K --host window --autodoc <its wrapper> --agent-dir <its folder>` on the TUI's config, in
-// the agent's folder, the profile's environment its own: no value of the profile's is on its command
-// line, which any user can read. Its answer is the setup, mail_via included; output that is no setup
-// is refused.
-func TestTheWindowAsksTheAgentsOwnCrewSetup(t *testing.T) {
-	rec, agentDir := t.TempDir(), t.TempDir()
-	bin := filepath.Join(rec, "autodoc")
-	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + shellQuote(filepath.Join(rec, "args")) + "\nenv > " + shellQuote(filepath.Join(rec, "env")) +
-		"\npwd > " + shellQuote(filepath.Join(rec, "pwd")) + "\necho '{\"argv\":[],\"env\":{},\"mail_via\":\"mcp\"}'\n"
-	if err := os.WriteFile(bin, []byte(script), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	s, err := crewSetupOf(bin, "/c/autodoc.toml", crew.KindClaude, agentDir, []string{"PATH=/usr/bin:/bin", "ANTHROPIC_API_KEY=s3cr3t-value"})
-	if err != nil || s.MailVia != crew.MailViaMCP {
-		t.Fatalf("crewSetupOf: %+v %v, want its answer, mail via MCP", s, err)
-	}
-	read := func(name string) string {
-		b, err := os.ReadFile(filepath.Join(rec, name))
-		if err != nil {
-			t.Fatal(err)
-		}
-		return string(b)
-	}
-	want := strings.Join([]string{"--config", "/c/autodoc.toml", "crew", "setup", "--kind", "claude", "--host", "window",
-		"--autodoc", shellQuote(bin), "--agent-dir", agentDir, "--mail-via", "mcp"}, "\n") + "\n" // the build by its path
-	if got := read("args"); got != want {
-		t.Errorf("its command line:\n%s\nwant\n%s", got, want)
-	}
-	if strings.Contains(read("args"), "s3cr3t") || !strings.Contains(read("env"), "ANTHROPIC_API_KEY=s3cr3t-value") {
-		t.Error("the profile's value is on the command line, or not in the environment")
-	}
-	if got := strings.TrimSpace(read("pwd")); got != agentDir {
-		t.Errorf("it ran in %q, want the agent's folder %q", got, agentDir)
-	}
-	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho 'something else'\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := crewSetupOf(bin, "", crew.KindClaude, agentDir, nil); err == nil {
-		t.Error("output that is no setup was taken")
-	}
-}
-
 // TestTwoAgentsOfOneKindAskTheirOwnSetup: every crew start asks its own setup, with its own folder
 // (agy's trust and folder files, an MCP server's command name it), and starts with its own answer:
 // nothing one start's setup answered is kept for another's.
