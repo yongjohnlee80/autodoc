@@ -194,3 +194,25 @@ func (h *crewHost) promptsReported(codename string, then func(reported bool)) {
 		then(false)
 	})
 }
+
+// peersOf are crew.list's rows (rows) A may hand a task to beside the window's own agents: every
+// live agent of a scope other than own.
+func peersOf(rows any, own string) []feature.AgentEntry {
+	var out []feature.AgentEntry
+	for _, r := range feature.AsList(rows) {
+		m := feature.AsMap(r)
+		code, scope, presence := feature.Str(m, "codename"), feature.Str(m, "scope"), feature.Str(m, "presence")
+		if code == "" || scope == "" || scope == own || scope == mail.GlobalScope || // the user's and the daemon's own
+			(presence != crew.PresenceLive && presence != crew.PresenceReconnecting) {
+			continue
+		}
+		project := scope
+		if name, ok := strings.CutPrefix(scope, "autovim:"); ok {
+			project = name
+		}
+		reachable, _ := m["reachable"].(bool)
+		out = append(out, feature.AgentEntry{Ref: feature.AgentRef{Codename: code}, Name: code,
+			Peer: &feature.PeerAgent{Scope: scope, Project: project, Reachable: reachable, Why: feature.Str(m, "why")}})
+	}
+	return out
+}
