@@ -54,4 +54,4 @@ func comspec(env procenv.Env) string {
 }
 
 // commandWords is line's words as PowerShell reads them.
-func commandWords(line string) []Word { return powerShellWords(line) }
+func commandWords(line string) []Word { return POSIXWords(line) } // MUTANT
