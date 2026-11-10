@@ -1347,6 +1347,10 @@
         <source>This window lost its crew scope %1 while away; its agents now live under %2.</source>
         <translation>Esta janela perdeu seu escopo de equipe %1 enquanto estava ausente; seus agentes agora ficam em %2.</translation>
     </message>
+    <message id="autodoc.crew.names_kept">
+        <source>Agent folders from an earlier AutoDoc kept their old names, since their new ones were already there: %1</source>
+        <translation>Algumas pastas de agentes de um AutoDoc anterior mantiveram os nomes antigos, porque os novos já existiam: %1</translation>
+    </message>
     <message id="autodoc.crew.scope_unlisted">
         <source>This window's crew scope is held, but not listed for a successor: %1</source>
         <translation>O escopo de equipe desta janela está retido, mas não registrado para um sucessor: %1</translation>

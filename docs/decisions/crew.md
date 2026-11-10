@@ -248,6 +248,34 @@ scope has one owner at a time: one process of its host, fenced by an epoch.
 
 In the code: `core/crew/claim.go`, `core/crew/proc.go`, `tui/crewhost.go`
 
+## Crew names on disk
+
+A crew identity becomes a file or folder name only through one function, `crewFileName`, which is
+golib's `paths.Encode`: the same name on every OS. A byte other than a lower-case letter, a digit,
+`.`, `_` or `-` becomes `%XX`, so a scope's colon (`autodoc:1f2e…` → `autodoc%3A1f2e…`), a
+separator or a name Windows reserves can't reach a path, and two identities never share a name.
+For now that covers the scope (an agent's folder under its workspace, `.crew-scopes/`,
+`.crew-todos/`) and the codename (an agent's folder under its scope). Codenames are lower case,
+digits and hyphens, so theirs are unchanged.
+
+Builds before this one wrote a scope as it is, which Windows can't hold. Every window renames those
+names once at its start, before anything reads the folders:
+
+- Only a name holding a colon is renamed, since every scope has one and nothing else AutoDoc writes
+  there does.
+- Each rename is a single rename in its own folder, under a file lock in the agents' folder
+  (`.crew-names.lock`), so two windows starting together rename once.
+- A run cut short leaves each name old or new, never half, and the next start renames the rest.
+- An old name whose new one is already there is left as it is, and so is the new one: nothing is
+  written over. The window says which were kept.
+- It is one way: no build writes an old name again. An agent's folder moves with its scope's
+  name, so a CLI that keys its state on the folder's path (Claude Code's project memory, say) sees
+  it as a new folder once. The release notes say so.
+- A scope whose name held `/` or `\` was written with `_` there, so it can't be read back. Its old
+  folder is renamed as it stands, and the agent starts in a new one.
+
+In the code: `tui/crewnames.go`, `tui/agent.go`, `tui/crewhost.go`, `tui/crewtodos.go`
+
 ## One daemon is one crew
 
 Agents in an AutoDoc window and in Neovim reach each other by codename, wherever each runs: one

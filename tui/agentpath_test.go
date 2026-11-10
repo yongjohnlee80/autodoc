@@ -47,7 +47,7 @@ func TestAnAgentsPathHasItsOwnAutodocFirst(t *testing.T) {
 		t.Fatalf("the agent's PATH %q: its first folder %q; autodoc is found at %q, %v (%q), want the window's wrapper there",
 			path, first, found, err, string(wrapper))
 	}
-	if os.PathListSeparator == ':' && !strings.Contains(instance.dir, "autodoc:") {
+	if !strings.Contains(instance.dir, crewFileName("autodoc:")) { // a scope by its file name
 		t.Fatalf("the agent's folder %q holds no scope: the cell doesn't hold the case it is for", instance.dir)
 	}
 }
