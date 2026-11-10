@@ -258,8 +258,8 @@ jobs:
       - name: scratch (not for merge) the shell seam's argument cells and three mutants
         if: ${{ !inputs.discover }}
         run: |
-          C='^(TestAnAgentsCommandReachesItsCLIWhole|TestAnAgentsCommandRefusesAValueItCannotCarry)$'
-          U='^(TestAQuotedArgumentReachesTheProgramAsItself|TestArgsCarryEachArgumentWhole|TestCarriesRefusesWhatABatchFileReadsAgain|TestArgsAreWrittenEachShellsWay|TestArgsCarryASetupsArgumentsThroughABatchFile|TestEachShellRunsALineItsWay|TestTheShellsOnWindows)$'
+          C='^(TestAnAgentsCommandReachesItsCLIWhole|TestAnAgentsCommandRefusesAValueItCannotCarry|TestARefusedAgentCommandIsNeverSpawned)$'
+          U='^(TestCarriesQuotedRefusesWhatWindowsPowerShellSplits|TestAQuotedArgumentReachesTheProgramAsItself|TestArgsCarryEachArgumentWhole|TestCarriesRefusesWhatABatchFileReadsAgain|TestArgsAreWrittenEachShellsWay|TestArgsCarryASetupsArgumentsThroughABatchFile|TestEachShellRunsALineItsWay|TestTheShellsOnWindows)$'
           go test -count=1 -timeout 10m -v -run "$U" ./internal/usershell/ > "$RUNNER_TEMP/u.txt" 2>&1 && ru=0 || ru=$?
           go test -count=1 -timeout 10m -v -run "$C" ./tui/ > "$RUNNER_TEMP/t.txt" 2>&1 && rt=0 || rt=$?
           grep -E '^(=== RUN|\s*--- (PASS|FAIL|SKIP)|ok |FAIL|panic: )|_test\.go:[0-9]+:' "$RUNNER_TEMP/u.txt" "$RUNNER_TEMP/t.txt" | grep -v '=== RUN' | cut -c1-400 || true
@@ -276,6 +276,7 @@ jobs:
           sed -i 's|^\t\treturn `""` // 5.1 drops an empty argument; "" is one to the program$|\t\treturn "" // mutant noempty|' internal/usershell/quote.go; mut noempty
           python -c "p='internal/usershell/usershell.go'; s=open(p,encoding='utf-8').read(); o='bad = \"%&|<>^\\\\r\\\\n\\\\x00\"'; assert o in s; open(p,'w',encoding='utf-8').write(s.replace(o,'bad = \"\\\\x00\" // mutant nocarry'))"; mut nocarry
           python -c "p='internal/usershell/usershell.go'; s=open(p,encoding='utf-8').read(); o='bad = \"%&|<>^\\\\r\\\\n\\\\x00\"'; assert o in s; open(p,'w',encoding='utf-8').write(s.replace(o,'bad = \"&|<>^\\\\r\\\\n\\\\x00\" // mutant nopercent'))"; mut nopercent
+          python -c "p='internal/usershell/usershell.go'; s=open(p,encoding='utf-8').read(); o='if s.kind != winps {'; assert s.count(o)==1; open(p,'w',encoding='utf-8').write(s.replace(o,'if true || s.kind != winps { // mutant noquoted'))"; mut noquoted
           [ $ru = 0 ] && [ $rt = 0 ]
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
