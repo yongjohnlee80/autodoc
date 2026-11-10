@@ -1,10 +1,10 @@
 package crew
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
-	"strings"
 )
 
 // Finding a crew agent's program follows the OS's rules through the standard library's own lookup
@@ -44,9 +44,16 @@ func isPath(name string) bool {
 	return filepath.Base(name) != name || filepath.VolumeName(name) != ""
 }
 
-// programName is the program a file is: its base name, less the extension that makes it one on Windows
-// (mise.exe and mise are both mise).
-func programName(path string) string {
-	base := filepath.Base(path)
-	return strings.TrimSuffix(base, filepath.Ext(base))
+// isProgram is whether the file at path is the program name by the OS's rules: what the standard
+// library's lookup finds for name in path's folder is that very file. On Unix it is the name alone
+// (mise.sh is not mise); on Windows, the name with an extension PATHEXT names, in any case (mise.exe,
+// MISE.EXE). The comms module keeps no extension rule of its own.
+func isProgram(path, name string) bool {
+	f, err := exec.LookPath(filepath.Join(filepath.Dir(path), name))
+	if err != nil {
+		return false
+	}
+	a, errA := os.Stat(f)
+	b, errB := os.Stat(path)
+	return errA == nil && errB == nil && os.SameFile(a, b)
 }

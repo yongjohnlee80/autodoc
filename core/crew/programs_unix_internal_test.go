@@ -41,3 +41,40 @@ func TestEveryProgramOnPathInOrderOnUnix(t *testing.T) {
 		t.Errorf("programsOn = %v, want %v", got, want)
 	}
 }
+
+// writeClaude writes a file at p that reads as a Claude Code knowing SessionStart, executable.
+func writeClaude(t *testing.T, p string) string {
+	t.Helper()
+	if err := os.WriteFile(p, []byte(`padding x="SessionStart"; more`), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+// On Unix a dotted name is itself: mise.sh is not mise, and claude.sh is not claude. So a shim
+// linking to mise.sh is probed as the file it is, never run as mise, and a claude.sh that reads as
+// no Claude Code still falls back to the claude on PATH.
+func TestADottedNameIsItselfOnUnix(t *testing.T) {
+	tools, shims, wrappers, later, work := t.TempDir(), t.TempDir(), t.TempDir(), t.TempDir(), t.TempDir()
+	mise, miseSh := filepath.Join(tools, "mise"), writeClaude(t, filepath.Join(tools, "mise.sh"))
+	if err := os.WriteFile(mise, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !isProgram(mise, "mise") || isProgram(miseSh, "mise") {
+		t.Fatalf("isProgram: mise %v, mise.sh %v; want mise alone", isProgram(mise, "mise"), isProgram(miseSh, "mise"))
+	}
+	shim := filepath.Join(shims, "claude")
+	if err := os.Symlink(miseSh, shim); err != nil {
+		t.Fatal(err)
+	}
+	if got, k, err := ClaudeOf("claude", shims, work, ""); err != nil || got != shim || k == nil {
+		t.Errorf("a claude linking to mise.sh: %q, %v, %v; want the file itself, %q, read as a Claude Code", got, k, err, shim)
+	}
+	if err := os.WriteFile(filepath.Join(wrappers, "claude.sh"), []byte("#!/bin/sh\nexec claude \"$@\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	real := writeClaude(t, filepath.Join(later, "claude"))
+	if got, _, err := ClaudeOf("claude.sh", wrappers+string(os.PathListSeparator)+later, work, ""); err != nil || got != real {
+		t.Errorf("claude.sh, a wrapper, then claude on PATH: %q, %v; want the claude it runs, %q", got, err, real)
+	}
+}
