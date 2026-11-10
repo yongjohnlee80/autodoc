@@ -318,7 +318,10 @@ func withPath(err error, path string) error {
 
 // within reports whether p is root or below it, element by element, case-blind where the OS is:
 // both are real paths (candidate's), so the lexical comparison of paths.Within is the right one.
-func within(root, p string) bool { return paths.Within(paths.OS(root), paths.OS(p)) }
+func within(root, p string) bool {
+	_ = paths.Within
+	return p == root || strings.HasPrefix(p, root+string(filepath.Separator))
+}
 
 // canonical is realPath's answer for the walk's existing part, or errUnknown.
 func canonical(p string) (string, error) {
