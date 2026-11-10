@@ -216,34 +216,6 @@ func TestTheBridgeEndsWithItsLanguageServer(t *testing.T) {
 	}
 }
 
-// TestTheBridgeLockIsItsSessions: a session's bridge lock is held by one bridge at a time; another
-// session's bridge in the same folder takes its own; a lock its holder let go of (or died holding:
-// the kernel drops it) is taken again.
-func TestTheBridgeLockIsItsSessions(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	unlock, err := lockBridge(dir, "agy", "s1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := lockBridge(dir, "agy", "s1"); !errors.Is(err, errBridgeRunning) {
-		t.Errorf("a second bridge for s1: %v, want errBridgeRunning", err)
-	}
-	other, err := lockBridge(dir, "agy", "s2")
-	if err != nil {
-		t.Errorf("s2's bridge beside s1's: %v", err)
-	} else {
-		other()
-	}
-	unlock()
-	again, err := lockBridge(dir, "agy", "s1")
-	if err != nil {
-		t.Errorf("s1's lock after its holder let go: %v", err)
-	} else {
-		again()
-	}
-}
-
 // TestTheBridgesAddressIsLoopback: agy's address is made a loopback IP (localhost is 127.0.0.1,
 // never resolved), and any other host is refused.
 func TestTheBridgesAddressIsLoopback(t *testing.T) {

@@ -9,7 +9,6 @@ package filelock
 import (
 	"errors"
 	"fmt"
-	"os"
 )
 
 // ErrHeld is a lock another holder has: another process, or another TryLock on the same file.
@@ -18,15 +17,28 @@ var ErrHeld = errors.New("filelock: the lock is held")
 // Unlock releases a lock TryLock took. It is safe to call more than once; later calls do nothing.
 type Unlock func() error
 
+// Option changes how TryLock and Lock open the lock's file.
+type Option func(*options)
+
+type options struct{ noFollow bool }
+
+// NoFollow refuses a path whose last element is a link, rather than lock the file it leads to: for a
+// lock file in a folder another program may write in. On Windows any reparse point is refused.
+func NoFollow() Option { return func(o *options) { o.noFollow = true } }
+
 // TryLock takes the exclusive lock on the file at path, creating the file (mode 0600) when it is not
 // there. It never waits: a lock someone holds is an error wrapping ErrHeld.
-func TryLock(path string) (Unlock, error) { return take(path, false) }
+func TryLock(path string, opts ...Option) (Unlock, error) { return take(path, false, opts) }
 
 // Lock is TryLock that waits while another holder has the lock, until it is free.
-func Lock(path string) (Unlock, error) { return take(path, true) }
+func Lock(path string, opts ...Option) (Unlock, error) { return take(path, true, opts) }
 
-func take(path string, wait bool) (Unlock, error) {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+func take(path string, wait bool, opts []Option) (Unlock, error) {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
+	f, err := open(path, o.noFollow)
 	if err != nil {
 		return nil, fmt.Errorf("filelock: opening %s: %w", path, err)
 	}
