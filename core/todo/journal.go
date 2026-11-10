@@ -179,12 +179,16 @@ func (s *Settings) ApplyRepath(store string, r Repath) {
 	}
 }
 
-// storeRootOf is the root whose default store is p (<root>/.todo-list, paths.Join(root, todoDir)'s
-// inverse), a volume's root included: "/.todo-list" is "/"'s and "C:/.todo-list" "C:/"'s, never ""
-// or "C:", which name no folder a root can be. ok is false for any other path.
+// storeRootOf is the root whose default store is p (<root>/.todo-list), paths.Join(root, todoDir)'s
+// exact inverse, a volume's root included: "/.todo-list" is "/"'s and "C:/.todo-list" "C:/"'s, never
+// "" or "C:", which name no folder a root can be. ok is false for any other path, an unclean
+// spelling of one included ("/a/.todo-list/", "/a//.todo-list"): a store's path is kept clean.
 func storeRootOf(p string) (root string, ok bool) {
 	if path.Base(p) != todoDir || !paths.IsAbs(p) {
 		return "", false
 	}
-	return paths.Dir(p), true
+	if root = paths.Dir(p); paths.Join(root, todoDir) != p {
+		return "", false
+	}
+	return root, true
 }
