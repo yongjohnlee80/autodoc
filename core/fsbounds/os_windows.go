@@ -28,7 +28,7 @@ func links(path string, _ os.FileInfo) uint64 {
 
 // isLink reports whether fi, an Lstat, is a link the walk resolves: a symbolic link, or any other
 // reparse point, a junction among them (Go reports those as irregular).
-func isLink(fi fs.FileInfo) bool { return fi.Mode()&(fs.ModeSymlink|fs.ModeIrregular) != 0 }
+func isLink(fi fs.FileInfo) bool { return fi.Mode()&fs.ModeSymlink != 0 }
 
 // realPath is an existing path as the file system names it (GetFinalPathNameByHandle): every link
 // and junction on it resolved, an 8.3 short name (RUNNER~1) given its long one, each name in the
