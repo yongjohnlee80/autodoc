@@ -72,7 +72,7 @@ func TestACrewIdentityIsAFileNameOnEveryOS(t *testing.T) {
 }
 
 // An earlier build's names are renamed to crewFileName's, their content kept, and a second run
-// changes nothing. What is not a scope's (a workspace's own files, a dot-folder) is left alone.
+// changes nothing. What is not a scope's (a workspace's own files) is left alone.
 func TestAnEarlierBuildsCrewNamesAreRenamed(t *testing.T) {
 	base := t.TempDir()
 	const scope = "autodoc:00000000000000aa"
@@ -91,6 +91,39 @@ func TestAnEarlierBuildsCrewNamesAreRenamed(t *testing.T) {
 		t.Fatalf("a second run: kept %v, %v", kept, err)
 	}
 	renamedTo(t, base, scope)
+}
+
+// A workspace whose name starts with a dot (.kb is a valid one) has its agents' folders renamed
+// too, their content kept; the agents' folder's own entries (.crew-fallbacks here) are not a
+// workspace's, and what is in them stays as it is.
+func TestADotNamedWorkspacesCrewNamesAreRenamed(t *testing.T) {
+	base := t.TempDir()
+	const scope = "autodoc:00000000000000ee"
+	earlierBuild(t, base, scope)
+	hidden := filepath.Join(base, ".kb", scope, "zen", "AGENTS.md")
+	own := filepath.Join(base, ".crew-fallbacks", scope)
+	for _, dir := range []string{filepath.Dir(hidden), own} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(hidden, []byte("zen's guide in .kb"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if kept, err := migrateCrewNames(base); err != nil || len(kept) != 0 {
+		t.Fatalf("migrateCrewNames: kept %v, %v", kept, err)
+	}
+	renamedTo(t, base, scope)
+	moved := filepath.Join(base, ".kb", crewFileName(scope), "zen", "AGENTS.md")
+	if b, err := os.ReadFile(moved); err != nil || string(b) != "zen's guide in .kb" {
+		t.Errorf("the .kb workspace's agent folder: %q, %v; want it renamed, its guide kept", b, err)
+	}
+	if _, err := os.Lstat(filepath.Join(base, ".kb", scope)); err == nil {
+		t.Error("the .kb workspace's old name is still there")
+	}
+	if _, err := os.Stat(own); err != nil {
+		t.Errorf("the agents' own .crew-fallbacks entry was moved: %v", err)
+	}
 }
 
 // A run cut short leaves some names old and some new; the next run renames the rest.
