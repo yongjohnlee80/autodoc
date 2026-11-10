@@ -97,8 +97,8 @@ func TestEditorReadsTheTokenFromItsFileWhenTheVariableIsDropped(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, c := range []struct{ path, why string }{
-		{write("open", "tok", 0o644), "must be 0600"},
-		{link, "not a regular file"},
+		{write("open", "tok", 0o644), "make it 0600"},
+		{link, "symbolic link"},
 		{write("empty", "", 0o600), "not a token"},
 		{filepath.Join(dir, "missing"), "no such file"},
 	} {
