@@ -247,6 +247,15 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: scratch (not for merge) the plugin cells on Windows x3, the stop's waits with them
+        if: ${{ !inputs.discover }}
+        run: |
+          T='^(TestAPluginsMenuRows|TestAPluginsNotices|TestANoticeQueuedBeforeAStopPostsNothing|TestAPluginOpensAPathAndUpdatesItself|TestAPluginThatFailsClosesItsDialogAndSaysWhy|TestAPluginRedrawsTheRenderedView|TestAPluginOpensADraftWithBufferNew|TestAProtocolTwoPluginsCallIsDropped|TestPastSixtyFourWaitingCallsTheHostIsBusy|TestACallReusingAWaitingNumberIsNeverAnswered|TestARemovalWaitsForThePluginToExit|TestTheQuitWaitsForAPluginStillClosing|TestAnExitWaitIsBounded)$'
+          go test -count=3 -timeout 25m -v -run "$T" ./tui/ > "$RUNNER_TEMP/t.txt" 2>&1 && rt=0 || rt=$?
+          echo "== PASS $(grep -cE '^--- PASS' "$RUNNER_TEMP/t.txt" || true) FAIL $(grep -cE '^--- FAIL' "$RUNNER_TEMP/t.txt" || true)"
+          grep -E '^--- FAIL|_test\.go:[0-9]+:' "$RUNNER_TEMP/t.txt" | sort -u | cut -c1-260 | head -12 || true
+          echo "== rc=$rt"
+          [ $rt = 0 ]
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
         run: |
