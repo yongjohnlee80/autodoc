@@ -31,7 +31,7 @@ func TestTheServerIsStartedWithTheCLIsEnvironment(t *testing.T) {
 	p, _ := a.profile("codex-one")
 	const secret = "tok-setup-9a1b"
 	var socket, envFile string
-	a.setupRun = func(_, dir string, _ []string) (crew.Setup, error) {
+	seamsOf(a).agentSetupRun = func(_, dir string, _ []string) (crew.Setup, error) {
 		socket, envFile = filepath.Join(dir, crew.CodexServerSocket), filepath.Join(dir, "server.env")
 		endsWithTheTestCopy(t, socket)
 		server := []string{"sh", "-c", `env > "$2"; touch "$1"; while :; do sleep 1; done`, "sh", socket, envFile}
@@ -42,9 +42,9 @@ func TestTheServerIsStartedWithTheCLIsEnvironment(t *testing.T) {
 		t.Fatal(err)
 	}
 	awaitStart(t, c, instance)
-	cfg := c.panel.configs[instance.tab]
+	cfg := c.panel.configs[instance.State().Tab]
 	var spawned pty.Cmd // the CLI, as runAgent gives it
-	a.spawn = func(c pty.Cmd) (terminal.TerminalProcess, error) { spawned = c; return newFakeTerminalCopy(), nil }
+	seamsOf(a).agentSpawn = func(c pty.Cmd) (terminal.TerminalProcess, error) { spawned = c; return newFakeTerminalCopy(), nil }
 	proc, err := cfg.Start(pty.Cmd{Path: cfg.Command, Args: cfg.Args, Dir: cfg.Dir})
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +78,7 @@ func TestTheServerIsStartedWithTheCLIsEnvironment(t *testing.T) {
 			t.Errorf("the CLI or its server has the window's spawner identity: AUTO_AGENTS_MAILBOX_ID=%s", v)
 		}
 	}
-	argv := slices.Concat([]string{spawned.Path}, spawned.Args, instance.setup.Server)
+	argv := slices.Concat([]string{spawned.Path}, spawned.Args, instance.State().Setup.Server)
 	for _, k := range []string{"AUTODOC_EDITOR_TOKEN", crew.EnvContext, "SVC_TOKEN"} {
 		for _, arg := range argv {
 			if strings.Contains(arg, cli[k]) {
@@ -98,7 +98,7 @@ func TestTheWindowStopsTheServerWhenItsCLIFailsToStart(t *testing.T) {
 	a, c, _ := crewAgents(t, crewKindsCopy)
 	p, _ := a.profile("codex-one")
 	var socket string
-	a.setupRun = func(_, dir string, _ []string) (crew.Setup, error) {
+	seamsOf(a).agentSetupRun = func(_, dir string, _ []string) (crew.Setup, error) {
 		socket = filepath.Join(dir, crew.CodexServerSocket)
 		return crew.Setup{Server: fakeServerCopy(t, socket, true), ServerSocket: socket, MailVia: crew.MailViaMCP}, nil
 	}
@@ -107,15 +107,15 @@ func TestTheWindowStopsTheServerWhenItsCLIFailsToStart(t *testing.T) {
 		t.Fatal(err)
 	}
 	awaitStart(t, c, instance)
-	cfg := c.panel.configs[instance.tab]
-	a.spawn = func(pty.Cmd) (terminal.TerminalProcess, error) { return nil, errors.New("no such program") }
+	cfg := c.panel.configs[instance.State().Tab]
+	seamsOf(a).agentSpawn = func(pty.Cmd) (terminal.TerminalProcess, error) { return nil, errors.New("no such program") }
 	if _, err := cfg.Start(pty.Cmd{Path: cfg.Command, Args: cfg.Args, Dir: cfg.Dir}); err == nil {
 		t.Fatal("a CLI that failed to start: started")
 	}
 	if !eventuallyCopy(t, func() bool { return len(processesNamingCopy(socket)) == 0 }) {
 		t.Fatalf("the CLI didn't start and its server still runs: %v", processesNamingCopy(socket))
 	}
-	if _, err := os.Stat(filepath.Join(cfg.Dir, serverPidFile)); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(cfg.Dir, serverPidFileCopy)); !os.IsNotExist(err) {
 		t.Fatalf("its pid file: %v, want it gone", err)
 	}
 }
@@ -179,7 +179,7 @@ func TestACellsServersEndWithIt(t *testing.T) {
 		if _, _, err := startedEnvCopy(a, c, instance); err != nil { // a spawn that starts nothing: the server is never stopped
 			t.Fatal(err)
 		}
-		socket = instance.setup.ServerSocket
+		socket = instance.State().Setup.ServerSocket
 		pids := liveProcessesNamingCopy(socket)
 		if len(pids) != 1 {
 			t.Fatalf("fixture: %d processes name the agent's socket %q, want its server", len(pids), socket)

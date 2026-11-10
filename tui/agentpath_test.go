@@ -16,7 +16,7 @@ import (
 // folder can't be the entry itself.
 func TestAnAgentsPathHasItsOwnAutodocFirst(t *testing.T) {
 	a, c, _ := crewAgents(t, oneTwoCopy)
-	a.agentBinPath = fakeBuildCopy(t, filepath.Join(t.TempDir(), "build"))
+	seamsOf(a).agentBin = fakeBuildCopy(t, filepath.Join(t.TempDir(), "build"))
 	p, _ := a.profile("one")
 	instance, err := a.startInstance(p)
 	if err != nil {
@@ -36,8 +36,8 @@ func TestAnAgentsPathHasItsOwnAutodocFirst(t *testing.T) {
 	if b, _ := os.ReadFile(found); found != a.agentBin() && !strings.Contains(string(b), a.agentBin()) {
 		t.Fatalf("autodoc at %s is neither the build %s nor a launcher of it: %q", found, a.agentBin(), b)
 	}
-	if !strings.Contains(instance.dir, crewFileName("autodoc:")) { // a scope by its file name
-		t.Fatalf("the agent's folder %q holds no scope: the cell doesn't hold the case it is for", instance.dir)
+	if !strings.Contains(instance.State().Dir, crewFileName("autodoc:")) { // a scope by its file name
+		t.Fatalf("the agent's folder %q holds no scope: the cell doesn't hold the case it is for", instance.State().Dir)
 	}
 }
 
@@ -67,8 +67,8 @@ func TestAnAgentsStalePathLinkIsReplaced(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got, err := os.Readlink(link); err != nil || got != filepath.Join(instance.dir, "bin") {
-				t.Fatalf("the agent's PATH link after its start: %q, %v; want %s", got, err, filepath.Join(instance.dir, "bin"))
+			if got, err := os.Readlink(link); err != nil || got != filepath.Join(instance.State().Dir, "bin") {
+				t.Fatalf("the agent's PATH link after its start: %q, %v; want %s", got, err, filepath.Join(instance.State().Dir, "bin"))
 			}
 			args, _, err := startedEnvCopy(a, c, instance)
 			if err != nil {

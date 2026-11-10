@@ -12,7 +12,7 @@ import (
 func TestPanelPreferenceRowsApplyLiveAndQueueWritesInOrder(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
-	json := agentProfilesJSONCopy([]agentProfile{{Name: "alpha", Command: "false"}})
+	json := agentProfilesJSON([]agentProfile{{Name: "alpha", Command: "false"}})
 	got := onLoop(r, func() bool {
 		before := len(r.h.prefWrites)
 		r.h.terminals.c.SetPref(prefTermEdge, "left")

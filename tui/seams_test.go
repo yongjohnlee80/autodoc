@@ -160,3 +160,21 @@ type namedTB struct {
 }
 
 func (n namedTB) Name() string { return n.name }
+
+// seamsOf is the seams the host's cell made a's agents with (testAgentsWithCopy, its rig's): the
+// cell sets an agents' hook there (agentSeams) as it builds the rig, before the agents use it.
+func seamsOf(a *agents) *seams {
+	agentsSeams.Lock()
+	defer agentsSeams.Unlock()
+	s, ok := agentsSeams.m[a]
+	if !ok {
+		panic("seamsOf: these agents weren't made by testAgentsWithCopy")
+	}
+	return s
+}
+
+// agentsSeams are the seams each rig's agents were made with, by the agents (seamsOf).
+var agentsSeams = struct {
+	sync.Mutex
+	m map[*agents]*seams
+}{m: map[*agents]*seams{}}

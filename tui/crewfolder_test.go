@@ -28,18 +28,18 @@ func TestAnAgentWorksInItsOwnFolderUnderTheWindowsScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Join(agentBase(nil, a.agentDir), safeName(c.ws.name), crewFileName("autodoc:0123456789abcdef"), crewFileName("one"))
-	if got := c.panel.configs[instance.tab].Dir; got != want {
+	want := filepath.Join(agentBase(nil, a.Snapshot().AgentDir), safeName(c.ws.name), crewFileName("autodoc:0123456789abcdef"), crewFileName("one"))
+	if got := c.panel.configs[instance.State().Tab].Dir; got != want {
 		t.Fatalf("the agent's folder: %s, want its own under the scope %s", got, want)
 	}
 	if _, err := os.Stat(filepath.Join(want, "CLAUDE.md")); err != nil {
 		t.Fatalf("the guide was not written in the agent's folder: %v", err)
 	}
-	c.panel.exit(instance.tab, 0)
+	c.panel.exit(instance.State().Tab, 0)
 	if again, err := a.startInstance(p); err != nil || again != instance {
 		t.Fatalf("a restart under the same scope: %v, want its tab started again", err)
 	}
-	c.panel.exit(instance.tab, 0)
+	c.panel.exit(instance.State().Tab, 0)
 	crewOf(a).scope = "autodoc:fedcba9876543210"
 	if _, err := a.startInstance(p); !errors.Is(err, ErrAgentStale) {
 		t.Fatalf("a start after the scope moved: %v, want ErrAgentStale (its tab runs in the old folder)", err)

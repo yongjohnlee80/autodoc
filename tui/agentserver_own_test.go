@@ -316,7 +316,7 @@ func TestAPlainAgentsVariablesAreInItsEnvironment(t *testing.T) {
 	}
 	cfg := c.panel.configs[instance.tab]
 	var spawned pty.Cmd
-	a.spawn = func(c pty.Cmd) (terminal.TerminalProcess, error) { spawned = c; return newFakeTerminal(), nil }
+	fakeSeamsOf(a).spawn = func(c pty.Cmd) (terminal.TerminalProcess, error) { spawned = c; return newFakeTerminal(), nil }
 	proc, err := cfg.Start(pty.Cmd{Path: cfg.Command, Args: cfg.Args, Dir: cfg.Dir})
 	if err != nil {
 		t.Fatal(err)

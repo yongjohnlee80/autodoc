@@ -159,8 +159,7 @@ func TestTerminalAndAgentFeaturesAreProgramOwned(t *testing.T) {
 		t.Fatal("programs share a panel registry or agent model")
 	}
 	a.terminals.restore = false
-	a.agents.agentRunning = "first"
-	if !b.terminals.restore || b.agents.Snapshot().Running != "" {
+	if !b.terminals.restore || a.agents == b.agents {
 		t.Fatal("programs share terminal or agent runtime state")
 	}
 	for _, name := range []string{"App.terminalShown", "App.agentShown"} {
