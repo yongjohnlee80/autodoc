@@ -211,7 +211,10 @@ func TestAStoreNotListedIsSaidAndNoOtherIsShownInItsPlace(t *testing.T) {
 	if v.cur == nil || v.cur.id != shown.id {
 		t.Errorf("a store not listed: shown %+v; want the one shown before, %s", v.cur, shown.id)
 	}
-	if !slices.ContainsFunc(core.Notes, func(n string) bool { return strings.Contains(n, "todos_the_store_of_is_not_listed") }) {
+	// said, naming the folder (the core's text is the catalog's, or the message's id)
+	if !slices.ContainsFunc(core.Notes, func(n string) bool {
+		return (strings.Contains(n, "todos_the_store_of_is_not_listed") || strings.Contains(n, "isn't listed")) && strings.Contains(n, "gone")
+	}) {
 		t.Errorf("a store not listed was not said: notes %q", core.Notes)
 	}
 }
