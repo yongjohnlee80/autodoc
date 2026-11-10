@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/internal/proctree"
 	"github.com/yongjohnlee80/autodoc/plugin"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -29,6 +30,7 @@ type pluginRun struct {
 	pl    *plugins
 	e     pluginEntry
 	cmd   *exec.Cmd
+	tree  *proctree.Tree // cmd's, and what it starts
 	link  *plugin.Link
 	ctx   context.Context
 	stop  context.CancelFunc
@@ -128,8 +130,8 @@ func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
 		cmd.ExtraFiles = []*os.File{surfaceChild}
 		cmd.Env = append(cmd.Env, plugin.SurfaceFDEnv+"=3")
 	}
-	cmd.SysProcAttr = pluginProcAttr()
-	err = cmd.Start()
+	// a tree of its own: its stop ends what it starts too
+	tree, err := proctree.StartTree(cmd)
 	toPlugin.Close() // the child's ends are the child's now
 	fromPlugin.Close()
 	if surfaceChild != nil {
@@ -143,7 +145,10 @@ func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
 		return nil, err
 	}
 
-	r := &pluginRun{pl: pl, e: e, cmd: cmd, log: log, out: newOutQueue(),
+	if why := tree.Contained(); why != nil {
+		log.note(why.Error() + ": its stop ends the plugin alone")
+	}
+	r := &pluginRun{pl: pl, e: e, cmd: cmd, tree: tree, log: log, out: newOutQueue(),
 		exited: make(chan struct{}), shutDone: make(chan struct{}),
 		handshake: pl.seams.pluginHandshake, grace: pl.seams.pluginGrace, termGrace: pl.seams.pluginTermGrace}
 	r.ctx, r.stop = context.WithCancel(pl.c.Context())
@@ -530,15 +535,16 @@ func (r *pluginRun) shutdown() {
 			// NOTE: a plugin is asked to close, then given grace to exit before SIGTERM, and termGrace
 			// more before SIGKILL: a graceful stop, bounded so a stuck plugin cannot hold the TUI open.
 		case <-time.After(r.grace):
-			signalGroup(r.cmd, false)
+			r.tree.Stop(false)
 			select {
 			case <-r.exited:
 			// NOTE: SIGTERM's grace, before SIGKILL ends a plugin that ignores it.
 			case <-time.After(r.termGrace):
-				signalGroup(r.cmd, true)
+				r.tree.Stop(true)
 				<-r.exited
 			}
 		}
+		r.tree.Close() // on Windows, what the plugin left running ends with its job
 		r.stop()
 		if r.link != nil {
 			_ = r.link.Close()
