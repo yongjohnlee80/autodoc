@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -353,7 +354,8 @@ func (m *Manager) MoveStore(ctx context.Context, at At, to string) (Resolved, er
 	if err != nil {
 		return Resolved{}, err
 	}
-	if !path.IsAbs(to) || path.Clean(to) != to || to == "/" {
+	to = filepath.ToSlash(to) // in the form core/todo keeps, still to be found clean
+	if !paths.IsAbs(to) || path.Clean(to) != to || to == "/" {
 		return Resolved{}, fmt.Errorf("%w: %q is not a clean absolute path", ErrInvalid, to)
 	}
 	st, err := m.open(ctx, w)

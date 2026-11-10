@@ -2,6 +2,9 @@ package paths_test
 
 import (
 	"errors"
+	"path"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/core/paths"
@@ -34,5 +37,31 @@ func TestExpandHome(t *testing.T) {
 	t.Setenv("HOME", "")
 	if _, err := paths.ExpandHome("~/notes"); !errors.Is(err, paths.ErrNoHome) {
 		t.Errorf("no home: %v; want ErrNoHome", err)
+	}
+}
+
+// Slash is an OS path in the core's form, and IsAbs takes a path in either form: the directory the
+// test is given, in the OS's own form and in Slash's, is absolute both ways, and stays the same
+// directory.
+func TestAnOSPathIsAbsoluteInEitherForm(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "kb")
+	slash := paths.Slash(dir)
+	if strings.Contains(slash, `\`) || slash != path.Clean(slash) || filepath.FromSlash(slash) != dir {
+		t.Errorf("Slash(%q) = %q: not the same directory, slash-separated and clean", dir, slash)
+	}
+	for _, p := range []string{dir, slash} {
+		if !paths.IsAbs(p) {
+			t.Errorf("IsAbs(%q) = false: the test's own directory", p)
+		}
+	}
+	for in, want := range map[string]bool{"/srv/kb": true, "srv/kb": false, "": false, "~/kb": false, ".": false} {
+		if got := paths.IsAbs(in); got != want {
+			t.Errorf("IsAbs(%q) = %v, want %v", in, got, want)
+		}
+	}
+	for in, want := range map[string]string{"": "", "/srv/kb/": "/srv/kb", "/srv//kb/./x/..": "/srv/kb", "a/b": "a/b"} {
+		if got := paths.Slash(in); got != want {
+			t.Errorf("Slash(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

@@ -282,7 +282,7 @@ func (m *Manager) SetKB(ctx context.Context, at At, workspace string) error {
 // use. A file in a known todo store belongs to the store's workspace (recorded, or containing);
 // any other file to the deepest workspace containing it; otherwise to none ("", "").
 func (m *Manager) Owner(ctx context.Context, abs string) (workspace, root string, err error) {
-	abs = path.Clean(abs)
+	abs = paths.Slash(abs)
 	st, err := m.j.Settings(ctx)
 	if err != nil {
 		return "", "", err
@@ -711,8 +711,8 @@ func (m *Manager) absValue(kb, v string) string {
 	switch {
 	case v == "~" || strings.HasPrefix(v, "~/"):
 		return path.Join(m.o.home, strings.TrimPrefix(v, "~"))
-	case strings.HasPrefix(v, "/"):
-		return path.Clean(v)
+	case paths.IsAbs(v):
+		return paths.Slash(v)
 	}
 	return path.Join(kb, v)
 }
@@ -1047,8 +1047,8 @@ func (m *Manager) MigrateVars(ctx context.Context) {
 		if sp == "" {
 			sp = root + "/" + todoDir
 		}
-		if m.nameOf(path.Clean(rr.KBRoot)) != "" {
-			hint[sp] = path.Clean(rr.KBRoot)
+		if m.nameOf(paths.Slash(rr.KBRoot)) != "" { // recorded as a client sent it: in the OS's own form
+			hint[sp] = paths.Slash(rr.KBRoot)
 		}
 	}
 	kbs := map[string]bool{}
