@@ -220,7 +220,7 @@ func homeDir(env procenv.Env) string {
 func (h *Host) set(name string, v any) { h.record(h.p.Set(name, v)) }
 
 // setField is the host's form fields written as a feature's are (endpoints.go: setField).
-func (h *Host) setField(name, text string) { setField(core{h}, name, text) }
+func (h *Host) setField(name, text string) { feature.SetField(core{h}, name, text) }
 
 // setWhere is the status line's left: the editor's mode, then where the TUI is attached. While
 // Insert's (or Replace's) Ctrl+O runs its one Normal-mode command, the mode is (INSERT) or
