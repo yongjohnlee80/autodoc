@@ -402,7 +402,7 @@ func (v *mindView) NativeView() (any, bool) {
 // colour (groupLegend), then any other document's box in its branch's tint. Its texts are English,
 // until legendIn puts them in the UI's language.
 func mindLegend(th guimermaid.Theme, gs *relGroups, m relMap) []legendRow {
-	rows := groupLegend(gs, m, func(g relGroup) func(gui.Canvas, gui.Rect) {
+	rows := groupLegend(gs, m, func(g Group) func(gui.Canvas, gui.Rect) {
 		t := th
 		t.NodeFill, t.NodeStroke = mixNRGBA(th.NodeFill, g.Colour, 0.35), mixNRGBA(th.NodeStroke, g.Colour, 0.75)
 		return legendForm(g.Shape, t)

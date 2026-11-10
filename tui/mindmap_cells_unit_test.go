@@ -199,7 +199,7 @@ func builtMindmap(t *testing.T, rm relMap, root string, w, h int) (*cellMindmap,
 	}
 	v := m.newView().(*cellMindView)
 	v.cells = tuicore.Size{W: w, H: h}
-	grid, err := tuimermaid.LayMindmap(context.Background(), mindmapModel(rm, root, cellMindShape(root)), cellMeasure{})
+	grid, err := tuimermaid.LayMindmap(context.Background(), mindmapModel(rm, root, cellMindShape(root)), feature.CellMeasure{})
 	if err != nil {
 		t.Fatal(err)
 	}

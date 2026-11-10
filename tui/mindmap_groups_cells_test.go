@@ -72,7 +72,8 @@ func openCellMindmapOf(t *testing.T, kb string, listed int, before func(*running
 	onLoop(r, func() bool { m.toggle(); return true })
 	r.s.WaitFor(t, "the Mindmap built in the workspace's groups", func(string) bool {
 		return onLoop(r, func() bool {
-			return m.open && m.cur != nil && m.groupsWS == "kb" && m.groups != nil && len(m.cur.tints) > 0
+			s := m.State()
+			return s.Open && s.Loaded && s.Workspace == "kb" && s.Groups != nil && len(s.Tints) > 0
 		})
 	})
 	return r, m
@@ -80,18 +81,12 @@ func openCellMindmapOf(t *testing.T, kb string, listed int, before func(*running
 
 // boxOf is the box of the build shown labelled label.
 func boxOf(r *running, m *cellMindmap, label string) (tuimermaid.Box, bool) {
-	i := onLoop(r, func() int {
-		for i, b := range m.cur.grid.Boxes {
-			if b.Label == label {
-				return i
-			}
+	for _, b := range onLoop(r, func() []tuimermaid.Box { return m.State().Boxes }) {
+		if b.Label == label {
+			return b, true
 		}
-		return -1
-	})
-	if i < 0 {
-		return tuimermaid.Box{}, false
 	}
-	return onLoop(r, func() tuimermaid.Box { return m.cur.grid.Boxes[i] }), true
+	return tuimermaid.Box{}, false
 }
 
 // TestTheTerminalsMindmapWearsItsGroups: a terminal's Mindmap draws each document in its group,
@@ -109,7 +104,7 @@ func TestTheTerminalsMindmapWearsItsGroups(t *testing.T) {
 	beta, ok := boxOf(r, m, "Beta")
 	alpha, aok := boxOf(r, m, "Alpha")
 	if !ok || !aok {
-		t.Fatalf("the map has no Beta or Alpha box: %+v", onLoop(r, func() []tuimermaid.Box { return m.cur.grid.Boxes }))
+		t.Fatalf("the map has no Beta or Alpha box: %+v", onLoop(r, func() []tuimermaid.Box { return m.State().Boxes }))
 	}
 	if beta.Form != tuimermaid.FormHexagon || alpha.Form != tuimermaid.FormBang {
 		t.Fatalf("Beta's outline %v, Alpha's %v; want the group's hexagon, and the root's bang (in no group)", beta.Form, alpha.Form)
@@ -174,7 +169,7 @@ func TestATerminalsMindmapWritesItsFirstGroups(t *testing.T) {
 	if beta, ok := boxOf(r, m, "Beta"); !ok || beta.Form != tuimermaid.FormHexagon {
 		t.Errorf("Beta's box %+v (%v); want its first group's hexagon", beta, ok)
 	}
-	if d := onLoop(r, func() int { return m.depth }); d != 2 {
+	if d := onLoop(r, func() int { return m.State().Depth }); d != 2 {
 		t.Errorf("the map opened at depth %d; want its settings' 2", d)
 	}
 }
@@ -225,12 +220,12 @@ func TestATerminalsMindmapSettingsEditItsGroups(t *testing.T) {
 		r.keys(t, key('q'))
 		r.s.WaitFor(t, theme+": the settings closed", func(s string) bool { return !strings.Contains(s, "Mindmap settings") })
 	}
-	onLoop(r, func() bool { m.editor.setColour("#123456"); return true })
+	onLoop(r, func() bool { m.EditGroups().setColour("#123456"); return true })
 	file := func() string { b, _ := os.ReadFile(graphFile(kb)); return string(b) }
 	r.s.WaitFor(t, "the edit written", func(string) bool { return strings.Contains(file(), `colour = "#123456"`) })
 	r.s.WaitFor(t, "the map drawn in the edit", func(string) bool {
 		return onLoop(r, func() bool {
-			for _, c := range m.cur.tints {
+			for _, c := range m.State().Tints {
 				if c == hexColour(0x123456) {
 					return true
 				}
@@ -279,15 +274,15 @@ func TestAGroupsRequestKeepsToItsWorkspace(t *testing.T) {
 	r.waitWithin(t, "a's files listed", daemonWait, listed("a", "alpha/x.md"))
 	open := make(chan struct{})
 	store := onLoop(r, func() *graphStore { return newGraphStore(core{r.h}, gatedFiles{core{r.h}, open}, "") })
-	got := make(chan []relGroup, 1)
+	got := make(chan []Group, 1)
 	onLoop(r, func() bool {
-		store.groups("a", viewMindmap, nil, color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, func(l []relGroup) { got <- l })
+		store.groups("a", viewMindmap, nil, color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, func(l []Group) { got <- l })
 		return true
 	})
 	r.h.p.Post(func() { r.h.enter("b") })
 	r.waitWithin(t, "b in use, its files listed", daemonWait, listed("b", "beta/y.md"))
 	close(open) // a's graph file read only now
-	var list []relGroup
+	var list []Group
 	select {
 	case list = <-got:
 	case <-time.After(daemonWait):
@@ -311,7 +306,7 @@ func TestAGroupsRequestKeepsToItsWorkspace(t *testing.T) {
 
 	// c, not in use: its request has no files of its own to hand, and never b's
 	onLoop(r, func() bool {
-		store.groups("c", viewMindmap, nil, color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, func(l []relGroup) { got <- l })
+		store.groups("c", viewMindmap, nil, color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, func(l []Group) { got <- l })
 		return true
 	})
 	select {
@@ -366,35 +361,49 @@ func TestTheMindmapSettingsEditOnlyTheirWorkspace(t *testing.T) {
 		return true
 	})
 	r.waitWithin(t, "a's groups listed", daemonWait, func() bool {
-		return onLoop(r, func() bool { return m.editor.ws == "a" && !m.editor.loading && len(m.editor.list) == 1 })
+		return onLoop(r, func() bool {
+			s := m.State()
+			return s.Editor.Workspace == "a" && !s.Editor.Loading && len(s.Editor.Groups) == 1
+		})
 	})
 	r.keys(t, key('q'))
 	open := make(chan struct{})
 	onLoop(r, func() bool {
 		s := newGraphStore(core{r.h}, gatedFiles{core{r.h}, open}, "") // b's file read only once open closes
-		m.store, m.editor.store = s, s
+		m.UseStore(s)
 		return true
 	})
 	r.h.p.Post(func() { r.h.enter("b") })
 	r.waitWithin(t, "b in use", daemonWait, func() bool { return onLoop(r, func() bool { return r.h.ws == "b" }) })
 	onLoop(r, func() bool { m.openSettings(); return true })
 	r.waitWithin(t, "the settings bound to b, reading", daemonWait, func() bool {
-		return onLoop(r, func() bool { return m.editor.ws == "b" && m.editor.loading && len(m.editor.list) == 0 })
+		return onLoop(r, func() bool {
+			s := m.State()
+			return s.Editor.Workspace == "b" && s.Editor.Loading && len(s.Editor.Groups) == 0
+		})
 	})
 	file := func(root string) string { b, _ := os.ReadFile(graphFile(root)); return string(b) }
 	beforeA, beforeB := file(a), file(b)
-	onLoop(r, func() bool { m.editor.setColour("#123456"); m.editor.add(); m.editor.addMissing(); return true })
+	onLoop(r, func() bool {
+		m.EditGroups().setColour("#123456")
+		m.EditGroups().add()
+		m.EditGroups().addMissing()
+		return true
+	})
 	if file(a) != beforeA || strings.Contains(file(a), "#123456") {
 		t.Fatalf("an edit while b's groups were read changed a's graph file:\n%s", file(a))
 	}
 	close(open)
 	r.waitWithin(t, "b's groups listed", daemonWait, func() bool {
-		return onLoop(r, func() bool { return m.editor.ws == "b" && !m.editor.loading && len(m.editor.list) == 1 })
+		return onLoop(r, func() bool {
+			s := m.State()
+			return s.Editor.Workspace == "b" && !s.Editor.Loading && len(s.Editor.Groups) == 1
+		})
 	})
 	if file(b) != beforeB {
 		t.Fatalf("an edit while b's groups were read was written over b's:\n%s", file(b))
 	}
-	onLoop(r, func() bool { m.editor.setColour("#123456"); return true })
+	onLoop(r, func() bool { m.EditGroups().setColour("#123456"); return true })
 	r.waitWithin(t, "the edit written to b", daemonWait, func() bool { return strings.Contains(file(b), `colour = "#123456"`) })
 	if strings.Contains(file(a), "#123456") {
 		t.Fatalf("b's edit reached a's graph file:\n%s", file(a))

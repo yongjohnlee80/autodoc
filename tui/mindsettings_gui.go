@@ -40,7 +40,7 @@ func (m *mindmap) readGroups(ws string, types []string) {
 	if m.store == nil {
 		return
 	}
-	m.store.groups(ws, viewMindmap, types, m.palette().background, func(list []relGroup) {
+	m.store.groups(ws, viewMindmap, types, m.palette().background, func(list []Group) {
 		if ws == m.c.Workspace() {
 			m.editor.listed(ws, types, list)
 			m.groupsWS = ws
@@ -50,7 +50,7 @@ func (m *mindmap) readGroups(ws string, types []string) {
 }
 
 // groupsEdited lays the map out again in list.
-func (m *mindmap) groupsEdited(list []relGroup) {
+func (m *mindmap) groupsEdited(list []Group) {
 	gs := newRelGroups(list)
 	m.groups = &gs
 	m.relayout()

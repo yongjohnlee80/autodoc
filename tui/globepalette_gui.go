@@ -164,7 +164,7 @@ func legendForm(s pm.MindShape, th guimermaid.Theme) func(gui.Canvas, gui.Rect) 
 // groupLegend are a legend's rows for the groups of gs that documents of m wear, in the groups'
 // order, each its mark; at most groupLegendRows, then a row saying how many more. None at all says
 // how to have some.
-func groupLegend(gs *relGroups, m relMap, mark func(relGroup) func(gui.Canvas, gui.Rect)) []legendRow {
+func groupLegend(gs *relGroups, m relMap, mark func(Group) func(gui.Canvas, gui.Rect)) []legendRow {
 	none := func(gui.Canvas, gui.Rect) {}
 	if gs == nil || len(gs.list) == 0 {
 		return []legendRow{legendMsg(none, "autodoc.text.relationviews_gui.no_groups_no_schema_types_or_folders_settings_ad")}

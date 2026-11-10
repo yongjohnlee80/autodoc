@@ -40,7 +40,7 @@ func TestTheGlobeLookIsItsSettingsOverTheTheme(t *testing.T) {
 		l.edges[edgeRelation] != def.edges[edgeRelation] || l.other != rgb(0x445566) {
 		t.Fatalf("settings: names %v, dot %v, steps %v, ring %v, edges %v, other %v", l.names, l.dot, l.steps, l.ring, l.edges, l.other)
 	}
-	gs := newRelGroups([]relGroup{{Query: "tag:#project", Colour: rgb(0x010101)}, {Query: "type:adr", Colour: rgb(0x020202)}})
+	gs := newRelGroups([]Group{{Query: "tag:#project", Colour: rgb(0x010101)}, {Query: "type:adr", Colour: rgb(0x020202)}})
 	for _, c := range []struct {
 		n    mapNode
 		want color.NRGBA
@@ -143,11 +143,11 @@ func TestTheGlobeMapsDotsAreOneFillAColour(t *testing.T) {
 		m.Nodes[i].Path = "notes/" + m.Nodes[i].Path
 	}
 	gl := settledGlobe(t, m)
-	same := newRelGroups([]relGroup{{Query: "type:adr", Colour: rgb(0x101010)}, {Query: "type:review", Colour: rgb(0x101010)}})
+	same := newRelGroups([]Group{{Query: "type:adr", Colour: rgb(0x101010)}, {Query: "type:review", Colour: rgb(0x101010)}})
 	if n := len(dotsAt(globeDots{}, gl, defaultLook, &same, 1, 1).fills); n != 2 {
 		t.Errorf("ADRs and reviews one colour, the rest no group's: %d fills; want 2", n)
 	}
-	all := newRelGroups([]relGroup{{Query: "path:notes/", Colour: rgb(0x202020)}})
+	all := newRelGroups([]Group{{Query: "path:notes/", Colour: rgb(0x202020)}})
 	if d := dotsAt(globeDots{}, gl, defaultLook, &all, 1, 1); len(d.fills) != 1 || d.fills[0].c != rgb(0x202020) {
 		t.Errorf("one group for every document: %d fills", len(d.fills))
 	}
@@ -182,7 +182,7 @@ func TestTheGlobeMapNamesNoneWhenItsSettingsSaySo(t *testing.T) {
 func TestTheGlobeMapsLegendIsItsGroups(t *testing.T) {
 	l := defaultLook
 	m := relMap{Nodes: []mapNode{{Path: "a.md", Type: "adr"}, {Path: "notes/b.md"}, {Path: "c.md", Tags: []string{"x"}}}}
-	gs := newRelGroups([]relGroup{{Query: "type:adr"}, {Query: "type:pr"}, {Query: "path:notes/"}, {Query: "#x"}})
+	gs := newRelGroups([]Group{{Query: "type:adr"}, {Query: "type:pr"}, {Query: "path:notes/"}, {Query: "#x"}})
 	texts := func(rows []legendRow) []string {
 		var out []string
 		for _, r := range legendIn(rows, inEnglish{}.Trf) {
@@ -215,14 +215,14 @@ func TestTheGlobeMapsLegendIsItsGroups(t *testing.T) {
 		t.Errorf("a view too small for the legend drew %d of its texts", n)
 	}
 	// many groups worn: groupLegendRows of them, then how many more; none at all says how to have some
-	var many []relGroup
+	var many []Group
 	var mm relMap
 	for i := range groupLegendRows + 3 {
-		many = append(many, relGroup{Query: fmt.Sprintf("type:t%d", i)})
+		many = append(many, Group{Query: fmt.Sprintf("type:t%d", i)})
 		mm.Nodes = append(mm.Nodes, mapNode{Type: fmt.Sprintf("t%d", i)})
 	}
 	mgs := newRelGroups(many)
-	got := texts(groupLegend(&mgs, mm, func(relGroup) func(gui.Canvas, gui.Rect) { return func(gui.Canvas, gui.Rect) {} }))
+	got := texts(groupLegend(&mgs, mm, func(Group) func(gui.Canvas, gui.Rect) { return func(gui.Canvas, gui.Rect) {} }))
 	if len(got) != groupLegendRows+1 || got[groupLegendRows] != "… 3 more groups" {
 		t.Errorf("many groups: %q", got)
 	}
@@ -236,7 +236,7 @@ func TestTheGlobeMapsLegendIsItsGroups(t *testing.T) {
 func TestTheMindmapsLegendIsItsGroups(t *testing.T) {
 	th := mindTheme(defaultPalette())
 	m := relMap{Nodes: []mapNode{{Type: "adr"}, {Type: "review"}}}
-	gs := newRelGroups([]relGroup{{Query: "type:adr", Colour: rgb(0xff0000), Shape: pm.MindDefault},
+	gs := newRelGroups([]Group{{Query: "type:adr", Colour: rgb(0xff0000), Shape: pm.MindDefault},
 		{Query: "type:review", Colour: rgb(0x0000ff), Shape: pm.MindHexagon}, {Query: "type:pr"}})
 	rows := legendIn(mindLegend(th, &gs, m), inEnglish{}.Trf)
 	var texts []string

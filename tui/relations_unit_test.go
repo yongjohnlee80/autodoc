@@ -256,3 +256,31 @@ func TestTheRelationsReadAtMostAThousandPagesOfTheUnresolved(t *testing.T) {
 		t.Errorf("the loops read are not shown: %q", r.labels())
 	}
 }
+
+// The links of the page read again (SPC l reads them while the drawer may already show them)
+// leave the cursor on the row it was on, moved there by find or a key; another document's rows
+// put it on their first document.
+func TestReadingTheLinksAgainKeepsTheCursorsRow(t *testing.T) {
+	rel := newRelated(newScripted("kb"))
+	back := func(paths ...string) relations {
+		var rl relations
+		for _, p := range paths {
+			rl.in = append(rl.in, relEdge{path: p, raw: "[[a]]", kind: "wikilink", resolved: true})
+		}
+		return rl
+	}
+	got := func() [4]int {
+		rel.show("kb", "a.md", back("b.md", "x.md")) // the heading, b.md, x.md
+		first := rel.at
+		rel.moveTo(2)
+		rel.show("kb", "a.md", back("b.md", "x.md"))
+		kept := rel.at
+		rel.show("kb", "a.md", back("x.md")) // the heading, x.md: the row moved up with it
+		moved := rel.at
+		rel.show("kb", "b.md", back("c.md", "x.md"))
+		return [4]int{first, kept, moved, rel.at}
+	}()
+	if got != [4]int{1, 2, 1, 1} {
+		t.Fatalf("the cursor's rows: first %d, read again %d, x.md moved up %d, another document's %d; want 1, 2, 1, 1", got[0], got[1], got[2], got[3])
+	}
+}

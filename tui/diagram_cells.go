@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	pm "github.com/yongjohnlee80/golib/parse/mermaid"
 	tuimermaid "github.com/yongjohnlee80/golib/tui/mermaid"
 )
@@ -17,6 +18,6 @@ func cellDiagram(src string) error {
 	if err != nil {
 		return err
 	}
-	_, err = tuimermaid.Lay(context.Background(), d, cellMeasure{})
+	_, err = tuimermaid.Lay(context.Background(), d, feature.CellMeasure{})
 	return err
 }

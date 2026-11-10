@@ -225,7 +225,7 @@ func openMindmap(t *testing.T, r *running) *cellMindmap {
 	}
 	onLoop(r, func() bool { m.toggle(); return true })
 	r.s.WaitFor(t, "the cell Mindmap open", func(string) bool {
-		return onLoop(r, func() bool { return m.open && m.view != nil })
+		return onLoop(r, func() bool { s := m.State(); return s.Open && s.Viewed })
 	})
 	return m
 }
@@ -236,10 +236,10 @@ func checkMindmap(t *testing.T, r *running, m *cellMindmap, theme string) {
 	settlesOnBase(t, r, theme, func(snap [][]tuicore.Cell) ([]probe, string) {
 		// the root's label, as the laid-out map has it: a title or a file's name
 		label := onLoop(r, func() string {
-			if m.cur == nil || len(m.cur.grid.Boxes) == 0 {
-				return ""
+			if boxes := m.State().Boxes; len(boxes) > 0 {
+				return boxes[0].Label
 			}
-			return m.cur.grid.Boxes[0].Label
+			return ""
 		})
 		if label == "" {
 			return nil, "the Mindmap's map"
