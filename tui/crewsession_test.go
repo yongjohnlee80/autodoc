@@ -195,7 +195,7 @@ func TestARefusedRegistrationStartsNothing(t *testing.T) {
 	if instance.running || instance.starting || c.panel.tabs[0].Running {
 		t.Fatalf("a refused registration started the agent: running %v starting %v", instance.running, instance.starting)
 	}
-	if _, _, ok := readContext(t, a.agentFolder(c.ws, "one")); ok {
+	if _, _, ok := readContext(t, a.agentFolder(workspaceOf(c.ws), "one")); ok {
 		t.Fatal("a refused registration left a context")
 	}
 	if len(c.notes) == 0 || !strings.Contains(c.notes[len(c.notes)-1], "did not start") {
@@ -219,7 +219,7 @@ func TestAFailedSpawnEndsItsSession(t *testing.T) {
 	if instance.running || instance.session.ID != "" {
 		t.Fatalf("a failed spawn: running %v, session %q", instance.running, instance.session.ID)
 	}
-	if _, _, ok := readContext(t, a.agentFolder(c.ws, "one")); ok {
+	if _, _, ok := readContext(t, a.agentFolder(workspaceOf(c.ws), "one")); ok {
 		t.Fatal("a failed spawn left its context")
 	}
 	if len(a.crew.sessions) != 0 {

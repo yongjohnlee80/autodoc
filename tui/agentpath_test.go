@@ -83,7 +83,7 @@ func TestAnAgentsStalePathLinkIsReplaced(t *testing.T) {
 		t.Run(stale, func(t *testing.T) {
 			a, c, _ := crewAgents(t, oneTwo)
 			p, _ := a.profile("one")
-			dir := a.agentFolder(c.ws, "one")
+			dir := a.agentFolder(workspaceOf(c.ws), "one")
 			link := a.agentPathDir(dir)
 			if err := os.MkdirAll(filepath.Dir(link), 0o700); err != nil {
 				t.Fatal(err)

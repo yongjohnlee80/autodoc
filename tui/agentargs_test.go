@@ -90,7 +90,7 @@ func TestAnAgentsCommandReachesItsCLIWhole(t *testing.T) {
 			if err := json.Unmarshal(out, &got); err != nil {
 				t.Fatalf("%s %q printed %q", prog, args, out)
 			}
-			if want := append([]string{root, ws.name}, agentSetupArgs...); !reflect.DeepEqual(got, want) {
+			if want := append([]string{root, ws.Name}, agentSetupArgs...); !reflect.DeepEqual(got, want) {
 				t.Errorf("the CLI was given %q\nwant %q\n(the line %q)", got, want, args[len(args)-1])
 			}
 		})
@@ -122,8 +122,8 @@ func TestAnAgentsCommandRefusesAValueItCannotCarry(t *testing.T) {
 				cmd.Env = c.env.With(argvPrinterEnv + "=1")
 				out, err := cmd.Output()
 				var got []string
-				if err != nil || json.Unmarshal(out, &got) != nil || !reflect.DeepEqual(got, []string{split.name}) {
-					t.Errorf("the workspace %q reached the CLI as %q (%v, %s)", split.name, got, err, out)
+				if err != nil || json.Unmarshal(out, &got) != nil || !reflect.DeepEqual(got, []string{split.Name}) {
+					t.Errorf("the workspace %q reached the CLI as %q (%v, %s)", split.Name, got, err, out)
 				}
 			}
 			// a setup's argument naming a path with a variable's name in it, the variable set, and one
