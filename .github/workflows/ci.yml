@@ -255,6 +255,26 @@ jobs:
           go vet ./...
           mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
           go test -count=1 -timeout 20m "${pkgs[@]}"
+      - name: scratch (not for merge) procenv's launcher cells, then its two mutants
+        if: ${{ !inputs.discover }}
+        run: |
+          go test -count=1 -timeout 10m -v ./internal/procenv/ > "$RUNNER_TEMP/p.txt" 2>&1 && rc=0 || rc=$?
+          grep -E '^(--- (PASS|FAIL|SKIP)|ok |FAIL|panic: )|_test\.go:[0-9]+:' "$RUNNER_TEMP/p.txt" | cut -c1-260 || true
+          echo "== cells rc=$rc"
+          cp internal/procenv/launcher_windows.go "$RUNNER_TEMP/keep.go"
+          sed -i 's|return \[\]LauncherFile{{Name: name, Text: shScript(argv)}, {Name: name + ".cmd", Text: \[\]byte(batch)}}, nil|_ = batch; return []LauncherFile{{Name: name, Text: shScript(argv)}}, nil // mutant nocmd|' internal/procenv/launcher_windows.go
+          echo "nocmd applied: $(grep -c 'mutant nocmd' internal/procenv/launcher_windows.go || true)"
+          go test -count=1 -timeout 5m -v -run 'Launcher' ./internal/procenv/ > "$RUNNER_TEMP/m1.txt" 2>&1 && m1=0 || m1=$?
+          grep -E '^(--- FAIL|ok |FAIL)|_test\.go:[0-9]+:' "$RUNNER_TEMP/m1.txt" | head -6 | cut -c1-260 || true
+          echo "== mutant nocmd rc=$m1 (want non-zero: killed)"
+          cp "$RUNNER_TEMP/keep.go" internal/procenv/launcher_windows.go
+          sed -i 's|^\ts = strings.ReplaceAll(s, "%", "%%")$|\t// mutant nopercent|' internal/procenv/launcher_windows.go
+          echo "nopercent applied: $(grep -c 'mutant nopercent' internal/procenv/launcher_windows.go || true)"
+          go test -count=1 -timeout 5m -v -run 'Launcher' ./internal/procenv/ > "$RUNNER_TEMP/m2.txt" 2>&1 && m2=0 || m2=$?
+          grep -E '^(--- FAIL|ok |FAIL)|_test\.go:[0-9]+:' "$RUNNER_TEMP/m2.txt" | head -6 | cut -c1-260 || true
+          echo "== mutant nopercent rc=$m2 (want non-zero: killed)"
+          cp "$RUNNER_TEMP/keep.go" internal/procenv/launcher_windows.go
+          [ $rc = 0 ] && [ $m1 != 0 ] && [ $m2 != 0 ]
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
