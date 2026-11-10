@@ -560,7 +560,8 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
   frees its codename at the next start. One under another epoch is still `crew.codename_busy`.
 - `crew.list` says why a session can't be woken now: `ended`, `host_gone`, `host` (a host's own session, kind
   `host`: Neovim's gateway forwards mail and takes no replies, so it is never woken; `crew list` and `crew_list` leave
-  it out unless `--all` / `all`), `no_endpoint`, `wakes_failing` (with
+  it out unless `--all` / `all`), `no_endpoint`, `no_wake_on_this_os` (a Claude, Codex or OpenCode
+  session on an OS that can't wake one: [Wakes an OS can't offer](#wakes-an-os-cant-offer)), `wakes_failing` (with
   the last failure's cause, once one is known), or `backoff_until` the next try, while a failed
   wake's backoff runs. The store keeps the count of failures, never their reasons: the cause is in
   the daemon's memory, and after a restart `wakes_failing` names none until the next failure.
@@ -610,6 +611,23 @@ In the code: `core/crew/scheduler.go`, `core/crew/scheduler_run.go`, `core/crew/
 `core/crew/wakecodex.go`, `core/crew/wakeagy.go`, `core/crew/wakeopencode.go`,
 `app/crewbridge.go`, `app/crewcodexbridge.go`, `app/crewopencode.go`, `core/crew/opencodeplugin.go`,
 `core/crew/opencode/autodoc-crew.js`, `app/serve.go`
+
+## Wakes an OS can't offer
+
+Claude Code, Codex's app-server and AutoDoc's OpenCode plugin are woken through a Unix socket each
+binds under the user's runtime folders. Windows can't offer that wake yet: the folders are no paths
+there. It is a capability crew states (`crew.SocketWakes`, read from the standard library's own
+reading of a path, so crew keeps no OS rule), not a build tag at each call site:
+- a socket locator is refused as a bad endpoint (`ErrBadEndpoint`, an invalid argument), saying the wake isn't available on this OS and
+  that the agent's mail waits until it reads it;
+- `crew.list` gives such a live session the why `no_wake_on_this_os`, not `no_endpoint`, so the
+  user isn't left guessing why it isn't woken;
+- its mail waits, queued: a Claude whose endpoint never registered never falls back to a host typing
+  into it, and its next receive gets the mail;
+- agy's wake, over loopback, is every OS's.
+
+In the code: `core/crew/wakes.go`, `core/crew/endpoint.go` (`SetEndpointWith`), `core/crew/list.go`,
+`core/mail/mailtest/fallback.go` (`testMailWaitsForAnAgentItsOSCantWake`)
 
 ## The human inbox
 

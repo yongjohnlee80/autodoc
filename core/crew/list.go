@@ -17,7 +17,7 @@ const (
 // (docs/decisions/crew.md#wakers-and-the-wake-scheduler): "" when it can.
 const (
 	WhyEnded        = "ended"         // no live session
-	WhyNoEndpoint   = "no_endpoint"   // live, but it registered no way to wake it
+	WhyNoEndpoint   = "no_endpoint"   // live, but it registered no way to wake it (WhyNoWakeHere when its OS has none)
 	WhyWakesFailing = "wakes_failing" // unreachable: "wakes_failing: <the last failure's cause>", the cause when known
 	WhyBackoffUntil = "backoff_until" // reachable, but its last wake failed: "backoff_until <RFC 3339 time>", the next try
 )
@@ -89,6 +89,9 @@ func (m *Manager) List(ctx context.Context) ([]Entry, error) {
 				}
 				if e.Reachable, e.Why, err = m.reachability(tx, s, now); err != nil {
 					return err
+				}
+				if e.Why == WhyNoEndpoint && !m.wakesOn(p.Kind) {
+					e.Why = WhyNoWakeHere // none could be registered: not a fault of the agent's
 				}
 				if p.Kind == KindHost && e.Why != WhyHostGone {
 					e.Reachable, e.Why = false, WhyHost // a forwarder, never woken: not a fault to report

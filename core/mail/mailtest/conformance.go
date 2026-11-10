@@ -77,6 +77,7 @@ func Run(t *testing.T, h Harness) {
 		{"AFallbackCountsFromTheRecipientsSessionStart", testAFallbackCountsFromTheRecipientsSessionStart},
 		{"TheNextFallbackIsTheSessionsStartPlusTheWindow", testTheNextFallbackIsTheSessionsStartPlusTheWindow},
 		{"AClaudeThatNeverStartedKeepsItsMailQueued", testAClaudeThatNeverStartedKeepsItsMailQueued},
+		{"MailWaitsForAnAgentItsOSCantWake", testMailWaitsForAnAgentItsOSCantWake},
 		{"AClaudesFallbackWindowOpensWhenItStarts", testAClaudesFallbackWindowOpensWhenItStarts},
 		{"ARegisteredAgainEndpointMovesNoFallbackWindow", testARegisteredAgainEndpointMovesNoFallbackWindow},
 		{"AnotherKindsFirstEndpointOpensNoWindow", testAnotherKindsFirstEndpointOpensNoWindow},
