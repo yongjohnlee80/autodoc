@@ -585,12 +585,21 @@ func awaitShutdown(runs []*pluginRun) error {
 	}
 	// NOTE: each shutdown is itself bounded, but its last step waits on the kill's reaping, which
 	// nothing bounds: the deadline keeps a process that outlives its kill from holding the folder.
-	deadline := time.After(bound)
+	return awaitShutdownBy(runs, time.After(bound), bound)
+}
+
+// awaitShutdownBy is awaitShutdown's wait, until deadline fires. A run whose shutdown ended as the
+// deadline came is one that ended: select picks either of two ready cases.
+func awaitShutdownBy(runs []*pluginRun, deadline <-chan time.Time, bound time.Duration) error {
 	for _, r := range runs {
 		select {
 		case <-r.shutDone:
 		case <-deadline:
-			return fmt.Errorf("%s did not exit within %s: its folder was left as it is", r.e.m.Name, bound)
+			select {
+			case <-r.shutDone:
+			default:
+				return fmt.Errorf("%s did not exit within %s: its folder was left as it is", r.e.m.Name, bound)
+			}
 		}
 	}
 	return nil
