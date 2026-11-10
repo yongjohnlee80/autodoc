@@ -399,3 +399,33 @@ func TestARelativeProtectedPathIsNeverDropped(t *testing.T) {
 	refusedFor(t, "under a protected path given relative", tr.check("visible/cfg/lua/x.lua", writeKB, opWrite), whyOwn)
 	refusedFor(t, "a call protecting a relative folder", tr.check("notes/a.md", Bounds{Within: "kb", Protect: []string{"cfg"}}, opWrite), whyProtect)
 }
+
+// siblingsByCase makes base/kb and base/KB, two folders differing only by case, or skips where the
+// file system takes them for one.
+func siblingsByCase(t *testing.T, base string) (lower, upper string) {
+	t.Helper()
+	lower, upper = filepath.Join(base, "kb"), filepath.Join(base, "KB")
+	mustMkdir(t, lower)
+	if err := os.Mkdir(upper, 0o755); err != nil {
+		t.Skipf("this file system takes kb and KB for one folder: %v", err)
+	}
+	return lower, upper
+}
+
+// Two folders that differ only by case are two places: a link from the workspace kb into its
+// sibling KB is outside it, and a path in KB is not kb's.
+func TestASiblingDifferingOnlyByCaseIsOutside(t *testing.T) {
+	base := t.TempDir()
+	kb, other := siblingsByCase(t, base)
+	mustMkdir(t, filepath.Join(kb, "notes"))
+	mustWrite(t, filepath.Join(other, "secret.md"), "s")
+	g := mustGuard(t)
+	g.SetServed(func() []Root { return []Root{{Name: "kb", Dir: kb}} })
+	if err := os.Symlink(other, filepath.Join(kb, "notes", "sib")); err != nil {
+		t.Skipf("this system makes no link here: %v", err)
+	}
+	refusedFor(t, "a link into the case sibling", g.check(Root{Name: "kb", Dir: kb}, "notes/sib/secret.md", readAny, opRead), whyOutside)
+	if ws, name, err := g.Locate(filepath.Join(other, "secret.md")); err == nil {
+		t.Errorf("Locate in the case sibling = %v %q: want it outside kb", ws, name)
+	}
+}
