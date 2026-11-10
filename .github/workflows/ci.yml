@@ -255,6 +255,13 @@ jobs:
           go vet ./...
           mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
           go test -count=1 -timeout 20m "${pkgs[@]}"
+      - name: scratch (not for merge) the todo and task cells on Windows
+        if: ${{ !inputs.discover }}
+        run: |
+          go test -count=1 -timeout 15m -v -run 'Todo|Task|Handed|Assign|Store|Tilde|Label' ./tui/ > "$RUNNER_TEMP/t.txt" 2>&1 && rt=0 || rt=$?
+          echo "== PASS $(grep -cE '^--- PASS' "$RUNNER_TEMP/t.txt" || true) FAIL $(grep -cE '^--- FAIL' "$RUNNER_TEMP/t.txt" || true) SKIP $(grep -cE '^--- SKIP' "$RUNNER_TEMP/t.txt" || true)"
+          grep -E '^--- (FAIL|SKIP)|_test\.go:[0-9]+:' "$RUNNER_TEMP/t.txt" | cut -c1-260 || true
+          echo "== tui rc=$rt"
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
