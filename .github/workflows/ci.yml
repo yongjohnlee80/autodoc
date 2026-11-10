@@ -247,6 +247,19 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: scratch (not for merge) a store's root at a drive's or a share's root, one mutant
+        if: ${{ !inputs.discover }}
+        run: |
+          go test -count=1 -v -run '^TestAStoresRootAtADrivesOrAShareRoot$' ./core/todo/ > "$RUNNER_TEMP/b.txt" 2>&1 && rb=0 || rb=$?
+          grep -E '^(--- |ok |FAIL)|_test\.go:[0-9]+:' "$RUNNER_TEMP/b.txt" | cut -c1-240 || true
+          echo "== base rc=$rb"
+          python -c "p='core/todo/journal.go'; s=open(p,encoding='utf-8').read(); o='\treturn paths.Dir(p), true\n'; assert s.count(o)==1; s=s.replace(o,'\tr, _ := strings.CutSuffix(p, \"/\"+todoDir) // mutant cutsuffix\n\treturn r, true\n'); s=s.replace('\t\"path\"\n','\t\"path\"\n\t\"strings\"\n',1); open(p,'w',encoding='utf-8').write(s)"
+          go test -count=1 -run '^TestAStoresRootAtADrivesOrAShareRoot$' ./core/todo/ > "$RUNNER_TEMP/m.txt" 2>&1 && rm=0 || rm=$?
+          echo "== mutant cutsuffix applied: $(grep -c 'mutant cutsuffix' core/todo/journal.go)"
+          grep -E '_test\.go:[0-9]+:' "$RUNNER_TEMP/m.txt" | head -3 | cut -c1-240 || true
+          echo "== mutant cutsuffix rc=$rm (want a non-zero: killed)"
+          git checkout -q -- core/todo/journal.go
+          [ $rb = 0 ]
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
         run: |
