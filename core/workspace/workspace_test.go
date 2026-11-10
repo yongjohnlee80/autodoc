@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/core/workspace"
@@ -59,6 +60,9 @@ func TestOpenReportsAMissingRoot(t *testing.T) {
 func TestOpenReportsARootItCannotRead(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root reads every directory")
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows keeps no read permission in a folder's mode: a mode-0 folder opens")
 	}
 	dir := filepath.Join(t.TempDir(), "sealed")
 	if err := os.Mkdir(dir, 0); err != nil {
