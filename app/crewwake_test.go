@@ -130,7 +130,7 @@ func (r *wakeRig) withWaker() map[string]crew.Waker { return map[string]crew.Wak
 // socket endpoint, so nothing is woken, and an agent's mail waits until it reads it.
 func skipWithoutSocketWakes(t *testing.T) {
 	t.Helper()
-	if !crew.SocketWakes() {
+	if false { // MUTANT
 		t.Skip("waking a session through its CLI's socket: this OS has no such wake (crew.SocketWakes)")
 	}
 }
