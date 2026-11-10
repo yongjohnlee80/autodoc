@@ -741,7 +741,7 @@ func (h *agents) writeAgentGuide(ws wsInfo, codename, crewKind string, via crew.
 	}
 	// the workspace notice, for a Claude agent (agenthook.go): without it the agent still starts, and
 	// asks editor.workspace by the guide's rule
-	h.c.Keep(mergeClaudeHook(filepath.Join(dir, ".claude", "settings.json"), noticeCommand(own)))
+	h.c.Keep(mergeClaudeHook(filepath.Join(dir, ".claude", "settings.json"), noticeCommand(h.agentBin())))
 	return dir, nil
 }
 

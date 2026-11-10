@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
@@ -19,21 +20,25 @@ import (
 // is the agent's (agentFolder); only Claude Code reads the file. mergeClaudeSettings writes
 // AutoDoc's other hooks and settings there the same way.
 
-// noticeCommand is the hook's command: the agent's own autodoc, own (its launcher, or on Windows
-// the build, its config from $AUTODOC_CONFIG in the agent's environment), so the TUI's build and
-// config answer.
-func noticeCommand(own string) string {
-	return shellQuote(own) + " --workspace-notice"
+// noticeTail is what the workspace notice hook runs after its program.
+const noticeTail = " --workspace-notice"
+
+// noticeCommand is the hook's command: the build by its absolute path (bin), never a bare autodoc a
+// PATH could make another, its config from $AUTODOC_CONFIG in the agent's environment, so the TUI's
+// build and config answer.
+func noticeCommand(bin string) string {
+	return shellQuote(bin) + noticeTail
 }
 
 // mergeClaudeHook makes path's hooks.UserPromptSubmit run command once (mergeClaudeSettings).
 func mergeClaudeHook(path, command string) error {
-	return mergeClaudeSettings(path, claudeMerge{events: map[string]string{"UserPromptSubmit": command}})
+	return mergeClaudeSettings(path, claudeMerge{events: map[string]string{"UserPromptSubmit": command}, ours: []string{noticeTail}})
 }
 
 // claudeMerge is what mergeClaudeSettings writes: each hook event's command, the top-level keys to
 // set, and what was AutoDoc's before: commands taken out of every event first (an event left with
-// no hook goes), and keys whose value is unset's taken out unless set again.
+// no hook goes), each named by its tail after its program (ourCommand), so AutoDoc's of any build,
+// wherever it was, are taken out; and keys whose value is unset's taken out unless set again.
 type claudeMerge struct {
 	events map[string]string
 	set    map[string]any
@@ -76,10 +81,8 @@ func mergeClaudeSettings(path string, m claudeMerge) error {
 		}
 		kept := []any{}
 		for _, g := range groups {
-			for _, command := range m.ours {
-				if g = withoutCommand(g, command); g == nil {
-					break
-				}
+			if g = withoutHooks(g, func(c string) bool { return ourCommand(c, m.ours) }); g == nil {
+				continue
 			}
 			if g != nil {
 				kept = append(kept, g)
@@ -103,7 +106,7 @@ func mergeClaudeSettings(path string, m claudeMerge) error {
 		}
 		kept := []any{}
 		for _, g := range groups {
-			if g = withoutCommand(g, command); g != nil {
+			if g = withoutHooks(g, func(c string) bool { return c == command }); g != nil {
 				kept = append(kept, g)
 			}
 		}
@@ -149,10 +152,10 @@ func mergeClaudeSettings(path string, m claudeMerge) error {
 	return writeAtomic(path, append(out, '\n'), 0o600)
 }
 
-// withoutCommand is the hook group g with every hook running command taken out: nil only when that
-// took out its last hook. A group none was taken from, even one with no hooks, is the user's, kept
-// as it is, and so is a group of another shape.
-func withoutCommand(g any, command string) any {
+// withoutHooks is the hook group g with every hook whose command drop says taken out: nil only when
+// that took out its last hook. A group none was taken from, even one with no hooks, is the user's,
+// kept as it is, and so is a group of another shape.
+func withoutHooks(g any, drop func(command string) bool) any {
 	group, ok := g.(map[string]any)
 	if !ok {
 		return g
@@ -163,8 +166,10 @@ func withoutCommand(g any, command string) any {
 	}
 	var left []any
 	for _, hk := range list {
-		if m, ok := hk.(map[string]any); ok && m["command"] == command {
-			continue
+		if m, ok := hk.(map[string]any); ok {
+			if command, _ := m["command"].(string); drop(command) {
+				continue
+			}
 		}
 		left = append(left, hk)
 	}
@@ -181,7 +186,7 @@ func withoutCommand(g any, command string) any {
 // writeWakeAcceptance configures only what lets the crew's fixed notice start a turn
 // (docs/decisions/crew.md#wake-acceptance-not-tool-approvals), for a crew session's CLI of kind in
 // dir: for a Claude Code that knows k, crew's one source of its settings (crew.ClaudeHookCommands,
-// crew.ClaudeSetKeys), run by dir's own autodoc: the SessionStart hook that registers its endpoint,
+// crew.ClaudeSetKeys), run by autodoc (the build by its absolute path, quoted): the SessionStart hook that registers its endpoint,
 // crossSessionInbound "accept", and, when it can report them, the hooks that report its permission
 // prompts (they report; they decide nothing), the events it doesn't know never named, and AutoDoc's
 // hooks of an earlier start taken out first. prompts is whether those hooks were written, which
@@ -191,15 +196,37 @@ func withoutCommand(g any, command string) any {
 // (crew.ClaudeMCPAllow) for one on MCP mail, in this folder's settings alone, AutoDoc's rules of
 // either mode taken out first; it never writes approval policies, permission modes, deny rules or
 // any other allow rule: a turn a wake starts runs under the profile's own tool policy.
-func writeWakeAcceptance(dir, kind string, k crew.ClaudeHooks, allow []string) (prompts bool, err error) {
+func writeWakeAcceptance(autodoc, dir, kind string, k crew.ClaudeHooks, allow []string) (prompts bool, err error) {
 	if kind != crew.KindClaude {
 		return false, nil
 	}
-	autodoc := shellQuote(filepath.Join(dir, "bin", "autodoc"))
 	events, prompts := crew.ClaudeHookCommands(autodoc, k)
 	set := crew.ClaudeSetKeys(k)
 	err = mergeClaudeSettings(filepath.Join(dir, ".claude", "settings.json"), claudeMerge{events: events, set: set,
-		ours: crew.ClaudeCommandLines(autodoc), unset: map[string]any{crew.ClaudeCrossSessionInbound: "accept"},
+		ours: crew.ClaudeCommandLines(""), unset: map[string]any{crew.ClaudeCrossSessionInbound: "accept"},
 		allow: allow})
 	return prompts && err == nil, err
+}
+
+// ourCommand reports whether command is one of AutoDoc's own: one program word, bare or quoted as
+// shellQuote writes it, then exactly one of tails. The program is any build's, wherever it was (an
+// earlier wrapper, a moved or upgraded build), so its old hooks are taken out, never left to run a
+// program that is gone.
+func ourCommand(command string, tails []string) bool {
+	for _, tail := range tails {
+		program, ok := strings.CutSuffix(command, tail)
+		if !ok || program == "" {
+			continue
+		}
+		if inner, quoted := strings.CutPrefix(program, "'"); quoted {
+			if inner, ok = strings.CutSuffix(inner, "'"); ok && shellQuote(strings.ReplaceAll(inner, `'\''`, "'")) == program {
+				return true
+			}
+			continue
+		}
+		if !strings.ContainsAny(program, " \t'\"") {
+			return true
+		}
+	}
+	return false
 }
