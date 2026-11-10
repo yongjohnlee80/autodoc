@@ -11,6 +11,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/internal/install"
 	"github.com/yongjohnlee80/autodoc/internal/ipc"
+	"github.com/yongjohnlee80/autodoc/tui/system"
 )
 
 // scriptInstall is a record install-autodoc.sh wrote, its update.sh at update.
@@ -194,9 +195,9 @@ func TestHowToUpdateIsAboutsUpdateForAScriptInstall(t *testing.T) {
 	r := attached(t, d)
 	s := startupOf(r)
 	got := onLoop(r, func() string {
-		s.exe = func() (string, error) { return "/home/u/.local/bin/autodoc", nil }
-		s.scripted = func() bool { return true }
-		return s.how(release{Tag: "v0.1.38", URL: "https://example/r"})
+		s.Exe = func() (string, error) { return "/home/u/.local/bin/autodoc", nil }
+		s.Scripted = func() bool { return true }
+		return s.How(system.Release{Tag: "v0.1.38", URL: "https://example/r"})
 	})
 	if got != "About › Update" {
 		t.Fatalf("how %q, want About › Update", got)

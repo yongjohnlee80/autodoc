@@ -2,12 +2,14 @@ package tui
 
 import (
 	"context"
-	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"maps"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/system"
 )
 
 // PREFERENCES — what the TUI keeps between runs, in the daemon's store (preference.list and
@@ -321,9 +323,9 @@ func legacyPrefRows(h *Host, gui bool) []feature.PrefSpec {
 			Chooser("App.openAsIndex", "App.setOpenAsIndex"),
 		choicePref(prefDiskReload, diskReloadClean, diskReloadChoices, func(p *prefs) *string { return &p.diskReload }).
 			Chooser("App.diskReloadIndex", "App.setDiskReloadIndex"),
-		boolPref(prefAboutAt, true, func(p *prefs) *bool { return &p.aboutAtStart }).
+		boolPref(system.PrefAboutAt, true, func(p *prefs) *bool { return &p.aboutAtStart }).
 			Chooser("App.aboutAtStartIndex", "App.setAboutAtStartIndex"),
-		boolPref(prefUpdates, true, func(p *prefs) *bool { return &p.updateCheck }).
+		boolPref(system.PrefUpdates, true, func(p *prefs) *bool { return &p.updateCheck }).
 			Chooser("App.updateCheckIndex", "App.setUpdateCheckIndex"),
 		choicePref(prefCorner, "bottom-right", corners, func(p *prefs) *string { return &p.toastCorner }).
 			Chooser("App.toastCornerIndex", "App.setToastCorner"),

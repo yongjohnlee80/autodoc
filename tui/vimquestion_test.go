@@ -5,6 +5,8 @@ package tui
 import (
 	"strings"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/tui/system"
 )
 
 // offeringVimQuestion turns the first run's Vim question on for one test's programs (TestMain turns
@@ -26,7 +28,7 @@ func TestTheVimQuestionIsATrueFirstRunsFirstCard(t *testing.T) {
 	seams := tune(t)
 	looked, look := 0, seams.lookAgentCLI
 	seams.lookAgentCLI = func(c string) (string, error) { looked++; return look(c) }
-	d, r, _ := runAgentTUIWith(t, t.TempDir(), nil, "", map[string]string{prefAboutAt: "true"}, Options{})
+	d, r, _ := runAgentTUIWith(t, t.TempDir(), nil, "", map[string]string{system.PrefAboutAt: "true"}, Options{})
 	r.s.WaitForText(t, "Do you use Vim?")
 	if sc := r.s.String(); strings.Contains(sc, "Set up an AI agent?") || strings.Contains(sc, "about autodoc") {
 		t.Fatalf("another card opened beside the Vim question:\n%s", sc)
@@ -62,9 +64,9 @@ func TestTheVimQuestionsYesAndEscape(t *testing.T) {
 func TestTheVimQuestionIsNotAskedOfAnExistingUser(t *testing.T) {
 	offeringVimQuestion(t)
 	for name, prefs := range map[string]map[string]string{
-		"a keymap":  {prefAboutAt: "true", prefKeymap: "vim"},
-		"an answer": {prefAboutAt: "true", prefAgentSetup: "declined"},
-		"a profile": {prefAboutAt: "true"},
+		"a keymap":  {system.PrefAboutAt: "true", prefKeymap: "vim"},
+		"an answer": {system.PrefAboutAt: "true", prefAgentSetup: "declined"},
+		"a profile": {system.PrefAboutAt: "true"},
 	} {
 		var profiles []agentProfile
 		if name == "a profile" {

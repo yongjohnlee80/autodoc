@@ -13,6 +13,7 @@ import (
 
 	regindex "github.com/yongjohnlee80/autodoc/core/registry"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/system"
 )
 
 // THE REGISTRY — AutoDoc's list of plugins, Lua packages and KB types
@@ -63,21 +64,21 @@ func (src registrySource) fetch(ctx context.Context, now time.Time) registryList
 	if cacheOK {
 		etag = cache.etag
 	}
-	g, err := httpGet(ctx, src.url, "application/json", etag)
+	g, err := system.HttpGet(ctx, src.url, "application/json", etag)
 	switch {
 	case err != nil:
 		return registryFallback(cache, cacheOK, err)
-	case g.status == http.StatusNotModified && cacheOK:
+	case g.Status == http.StatusNotModified && cacheOK:
 		_ = src.write(cache.etag, now, cache.raw) // fresh for another day
 		return registryList{ix: cache.ix}
-	case g.status != http.StatusOK: // a 304 with no cache too: the request was unconditional
-		return registryFallback(cache, cacheOK, fmt.Errorf("the registry answered %d %s", g.status, http.StatusText(g.status)))
+	case g.Status != http.StatusOK: // a 304 with no cache too: the request was unconditional
+		return registryFallback(cache, cacheOK, fmt.Errorf("the registry answered %d %s", g.Status, http.StatusText(g.Status)))
 	}
-	ix, err := regindex.Decode(g.body)
+	ix, err := regindex.Decode(g.Body)
 	if err != nil {
 		return registryFallback(cache, cacheOK, err)
 	}
-	_ = src.write(g.etag, now, g.body) // a cache that can't be written is only slower
+	_ = src.write(g.Etag, now, g.Body) // a cache that can't be written is only slower
 	return registryList{ix: ix}
 }
 

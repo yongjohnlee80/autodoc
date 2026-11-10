@@ -357,8 +357,6 @@ gui	scripting	host	widgetTarget.open	field
 gui	scripting	host	widgetTarget.title	field
 gui	scripting	host	withAuthority	func
 gui	scripting	plugins	launchCapability	const
-gui	system	host	prefAboutAt	const
-gui	system	host	prefUpdates	const
 gui	terminals	host	Host	type
 gui	terminals	host	Host.fonts	field
 gui	terminals	host	Host.keep	method
@@ -697,8 +695,6 @@ term	scripting	host	widgetTarget.open	field
 term	scripting	host	widgetTarget.title	field
 term	scripting	host	withAuthority	func
 term	scripting	plugins	launchCapability	const
-term	system	host	prefAboutAt	const
-term	system	host	prefUpdates	const
 term	terminals	host	Host	type
 term	terminals	host	Host.fonts	field
 term	terminals	host	Host.keep	method

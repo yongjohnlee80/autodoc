@@ -1,4 +1,4 @@
-package tui
+package system
 
 import (
 	"context"
@@ -40,7 +40,7 @@ func TestTheWindowsProfilingStartsAndStops(t *testing.T) {
 	c := newScripted("kb")
 	prof := profiling.New(context.Background(), "gui")
 	t.Cleanup(func() { _ = prof.Close() })
-	f := newProfiling(c, prof, nil)
+	f := NewProfiling(c, prof, nil)
 	if st := f.State(); st["App.profilingWindow"] != false || st["App.profilingMark"] != "" {
 		t.Fatalf("before a start: %v", st)
 	}
@@ -72,11 +72,11 @@ func TestTheWindowsProfilingFromLaunchAndWithout(t *testing.T) {
 	if _, err := prof.Start(""); err != nil {
 		t.Fatal(err)
 	}
-	if st := newProfiling(newScripted("kb"), prof, nil).State(); st["App.profilingWindow"] != true || st["App.profilingMark"] != badge {
+	if st := NewProfiling(newScripted("kb"), prof, nil).State(); st["App.profilingWindow"] != true || st["App.profilingMark"] != badge {
 		t.Errorf("launched with --profile: %v", st)
 	}
 	c := newScripted("kb")
-	newProfiling(c, nil, nil).toggleWindow()
+	NewProfiling(c, nil, nil).toggleWindow()
 	if !noted(c, "no profiler") {
 		t.Errorf("no profiler: %v", c.Notes)
 	}
@@ -100,7 +100,7 @@ func TestTheBackendsProfiling(t *testing.T) {
 		}
 		return map[string]any{"on": on, "dir": dir}, nil
 	}
-	f := newProfiling(c, nil, nil)
+	f := NewProfiling(c, nil, nil)
 	f.toggleBackend()
 	if c.Sets["App.profilingBackend"] != true || c.Sets["App.profilingMark"] != badge || !noted(c, "autodoc-profile-serve-9") {
 		t.Fatalf("after a start: %v, notes %v", c.Sets, c.Notes)
@@ -134,7 +134,7 @@ func TestCaptureAndFolderNeedAMonitor(t *testing.T) {
 	var opened []string
 	prof := profiling.New(context.Background(), "gui")
 	t.Cleanup(func() { _ = prof.Close() })
-	f := newProfiling(c, prof, func(_ context.Context, p string) error { opened = append(opened, p); return nil })
+	f := NewProfiling(c, prof, func(_ context.Context, p string) error { opened = append(opened, p); return nil })
 	f.captureCPU()
 	f.openFolder()
 	if len(c.Notes) != 2 || !noted(c, "Start profiling") || len(opened) != 0 {
@@ -165,7 +165,7 @@ func TestAStaleBackendStatusNeverUndoesAStart(t *testing.T) {
 		}
 		return map[string]any{"on": on, "dir": dir}, nil
 	}
-	f := newProfiling(c, nil, nil)
+	f := NewProfiling(c, nil, nil)
 	f.Connected()     // asks: off
 	f.toggleBackend() // starts
 	if len(c.Pending) != 2 {
@@ -185,7 +185,7 @@ func TestTheWindowsToggleRunsOffTheLoopOnceAtATime(t *testing.T) {
 	c.Deferred = true
 	prof := profiling.New(context.Background(), "gui")
 	t.Cleanup(func() { _ = prof.Close() })
-	f := newProfiling(c, prof, nil)
+	f := NewProfiling(c, prof, nil)
 	f.toggleWindow()
 	f.toggleWindow()
 	if len(c.Pending) != 1 {
@@ -215,7 +215,7 @@ func TestARefusedBackendStopAsksAgain(t *testing.T) {
 		}
 		return map[string]any{"on": false, "dir": ""}, nil
 	}
-	f := newProfiling(c, nil, nil)
+	f := NewProfiling(c, nil, nil)
 	f.toggleBackend()
 	f.toggleBackend()
 	if len(c.Failures) != 1 || c.Sets["App.profilingBackend"] != false || c.Calls[len(c.Calls)-1] != "sys.profile[status ]" {
@@ -231,7 +231,7 @@ func TestTheBackendsToggleRunsOnceAtATime(t *testing.T) {
 	c.Answers["sys.profile"] = func(params []any) (any, error) {
 		return map[string]any{"on": params[0] == "start", "dir": "/run/user/1/p"}, nil
 	}
-	f := newProfiling(c, nil, nil)
+	f := NewProfiling(c, nil, nil)
 	f.toggleBackend()
 	f.toggleBackend()
 	if len(c.Pending) != 1 || !slices.Equal(c.Calls, []string{"sys.profile[start ]"}) {
@@ -249,7 +249,7 @@ func TestAWindowStartQueuedPastTheCloseStartsNothing(t *testing.T) {
 	shortRuntime(t)
 	c := &featuretest.HeldCore{ScriptedCore: newScripted("kb")} // Go holds the worker
 	prof := profiling.New(context.Background(), "gui")
-	f := newProfiling(c, prof, nil)
+	f := NewProfiling(c, prof, nil)
 	f.toggleWindow()
 	if len(c.Held) != 1 {
 		t.Fatalf("%d works queued; want the start", len(c.Held))

@@ -11,6 +11,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc"
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/tui/system"
 )
 
 // offeringSetup turns the first-run card on for one test's programs (TestMain turns it off for the
@@ -82,16 +83,16 @@ func TestTheSetupCardIsAFirstRunsOnly(t *testing.T) {
 	t.Parallel()
 	offeringSetup(t)
 	fakeClaude(t)
-	_, r, _ := runAgentTUIWith(t, t.TempDir(), nil, "", map[string]string{prefAboutAt: "true"}, Options{})
+	_, r, _ := runAgentTUIWith(t, t.TempDir(), nil, "", map[string]string{system.PrefAboutAt: "true"}, Options{})
 	r.s.WaitForText(t, "Set up an AI agent?")
 	if strings.Contains(r.s.String(), "about autodoc") {
 		t.Fatal("About opened beside the setup card")
 	}
 
 	for name, prefs := range map[string]map[string]string{
-		"a profile": {prefAboutAt: "true"},
-		"an answer": {prefAboutAt: "true", prefAgentSetup: "declined"},
-		"set up":    {prefAboutAt: "true", prefAgentSetup: "done"},
+		"a profile": {system.PrefAboutAt: "true"},
+		"an answer": {system.PrefAboutAt: "true", prefAgentSetup: "declined"},
+		"set up":    {system.PrefAboutAt: "true", prefAgentSetup: "done"},
 	} {
 		var profiles []agentProfile
 		if name == "a profile" {
