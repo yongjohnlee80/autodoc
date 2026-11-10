@@ -364,7 +364,7 @@ func agentProgram(command string) string {
 	for len(w) > 0 {
 		f := w[0].Text
 		switch {
-		case w[0].Assignment(), f == "&": // an assignment; PowerShell's call operator, before a quoted path
+		case w[0].Assignment(): // MUTANT: the call operator not skipped
 			w = w[1:]
 		case f == "exec" || f == "command" || f == "nohup":
 			w = skipOptions(w[1:], "-a")
