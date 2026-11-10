@@ -18,6 +18,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
 
 	"github.com/yongjohnlee80/autodoc/script"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	lua "github.com/yuin/gopher-lua"
 )
@@ -512,7 +513,7 @@ func (v luaVerb) bounded(params []any, bounds map[string]any) []any {
 
 // userPreferences are the preferences whose value is rights (the grants) or a command (the agent
 // profiles' commands, run as /bin/sh -c): the user's to write, never a gated script's (AS-2b).
-var userPreferences = map[string]bool{prefLuaGrants: true, PrefAgentProfiles: true}
+var userPreferences = map[string]bool{prefLuaGrants: true, agents.PrefAgentProfiles: true}
 
 // refusedPreference is the refusal of a gated script's preference.set of one of userPreferences.
 func refusedPreference(verb string, params []any) error {

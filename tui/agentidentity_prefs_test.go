@@ -13,7 +13,7 @@ import (
 
 func TestProfileRenamesKeepOwnAndUntouchedLegacyCodenames(t *testing.T) {
 	c := newIdentityHost(`[{"name":"Claude Opus","command":"one"},{"name":"Other Agent","command":"two"}]`)
-	c.p = prefsFor(map[string]any{PrefAgentProfiles: c.p.Value(agents.PrefAgentProfiles), prefAgentDefault: "Other Agent"}, false)
+	c.p = prefsFor(map[string]any{agents.PrefAgentProfiles: c.p.Value(agents.PrefAgentProfiles), prefAgentDefault: "Other Agent"}, false)
 	a := testAgents(c, "", "")
 	a.StartEditAgent(1)
 	a.SaveAgent("Renamed", "two")
@@ -28,7 +28,7 @@ func TestProfileRenamesKeepOwnAndUntouchedLegacyCodenames(t *testing.T) {
 
 func TestLegacyDefaultNameMigratesWithoutConfusingAnotherCodename(t *testing.T) {
 	c := newIdentityHost(`[{"name":"Foo","command":"one"},{"name":"foo","command":"two"},{"name":"foo-2","command":"three"}]`)
-	c.p = prefsFor(map[string]any{PrefAgentProfiles: c.p.Value(agents.PrefAgentProfiles), prefAgentDefault: "foo-2"}, false)
+	c.p = prefsFor(map[string]any{agents.PrefAgentProfiles: c.p.Value(agents.PrefAgentProfiles), prefAgentDefault: "foo-2"}, false)
 	a := testAgents(c, "", "")
 	if p, ok := a.Profile(a.DefaultProfile()); !ok || p.Command != "three" {
 		t.Fatalf("legacy name was mistaken for another allocated codename: %+v", p)
@@ -59,8 +59,8 @@ func TestAgentDefaultMigrationDistinguishesMissingAndExplicitEmptyAtRestart(t *t
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			raw := map[string]any{
-				PrefAgentProfiles: `[{"name":"A","command":"one"},{"name":"B","command":"two"}]`,
-				prefAgentDefault:  "A",
+				agents.PrefAgentProfiles: `[{"name":"A","command":"one"},{"name":"B","command":"two"}]`,
+				prefAgentDefault:         "A",
 			}
 			if tc.present {
 				raw[agents.PrefAgentDefaultCodename] = tc.canonical

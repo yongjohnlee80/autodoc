@@ -66,7 +66,7 @@ func TestTheVimQuestionIsNotAskedOfAnExistingUser(t *testing.T) {
 	offeringVimQuestion(t)
 	for name, prefs := range map[string]map[string]string{
 		"a keymap":  {system.PrefAboutAt: "true", prefKeymap: "vim"},
-		"an answer": {system.PrefAboutAt: "true", PrefAgentSetup: "declined"},
+		"an answer": {system.PrefAboutAt: "true", agents.PrefAgentSetup: "declined"},
 		"a profile": {system.PrefAboutAt: "true"},
 	} {
 		var profiles []agents.AgentProfile

@@ -22,19 +22,19 @@ func TestACommandIsJudgedAsWindowsFindsAProgram(t *testing.T) {
 	env := []string{"PATH=" + dir, "PATHEXT=.COM;.EXE", "SystemRoot=" + os.Getenv("SystemRoot")}
 	shell := usershell.Commands(env)
 	for _, found := range []string{"agent --x", "AGENT", filepath.Join(dir, "agent"), filepath.Join(dir, "agent.exe"), filepath.ToSlash(filepath.Join(dir, "agent"))} {
-		if err := commandOnPath(shell, found, env); err != nil {
+		if err := CommandOnPath(shell, found, env); err != nil {
 			t.Errorf("%q: %v; want it found", found, err)
 		}
 	}
-	err := commandOnPath(shell, "claude-work", env)
+	err := CommandOnPath(shell, "claude-work", env)
 	if err == nil || !strings.Contains(err.Error(), "claude-work") || !strings.Contains(err.Error(), shell.Describe()) || strings.Contains(err.Error(), "/bin/sh") {
 		t.Errorf("a bare name not on PATH: %v; want it refused, naming %s", err, shell.Describe())
 	}
 	missing := filepath.Join(dir, "no-such.exe")
-	if err := commandOnPath(shell, missing, env); err == nil || !strings.Contains(err.Error(), missing) {
+	if err := CommandOnPath(shell, missing, env); err == nil || !strings.Contains(err.Error(), missing) {
 		t.Errorf("an absolute path that isn't there: %v; want it refused, naming it", err)
 	}
-	if err := commandOnPath(shell, `~\bin\no-such`, env); err != nil {
+	if err := CommandOnPath(shell, `~\bin\no-such`, env); err != nil {
 		t.Errorf("a leading ~: %v; want it left to PowerShell", err)
 	}
 }

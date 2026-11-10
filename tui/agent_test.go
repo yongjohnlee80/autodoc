@@ -49,7 +49,7 @@ func runAgentTUIIn(t *testing.T, dir string, profiles []agents.AgentProfile, def
 	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho \"$@\" >> "+agents.ShellQuote(calls)+"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	prefs := map[string]string{PrefAgentProfiles: agents.AgentProfilesJSON(profiles)}
+	prefs := map[string]string{agents.PrefAgentProfiles: agents.AgentProfilesJSON(profiles)}
 	if def != "" {
 		prefs[prefAgentDefault] = def
 	}
@@ -228,8 +228,8 @@ func TestAgentProfilesAreAddedEditedAndRemoved(t *testing.T) {
 func TestAnExplicitlyClearedAgentDefaultStaysClearedAfterLoad(t *testing.T) {
 	t.Parallel()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{
-		PrefAgentProfiles: `[{"name":"A","command":"false","codename":"a"}]`,
-		prefAgentDefault:  "A", PrefAgentDefaultCodename: "",
+		agents.PrefAgentProfiles: `[{"name":"A","command":"false","codename":"a"}]`,
+		prefAgentDefault:         "A", agents.PrefAgentDefaultCodename: "",
 	}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitFor(t, "stored cleared default loaded", func(string) bool {
@@ -247,7 +247,7 @@ func TestAnExplicitlyClearedAgentDefaultStaysClearedAfterLoad(t *testing.T) {
 func TestLegacyAgentDefaultMigratesOnceAndNeverReadsItsMirrorAgain(t *testing.T) {
 	t.Parallel()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{
-		PrefAgentProfiles: `[{"name":"A","command":"false"}]`, prefAgentDefault: "A",
+		agents.PrefAgentProfiles: `[{"name":"A","command":"false"}]`, prefAgentDefault: "A",
 	}})
 	sess := NewSession(d.sock, nil)
 	var writes atomic.Int32

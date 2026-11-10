@@ -33,7 +33,7 @@ type identityHost struct {
 
 func newIdentityHost(raw string) *identityHost {
 	return &identityHost{p: prefs{values: map[string]string{
-		PrefAgentProfiles: raw, PrefAgentDefaultCodename: "",
+		agents.PrefAgentProfiles: raw, agents.PrefAgentDefaultCodename: "",
 	}}, state: map[string]any{}}
 }
 
