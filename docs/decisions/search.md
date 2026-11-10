@@ -86,7 +86,7 @@ none of its own.
 - The result reports the stage's state (off, ready or error) and the model that ranked it, and each
   ranked hit carries its score. A failed ranker leaves the hits in recall order.
 
-In the code: `internal/daemon/ranking.go`, `core/store/rankers.go`, `rpc/rankers.go`, `tui/rankers.go`
+In the code: `internal/daemon/ranking.go`, `core/store/rankers.go`, `rpc/rankers.go`, `tui/searchsetup/rankers.go`
 
 ## A build's own ranking
 
@@ -411,4 +411,4 @@ workspace start embedding with the new model. A failed step stops the plan and R
 from the start; a step already done changes nothing. When Ollama updates a model in use, the notice
 names the model and says it is refilling.
 
-In the code: `tui/embedsetup.go`, `tui/progress.go`, `tui/qml/dialogs/EmbeddingSetup.qml`
+In the code: `tui/searchsetup/embedsetup.go`, `tui/progress.go`, `tui/qml/dialogs/EmbeddingSetup.qml`

@@ -148,7 +148,7 @@ func (h *Host) cancelIndexing() {
 				return
 			}
 			h.notify(h.trf("autodoc.notice.vectors.switch_cancelled_semantic_search_with_again_s_ve", a.Value, target))
-			h.ai.reloadProviders()
+			h.ai.ReloadProviders()
 		})
 	case e.working() > 0:
 		do(h, func(ctx context.Context) error {
@@ -160,7 +160,7 @@ func (h *Host) cancelIndexing() {
 				return
 			}
 			h.notify(h.tr("autodoc.notice.vectors.embedding_stopped_the_vectors_made_kept_use_carr"))
-			h.ai.reloadProviders()
+			h.ai.ReloadProviders()
 		})
 	default:
 		h.say(h.tr("autodoc.notice.vectors.nothing_is_being_embedded"))

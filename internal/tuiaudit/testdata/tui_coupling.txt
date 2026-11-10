@@ -237,7 +237,6 @@ gui	plugins	host	themeImport	var
 gui	plugins	host	toastPlugin	const
 gui	plugins	host	withRelationViews	func
 gui	plugins	page	Host.native	method
-gui	plugins	searchsetup	setField	func
 gui	plugins	todos	assignable	func
 gui	plugins	todos	newAgentPick	func
 gui	relations	explorer	linksTab	const
@@ -358,11 +357,6 @@ gui	scripting	host	widgetTarget.open	field
 gui	scripting	host	widgetTarget.title	field
 gui	scripting	host	withAuthority	func
 gui	scripting	plugins	launchCapability	const
-gui	searchsetup	host	bytesText	func
-gui	searchsetup	host	choices	func
-gui	searchsetup	host	wording	type
-gui	searchsetup	host	wording.Tr	method
-gui	searchsetup	host	wording.Trf	method
 gui	system	host	prefAboutAt	const
 gui	system	host	prefUpdates	const
 gui	terminals	host	Host	type
@@ -612,7 +606,6 @@ term	plugins	host	themeImport	var
 term	plugins	host	toastPlugin	const
 term	plugins	host	withRelationViews	func
 term	plugins	page	Host.native	method
-term	plugins	searchsetup	setField	func
 term	plugins	todos	assignable	func
 term	plugins	todos	newAgentPick	func
 term	relations	explorer	linksTab	const
@@ -704,11 +697,6 @@ term	scripting	host	widgetTarget.open	field
 term	scripting	host	widgetTarget.title	field
 term	scripting	host	withAuthority	func
 term	scripting	plugins	launchCapability	const
-term	searchsetup	host	bytesText	func
-term	searchsetup	host	choices	func
-term	searchsetup	host	wording	type
-term	searchsetup	host	wording.Tr	method
-term	searchsetup	host	wording.Trf	method
 term	system	host	prefAboutAt	const
 term	system	host	prefUpdates	const
 term	terminals	host	Host	type

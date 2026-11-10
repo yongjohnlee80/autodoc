@@ -1,8 +1,9 @@
-package tui
+package searchsetup
 
 import (
-	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"maps"
+
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE AI MODELS — System › Search models… (SPC a), a feature of its own: the embedding providers
@@ -17,23 +18,23 @@ const (
 )
 
 // aiModels is the dialog: its two lists and the tab showing.
-type aiModels struct {
+type AIModels struct {
 	c         feature.Core
-	providers *providers
+	Providers *providers
 	rankers   *rankers
 	setup     *embedSetup // Set up… (embedsetup.go)
 	tab       int
 }
 
-func newAIModels(c feature.Core) *aiModels {
-	a := &aiModels{c: c, providers: newProviders(c), setup: newEmbedSetup(c)}
+func NewAIModels(c feature.Core) *AIModels {
+	a := &AIModels{c: c, Providers: newProviders(c), setup: newEmbedSetup(c)}
 	a.rankers = newRankers(c, a.syncButtons)
 	return a
 }
 
-func (*aiModels) Name() string { return "aiModels" }
+func (*AIModels) Name() string { return "aiModels" }
 
-func (a *aiModels) State() map[string]any {
+func (a *AIModels) State() map[string]any {
 	s := map[string]any{
 		"App.aiTab":          0,
 		"App.aiEmbeddingTab": true,
@@ -41,13 +42,13 @@ func (a *aiModels) State() map[string]any {
 		"App.aiRankerChoice": false,
 		"App.aiUseEnabled":   true,
 	}
-	maps.Copy(s, a.providers.State())
+	maps.Copy(s, a.Providers.State())
 	maps.Copy(s, a.rankers.State())
 	maps.Copy(s, a.setup.State())
 	return s
 }
 
-func (a *aiModels) Commands() map[string]feature.Command {
+func (a *AIModels) Commands() map[string]feature.Command {
 	cmds := map[string]feature.Command{
 		"App.openAIModels": feature.None(a.open),
 		"App.aiTabMoved":   feature.OneNumber("a tab", a.tabMoved),
@@ -56,24 +57,24 @@ func (a *aiModels) Commands() map[string]feature.Command {
 		"App.aiUse":        feature.OneNumber("a row", a.use),
 		"App.aiRemove":     feature.OneNumber("a row", a.remove),
 	}
-	maps.Copy(cmds, a.providers.Commands())
+	maps.Copy(cmds, a.Providers.Commands())
 	maps.Copy(cmds, a.rankers.Commands())
 	maps.Copy(cmds, a.setup.Commands())
 	return cmds
 }
 
 // Catalog is the dialog's user command (feature/catalog.go): it runs what App.openAIModels runs.
-func (a *aiModels) Catalog() []feature.Entry {
+func (a *AIModels) Catalog() []feature.Entry {
 	return []feature.Entry{feature.Builtin("prefs.search_models", "search models", "App.openAIModels()", a.open),
 		feature.Builtin("prefs.set_up_semantic_search", "set up semantic search", "App.openEmbeddingSetup()", a.setup.open)}
 }
 
 // open opens the AI models: the providers listed, and the rankers when their tab is the one showing.
 // LanguageChanged composes the providers tab's title again; the rest is composed as AI models opens.
-func (a *aiModels) LanguageChanged() { a.providers.languageChanged() }
+func (a *AIModels) LanguageChanged() { a.Providers.languageChanged() }
 
-func (a *aiModels) open() {
-	a.providers.load()
+func (a *AIModels) open() {
+	a.Providers.load()
 	if a.tab == rankerTab {
 		a.rankers.load()
 	}
@@ -83,7 +84,7 @@ func (a *aiModels) open() {
 // tabMoved is the dialog's tab changed: its own buttons shown, the other's hidden, and the rankers
 // listed when their tab shows. The buttons change once the tab's change is done: a button hidden
 // while the view is still changing tabs would cancel a gesture outside an event.
-func (a *aiModels) tabMoved(tab int) {
+func (a *AIModels) tabMoved(tab int) {
 	a.tab = tab
 	a.c.Post(func() {
 		if a.tab != tab {
@@ -100,7 +101,7 @@ func (a *aiModels) tabMoved(tab int) {
 
 // syncButtons enables Use, Don't use and Window… only on the ranker tab, and only when the build
 // does not supply its ranker.
-func (a *aiModels) syncButtons() {
+func (a *AIModels) syncButtons() {
 	choice := a.tab == rankerTab && a.rankers.supplied == ""
 	a.c.Set("App.aiRankerChoice", choice)
 	a.c.Set("App.aiUseEnabled", a.tab == embeddingTab || choice)
@@ -109,41 +110,41 @@ func (a *aiModels) syncButtons() {
 // The buttons both tabs share: on the providers' tab they act on the row the dialog passes, on the
 // rankers' on the row under the rankers' cursor.
 
-func (a *aiModels) add() {
+func (a *AIModels) add() {
 	if a.tab == rankerTab {
 		a.rankers.startAdd()
 		return
 	}
-	a.providers.startAdd()
+	a.Providers.startAdd()
 }
 
-func (a *aiModels) edit(provider int) {
+func (a *AIModels) edit(provider int) {
 	if a.tab == rankerTab {
 		a.rankers.startEdit(a.rankers.cursor)
 		return
 	}
-	a.providers.startEdit(provider)
+	a.Providers.startEdit(provider)
 }
 
-func (a *aiModels) use(provider int) {
+func (a *AIModels) use(provider int) {
 	if a.tab == rankerTab {
 		a.rankers.use(a.rankers.cursor)
 		return
 	}
-	a.providers.use(provider)
+	a.Providers.use(provider)
 }
 
-func (a *aiModels) remove(provider int) {
+func (a *AIModels) remove(provider int) {
 	if a.tab == rankerTab {
 		a.rankers.startRemove(a.rankers.cursor)
 		return
 	}
-	a.providers.startRemove(provider)
+	a.Providers.startRemove(provider)
 }
 
 // reranked is the daemon's word that the ranker in use changed: the rankers' tab, when it shows,
 // lists them again.
-func (a *aiModels) reranked() {
+func (a *AIModels) Reranked() {
 	if a.tab == rankerTab {
 		a.rankers.load()
 	}
@@ -151,4 +152,4 @@ func (a *aiModels) reranked() {
 
 // reloadProviders lists the embedding providers again: the one in use changed outside the dialog
 // (a switch cancelled, the embedding stopped).
-func (a *aiModels) reloadProviders() { a.providers.load() }
+func (a *AIModels) ReloadProviders() { a.Providers.load() }
