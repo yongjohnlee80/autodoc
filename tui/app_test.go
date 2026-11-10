@@ -1124,10 +1124,10 @@ func TestProgressWhileIndexing(t *testing.T) {
 	r.s.WaitForText(t, "explorer")
 	r.keys(t, enter())
 	under := func() int {
-		return onLoop(r, func() int { return r.h.explorer.model.RowCount(&tuidecl.Index{Row: 0}) })
+		return onLoop(r, func() int { return r.h.explorer.Model.RowCount(&tuidecl.Index{Row: 0}) })
 	}
 	r.s.WaitFor(t, "kb listed", func(string) bool {
-		return onLoop(r, func() bool { _, ok := r.h.explorer.paths["kb"]; return ok })
+		return onLoop(r, func() bool { _, ok := r.h.explorer.Paths["kb"]; return ok })
 	})
 	if n := under(); n >= 40 {
 		t.Fatalf("the explorer had %d notes mid-scan: the cell needs a partial list", n)

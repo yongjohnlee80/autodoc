@@ -1,6 +1,10 @@
 package tui
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/yongjohnlee80/autodoc/tui/explorer"
+)
 
 // THE PAGE'S FRAME — its title, and the cursor's moves the features hear: the host's, beside the
 // outline that puts the breadcrumb there (outline.go).
@@ -9,7 +13,7 @@ import "strings"
 func (h *Host) showTitle() {
 	title := h.file.title(h.tr)
 	if len(h.crumbs) > 0 {
-		title += crumbSep + strings.Join(h.crumbs, crumbSep)
+		title += explorer.CrumbSep + strings.Join(h.crumbs, explorer.CrumbSep)
 	}
 	h.set("App.fileTitle", title)
 }

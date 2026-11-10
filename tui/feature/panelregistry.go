@@ -177,6 +177,13 @@ func SidePanelSpec(id, view string, priority int, edge func(PrefsView) string) P
 		Keyboard: true, Size: [2]int{SidePanelMin, 90}, Length: [2]int{20, 100}, Default: SideDefault}
 }
 
+// The explorer panel's tabs (main.qml's sideTabs): the workspaces' files, and the page's links (the
+// relations feature's list), so a feature opens the one it means.
+const (
+	ExplorerFilesTab = iota
+	ExplorerLinksTab
+)
+
 // explorerPanelSpec is the explorer: one drawer of two tabs, the workspaces' files (explorerTree)
 // and the page's links (relationsView). The links' own panel, with its tui.links.* preferences,
 // became its tab (migrateLinksPanel).

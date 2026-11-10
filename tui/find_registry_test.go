@@ -92,14 +92,14 @@ func TestAFeaturesPaneIsSearchedWithoutFindNamingIt(t *testing.T) {
 	}
 	// the explorer and the relations declare the views their drawer gives the keyboard, each on its
 	// tab of the explorer's
-	for tab, name := range []string{explorerTab: "explorer", linksTab: "links"} {
+	for tab, name := range []string{feature.ExplorerFilesTab: "explorer", feature.ExplorerLinksTab: "links"} {
 		view := onLoop(r, func() string { p, _ := r.h.findPane(name); return p.View })
-		bound := onLoop(r, func() string { r.h.explorer.tabShown(tab); return r.h.panelView("explorer") })
+		bound := onLoop(r, func() string { r.h.explorer.TabShown(tab); return r.h.panelView("explorer") })
 		if view == "" || view != bound {
 			t.Errorf("the %s's find view is %q, its tab's %q", name, view, bound)
 		}
 	}
-	onLoop(r, func() bool { r.h.explorer.tabShown(explorerTab); return true })
+	onLoop(r, func() bool { r.h.explorer.TabShown(feature.ExplorerFilesTab); return true })
 
 	// in a list no feature finds in, / names every pane, the feature's too
 	if err := onLoop(r, func() error { return r.h.p.Call("zzOther", "forceActiveFocus") }); err != nil {

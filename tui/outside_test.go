@@ -17,6 +17,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/autodoc/tui/explorer"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -131,10 +132,10 @@ func TestAnOutsideFileStaysOpenAcrossWorkspacesAndReachesTheFeedAndRecent(t *tes
 	r.leader(t, 'r')
 	r.s.WaitForText(t, "("+outsideBadge+")")
 	rows := r.recentListedNow()
-	if len(rows) == 0 || rows[0] != (recentDoc{Workspace: "", Path: abs}) {
+	if len(rows) == 0 || rows[0] != (explorer.RecentDoc{Workspace: "", Path: abs}) {
 		t.Fatalf("recent files %v, want the outside file first", rows)
 	}
-	r.h.p.Post(func() { r.h.recent.choose(0) })
+	r.h.p.Post(func() { r.h.recent.Choose(0) })
 	r.waitOpen(t, "", abs)
 	if ws := onLoop(r, func() string { return r.h.ws }); ws != "notes" {
 		t.Errorf("reopening it left the workspace in use %q, want notes", ws)
