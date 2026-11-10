@@ -67,11 +67,9 @@ func startingCrewAgents(t *testing.T, profiles string) (*agents, *identityHostCo
 	t.Helper()
 	a, c, w := crewAgents(t, profiles)
 	c.panel = &modelPanelCopy{owner: c, starts: true}
-	a.spawn = func(pty.Cmd) (terminal.TerminalProcess, error) { return newFakeTerminal(), nil }
+	a.spawn = func(pty.Cmd) (terminal.TerminalProcess, error) { return newFakeTerminalCopy(), nil }
 	return a, c, w
 }
-
-const oneTwo = `[{"name":"One","command":"one","codename":"one"},{"name":"Two","command":"two","codename":"two"}]`
 
 // readContext is the one session context in the agent folder dir (crew.ContextDir), and its file;
 // ok is false when there is none, and more than one fails the test.
@@ -118,36 +116,13 @@ func contextFiles(t *testing.T, dir string) []string {
 	return out
 }
 
-// startedEnv is the variables instance's tab starts its program with (its environment, a later
-// entry winning), through the tab's own start (runAgent), its program not run; err is the start's
-// refusal.
-func startedEnv(a *agents, c *identityHostCopy, instance *agentInstance) (env []string, spawned bool, err error) {
-	cmd, spawned, err := startedCmd(a, c, instance)
-	return cmd.Env, spawned, err
-}
-
-// startedCmd is the command instance's tab starts its program with, as startedEnv. Its process
-// is a fake terminal, never nil: a Codex agent's server is bound to it, and closes it when it
-// ends (as the cell's cleanup ends it).
-func startedCmd(a *agents, c *identityHostCopy, instance *agentInstance) (started pty.Cmd, spawned bool, err error) {
-	cfg := c.panel.configs[instance.tab]
-	spawn := a.spawn
-	defer func() { a.spawn = spawn }()
-	a.spawn = func(cmd pty.Cmd) (terminal.TerminalProcess, error) {
-		started, spawned = cmd, true
-		return newFakeTerminal(), nil
-	}
-	_, err = cfg.Start(pty.Cmd{Path: cfg.Command, Args: cfg.Args, Dir: cfg.Dir})
-	return started, spawned, err
-}
-
 // TestAnAgentIsRegisteredBeforeItStarts (docs/decisions/crew.md#sessions-and-the-guard,
 // docs/decisions/crew.md#the-session-context): an agent of a window holding a scope starts only
 // once its crew session is registered and its context written, private to this user, in its folder, which its
 // process is told; its exit ends the session and removes the context, so no later process reads a
 // dead session's credential, and the codename is free for its next session.
 func TestAnAgentIsRegisteredBeforeItStarts(t *testing.T) {
-	a, c, _ := crewAgents(t, oneTwo)
+	a, c, _ := crewAgents(t, oneTwoCopy)
 	scope, _, _ := crewOf(a).held()
 	p, _ := a.profile("one")
 	instance, err := a.startInstance(p)
@@ -174,7 +149,7 @@ func TestAnAgentIsRegisteredBeforeItStarts(t *testing.T) {
 	if fi.Name() != instance.session.ID {
 		t.Fatalf("the context file %s: want its session's own, %s", fi.Name(), instance.session.ID)
 	}
-	args, _, err := startedEnv(a, c, instance)
+	args, _, err := startedEnvCopy(a, c, instance)
 	if err != nil || !slices.Contains(args, "AUTODOC_CREW_CONTEXT="+crew.ContextPath(dir, instance.session.ID)) {
 		t.Fatalf("the process isn't told its context file: %v %v", err, args)
 	}
@@ -195,7 +170,7 @@ func TestAnAgentIsRegisteredBeforeItStarts(t *testing.T) {
 // TestARefusedRegistrationStartsNothing: a registration the daemon refuses starts no process, writes
 // no context, says why, and is not kept to be replayed.
 func TestARefusedRegistrationStartsNothing(t *testing.T) {
-	a, c, w := startingCrewAgents(t, oneTwo)
+	a, c, w := startingCrewAgents(t, oneTwoCopy)
 	w.d.refuse = &golibrpc.Error{Code: crew.CodeCodenameBusy, Message: "the codename is busy"}
 	p, _ := a.profile("one")
 	instance, err := a.startInstance(p)
@@ -219,7 +194,7 @@ func TestARefusedRegistrationStartsNothing(t *testing.T) {
 // TestAFailedSpawnEndsItsSession: a start that fails after its session was registered ends the
 // session (start_failed) and removes its context.
 func TestAFailedSpawnEndsItsSession(t *testing.T) {
-	a, c, _ := crewAgents(t, oneTwo)
+	a, c, _ := crewAgents(t, oneTwoCopy)
 	c.panel = &modelPanelCopy{owner: c, startErr: errors.New("no such program")}
 	p, _ := a.profile("one")
 	instance, err := a.startInstance(p)
@@ -471,7 +446,7 @@ func TestAClaudeThatCantBeReadGetsTheFloor(t *testing.T) {
 // TestAQuitRemovesEverySessionsContext: the window's clean quit, which releases its scope and so
 // ends every session, removes each session's context too.
 func TestAQuitRemovesEverySessionsContext(t *testing.T) {
-	a, c, _ := crewAgents(t, oneTwo)
+	a, c, _ := crewAgents(t, oneTwoCopy)
 	var dirs []string
 	for _, code := range []string{"one", "two"} {
 		p, _ := a.profile(code)
@@ -492,13 +467,13 @@ func TestAQuitRemovesEverySessionsContext(t *testing.T) {
 // TestADeliveryWaitsForItsAgentsRegistration: a task handed to an agent it starts waits while the
 // agent's crew session is registered, and reaches the agent once it runs, never as a stale send.
 func TestADeliveryWaitsForItsAgentsRegistration(t *testing.T) {
-	a, c, w := crewAgents(t, oneTwo)
+	a, c, w := crewAgents(t, oneTwoCopy)
 	c.panel = &modelPanelCopy{owner: c}                         // takes a bracketed paste at once
 	a.promptsReported = func(string, bool) bool { return true } // delivered is sent: the base presses Enter
 	w.hold = true
 	calls := 0
 	var outcome error
-	if err := a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "task", Path: taskFile("/task.md")}, "work", func(err error) { calls++; outcome = err }); err != nil {
+	if err := a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "task", Path: taskFileCopy("/task.md")}, "work", func(err error) { calls++; outcome = err }); err != nil {
 		t.Fatal(err)
 	}
 	c.questions[0].OnYes()
@@ -529,7 +504,7 @@ func calledTimes(w *crewWindow, verb string) int {
 // committed comes back, its credential the one the daemon holds, never a fresh registration that
 // the first would leave busy.
 func TestALostRegistrationReplyIsReplayed(t *testing.T) {
-	a, c, w := startingCrewAgents(t, oneTwo)
+	a, c, w := startingCrewAgents(t, oneTwoCopy)
 	w.lost = map[string]int{"crew.register": 1}
 	p, _ := a.profile("one")
 	first, err := a.startInstance(p)
@@ -564,7 +539,7 @@ func TestALostRegistrationReplyIsReplayed(t *testing.T) {
 // TestALostRegistrationNobodyStartsIsEnded: a lost registration whose codename is not started again
 // is replayed and ended once the daemon answers again (the next renewal), so its codename is free.
 func TestALostRegistrationNobodyStartsIsEnded(t *testing.T) {
-	a, _, w := crewAgents(t, oneTwo)
+	a, _, w := crewAgents(t, oneTwoCopy)
 	w.lost = map[string]int{"crew.register": 1}
 	p, _ := a.profile("one")
 	if first, err := a.startInstance(p); err != nil || first.running {
@@ -599,7 +574,7 @@ func TestALateRegistrationStartsNothing(t *testing.T) {
 		"another daemon": func(_ *testing.T, _ *agents, w *crewWindow) { w.socket = "/run/test/other.sock" },
 	} {
 		t.Run(name, func(t *testing.T) {
-			a, c, w := startingCrewAgents(t, oneTwo)
+			a, c, w := startingCrewAgents(t, oneTwoCopy)
 			// the start's setup answers at once; the daemon commits the registration, and its answer
 			// comes after the change
 			w.hold, w.late, w.skipHold = true, true, 1
@@ -626,7 +601,7 @@ func TestALateRegistrationStartsNothing(t *testing.T) {
 // TestAnEndedSessionLeavesAReplacementsContext: ending a session removes its own context file, by
 // its session's name: a newer session's, published in the same agent folder by another host, stays.
 func TestAnEndedSessionLeavesAReplacementsContext(t *testing.T) {
-	a, c, _ := crewAgents(t, oneTwo)
+	a, c, _ := crewAgents(t, oneTwoCopy)
 	p, _ := a.profile("one")
 	instance, err := a.startInstance(p)
 	if err != nil || !instance.running {
@@ -650,7 +625,7 @@ func TestAnEndedSessionLeavesAReplacementsContext(t *testing.T) {
 // codename under its epoch supersedes the session the daemon never heard end (docs/decisions/crew.md,
 // the owner's register), so the agent starts, and the old session ends 'takeover'.
 func TestALostExitIsAskedAgain(t *testing.T) {
-	a, c, w := crewAgents(t, oneTwo)
+	a, c, w := crewAgents(t, oneTwoCopy)
 	p, _ := a.profile("one")
 	instance, err := a.startInstance(p)
 	if err != nil || !instance.running {
@@ -689,7 +664,7 @@ func TestALostExitIsAskedAgain(t *testing.T) {
 // its session and with its context, whatever selecting its tab answers: that failure is said, and
 // the session ends with the process.
 func TestAStartedAgentKeepsItsSessionWhenItsTabCantBeShown(t *testing.T) {
-	a, c, _ := crewAgents(t, oneTwo)
+	a, c, _ := crewAgents(t, oneTwoCopy)
 	c.panel = &modelPanelCopy{owner: c, selectErr: errors.New("the panel is not mounted")}
 	p, _ := a.profile("one")
 	instance, err := a.startInstance(p)
@@ -716,21 +691,21 @@ func TestAStartedAgentKeepsItsSessionWhenItsTabCantBeShown(t *testing.T) {
 // (Enter after its program exited) runs nothing, since no session is registered for that start;
 // the agents panel's start registers one, and its program is told that session's file.
 func TestACrewTabRestartedFromItselfIsRefused(t *testing.T) {
-	a, c, _ := crewAgents(t, oneTwo)
+	a, c, _ := crewAgents(t, oneTwoCopy)
 	p, _ := a.profile("one")
 	instance, err := a.startInstance(p)
 	if err != nil || !instance.running {
 		t.Fatalf("start: %v", err)
 	}
 	c.panel.exit(instance.tab, 0)
-	if _, spawned, err := startedEnv(a, c, instance); !errors.Is(err, errCrewStartHere) || spawned {
+	if _, spawned, err := startedEnvCopy(a, c, instance); !errors.Is(err, errCrewStartHere) || spawned {
 		t.Fatalf("a restart from the tab: %v, spawned %v; want refused, nothing run", err, spawned)
 	}
 	again, err := a.startInstance(p)
 	if err != nil || !again.running {
 		t.Fatalf("a start from the panel: %v", err)
 	}
-	if args, spawned, err := startedEnv(a, c, again); err != nil || !spawned ||
+	if args, spawned, err := startedEnvCopy(a, c, again); err != nil || !spawned ||
 		!slices.Contains(args, "AUTODOC_CREW_CONTEXT="+crew.ContextPath(again.dir, again.session.ID)) {
 		t.Fatalf("its program after the panel's start: %v, spawned %v, %v", err, spawned, args)
 	}
@@ -740,7 +715,7 @@ func TestACrewTabRestartedFromItselfIsRefused(t *testing.T) {
 // session even when its tab can't be selected (that failure is kept), so it is never said to be in
 // another window; a session no agent here has is not found.
 func TestAnAgentHereIsRaisedWhateverItsTab(t *testing.T) {
-	a, c, _ := crewAgents(t, oneTwo)
+	a, c, _ := crewAgents(t, oneTwoCopy)
 	p, _ := a.profile("one")
 	instance, err := a.startInstance(p)
 	if err != nil || !instance.running {

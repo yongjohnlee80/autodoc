@@ -17,7 +17,7 @@ import (
 // selected, and it stays stopped; a toast says it too. Before, the tab stayed empty and the toast
 // was the only trace.
 func TestARefusedRegistrationIsShownInItsTab(t *testing.T) {
-	a, c, w := crewAgents(t, oneTwo)
+	a, c, w := crewAgents(t, oneTwoCopy)
 	c.panel = &modelPanelCopy{owner: c, starts: true}
 	w.d.refuse = &golibrpc.Error{Code: crew.CodeCodenameBusy, Message: "the codename already has a live session"}
 	p, _ := a.profile("one")
