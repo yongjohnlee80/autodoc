@@ -60,6 +60,30 @@ func TestATogglePressedOnCoveredTodosRaisesThemOnEveryTab(t *testing.T) {
 	}
 }
 
+// The todos hold the keyboard while another panel lies over them: the keyboard is already there, so
+// focusing them raises nothing. The toggle brings them forward anyway, the keyboard staying.
+func TestATogglePressedOnACoveredPanelHoldingTheKeyboardRaisesIt(t *testing.T) {
+	t.Parallel()
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "# A\n"}})
+	r := attached(t, d)
+	onLoop(r, func() bool { r.h.togglePanel("explorer"); return true })
+	r.s.WaitFor(t, "the explorer open", func(string) bool { return r.panelIsOpen("explorer") })
+	onLoop(r, func() bool { r.h.togglePanel("todos"); return true })
+	r.s.WaitFor(t, "the todos open with the keyboard", func(string) bool { return r.focusedOn("todoOpenTable") })
+	onLoop(r, func() bool { r.h.raisePanel("explorer"); return true }) // over the todos, the keyboard staying
+	r.s.WaitFor(t, "the explorer over the todos, the keyboard in the todos", func(string) bool {
+		return r.covered("todos") && r.focusedOn("todoOpenTable")
+	})
+
+	onLoop(r, func() bool { r.h.togglePanel("todos"); return true })
+	r.s.WaitFor(t, "the todos in front, the keyboard still in them", func(string) bool {
+		return !r.covered("todos") && r.focusedOn("todoOpenTable")
+	})
+	if !r.panelIsOpen("todos") {
+		t.Fatal("the toggle closed the covered todos")
+	}
+}
+
 // The explorer tiled beside the page, the keyboard in the page: nothing covers the explorer, so
 // its toggle closes it at the first press, though it hasn't the keyboard.
 func TestATogglePressedOnAnUncoveredPanelWithoutTheKeyboardClosesIt(t *testing.T) {
