@@ -87,9 +87,11 @@ func POSIXWords(line string) []Word {
 
 // powerShellWords is line's words as PowerShell splits a command's before expanding them: blanks
 // between words; '…' literal, ” in it a quote; "…" with ` escaping the next character and "" in it
-// a quote; ` outside quotes escaping the next character. A backslash is a character like any other
-// (a Windows path's separator). The call operator & before a quoted path is a word of its own.
-// Expansions are left as written, and an unterminated quote runs to the end.
+// a quote; ` outside quotes escaping the next character, and so a ` ending a line joining it to the
+// next (inside quotes, the newline stays the string's). A backslash is a character like any other
+// (a Windows path's separator). An operator outside quotes is a word of its own, blanks or none
+// around it: the call operator & (&claude is & and claude), ; | && ||. Expansions are left as
+// written, and an unterminated quote runs to the end.
 func powerShellWords(line string) []Word {
 	w := newWords()
 	for i := 0; i < len(line); i++ {
@@ -135,6 +137,14 @@ func powerShellWords(line string) []Word {
 					w.b.WriteByte(line[i])
 				}
 			}
+		case '&', ';', '|':
+			w.end()
+			op := line[i : i+1]
+			if c != ';' && i+1 < len(line) && line[i+1] == c {
+				op = line[i : i+2] // && or ||
+				i++
+			}
+			w.out = append(w.out, Word{Text: op, Bare: len(op)})
 		default:
 			w.in = true
 			w.b.WriteByte(c)
