@@ -256,7 +256,7 @@ func TestAPeersRenameIsToldAsARename(t *testing.T) {
 func TestTheNoticeHookIsMergedIntoTheUsersSettings(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".claude", "settings.json")
-	cmd := noticeCommand(dir)
+	cmd := noticeCommand(filepath.Join(dir, "bin", "autodoc"))
 	ours := func(b []byte) int { return strings.Count(string(b), "--workspace-notice") }
 	if err := mergeClaudeHook(path, cmd); err != nil {
 		t.Fatal(err)

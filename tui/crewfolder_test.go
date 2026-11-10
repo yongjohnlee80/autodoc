@@ -96,11 +96,13 @@ func TestClaudeSettingsTakeOutAutoDocsOldHooks(t *testing.T) {
 	if err := os.WriteFile(path, []byte(user), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	ours := []string{"ours-start", "ours-prompt"}
+	// AutoDoc's commands by their tails, whichever build ran them: this write's is another program
+	// (a build moved, upgraded or once a wrapper), and still the earlier write's are taken out
+	ours := []string{" ours-start", " ours-prompt"}
 	unset := map[string]any{"crossSessionInbound": "accept"}
-	full := claudeMerge{events: map[string]string{"SessionStart": "ours-start", "PermissionRequest": "ours-prompt", "Stop": "ours-prompt"},
+	full := claudeMerge{events: map[string]string{"SessionStart": "'/old/autodoc' ours-start", "PermissionRequest": "'/old/autodoc' ours-prompt", "Stop": "'/old/autodoc' ours-prompt"},
 		set: map[string]any{"crossSessionInbound": "accept"}, ours: ours, unset: unset}
-	old := claudeMerge{events: map[string]string{"SessionStart": "ours-start"}, ours: ours, unset: unset}
+	old := claudeMerge{events: map[string]string{"SessionStart": "/new/autodoc ours-start"}, ours: ours, unset: unset}
 	for _, m := range []claudeMerge{full, old} {
 		if err := mergeClaudeSettings(path, m); err != nil {
 			t.Fatal(err)
@@ -115,7 +117,7 @@ func TestClaudeSettingsTakeOutAutoDocsOldHooks(t *testing.T) {
 	if _, named := hooks["PermissionRequest"]; named || strings.Contains(string(b), "ours-prompt") {
 		t.Errorf("the old write's prompt hooks are still there:\n%s", b)
 	}
-	if strings.Count(string(b), `"mine"`) != 1 || strings.Count(string(b), `"ours-start"`) != 1 || s["theme"] != "dark" {
+	if strings.Count(string(b), `"mine"`) != 1 || strings.Count(string(b), "ours-start") != 1 || strings.Contains(string(b), "/old/autodoc") || s["theme"] != "dark" {
 		t.Errorf("the user's hook and key, or this write's hook, are not there once:\n%s", b)
 	}
 	if _, set := s["crossSessionInbound"]; set {

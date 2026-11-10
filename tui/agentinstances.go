@@ -446,7 +446,7 @@ func (a *agents) applySetup(ws wsInfo, p agentProfile, dir string, setup crew.Se
 	if kind == crew.KindClaude {
 		// a wake reaches it only with these: without them it still starts, and receives when it asks
 		var err error
-		prompts, err = writeWakeAcceptance(dir, kind, a.claudeHooks(p), setup.Allow)
+		prompts, err = writeWakeAcceptance(shellQuote(a.agentBin()), dir, kind, a.claudeHooks(p), setup.Allow)
 		a.c.Keep(err)
 	}
 	return prompts, nil
