@@ -15,7 +15,7 @@ import (
 // folder the scope moved is not started there again: its process would run in the old scope's
 // folder.
 func TestAnAgentWorksInItsOwnFolderUnderTheWindowsScope(t *testing.T) {
-	a, c := modelAgents(t)
+	a, c := modelAgentsCopy(t)
 	ws := feature.Workspace{Name: "kb", Root: t.TempDir()}
 	shared := a.agentFolder(ws, "one")
 	a.crew = &crewHost{}
