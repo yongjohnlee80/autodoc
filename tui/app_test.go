@@ -82,6 +82,10 @@ func taskFile(p string) string {
 	return filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), filepath.FromSlash(p))
 }
 
+// slashFile is taskFile's path in the slash form, the daemon's for a store or a root, its volume
+// kept: itself on Unix, C:/kb/.todo-list on Windows.
+func slashFile(p string) string { return paths.Slash(taskFile(p)) }
+
 // startDaemon serves the workspaces named (each with its files, path then content). A name ending
 // in "!" is served on a filesystem whose writes land and then fail (Committed).
 func startDaemon(t *testing.T, workspaces map[string][]string) *daemon {

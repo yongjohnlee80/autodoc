@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/yongjohnlee80/autodoc/core/paths"
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/internal/userdirs"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
@@ -112,16 +113,22 @@ func storeName(root string) string {
 // tildePath is path with the home directory (env's, nil for AutoDoc's own) as ~, as the panel shows
 // a store's place.
 func tildePath(env procenv.Env, path string) string {
-	if home, err := userdirs.Home(env); err == nil && home != "" && (path == home || strings.HasPrefix(path, home+string(filepath.Separator))) {
-		return "~" + strings.TrimPrefix(path, home)
+	home, err := userdirs.Home(env)
+	if err != nil || home == "" {
+		return path
+	}
+	// compared in the slash form, the daemon's for a store's path, whichever form either is in
+	p, h := paths.Slash(path), paths.Slash(home)
+	if p == h || strings.HasPrefix(p, strings.TrimSuffix(h, "/")+"/") {
+		return "~" + strings.TrimPrefix(p, h)
 	}
 	return path
 }
 
 // storeRoot is the project root of a store directory: the folder holding its .todo-list.
 func storeRoot(path string) string {
-	if filepath.Base(path) == ".todo-list" {
-		return filepath.Dir(path)
+	if dir, ok := strings.CutSuffix(path, "/.todo-list"); ok { // the daemon's slash form, its volume kept
+		return dir
 	}
 	return path
 }
@@ -1184,15 +1191,18 @@ func (t *todos) folderChosen(dir string) {
 	if filepath.Base(dir) == ".todo-list" {
 		dir = filepath.Dir(dir) // the store itself was chosen: its project is the root
 	}
-	at := map[string]any{"root": dir}
+	// the daemon's form, the slash form with its volume kept: a store's id from todos.stores is
+	// "root:" and its root in that form, so the folder just chosen is found among them
+	root := paths.Slash(dir)
+	at := map[string]any{"root": root}
 	switch t.folderAs {
 	case "load":
-		t.call("todos.register", []any{dir}, nil, func(any) { t.want = "root:" + dir; t.list() })
+		t.call("todos.register", []any{root}, nil, func(any) { t.want = "root:" + root; t.list() })
 	case "new":
-		t.call("todos.register", []any{dir}, nil, func(any) {
+		t.call("todos.register", []any{root}, nil, func(any) {
 			t.call("todos.resolve", []any{at}, nil, func(v any) {
-				t.want = "root:" + dir
-				s := &todoStore{id: "root:" + dir, at: at, name: storeName(dir), released: feature.AsMap(v)["released"] == true}
+				t.want = "root:" + root
+				s := &todoStore{id: "root:" + root, at: at, name: storeName(dir), released: feature.AsMap(v)["released"] == true}
 				if t.readOnly(s) { // the folder is loaded; a store released there takes no new buckets
 					t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_is_loaded_read_only_its_store_was_released", tildePath(t.c.Env(), dir)))
 					t.list()
@@ -1206,7 +1216,7 @@ func (t *todos) folderChosen(dir string) {
 		if s == nil {
 			return
 		}
-		t.write(s, "todos.move_store", []any{s.at, filepath.Join(dir, ".todo-list")}, func(any) {
+		t.write(s, "todos.move_store", []any{s.at, paths.Join(root, ".todo-list")}, func(any) {
 			t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_the_store_is_now_in", dir))
 			t.list()
 		})

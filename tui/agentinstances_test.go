@@ -319,7 +319,7 @@ func TestHandTaskAcceptedDeliverySnapshotsAndCompletesOnce(t *testing.T) {
 	}
 	c.drainPosts()
 	tab := string(instance.tab)
-	if done != 0 || !slices.Equal(c.panel.pastes, []string{tab + ":[bracketed]Task: original\nFile: /tasks/one.md\nID: one\nInstruction: inspect"}) {
+	if done != 0 || !slices.Equal(c.panel.pastes, []string{tab + ":[bracketed]Task: original\nFile: " + taskFile("/tasks/one.md") + "\nID: one\nInstruction: inspect"}) {
 		t.Fatalf("the task goes as one bracketed paste, done waiting for its Enter: done=%d pastes=%q", done, c.panel.pastes)
 	}
 	// the Enter that sends it follows the paste after submitDelay (agentmessaging.go), never with it,

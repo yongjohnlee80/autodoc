@@ -24,7 +24,7 @@ func newScripted(ws string) *featuretest.ScriptedCore {
 func scriptedStore(claimed bool) *featuretest.ScriptedCore {
 	s := newScripted("kb")
 	s.Answers["todos.resolve"] = func([]any) (any, error) {
-		return map[string]any{"store": "/kb/.todo-list", "claimed": claimed, "released": !claimed}, nil
+		return map[string]any{"store": slashFile("/kb/.todo-list"), "claimed": claimed, "released": !claimed}, nil
 	}
 	s.Answers["todos.list"] = func(p []any) (any, error) {
 		opts := p[1].(map[string]any)
@@ -42,8 +42,8 @@ func scriptedStore(claimed bool) *featuretest.ScriptedCore {
 		return map[string]any{"tasks": []any{}}, nil
 	}
 	s.Answers["todos.stores"] = func([]any) (any, error) {
-		return []any{map[string]any{"path": "/p/.todo-list", "roots": []any{"/p"}, "claimed": true},
-			map[string]any{"path": "/q/.todo-list", "roots": []any{}}}, nil
+		return []any{map[string]any{"path": slashFile("/p/.todo-list"), "roots": []any{slashFile("/p")}, "claimed": true},
+			map[string]any{"path": slashFile("/q/.todo-list"), "roots": []any{}}}, nil
 	}
 	return s
 }
@@ -206,7 +206,7 @@ func TestTodosTabsAreNumberedTablesReadWhenShown(t *testing.T) {
 		t.Errorf("a tab read already was read again: %v", s.Calls[n:])
 	}
 	v.activated(2, 1)
-	if !slices.Equal(s.OpenedFiles, []string{"/kb/.todo-list/deferred/1.md"}) || !slices.Contains(s.Views, "todos.close") {
+	if !slices.Equal(s.OpenedFiles, []string{taskFile("/kb/.todo-list/deferred/1.md")}) || !slices.Contains(s.Views, "todos.close") {
 		t.Errorf("Enter on a task: files %v, views %v", s.OpenedFiles, s.Views)
 	}
 	v.activated(2, 9) // no such row
@@ -343,7 +343,7 @@ func TestTodosEventsAndFolders(t *testing.T) {
 	}
 	v.storeChosen(1)
 	n = len(s.Calls)
-	v.Event("todos.changed", "", "/p#t9")
+	v.Event("todos.changed", "", slashFile("/p")+"#t9")
 	if got := len(s.Calls) - n; got != 1 {
 		t.Errorf("%d reads after /p's event", got)
 	}
@@ -352,22 +352,22 @@ func TestTodosEventsAndFolders(t *testing.T) {
 		t.Errorf("folder dialog %v", s.Opened)
 	}
 	s.Answers["todos.stores"] = func([]any) (any, error) {
-		return []any{map[string]any{"path": "/p/.todo-list", "roots": []any{"/p"}, "claimed": true},
-			map[string]any{"path": "/r/.todo-list", "roots": []any{"/r"}}}, nil
+		return []any{map[string]any{"path": slashFile("/p/.todo-list"), "roots": []any{slashFile("/p")}, "claimed": true},
+			map[string]any{"path": slashFile("/r/.todo-list"), "roots": []any{slashFile("/r")}}}, nil
 	}
-	v.folderChosen("/r/.todo-list")
-	if !s.Called("todos.register[/r]") || v.cur == nil || v.cur.id != "root:/r" || s.Sets["App.todoStoreIndex"] != 2 {
+	v.folderChosen(taskFile("/r/.todo-list"))
+	if !s.Called("todos.register["+slashFile("/r")+"]") || v.cur == nil || v.cur.id != "root:"+slashFile("/r") || s.Sets["App.todoStoreIndex"] != 2 {
 		t.Errorf("load: calls %v, shown %+v, index %v", s.Calls, v.cur, s.Sets["App.todoStoreIndex"])
 	}
 	v.folderAs = "new"
-	v.folderChosen("/n")
-	if !s.Called("todos.scaffold[map[root:/n]]") {
+	v.folderChosen(taskFile("/n"))
+	if !s.Called("todos.scaffold[map[root:" + slashFile("/n") + "]]") {
 		t.Errorf("new: %v", s.Calls)
 	}
 	v.storeChosen(0)
 	v.folderAs = "move"
-	v.folderChosen("/m")
-	if !s.Called("todos.move_store[kb /m/.todo-list]") {
+	v.folderChosen(taskFile("/m"))
+	if !s.Called("todos.move_store[kb " + slashFile("/m/.todo-list") + "]") {
 		t.Errorf("move: %v", s.Calls)
 	}
 	v.folderChosen("")
@@ -434,7 +434,7 @@ func TestTodosAtTheEdges(t *testing.T) {
 	w.label()
 	w.enter()
 	w.folderAs = "move"
-	w.folderChosen("/m")
+	w.folderChosen(taskFile("/m"))
 	w.Event("todos.changed", "kb", "")
 	if len(idle.Calls) != n {
 		t.Errorf("with no store, the keys asked %v", idle.Calls[n:])
