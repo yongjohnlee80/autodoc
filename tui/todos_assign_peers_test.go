@@ -2,10 +2,12 @@ package tui
 
 import (
 	"errors"
-	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // peerCore is a window holding a crew scope, with other hosts' agents: what A lists beside its own,
@@ -110,7 +112,7 @@ func TestTodosAssignHandsAnotherHostsAgentATaskAsTheUser(t *testing.T) {
 	}
 	s := c.sent[0]
 	if s.codename != "jarvis" || s.scope != "autovim:plugins" || s.subject != "Task: Ship" || s.key != "assign:t1:r2" ||
-		!strings.Contains(s.body, "File: ") || !strings.Contains(s.body, "in-progress/t1.md") || !strings.Contains(s.body, "ID: t1") || !strings.Contains(s.body, "Instruction: Go.") {
+		!strings.Contains(s.body, "File: ") || !strings.Contains(s.body, filepath.Join("in-progress", "t1.md")) || !strings.Contains(s.body, "ID: t1") || !strings.Contains(s.body, "Instruction: Go.") {
 		t.Errorf("the task sent %+v, want jarvis in autovim:plugins, Task: Ship, its file, id and instruction, keyed assign:t1:r2", s)
 	}
 	if len(c.handed) != 0 {

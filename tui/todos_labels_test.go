@@ -414,7 +414,7 @@ func TestTodosTheCursorFollowsWhenTheTabLands(t *testing.T) {
 // read put it; an answer with no task in it still follows the task by its id.
 func TestTodosLabelsAndMovesAtTheEdges(t *testing.T) {
 	home := t.TempDir()
-	env := procenv.Env(nil).With("HOME=" + home)
+	env := procenv.Env(nil).With("HOME="+home, "USERPROFILE="+home) // the home folder by each OS's name
 	if got := tildePath(env, home+"/notes/.todo-list"); got != "~/notes/.todo-list" {
 		t.Errorf("tildePath = %q", got)
 	}

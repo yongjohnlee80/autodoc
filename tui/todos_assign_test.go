@@ -131,7 +131,7 @@ func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 		t.Fatalf("Scribe heard %q", got)
 	}
 	// the workspace kb is the daemon's /kb: the store is its .todo-list, on the todos' own disk
-	if want := "/kb/.todo-list/in-progress/" + tasks[0].ID + ".md"; file != want || x.Path != "in-progress/"+tasks[0].ID+".md" {
+	if want := taskFile("/kb/.todo-list/in-progress/" + tasks[0].ID + ".md"); file != want || x.Path != "in-progress/"+tasks[0].ID+".md" {
 		t.Fatalf("Scribe was handed %q (the task at %q), want %q: the path the assign returned", file, x.Path, want)
 	}
 	if _, err := d.todoDisk.ReadFile(file); err != nil {
@@ -302,7 +302,7 @@ func TestTodosAssignWritesThenHandsOverAtTheReturnedPath(t *testing.T) {
 	}
 	h := c.handed[0]
 	if h.to != (feature.AgentRef{Codename: "scribe"}) || h.instruction != assignDefault ||
-		h.task != (feature.TaskRef{Title: "Ship", Path: "/kb/.todo-list/in-progress/t1.md", ID: "t1"}) {
+		h.task != (feature.TaskRef{Title: "Ship", Path: taskFile("/kb/.todo-list/in-progress/t1.md"), ID: "t1"}) {
 		t.Fatalf("handed %+v", h)
 	}
 	h.done(nil)
@@ -398,7 +398,7 @@ func TestTodosAssignAnsweredAfterAWorkspaceSwitchIsHandedToNoOne(t *testing.T) {
 		case switched && (len(c.handed) != 0 || len(c.Notes) != 1 ||
 			!strings.Contains(c.Notes[0], "assigned to autodoc:scribe, but not delivered (the workspace changed before the assign landed)")):
 			t.Fatalf("after a switch: handed %+v, notes %q", c.handed, c.Notes)
-		case !switched && (len(c.handed) != 1 || c.handed[0].task.Path != "/kb/.todo-list/in-progress/t1.md"):
+		case !switched && (len(c.handed) != 1 || c.handed[0].task.Path != taskFile("/kb/.todo-list/in-progress/t1.md")):
 			t.Fatalf("same workspace, answered late: handed %+v", c.handed)
 		}
 	}
