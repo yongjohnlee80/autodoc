@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/internal/profiling"
+	"github.com/yongjohnlee80/autodoc/tui/feature/featuretest"
 )
 
 // shortRuntime points the runtime directory somewhere short enough for a monitor's socket.
@@ -27,8 +28,8 @@ func shortRuntime(t *testing.T) string {
 // badge is the status line's mark in English.
 var badge = englishText("autodoc.text.profiling.badge")
 
-func noted(c *scriptedCore, part string) bool {
-	return slices.ContainsFunc(c.notes, func(n string) bool { return strings.Contains(n, part) })
+func noted(c *featuretest.ScriptedCore, part string) bool {
+	return slices.ContainsFunc(c.Notes, func(n string) bool { return strings.Contains(n, part) })
 }
 
 // Profile the window starts the window's monitor in its default folder and stops it: the item's
@@ -45,21 +46,21 @@ func TestTheWindowsProfilingStartsAndStops(t *testing.T) {
 	}
 	f.toggleWindow()
 	dir := prof.Dir()
-	if !strings.HasPrefix(dir, run) || c.set["App.profilingWindow"] != true || c.set["App.profilingMark"] != badge {
-		t.Fatalf("after a start: dir %q, state %v", dir, c.set)
+	if !strings.HasPrefix(dir, run) || c.Sets["App.profilingWindow"] != true || c.Sets["App.profilingMark"] != badge {
+		t.Fatalf("after a start: dir %q, state %v", dir, c.Sets)
 	}
 	if !noted(c, dir) || !noted(c, "pprof labels") {
-		t.Errorf("the start's notice: %v", c.notes)
+		t.Errorf("the start's notice: %v", c.Notes)
 	}
 	f.toggleWindow()
-	if prof.Dir() != "" || c.set["App.profilingWindow"] != false || c.set["App.profilingMark"] != "" {
-		t.Fatalf("after a stop: dir %q, state %v", prof.Dir(), c.set)
+	if prof.Dir() != "" || c.Sets["App.profilingWindow"] != false || c.Sets["App.profilingMark"] != "" {
+		t.Fatalf("after a stop: dir %q, state %v", prof.Dir(), c.Sets)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "samples.jsonl")); err != nil {
 		t.Errorf("no samples after the stop: %v", err)
 	}
-	if len(c.failed) != 0 {
-		t.Errorf("failed: %v", c.failed)
+	if len(c.Failures) != 0 {
+		t.Errorf("failed: %v", c.Failures)
 	}
 }
 
@@ -77,7 +78,7 @@ func TestTheWindowsProfilingFromLaunchAndWithout(t *testing.T) {
 	c := newScripted("kb")
 	newProfiling(c, nil, nil).toggleWindow()
 	if !noted(c, "no profiler") {
-		t.Errorf("no profiler: %v", c.notes)
+		t.Errorf("no profiler: %v", c.Notes)
 	}
 }
 
@@ -86,7 +87,7 @@ func TestTheWindowsProfilingFromLaunchAndWithout(t *testing.T) {
 func TestTheBackendsProfiling(t *testing.T) {
 	c := newScripted("kb")
 	on := false
-	c.answers["sys.profile"] = func(params []any) (any, error) {
+	c.Answers["sys.profile"] = func(params []any) (any, error) {
 		switch params[0] {
 		case "start":
 			on = true
@@ -101,27 +102,27 @@ func TestTheBackendsProfiling(t *testing.T) {
 	}
 	f := newProfiling(c, nil, nil)
 	f.toggleBackend()
-	if c.set["App.profilingBackend"] != true || c.set["App.profilingMark"] != badge || !noted(c, "autodoc-profile-serve-9") {
-		t.Fatalf("after a start: %v, notes %v", c.set, c.notes)
+	if c.Sets["App.profilingBackend"] != true || c.Sets["App.profilingMark"] != badge || !noted(c, "autodoc-profile-serve-9") {
+		t.Fatalf("after a start: %v, notes %v", c.Sets, c.Notes)
 	}
 	f.toggleBackend()
-	if c.set["App.profilingBackend"] != false || c.set["App.profilingMark"] != "" {
-		t.Fatalf("after a stop: %v", c.set)
+	if c.Sets["App.profilingBackend"] != false || c.Sets["App.profilingMark"] != "" {
+		t.Fatalf("after a stop: %v", c.Sets)
 	}
-	if want := []string{"sys.profile[start ]", "sys.profile[stop ]"}; !slices.Equal(c.calls, want) {
-		t.Errorf("calls %v; want %v", c.calls, want)
+	if want := []string{"sys.profile[start ]", "sys.profile[stop ]"}; !slices.Equal(c.Calls, want) {
+		t.Errorf("calls %v; want %v", c.Calls, want)
 	}
 
 	on = true // another client started it
 	f.Connected()
-	if c.set["App.profilingBackend"] != true {
-		t.Errorf("a connection to a daemon already profiling: %v", c.set)
+	if c.Sets["App.profilingBackend"] != true {
+		t.Errorf("a connection to a daemon already profiling: %v", c.Sets)
 	}
 
-	c.answers["sys.profile"] = func([]any) (any, error) { return nil, errors.New("unknown method") }
+	c.Answers["sys.profile"] = func([]any) (any, error) { return nil, errors.New("unknown method") }
 	f.toggleBackend()
-	if len(c.failed) != 1 || c.set["App.profilingBackend"] != true {
-		t.Errorf("a refused stop: failed %v, state %v", c.failed, c.set)
+	if len(c.Failures) != 1 || c.Sets["App.profilingBackend"] != true {
+		t.Errorf("a refused stop: failed %v, state %v", c.Failures, c.Sets)
 	}
 }
 
@@ -136,8 +137,8 @@ func TestCaptureAndFolderNeedAMonitor(t *testing.T) {
 	f := newProfiling(c, prof, func(_ context.Context, p string) error { opened = append(opened, p); return nil })
 	f.captureCPU()
 	f.openFolder()
-	if len(c.notes) != 2 || !noted(c, "Start profiling") || len(opened) != 0 {
-		t.Fatalf("with none running: notes %v, opened %v", c.notes, opened)
+	if len(c.Notes) != 2 || !noted(c, "Start profiling") || len(opened) != 0 {
+		t.Fatalf("with none running: notes %v, opened %v", c.Notes, opened)
 	}
 	f.toggleWindow()
 	dir := prof.Dir()
@@ -152,9 +153,9 @@ func TestCaptureAndFolderNeedAMonitor(t *testing.T) {
 // start's answer, is dropped (Ticket), so the item and the badge stay on.
 func TestAStaleBackendStatusNeverUndoesAStart(t *testing.T) {
 	c := newScripted("kb")
-	c.deferred = true
+	c.Deferred = true
 	on := false
-	c.answers["sys.profile"] = func(params []any) (any, error) {
+	c.Answers["sys.profile"] = func(params []any) (any, error) {
 		if params[0] == "start" {
 			on = true
 		}
@@ -167,12 +168,12 @@ func TestAStaleBackendStatusNeverUndoesAStart(t *testing.T) {
 	f := newProfiling(c, nil, nil)
 	f.Connected()     // asks: off
 	f.toggleBackend() // starts
-	if len(c.pending) != 2 {
-		t.Fatalf("%d answers pending; want the status and the start", len(c.pending))
+	if len(c.Pending) != 2 {
+		t.Fatalf("%d answers pending; want the status and the start", len(c.Pending))
 	}
-	c.deliver(1, 0) // the start's answer first, then the older status's
-	if c.set["App.profilingBackend"] != true || c.set["App.profilingMark"] != badge {
-		t.Errorf("the stale status undid the start: %v", c.set)
+	c.Deliver(1, 0) // the start's answer first, then the older status's
+	if c.Sets["App.profilingBackend"] != true || c.Sets["App.profilingMark"] != badge {
+		t.Errorf("the stale status undid the start: %v", c.Sets)
 	}
 }
 
@@ -181,23 +182,23 @@ func TestAStaleBackendStatusNeverUndoesAStart(t *testing.T) {
 func TestTheWindowsToggleRunsOffTheLoopOnceAtATime(t *testing.T) {
 	shortRuntime(t)
 	c := newScripted("kb")
-	c.deferred = true
+	c.Deferred = true
 	prof := profiling.New(context.Background(), "gui")
 	t.Cleanup(func() { _ = prof.Close() })
 	f := newProfiling(c, prof, nil)
 	f.toggleWindow()
 	f.toggleWindow()
-	if len(c.pending) != 1 {
-		t.Fatalf("%d toggles under way; want one", len(c.pending))
+	if len(c.Pending) != 1 {
+		t.Fatalf("%d toggles under way; want one", len(c.Pending))
 	}
-	c.deliver(0)
-	if prof.Dir() == "" || c.set["App.profilingWindow"] != true || f.windowBusy {
-		t.Fatalf("after the start: dir %q, state %v, busy %v", prof.Dir(), c.set, f.windowBusy)
+	c.Deliver(0)
+	if prof.Dir() == "" || c.Sets["App.profilingWindow"] != true || f.windowBusy {
+		t.Fatalf("after the start: dir %q, state %v, busy %v", prof.Dir(), c.Sets, f.windowBusy)
 	}
 	f.toggleWindow()
-	c.deliver(0)
-	if prof.Dir() != "" || c.set["App.profilingWindow"] != false {
-		t.Errorf("after the stop: dir %q, state %v", prof.Dir(), c.set)
+	c.Deliver(0)
+	if prof.Dir() != "" || c.Sets["App.profilingWindow"] != false {
+		t.Errorf("after the stop: dir %q, state %v", prof.Dir(), c.Sets)
 	}
 }
 
@@ -205,7 +206,7 @@ func TestTheWindowsToggleRunsOffTheLoopOnceAtATime(t *testing.T) {
 // same) is said, and the daemon asked again, whose answer the item shows.
 func TestARefusedBackendStopAsksAgain(t *testing.T) {
 	c := newScripted("kb")
-	c.answers["sys.profile"] = func(params []any) (any, error) {
+	c.Answers["sys.profile"] = func(params []any) (any, error) {
 		switch params[0] {
 		case "start":
 			return map[string]any{"on": true, "dir": "/run/user/1/p"}, nil
@@ -217,8 +218,8 @@ func TestARefusedBackendStopAsksAgain(t *testing.T) {
 	f := newProfiling(c, nil, nil)
 	f.toggleBackend()
 	f.toggleBackend()
-	if len(c.failed) != 1 || c.set["App.profilingBackend"] != false || c.calls[len(c.calls)-1] != "sys.profile[status ]" {
-		t.Errorf("a refused stop: failed %v, state %v, calls %v", c.failed, c.set, c.calls)
+	if len(c.Failures) != 1 || c.Sets["App.profilingBackend"] != false || c.Calls[len(c.Calls)-1] != "sys.profile[status ]" {
+		t.Errorf("a refused stop: failed %v, state %v, calls %v", c.Failures, c.Sets, c.Calls)
 	}
 }
 
@@ -226,19 +227,19 @@ func TestARefusedBackendStopAsksAgain(t *testing.T) {
 // starts, and the item shows where the first left the monitor.
 func TestTheBackendsToggleRunsOnceAtATime(t *testing.T) {
 	c := newScripted("kb")
-	c.deferred = true
-	c.answers["sys.profile"] = func(params []any) (any, error) {
+	c.Deferred = true
+	c.Answers["sys.profile"] = func(params []any) (any, error) {
 		return map[string]any{"on": params[0] == "start", "dir": "/run/user/1/p"}, nil
 	}
 	f := newProfiling(c, nil, nil)
 	f.toggleBackend()
 	f.toggleBackend()
-	if len(c.pending) != 1 || !slices.Equal(c.calls, []string{"sys.profile[start ]"}) {
-		t.Fatalf("two quick toggles: %d pending, calls %v; want one start", len(c.pending), c.calls)
+	if len(c.Pending) != 1 || !slices.Equal(c.Calls, []string{"sys.profile[start ]"}) {
+		t.Fatalf("two quick toggles: %d pending, calls %v; want one start", len(c.Pending), c.Calls)
 	}
-	c.deliver(0)
-	if c.set["App.profilingBackend"] != true || f.backendBusy {
-		t.Errorf("after the start: state %v, busy %v", c.set, f.backendBusy)
+	c.Deliver(0)
+	if c.Sets["App.profilingBackend"] != true || f.backendBusy {
+		t.Errorf("after the start: state %v, busy %v", c.Sets, f.backendBusy)
 	}
 }
 
@@ -246,18 +247,18 @@ func TestTheBackendsToggleRunsOnceAtATime(t *testing.T) {
 // the close is for good, so the start is refused and the item stays off.
 func TestAWindowStartQueuedPastTheCloseStartsNothing(t *testing.T) {
 	shortRuntime(t)
-	c := &heldCore{scriptedCore: newScripted("kb")} // embedsetup_test.go's: Go holds the worker
+	c := &featuretest.HeldCore{ScriptedCore: newScripted("kb")} // Go holds the worker
 	prof := profiling.New(context.Background(), "gui")
 	f := newProfiling(c, prof, nil)
 	f.toggleWindow()
-	if len(c.held) != 1 {
-		t.Fatalf("%d works queued; want the start", len(c.held))
+	if len(c.Held) != 1 {
+		t.Fatalf("%d works queued; want the start", len(c.Held))
 	}
 	if err := prof.Close(); err != nil { // the owner's close at exit
 		t.Fatal(err)
 	}
-	c.run(0)
-	if prof.Dir() != "" || c.set["App.profilingWindow"] == true || len(c.failed) != 1 {
-		t.Errorf("a start run after the close: dir %q, state %v, failed %v", prof.Dir(), c.set, c.failed)
+	c.Run(0)
+	if prof.Dir() != "" || c.Sets["App.profilingWindow"] == true || len(c.Failures) != 1 {
+		t.Errorf("a start run after the close: dir %q, state %v, failed %v", prof.Dir(), c.Sets, c.Failures)
 	}
 }

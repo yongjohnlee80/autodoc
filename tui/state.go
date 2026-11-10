@@ -4,7 +4,6 @@ import (
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/internal/userdirs"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
-	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
@@ -87,8 +86,8 @@ func (h *Host) state() map[string]any {
 		// the leader card
 
 		// the editor's preferences
-		"App.languages":     choices(languageLabels()...),
-		"App.themes":        choices(h.themeLabels()...),
+		"App.languages":     feature.Choices(languageLabels()...),
+		"App.themes":        feature.Choices(h.themeLabels()...),
 		"App.userThemes":    h.userThemeRows(),
 		"App.builtinThemes": h.builtinThemeRows(),
 		"App.prefsError":    "",
@@ -169,9 +168,9 @@ func (h *Host) state() map[string]any {
 		"App.cellFonts":     h.cellFontModel,
 		"App.terminalFonts": h.termFontModel,
 		"App.proseFonts":    h.proseFontModel,
-		"App.fontSizes":     choices(fontSizeLabels()...),
-		"App.agentScales":   choices(percentLabels(feature.AgentScales)...),
-		"App.zoomSteps":     choices(zoomLabels()...),
+		"App.fontSizes":     feature.Choices(fontSizeLabels()...),
+		"App.agentScales":   feature.Choices(percentLabels(feature.AgentScales)...),
+		"App.zoomSteps":     feature.Choices(zoomLabels()...),
 		"App.cellFontIndex": 0, "App.proseFontIndex": 0, "App.terminalFontIndex": 0, "App.terminalLookNote": "",
 	}
 	for k, v := range h.cardState() {
@@ -208,17 +207,6 @@ func (h *Host) languageState() map[string]any {
 	}
 }
 
-// choices are a chooser's rows: each a label.
-func choices(labels ...string) *tuidecl.ListModel {
-	m := tuidecl.NewListModel("key", "label")
-	rows := make([]feature.RowOf, len(labels))
-	for i, l := range labels {
-		rows[i] = feature.RowOf{"key": l, "label": l}
-	}
-	m.Reset(rows)
-	return m
-}
-
 // homeDir is where the folder picker starts: the home directory (env's, nil for AutoDoc's own),
 // or the root.
 func homeDir(env procenv.Env) string {
@@ -232,7 +220,7 @@ func homeDir(env procenv.Env) string {
 func (h *Host) set(name string, v any) { h.record(h.p.Set(name, v)) }
 
 // setField is the host's form fields written as a feature's are (endpoints.go: setField).
-func (h *Host) setField(name, text string) { setField(core{h}, name, text) }
+func (h *Host) setField(name, text string) { feature.SetField(core{h}, name, text) }
 
 // setWhere is the status line's left: the editor's mode, then where the TUI is attached. While
 // Insert's (or Replace's) Ctrl+O runs its one Normal-mode command, the mode is (INSERT) or

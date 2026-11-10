@@ -775,6 +775,10 @@ func Run(t *testing.T, h Harness) {
 		}
 		cred := crew.Credential(got.Session, r.Secret)
 		claude := `{"socket":"/run/user/1000/cc-socks/a.sock","pid":42,"start":"b:n:42:9000","session":"c-1"}`
+		if !crew.SocketWakes() {
+			refusedHere(ctx, t, m, cred, "claude", claude)
+			return
+		}
 		// a wake row mid-backoff, as a failed attempt leaves it
 		if err := store.Write(ctx, func(tx crew.Tx) error {
 			w, _, err := tx.Wake(got.Session)
@@ -888,6 +892,10 @@ func Run(t *testing.T, h Harness) {
 			}
 			return ep
 		}
+		if !crew.SocketWakes() {
+			refusedHere(ctx, t, m, crew.Credential(got.Session, rj.Secret), "claude", loc)
+			return
+		}
 		clock.Advance(time.Minute)
 		first := clock.Now().UnixNano()
 		if _, err := m.SetEndpoint(ctx, crew.Credential(got.Session, rj.Secret), "claude", loc); err != nil {
@@ -902,6 +910,53 @@ func Run(t *testing.T, h Harness) {
 		}
 		if ep := endpoint(); ep.Generation != 2 || ep.First != first || ep.Registered != clock.Now().UnixNano() {
 			t.Fatalf("the second generation: %+v, want first %d kept, registered now", ep, first)
+		}
+	})
+
+	t.Run("endpoints: none by socket where the OS can't wake through one", func(t *testing.T) {
+		// an OS that can't wake an agent through its CLI's socket (crew.SocketWakes false: Windows),
+		// on every OS: a socket locator is refused, saying why and that mail waits; the addressbook
+		// says the agent has no wake on this OS, not that it registered none; agy's loopback wake
+		// is every OS's, and its session with none is still no_endpoint
+		clock := NewClock()
+		store := h.New(t, clock.Now)
+		m := crew.New(store, crew.WithUID(1000), crew.WithStarted(clock.Now()), crew.WithSocketWakes(false))
+		e, err := m.Claim(ctx, scope, "run-a", proc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rc := reg(e, "jarvis", "agent-1")
+		claude, err := m.Register(ctx, rc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ra := reg(e, "juliet", "agent-2")
+		ra.Kind = "agy"
+		agy, err := m.Register(ctx, ra)
+		if err != nil {
+			t.Fatal(err)
+		}
+		refusedHere(ctx, t, m, crew.Credential(claude.Session, rc.Secret), "claude",
+			`{"socket":"/run/user/1000/cc-socks/j.sock","pid":7,"start":"b:n:7:1","session":"c"}`)
+		l, err := m.List(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		why := map[string]string{}
+		for _, en := range l {
+			if en.Reachable {
+				t.Errorf("%s reachable with no wake registered", en.Codename)
+			}
+			why[en.Codename] = en.Why
+		}
+		if why["jarvis"] != crew.WhyNoWakeHere || why["juliet"] != crew.WhyNoEndpoint {
+			t.Fatalf("why: %v; want jarvis (claude) %s and juliet (agy) %s", why, crew.WhyNoWakeHere, crew.WhyNoEndpoint)
+		}
+		if _, err := m.SetEndpoint(ctx, crew.Credential(agy.Session, ra.Secret), "agy", `{"address":"127.0.0.1:4000","conversation":"x"}`); err != nil {
+			t.Fatalf("agy's loopback endpoint with no socket wakes: %v; want it registered", err)
+		}
+		if l, err := m.List(ctx); err != nil || len(l) != 2 || l[1].Codename != "juliet" || !l[1].Reachable {
+			t.Fatalf("after agy's endpoint: %+v, %v; want juliet reachable", l, err)
 		}
 	})
 
@@ -924,10 +979,7 @@ func Run(t *testing.T, h Harness) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := m.SetEndpoint(ctx, crew.Credential(jarvis.Session, rj.Secret), "claude",
-			`{"socket":"/run/user/1000/cc-socks/j.sock","pid":7,"start":"b:n:7:1","session":"c"}`); err != nil {
-			t.Fatal(err)
-		}
+		jloc := `{"socket":"/run/user/1000/cc-socks/j.sock","pid":7,"start":"b:n:7:1","session":"c"}`
 		list := func() []crew.Entry {
 			t.Helper()
 			l, err := m.List(ctx)
@@ -935,6 +987,23 @@ func Run(t *testing.T, h Harness) {
 				t.Fatal(err)
 			}
 			return l
+		}
+		if !crew.SocketWakes() {
+			// no Claude can register a wake here: each is listed with the OS's reason, not as a fault
+			refusedHere(ctx, t, m, crew.Credential(jarvis.Session, rj.Secret), "claude", jloc)
+			want := []crew.Entry{
+				{Codename: "jarvis", Scope: scope, Kind: "claude", Presence: crew.PresenceLive, Reachable: false, PromptsReported: false,
+					Why: crew.WhyNoWakeHere, MailVia: "cli"},
+				{Codename: "vision", Scope: scope, Kind: "claude", Presence: crew.PresenceLive, Reachable: false, PromptsReported: false,
+					Why: crew.WhyNoWakeHere, MailVia: "cli"},
+			}
+			if got := list(); !slices.Equal(got, want) {
+				t.Fatalf("list with no socket wakes: %+v\nwant %+v", got, want)
+			}
+			return
+		}
+		if _, err := m.SetEndpoint(ctx, crew.Credential(jarvis.Session, rj.Secret), "claude", jloc); err != nil {
+			t.Fatal(err)
 		}
 		want := []crew.Entry{
 			// both live Claude sessions: the hooks report the prompts of the one registered with them,
@@ -1179,5 +1248,15 @@ func wantEnded(t *testing.T, store crew.Store, enders *Enders, id, why string) {
 	defer enders.mu.Unlock()
 	if len(enders.Ended) != 1 || enders.Ended[0] != (EndedSession{id, why}) {
 		t.Fatalf("the mail module heard %v, want one %s ended %q", enders.Ended, id, why)
+	}
+}
+
+// refusedHere checks that on an OS without socket wakes (crew.SocketWakes) a session's socket
+// locator is refused as a bad endpoint, saying the wake isn't available here and that mail waits.
+func refusedHere(ctx context.Context, t *testing.T, m *crew.Manager, cred, kind, locator string) {
+	t.Helper()
+	_, err := m.SetEndpoint(ctx, cred, kind, locator)
+	if !errors.Is(err, crew.ErrBadEndpoint) || !strings.Contains(err.Error(), "not available on this OS") || !strings.Contains(err.Error(), "mail waits") {
+		t.Fatalf("a %s endpoint with no socket wakes: %v; want ErrBadEndpoint saying the wake isn't available here and mail waits", kind, err)
 	}
 }

@@ -179,7 +179,7 @@ func (g *cellGlobeMap) State() map[string]any {
 	st := g.editor.state()
 	maps.Copy(st, map[string]any{
 		"App.globeMapTitle": "GlobeMap", "App.globeSettingsError": "",
-		"App.globeThemes": choices(), "App.globeDotSizes": choices(), "App.globeSpeeds": choices(),
+		"App.globeThemes": feature.Choices(), "App.globeDotSizes": feature.Choices(), "App.globeSpeeds": feature.Choices(),
 		"App.globeFilters":     choiceModel(g.c, "App.globeFilters"),
 		"App.globeOtherColour": "", "App.globeBodyLinkColour": "", "App.globeSupersessionLinkColour": "",
 		"App.globeRelationLinkColour": "", "App.globeRingColour": "",

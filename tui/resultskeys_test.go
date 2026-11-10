@@ -87,7 +87,7 @@ func TestTheResultsSKeySortsWithoutFetching(t *testing.T) {
 	r, logs := pluginTUI(t, dir)
 	onLoop(r, func() bool { r.h.plugins.runPluginCommand("rows", "run"); return true })
 	r.waitResults(t, "q1", tablePage+resultsPage)
-	fetches := len(saidLines(t, logs, "rows", "fetch "))
+	fetches := r.saidFetches(t, logs) // the table's own fetches, every one in the log
 	onLoop(r, func() bool { r.h.keep(r.h.p.Call(resultsView, "forceActiveFocus")); return true })
 	r.s.WaitFor(t, "results focused", func(string) bool { return r.focused(resultsView) })
 	r.keys(t, key('s'), key('s')) // ascending then descending: row zero moves near the end

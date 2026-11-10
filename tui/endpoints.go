@@ -92,7 +92,7 @@ func (e *endpoints) State() map[string]any {
 	for i, k := range e.spec.kinds {
 		labels[i] = k.label
 	}
-	state := map[string]any{e.src("s"): e.rows.Model(), e.src("Kinds"): choices(labels...), e.src("KindIndex"): 0}
+	state := map[string]any{e.src("s"): e.rows.Model(), e.src("Kinds"): feature.Choices(labels...), e.src("KindIndex"): 0}
 	for _, name := range []string{"sStatus", "Detail", "FormTitle", "FormError", "Name", "Base", "Model", "Key", "KeyLabel", "ModelsStatus"} {
 		state[e.src(name)] = ""
 	}
@@ -301,10 +301,10 @@ func (e *endpoints) fill(title string, r endpointRow) {
 	e.c.Set(e.src("FormTitle"), title)
 	e.c.Set(e.src("FormError"), "")
 	e.c.Set(e.src("KindIndex"), e.kind)
-	setField(e.c, e.src("Name"), r.name)
-	setField(e.c, e.src("Base"), r.base)
-	setField(e.c, e.src("Model"), r.model)
-	setField(e.c, e.src("Key"), "")
+	feature.SetField(e.c, e.src("Name"), r.name)
+	feature.SetField(e.c, e.src("Base"), r.base)
+	feature.SetField(e.c, e.src("Model"), r.model)
+	feature.SetField(e.c, e.src("Key"), "")
 	if e.spec.formOpened != nil {
 		e.spec.formOpened(r)
 	}
@@ -335,7 +335,7 @@ func (e *endpoints) kindChosen(i int, base string) {
 	e.kind = i
 	for _, k := range e.spec.kinds {
 		if strings.TrimSpace(base) == "" || base == k.base {
-			setField(e.c, e.src("Base"), e.spec.kinds[i].base)
+			feature.SetField(e.c, e.src("Base"), e.spec.kinds[i].base)
 			break
 		}
 	}
@@ -415,11 +415,4 @@ func (e *endpoints) save(name, base, model, key, extra string) {
 func (e *endpoints) refuse(why string) {
 	e.c.Set(e.src("FormError"), why)
 	e.c.Open(e.spec.noun + "Edit")
-}
-
-// setField writes a form field bound to name, moving it away first so the same text written twice
-// still reaches a field the user has typed in.
-func setField(c feature.Core, name, text string) {
-	c.Set(name, "\x00")
-	c.Set(name, text)
 }

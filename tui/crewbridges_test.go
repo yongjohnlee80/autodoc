@@ -55,10 +55,12 @@ func (w *bridgesWindow) Ask(q feature.Question) feature.Asked {
 	w.asked = append(w.asked, q)
 	return feature.Asked{}
 }
-func (w *bridgesWindow) Notify(msg string)                 { w.notices = append(w.notices, msg) }
-func (w *bridgesWindow) Tr(id string) string               { return w.Trf(id) }
-func (w *bridgesWindow) Trf(id string, args ...any) string { return fill(englishText(id), args...) }
-func (w *bridgesWindow) CopyText(text string) bool         { w.copied = text; return true }
+func (w *bridgesWindow) Notify(msg string)   { w.notices = append(w.notices, msg) }
+func (w *bridgesWindow) Tr(id string) string { return w.Trf(id) }
+func (w *bridgesWindow) Trf(id string, args ...any) string {
+	return feature.Fill(englishText(id), args...)
+}
+func (w *bridgesWindow) CopyText(text string) bool { w.copied = text; return true }
 
 func (w *bridgesWindow) fire() {
 	ts := w.timers

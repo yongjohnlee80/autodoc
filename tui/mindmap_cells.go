@@ -122,7 +122,7 @@ func (*cellMindmap) Prefs() []feature.PrefSpec {
 func (m *cellMindmap) State() map[string]any {
 	st := m.editor.state()
 	maps.Copy(st, map[string]any{
-		"App.mindmapTitle": "Mindmap", "App.mindThemes": choices(), "App.mindThemeIndex": 0,
+		"App.mindmapTitle": "Mindmap", "App.mindThemes": feature.Choices(), "App.mindThemeIndex": 0,
 		"App.mindDepths": choiceModel(m.c, "App.mindDepths"), "App.mindShapeChoices": choiceModel(m.c, "App.mindShapeChoices"),
 	})
 	return st

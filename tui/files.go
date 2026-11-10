@@ -110,7 +110,7 @@ func (n openedFile) outside() bool { return n.open && n.ws == "" }
 // (h.tr): a derived document's carries its read-only badge, an outside file's that it is in no
 // workspace.
 func (n openedFile) title(tr func(string) string) string {
-	trf := func(id, arg string) string { return fill(tr(id), arg) }
+	trf := func(id, arg string) string { return feature.Fill(tr(id), arg) }
 	badges := []string{}
 	if n.outside() {
 		badges = append(badges, tr("autodoc.text.files.no_workspace"))

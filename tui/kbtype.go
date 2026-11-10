@@ -229,7 +229,7 @@ func (h *Host) keepForResume(ws string, s *stagedKBType) {
 
 // kbTypeSummary is what the field shows of a staged type: its folders and purposes, and the
 // settings it proposes.
-func kbTypeSummary(t wording, s *stagedKBType) string {
+func kbTypeSummary(t feature.Wording, s *stagedKBType) string {
 	var b strings.Builder
 	b.WriteString(t.Trf("autodoc.text.kbtype.at", s.t.Title, s.commit[:min(7, len(s.commit))]) + "\n")
 	width := 0
@@ -280,7 +280,7 @@ type kbApply struct {
 }
 
 // text is how far the apply got, in t's language.
-func (a kbApply) text(t wording) string {
+func (a kbApply) text(t feature.Wording) string {
 	s := t.Trf("autodoc.text.kbtype.created_kept", len(a.created), len(a.kept))
 	if len(a.updated) > 0 {
 		s += ", " + t.Trf("autodoc.text.kbtype.updated", len(a.updated))

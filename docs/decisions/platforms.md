@@ -29,7 +29,7 @@ The packages, the planned seams (their design is pending):
 | Free disk space | `internal/diskspace` |
 | The user's folders: home, cache, temporary | `internal/userdirs` |
 | The default shell | `internal/usershell` |
-| The environment, and the programs on its PATH | `internal/procenv` |
+| The environment, the programs on its PATH, and a launcher put first on one (a link and a /bin/sh script on Unix; the folder itself, a batch file and the script on Windows) | `internal/procenv` |
 | What this process uses: CPU, resident memory | `core/procstat` |
 | What this machine offers: RAM, GPU | `core/hostprobe` |
 

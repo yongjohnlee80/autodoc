@@ -422,7 +422,7 @@ func (w *crewWindow) Trf(id string, args ...any) string {
 	if w.marked {
 		return markedText(id, args...)
 	}
-	return fill(englishText(id), args...)
+	return feature.Fill(englishText(id), args...)
 }
 
 // optString is p's i-th parameter as a string, "" when it isn't sent (an optional one).
