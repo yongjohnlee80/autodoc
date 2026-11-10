@@ -100,7 +100,7 @@ func (f *fakeTerminal) Resize(_, _ int) error { return nil }
 func (r *running) agentRunningNow() bool {
 	return onLoop(r, func() bool {
 		for _, entry := range r.h.agents.AgentEntries() {
-			if entry.Ref.Codename == r.h.agents.selectedAgent {
+			if entry.Ref.Codename == r.h.agents.Snapshot().Selected {
 				return entry.Running
 			}
 		}

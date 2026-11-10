@@ -16,9 +16,9 @@ func TestPanelPreferenceRowsApplyLiveAndQueueWritesInOrder(t *testing.T) {
 	got := onLoop(r, func() bool {
 		before := len(r.h.prefWrites)
 		r.h.terminals.c.SetPref(prefTermEdge, "left")
-		r.h.agents.c.SetPref(prefAgentEdge, "center")
-		r.h.agents.c.SetPref(prefAgentProfiles, json)
-		r.h.agents.c.SetPref(prefAgentDefaultCodename, "alpha")
+		r.h.agents.Snapshot().Host.SetPref(prefAgentEdge, "center")
+		r.h.agents.Snapshot().Host.SetPref(prefAgentProfiles, json)
+		r.h.agents.Snapshot().Host.SetPref(prefAgentDefaultCodename, "alpha")
 		for name, want := range map[string]string{
 			"App.terminalEdge": "left", "App.terminalSize": "40", "App.terminalEdgeIndex": "2",
 			"App.agentEdge": "center", "App.agentSize": "80", "App.agentEdgeIndex": "4",

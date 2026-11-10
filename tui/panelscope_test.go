@@ -37,7 +37,7 @@ func TestPanelServicesRejectOtherFeaturesViews(t *testing.T) {
 		{"terminals", "agentView"}, {"terminals", "editor"},
 	} {
 		got := onLoop(r, func() []error {
-			var c feature.PanelHost = r.h.agents.c
+			var c feature.PanelHost = r.h.agents.Snapshot().Host
 			if tc.feature == "terminals" {
 				c = r.h.terminals.c
 			}
@@ -56,7 +56,7 @@ func TestPanelServicesRejectOtherFeaturesViews(t *testing.T) {
 		}
 	}
 	err := onLoop(r, func() error {
-		return r.h.agents.c.ConfigureTerminal("terminalView", "not-run", "", "arg")
+		return r.h.agents.Snapshot().Host.ConfigureTerminal("terminalView", "not-run", "", "arg")
 	})
 	if !errors.Is(err, feature.ErrPanelViewAccess) {
 		t.Errorf("agent configured the shell feature's terminal: %v", err)
@@ -70,17 +70,17 @@ func TestPanelNavigationAllowsOnlyBoundedKeyboardRestoration(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	onLoop(r, func() bool {
-		r.h.agents.c.OpenDrawer("explorer") // navigation to another panel is permitted
+		r.h.agents.Snapshot().Host.OpenDrawer("explorer") // navigation to another panel is permitted
 		return true
 	})
 	r.s.WaitFor(t, "explorer keyboard", func(string) bool { return r.focused("explorerTree") })
-	err := onLoop(r, func() error { return r.h.agents.c.RestoreKeyboardPane("editor") })
+	err := onLoop(r, func() error { return r.h.agents.Snapshot().Host.RestoreKeyboardPane("editor") })
 	if err != nil {
 		t.Fatal(err)
 	}
 	r.s.WaitFor(t, "editor keyboard restored", func(string) bool { return r.focused("editor") })
 	for _, id := range []string{"agentView", "confirm", "missingView"} {
-		err := onLoop(r, func() error { return r.h.agents.c.RestoreKeyboardPane(id) })
+		err := onLoop(r, func() error { return r.h.agents.Snapshot().Host.RestoreKeyboardPane(id) })
 		if !errors.Is(err, errs.ErrInvalidArgument) {
 			t.Errorf("unbounded restoration to %s: %v", id, err)
 		}
@@ -123,9 +123,9 @@ func TestAgentPanelBindingKeepsItsServicesOnAnInvalidHost(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	kept := onLoop(r, func() bool {
-		before := r.h.agents.c
+		before := r.h.agents.Snapshot().Host
 		err := r.h.agents.BindPanelHost(panelOnlyServices{r.h.terminals.c})
-		return err != nil && r.h.agents.c == before
+		return err != nil && r.h.agents.Snapshot().Host == before
 	})
 	if !kept {
 		t.Fatal("invalid agent service binding was accepted or replaced its valid scope")
@@ -260,7 +260,7 @@ func TestPanelMaximizedIsOnlyOwnPanels(t *testing.T) {
 	r := attached(t, d)
 	read := onLoop(r, func() [2]bool {
 		r.h.panelChanged("agent", "maximize", true)
-		return [2]bool{r.h.agents.c.(*scopedPanelHost).PanelMaximized("agent"), r.h.terminals.c.(*scopedPanelHost).PanelMaximized("agent")}
+		return [2]bool{r.h.agents.Snapshot().Host.(*scopedPanelHost).PanelMaximized("agent"), r.h.terminals.c.(*scopedPanelHost).PanelMaximized("agent")}
 	})
 	if !read[0] {
 		t.Error("the agents' own maximized panel did not read as maximized")
@@ -288,7 +288,7 @@ func TestPanelTextSizeIsTheWindowsAndWaitsForTheViews(t *testing.T) {
 	d, r := runWindowTUI(t, map[string]string{"tui.agent.text.scale": "70"}, &fakeFonts{})
 	read := func() [2]int {
 		return onLoop(r, func() [2]int {
-			agents, _ := r.h.agents.c.(*scopedPanelHost).PanelTextScale()
+			agents, _ := r.h.agents.Snapshot().Host.(*scopedPanelHost).PanelTextScale()
 			terminal, _ := r.h.terminals.c.(*scopedPanelHost).PanelTextScale()
 			return [2]int{agents, terminal}
 		})
@@ -304,7 +304,7 @@ func TestPanelTextSizeIsTheWindowsAndWaitsForTheViews(t *testing.T) {
 	if got := read(); got != [2]int{80, 80} {
 		t.Errorf("Larger from the terminal panel's menu: the panels read %v, want 80%% both", got)
 	}
-	if err := onLoop(r, func() error { return r.h.agents.c.(*scopedPanelHost).StepPanelTextScale(-1) }); err != nil {
+	if err := onLoop(r, func() error { return r.h.agents.Snapshot().Host.(*scopedPanelHost).StepPanelTextScale(-1) }); err != nil {
 		t.Fatal(err)
 	}
 	storedPref(t, d, r, "tui.agent.text.scale", "70")
