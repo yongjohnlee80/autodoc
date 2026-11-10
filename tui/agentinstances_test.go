@@ -581,7 +581,7 @@ func TestStoppedAgentDoesNotRelabelItsOldWorkspaceConfiguration(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.questions[len(c.questions)-1].OnYes()
-	if done != 1 || !errors.Is(outcome, ErrAgentStale) || instance.running || instance.workspace.name != "kb" || len(c.panel.pastes) != 0 {
+	if done != 1 || !errors.Is(outcome, ErrAgentStale) || instance.running || instance.workspace.Name != "kb" || len(c.panel.pastes) != 0 {
 		t.Fatal("workspace B reused or relabelled workspace A process")
 	}
 	if c.panel.configs[instance.tab].Dir != oldConfig.Dir || c.panel.configs[instance.tab].Args[len(oldConfig.Args)-1] != oldConfig.Args[len(oldConfig.Args)-1] {
