@@ -80,8 +80,11 @@ func runTestPlugin(mode string) int {
 	switch mode {
 	case "true": // a build step that succeeds, on every OS (no true program on Windows)
 		return 0
-	case "silent": // never answers
-		select {}
+	case "silent": // never answers: asleep, never a bare select{}, which a process with no other
+		// goroutine ends as a deadlock (exit status 2), as Windows' test binary is
+		for {
+			time.Sleep(time.Hour)
+		}
 	case "otherprotocol": // answers in a protocol its manifest does not say
 		conn := testStdio()
 		done := make(chan struct{})
