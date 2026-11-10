@@ -873,3 +873,5 @@ func agentPanelSpec() feature.PanelSpec {
 		Edge: func(p feature.PrefsView) string { return p.Value(prefAgentEdge) }, Places: slices.Clone(agentEdges),
 		Size: [2]int{feature.SidePanelMin, 90}, Length: [2]int{20, 100}, Default: agentDefault}
 }
+
+var _ = userperm.ErrExposed // MUTANT: keeps the import
