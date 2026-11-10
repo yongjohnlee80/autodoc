@@ -2,6 +2,7 @@ package tui
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -10,13 +11,14 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/internal/usershell"
 )
 
 // agentSetupArgs are arguments as an agent's setup gives them (crew.Setup's Argv): a JSON config
 // with a space inside a value, a quote followed by a space, an apostrophe, a last backslash, none
-// at all, and shell characters inside a quoted word.
+// at all, and characters PowerShell would read outside a quoted word.
 var agentSetupArgs = []string{`{"mcpServers":{"autodoc":{"command":"C:\\Program Files\\autodoc.exe","args":["mcp serve"]}}}`,
-	`say "hi" now`, "it's", `ends\`, "", "a & b"}
+	`say "hi" now`, "it's", `ends\`, "", "!x (a)"}
 
 // agentCommandCase is one way an agent's command reaches its CLI: the environment its shell is
 // chosen in, and the profile command's call of the CLI.
@@ -66,8 +68,14 @@ func TestAnAgentsCommandReachesItsCLIWhole(t *testing.T) {
 		t.Run(c.label, func(t *testing.T) {
 			root := filepath.Join(t.TempDir(), "it's a root")
 			ws := wsInfo{id: 1, name: "kb it's", root: root}
-			prog, args := agentArgv(c.env, fillAgentCommand(c.env, c.call+" {root} {workspace}", ws))
-			args = withCommandArgs(c.env, args, agentSetupArgs)
+			filled, err := fillAgentCommand(c.env, c.call+" {root} {workspace}", ws)
+			if err != nil {
+				t.Fatal(err)
+			}
+			prog, args := agentArgv(c.env, filled)
+			if args, err = withCommandArgs(c.env, args, agentSetupArgs); err != nil {
+				t.Fatal(err)
+			}
 			cmd := exec.Command(prog, args...)
 			cmd.Env = c.env.With(argvPrinterEnv + "=1")
 			out, err := cmd.Output()
@@ -80,6 +88,28 @@ func TestAnAgentsCommandReachesItsCLIWhole(t *testing.T) {
 			}
 			if want := append([]string{root, ws.name}, agentSetupArgs...); !reflect.DeepEqual(got, want) {
 				t.Errorf("the CLI was given %q\nwant %q\n(the line %q)", got, want, args[len(args)-1])
+			}
+		})
+	}
+}
+
+// A value an agent's command can't carry as itself on this OS's shell (usershell.Shell.Carries: on
+// Windows what cmd.exe reads again in a batch file's %*) refuses the command instead of changing
+// it: a {root} holding one fails the fill, a setup's argument holding one fails the arguments. On
+// Unix both reach the CLI.
+func TestAnAgentsCommandRefusesAValueItCannotCarry(t *testing.T) {
+	for _, c := range agentCommandCases(t) {
+		t.Run(c.label, func(t *testing.T) {
+			refused := usershell.Commands(c.env).Carries("50% & more") != nil
+			ws := wsInfo{id: 1, name: "kb", root: filepath.Join(t.TempDir(), "50% & more")}
+			_, err := fillAgentCommand(c.env, c.call+" {root}", ws)
+			if refused != (err != nil) || (err != nil && !errors.Is(err, usershell.ErrNotCarried)) {
+				t.Errorf("a root holding %% and &: %v; want refused %v", err, refused)
+			}
+			prog, args := agentArgv(c.env, c.call)
+			_, err = withCommandArgs(c.env, args, []string{`{"k":"50% & more"}`})
+			if refused != (err != nil) || (err != nil && !errors.Is(err, usershell.ErrNotCarried)) {
+				t.Errorf("%s: a setup argument holding %% and &: %v; want refused %v", prog, err, refused)
 			}
 		})
 	}
