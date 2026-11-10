@@ -251,7 +251,7 @@ jobs:
         if: ${{ !inputs.discover }}
         continue-on-error: true
         run: |
-          go test -count=1 -timeout 5m -v -run '^TestAPluginThatFailsClosesItsDialogAndSaysWhy$' ./tui/ 2>&1 | grep -vE '^=== (RUN|PAUSE|CONT)' | grep -vE '^\s*│\s*│?\s*$' | cut -c1-260 | head -60 || true
+          go test -count=3 -timeout 5m -v -run '^TestAPluginThatFailsClosesItsDialogAndSaysWhy$' ./tui/ 2>&1 | grep -vE '^=== (RUN|PAUSE|CONT)' | grep -E 'testing.go|_test.go|--- |FAIL|ok ' | grep -vE '^\s*│\s*│?\s*$' | cut -c1-260 | head -60 || true
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
         run: |
