@@ -26,7 +26,7 @@ func wantLayoutAbove(t *testing.T, menu string, rows []widgetcore.MenuItemModel,
 	t.Helper()
 	l, g := rowAt(rows, "layout"), rowAt(rows, goTo)
 	if l < 0 || g != l+1 {
-		t.Fatalf("%s: Layout at %d, Go to at %d; want Layout right above Go to: %v", menu, l, g, rowIDs(rows))
+		t.Fatalf("%s: Layout at %d, Go to at %d; want Layout right above Go to: %v", menu, l, g, rowIDsCopy(rows))
 	}
 	wantLayoutChecked(t, menu, rows[l].Children, tiled)
 }
@@ -36,14 +36,14 @@ func wantLayoutAbove(t *testing.T, menu string, rows []widgetcore.MenuItemModel,
 // it is tiled and none while it floats.
 func wantLayoutChecked(t *testing.T, menu string, choices []widgetcore.MenuItemModel, tiled bool) {
 	t.Helper()
-	tr, okT := menuRow(choices, "layout.tiled")
-	fl, okF := menuRow(choices, "layout.float")
+	tr, okT := menuRowCopy(choices, "layout.tiled")
+	fl, okF := menuRowCopy(choices, "layout.float")
 	if !okT || !okF || fl.Kind != widgetcore.ItemKindRadio {
-		t.Fatalf("%s: Layout holds %v; want Tiled and the radio Float", menu, rowIDs(choices))
+		t.Fatalf("%s: Layout holds %v; want Tiled and the radio Float", menu, rowIDsCopy(choices))
 	}
 	isTiled := tr.Checked
 	if tr.Kind == widgetcore.ItemKindSubmenu {
-		if ids := rowIDs(tr.Children); !slices.Equal(ids, []string{"layout.tiled.left", "layout.tiled.right", "layout.tiled.top", "layout.tiled.bottom"}) {
+		if ids := rowIDsCopy(tr.Children); !slices.Equal(ids, []string{"layout.tiled.left", "layout.tiled.right", "layout.tiled.top", "layout.tiled.bottom"}) {
 			t.Fatalf("%s: Tiled holds %v; want the edges Left, Right, Top and Bottom", menu, ids)
 		}
 		checked := 0
@@ -73,11 +73,11 @@ func edgeRow(rows []widgetcore.MenuItemModel, edge string) (widgetcore.MenuItemM
 	if l < 0 {
 		return widgetcore.MenuItemModel{}, false
 	}
-	tiled, ok := menuRow(rows[l].Children, "layout.tiled")
+	tiled, ok := menuRowCopy(rows[l].Children, "layout.tiled")
 	if !ok {
 		return widgetcore.MenuItemModel{}, false
 	}
-	return menuRow(tiled.Children, "layout.tiled."+edge)
+	return menuRowCopy(tiled.Children, "layout.tiled."+edge)
 }
 
 // The page's buffer strip and the terminal's tabs have Layout › right above Go to ›, checked as
@@ -92,7 +92,7 @@ func TestLayoutIsRightAboveGoToOnTheBufferAndShellMenus(t *testing.T) {
 	wantLayoutAbove(t, "the terminal", rows, "tabs.goto", false)
 	bottom, ok := edgeRow(rows, "bottom")
 	if !ok {
-		t.Fatalf("the terminal's Layout has no Tiled › Bottom: %v", rowIDs(rows))
+		t.Fatalf("the terminal's Layout has no Tiled › Bottom: %v", rowIDsCopy(rows))
 	}
 	onLoop(r, func() bool { bottom.Action.(terminal.TerminalTabsMenuAction).Run(""); return true })
 	r.s.WaitFor(t, "the terminal's Layout Tiled", func(string) bool {
@@ -103,7 +103,7 @@ func TestLayoutIsRightAboveGoToOnTheBufferAndShellMenus(t *testing.T) {
 
 // The agent's tabs have Layout › right above Go to ›, Float as stored.
 func TestLayoutIsRightAboveGoToOnTheAgentsMenu(t *testing.T) {
-	agent, _ := fakeAgent(t)
+	agent, _ := fakeAgentCopy(t)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
@@ -117,7 +117,7 @@ func TestTheResultsLayoutEndsItsTablesMenu(t *testing.T) {
 	rows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.plugins.resultsMenuRows() })
 	l := rowAt(rows, "layout")
 	if l != len(rows)-1 || l < 1 || rows[l-1].Kind != widgetcore.ItemKindSeparator {
-		t.Fatalf("the results' menu %v; want Layout last, after a separator", rowIDs(rows))
+		t.Fatalf("the results' menu %v; want Layout last, after a separator", rowIDsCopy(rows))
 	}
 	wantLayoutChecked(t, "the results", rows[l].Children, false)
 }
@@ -217,7 +217,7 @@ func TestAPanelsEdgeIsChosenOnItsLayout(t *testing.T) {
 		t.Helper()
 		row, ok := edgeRow(rows(), edge)
 		if !ok {
-			t.Fatalf("the terminal's Layout has no Tiled › %s: %v", edge, rowIDs(rows()))
+			t.Fatalf("the terminal's Layout has no Tiled › %s: %v", edge, rowIDsCopy(rows()))
 		}
 		onLoop(r, func() bool { row.Action.(terminal.TerminalTabsMenuAction).Run(""); return true })
 	}

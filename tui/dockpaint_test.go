@@ -99,7 +99,7 @@ func TestTheTerminalsStripHideAndEscapePaintItsDockIconLitThenDimmed(t *testing.
 }
 
 func TestTheAgentsStripHidePaintsItsDockIconLitThenDimmed(t *testing.T) {
-	agent, _ := fakeAgent(t)
+	agent, _ := fakeAgentCopy(t)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
 	r.leader(t, 'g')
 	r.s.WaitForText(t, "started")
