@@ -3,6 +3,7 @@
 #   gh workflow run ci.yml --ref <branch> -f discover=true
 .
 ./core/clock
+./core/crew/proglook
 ./core/edition
 ./core/export/mermaid
 ./core/hostprobe

@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/core/crew/proglook"
 )
 
 // A crew Claude agent's settings (docs/decisions/crew.md#wake-acceptance-not-tool-approvals): what
@@ -326,7 +328,7 @@ var (
 // runs. The error, when neither is found, is the program's, then claude's.
 func ClaudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
 	bin, k, err := claudeOf(program, path, dir, cache)
-	if err == nil || filepath.Base(program) == KindClaude {
+	if err == nil || proglook.Name(program) == KindClaude {
 		return bin, k, err
 	}
 	cbin, ck, cerr := claudeOf(KindClaude, path, dir, cache)
@@ -346,7 +348,7 @@ func ClaudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
 // be the one the launcher runs, and naming hooks the running one doesn't know can stall its start.
 // The error says first why mise didn't answer, if it didn't, then names every file tried.
 func claudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
-	if strings.Contains(program, "/") {
+	if proglook.IsPath(program) {
 		bin := program
 		if !filepath.IsAbs(bin) {
 			bin = filepath.Join(dir, bin)
@@ -354,11 +356,11 @@ func claudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
 		k, err := ClaudeKnowsIn(bin, cache)
 		return bin, k, err
 	}
-	hits := lookAll(program, path, dir)
+	hits := proglook.All(program, path, dir)
 	if len(hits) == 0 {
 		return "", nil, fmt.Errorf("crew: %s is not on the agent's PATH", program)
 	}
-	mise := lookAll("mise", path, dir)
+	mise := proglook.All("mise", path, dir)
 	var tried []string
 	seen := map[string]bool{}
 	try := func(bin string) (ClaudeHooks, bool) {
@@ -388,7 +390,7 @@ func claudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
 			continue
 		}
 		bin := hit
-		if filepath.Base(real) == "mise" { // a shim: the tool mise runs for it
+		if proglook.Name(real) == "mise" { // a shim: the tool mise runs for it
 			if bin = which(real); bin == "" {
 				continue
 			}
@@ -408,24 +410,6 @@ func claudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
 		return "", nil, fmt.Errorf("crew: %s, and none of %s reads as a Claude Code", miseFailed, strings.Join(tried, ", "))
 	}
 	return "", nil, fmt.Errorf("crew: none of %s reads as a Claude Code", strings.Join(tried, ", "))
-}
-
-// lookAll is every executable file named name on path, in order, a relative folder taken from dir.
-func lookAll(name, path, dir string) []string {
-	var out []string
-	for _, d := range filepath.SplitList(path) {
-		if d == "" {
-			d = "."
-		}
-		if !filepath.IsAbs(d) {
-			d = filepath.Join(dir, d)
-		}
-		f := filepath.Join(d, name)
-		if fi, err := os.Stat(f); err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 && !slices.Contains(out, f) {
-			out = append(out, f)
-		}
-	}
-	return out
 }
 
 // miseWhich is the tool mise (at bin) runs for program in dir: `mise which`, bounded by
