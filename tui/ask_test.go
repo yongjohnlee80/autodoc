@@ -104,7 +104,7 @@ func TestAskCancellationEndingsAreOnceAndExclusiveWithYes(t *testing.T) {
 				t.Fatalf("%s: yes=%d cancel=%d; want %d/%d", ending, yes, cancel, wantYes, wantCancel)
 			}
 			asked.Say("stale")
-			if s.set["App.askText"] == "stale" {
+			if s.Sets["App.askText"] == "stale" {
 				t.Error("ended question can still rewrite text")
 			}
 		})
@@ -154,11 +154,11 @@ func TestAskStoppedCancelsPendingAndRefusesToOpenAgain(t *testing.T) {
 	a.Ask(feature.Question{OnCancel: func() { cancel++ }})
 	a.Stopped()
 	a.Stopped()
-	opened := len(s.opened)
+	opened := len(s.Opened)
 	a.Ask(feature.Question{OnCancel: func() { cancel++ }, OnYes: func() { t.Error("stopped question accepted") }})
 	a.Accepted()
-	if cancel != 2 || len(s.opened) != opened {
-		t.Fatalf("stopped ask: cancelled=%d opened=%d want %d", cancel, len(s.opened), opened)
+	if cancel != 2 || len(s.Opened) != opened {
+		t.Fatalf("stopped ask: cancelled=%d opened=%d want %d", cancel, len(s.Opened), opened)
 	}
 }
 
@@ -172,13 +172,13 @@ func TestAskRunsYesOnceAndOnlyForTheQuestionAsked(t *testing.T) {
 	}
 	ran := 0
 	asked := a.Ask(feature.Question{Title: "remove the thing?", Text: "counting…", Yes: "&Yes, remove it", OnYes: func() { ran++ }})
-	if s.opened[len(s.opened)-1] != "confirm" || s.set["App.askTitle"] != "remove the thing?" ||
-		s.set["App.askYes"] != "&Yes, remove it" || s.set["App.askNo"] != "&No" {
-		t.Fatalf("the card: opened %v, set %v", s.opened, s.set)
+	if s.Opened[len(s.Opened)-1] != "confirm" || s.Sets["App.askTitle"] != "remove the thing?" ||
+		s.Sets["App.askYes"] != "&Yes, remove it" || s.Sets["App.askNo"] != "&No" {
+		t.Fatalf("the card: opened %v, set %v", s.Opened, s.Sets)
 	}
 	asked.Say("3 things go")
-	if s.set["App.askText"] != "3 things go" {
-		t.Errorf("Say while asked: %v", s.set["App.askText"])
+	if s.Sets["App.askText"] != "3 things go" {
+		t.Errorf("Say while asked: %v", s.Sets["App.askText"])
 	}
 	a.Commands()["App.askAccepted"].Run(nil)
 	a.Commands()["App.askAccepted"].Run(nil)
@@ -186,14 +186,14 @@ func TestAskRunsYesOnceAndOnlyForTheQuestionAsked(t *testing.T) {
 		t.Errorf("Yes ran OnYes %d times, want once", ran)
 	}
 	asked.Say("late")
-	if s.set["App.askText"] != "3 things go" {
-		t.Errorf("Say after the answer rewrote the text: %v", s.set["App.askText"])
+	if s.Sets["App.askText"] != "3 things go" {
+		t.Errorf("Say after the answer rewrote the text: %v", s.Sets["App.askText"])
 	}
 
 	first := a.Ask(feature.Question{Title: "one?", OnYes: func() { ran += 10 }})
 	a.Ask(feature.Question{Title: "two?", OnYes: func() { ran += 100 }})
 	first.Say("stale")
-	if s.set["App.askText"] == "stale" {
+	if s.Sets["App.askText"] == "stale" {
 		t.Error("an older question's Say rewrote the newer one")
 	}
 	a.Commands()["App.askAccepted"].Run(nil)
@@ -221,8 +221,8 @@ func TestAskOtherRunsOnceAndNeitherYesNorCancel(t *testing.T) {
 	}
 	yes, cancel, other := 0, 0, 0
 	a.Ask(feature.Question{Title: "install?", Other: "&Audit…", OnYes: func() { yes++ }, OnCancel: func() { cancel++ }, OnOther: func() { other++ }})
-	if s.set["App.askOther"] != "&Audit…" || s.set["App.askOtherShown"] != true {
-		t.Fatalf("the third button: %v %v", s.set["App.askOther"], s.set["App.askOtherShown"])
+	if s.Sets["App.askOther"] != "&Audit…" || s.Sets["App.askOtherShown"] != true {
+		t.Fatalf("the third button: %v %v", s.Sets["App.askOther"], s.Sets["App.askOtherShown"])
 	}
 	a.Commands()["App.askOtherChosen"].Run(nil)
 	a.Commands()["App.askOtherChosen"].Run(nil)
@@ -233,8 +233,8 @@ func TestAskOtherRunsOnceAndNeitherYesNorCancel(t *testing.T) {
 	}
 
 	a.Ask(feature.Question{Title: "remove?", OnCancel: func() { cancel++ }})
-	if s.set["App.askOther"] != "" || s.set["App.askOtherShown"] != false {
-		t.Fatalf("a question without one shows a third button: %v %v", s.set["App.askOther"], s.set["App.askOtherShown"])
+	if s.Sets["App.askOther"] != "" || s.Sets["App.askOtherShown"] != false {
+		t.Fatalf("a question without one shows a third button: %v %v", s.Sets["App.askOther"], s.Sets["App.askOtherShown"])
 	}
 	a.OtherChosen() // a card without one: nothing is chosen, and the question is still asked
 	a.Rejected()
@@ -306,8 +306,8 @@ func TestAQuestionAskedWhenFreeOfAStoppedHostIsCancelledAtOnce(t *testing.T) {
 	a.AskWhenFree(feature.Question{Title: "quiet"}) // no OnCancel: nothing to run, nothing to panic on
 	a.Accepted()
 	a.Stopped()
-	if _, set := s.set["App.askTitle"]; set || len(s.opened) != 0 || a.Pending || len(a.Waiting) != 0 {
-		t.Fatalf("a stopped host's question went on: title set %v, opened %v, pending %v, waiting %d", set, s.opened, a.Pending, len(a.Waiting))
+	if _, set := s.Sets["App.askTitle"]; set || len(s.Opened) != 0 || a.Pending || len(a.Waiting) != 0 {
+		t.Fatalf("a stopped host's question went on: title set %v, opened %v, pending %v, waiting %d", set, s.Opened, a.Pending, len(a.Waiting))
 	}
 	if cancel != 1 {
 		t.Fatalf("the stopped host's question cancelled %d times, want once", cancel)

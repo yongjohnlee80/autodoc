@@ -138,24 +138,24 @@ func TestTheExplorersTabRefusesWhatTheViewNeverSends(t *testing.T) {
 	c := newScripted("kb")
 	e := newExplorer(c)
 	e.tabShown(linksTab) // the drawer not on screen: no keyboard to give
-	if len(c.views) != 0 {
-		t.Fatalf("a tab shown off screen called %v; want nothing", c.views)
+	if len(c.Views) != 0 {
+		t.Fatalf("a tab shown off screen called %v; want nothing", c.Views)
 	}
-	c.shown = true // on screen: a tab shown gives its list the keyboard
+	c.Shown = true // on screen: a tab shown gives its list the keyboard
 	e.tabShown(linksTab)
 	e.tabShown(7) // no such tab
-	if e.tab != linksTab || c.set["App.explorerTab"] != linksTab || c.set["App.linksTabShown"] != true || e.view() != feature.RelationsView {
+	if e.tab != linksTab || c.Sets["App.explorerTab"] != linksTab || c.Sets["App.linksTabShown"] != true || e.view() != feature.RelationsView {
 		t.Fatalf("after tab 7: tab %d, App.explorerTab %v, App.linksTabShown %v, view %q; want the Links tab kept",
-			e.tab, c.set["App.explorerTab"], c.set["App.linksTabShown"], e.view())
+			e.tab, c.Sets["App.explorerTab"], c.Sets["App.linksTabShown"], e.view())
 	}
-	c.viewErr = errors.New("no such view")
+	c.ViewErr = errors.New("no such view")
 	e.showTab(explorerTab) // the scripted core runs a Post at once
 	e.close()
-	if want := []string{"relationsList.forceActiveFocus", "explorerTree.forceActiveFocus", "explorer.close"}; !slices.Equal(c.views, want) {
-		t.Errorf("views called %v, want %v", c.views, want)
+	if want := []string{"relationsList.forceActiveFocus", "explorerTree.forceActiveFocus", "explorer.close"}; !slices.Equal(c.Views, want) {
+		t.Errorf("views called %v, want %v", c.Views, want)
 	}
-	if want := []string{"explorer: the keyboard: no such view", "explorer: closing: no such view"}; !slices.Equal(c.failed, want) {
-		t.Errorf("failures said %v, want %v", c.failed, want)
+	if want := []string{"explorer: the keyboard: no such view", "explorer: closing: no such view"}; !slices.Equal(c.Failures, want) {
+		t.Errorf("failures said %v, want %v", c.Failures, want)
 	}
 }
 

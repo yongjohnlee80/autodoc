@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/feature/featuretest"
 	graphlayout "github.com/yongjohnlee80/golib/graph/layout"
 	"github.com/yongjohnlee80/golib/gui"
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -598,9 +599,9 @@ func TestTheGlobeMapsPointerActsOnlyOnWhatTheScreenAgreesOn(t *testing.T) {
 // stops the older, whose frames never show; closing the panel stops the newest.
 func TestTheGlobeMapShowsOnlyItsNewestLoad(t *testing.T) {
 	t.Parallel()
-	a := &asyncCore{scriptedCore: newScripted("kb"), posted: make(chan func(), 64)}
+	a := &asyncCore{ScriptedCore: newScripted("kb"), posted: make(chan func(), 64)}
 	sizes := []int{20, 30, 40}
-	a.answers["graph.map"] = func([]any) (any, error) {
+	a.Answers["graph.map"] = func([]any) (any, error) {
 		n := sizes[0]
 		sizes = sizes[1:]
 		return mapAnswer(nodesOf(n), nil), nil
@@ -649,35 +650,35 @@ func nodesOf(n int) [][4]any {
 func TestTheMindmapRootsAtThePageShown(t *testing.T) {
 	t.Parallel()
 	c := newScripted("kb")
-	c.answers["graph.map"] = func(p []any) (any, error) {
+	c.Answers["graph.map"] = func(p []any) (any, error) {
 		root := p[1].(map[string]any)["root"].(string)
 		return mapAnswer([][4]any{{"a.md", "A", "adr", false}, {"b.md", "B", "review", false}, {"c.md", "C", "", false}},
 			[][3]string{{"a.md", "b.md", "wikilink"}, {"b.md", "c.md", "wikilink"}, {root, root, "wikilink"}}), nil
 	}
 	m := newMindmap(c)
 	m.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}}) // closed: nothing read
-	if len(c.calls) != 0 {
-		t.Fatalf("a closed Mindmap read %v", c.calls)
+	if len(c.Calls) != 0 {
+		t.Fatalf("a closed Mindmap read %v", c.Calls)
 	}
 	m.Panels()[0].Opened(nil)
-	if m.cur == nil || m.cur.root.Path != "a.md" || len(c.calls) != 1 || !strings.Contains(c.calls[0], "root:a.md") {
-		t.Fatalf("opened over a.md: %+v, calls %v", m.cur, c.calls)
+	if m.cur == nil || m.cur.root.Path != "a.md" || len(c.Calls) != 1 || !strings.Contains(c.Calls[0], "root:a.md") {
+		t.Fatalf("opened over a.md: %+v, calls %v", m.cur, c.Calls)
 	}
 	p, ok := pointOf(m.cur, "b.md")
 	if !ok {
 		t.Fatal("b.md is nowhere in the drawn map")
 	}
 	m.click(p, gui.Point{})
-	if want := []string{"kb:b.md"}; !equalStrings(c.files, want) || !equalStrings(c.hidden, []string{mindmapPanelID}) || len(c.calls) != 1 {
-		t.Fatalf("the click opened %v, hid %v and read %v; want b.md opened, the Mindmap hidden, and no read", c.files, c.hidden, c.calls)
+	if want := []string{"kb:b.md"}; !equalStrings(c.OpenedFiles, want) || !equalStrings(c.Hidden, []string{mindmapPanelID}) || len(c.Calls) != 1 {
+		t.Fatalf("the click opened %v, hid %v and read %v; want b.md opened, the Mindmap hidden, and no read", c.OpenedFiles, c.Hidden, c.Calls)
 	}
 	m.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "b.md"}}) // the page the click opened
-	if m.cur.root.Path != "b.md" || len(c.calls) != 2 {
-		t.Fatalf("after b.md was shown: rooted at %s, calls %v", m.cur.root.Path, c.calls)
+	if m.cur.root.Path != "b.md" || len(c.Calls) != 2 {
+		t.Fatalf("after b.md was shown: rooted at %s, calls %v", m.cur.root.Path, c.Calls)
 	}
 	m.Shown(feature.Page{Ref: feature.FileRef{WS: "", Path: "/tmp/x.md"}, Outside: true})
-	if m.cur != nil || len(c.calls) != 2 {
-		t.Fatalf("a file in no workspace: %+v, calls %v", m.cur, c.calls)
+	if m.cur != nil || len(c.Calls) != 2 {
+		t.Fatalf("a file in no workspace: %+v, calls %v", m.cur, c.Calls)
 	}
 }
 
@@ -877,7 +878,7 @@ func sameFrame(a, b *globe) bool { return slices.Equal(a.at, b.at) }
 // asyncCore runs a load off the test goroutine, as the host does, and queues what it posts for the
 // test to run as the loop.
 type asyncCore struct {
-	*scriptedCore
+	*featuretest.ScriptedCore
 	posted chan func()
 }
 

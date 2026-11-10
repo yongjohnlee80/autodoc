@@ -4,14 +4,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature/featuretest"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
 // varsStore is scriptedStore with todos.vars answered: a derived built-in, a variable from the KB's
 // file, a machine-only one with no value here, and one a migration holds in conflict.
-func varsStore(claimed bool) *scriptedCore {
+func varsStore(claimed bool) *featuretest.ScriptedCore {
 	s := scriptedStore(claimed)
-	s.answers["todos.vars"] = func([]any) (any, error) {
+	s.Answers["todos.vars"] = func([]any) (any, error) {
 		return []any{
 			map[string]any{"name": "KB_ROOT", "value": "/kb", "builtin": true, "derived": "/kb", "source": "derived"},
 			map[string]any{"name": "PROJ", "value": "/src/p", "source": "kb"},
@@ -43,69 +44,69 @@ func TestTheVariablesTab(t *testing.T) {
 	v := newTodos(s)
 	v.Panels()[0].Opened(nil)
 	v.showTab(varsTab)
-	if !s.called("todos.vars[") {
-		t.Fatalf("the tab did not read todos.vars: %v", s.calls)
+	if !s.Called("todos.vars[") {
+		t.Fatalf("the tab did not read todos.vars: %v", s.Calls)
 	}
 	if got := strings.Join(varRows(v), " | "); got != "$KB_ROOT derived /kb | $PROJ kb /src/p | $DUMPS machine (set per machine: none here) | "+
 		"$P conflict (conflict: set it in the KB's file, or machine-only)" {
 		t.Errorf("rows %q", got)
 	}
-	if s.set["App.todoOnVars"] != true || s.set["App.todoActStatus"] != false || s.set["App.todoActAdd"] != false ||
-		s.set["App.todoActVarSet"] != true || s.set["App.todoActVarAdd"] != true {
-		t.Errorf("actions on the tab: %v", s.set)
+	if s.Sets["App.todoOnVars"] != true || s.Sets["App.todoActStatus"] != false || s.Sets["App.todoActAdd"] != false ||
+		s.Sets["App.todoActVarSet"] != true || s.Sets["App.todoActVarAdd"] != true {
+		t.Errorf("actions on the tab: %v", s.Sets)
 	}
-	if d, _ := s.set["App.todoDetail"].(string); !strings.Contains(d, "## $KB_ROOT") || !strings.Contains(d, "derived from the workspace: /kb") {
+	if d, _ := s.Sets["App.todoDetail"].(string); !strings.Contains(d, "## $KB_ROOT") || !strings.Contains(d, "derived from the workspace: /kb") {
 		t.Errorf("details %q", d)
 	}
-	if s.set["App.todoActVarClear"] != false {
+	if s.Sets["App.todoActVarClear"] != false {
 		t.Error("a derived value offers to be cleared")
 	}
 
 	v.varMoved(3) // $P, in conflict: nothing set here to clear, and the details say what settles it
-	if d, _ := s.set["App.todoDetail"].(string); s.set["App.todoActVarClear"] != false || !strings.Contains(d, "in conflict") {
-		t.Errorf("a conflict: clear %v, details %q", s.set["App.todoActVarClear"], d)
+	if d, _ := s.Sets["App.todoDetail"].(string); s.Sets["App.todoActVarClear"] != false || !strings.Contains(d, "in conflict") {
+		t.Errorf("a conflict: clear %v, details %q", s.Sets["App.todoActVarClear"], d)
 	}
 	v.varMoved(1) // $PROJ, from the KB's file
-	if s.set["App.todoActVarClear"] != true {
+	if s.Sets["App.todoActVarClear"] != true {
 		t.Error("a value from the KB's file offers no clear")
 	}
 	v.enter()
-	if s.opened[len(s.opened)-1] != "todoVar" || !strings.Contains(s.set["App.todoVarTitle"].(string), "the KB's file") ||
-		s.set["App.todoVarText"] != "/src/p" {
-		t.Fatalf("Enter on a variable: opened %v, %v", s.opened, s.set)
+	if s.Opened[len(s.Opened)-1] != "todoVar" || !strings.Contains(s.Sets["App.todoVarTitle"].(string), "the KB's file") ||
+		s.Sets["App.todoVarText"] != "/src/p" {
+		t.Fatalf("Enter on a variable: opened %v, %v", s.Opened, s.Sets)
 	}
 	v.varSet("/src/q")
-	if !s.called("todos.set_var[PROJ /src/q map[at:") || !strings.Contains(s.calls[len(s.calls)-2], "scope:store") {
-		t.Errorf("e's set: %v", s.calls)
+	if !s.Called("todos.set_var[PROJ /src/q map[at:") || !strings.Contains(s.Calls[len(s.Calls)-2], "scope:store") {
+		t.Errorf("e's set: %v", s.Calls)
 	}
 
 	v.varMoved(2) // $DUMPS, machine-only: e keeps it for this machine
 	v.varEdit()
 	v.varSet("/data")
-	if !s.called("todos.set_var[DUMPS /data map[at:") || !strings.Contains(strings.Join(s.calls, "\n"), "DUMPS /data map[at:kb scope:machine]") {
-		t.Errorf("a machine-only name's set: %v", s.calls)
+	if !s.Called("todos.set_var[DUMPS /data map[at:") || !strings.Contains(strings.Join(s.Calls, "\n"), "DUMPS /data map[at:kb scope:machine]") {
+		t.Errorf("a machine-only name's set: %v", s.Calls)
 	}
 
 	v.add()
 	v.varSet("NEW = ../x")
-	if !s.called("todos.set_var[NEW ../x map[at:") {
-		t.Errorf("a: %v", s.calls)
+	if !s.Called("todos.set_var[NEW ../x map[at:") {
+		t.Errorf("a: %v", s.Calls)
 	}
 	v.varSet("") // no prompt open: nothing
 	v.add()
 	v.varSet("no-equals")
-	if s.notes[len(s.notes)-1] != "todos: a variable is NAME=value" {
-		t.Errorf("a without NAME=value: %v", s.notes)
+	if s.Notes[len(s.Notes)-1] != "todos: a variable is NAME=value" {
+		t.Errorf("a without NAME=value: %v", s.Notes)
 	}
 
 	v.varMoved(1)
 	v.remove()
-	if len(s.asked) == 0 {
+	if len(s.Asked) == 0 {
 		t.Fatal("d did not ask")
 	}
-	s.yes()
-	if !strings.Contains(strings.Join(s.calls, "\n"), "todos.set_var[PROJ  map[at:kb scope:store]]") {
-		t.Errorf("d's clear: %v", s.calls)
+	s.Yes()
+	if !strings.Contains(strings.Join(s.Calls, "\n"), "todos.set_var[PROJ  map[at:kb scope:store]]") {
+		t.Errorf("d's clear: %v", s.Calls)
 	}
 
 	v.showTab(archivedTab)
@@ -114,8 +115,8 @@ func TestTheVariablesTab(t *testing.T) {
 		t.Errorf("] after Archived: tab %d", v.tab)
 	}
 	v.stepTab(1)
-	if v.tab != 0 || s.set["App.todoOnVars"] != false || s.set["App.todoActVarSet"] != false {
-		t.Errorf("] after Variables: tab %d, %v", v.tab, s.set)
+	if v.tab != 0 || s.Sets["App.todoOnVars"] != false || s.Sets["App.todoActVarSet"] != false {
+		t.Errorf("] after Variables: tab %d, %v", v.tab, s.Sets)
 	}
 
 	ro := varsStore(false)
@@ -124,7 +125,7 @@ func TestTheVariablesTab(t *testing.T) {
 	w.showTab(varsTab)
 	w.varEdit()
 	w.add()
-	if len(ro.opened) != 0 || ro.set["App.todoActVarSet"] != false {
-		t.Errorf("a read-only store's variables: opened %v, %v", ro.opened, ro.set)
+	if len(ro.Opened) != 0 || ro.Sets["App.todoActVarSet"] != false {
+		t.Errorf("a read-only store's variables: opened %v, %v", ro.Opened, ro.Sets)
 	}
 }
