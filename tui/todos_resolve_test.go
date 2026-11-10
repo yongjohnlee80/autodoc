@@ -100,13 +100,19 @@ func TestALoadedFolderIsShownByTheStoreTheDaemonResolves(t *testing.T) {
 		slashFile("/alias"): slashFile("/canon"), slashFile("/madealias"): slashFile("/madecanon"),
 	}}, todotest.NewJournal())
 	t.Cleanup(func() { _ = m.Close() })
-	// a store listed first, so a store not found among them (the panel's fallback is the first) is
-	// never taken for the one each case wants
+	// a store listed first (resolved, as a store is listed once it is), so a store not found among
+	// them (the panel's fallback is the first) is never taken for the one each case wants
 	if _, err := m.Register(context.Background(), slashFile("/before")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Resolve(context.Background(), todo.At{Root: slashFile("/before")}); err != nil {
 		t.Fatal(err)
 	}
 	v := newTodos(managerCore(t, m))
 	v.list()
+	if want := "root:" + slashFile("/before"); v.cur == nil || v.cur.id != want {
+		t.Fatalf("the store listed first: shown %+v; want %s", v.cur, want)
+	}
 	for _, c := range []struct{ as, chosen, want string }{
 		{"load", "/fresh", "/fresh"}, {"load", "/alias", "/canon"},
 		{"new", "/made", "/made"}, {"new", "/madealias", "/madecanon"},
