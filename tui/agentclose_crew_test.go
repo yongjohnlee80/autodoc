@@ -9,7 +9,7 @@ import (
 // no row).
 func presenceOf(t *testing.T, a *agents, w *crewWindow, codename string) string {
 	t.Helper()
-	scope, _, _ := a.crew.held()
+	scope, _, _ := crewOf(a).held()
 	entries, err := w.d.m.List(context.Background())
 	if err != nil {
 		t.Fatal(err)

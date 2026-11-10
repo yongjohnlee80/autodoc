@@ -223,7 +223,7 @@ func TestAClaudeTheCrewCantVouchForIsNotTypedInto(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			a, cw, w, _ := claudeRig(t)
-			scope, _, _ := a.crew.held()
+			scope, _, _ := crewOf(a).held()
 			c.list(w, scope)
 			var heard []error
 			a.deliverFallback("cl", "hello cl", func(err error) { heard = append(heard, err) })
@@ -240,7 +240,7 @@ func TestAClaudeTheCrewCantVouchForIsNotTypedInto(t *testing.T) {
 // mutants: no scope taken for started; the send queued with no scope to send from).
 func TestAWindowWithNoScopeTypesNothingIntoItsClaude(t *testing.T) {
 	a, c, w, _ := claudeRig(t)
-	a.crew.scope = "" // the scope lost; the agent's session is still the window's record of it
+	crewOf(a).scope = "" // the scope lost; the agent's session is still the window's record of it
 	var heard []error
 	if err := a.SendText(feature.AgentRef{Codename: "cl"}, "hello cl", func(err error) { heard = append(heard, err) }); err != nil {
 		t.Fatal(err)
