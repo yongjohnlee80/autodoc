@@ -61,3 +61,12 @@ func rendererOptions(path string) []gui.Option {
 	}
 	return nil
 }
+
+// keepStartupErrors gives a program that has just given up its console somewhere to say why it
+// failed: from here its standard error is the startup log. With no log to be had, there is nowhere
+// left to report that, so it goes on: the GUI may still start.
+func keepStartupErrors() {
+	if f, err := openStartupLog(); err == nil {
+		proctree.SetStderr(f) // held open to the process's end: its last words are the point
+	}
+}
