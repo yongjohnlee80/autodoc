@@ -380,7 +380,7 @@ func TestCoreReadsAndWritesAnAbsoluteFile(t *testing.T) {
 		t.Errorf("no file: %v; want not found", err)
 	}
 	// the theme choices a chooser offers: its own first, then every theme the window can wear
-	names, labels := themeChoices(c, []string{"terminal", "page"}, []string{"the terminals'", "the page's"})
+	names, labels := feature.ThemeChoices(c, []string{"terminal", "page"}, []string{"the terminals'", "the page's"})
 	if names[0] != "terminal" || labels[1] != "the page's" || len(names) != len(labels) || len(names) < 3 {
 		t.Errorf("choices %q, %q", names, labels)
 	}

@@ -1,5 +1,7 @@
 package tui
 
+import "github.com/yongjohnlee80/autodoc/tui/feature"
+
 // THE TERMINALS' LOOK — Theme and font…, on the terminal's and the agents' tab menus (feature/tabmenus.go):
 // a small dialog of the two settings the terminals have of their own. They are the very settings
 // Preferences' terminal row (the theme) and Options › Fonts and zoom… (the font) set, through the
@@ -37,7 +39,7 @@ func (h *Host) terminalLookCancelled() {
 	}
 	h.lookWas.open = false
 	if h.prefs.termTheme != was.theme {
-		h.setPref(prefTermTheme, was.theme, func(p *prefs) { p.termTheme = was.theme })
+		h.setPref(feature.PrefTermTheme, was.theme, func(p *prefs) { p.termTheme = was.theme })
 	}
 	if h.prefs.termFont != was.font {
 		h.setPref(prefTermFont, was.font, func(p *prefs) { p.termFont = was.font })

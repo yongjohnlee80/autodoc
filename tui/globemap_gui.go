@@ -852,7 +852,7 @@ func (g *globeMap) told(msg string) {
 func (g *globeMap) progress() {
 	if g.cur == nil || !g.cur.final {
 		g.tell(g.c.Trf("autodoc.notice.globemap_gui.globemap_laying_out_documents_links",
-			g.c.Workspace(), g.counts[0], g.counts[1], bar(int64(min(g.stepped, globeSteps)), globeSteps)))
+			g.c.Workspace(), g.counts[0], g.counts[1], feature.Bar(int64(min(g.stepped, globeSteps)), globeSteps)))
 	}
 	g.title()
 }
@@ -890,7 +890,7 @@ func (g *globeMap) statusText() string {
 // heading (and the legend, as the view is drawn again), its choosers' rows and its groups' note.
 func (g *globeMap) LanguageChanged() {
 	names, labels := g.themeChoices()
-	g.c.Set("App.globeThemes", keyedChoices(names, labels))
+	g.c.Set("App.globeThemes", feature.KeyedChoices(names, labels))
 	for _, src := range []string{"App.globeFilters", "App.globeDotSizes", "App.globeSpeeds"} {
 		g.c.Set(src, relationChoice(g.c, src))
 	}

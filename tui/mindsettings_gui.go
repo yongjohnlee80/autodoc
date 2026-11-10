@@ -3,9 +3,10 @@
 package tui
 
 import (
-	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"maps"
 	"slices"
+
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE MINDMAP'S SETTINGS — Relations › Mindmap settings…, as the GlobeMap's: its theme (the page's,
@@ -84,7 +85,7 @@ func (m *mindmap) settingsState() map[string]any {
 	names, themes := viewThemeChoices(m.c)
 	st := m.editor.state()
 	maps.Copy(st, map[string]any{
-		"App.mindThemes": keyedChoices(names, themes), "App.mindDepths": relationChoice(m.c, "App.mindDepths"),
+		"App.mindThemes": feature.KeyedChoices(names, themes), "App.mindDepths": relationChoice(m.c, "App.mindDepths"),
 		"App.mindShapeChoices": relationChoice(m.c, "App.mindShapeChoices"),
 	})
 	return st
