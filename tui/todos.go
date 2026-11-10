@@ -290,6 +290,10 @@ func (t *todos) Catalog() []feature.Entry {
 	}
 }
 
+// prefTodosEdge is the todos panel's edge, the todos' own preference, which the host's table
+// declares (prefs.go).
+const prefTodosEdge = "tui.todos.edge"
+
 // todosPanelSpec is the todos panel: at the left edge by default, its geometry kept per edge like
 // the side panels', and large until the user sizes it (todosDefault). It shares the left edge with
 // the explorer as two drawers do: each opens over the page, the later on top.

@@ -26,7 +26,6 @@ const (
 	prefGUITheme   = "gui.theme"
 	prefMenuHide   = "tui.menu.autohide"
 	prefStatus     = "tui.status.shown"
-	prefTodosEdge  = "tui.todos.edge"
 	prefRuler      = "tui.ruler"
 	prefKeymap     = "tui.editor.keymap"
 	prefRenderer   = "tui.gui.renderer" // the window's renderer, taken as it opens (renderer.go)
