@@ -231,7 +231,7 @@ func TestAFailedSpawnEndsItsSession(t *testing.T) {
 	}
 }
 
-// fakeClaudeBin writes an executable "Claude Code" at dir/claude whose binary names events as the
+// fakeClaudeBin writes an executable "Claude Code" at dir/claude (claude.exe on Windows) whose binary names events as the
 // real one does (quoted literals), and returns its path.
 func fakeClaudeBin(t *testing.T, dir string, events ...string) string {
 	t.Helper()
@@ -240,7 +240,7 @@ func fakeClaudeBin(t *testing.T, dir string, events ...string) string {
 	for _, e := range events {
 		b.WriteString(`"` + e + `";`)
 	}
-	path := filepath.Join(dir, "claude")
+	path := filepath.Join(dir, "claude"+exeSuffix) // named as this OS names a program
 	if err := os.WriteFile(path, []byte(b.String()), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -406,7 +406,7 @@ func TestAnOlderClaudeGetsOnlyTheHooksItKnows(t *testing.T) {
 // prompts, and no notice.
 func TestAWrapperClaudeGetsTheRealOnesHooks(t *testing.T) {
 	wrappers, bin := t.TempDir(), t.TempDir()
-	if err := os.WriteFile(filepath.Join(wrappers, "claude"), []byte("#!/bin/bash\nexec mise x claude -- claude \"$@\"\n"), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(wrappers, "claude"+scriptSuffix), []byte(wrapperScript), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	fakeClaudeBin(t, bin, append(claudeHookEvents, "crossSessionInbound")...)
