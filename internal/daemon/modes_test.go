@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/core/index"
+	"github.com/yongjohnlee80/autodoc/core/paths"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
@@ -58,6 +59,68 @@ func TestAPathsModeIsTheFirstRuleItMatches(t *testing.T) {
 			}
 			if md.GraphOnly != w.graph || id != w.store {
 				t.Errorf("%s: %s: graph-only %v, store %q; want %v, %q", c.name, w.path, md.GraphOnly, id, w.graph, w.store)
+			}
+		}
+	}
+}
+
+// TestAStoreIsFoundWhateverFormItsPathTakes: the todo system keeps its directories in the slash
+// form (core/paths), a workspace's root and a test's directory are in the OS's own, and a document
+// is compared with its store and its workspace's variables in one form, exactly. A path under a
+// store is found, given in either form against a registry given in either; a sibling sharing the
+// store's prefix ("kb" and "kbx") is not, and neither is one whose name differs only in case: a
+// path's identity is the filesystem's, never case-folded.
+func TestAStoreIsFoundWhateverFormItsPathTakes(t *testing.T) {
+	base := t.TempDir() // the OS's own form
+	dir := filepath.Join(base, "kb")
+	for _, reg := range []struct {
+		form string
+		r    TodoRegistry
+	}{
+		{"the slash form", TodoRegistry{Stores: []TodoStore{{ID: "S", Dir: paths.Slash(dir), KB: paths.Slash(base)}},
+			Vars: map[string]map[string]string{paths.Slash(base): {"KB_ROOT": "base"}}}},
+		{"the OS's own form", TodoRegistry{Stores: []TodoStore{{ID: "S", Dir: dir, KB: base}},
+			Vars: map[string]map[string]string{base: {"KB_ROOT": "base"}}}},
+	} {
+		m := &Workspaces{}
+		m.stores.Store(newRegistry(reg.r))
+		in := filepath.Join(dir, "open", "t.md")
+		for _, c := range []struct {
+			abs   string
+			store bool
+		}{
+			{in, true},
+			{paths.Slash(in), true},
+			{dir, true},
+			{filepath.Join(base, "kbx", "open", "t.md"), false},
+			{paths.Slash(filepath.Join(base, "kbx", "open", "t.md")), false},
+			{filepath.Join(base, "KB", "open", "t.md"), false},
+		} {
+			st, vars := m.storeAt(c.abs)
+			if (st != nil) != c.store {
+				t.Errorf("registry in %s: %s: store %+v, want found=%v", reg.form, c.abs, st, c.store)
+			}
+			if got := vars.Get("KB_ROOT"); got != "base" {
+				t.Errorf("registry in %s: %s: KB_ROOT %q, want the workspace's", reg.form, c.abs, got)
+			}
+		}
+		h := &modes{m: m, root: base}
+		h.set(nil, true)
+		for p, want := range map[string]string{"kb/open/t.md": "S", "kbx/open/t.md": "", "KB/open/t.md": ""} {
+			id := ""
+			if md := h.mode(p); md.Store != nil {
+				id = md.Store.ID
+			}
+			if id != want {
+				t.Errorf("registry in %s: mode(%q): store %q, want %q", reg.form, p, id, want)
+			}
+		}
+		// an exclude reaching the store is said for the workspace holding it, and for no workspace
+		// whose root only shares its prefix ("k" and "kb") or is the store itself
+		exclude := []string{"kb/**", "**/open/**"}
+		for root, want := range map[string][]string{base: exclude, filepath.Join(base, "k"): nil, dir: nil} {
+			if got := m.todoExcluded(root, exclude); !slices.Equal(got, want) {
+				t.Errorf("registry in %s: root %s: excluded %v, want %v", reg.form, root, got, want)
 			}
 		}
 	}
