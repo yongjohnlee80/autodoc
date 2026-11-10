@@ -247,6 +247,15 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: scratch (not for merge) the crew-setup and volume-root Stores cells on Windows
+        if: ${{ !inputs.discover }}
+        run: |
+          go test -count=3 -v -run '^TestTheWindowAsksTheAgentsOwnCrewSetup$' ./tui/ > "$RUNNER_TEMP/t.txt" 2>&1 && rt=0 || rt=$?
+          go test -count=3 -v -run '^TestAStoreAtAVolumesRootListsThatRoot$' ./core/todo/ > "$RUNNER_TEMP/d.txt" 2>&1 && rd=0 || rd=$?
+          echo "== tui PASS $(grep -cE '^--- PASS' "$RUNNER_TEMP/t.txt" || true) FAIL $(grep -cE '^--- FAIL' "$RUNNER_TEMP/t.txt" || true); core/todo PASS $(grep -cE '^--- PASS' "$RUNNER_TEMP/d.txt" || true) FAIL $(grep -cE '^--- FAIL' "$RUNNER_TEMP/d.txt" || true)"
+          grep -hE '^--- FAIL|_test\.go:[0-9]+:' "$RUNNER_TEMP/t.txt" "$RUNNER_TEMP/d.txt" | cut -c1-300 | head -10 || true
+          echo "== rc tui=$rt todo=$rd"
+          [ $rt = 0 ] && [ $rd = 0 ]
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
         run: |
