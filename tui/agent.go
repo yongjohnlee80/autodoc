@@ -125,7 +125,7 @@ func (a *agents) Catalog() []feature.Entry {
 }
 
 func agentPrefRows(a *agents) []feature.PrefSpec {
-	edge := choicePref(prefAgentEdge, defaultAgentEdge, agentEdges, func(p *prefs) *string { return &p.agentEdge }).
+	edge := feature.ValuePref(prefAgentEdge, defaultAgentEdge, agentEdges).
 		Shows(agentPreferenceState)
 	profiles := feature.ValuePref(prefAgentProfiles, "[]", nil)
 	def := feature.ValuePref(prefAgentDefault, "", nil)

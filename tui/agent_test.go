@@ -501,7 +501,7 @@ func TestTheAgentsPanelSizeIsKept(t *testing.T) {
 func TestTheAgentOpensWherePreferencesSay(t *testing.T) {
 	t.Parallel()
 	d, r, _ := runAgentTUI(t, t.TempDir(), nil, "")
-	if e := onLoop(r, func() string { return r.h.prefs.agentEdge }); e != "bottom" {
+	if e := onLoop(r, func() string { return r.h.prefs.Value(prefAgentEdge) }); e != "bottom" {
 		t.Fatalf("the agent opens at %q by default, want bottom", e)
 	}
 	onLoop(r, func() bool { r.h.agents.setAgentSize(nearest(termSizes, 70)); return true })
@@ -528,7 +528,7 @@ func TestTheAgentOpensWherePreferencesSay(t *testing.T) {
 	// loaded runner can answer after the notes. Wait for them; one that never reads center still fails.
 	again := attached(t, d)
 	again.s.WaitFor(t, "a new TUI opens the agent at the chosen center", func(string) bool {
-		return onLoop(again, func() string { return again.h.prefs.agentEdge }) == "center"
+		return onLoop(again, func() string { return again.h.prefs.Value(prefAgentEdge) }) == "center"
 	})
 }
 

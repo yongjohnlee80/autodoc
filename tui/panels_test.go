@@ -27,7 +27,7 @@ func TestTheAgentPanelHasAnEdge(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	got := onLoop(r, func() string {
-		r.h.prefs.agentEdge = "left"
+		r.h.prefs.SetValue(prefAgentEdge, "left")
 		return r.h.panelSpec("agent").Edge(r.h.prefs)
 	})
 	if got != "left" {
@@ -119,7 +119,7 @@ func TestASettingMadeWhileThePreferencesLoadIsKept(t *testing.T) {
 	for i := range 20 {
 		size := 40 + i
 		onLoop(r, func() bool {
-			r.h.prefs.agentEdge = "bottom"
+			r.h.prefs.SetValue(prefAgentEdge, "bottom")
 			r.h.loadPrefs()
 			r.h.panelResized("agent", size, 90)
 			return true
@@ -137,7 +137,8 @@ func TestEveryPanelKeepsItsSizeAtItsEdge(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	onLoop(r, func() bool {
-		r.h.prefs.explorerEdge, r.h.prefs.agentEdge, r.h.prefs.termEdge = "left", "bottom", "center"
+		r.h.prefs.explorerEdge, r.h.prefs.termEdge = "left", "center"
+		r.h.prefs.SetValue(prefAgentEdge, "bottom")
 		r.h.panelResized("explorer", 20, 70)
 		r.h.panelResized("agent", 40, 90)
 		r.h.panelResized("terminal", 60, 80)

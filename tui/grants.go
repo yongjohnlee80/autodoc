@@ -128,7 +128,7 @@ func holderRank(holder string) int {
 // list reads the grants again, the cursor kept on its row (else at the place it was), and says how
 // many there are.
 func (g *grantsView) list() {
-	items := grantRows(asPrefs(g.c.Prefs()).luaGrants)
+	items := grantRows(feature.GrantsOf(g.c.Prefs().Value(feature.PrefGrants)))
 	g.rows.Reset(items)
 	if i := slices.IndexFunc(items, func(r grantRow) bool { return r.key() == g.key }); g.key != "" && i >= 0 {
 		g.cursor = i
@@ -161,7 +161,7 @@ func (g *grantsView) who(holder string) (name, kind string) {
 
 // what is what a capability lets its holder do, as its card says it.
 func (g *grantsView) what(capability string) string {
-	id, ok := luaCapabilityText[capability]
+	id, ok := feature.CapabilityText[capability]
 	if !ok {
 		id = "autodoc.question.luagate.a_capability_autodoc_does_not_know"
 	}

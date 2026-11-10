@@ -127,21 +127,12 @@ func (h *Host) revokeLua(script string, caps []string) {
 // RevokeGrants is revokeLua, for Agent permissions (grants.go).
 func (c core) RevokeGrants(holder string, caps []string) { c.h.revokeLua(holder, caps) }
 
-// luaGrantsOf reads the preference's JSON; anything else is no grants.
-func luaGrantsOf(s string) map[string]map[string]bool {
-	var g map[string]map[string]bool
-	if json.Unmarshal([]byte(s), &g) != nil {
-		return nil
-	}
-	return g
-}
-
 // luaGrantText says what each capability lets a script do, a line each, in the language trf (a
 // Host's trf, or inEnglish{}.Trf) says it in.
 func luaGrantText(trf func(string, ...any) string, caps []string) string {
 	var b strings.Builder
 	for _, c := range caps {
-		id, ok := luaCapabilityText[c]
+		id, ok := feature.CapabilityText[c]
 		if !ok {
 			id = "autodoc.question.luagate.a_capability_autodoc_does_not_know"
 		}
@@ -149,22 +140,6 @@ func luaGrantText(trf func(string, ...any) string, caps []string) string {
 	}
 	b.WriteString(trf("autodoc.question.luagate.not_now_refuses_until_the_next_start"))
 	return b.String()
-}
-
-// luaCapabilityText is what each capability lets a script do, by its catalog id.
-var luaCapabilityText = map[string]string{
-	"workspace.read":  "autodoc.question.luagate.read_the_files_in_your_workspaces_except_hidden",
-	"workspace.write": "autodoc.question.luagate.create_edit_rename_and_remove_the_files_of_this",
-	"settings":        "autodoc.question.luagate.change_autodoc_s_settings_workspaces_models_pref",
-	"clipboard":       "autodoc.question.luagate.read_and_write_the_clipboard",
-	"agents":          "autodoc.question.luagate.list_the_agents_and_send_them_text_an_agent_can",
-	"commands":        "autodoc.question.luagate.run_any_of_autodoc_s_commands",
-	"terminal":        "autodoc.question.luagate.run_command_lines_in_autodoc_s_terminal",
-	// a plugin's start with AutoDoc, its manifest's start = "launch" (pluginlaunch.go)
-	launchCapability: "autodoc.question.pluginlaunch.start_with_autodoc",
-	// the editor socket's (editorsocket.go editorVerbs): an agent's reach into the page
-	"editor.read":  "autodoc.question.luagate.read_your_open_documents_and_find_in_them",
-	"editor.write": "autodoc.question.luagate.insert_replace_and_delete_text_in_your_open_documents",
 }
 
 var _ script.Grants = luaGrants{}
