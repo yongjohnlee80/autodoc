@@ -291,12 +291,14 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 		a.refuse(panel, instance, fillErr)
 		return instance, nil
 	}
-	if a.commandCheck != nil {
-		if err := a.commandCheck(usershell.Commands(a.seams.Env()), filled, env); err != nil { // nothing set up or registered for it
-			a.c.Notify(a.c.Trf("autodoc.crew.did_not_start", p.Name, err.Error()))
-			a.refuse(panel, instance, err)
-			return instance, nil
-		}
+	check := a.seams.CommandCheck()
+	if check == nil {
+		check = commandOnPath
+	}
+	if err := check(usershell.Commands(a.seams.Env()), filled, env); err != nil { // nothing set up or registered for it
+		a.c.Notify(a.c.Trf("autodoc.crew.did_not_start", p.Name, err.Error()))
+		a.refuse(panel, instance, err)
+		return instance, nil
 	}
 	if crewed {
 		// registered first (docs/decisions/crew.md#sessions-and-the-guard): the process starts only
@@ -494,7 +496,11 @@ func (a *agents) runAgent(instance *agentInstance, c pty.Cmd) (terminal.Terminal
 		}
 		server = srv
 	}
-	proc, err := a.spawn(c)
+	spawn := a.seams.Spawn()
+	if spawn == nil {
+		spawn = func(c pty.Cmd) (terminal.TerminalProcess, error) { return pty.Start(c) }
+	}
+	proc, err := spawn(c)
 	if server != nil {
 		if err != nil {
 			server.stop() // the CLI didn't start: nothing of its server is left
@@ -527,8 +533,8 @@ func (a *agents) runAfterSteps(after [][]string, ctxFile, dir string, environ []
 	run := func(args ...string) error {
 		return runAgentAutodoc(a.agentBin(), a.agentConfig, ctxFile, dir, environ, args...)
 	}
-	if a.codexHere != nil {
-		run = func(args ...string) error { return a.codexHere(environ, args...) }
+	if here := a.seams.CodexHere(); here != nil {
+		run = func(args ...string) error { return here(environ, args...) }
 	}
 	since := strconv.FormatInt(started.Unix()-2, 10) // the thread may be dated a moment before the spawn returns
 	for _, step := range after {
