@@ -2,6 +2,7 @@ package usershell
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -99,7 +100,11 @@ func throughArgs(t *testing.T, s Shell, program string, args []string) []string 
 	if s.kind == powershell || s.kind == winps {
 		line = "& " + line
 	}
-	prog, pargs := s.Run(line + s.Args(args))
+	written, err := s.Args(args)
+	if err != nil {
+		t.Fatalf("Args(%q): %v", args, err)
+	}
+	prog, pargs := s.Run(line + written)
 	cmd := exec.Command(prog, pargs...)
 	cmd.Env = procenv.Env(os.Environ()).With(argvHelper + "=1")
 	out, err := cmd.Output()
@@ -116,23 +121,62 @@ func throughArgs(t *testing.T, s Shell, program string, args []string) []string 
 // setupShaped are arguments as an agent's setup gives them: a JSON config with a space inside a
 // value, a quote with a space after it, a path with an apostrophe and a last backslash, and none.
 var setupShaped = []string{`{"mcpServers":{"autodoc":{"command":"C:\\Program Files\\autodoc.exe","args":["mcp serve"]}}}`,
-	`say "hi" now`, `it's`, `C:\o'brien dir\`, "", `a & b`}
+	`say "hi" now`, `it's`, `C:\o'brien dir\`, "", `!x (a)`}
 
-// Args carries every argument whole to the program, through each shell this OS has: the hostile
-// ones, and a setup's, which a quote followed by a space inside a value would split under Windows
-// PowerShell 5.1's own passing. Under 5.1 a %NAME% naming one of its variables is that variable's
-// value (the --% text's one expansion), so %PATH% is not sent there.
+// carried is setupShaped and every hostile argument s Carries; refused, the hostile ones it doesn't.
+func carried(s Shell) (carried, refused []string) {
+	carried = slices.Clone(setupShaped)
+	for _, a := range hostile {
+		if s.Carries(a) == nil {
+			carried = append(carried, a)
+		} else {
+			refused = append(refused, a)
+		}
+	}
+	return carried, refused
+}
+
+// Args carries every argument it accepts whole to the program, through each shell this OS has: a
+// setup's (a quote followed by a space inside a value would be split by Windows PowerShell 5.1's
+// own passing) and each hostile one Carries accepts; each one it refuses is an error, with nothing
+// written.
 func TestArgsCarryEachArgumentWhole(t *testing.T) {
 	for _, s := range shellsHere(t) {
 		t.Run(s.Program, func(t *testing.T) {
-			args := append(slices.Clone(setupShaped), hostile...)
-			if s.kind == winps {
-				args = slices.DeleteFunc(args, func(a string) bool { return a == "%PATH%" })
-			}
+			args, refused := carried(s)
 			if got := throughArgs(t, s, os.Args[0], args); !reflect.DeepEqual(got, args) {
 				t.Errorf("the program was given %q\nwant %q", got, args)
 			}
+			for _, a := range refused {
+				if w, err := s.Args([]string{"x", a}); !errors.Is(err, ErrNotCarried) || w != "" {
+					t.Errorf("%q: written %q, %v; want ErrNotCarried and nothing", a, w, err)
+				}
+			}
 		})
+	}
+}
+
+// Carries refuses, under either PowerShell, what cmd.exe reads again in a batch file's %* (% & | <
+// > ^ and a line break), and nothing else; under /bin/sh nothing an argument can hold.
+func TestCarriesRefusesWhatABatchFileReadsAgain(t *testing.T) {
+	refusedHere := []string{"%PATH%", "100%", "a&b", "a | b", "<x>", "a^b", "two\nlines", "cr\r"}
+	carriedEverywhere := []string{"", `{"k":"v w"}`, `a"b`, "it's", `ends\`, "$HOME", "!x", "(a)", "x; echo y", "naïve ‘q’ “q”"}
+	for _, k := range []kind{powershell, winps} {
+		for _, a := range refusedHere {
+			if err := (Shell{kind: k}).Carries(a); !errors.Is(err, ErrNotCarried) {
+				t.Errorf("kind %d, %q: %v; want ErrNotCarried", k, a, err)
+			}
+		}
+		for _, a := range carriedEverywhere {
+			if err := (Shell{kind: k}).Carries(a); err != nil {
+				t.Errorf("kind %d, %q: %v; want it carried", k, a, err)
+			}
+		}
+	}
+	for _, a := range append(refusedHere, carriedEverywhere...) {
+		if err := (Shell{kind: posix}).Carries(a); err != nil {
+			t.Errorf("posix, %q: %v; want it carried", a, err)
+		}
 	}
 }
 
@@ -148,11 +192,11 @@ func TestArgsAreWrittenEachShellsWay(t *testing.T) {
 		{Shell{"pwsh", powershell}, ` 'a b' '' 'a"b' 'ends\' 'it''s'`},
 		{Shell{"powershell", winps}, ` --% "a b" "" "a\"b" "ends\\" "it's"`},
 	} {
-		if got := c.s.Args(args); got != c.want {
-			t.Errorf("%s: %s, want %s", c.s.Program, got, c.want)
+		if got, err := c.s.Args(args); err != nil || got != c.want {
+			t.Errorf("%s: %s, %v; want %s", c.s.Program, got, err, c.want)
 		}
-		if got := c.s.Args(nil); got != "" {
-			t.Errorf("%s: no args written %q", c.s.Program, got)
+		if got, err := c.s.Args(nil); err != nil || got != "" {
+			t.Errorf("%s: no args written %q, %v", c.s.Program, got, err)
 		}
 	}
 }

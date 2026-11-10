@@ -316,10 +316,18 @@ func (h *agents) stopAgent() bool {
 }
 
 // fillAgentCommand fills {root} and {workspace} in a profile's command, each quoted for the shell
-// that runs it in env (internal/usershell).
-func fillAgentCommand(env procenv.Env, command string, ws wsInfo) string {
+// that runs it in env (internal/usershell). A value that shell can't hand the program as itself
+// (usershell.Shell.Carries) is an error, and the command is not filled.
+func fillAgentCommand(env procenv.Env, command string, ws wsInfo) (string, error) {
 	sh := usershell.Commands(env)
-	return strings.NewReplacer("{root}", sh.Quote(ws.root), "{workspace}", sh.Quote(ws.name)).Replace(command)
+	for _, f := range []struct{ placeholder, value string }{{"{root}", ws.root}, {"{workspace}", ws.name}} {
+		if strings.Contains(command, f.placeholder) {
+			if err := sh.Carries(f.value); err != nil {
+				return "", fmt.Errorf("its command's %s can't reach it whole: %w", f.placeholder, err)
+			}
+		}
+	}
+	return strings.NewReplacer("{root}", sh.Quote(ws.root), "{workspace}", sh.Quote(ws.name)).Replace(command), nil
 }
 
 // shellQuote is s as one word of a POSIX shell: for AutoDoc's own sh scripts (a wrapper, a hook).
@@ -516,14 +524,19 @@ func agentArgv(env procenv.Env, command string) (string, []string) {
 
 // withCommandArgs is agentArgv's args with extra appended to the program's own command line as
 // env's shell writes them (usershell.Shell.Args), so a setup's argument (a JSON config, a prompt)
-// reaches the program as one word, itself.
-func withCommandArgs(env procenv.Env, args, extra []string) []string {
+// reaches the program as one word, itself; one the shell can't hand on as itself
+// (usershell.Shell.Carries) is an error.
+func withCommandArgs(env procenv.Env, args, extra []string) ([]string, error) {
 	if len(extra) == 0 || len(args) == 0 {
-		return args
+		return args, nil
+	}
+	written, err := usershell.Commands(env).Args(extra)
+	if err != nil {
+		return nil, fmt.Errorf("its setup's argument can't reach it whole: %w", err)
 	}
 	out := slices.Clone(args)
-	out[len(out)-1] += usershell.Commands(env).Args(extra)
-	return out
+	out[len(out)-1] += written
+	return out, nil
 }
 
 // agentEnv are the variables p's agent is started with, in its folder dir: the workspace, its root,

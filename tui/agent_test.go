@@ -536,9 +536,9 @@ func TestTheAgentOpensWherePreferencesSay(t *testing.T) {
 func TestAnAgentsCommandIsFilledInQuoted(t *testing.T) {
 	t.Parallel()
 	ws := wsInfo{name: "it's", root: "/a b/$HOME"}
-	got := fillAgentCommand(nil, "agent {root} --ws={workspace}", ws)
-	if want := `agent '/a b/$HOME' --ws='it'\''s'`; got != want {
-		t.Fatalf("filled %q, want %q", got, want)
+	got, err := fillAgentCommand(nil, "agent {root} --ws={workspace}", ws)
+	if want := `agent '/a b/$HOME' --ws='it'\''s'`; err != nil || got != want {
+		t.Fatalf("filled %q, %v; want %q", got, err, want)
 	}
 }
 
