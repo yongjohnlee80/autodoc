@@ -247,6 +247,22 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: scratch (not for merge) the outside-file and home cells on Windows, two mutants
+        if: ${{ !inputs.discover }}
+        run: |
+          T='^(TestADraftIsSavedAsAnyTextFile|TestAFileAPluginOpensGoesToItsCommand|TestAFileOutsideEveryWorkspaceFollowsTheDisk|TestAFileOutsideEveryWorkspaceOpensEditsAndSaves|TestAFindOnARawHTMLPageCountsWhatItShows|TestAFindOnlyARawHTMLFilesSourceHasGoesToTheText|TestAGatedSaveIsHeldToTheWorkspace|TestAnEditingKeyFromARawHTMLPageActsOnce|TestAnHTMLFileIsCreatedAsItsOwnBytes|TestAnOutsideFileGoneFromDiskIsClosedOnRecheck|TestAnOutsideFileHasNoRelations|TestAnOutsideFileStaysOpenAcrossWorkspacesAndReachesTheFeedAndRecent|TestAQuestionsAnswerContinuesTheScriptsStep|TestARawHTMLFilesPageIsItsRenderedView|TestARawHTMLFilesPageWearsTheDocumentAccent|TestARawHTMLPagesReadingKeysKeepItRendered|TestARefusedCreateIsSaid|TestARightPressOnARawHTMLPageOpensTheEditorsMenu|TestATerminalDrawsARawHTMLFilesPage|TestCoreOpensAFileByItsAbsolutePath|TestCoreReadsAndWritesAnAbsoluteFile|TestLuaReloadReadsTheScriptsAgain|TestNewFileInAnyFolder|TestNewFileMakesAnyTextFile|TestOpenFileDialogOpensTheFileChosen|TestOpeningAnHTMLFileAsksSimplifiedOrRaw|TestReopeningTheOpenOutsideFileKeepsThePage|TestSPCjOnARawHTMLPageFollowsItsLink|TestSPCjOnARawHTMLPageWithNoLinkSaysSo|TestTheCommandLineOpensFromARawHTMLPage|TestTheDefaultAppOpensAnOutsideFileAtItsPath|TestTheDiagramViewShowsTheEmbedUnderTheCursor|TestTheFileDialogsFollowALinkToAFolder|TestTheOpenPreferenceAnswersForTheUser|TestTheRenderedViewIsToldTheNotesFile|TestTheTextKeymapTypesEveryPrintingKeyOnARawHTMLPage|TestOpenFileDialogOpensAnOutsideFile|TestTheFolderPickerStartsAtHome)$'
+          go test -count=1 -timeout 20m -v -run "$T" ./tui/ > "$RUNNER_TEMP/b.txt" 2>&1 && rb=0 || rb=$?
+          echo "== base PASS $(grep -cE '^--- PASS' "$RUNNER_TEMP/b.txt" || true) FAIL $(grep -cE '^--- FAIL' "$RUNNER_TEMP/b.txt" || true) SKIP $(grep -cE '^--- SKIP' "$RUNNER_TEMP/b.txt" || true)"
+          grep -E '^--- (FAIL|SKIP)|_test\.go:[0-9]+:' "$RUNNER_TEMP/b.txt" | cut -c1-260 | head -20 || true
+          echo "== base rc=$rb"
+          mut() { n=$1; go test -count=1 -timeout 20m -v -run "$T" ./tui/ > "$RUNNER_TEMP/m-$n.txt" 2>&1 && rm=0 || rm=$?
+            echo "== mutant $n applied: $(cat tui/state.go tui/outside.go | grep -c "mutant $n")"
+            grep -E '^--- FAIL' "$RUNNER_TEMP/m-$n.txt" | sed 's/ (.*//' | sort | tr '\n' ' ' || true; echo
+            grep -E '_test\.go:[0-9]+:' "$RUNNER_TEMP/m-$n.txt" | head -3 | cut -c1-240 || true
+            echo "== mutant $n rc=$rm (want a non-zero: killed)"; git checkout -q -- tui/state.go tui/outside.go; }
+          python -c "p='tui/state.go'; s=open(p,encoding='utf-8').read(); o='return filepath.VolumeName(userdirs.Temp(env)) + string(filepath.Separator)'; assert s.count(o)==1; open(p,'w',encoding='utf-8').write(s.replace(o,'_ = filepath.Separator; return \"/\" // mutant slashroot'))"; mut slashroot
+          python -c "p='tui/outside.go'; s=open(p,encoding='utf-8').read(); o='src := files.LocalFiles()'; assert s.count(o)==1; s=s.replace(o,'src := files.FileSource{FS: os.DirFS(\"/\"), Root: \"/\"} // mutant dirfs'); s=s.replace('import (','import (\n\t\"os\"',1); open(p,'w',encoding='utf-8').write(s)"; mut dirfs
+          [ $rb = 0 ]
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
         run: |
