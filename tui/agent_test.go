@@ -130,7 +130,7 @@ func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.
 	// It exits: the notifications say so, and the next SPC g starts the default again.
 	r.keys(t, decltest.Type("exit 3\r")...)
 	r.s.WaitFor(t, "the exit in the notifications", func(string) bool { return r.noticed("fake exited (3)") })
-	if n := onLoop(r, func() string { return r.h.agents.agentRunning }); n != "" {
+	if n := onLoop(r, func() string { return r.h.agents.Snapshot().Running }); n != "" {
 		t.Fatalf("after its exit %q is still running", n)
 	}
 
@@ -152,7 +152,7 @@ func TestAnAgentNotInstalledSaysItsCommandWasNotFound(t *testing.T) {
 	if !r.noticed(`gone did not start: its command "autodoc-no-such-agent" isn't a program on its PATH`) {
 		t.Fatal("no notice that gone did not start because its command isn't on its PATH")
 	}
-	if n := onLoop(r, func() string { return r.h.agents.agentRunning }); n != "" {
+	if n := onLoop(r, func() string { return r.h.agents.Snapshot().Running }); n != "" {
 		t.Fatalf("after its command was not found %q is running", n)
 	}
 }
@@ -234,7 +234,7 @@ func TestAnExplicitlyClearedAgentDefaultStaysClearedAfterLoad(t *testing.T) {
 	})
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitForText(t, "Make default marks the one SPC g opens")
-	if code := onLoop(r, func() string { return r.h.agents.agentRunning }); code != "" {
+	if code := onLoop(r, func() string { return r.h.agents.Snapshot().Running }); code != "" {
 		t.Fatalf("restart revived the old default identity %q", code)
 	}
 }
@@ -296,7 +296,7 @@ func TestRemoveAgentOnlyRemovesTheConfirmedProfile(t *testing.T) {
 	}
 	onLoop(r, func() bool {
 		r.h.agents.removeAgent(1) // beta at row 1 when asked
-		r.h.agents.c.SetPref(prefAgentProfiles, agentProfilesJSON([]agentProfile{profiles[1], profiles[0], profiles[2]}))
+		r.h.agents.Snapshot().Host.SetPref(prefAgentProfiles, agentProfilesJSON([]agentProfile{profiles[1], profiles[0], profiles[2]}))
 		return true
 	})
 	r.s.WaitForText(t, "remove the agent profile?")
@@ -322,7 +322,7 @@ func TestRemoveAgentRefusesAProfileEditedWhileAsked(t *testing.T) {
 		r.h.agents.removeAgent(0)
 		profiles := r.h.agents.profiles()
 		profiles[0].Command = "beta --new"
-		r.h.agents.c.SetPref(prefAgentProfiles, agentProfilesJSON(profiles))
+		r.h.agents.Snapshot().Host.SetPref(prefAgentProfiles, agentProfilesJSON(profiles))
 		return true
 	})
 	r.s.WaitForText(t, "remove the agent profile?")
@@ -388,7 +388,7 @@ func TestUsingAnotherAgentKeepsBothInstancesRunning(t *testing.T) {
 	}
 	onLoop(r, func() bool { r.h.agents.useAgent(1); return true })
 	r.s.WaitForText(t, "started second")
-	if n := onLoop(r, func() string { return r.h.agents.agentRunning }); n != "two" {
+	if n := onLoop(r, func() string { return r.h.agents.Snapshot().Running }); n != "two" {
 		t.Fatalf("after Yes %q is running, want two", n)
 	}
 
@@ -401,7 +401,7 @@ func TestUsingAnotherAgentKeepsBothInstancesRunning(t *testing.T) {
 	r.s.WaitFor(t, "hidden, unchecked", func(sc string) bool { return !strings.Contains(sc, "agent · two") && !shown() })
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "two shown again, checked", func(sc string) bool { return strings.Contains(sc, "agent · two") && shown() })
-	if n := onLoop(r, func() string { return r.h.agents.agentRunning }); n != "two" {
+	if n := onLoop(r, func() string { return r.h.agents.Snapshot().Running }); n != "two" {
 		t.Fatalf("shown again, %q is running, want two", n)
 	}
 }

@@ -151,7 +151,7 @@ func TestNoneFoundSaysWhichAndRecordsNothing(t *testing.T) {
 	tune(t).lookAgentCLI = func(string) (string, error) { return "", errors.New("not found") }
 	d, r, _ := runAgentTUIWith(t, t.TempDir(), nil, "", nil, Options{})
 	r.s.WaitForText(t, "No agent CLI was found on your PATH")
-	if n := onLoop(r, func() int { return len(r.h.agents.setupFound) }); n != 0 {
+	if n := onLoop(r, func() int { return r.h.agents.Snapshot().Found }); n != 0 {
 		t.Errorf("the none-found card lists %d CLIs to set up", n)
 	}
 	r.keys(t, key('c')) // &Close
