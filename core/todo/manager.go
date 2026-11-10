@@ -258,7 +258,7 @@ func (m *Manager) resolve(ctx context.Context, at At) (where, error) {
 	w.root = canon
 	if !w.workspace {
 		for _, name := range m.roots.Names() {
-			if r, ok := m.roots.Root(name); ok && (r == canon || r == paths.Slash(raw)) {
+			if r, ok := m.roots.Root(name); ok && (paths.SameAbs(r, canon) || paths.SameAbs(r, paths.Slash(raw))) {
 				w.workspace = true
 			}
 		}

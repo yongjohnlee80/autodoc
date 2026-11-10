@@ -16,7 +16,12 @@ import (
 // (`\\localhost\C$\…\r.md`) is kept in the slash form, the share its volume; an update's adr is
 // read the same way.
 func TestARefInWindowsOwnFormIsStoredInTheSlashForm(t *testing.T) {
-	dir := t.TempDir()
+	// the directory as a user names it: its long form (the temporary directory may be given in its
+	// 8.3 short form, RUNNER~1, which core/todo does not resolve)
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	kb, outside := filepath.Join(dir, "kb"), filepath.Join(dir, "outside")
 	for _, d := range []string{filepath.Join(kb, ".todo-list", "open"), filepath.Join(kb, "adrs"), outside} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
@@ -42,18 +47,20 @@ func TestARefInWindowsOwnFormIsStoredInTheSlashForm(t *testing.T) {
 	if err := m.Claim(ctx, ws); err != nil {
 		t.Fatal(err)
 	}
-	task, err := m.Add(ctx, ws, todo.Spec{Title: "t", ADR: []string{filepath.Join(kb, "adrs", "x.md")}, Review: []string{share}}, "")
+	x := filepath.Join(kb, "adrs", "x.md")
+	lower := strings.ToLower(x[:1]) + x[1:] // a drive letter in lower case, as some shells give it
+	task, err := m.Add(ctx, ws, todo.Spec{Title: "t", ADR: []string{x, lower}, Review: []string{share}}, "")
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
-	if len(task.ADR) != 1 || task.ADR[0] != "$KB_ROOT/adrs/x.md" {
-		t.Errorf("the adr %q: want $KB_ROOT/adrs/x.md", task.ADR)
+	if len(task.ADR) != 2 || task.ADR[0] != "$KB_ROOT/adrs/x.md" || task.ADR[1] != "$KB_ROOT/adrs/x.md" {
+		t.Errorf("the adrs %q: want both $KB_ROOT/adrs/x.md, the lower-case drive's too", task.ADR)
 	}
 	if len(task.Review) != 1 || task.Review[0] != paths.Slash(share) || !strings.HasPrefix(strings.ToLower(task.Review[0]), "//localhost/") {
 		t.Errorf("the review %q: want %q, the share kept", task.Review, paths.Slash(share))
 	}
 	for _, e := range task.Errors {
-		if e.Field == "adr[0]" {
+		if strings.HasPrefix(e.Field, "adr[") {
 			t.Errorf("the adr under the KB was not found: %+v", e)
 		}
 	}

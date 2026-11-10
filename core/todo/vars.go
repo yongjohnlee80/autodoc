@@ -166,7 +166,10 @@ func (s scope) symbolize(p string) string {
 		abs := s.osAbs(s.expandHome(p))
 		var best *root
 		for i, r := range roots {
-			if paths.Under(abs, r.value) {
+			// compared as the scope's OS compares paths: on Windows without regard to case. A name
+			// written in its 8.3 short form (RUNNER~1) is another spelling, not compared as its long
+			// form: core/todo reads no disk to resolve it, so such a ref is kept as written.
+			if paths.UnderAbsFor(abs, r.value, s.windows) {
 				if best == nil || len(r.value) > len(best.value) {
 					best = &roots[i]
 				}
