@@ -17,7 +17,7 @@ func fakeClaude(t *testing.T) (heard string, onPath func(*running)) {
 	t.Helper()
 	bin := t.TempDir()
 	heard = filepath.Join(t.TempDir(), "heard")
-	script := "#!/bin/sh\necho ready\nwhile IFS= read -r line; do printf '%s\\n' \"$line\" >> " + shellQuote(heard) + "; done\n"
+	script := "#!/bin/sh\necho ready\nwhile IFS= read -r line; do printf '%s\\n' \"$line\" >> " + shellQuoteCopy(heard) + "; done\n"
 	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}

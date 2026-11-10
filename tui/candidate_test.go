@@ -56,7 +56,7 @@ func TestAuditHandsAFreshCopyAndItsToastReopensTheCard(t *testing.T) {
 	heardDir := t.TempDir()
 	agent := hearingAgent(t, heardDir)
 	dir := t.TempDir()
-	_, r, _ := runAgentTUIWith(t, t.TempDir(), []agentProfile{{Name: "Scribe", Codename: "scribe", Command: shellQuote(agent) + " scribe"}},
+	_, r, _ := runAgentTUIWith(t, t.TempDir(), []agentProfile{{Name: "Scribe", Codename: "scribe", Command: shellQuoteCopy(agent) + " scribe"}},
 		"", nil, Options{Plugins: Plugins{Dir: dir, LogDir: t.TempDir()}})
 	repo := pluginRepo(t, "Echo", "true")
 	full := runGit(t, repo, "rev-parse", "HEAD")
@@ -171,7 +171,7 @@ func TestEachCandidateOwnsItsCard(t *testing.T) {
 	dir := t.TempDir()
 	r, _ := pluginTUI(t, dir)
 	counter := filepath.Join(t.TempDir(), "builds")
-	alpha := namedPluginRepo(t, "alpha", "echo built >> "+shellQuote(counter))
+	alpha := namedPluginRepo(t, "alpha", "echo built >> "+shellQuoteCopy(counter))
 	beta := namedPluginRepo(t, "beta", "true")
 	add := func(repo string) { r.h.p.Post(func() { r.h.plugins.addPlugin("file://" + repo) }) }
 
@@ -621,8 +621,8 @@ func heldGit(t *testing.T, env procenv.Env) (held procenv.Env, running func() bo
 	}
 	bin, controls := t.TempDir(), t.TempDir()
 	ready, go_ := filepath.Join(controls, "ready"), filepath.Join(controls, "release")
-	script := "#!/bin/sh\nif [ \"$1\" = clone ]; then\n touch " + shellQuote(ready) + "\n while [ ! -f " + shellQuote(go_) +
-		" ]; do sleep 0.01; done\nfi\nexec " + shellQuote(real) + " \"$@\"\n"
+	script := "#!/bin/sh\nif [ \"$1\" = clone ]; then\n touch " + shellQuoteCopy(ready) + "\n while [ ! -f " + shellQuoteCopy(go_) +
+		" ]; do sleep 0.01; done\nfi\nexec " + shellQuoteCopy(real) + " \"$@\"\n"
 	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}

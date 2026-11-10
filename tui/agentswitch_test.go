@@ -31,7 +31,7 @@ func TestAnAgentIsToldOfAWorkspaceSwitch(t *testing.T) {
 	agent, report := recordingAgentCopy(t, true)
 	dir := t.TempDir()
 	files := map[string][]string{"kb": {"a.md", "a\n"}, "notes": {"b.md", "b\n"}}
-	_, r, _ := runAgentTUIIn(t, dir, []agentProfile{{Name: "zen", Command: shellQuote(agent), Codename: "zen"}}, "zen", nil,
+	_, r, _ := runAgentTUIIn(t, dir, []agentProfile{{Name: "zen", Command: shellQuoteCopy(agent), Codename: "zen"}}, "zen", nil,
 		Options{EditorDir: t.TempDir(), Workspace: "kb"}, files)
 	r.s.WaitFor(t, "kb entered", func(string) bool { return onLoop(r, func() bool { return r.h.ws == "kb" }) })
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
@@ -138,8 +138,8 @@ func TestAnAgentIsToldOfAWorkspaceSwitch(t *testing.T) {
 	}
 	// the notice runs the build by its path, never the folder's wrapper or a bare autodoc
 	bin := onLoop(r, func() string { return r.h.agents.agentBin() })
-	hooks := claudeHookCommands(t, filepath.Join(dir, "kb"))
-	if want := shellQuote(bin) + " --workspace-notice"; !slices.Contains(hooks["UserPromptSubmit"], want) {
+	hooks := claudeHookCommandsCopy(t, filepath.Join(dir, "kb"))
+	if want := shellQuoteCopy(bin) + " --workspace-notice"; !slices.Contains(hooks["UserPromptSubmit"], want) {
 		t.Errorf("the folder's Claude hooks: %q, want UserPromptSubmit's %q", hooks, want)
 	}
 }

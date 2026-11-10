@@ -44,7 +44,7 @@ done
 func runSuspendingAgent(t *testing.T) *running {
 	t.Helper()
 	agent := suspendingAgent(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuoteCopy(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	r.s.WaitForText(t, "ready")

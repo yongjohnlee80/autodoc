@@ -45,10 +45,10 @@ func runAgentTUIIn(t *testing.T, dir string, profiles []agentProfile, def string
 	}
 	calls = filepath.Join(bins, "calls")
 	bin := filepath.Join(bins, "autodoc-build")
-	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho \"$@\" >> "+shellQuote(calls)+"\n"), 0o755); err != nil {
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho \"$@\" >> "+shellQuoteCopy(calls)+"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	prefs := map[string]string{prefAgentProfiles: agentProfilesJSON(profiles)}
+	prefs := map[string]string{prefAgentProfiles: agentProfilesJSONCopy(profiles)}
 	if def != "" {
 		prefs[prefAgentDefaultCopy] = def
 	}
@@ -79,7 +79,7 @@ func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.
 	// as a user may write a command: a variable set before it, its program's path quoted
 	_, r, calls := runAgentTUI(t, dir, []agentProfile{
 		{Name: "other", Command: "false"},
-		{Name: "fake", Command: "FAKE_GREETING=hi " + shellQuote(agent) + " --root {root} --ws {workspace}"},
+		{Name: "fake", Command: "FAKE_GREETING=hi " + shellQuoteCopy(agent) + " --root {root} --ws {workspace}"},
 	}, "fake")
 	root := onLoop(r, func() string { ws, _ := r.h.activeWorkspaceInfo(); return ws.root })
 	folder := filepath.Join(dir, "kb")
@@ -296,7 +296,7 @@ func TestRemoveAgentOnlyRemovesTheConfirmedProfile(t *testing.T) {
 	}
 	onLoop(r, func() bool {
 		r.h.agents.removeAgent(1) // beta at row 1 when asked
-		r.h.agents.Snapshot().Host.SetPref(prefAgentProfiles, agentProfilesJSON([]agentProfile{profiles[1], profiles[0], profiles[2]}))
+		r.h.agents.Snapshot().Host.SetPref(prefAgentProfiles, agentProfilesJSONCopy([]agentProfile{profiles[1], profiles[0], profiles[2]}))
 		return true
 	})
 	r.s.WaitForText(t, "remove the agent profile?")
@@ -322,7 +322,7 @@ func TestRemoveAgentRefusesAProfileEditedWhileAsked(t *testing.T) {
 		r.h.agents.removeAgent(0)
 		profiles := r.h.agents.profiles()
 		profiles[0].Command = "beta --new"
-		r.h.agents.Snapshot().Host.SetPref(prefAgentProfiles, agentProfilesJSON(profiles))
+		r.h.agents.Snapshot().Host.SetPref(prefAgentProfiles, agentProfilesJSONCopy(profiles))
 		return true
 	})
 	r.s.WaitForText(t, "remove the agent profile?")
@@ -475,7 +475,7 @@ func TestTheAgentOpensWherePreferencesSay(t *testing.T) {
 func TestAnAgentsCleanExitClosesItsPanel(t *testing.T) {
 	t.Parallel()
 	agent, _ := fakeAgentCopy(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuoteCopy(agent)}}, "fake")
 	r.leader(t, 'g')
 	r.s.WaitForText(t, "agent · fake")
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
@@ -494,7 +494,7 @@ func TestAnAgentsCleanExitClosesItsPanel(t *testing.T) {
 func TestF11WorksWithTheKeyboardInARunningAgent(t *testing.T) {
 	t.Parallel()
 	agent, _ := fakeAgentCopy(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuoteCopy(agent)}}, "fake")
 	r.leader(t, 'g')
 	r.s.WaitForText(t, "started")
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
@@ -518,7 +518,7 @@ func TestF11WorksWithTheKeyboardInARunningAgent(t *testing.T) {
 func TestCtrlTTogglesTheAgentsModeAndEscIsTheAgents(t *testing.T) {
 	t.Parallel()
 	agent, _ := fakeAgentCopy(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuoteCopy(agent)}}, "fake")
 	r.leader(t, 'g')
 	r.s.WaitForText(t, "started")
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
@@ -552,7 +552,7 @@ func (d *daemon) waitStored(t *testing.T, def, profiles string) {
 func TestTheFocusedAgentReceivesDroppedPathsAsAnOrdinaryPaste(t *testing.T) {
 	t.Parallel()
 	agent, _ := fakeAgentCopy(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuoteCopy(agent)}}, "fake")
 	r.leader(t, 'g')
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
 	r.s.WaitForText(t, "started")
@@ -598,7 +598,7 @@ read line
 	if err := os.WriteFile(agent, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	_, r, _ := runAgentTUI(t, dir, []agentProfile{{Name: "kitty", Command: shellQuote(agent)}}, "kitty")
+	_, r, _ := runAgentTUI(t, dir, []agentProfile{{Name: "kitty", Command: shellQuoteCopy(agent)}}, "kitty")
 	r.leader(t, 'g')
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
 	r.s.WaitForText(t, "ready")
