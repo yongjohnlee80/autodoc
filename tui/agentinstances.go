@@ -1087,43 +1087,6 @@ func (a *agents) Stopping() {
 	}
 }
 
-func (c core) AgentEntries() []feature.AgentEntry { return c.h.agents.AgentEntries() }
-
-// windowScope is the crew scope the window holds, "" for none (todos_assign.go).
-func (c core) windowScope() string {
-	if c.h.crew == nil {
-		return ""
-	}
-	scope, _, _ := c.h.crew.held()
-	return scope
-}
-
-// peerAgents are the live crew agents of every other scope, for todos' A (todos_assign.go): none
-// while the window holds no scope, since it couldn't send them anything.
-func (c core) peerAgents(then func([]feature.AgentEntry)) {
-	if c.h.crew == nil {
-		then(nil)
-		return
-	}
-	c.h.crew.peerAgents(then)
-}
-
-// sendTask sends another host's agent a task as the user's request (todos_assign.go).
-func (c core) sendTask(codename, scope, subject, body, key string, then func(error)) {
-	if c.h.crew == nil {
-		then(fmt.Errorf("%w: the window holds no crew scope", errDoorbellNotSent))
-		return
-	}
-	c.h.crew.sendTask(codename, scope, subject, body, key, then)
-}
-
-func (c core) HandTask(to feature.AgentRef, task feature.TaskRef, instruction string, done func(error)) error {
-	return c.h.agents.HandTask(to, task, instruction, done)
-}
-func (c core) SendText(to feature.AgentRef, text string, done func(error)) error {
-	return c.h.agents.SendText(to, text, done)
-}
-
 // raiseSession opens the agent drawer on this window's agent whose crew session is session (a crew
 // toast's click, an inbox focus), and answers false when no agent here has it. One here whose tab
 // can't be selected is still here: that failure is kept, not taken for another window's.
