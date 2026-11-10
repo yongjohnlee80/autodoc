@@ -80,8 +80,8 @@ type openedFile struct {
 	crlf bool
 }
 
-// untitled is the draft's name wherever a file's path would show.
-const untitled = "untitled"
+// untitled is the draft's name wherever a file's path would show (the kit's, feature.Untitled).
+const untitled = feature.Untitled
 
 // name is the file's path; for the draft, its hint, or untitled.
 func (n openedFile) name() string {
