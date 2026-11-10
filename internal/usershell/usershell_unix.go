@@ -14,3 +14,6 @@ func interactive(env procenv.Env) []string {
 	}
 	return []string{"/bin/sh"}
 }
+
+// commandWords is line's words as /bin/sh reads them.
+func commandWords(line string) []Word { return POSIXWords(line) }

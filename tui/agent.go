@@ -345,9 +345,10 @@ func (p agentProfile) kind() string {
 }
 
 // agentKind is the crew kind of the CLI command runs (claude, codex, agy, opencode, …): the name of
-// the program its first simple command runs, its words read as the shell reads them, past any
-// NAME=value assignments and the wrappers env, exec, command, nohup and mise exec|x … --; "agent"
-// when there is none. A wrapper not named here is the kind itself, never a vendor's guessed.
+// the program its first simple command runs, its words read as the shell that runs it reads them
+// (usershell.Words: /bin/sh's, PowerShell's on Windows), past any NAME=value assignments,
+// PowerShell's call operator & and the wrappers env, exec, command, nohup and mise exec|x … --;
+// "agent" when there is none. A wrapper not named here is the kind itself, never a vendor's guessed.
 func agentKind(command string) string {
 	if name := procenv.ProgramName(nil, agentProgram(command)); name != "" && name != "." && name != "/" {
 		return name
@@ -359,18 +360,18 @@ func agentKind(command string) string {
 // as written (a name the shell looks up on PATH, or a path), "" when there is none. A mise exec
 // with no -- is mise itself.
 func agentProgram(command string) string {
-	w := shellWords(command)
+	w := usershell.Words(command)
 	for len(w) > 0 {
-		f := w[0].text
+		f := w[0].Text
 		switch {
-		case w[0].assignment():
+		case w[0].Assignment(), f == "&": // an assignment; PowerShell's call operator, before a quoted path
 			w = w[1:]
 		case f == "exec" || f == "command" || f == "nohup":
 			w = skipOptions(w[1:], "-a")
 		case procenv.ProgramName(nil, f) == "env":
 			w = skipEnvOptions(w[1:])
-		case procenv.ProgramName(nil, f) == "mise" && len(w) > 1 && (w[1].text == "exec" || w[1].text == "x"):
-			i := slices.IndexFunc(w, func(x shellWord) bool { return x.text == "--" })
+		case procenv.ProgramName(nil, f) == "mise" && len(w) > 1 && (w[1].Text == "exec" || w[1].Text == "x"):
+			i := slices.IndexFunc(w, func(x usershell.Word) bool { return x.Text == "--" })
 			if i < 0 {
 				return f // its tools run their own default program: none of them guessed
 			}
@@ -383,9 +384,9 @@ func agentProgram(command string) string {
 }
 
 // skipOptions is w past its leading options and a "--"; an option in valued takes the next word.
-func skipOptions(w []shellWord, valued ...string) []shellWord {
-	for len(w) > 0 && strings.HasPrefix(w[0].text, "-") {
-		f := w[0].text
+func skipOptions(w []usershell.Word, valued ...string) []usershell.Word {
+	for len(w) > 0 && strings.HasPrefix(w[0].Text, "-") {
+		f := w[0].Text
 		w = w[1:]
 		if f == "--" {
 			break
@@ -398,10 +399,10 @@ func skipOptions(w []shellWord, valued ...string) []shellWord {
 }
 
 // skipEnvOptions is w, env's arguments, past its options: -S's string is split into the words it
-// runs, as env splits it.
-func skipEnvOptions(w []shellWord) []shellWord {
-	for len(w) > 0 && strings.HasPrefix(w[0].text, "-") {
-		f := w[0].text
+// runs, as env splits it (usershell.POSIXWords).
+func skipEnvOptions(w []usershell.Word) []usershell.Word {
+	for len(w) > 0 && strings.HasPrefix(w[0].Text, "-") {
+		f := w[0].Text
 		switch {
 		case f == "--":
 			return w[1:]
@@ -409,11 +410,11 @@ func skipEnvOptions(w []shellWord) []shellWord {
 			if len(w) < 2 {
 				return nil
 			}
-			return append(shellWords(w[1].text), w[2:]...)
+			return append(usershell.POSIXWords(w[1].Text), w[2:]...)
 		case strings.HasPrefix(f, "--split-string="):
-			return append(shellWords(strings.TrimPrefix(f, "--split-string=")), w[1:]...)
+			return append(usershell.POSIXWords(strings.TrimPrefix(f, "--split-string=")), w[1:]...)
 		case strings.HasPrefix(f, "-S"):
-			return append(shellWords(f[2:]), w[1:]...)
+			return append(usershell.POSIXWords(f[2:]), w[1:]...)
 		case f == "-u" || f == "-C" || f == "--unset" || f == "--chdir":
 			if len(w) < 2 {
 				return nil
@@ -424,93 +425,6 @@ func skipEnvOptions(w []shellWord) []shellWord {
 		}
 	}
 	return w
-}
-
-// shellWord is one word of a command as the shell splits it, its quotes and escapes removed; bare
-// is how many of its leading bytes stood unquoted.
-type shellWord struct {
-	text string
-	bare int
-}
-
-// assignment reports whether the word is a NAME=value assignment: its NAME= unquoted, as the shell
-// requires, whatever quoting its value has.
-func (w shellWord) assignment() bool {
-	i := strings.IndexByte(w.text, '=')
-	if i <= 0 || i >= w.bare {
-		return false
-	}
-	for j, c := range w.text[:i] {
-		if !(c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || j > 0 && c >= '0' && c <= '9') {
-			return false
-		}
-	}
-	return true
-}
-
-// shellWords splits command into words as a POSIX shell does before expanding them: blanks between
-// words, '…' literal, "…" with \ escaping $ ` " \ and a newline, and \ outside quotes escaping the
-// next byte. Expansions are left as written, and an unterminated quote runs to the end; nothing is
-// evaluated.
-func shellWords(command string) []shellWord {
-	var out []shellWord
-	var b strings.Builder
-	in, bare := false, -1
-	quoted := func() { // a quote or an escape: the word's bare prefix ends here
-		in = true
-		if bare < 0 {
-			bare = b.Len()
-		}
-	}
-	end := func() {
-		if !in {
-			return
-		}
-		if bare < 0 {
-			bare = b.Len()
-		}
-		out = append(out, shellWord{text: b.String(), bare: bare})
-		b.Reset()
-		in, bare = false, -1
-	}
-	for i := 0; i < len(command); i++ {
-		switch c := command[i]; c {
-		case ' ', '\t', '\n':
-			end()
-		case '\'':
-			quoted()
-			j := strings.IndexByte(command[i+1:], '\'')
-			if j < 0 {
-				j = len(command) - i - 1
-			}
-			b.WriteString(command[i+1 : i+1+j])
-			i += j + 1
-		case '"':
-			quoted()
-			for i++; i < len(command) && command[i] != '"'; i++ {
-				if command[i] == '\\' && i+1 < len(command) && strings.IndexByte("$`\"\\\n", command[i+1]) >= 0 {
-					i++
-					if command[i] == '\n' {
-						continue
-					}
-				}
-				b.WriteByte(command[i])
-			}
-		case '\\':
-			quoted()
-			if i+1 < len(command) {
-				i++
-				if command[i] != '\n' {
-					b.WriteByte(command[i])
-				}
-			}
-		default:
-			in = true
-			b.WriteByte(c)
-		}
-	}
-	end()
-	return out
 }
 
 // agentArgv is how the terminal runs command: the shell that runs command lines in env
