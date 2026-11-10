@@ -78,11 +78,10 @@ func (m *Manager) MigrateRefs(ctx context.Context, at At, o MigrateOpts) (Migrat
 	}
 	sc, done := m.withExists(ctx, sc)
 	defer done()
-	st, err := m.open(ctx, w)
+	st, err := m.openLocked(ctx, w)
 	if err != nil {
 		return MigrateResult{}, err
 	}
-	st.mu.Lock()
 	defer st.mu.Unlock()
 	if err := m.ready(ctx, st); err != nil {
 		return MigrateResult{}, err

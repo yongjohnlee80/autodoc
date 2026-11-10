@@ -313,10 +313,20 @@ type Disk struct {
 	mu    sync.Mutex
 	fault func(op, name string) error
 	reads map[string]int
+	held  map[string]int // the directories opened and not yet closed, by path: a real disk's handles
 }
 
 // NewDisk is an empty disk.
-func NewDisk() *Disk { return &Disk{FS: memfs.New(), reads: map[string]int{}} }
+func NewDisk() *Disk { return &Disk{FS: memfs.New(), reads: map[string]int{}, held: map[string]int{}} }
+
+// Held is each directory opened through the disk and not closed since, with how many times: on a
+// real disk each is a handle, and on Windows a directory held open can be neither removed nor
+// renamed.
+func (d *Disk) Held() map[string]int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return maps.Clone(d.held)
+}
 
 // SetFault installs a hook called before every operation through an opened directory, with the
 // operation ("stat", "readdir", "read", "write", "create", "remove", "rename", "mkdir") and the
@@ -378,7 +388,10 @@ func (d *Disk) Open(ctx context.Context, dir string) (vfs.FS, string, error) {
 	if !fi.IsDir() {
 		return nil, "", &fs.PathError{Op: "open", Path: dir, Err: errors.New("not a directory")}
 	}
-	return &sub{d: d, prefix: rel(dir)}, path.Clean(dir), nil
+	d.mu.Lock()
+	d.held[path.Clean(dir)]++
+	d.mu.Unlock()
+	return &sub{d: d, prefix: rel(dir), dir: path.Clean(dir)}, path.Clean(dir), nil
 }
 
 // MkdirAll, WriteFile and ReadFile are test setup, past every fault.
@@ -418,6 +431,8 @@ func (d *Disk) Version(abs string) vfs.Version {
 type sub struct {
 	d      *Disk
 	prefix string
+	dir    string
+	closed bool // under d.mu: a second Close releases nothing more
 }
 
 var (
@@ -553,4 +568,14 @@ func (s *sub) RenameNoReplace(ctx context.Context, from, to string) error {
 	return s.d.FS.RenameNoReplace(ctx, s.full(from), s.full(to))
 }
 
-func (s *sub) Close() error { return nil }
+func (s *sub) Close() error {
+	s.d.mu.Lock()
+	defer s.d.mu.Unlock()
+	if !s.closed {
+		s.closed = true
+		if s.d.held[s.dir]--; s.d.held[s.dir] == 0 {
+			delete(s.d.held, s.dir)
+		}
+	}
+	return nil
+}

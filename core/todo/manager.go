@@ -148,6 +148,26 @@ func New(roots Roots, disk Filesystems, journal Journal, opts ...Option) *Manage
 	return m
 }
 
+// Close releases the store directories the Manager holds open, one per store it has used: on
+// Windows a directory held open can be neither removed nor renamed, so whatever owns the Manager
+// closes it before those directories may go (a daemon as it stops, a test before its temporary
+// directory is removed). Each store's work in progress finishes first. A Manager used after Close
+// opens its stores again.
+func (m *Manager) Close() error {
+	m.mu.Lock()
+	open := slices.Collect(maps.Values(m.stores))
+	clear(m.stores)
+	m.mu.Unlock()
+	var errs []error
+	for _, s := range open { // each under its own lock, taken outside the Manager's: the order its users take them in
+		s.mu.Lock()
+		errs = append(errs, s.fsys.Close())
+		s.closed = true
+		s.mu.Unlock()
+	}
+	return errors.Join(errs...)
+}
+
 func (m *Manager) now() time.Time { return m.o.now() }
 
 func (m *Manager) event(e Event) {
@@ -505,14 +525,13 @@ func (m *Manager) Claim(ctx context.Context, at At, opts ...ClaimOpts) error {
 // buckets yet is left to Scaffold, which writes the marker; any other failure to open it is the
 // claim's.
 func (m *Manager) finishClaim(ctx context.Context, w where, o ClaimOpts) error {
-	st, err := m.open(ctx, w)
+	st, err := m.openLocked(ctx, w)
 	if errors.Is(err, ErrNotAStore) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	st.mu.Lock()
 	err = st.mark(ctx, m.now())
 	st.mu.Unlock()
 	if err != nil || o.LegacyWorkspace == "" {
@@ -527,7 +546,9 @@ func (m *Manager) finishClaim(ctx context.Context, w where, o ClaimOpts) error {
 			return err
 		}
 	}
-	st.mu.Lock()
+	if st, err = m.openLocked(ctx, w); err != nil {
+		return err
+	}
 	defer st.mu.Unlock()
 	if err := m.ready(ctx, st); err != nil {
 		return err
@@ -565,8 +586,7 @@ func (m *Manager) Release(ctx context.Context, at At) error {
 	if err != nil {
 		return err
 	}
-	if st, err := m.open(ctx, w); err == nil {
-		st.mu.Lock()
+	if st, err := m.openLocked(ctx, w); err == nil {
 		defer st.mu.Unlock()
 		return st.unmark(ctx)
 	}
@@ -651,11 +671,10 @@ func (m *Manager) Scaffold(ctx context.Context, at At) (Opened, error) {
 		}
 	}
 	fsys.Close()
-	st, err := m.open(ctx, w)
+	st, err := m.openLocked(ctx, w)
 	if err != nil {
 		return Opened{}, err
 	}
-	st.mu.Lock()
 	defer st.mu.Unlock()
 	if err := st.mark(ctx, m.now()); err != nil {
 		return Opened{}, err
