@@ -73,3 +73,8 @@ func releaseConsoleIfAlone() bool {
 	ok, _, _ := freeConsole.Call()
 	return ok != 0
 }
+
+// setStderrHandle makes f the process's standard error handle, the one the runtime writes a crash to.
+func setStderrHandle(f *os.File) {
+	_ = windows.SetStdHandle(windows.STD_ERROR_HANDLE, windows.Handle(f.Fd()))
+}
