@@ -409,6 +409,27 @@ name stays unresolved and is never read from the workspace root.
 
 In the code: `core/index/links.go`, `core/index/mode.go`, `internal/daemon/modes.go`, `core/todo/storevars.go`
 
+## A root is compared where the disk says it is
+
+The todo system names every store and every workspace root by the path the disk gives it: symlinks
+resolved and, on Windows, long names in the disk's own case. A workspace may be configured by
+another spelling of the same folder: through a symlink, by a short name, or with the drive letter
+in the other case. So the daemon asks the disk once, as it starts a workspace and after its root is
+open, where the configured root leads, through the same function the todo system's disk uses. That
+spelling is what the workspace's paths are compared with to find their store and their variables,
+and to say which exclude patterns keep a store out of the index. It is asked again at every start,
+so a link pointed elsewhere is followed from the next one.
+
+- Comparisons stay exact and by whole path segments. Nothing is case-folded: on a disk that tells
+  `kb` from `KB`, they are two workspaces.
+- The index is given both spellings. A ref under the root as configured or under where it leads is
+  the workspace's document; where both hold a ref (a root configured as a link lying inside the
+  folder it leads to), the longer spelling decides which document it names. A ref spelled a third
+  way is an external link: the index never resolves a ref against the disk.
+- The workspace is still listed, guarded and stored under the root as configured.
+
+In the code: `internal/daemon/todos.go`, `internal/daemon/workspaces.go`, `internal/daemon/modes.go`, `core/index/mode.go`
+
 ## Retiring $WORKSPACE
 
 `$WORKSPACE` meant two places: the Neovim plugins used it for the project root, and the daemon for a

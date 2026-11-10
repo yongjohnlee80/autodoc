@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/yongjohnlee80/golib/logger"
@@ -112,7 +111,7 @@ func (m *Manager) whereOf(ctx context.Context, st Settings, rec StoreRecord) (wh
 			roots = append(roots, root)
 		}
 	}
-	if root, ok := strings.CutSuffix(rec.Path, "/"+todoDir); ok && !slices.Contains(roots, root) {
+	if root, ok := storeRootOf(rec.Path); ok && !slices.Contains(roots, root) {
 		roots = append(roots, root)
 	}
 	var errs []error

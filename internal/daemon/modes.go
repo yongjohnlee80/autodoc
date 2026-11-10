@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -51,6 +50,9 @@ type TodoStores func(ctx context.Context) (TodoRegistry, error)
 
 // registry is the snapshot every workspace's modes read: the stores, longest directory first, and
 // each workspace's variables, made once per read so a document's fingerprint is never recomputed.
+// Every directory and root in it is in the slash form (core/paths), the form a document's path is
+// compared in, so the comparison is exact on every OS: never case-folded, the filesystem's names
+// being its identity.
 type registry struct {
 	stores []TodoStore
 	vars   map[string]map[string]string
@@ -61,9 +63,19 @@ type registry struct {
 }
 
 func newRegistry(r TodoRegistry) *registry {
-	g := &registry{stores: r.Stores, vars: r.Vars, files: r.Files, check: r.Check, modes: map[string]*index.Vars{}}
+	g := &registry{files: r.Files, check: r.Check, modes: map[string]*index.Vars{}}
+	for _, st := range r.Stores {
+		st.Dir, st.KB = paths.Slash(st.Dir), paths.Slash(st.KB)
+		g.stores = append(g.stores, st)
+	}
 	sort.Slice(g.stores, func(i, j int) bool { return len(g.stores[i].Dir) > len(g.stores[j].Dir) })
-	for root, vs := range r.Vars {
+	if r.Vars != nil {
+		g.vars = make(map[string]map[string]string, len(r.Vars))
+		for root, vs := range r.Vars {
+			g.vars[paths.Slash(root)] = vs
+		}
+	}
+	for root, vs := range g.vars {
 		g.modes[root] = index.NewVars(vs)
 		if root != "" {
 			g.roots = append(g.roots, root)
@@ -79,10 +91,10 @@ func (g *registry) same(o *registry) bool {
 		maps.EqualFunc(g.vars, o.vars, func(a, b map[string]string) bool { return maps.Equal(a, b) })
 }
 
-// varsOf are the variables a document at abs, in store st (nil for none), resolves with: its store's
-// workspace's, or the deepest workspace's holding it, or those of no workspace
-// (docs/decisions/todos.md#resolving-refs-in-every-document, the owner rule workspace.of answers).
-// nil when the registry gives no variables.
+// varsOf are the variables a document at abs (in the slash form), in store st (nil for none),
+// resolves with: its store's workspace's, or the deepest workspace's holding it, or those of no
+// workspace (docs/decisions/todos.md#resolving-refs-in-every-document, the owner rule workspace.of
+// answers). nil when the registry gives no variables.
 func (g *registry) varsOf(abs string, st *TodoStore) *index.Vars {
 	if g.vars == nil {
 		return nil
@@ -279,12 +291,14 @@ func (m *Workspaces) taskCheck() func([]byte) schema.Result {
 }
 
 // storeAt is the todo store holding abs, the innermost one, and the variables abs resolves with;
-// nil for none.
+// nil for none. abs is in either form, the OS's own or the slash form: it is compared in the slash
+// form, the registry's.
 func (m *Workspaces) storeAt(abs string) (*TodoStore, *index.Vars) {
 	g := m.stores.Load()
 	if g == nil {
 		return nil, nil
 	}
+	abs = paths.Slash(abs)
 	for i, st := range g.stores {
 		if paths.Under(abs, st.Dir) {
 			return &g.stores[i], g.varsOf(abs, &g.stores[i])
@@ -297,9 +311,27 @@ func (m *Workspaces) storeAt(abs string) (*TodoStore, *index.Vars) {
 // (docs/decisions/todos.md#which-paths-are-graph-only), read by its indexer for each path. They
 // outlive its restarts, like its schema.
 type modes struct {
-	m    *Workspaces
-	root string
+	m *Workspaces
+	// root is where the workspace's root leads on the disk (diskRoot), in the slash form: the
+	// spelling the registry's stores and variables carry. Set at each start, once the root is
+	// open; nil before the first.
+	root atomic.Pointer[string]
 	cfg  atomic.Pointer[modeConfig]
+}
+
+// setRoot is the root a path's store and variables are looked up under, in either form.
+func (h *modes) setRoot(root string) {
+	root = paths.Slash(root)
+	h.root.Store(&root)
+}
+
+// diskRoot is the spelling of a workspace's root the todo registry is compared with: canon, where
+// the root leads, or the root as configured when the disk gave none.
+func diskRoot(root, canon string) string {
+	if canon != "" {
+		return canon
+	}
+	return root
 }
 
 // modeConfig is a workspace's graph_only list and todo_search, compiled.
@@ -341,7 +373,11 @@ func (h *modes) set(list []string, search bool) { h.cfg.Store(newModeConfig(list
 func (h *modes) mode(p string) index.Mode {
 	c := h.cfg.Load()
 	var md index.Mode
-	st, vars := h.m.storeAt(filepath.Join(h.root, filepath.FromSlash(p)))
+	var st *TodoStore
+	var vars *index.Vars
+	if root := h.root.Load(); root != nil {
+		st, vars = h.m.storeAt(paths.Join(*root, p))
+	}
 	if st != nil {
 		md.Store = &index.TodoStore{ID: st.ID, Check: h.m.taskCheck()}
 	}
@@ -356,12 +392,12 @@ func (h *modes) mode(p string) index.Mode {
 }
 
 // modesFor is workspace id's modes, made on its first start from what the store holds.
-func (m *Workspaces) modesFor(id int64, root string, list []string, search bool) *modes {
+func (m *Workspaces) modesFor(id int64, list []string, search bool) *modes {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	h, ok := m.modes[id]
 	if !ok {
-		h = &modes{m: m, root: root} // a workspace's root never changes
+		h = &modes{m: m}
 		m.modes[id] = h
 	}
 	h.set(list, search)
@@ -379,11 +415,11 @@ func (m *Workspaces) todoExcluded(root string, exclude []string) []string {
 	}
 	var out []string
 	for _, st := range g.stores {
-		rel, err := filepath.Rel(root, st.Dir)
-		if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, "../") || filepath.IsAbs(rel) {
+		rel, ok := paths.Rel(paths.Slash(root), st.Dir) // both in the slash form: no OS separator to test
+		if !ok || rel == "." {
 			continue
 		}
-		sample := filepath.ToSlash(rel) + "/open/task.md"
+		sample := rel + "/open/task.md"
 		for _, p := range exclude {
 			if workspace.NewMatcher(nil, []string{p}).Excluded(sample) && !slices.Contains(out, p) {
 				out = append(out, p)
@@ -406,7 +442,7 @@ func (m *Workspaces) noteTodoExcluded() {
 	}
 	var all []ws
 	for name, s := range m.served {
-		all = append(all, ws{s.id, name, s.root, s.exclude})
+		all = append(all, ws{s.id, name, diskRoot(s.root, s.canon), s.exclude})
 	}
 	m.mu.Unlock()
 	for _, w := range all {
