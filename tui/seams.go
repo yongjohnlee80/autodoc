@@ -7,6 +7,7 @@ import (
 
 	regindex "github.com/yongjohnlee80/autodoc/core/registry"
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // seams are the program's waits, addresses, limits and test hooks: the values a test sets for its
@@ -126,4 +127,14 @@ var defaultSeams = seams{
 	installFS:        installFS{rename: os.Rename, removeAll: os.RemoveAll},
 	resultsResident:  100_000,
 	resultsCopyCap:   16 << 20,
+}
+
+// Env, ServerReady, OfferAgentSetup, LookAgentCLI and VimQuestionPending are the agents' seams
+// (agent.go agentSeams), read when used.
+func (s *seams) Env() procenv.Env                           { return s.env }
+func (s *seams) ServerReady() time.Duration                 { return s.serverReady }
+func (s *seams) OfferAgentSetup() bool                      { return s.offerAgentSetup }
+func (s *seams) LookAgentCLI() func(string) (string, error) { return s.lookAgentCLI }
+func (s *seams) VimQuestionPending(p feature.PrefsView) bool {
+	return vimQuestionPending(s, p)
 }
