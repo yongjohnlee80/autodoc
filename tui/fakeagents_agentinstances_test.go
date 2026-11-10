@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/pty"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
@@ -50,16 +51,44 @@ type modelPanelCopy struct {
 	reported []string
 }
 
+// fakeSeams are the program's seams as the agents' cells set them (agentSeams): its environment
+// (nil, AutoDoc's own), the wait for an agent server's socket, whether a first run offers the agent
+// setup, how the setup finds the CLIs (nil, on the PATH) and whether a first run's Vim question is
+// still to be asked.
+type fakeSeamsCopy struct {
+	env             procenv.Env
+	serverReady     time.Duration
+	offerAgentSetup bool
+	lookAgentCLI    func(string) (string, error)
+	vimPending      bool
+}
+
+// newFakeSeams are the program's own seams for the agents: a server's socket waited for 10 s, the
+// agent setup offered, no Vim question pending.
+func newFakeSeamsCopy() *fakeSeamsCopy {
+	return &fakeSeamsCopy{serverReady: 10 * time.Second, offerAgentSetup: true}
+}
+
+func (s *fakeSeamsCopy) Env() procenv.Env { return s.env }
+
+func (s *fakeSeamsCopy) ServerReady() time.Duration { return s.serverReady }
+
+func (s *fakeSeamsCopy) OfferAgentSetup() bool { return s.offerAgentSetup }
+
+func (s *fakeSeamsCopy) LookAgentCLI() func(string) (string, error) { return s.lookAgentCLI }
+
+func (s *fakeSeamsCopy) VimQuestionPending(feature.PrefsView) bool { return s.vimPending }
+
 // testAgents is newAgents for cells whose profiles name programs that don't exist ("one", "two"):
-// their commands aren't looked up on a PATH (commandCheck off); a cell of that check sets it.
+// their commands aren't looked up on a PATH (commandCheck off); a cell of that check sets it. Its
+// seams are newFakeSeams'.
 func testAgentsCopy(c agentHost, dir, config string) *agents {
 	s := defaultSeams
 	return testAgentsWithCopy(c, &s, dir, config)
 }
 
-// testAgentsWith is testAgents with the seams s (seamsFor: a test's tune, its environment's
-// included).
-func testAgentsWithCopy(c agentHost, s *seams, dir, config string) *agents {
+// testAgentsWith is testAgents with the seams s (a test's tune, its environment's included).
+func testAgentsWithCopy(c agentHost, s agentSeams, dir, config string) *agents {
 	a := newAgents(c, s, dir, config)
 	a.commandCheck = nil
 	return a
