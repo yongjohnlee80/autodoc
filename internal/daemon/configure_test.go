@@ -360,8 +360,9 @@ func TestConfigure_SaysWhatItCouldNotDo(t *testing.T) {
 	}
 
 	if runtime.GOOS == "windows" {
-		// the served workspace holds its root open, and Windows removes no folder a process holds
-		t.Skip("a served root can't be removed on Windows: the refusal of a gone root is checked on Unix")
+		// measured: RemoveAll of the served root fails on Windows with a sharing violation ("being
+		// used by another process"). Which handle holds it is not identified.
+		t.Skip("removing a served root fails on Windows with a sharing violation: the refusal of a gone root is checked on Unix")
 	}
 	if err := os.RemoveAll(w.Root()); err != nil {
 		t.Fatal(err)
