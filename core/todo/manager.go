@@ -155,14 +155,14 @@ func New(roots Roots, disk Filesystems, journal Journal, opts ...Option) *Manage
 // opens its stores again.
 func (m *Manager) Close() error {
 	m.mu.Lock()
-	open := slices.Collect(maps.Values(m.stores))
-	clear(m.stores)
+	open := slices.Collect(maps.Values(m.stores)) // left in place: an entry goes only under its store's lock
 	m.mu.Unlock()
 	var errs []error
-	for _, s := range open { // each under its own lock, taken outside the Manager's: the order its users take them in
+	for _, s := range open {
 		s.mu.Lock()
-		errs = append(errs, s.fsys.Close())
-		s.closed = true
+		if !s.closed {
+			errs = append(errs, m.release(s))
+		}
 		s.mu.Unlock()
 	}
 	return errors.Join(errs...)
@@ -399,12 +399,14 @@ func (m *Manager) Open(ctx context.Context, at At, _ OpenOpts) (Opened, error) {
 	if err != nil {
 		return Opened{}, err
 	}
-	st, err := m.open(ctx, w)
+	st, err := m.openLocked(ctx, w)
 	if err != nil {
 		return Opened{}, err
 	}
-	m.touch(ctx, st.id)
-	return Opened{StoreID: st.id, Store: st.path}, nil
+	id, dir := st.id, st.path
+	st.mu.Unlock()
+	m.touch(ctx, id)
+	return Opened{StoreID: id, Store: dir}, nil
 }
 
 func (m *Manager) touch(ctx context.Context, id string) {

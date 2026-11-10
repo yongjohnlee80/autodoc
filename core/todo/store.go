@@ -68,62 +68,86 @@ func eligible(p string) bool {
 	return false
 }
 
+// THE STORES' LIFECYCLE. One store object per id is in m.stores at a time, and it owns that store's
+// directory, open, and the lock its users serialize on. Only a holder of its lock releases it: it
+// closes the directory, marks it closed, and removes its entry from m.stores (if the entry is still
+// that object) before it lets the lock go. A user waiting for that lock then finds it closed and
+// asks open again, which makes the store's next object. So two objects for one id never both have
+// users. Locks: open takes m.mu alone, and a user takes the store's lock after open has let m.mu
+// go; a holder of a store's lock may take m.mu (to remove its entry), never the other way round.
+
 // open is an At's store, opened once per Manager and recovered before its first use. An
-// interrupted store move is settled first: it decides which directory is the store.
-func (m *Manager) open(ctx context.Context, w where) (*store, error) {
+// interrupted store move is settled first: it decides which directory is the store. path is where
+// the store is now: an object found at another path is stale, and its user retires it (openLocked).
+func (m *Manager) open(ctx context.Context, w where) (s *store, path string, err error) {
 	if err := m.recoverMoves(ctx, w.rec.ID, false); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	st, _ := m.j.Settings(ctx)
-	path := w.rec.Path
+	path = w.rec.Path
 	if rec, ok := st.Stores[w.rec.ID]; ok {
 		path = rec.Path
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if s := m.stores[w.rec.ID]; s != nil && s.path == path {
-		return s, nil
-	} else if s != nil {
-		s.fsys.Close() // the store moved
-		delete(m.stores, w.rec.ID)
+	if s := m.stores[w.rec.ID]; s != nil {
+		return s, path, nil // its own path or a stale one: only a holder of its lock may release it
 	}
 	fsys, canon, err := m.disk.Open(ctx, path)
 	if err != nil {
 		if errors.Is(err, vfs.ErrNotExist) {
-			return nil, fmt.Errorf("%w: %s does not exist (todos.scaffold creates it)", errNoStoreYet, path)
+			return nil, "", fmt.Errorf("%w: %s does not exist (todos.scaffold creates it)", errNoStoreYet, path)
 		}
-		return nil, err
+		return nil, "", err
 	}
 	if canon != path {
 		fsys.Close()
-		return nil, fmt.Errorf("%w: %s resolves to %s", ErrNotWritable, path, canon)
+		return nil, "", fmt.Errorf("%w: %s resolves to %s", ErrNotWritable, path, canon)
 	}
 	if !isStore(ctx, fsys, path) {
 		fsys.Close()
-		return nil, fmt.Errorf("%w: %s has no buckets (todos.scaffold creates them)", ErrNotAStore, path)
+		return nil, "", fmt.Errorf("%w: %s has no buckets (todos.scaffold creates them)", ErrNotAStore, path)
 	}
-	s := &store{id: w.rec.ID, path: path, fsys: fsys, docs: docs.New(fsys, eligible), cache: map[string]cached{}}
+	s = &store{id: w.rec.ID, path: path, fsys: fsys, docs: docs.New(fsys, eligible), cache: map[string]cached{}}
 	m.stores[w.rec.ID] = s
-	return s, nil
+	return s, path, nil
 }
 
-// openLocked is an At's store, open and its lock held: a store released while this waited for its
-// lock (Manager.Close, a move) is opened again, so no holder works through a closed directory.
+// openLocked is an At's store, open and its lock held. A store released while this waited for its
+// lock (Manager.Close, a move) is asked for again; one found at a path the store has left is
+// released here, under its lock, and asked for again. No holder works through a closed directory,
+// and no two objects of one store have users at once.
 func (m *Manager) openLocked(ctx context.Context, w where) (*store, error) {
 	for {
-		st, err := m.open(ctx, w)
+		st, path, err := m.open(ctx, w)
 		if err != nil {
 			return nil, err
 		}
 		st.mu.Lock()
-		if !st.closed {
+		if !st.closed && st.path == path {
 			return st, nil
+		}
+		if !st.closed {
+			m.release(st) // the store moved
 		}
 		st.mu.Unlock()
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 	}
+}
+
+// release closes st's directory, marks it closed and removes its entry, if the entry is still st.
+// The caller holds st's lock.
+func (m *Manager) release(st *store) error {
+	err := st.fsys.Close()
+	st.closed = true
+	m.mu.Lock()
+	if m.stores[st.id] == st {
+		delete(m.stores, st.id)
+	}
+	m.mu.Unlock()
+	return err
 }
 
 // isStore reports a directory that is a todo store: named .todo-list, or holding a bucket or the
