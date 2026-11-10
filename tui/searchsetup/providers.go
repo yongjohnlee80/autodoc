@@ -1,4 +1,4 @@
-package tui
+package searchsetup
 
 import (
 	"context"
@@ -30,7 +30,7 @@ var providerKinds = []endpointKind{
 type providers struct {
 	*endpoints
 	models    *tuidecl.ListModel // List models' answer, a model a row
-	modelList []string
+	ModelList []string
 	// the form's endpoint and model as last asked of it (List models, a model picked), and that
 	// model's context window maximum (0 unknown)
 	base, key, model string
@@ -42,7 +42,7 @@ func newProviders(c feature.Core) *providers {
 	p.endpoints = newEndpoints(c, endpointSpec{
 		noun: "provider", verb: "embedding", list: "embedding.providers",
 		kinds:     providerKinds,
-		blank:     endpointRow{kind: "ollama", base: embed.DefaultOllamaURL, context: store.DefaultContext},
+		blank:     EndpointRow{kind: "ollama", base: embed.DefaultOllamaURL, context: store.DefaultContext},
 		addTitle:  "add an embedding provider",
 		checkHint: "List models asks the provider what it has",
 		columns:   []string{"use", "name", "kind", "model", "context", "apiKey"},
@@ -97,24 +97,24 @@ func (p *providers) languageChanged() {
 
 // inUseText says which provider semantic search uses, for the status under the list.
 func (p *providers) inUseText() string {
-	if p.active == "" {
+	if p.Active == "" {
 		return p.c.Tr("autodoc.text.providers.semantic_search_off")
 	}
-	return p.c.Trf("autodoc.text.providers.semantic_search_with", p.active)
+	return p.c.Trf("autodoc.text.providers.semantic_search_with", p.Active)
 }
 
 // use makes provider i the one semantic search uses; one that does not set up is refused, and the
 // one in use stays.
 func (p *providers) use(i int) {
-	r, ok := p.at(i)
+	r, ok := p.At(i)
 	if !ok {
 		return
 	}
-	p.c.Set("App.providersStatus", p.c.Trf("autodoc.text.providers.setting_up", r.name))
-	p.choose(r.name, func(err error) {
-		p.c.Set("App.providersStatus", p.c.Trf("autodoc.text.providers.not_used", r.name, feature.WireMessage(err), p.inUseText()))
+	p.c.Set("App.providersStatus", p.c.Trf("autodoc.text.providers.setting_up", r.Name))
+	p.choose(r.Name, func(err error) {
+		p.c.Set("App.providersStatus", p.c.Trf("autodoc.text.providers.not_used", r.Name, feature.WireMessage(err), p.inUseText()))
 	}, func() {
-		p.c.Notify(p.c.Trf("autodoc.notice.providers.semantic_search_with_the_files_are_embedded_in_t", r.name))
+		p.c.Notify(p.c.Trf("autodoc.notice.providers.semantic_search_with_the_files_are_embedded_in_t", r.Name))
 	})
 }
 
@@ -127,21 +127,21 @@ func (p *providers) stop() {
 // (docs/decisions/store.md#removing-a-provider-retires-its-model): the provider in use, or with
 // none in use, takes its model's vectors in every workspace with it, unless another provider serves
 // the same model.
-func (p *providers) removal(r endpointRow, remove func()) {
+func (p *providers) removal(r EndpointRow, remove func()) {
 	var sibling string
-	for _, o := range p.rows.All() {
-		if o.name != r.name && providerFamily(o.kind) == providerFamily(r.kind) && o.model == r.model {
-			sibling = o.name
+	for _, o := range p.Rows.All() {
+		if o.Name != r.Name && providerFamily(o.kind) == providerFamily(r.kind) && o.model == r.model {
+			sibling = o.Name
 		}
 	}
 	q := feature.Question{Title: p.c.Tr("autodoc.question.providers.remove_the_provider"), OnYes: remove}
 	switch {
-	case p.active != "" && p.active != r.name:
-		q.Text = p.c.Trf("autodoc.text.providers.remove_the_provider_its_vectors_go_once_unused", r.name)
+	case p.Active != "" && p.Active != r.Name:
+		q.Text = p.c.Trf("autodoc.text.providers.remove_the_provider_its_vectors_go_once_unused", r.Name)
 	case sibling != "":
-		q.Text = p.c.Trf("autodoc.text.providers.remove_the_provider_another_serves_its_model", r.name, r.model, sibling)
+		q.Text = p.c.Trf("autodoc.text.providers.remove_the_provider_another_serves_its_model", r.Name, r.model, sibling)
 	default:
-		q.Text = p.c.Trf("autodoc.text.providers.remove_the_provider_its_vectors_are_deleted", r.name, r.model)
+		q.Text = p.c.Trf("autodoc.text.providers.remove_the_provider_its_vectors_are_deleted", r.Name, r.model)
 		p.countRemoved(r, p.c.Ask(q))
 		return
 	}
@@ -159,7 +159,7 @@ func providerFamily(kind string) string {
 
 // countRemoved says, in the removal's question, how many of r's model's vectors it deletes, and in
 // how many workspaces, while the question is still open.
-func (p *providers) countRemoved(r endpointRow, asked feature.Asked) {
+func (p *providers) countRemoved(r EndpointRow, asked feature.Asked) {
 	var names []string
 	for _, w := range p.c.Workspaces() {
 		names = append(names, w.Name)
@@ -189,7 +189,7 @@ func (p *providers) countRemoved(r endpointRow, asked feature.Asked) {
 		return a
 	}, func(v any) {
 		a := v.(answer)
-		asked.Say(p.c.Trf("autodoc.notice.providers.remove_the_provider_its_key_its_usage_and_its_lo", r.name, r.model, a.vectors, feature.BytesText(a.bytes), a.spaces))
+		asked.Say(p.c.Trf("autodoc.notice.providers.remove_the_provider_its_key_its_usage_and_its_lo", r.Name, r.model, a.vectors, feature.BytesText(a.bytes), a.spaces))
 	})
 }
 
@@ -198,7 +198,7 @@ func (p *providers) countRemoved(r endpointRow, asked feature.Asked) {
 // formOpened fills the context window (the default when r has none), its hints, and asks the
 // model's maximum when r names a model. The form's title on Add… and what List models does are
 // said in the UI's language: the spec's are English, set as the form opens (endpoints.fill).
-func (p *providers) formOpened(r endpointRow) {
+func (p *providers) formOpened(r EndpointRow) {
 	if p.editing == "" {
 		p.c.Set("App.providerFormTitle", p.c.Tr("autodoc.text.providers.add_an_embedding_provider"))
 	}
@@ -250,7 +250,7 @@ func (p *providers) checked(models []string, err error) {
 		p.c.Set("App.providerModelsStatus", p.c.Trf("autodoc.text.providers.no_models", feature.WireMessage(err)))
 		return
 	}
-	p.modelList = models
+	p.ModelList = models
 	rows := make([]feature.RowOf, len(models))
 	for i, m := range models {
 		rows[i] = feature.RowOf{"key": m, "name": m}
@@ -264,10 +264,10 @@ func (p *providers) checked(models []string, err error) {
 
 // pickModel writes model i into the form's model field.
 func (p *providers) pickModel(i int) {
-	if i >= 0 && i < len(p.modelList) {
-		feature.SetField(p.c, "App.providerModel", p.modelList[i])
-		p.model = p.modelList[i]
-		p.checkModelContext(p.base, p.key, p.modelList[i])
+	if i >= 0 && i < len(p.ModelList) {
+		feature.SetField(p.c, "App.providerModel", p.ModelList[i])
+		p.model = p.ModelList[i]
+		p.checkModelContext(p.base, p.key, p.ModelList[i])
 	}
 }
 

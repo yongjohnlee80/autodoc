@@ -189,7 +189,7 @@ func (h *Host) applyEvents(events []peerEvent) {
 		h.notify(n)
 	}
 	if reranked {
-		h.ai.reranked()
+		h.ai.Reranked()
 	}
 	if reranked {
 		h.loadStageRanker(true)

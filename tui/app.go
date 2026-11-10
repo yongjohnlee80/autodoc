@@ -58,6 +58,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/internal/usertheme"
 	"github.com/yongjohnlee80/autodoc/script"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/searchsetup"
 )
 
 // Host is the program behind qml/main.qml.
@@ -172,7 +173,7 @@ type Host struct {
 	// the AI models dialog (aimodels.go), a feature of its own: the host lists its providers again
 	// when the workspace's vectors change under them (vectors.go), and its rankers when the daemon
 	// says the ranker in use changed (events.go)
-	ai *aiModels
+	ai *searchsetup.AIModels
 
 	hitsRanked string // the hits' title's note of their order (rankedTitle)
 	// the search's stages (stages.go): the ranker in use, who it is and how its box names it ("" for
@@ -523,7 +524,7 @@ func newHost(session *Session, opt Options) *Host {
 	h.recent = newRecent(core{h})
 	h.tiles = newTiles(core{h})
 	h.explorer = newExplorer(core{h})
-	h.ai = newAIModels(core{h})
+	h.ai = searchsetup.NewAIModels(core{h})
 	h.outline = newOutline(core{h})
 	h.rel = newRelated(core{h})
 	h.searchPick, h.openPick, h.newPick = h.newSearchPick(), h.newOpenPick(), h.newNewPick()
