@@ -31,7 +31,7 @@ func TestAnAgentIsToldOfAWorkspaceSwitch(t *testing.T) {
 	agent, report := recordingAgentCopy(t, true)
 	dir := t.TempDir()
 	files := map[string][]string{"kb": {"a.md", "a\n"}, "notes": {"b.md", "b\n"}}
-	_, r, _ := runAgentTUIIn(t, dir, []agentProfile{{Name: "zen", Command: shellQuoteCopy(agent), Codename: "zen"}}, "zen", nil,
+	_, r, _ := runAgentTUIIn(t, dir, []agentProfile{{Name: "zen", Command: shellQuote(agent), Codename: "zen"}}, "zen", nil,
 		Options{EditorDir: t.TempDir(), Workspace: "kb"}, files)
 	r.s.WaitFor(t, "kb entered", func(string) bool { return onLoop(r, func() bool { return r.h.ws == "kb" }) })
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
@@ -139,94 +139,39 @@ func TestAnAgentIsToldOfAWorkspaceSwitch(t *testing.T) {
 	// the notice runs the build by its path, never the folder's wrapper or a bare autodoc
 	bin := onLoop(r, func() string { return r.h.agents.agentBin() })
 	hooks := claudeHookCommandsCopy(t, filepath.Join(dir, "kb"))
-	if want := shellQuoteCopy(bin) + " --workspace-notice"; !slices.Contains(hooks["UserPromptSubmit"], want) {
+	if want := shellQuote(bin) + " --workspace-notice"; !slices.Contains(hooks["UserPromptSubmit"], want) {
 		t.Errorf("the folder's Claude hooks: %q, want UserPromptSubmit's %q", hooks, want)
-	}
-}
-
-// TestTheSwitchIsCoalesced (docs/decisions/crew.md#one-coalesced-switch-per-agent): an agent is
-// told one switch from the workspace it last saw to the one in use, however many came between. kb →
-// notes → other is one, kb → other; back to the one it saw is none; a rename (the same root) is
-// renamed; a name the list doesn't hold yet waits; no workspace is left; a restart (a new token)
-// starts again from its own.
-func TestTheSwitchIsCoalesced(t *testing.T) {
-	h := &Host{agents: &agents{instances: map[string]*agentInstance{
-		"zen": {token: "t1", workspace: feature.Workspace{Name: "kb", Root: "/k"}},
-	}}}
-	h.workspaces = feature.NewRows(tuidecl.NewListModel("key", "label"), workspaceRowOf)
-	list := func(ws ...wsInfo) { h.workspaces.Reset(ws) }
-	list(wsInfo{name: "kb", root: "/k"}, wsInfo{name: "notes", root: "/n"}, wsInfo{name: "other", root: "/o"})
-	take := func(ws string) (wsSwitch, bool) { h.ws = ws; return h.takeSwitch("zen") }
-
-	if sw, ok := take("kb"); ok {
-		t.Errorf("in its own workspace: %+v", sw)
-	}
-	h.ws = "notes" // a switch it isn't asked of
-	if sw, ok := take("other"); !ok || sw != (wsSwitch{Kind: switchEntered, From: wsRef{"kb", "/k"}, To: wsRef{"other", "/o"}}) {
-		t.Errorf("kb → notes → other: %+v %v, want one kb → other", sw, ok)
-	}
-	if sw, ok := take("other"); ok {
-		t.Errorf("asked again: %+v", sw)
-	}
-	h.ws = "notes"
-	if sw, ok := take("other"); ok {
-		t.Errorf("other → notes → other: %+v", sw)
-	}
-	list(wsInfo{name: "kb", root: "/k"}, wsInfo{name: "renamed", root: "/o"})
-	if sw, ok := take("renamed"); !ok || sw != (wsSwitch{Kind: switchRenamed, From: wsRef{"other", "/o"}, To: wsRef{"renamed", "/o"}}) {
-		t.Errorf("other renamed: %+v %v", sw, ok)
-	}
-	if sw, ok := take("ghost"); ok {
-		t.Errorf("a workspace the list doesn't hold yet: %+v", sw)
-	}
-	list(wsInfo{name: "kb", root: "/k"}, wsInfo{name: "ghost", root: "/g"})
-	if sw, ok := take("ghost"); !ok || sw.From != (wsRef{"renamed", "/o"}) || sw.Kind != switchEntered {
-		t.Errorf("once listed: %+v %v, want renamed → ghost", sw, ok)
-	}
-	if sw, ok := take(""); !ok || sw.Kind != switchLeft || sw.To != (wsRef{}) {
-		t.Errorf("no workspace: %+v %v", sw, ok)
-	}
-	h.agents.instances["zen"].token = "t2" // restarted in its tab: it knows only kb
-	if sw, ok := take("ghost"); !ok || sw.From != (wsRef{"kb", "/k"}) {
-		t.Errorf("after a restart: %+v %v, want from kb", sw, ok)
-	}
-	if _, ok := h.takeSwitch("nobody"); ok {
-		t.Error("an agent with no instance was told a switch")
-	}
-
-	spawn := wsRef{"kb", "/k"}
-	for _, c := range []struct {
-		sw   wsSwitch
-		want []string
-	}{
-		{wsSwitch{Kind: switchEntered, From: spawn, To: wsRef{"notes", "/n"}, Document: "b.md"}, []string{"moved to workspace notes (/n), from kb (/k); open: b.md", "You stay in kb"}},
-		{wsSwitch{Kind: switchRenamed, From: spawn, To: wsRef{"kb2", "/k"}}, []string{"kb was renamed kb2", "$AUTODOC_WORKSPACE still says kb"}},
-		{wsSwitch{Kind: switchLeft, From: spawn}, []string{"no workspace open", "You stay in kb"}},
-	} {
-		n := c.sw.notice(spawn)
-		for _, w := range c.want {
-			if !strings.HasPrefix(n, "[AutoDoc] ") || strings.ContainsAny(n, "\r\n") || !strings.Contains(n, w) {
-				t.Errorf("%s's notice %q lacks %q", c.sw.Kind, n, w)
-			}
-		}
 	}
 }
 
 // TestAPeersRenameIsToldAsARename (docs/decisions/crew.md#one-coalesced-switch-per-agent): a peer's
 // workspace.renamed of the workspace in use, through applyEvents, lists it under its new name at
-// once, so an agent of it is told renamed, its root on both sides, before the relisting answers.
+// once, its root kept, before the relisting answers: so the workspace an agent is handed next is
+// the renamed one at the same root, which it is told as a rename (TestTheSwitchIsCoalesced).
 func TestAPeersRenameIsToldAsARename(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
-	sw := onLoop(r, func() wsSwitch {
+	refs := onLoop(r, func() [3]wsRef {
 		kb := r.h.wsRefOf("kb")
-		r.h.agents.instances["zen"] = &agentInstance{token: "t", workspace: feature.Workspace{Name: kb.Name, Root: kb.Root}}
 		r.h.applyEvents([]peerEvent{{seq: 1, kind: "workspace.renamed", workspace: "kb", client: "another", detail: "kb2"}})
-		sw, _ := r.h.takeSwitch("zen")
-		return sw
+		return [3]wsRef{kb, r.h.wsRefOf("kb2"), r.h.wsRefOf("kb")}
 	})
-	root := onLoop(r, func() string { return r.h.agents.Snapshot().Instances["zen"].Workspace.Root })
-	if root == "" || sw != (wsSwitch{Kind: switchRenamed, From: wsRef{"kb", root}, To: wsRef{"kb2", root}}) {
-		t.Fatalf("a peer's rename told the agent %+v, want renamed kb → kb2 at %s", sw, root)
+	before, after, gone := refs[0], refs[1], refs[2]
+	if before.Root == "" || after != (wsRef{"kb2", before.Root}) || gone.Root != "" {
+		t.Fatalf("a peer's rename: kb was %+v; kb2 is %+v and kb %+v, want kb2 at kb's root and kb no longer listed", before, after, gone)
+	}
+}
+
+// TestTheWorkspaceInUseIsNamedWithItsRoot: the host hands the agents the workspace in use as it
+// lists it (wsRefOf): its name and root; the name alone for one it doesn't list yet; none for no
+// workspace. The agents tell a switch from it (TestTheSwitchIsCoalesced).
+func TestTheWorkspaceInUseIsNamedWithItsRoot(t *testing.T) {
+	h := &Host{}
+	h.workspaces = feature.NewRows(tuidecl.NewListModel("key", "label"), workspaceRowOf)
+	h.workspaces.Reset([]wsInfo{{name: "kb", root: "/k"}, {name: "notes", root: "/n"}})
+	for name, want := range map[string]wsRef{"kb": {"kb", "/k"}, "notes": {"notes", "/n"}, "ghost": {Name: "ghost"}, "": {}} {
+		if got := h.wsRefOf(name); got != want {
+			t.Errorf("wsRefOf(%q) = %+v, want %+v", name, got, want)
+		}
 	}
 }

@@ -45,21 +45,25 @@ func runAgentTUIIn(t *testing.T, dir string, profiles []agentProfile, def string
 	}
 	calls = filepath.Join(bins, "calls")
 	bin := filepath.Join(bins, "autodoc-build")
-	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho \"$@\" >> "+shellQuoteCopy(calls)+"\n"), 0o755); err != nil {
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho \"$@\" >> "+shellQuote(calls)+"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	prefs := map[string]string{prefAgentProfiles: agentProfilesJSONCopy(profiles)}
+	prefs := map[string]string{prefAgentProfiles: agentProfilesJSON(profiles)}
 	if def != "" {
 		prefs[prefAgentDefaultCopy] = def
 	}
 	maps.Copy(prefs, more)
 	d = startDaemonWith(t, "", files, daemonOpts{prefs: prefs})
 	opt.AgentDir, opt.ConfigPath = dir, agentConfig
+	// the program's seams, set as it is made: its agents call the build bin, and the test agents'
+	// CLIs stand for ones whose adapter reports permission prompts, so the messaging base sends what
+	// it types (agentmessaging.go); a kind without one is agentmessaging_test.go's
+	if opt.seams == nil {
+		opt.seams = seamsWithEnv(t, nil)
+	}
+	opt.seams.agentBin = bin
+	opt.seams.agentPromptsReported = func(string, bool) bool { return true }
 	r = runTUI(t, NewSession(d.sock, nil), opt)
-	onLoop(r, func() bool { r.h.agents.agentBinPath = bin; return true })
-	// the test agents' CLIs stand for ones whose adapter reports permission prompts, so the messaging
-	// base sends what it types (agentmessaging.go); a kind without one is agentmessaging_test.go's
-	onLoop(r, func() bool { r.h.agents.promptsReported = func(string, bool) bool { return true }; return true })
 	r.connected(t)
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
 	// The stored preferences carry the profiles and the default, and their answer is not ordered
@@ -79,7 +83,7 @@ func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.
 	// as a user may write a command: a variable set before it, its program's path quoted
 	_, r, calls := runAgentTUI(t, dir, []agentProfile{
 		{Name: "other", Command: "false"},
-		{Name: "fake", Command: "FAKE_GREETING=hi " + shellQuoteCopy(agent) + " --root {root} --ws {workspace}"},
+		{Name: "fake", Command: "FAKE_GREETING=hi " + shellQuote(agent) + " --root {root} --ws {workspace}"},
 	}, "fake")
 	root := onLoop(r, func() string { ws, _ := r.h.activeWorkspaceInfo(); return ws.root })
 	folder := filepath.Join(dir, "kb")
@@ -296,7 +300,7 @@ func TestRemoveAgentOnlyRemovesTheConfirmedProfile(t *testing.T) {
 	}
 	onLoop(r, func() bool {
 		r.h.agents.removeAgent(1) // beta at row 1 when asked
-		r.h.agents.Snapshot().Host.SetPref(prefAgentProfiles, agentProfilesJSONCopy([]agentProfile{profiles[1], profiles[0], profiles[2]}))
+		r.h.agents.Snapshot().Host.SetPref(prefAgentProfiles, agentProfilesJSON([]agentProfile{profiles[1], profiles[0], profiles[2]}))
 		return true
 	})
 	r.s.WaitForText(t, "remove the agent profile?")
@@ -322,7 +326,7 @@ func TestRemoveAgentRefusesAProfileEditedWhileAsked(t *testing.T) {
 		r.h.agents.removeAgent(0)
 		profiles := r.h.agents.profiles()
 		profiles[0].Command = "beta --new"
-		r.h.agents.Snapshot().Host.SetPref(prefAgentProfiles, agentProfilesJSONCopy(profiles))
+		r.h.agents.Snapshot().Host.SetPref(prefAgentProfiles, agentProfilesJSON(profiles))
 		return true
 	})
 	r.s.WaitForText(t, "remove the agent profile?")
@@ -475,7 +479,7 @@ func TestTheAgentOpensWherePreferencesSay(t *testing.T) {
 func TestAnAgentsCleanExitClosesItsPanel(t *testing.T) {
 	t.Parallel()
 	agent, _ := fakeAgentCopy(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuoteCopy(agent)}}, "fake")
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
 	r.leader(t, 'g')
 	r.s.WaitForText(t, "agent · fake")
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
@@ -494,7 +498,7 @@ func TestAnAgentsCleanExitClosesItsPanel(t *testing.T) {
 func TestF11WorksWithTheKeyboardInARunningAgent(t *testing.T) {
 	t.Parallel()
 	agent, _ := fakeAgentCopy(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuoteCopy(agent)}}, "fake")
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
 	r.leader(t, 'g')
 	r.s.WaitForText(t, "started")
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
@@ -518,7 +522,7 @@ func TestF11WorksWithTheKeyboardInARunningAgent(t *testing.T) {
 func TestCtrlTTogglesTheAgentsModeAndEscIsTheAgents(t *testing.T) {
 	t.Parallel()
 	agent, _ := fakeAgentCopy(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuoteCopy(agent)}}, "fake")
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
 	r.leader(t, 'g')
 	r.s.WaitForText(t, "started")
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
@@ -552,7 +556,7 @@ func (d *daemon) waitStored(t *testing.T, def, profiles string) {
 func TestTheFocusedAgentReceivesDroppedPathsAsAnOrdinaryPaste(t *testing.T) {
 	t.Parallel()
 	agent, _ := fakeAgentCopy(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuoteCopy(agent)}}, "fake")
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
 	r.leader(t, 'g')
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
 	r.s.WaitForText(t, "started")
@@ -598,7 +602,7 @@ read line
 	if err := os.WriteFile(agent, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	_, r, _ := runAgentTUI(t, dir, []agentProfile{{Name: "kitty", Command: shellQuoteCopy(agent)}}, "kitty")
+	_, r, _ := runAgentTUI(t, dir, []agentProfile{{Name: "kitty", Command: shellQuote(agent)}}, "kitty")
 	r.leader(t, 'g')
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
 	r.s.WaitForText(t, "ready")

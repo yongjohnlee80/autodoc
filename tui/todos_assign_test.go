@@ -27,7 +27,7 @@ func hearingAgent(t *testing.T, dir string) string {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "hearing-agent")
 	script := "#!/bin/sh\nstty raw -echo\nprintf '\\033[?2004hstarted %s\\r\\n' \"$1\"\nexec cat >> " +
-		shellQuoteCopy(dir) + "/heard-\"$1\"\n"
+		shellQuote(dir) + "/heard-\"$1\"\n"
 	if err := os.WriteFile(p, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -75,8 +75,8 @@ func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 	heardDir := t.TempDir()
 	agent := hearingAgent(t, heardDir)
 	d, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{
-		{Name: "Scribe", Codename: "scribe", Command: shellQuoteCopy(agent) + " scribe"},
-		{Name: "Critic", Codename: "critic", Command: shellQuoteCopy(agent) + " critic"},
+		{Name: "Scribe", Codename: "scribe", Command: shellQuote(agent) + " scribe"},
+		{Name: "Critic", Codename: "critic", Command: shellQuote(agent) + " critic"},
 	}, "")
 	tasks := seedTodos(t, d, true, todo.Spec{Title: "Draft the guide"}, todo.Spec{Title: "Edit the links"},
 		todo.Spec{Title: "Fix the typos"})

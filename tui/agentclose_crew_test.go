@@ -31,7 +31,7 @@ func TestAnAgentTheWindowTakesAwayEndsItsCrewSession(t *testing.T) {
 	for _, how := range []string{"close", "restart", "stop all"} {
 		t.Run(how, func(t *testing.T) {
 			a, c, w := messagingRig(t)
-			before := a.instances["one"].session.ID
+			before := a.Snapshot().Instances["one"].Session.ID
 			if before == "" || presenceOf(t, a, w, "one") != "live" {
 				t.Fatalf("agent one has no live crew session: %q, %q", before, presenceOf(t, a, w, "one"))
 			}
@@ -55,8 +55,8 @@ func TestAnAgentTheWindowTakesAwayEndsItsCrewSession(t *testing.T) {
 			got := presenceOf(t, a, w, "one")
 			switch how {
 			case "restart":
-				fresh := a.instances["one"]
-				if fresh == nil || fresh.session.ID == "" || fresh.session.ID == before || got != "live" {
+				fresh, ok := a.Snapshot().Instances["one"]
+				if !ok || fresh.Session.ID == "" || fresh.Session.ID == before || got != "live" {
 					t.Errorf("restart: the new instance %+v, presence %q; want a new live session, not %s", fresh, got, before)
 				}
 				if ended := w.d.sessionEnded(t, before); !ended {
@@ -77,7 +77,7 @@ func TestAnAgentTheWindowTakesAwayEndsItsCrewSession(t *testing.T) {
 // registered until the exit's answer comes, and then the new session is.
 func TestARestartRegistersAfterTheOldSessionsExit(t *testing.T) {
 	a, c, w := messagingRig(t)
-	before := a.instances["one"].session.ID
+	before := a.Snapshot().Instances["one"].Session.ID
 	registered := calledTimes(w, "crew.register")
 	a.restartAgent("one")
 	w.hold, w.late = true, true // calls run at once, their answers wait
@@ -109,8 +109,8 @@ func TestARestartRegistersAfterTheOldSessionsExit(t *testing.T) {
 		}
 	}
 	settleMessaging(c, w)
-	fresh := a.instances["one"]
-	if calledTimes(w, "crew.register") != registered+1 || fresh == nil || fresh.session.ID == "" || fresh.session.ID == before ||
+	fresh, ok := a.Snapshot().Instances["one"]
+	if calledTimes(w, "crew.register") != registered+1 || !ok || fresh.Session.ID == "" || fresh.Session.ID == before ||
 		!w.d.sessionEnded(t, before) || presenceOf(t, a, w, "one") != "live" {
 		t.Fatalf("after the exit's answer: registers %d (want %d), instance %+v; the old session ended %v, presence %q",
 			calledTimes(w, "crew.register"), registered+1, fresh, w.d.sessionEnded(t, before), presenceOf(t, a, w, "one"))

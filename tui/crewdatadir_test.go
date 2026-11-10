@@ -15,9 +15,9 @@ func TestACrewOpenCodeAgentWritesNothingIntoTheWorkingFolder(t *testing.T) {
 	cwd := t.TempDir()
 	t.Chdir(cwd)
 	a, c, _ := crewAgents(t, crewKindsCopy)
-	run := a.setupRun
+	run := seamsOf(a).agentSetupRun
 	var asked string
-	a.setupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
+	seamsOf(a).agentSetupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
 		asked = dir
 		return run(kind, dir, environ)
 	}
@@ -30,8 +30,8 @@ func TestACrewOpenCodeAgentWritesNothingIntoTheWorkingFolder(t *testing.T) {
 	if _, _, err := startedEnvCopy(a, c, instance); err != nil {
 		t.Fatal(err)
 	}
-	if asked != instance.dir {
-		t.Errorf("its setup was asked for %q, want its own folder %q", asked, instance.dir)
+	if asked != instance.State().Dir {
+		t.Errorf("its setup was asked for %q, want its own folder %q", asked, instance.State().Dir)
 	}
 	if entries, _ := os.ReadDir(cwd); len(entries) != 0 {
 		var names []string
