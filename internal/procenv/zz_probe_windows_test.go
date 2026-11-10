@@ -16,92 +16,107 @@ import (
 // scratch probe, not for merge: each caller argument through each route, logged, never failing.
 func TestProbeCallerArgs(t *testing.T) {
 	helper := helperIn(t, "probe dir")
-	bound := []string{helper, "--config", filepath.Join(filepath.Dir(helper), "config.toml")}
-	dir := writeLauncher(t, "autodoc", bound)
 	sys32 := filepath.Join(os.Getenv("SystemRoot"), "System32")
-	env := launcherEnv(dir + ";" + sys32)
-	cases := [][]string{
-		{"--call", `["kb","a b.md"]`},
-		{`say "hi"`},
-		{"50%"},
-		{"%PATH%"},
-		{"a&b"},
-		{"a & b"},
-		{"!x"},
-		{`ends\`},
-		{`ends\`, "next"},
-		{"a^b", "a|b", "<x>"},
+	launcherBound := []string{helper, "--config", filepath.Join(filepath.Dir(helper), "config.toml")}
+	launcherDir := writeLauncher(t, "autodoc", launcherBound)
+	directDir := t.TempDir() // the control: the helper itself as autodoc.exe, no launcher
+	if b, err := os.ReadFile(helper); err != nil || os.WriteFile(filepath.Join(directDir, "autodoc.exe"), b, 0o700) != nil {
+		t.Fatal(err)
 	}
-	run := func(cmd *exec.Cmd) ([]string, string) {
-		cmd.Env = append(append([]string{}, env...), argvHelper+"=1")
-		out, err := cmd.CombinedOutput()
-		var got []string
-		if jerr := json.Unmarshal(out, &got); jerr != nil {
-			return nil, strings.TrimSpace(string(out)) + " / " + func() string {
-				if err != nil {
-					return err.Error()
-				}
-				return ""
-			}()
+	for _, setup := range []struct {
+		label string
+		dir   string
+		bound []string
+	}{{"cmd-launcher", launcherDir, launcherBound}, {"direct-exe", directDir, []string{"autodoc.exe"}}} {
+		dir, bound := setup.dir, setup.bound
+		env := launcherEnv(dir + ";" + sys32)
+		cases := [][]string{
+			{"--call", `["kb","a b.md"]`},
+			{`say "hi"`},
+			{"50%"},
+			{"%PATH%"},
+			{"a&b"},
+			{"a & b"},
+			{"!x"},
+			{`ends\`},
+			{`ends\`, "next"},
+			{"a^b", "a|b", "<x>"},
 		}
-		return got, ""
-	}
-	report := func(route string, args, got []string, fail string) {
-		want := append(append([]string{}, bound[1:]...), args...)
-		switch {
-		case fail != "":
-			t.Logf("PROBE %-10s %q -> FAILED: %.200s", route, args, fail)
-		case reflect.DeepEqual(got, want):
-			t.Logf("PROBE %-10s %q -> intact", route, args)
-		default:
-			t.Logf("PROBE %-10s %q -> MANGLED: got %q", route, args, got[min(2, len(got)):])
-		}
-	}
-	cmdQuote := func(a string) string { // as a user types it in cmd: quoted, inner quote as \"
-		return `"` + strings.ReplaceAll(a, `"`, `\"`) + `"`
-	}
-	pwsh, _ := exec.LookPath("pwsh")
-	sh, _ := exec.LookPath("sh")
-	for _, args := range cases {
-		// Go's own exec of the .cmd
-		got, fail := run(exec.Command(filepath.Join(dir, "autodoc.cmd"), args...))
-		report("go-exec", args, got, fail)
-		// cmd /c, the line as a user types it
-		line := "autodoc"
-		for _, a := range args {
-			line += " " + cmdQuote(a)
-		}
-		c := exec.Command(filepath.Join(sys32, "cmd.exe"))
-		c.SysProcAttr = &syscall.SysProcAttr{CmdLine: `cmd.exe /d /s /c "` + line + `"`}
-		got, fail = run(c)
-		report("cmd-typed", args, got, fail)
-		// PowerShell, the arguments as an array splatted onto the command
-		j, _ := json.Marshal(args)
-		ps := "$a = @(ConvertFrom-Json $env:PROBE_ARGS); autodoc @a"
-		for _, p := range [][2]string{{"winps", filepath.Join(sys32, "WindowsPowerShell", "v1.0", "powershell.exe")}, {"pwsh", pwsh}} {
-			if p[1] == "" {
-				continue
-			}
-			cmd2 := exec.Command(p[1], "-NoLogo", "-NoProfile", "-Command", ps)
-			env2 := append(append([]string{}, env...), "PROBE_ARGS="+string(j), argvHelper+"=1")
-			cmd2.Env = env2
-			out, err := cmd2.CombinedOutput()
-			var g []string
-			if jerr := json.Unmarshal(out, &g); jerr != nil {
-				report(p[0], args, nil, strings.TrimSpace(string(out))+" / "+func() string {
+		run := func(cmd *exec.Cmd) ([]string, string) {
+			cmd.Env = append(append([]string{}, env...), argvHelper+"=1")
+			out, err := cmd.CombinedOutput()
+			var got []string
+			if jerr := json.Unmarshal(out, &got); jerr != nil {
+				return nil, strings.TrimSpace(string(out)) + " / " + func() string {
 					if err != nil {
 						return err.Error()
 					}
 					return ""
-				}())
-			} else {
-				report(p[0], args, g, "")
+				}()
+			}
+			return got, ""
+		}
+		report := func(route string, args, got []string, fail string) {
+			want := append(append([]string{}, bound[1:]...), args...)
+			switch {
+			case fail != "":
+				t.Logf("PROBE %-12s %-10s %q -> FAILED: %.200s", setup.label, route, args, fail)
+			case reflect.DeepEqual(got, want):
+				t.Logf("PROBE %-12s %-10s %q -> intact", setup.label, route, args)
+			default:
+				t.Logf("PROBE %-12s %-10s %q -> MANGLED: got %q", setup.label, route, args, got[min(len(bound)-1, len(got)):])
 			}
 		}
-		// Git's shell: "$@" onto autodoc, which finds the sh script
-		if sh != "" {
-			got, fail = run(exec.Command(sh, append([]string{"-c", `autodoc "$@"`, "sh"}, args...)...))
-			report("git-sh", args, got, fail)
+		cmdQuote := func(a string) string { // as a user types it in cmd: quoted, inner quote as \"
+			return `"` + strings.ReplaceAll(a, `"`, `\"`) + `"`
+		}
+		pwsh, _ := exec.LookPath("pwsh")
+		sh, _ := exec.LookPath("sh")
+		for _, args := range cases {
+			// Go's own exec of the .cmd
+			target := filepath.Join(dir, "autodoc.cmd")
+			if setup.label == "direct-exe" {
+				target = filepath.Join(dir, "autodoc.exe")
+			}
+			got, fail := run(exec.Command(target, args...))
+			report("go-exec", args, got, fail)
+			// cmd /c, the line as a user types it
+			line := "autodoc"
+			for _, a := range args {
+				line += " " + cmdQuote(a)
+			}
+			c := exec.Command(filepath.Join(sys32, "cmd.exe"))
+			c.SysProcAttr = &syscall.SysProcAttr{CmdLine: `cmd.exe /d /s /c "` + line + `"`}
+			got, fail = run(c)
+			report("cmd-typed", args, got, fail)
+			// PowerShell, the arguments as an array splatted onto the command
+			j, _ := json.Marshal(args)
+			ps := "$a = @(ConvertFrom-Json $env:PROBE_ARGS); autodoc @a"
+			for _, p := range [][2]string{{"winps", filepath.Join(sys32, "WindowsPowerShell", "v1.0", "powershell.exe")}, {"pwsh", pwsh}} {
+				if p[1] == "" {
+					continue
+				}
+				cmd2 := exec.Command(p[1], "-NoLogo", "-NoProfile", "-Command", ps)
+				env2 := append(append([]string{}, env...), "PROBE_ARGS="+string(j), argvHelper+"=1")
+				cmd2.Env = env2
+				out, err := cmd2.CombinedOutput()
+				var g []string
+				if jerr := json.Unmarshal(out, &g); jerr != nil {
+					report(p[0], args, nil, strings.TrimSpace(string(out))+" / "+func() string {
+						if err != nil {
+							return err.Error()
+						}
+						return ""
+					}())
+				} else {
+					report(p[0], args, g, "")
+				}
+			}
+			// Git's shell: "$@" onto autodoc, which finds the sh script
+			if sh != "" {
+				got, fail = run(exec.Command(sh, append([]string{"-c", `autodoc "$@"`, "sh"}, args...)...))
+				report("git-sh", args, got, fail)
+			}
 		}
 	}
 }
