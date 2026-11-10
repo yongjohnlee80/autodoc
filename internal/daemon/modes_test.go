@@ -747,7 +747,9 @@ func TestASiblingInAnotherCaseIsAnotherWorkspace(t *testing.T) {
 	}
 	w, _ := m.Get("upper")
 	ls, err := w.Index().Store().Links(context.Background(), "notes/n.md", nil)
-	if err != nil || len(ls) != 1 || ls[0].Resolved {
-		t.Errorf("KB's note's $KB_ROOT relation %+v, %v; want it unresolved: KB has no variables", ls, err)
+	// with no variables of its own, KB reads $KB_ROOT from its own root, as a workspace always
+	// has; given kb's variables it would name kb's a/x.md, a file outside KB
+	if err != nil || len(ls) != 1 || !ls[0].Resolved || ls[0].Path != "a/x.md" || ls[0].External != "" {
+		t.Errorf("KB's note's $KB_ROOT relation %+v, %v; want KB's own a/x.md: KB has none of kb's variables", ls, err)
 	}
 }

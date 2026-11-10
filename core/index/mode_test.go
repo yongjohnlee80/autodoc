@@ -492,7 +492,9 @@ func TestRefsResolveUnderARootConfiguredThroughAnAlias(t *testing.T) {
 // unchanged, keep their rows, so nothing is embedded again. A document already under this reading
 // is not parsed.
 func TestAnOlderRelationsReadingIsReadAgainOnStart(t *testing.T) {
-	e := newEnv(t, options{Root: "/ws"})
+	// with variables given, a relation's absolute ref is read against the root
+	m := &modes{vars: map[string]map[string]string{"": {"KB_ROOT": "/ws"}}}
+	e := newEnv(t, options{Modes: m.mode, Root: "/ws"})
 	e.put("b.md", "# B\n\nbody\n", "a.md", "---\nrelated: [/ws/b.md, /elsewhere/q.md]\n---\n# A\n\nsee [[b]]\n")
 	want := e.kinds("a.md")
 	if len(want) != 3 {
@@ -515,7 +517,7 @@ func TestAnOlderRelationsReadingIsReadAgainOnStart(t *testing.T) {
 		t.Fatalf("the fixture: %d live links rewritten as the older reading's, %v; want %d", left, err, len(want))
 	}
 	e.stop = nil
-	e.open(options{Root: "/ws"})
+	e.open(options{Modes: m.mode, Root: "/ws"})
 	e.eventually("a.md read again under this reading", func() bool { return e.indexerOf("a.md") == cur && e.pendingJobs() == 0 })
 	eq(t, "a.md's links, read again", e.kinds("a.md"), want)
 	if got := e.ix.Parses(); got != 1 {
