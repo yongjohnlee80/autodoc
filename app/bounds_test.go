@@ -242,7 +242,7 @@ func TestASecondHardLinkIsRefused(t *testing.T) {
 // own is refused as one too many, never taken for bounds.
 func TestBoundsArriveFromProtocol34(t *testing.T) {
 	f := newBoundsFixture(t)
-	old, err := golibrpc.Dial(context.Background(), f.sock, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	old, err := golibrpc.Dial(context.Background(), f.sock, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 	if err != nil {
 		t.Fatal(err)
 	}

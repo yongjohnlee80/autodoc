@@ -100,6 +100,14 @@ func writeConfig(t *testing.T, sock, state, extra string, workspaces ...string) 
 	return p
 }
 
+// skipOnPipes skips a cell about a socket's file: a named pipe has none, and goes with its last handle.
+func skipOnPipes(t *testing.T) {
+	t.Helper()
+	if ipc.Network != "unix" {
+		t.Skip("about a socket file left on disk: a named pipe leaves none")
+	}
+}
+
 // start runs runServe on cfg and waits until it answers, or until it returns (wait false: return
 // at once with the handle).
 func start(t *testing.T, cfg, sock string) *daemon { return startAs(t, cfg, sock, testBuild) }
@@ -116,7 +124,7 @@ func startWith(t *testing.T, cfg, sock string, b build, level logger.Severity) *
 	t.Cleanup(func() { d.stop() })
 	deadline := time.Now().Add(10 * time.Second)
 	for {
-		if _, err := rpc.ProbeOn(context.Background(), "unix", sock); err == nil {
+		if _, err := rpc.ProbeOn(context.Background(), ipc.Network, sock); err == nil {
 			return d
 		}
 		select {
@@ -146,7 +154,7 @@ func (d *daemon) stop() {
 
 func dial(t *testing.T, sock string) *golibrpc.Client {
 	t.Helper()
-	cli, err := golibrpc.Dial(context.Background(), sock, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	cli, err := golibrpc.Dial(context.Background(), sock, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,13 +213,14 @@ func TestSecondDaemonIsRefused(t *testing.T) {
 	if !errors.Is(err, errAlreadyServing) {
 		t.Fatalf("a second daemon: %v", err)
 	}
-	if _, err := rpc.ProbeOn(context.Background(), "unix", sock); err != nil {
+	if _, err := rpc.ProbeOn(context.Background(), ipc.Network, sock); err != nil {
 		t.Errorf("the first daemon stopped answering: %v", err)
 	}
 }
 
 // TestStaleSocketIsReplaced: a socket file nothing answers on (a crashed daemon's) is taken over.
 func TestStaleSocketIsReplaced(t *testing.T) {
+	skipOnPipes(t)
 	dir := short(t)
 	sock := ipc.ScratchAddr(dir, "a.sock")
 	ln, err := net.Listen("unix", sock)
@@ -225,6 +234,7 @@ func TestStaleSocketIsReplaced(t *testing.T) {
 
 // TestSuccessorsSocketIsLeft: a daemon shutting down removes the socket only while it is its own.
 func TestSuccessorsSocketIsLeft(t *testing.T) {
+	skipOnPipes(t)
 	dir := short(t)
 	sock := ipc.ScratchAddr(dir, "a.sock")
 	d := start(t, writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+t.TempDir()), sock)
@@ -232,7 +242,7 @@ func TestSuccessorsSocketIsLeft(t *testing.T) {
 	if err := os.Remove(sock); err != nil {
 		t.Fatal(err)
 	}
-	ln, err := net.Listen("unix", sock)
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -622,7 +632,7 @@ func TestSpawnServeStartsADetachedDaemon(t *testing.T) {
 		t.Errorf("log %q", logPath)
 	}
 	eventually(t, "the spawned daemon answering", func() bool {
-		_, err := rpc.ProbeOn(context.Background(), "unix", sock)
+		_, err := rpc.ProbeOn(context.Background(), ipc.Network, sock)
 		if err != nil {
 			if b, _ := os.ReadFile(logPath); strings.Contains(string(b), "autodoc:") {
 				t.Fatalf("the daemon failed: %s", b)
@@ -646,7 +656,7 @@ func TestSpawnServeStartsADetachedDaemon(t *testing.T) {
 	}
 	call(t, cli, "sys.shutdown")
 	eventually(t, "the daemon gone", func() bool {
-		_, err := rpc.ProbeOn(context.Background(), "unix", sock)
+		_, err := rpc.ProbeOn(context.Background(), ipc.Network, sock)
 		return err != nil
 	})
 	if b, _ := os.ReadFile(logPath); !strings.Contains(string(b), "serving msgpack-RPC on "+sock) {
@@ -952,7 +962,7 @@ func TestServeAsAModeSaysWhyItServesNothing(t *testing.T) {
 		t.Errorf("--serve on another store's daemon's socket: %v", err)
 	}
 	plain := ipc.ScratchAddr(dir, "p.sock")
-	ln, err := net.Listen("unix", plain)
+	ln, err := ipc.Listen(plain, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
