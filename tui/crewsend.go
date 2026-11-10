@@ -11,6 +11,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/inbox"
 	"github.com/yongjohnlee80/autodoc/core/mail"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -40,7 +41,7 @@ const (
 func (h *crewHost) userSend(codename, kind, subject, body string, then func(error)) {
 	scope, epoch, ok := h.held()
 	if !ok || codename == "" {
-		then(fmt.Errorf("%w: the window holds no crew scope", errDoorbellNotSent))
+		then(fmt.Errorf("%w: the window holds no crew scope", agents.ErrDoorbellNotSent))
 		return
 	}
 	key := newSecret() // one key for every ask of this send
@@ -55,9 +56,9 @@ func (h *crewHost) userSend(codename, kind, subject, body string, then func(erro
 			case err == nil:
 				then(nil)
 			case feature.Code(err) == inbox.CodeHandedOver: // its fallback job brings it back: never asked again, never typed here
-				then(errHandedOver)
+				then(agents.ErrHandedOver)
 			case doorbellNotSent(err):
-				then(fmt.Errorf("%w: %v", errDoorbellNotSent, err))
+				then(fmt.Errorf("%w: %v", agents.ErrDoorbellNotSent, err))
 			case left > 1:
 				h.c.After(userSendGap, func() { ask(left - 1) })
 			default:
@@ -102,7 +103,7 @@ func (h *crewHost) peerAgents(then func([]feature.AgentEntry)) {
 func (h *crewHost) sendTask(codename, scope, subject, body, key string, then func(error)) {
 	own, epoch, ok := h.held()
 	if !ok {
-		then(fmt.Errorf("%w: the window holds no crew scope", errDoorbellNotSent))
+		then(fmt.Errorf("%w: the window holds no crew scope", agents.ErrDoorbellNotSent))
 		return
 	}
 	h.c.Go(func(ctx context.Context) any {
@@ -120,7 +121,7 @@ func (h *crewHost) sendTask(codename, scope, subject, body, key string, then fun
 func (h *crewHost) queueSend(codename, kind, subject, body string, then func(error)) {
 	scope, epoch, ok := h.held()
 	if !ok || codename == "" {
-		then(fmt.Errorf("%w: the window holds no crew scope", errDoorbellNotSent))
+		then(fmt.Errorf("%w: the window holds no crew scope", agents.ErrDoorbellNotSent))
 		return
 	}
 	key := newSecret()

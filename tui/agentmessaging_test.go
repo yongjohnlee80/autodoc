@@ -12,16 +12,17 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/inbox"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // messagingRig is crewAgents with agent one started: a window holding a crew scope, one agent
 // running in it, its CLI reporting its prompts unless a cell says otherwise.
-func messagingRig(t *testing.T) (*agents, *identityHostCopy, *crewWindow) {
+func messagingRig(t *testing.T) (*agents.Agents, *identityHost, *crewWindow) {
 	t.Helper()
-	a, c, w := crewAgents(t, oneTwoCopy)
-	p, _ := a.profile("one")
-	if instance, err := a.startInstance(p); err != nil || !instance.State().Running {
+	a, c, w := crewAgents(t, oneTwo)
+	p, _ := a.Profile("one")
+	if instance, err := a.StartInstance(p); err != nil || !instance.State().Running {
 		t.Fatalf("start: %v", err)
 	}
 	seamsOf(a).agentPromptsReported = func(string, bool) bool { return true }
@@ -30,7 +31,7 @@ func messagingRig(t *testing.T) (*agents, *identityHostCopy, *crewWindow) {
 
 // settleMessaging runs what the window and the crew host left for later: posted deliveries, the
 // base's Enter, the doorbell's asks again (settleRounds rounds of the crew host's timers).
-func settleMessaging(c *identityHostCopy, w *crewWindow) {
+func settleMessaging(c *identityHost, w *crewWindow) {
 	for round := 0; ; round++ {
 		c.drainPosts()
 		c.fireAfters()
@@ -54,7 +55,7 @@ func TestAMessageRingsTheAgentsDoorbell(t *testing.T) {
 	var got []any
 	w.inboxSend = func(p []any) (any, error) { got = p; return map[string]any{"message": "m1"}, nil }
 	var heard []error
-	task := feature.TaskRef{Title: "Ship", Path: taskFileCopy("/kb/.todo-list/in-progress/t1.md"), ID: "t1"}
+	task := feature.TaskRef{Title: "Ship", Path: taskFile("/kb/.todo-list/in-progress/t1.md"), ID: "t1"}
 	if err := a.HandTask(feature.AgentRef{Codename: "one"}, task, "Go.", func(err error) { heard = append(heard, err) }); err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +64,7 @@ func TestAMessageRingsTheAgentsDoorbell(t *testing.T) {
 		t.Fatalf("done heard %v, want one nil", heard)
 	}
 	if len(got) != 9 || got[0] != scope || got[2] != epoch || func() bool { l, ok := got[3].([]any); return !ok || !slices.Equal(l, []any{"one"}) }() ||
-		got[4] != "File: "+taskFileCopy("/kb/.todo-list/in-progress/t1.md")+"\nID: t1\nInstruction: Go." || got[6] != MessageRequest ||
+		got[4] != "File: "+taskFile("/kb/.todo-list/in-progress/t1.md")+"\nID: t1\nInstruction: Go." || got[6] != agents.MessageRequest ||
 		got[7] != "Task: Ship" || got[8] != true || got[5] == "" {
 		t.Fatalf("inbox.send %v", got)
 	}
@@ -75,7 +76,7 @@ func TestAMessageRingsTheAgentsDoorbell(t *testing.T) {
 // A stopped agent is started with the user's consent and typed to: a session just registered has no
 // doorbell yet, so it is never rung (S1: the doorbell runs inside the one delivery).
 func TestAStartedAgentIsNotRung(t *testing.T) {
-	a, c, w := crewAgents(t, oneTwoCopy)
+	a, c, w := crewAgents(t, oneTwo)
 	seamsOf(a).agentPromptsReported = func(string, bool) bool { return true }
 	rang := false
 	w.inboxSend = func([]any) (any, error) { rang = true; return map[string]any{"message": "m"}, nil }
@@ -97,7 +98,7 @@ func TestAStartedAgentIsNotRung(t *testing.T) {
 // scope says nothing, and a session the list doesn't name is not reported (the mutants: the lookup
 // skipped; the scope not matched; no session taken as reported).
 func TestTheEnterAsksTheCrewWhetherPromptsAreReported(t *testing.T) {
-	scopeOf := func(a *agents) string { s, _, _ := crewOf(a).held(); return s }
+	scopeOf := func(a *agents.Agents) string { s, _, _ := crewOf(a).held(); return s }
 	for _, c := range []struct {
 		name   string
 		list   func(scope string) []any
@@ -130,7 +131,7 @@ func TestTheEnterAsksTheCrewWhetherPromptsAreReported(t *testing.T) {
 			if pressed := len(cw.panel.keys) == 1; pressed != c.enter || len(heard) != 1 {
 				t.Fatalf("pressed %q heard %v: want Enter %v", cw.panel.keys, heard, c.enter)
 			}
-			if c.enter && heard[0] != nil || !c.enter && !errors.Is(heard[0], ErrAgentTypedNotSent) {
+			if c.enter && heard[0] != nil || !c.enter && !errors.Is(heard[0], agents.ErrAgentTypedNotSent) {
 				t.Fatalf("heard %v", heard)
 			}
 			if c.notice != "" && !hasNote(cw.notes, c.notice) {
@@ -145,7 +146,7 @@ func TestASessionWithNoReporterIsNotReported(t *testing.T) {
 	a, cw, w := messagingRig(t)
 	var said []bool
 	done := false
-	crewOf(a).promptsReported("one", func(reportedCopy bool) { said = append(said, reportedCopy); done = true })
+	crewOf(a).promptsReported("one", func(reported bool) { said = append(said, reported); done = true })
 	settleMessaging(cw, w)
 	if !done || len(said) != 1 || said[0] {
 		t.Fatalf("one, of no reporting kind: %v", said)
@@ -249,7 +250,7 @@ func TestACLIThatDoesntReportPromptsIsTypedNotSent(t *testing.T) {
 		t.Fatal(err)
 	}
 	settleMessaging(c, w)
-	if len(c.panel.pastes) != 1 || len(c.panel.keys) != 0 || len(heard) != 1 || !errors.Is(heard[0], ErrAgentTypedNotSent) {
+	if len(c.panel.pastes) != 1 || len(c.panel.keys) != 0 || len(heard) != 1 || !errors.Is(heard[0], agents.ErrAgentTypedNotSent) {
 		t.Fatalf("pasted %q pressed %q heard %v: want typed, no Enter, ErrAgentTypedNotSent", c.panel.pastes, c.panel.keys, heard)
 	}
 	if !hasNote(c.notes, "AutoDoc can't see one's permission prompts") {
@@ -262,13 +263,13 @@ func TestACLIThatDoesntReportPromptsIsTypedNotSent(t *testing.T) {
 func TestNoEnterIsPressedIntoAPrompt(t *testing.T) {
 	a, c, w := messagingRig(t)
 	w.inboxSend = func([]any) (any, error) { return nil, &golibrpc.Error{Code: inbox.CodeUnreachable, Message: "x"} }
-	a.inbox = &crewInbox{waiting: map[string]bool{"one": true}}
+	a.Inbox = &crewInbox{waiting: map[string]bool{"one": true}}
 	var heard []error
 	if err := a.SendText(feature.AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
 		t.Fatal(err)
 	}
 	settleMessaging(c, w)
-	if len(c.panel.pastes) != 1 || len(c.panel.keys) != 0 || len(heard) != 1 || !errors.Is(heard[0], ErrAgentTypedNotSent) {
+	if len(c.panel.pastes) != 1 || len(c.panel.keys) != 0 || len(heard) != 1 || !errors.Is(heard[0], agents.ErrAgentTypedNotSent) {
 		t.Fatalf("pasted %q pressed %q heard %v: want typed, no Enter", c.panel.pastes, c.panel.keys, heard)
 	}
 	if !hasNote(c.notes, "one is waiting on a prompt") {
@@ -282,10 +283,10 @@ func TestNoEnterIsPressedIntoAPrompt(t *testing.T) {
 func TestNoEnterIsPressedIntoADeliveryThatWentStale(t *testing.T) {
 	for _, c := range []struct {
 		name  string
-		stale func(a *agents)
+		stale func(a *agents.Agents)
 	}{
-		{"shut down", func(a *agents) { a.Stopping() }},
-		{"the agent closing", func(a *agents) { a.closeAgent("one") }},
+		{"shut down", func(a *agents.Agents) { a.Stopping() }},
+		{"the agent closing", func(a *agents.Agents) { a.CloseAgent("one") }},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			a, cw, w := messagingRig(t)

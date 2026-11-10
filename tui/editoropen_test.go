@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/internal/ipc"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 )
@@ -51,7 +52,7 @@ func TestAnAgentOpensAFileByItsPath(t *testing.T) {
 	r.connected(t)
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
-	call := editorClient(t, r, onLoop(r, func() string { return r.h.agents.editorToken("zen") }))
+	call := editorClient(t, r, onLoop(r, func() string { return r.h.agents.EditorToken("zen") }))
 
 	res, re := call("editor.commands")
 	if re != nil {
@@ -123,14 +124,14 @@ func TestAnAgentOpensAFileByItsPath(t *testing.T) {
 // agent started in kb, the editor switched to notes, opens notes's file by its path there, and
 // editor.document says it is foreign to the agent.
 func TestAnAgentOpensARelativePathInTheEditorsWorkspace(t *testing.T) {
-	agent, _ := recordingAgentCopy(t, true)
+	agent, _ := recordingAgent(t, true)
 	files := map[string][]string{"kb": {"a.md", "a\n"}, "notes": {"b.md", "b\n", "only.md", "notes only\n"}}
-	_, r, _ := runAgentTUIIn(t, t.TempDir(), []agentProfile{{Name: "zen", Command: shellQuote(agent), Codename: "zen"}}, "zen", nil,
+	_, r, _ := runAgentTUIIn(t, t.TempDir(), []agents.AgentProfile{{Name: "zen", Command: agents.ShellQuote(agent), Codename: "zen"}}, "zen", nil,
 		Options{EditorDir: t.TempDir(), Workspace: "kb"}, files)
 	r.s.WaitFor(t, "kb entered", func(string) bool { return onLoop(r, func() bool { return r.h.ws == "kb" }) })
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitForText(t, "ready")
-	call := editorClient(t, r, onLoop(r, func() string { return r.h.agents.editorToken("zen") }))
+	call := editorClient(t, r, onLoop(r, func() string { return r.h.agents.EditorToken("zen") }))
 	onLoop(r, func() bool {
 		r.h.prefs.luaGrants = map[string]map[string]bool{"agent:zen": {"commands": true, "editor.read": true}}
 		return true
@@ -184,7 +185,7 @@ func TestALuaCommandNamedOpenIsListedAsOwningIt(t *testing.T) {
 			return r.h.cat != nil && r.h.cat.Names["open"] != "" && r.h.cat.Names["open"] != "file.open_path"
 		})
 	})
-	call := editorClient(t, r, onLoop(r, func() string { return r.h.agents.editorToken("zen") }))
+	call := editorClient(t, r, onLoop(r, func() string { return r.h.agents.EditorToken("zen") }))
 	res, re := call("editor.commands")
 	if re != nil {
 		t.Fatalf("editor.commands: %v", re)

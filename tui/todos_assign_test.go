@@ -14,6 +14,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 
 	"github.com/yongjohnlee80/autodoc/core/todo"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/autodoc/tui/feature/featuretest"
 )
@@ -27,7 +28,7 @@ func hearingAgent(t *testing.T, dir string) string {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "hearing-agent")
 	script := "#!/bin/sh\nstty raw -echo\nprintf '\\033[?2004hstarted %s\\r\\n' \"$1\"\nexec cat >> " +
-		shellQuote(dir) + "/heard-\"$1\"\n"
+		agents.ShellQuote(dir) + "/heard-\"$1\"\n"
 	if err := os.WriteFile(p, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -74,9 +75,9 @@ func taskIn(t *testing.T, d *daemon, bucket, title string) (todo.Task, bool) {
 func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 	heardDir := t.TempDir()
 	agent := hearingAgent(t, heardDir)
-	d, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{
-		{Name: "Scribe", Codename: "scribe", Command: shellQuote(agent) + " scribe"},
-		{Name: "Critic", Codename: "critic", Command: shellQuote(agent) + " critic"},
+	d, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{
+		{Name: "Scribe", Codename: "scribe", Command: agents.ShellQuote(agent) + " scribe"},
+		{Name: "Critic", Codename: "critic", Command: agents.ShellQuote(agent) + " critic"},
 	}, "")
 	tasks := seedTodos(t, d, true, todo.Spec{Title: "Draft the guide"}, todo.Spec{Title: "Edit the links"},
 		todo.Spec{Title: "Fix the typos"})
@@ -131,7 +132,7 @@ func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 		t.Fatalf("Scribe heard %q", got)
 	}
 	// the workspace kb is the daemon's /kb: the store is its .todo-list, on the todos' own disk
-	if want := taskFileCopy("/kb/.todo-list/in-progress/" + tasks[0].ID + ".md"); file != want || x.Path != "in-progress/"+tasks[0].ID+".md" {
+	if want := taskFile("/kb/.todo-list/in-progress/" + tasks[0].ID + ".md"); file != want || x.Path != "in-progress/"+tasks[0].ID+".md" {
 		t.Fatalf("Scribe was handed %q (the task at %q), want %q: the path the assign returned", file, x.Path, want)
 	}
 	if _, err := d.todoDisk.ReadFile(file); err != nil {
@@ -151,7 +152,7 @@ func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 	agentShown := func() bool { return onLoop(r, func() bool { return r.h.panelOpen["agent"] }) }
 	r.s.WaitFor(t, "the agent's panel open", func(string) bool { return agentShown() })
 	r.s.WaitFor(t, "the keyboard in the agent", func(string) bool { return r.focused("agentView") })
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitFor(t, "the agent's panel hidden", func(string) bool { return !agentShown() })
 	r.s.WaitForText(t, "status: in-progress") // the cursor followed the task
 
@@ -302,11 +303,11 @@ func TestTodosAssignWritesThenHandsOverAtTheReturnedPath(t *testing.T) {
 	}
 	h := c.handed[0]
 	if h.to != (feature.AgentRef{Codename: "scribe"}) || h.instruction != assignDefault ||
-		h.task != (feature.TaskRef{Title: "Ship", Path: taskFileCopy("/kb/.todo-list/in-progress/t1.md"), ID: "t1"}) {
+		h.task != (feature.TaskRef{Title: "Ship", Path: taskFile("/kb/.todo-list/in-progress/t1.md"), ID: "t1"}) {
 		t.Fatalf("handed %+v", h)
 	}
 	h.done(nil)
-	h.done(ErrAgentCancelled)                    // as a second A's would: each says how it went
+	h.done(agents.ErrAgentCancelled)             // as a second A's would: each says how it went
 	h.done(terminal.ErrTerminalPasteUnbracketed) // a program that takes no bracketed paste got nothing
 	if len(c.Notes) != 3 || c.Notes[0] != "todos: assigned to Scribe, and sent to it" ||
 		!strings.Contains(c.Notes[1], "assigned to autodoc:scribe, but not delivered (you didn't start it)") ||
@@ -316,7 +317,7 @@ func TestTodosAssignWritesThenHandsOverAtTheReturnedPath(t *testing.T) {
 
 	// a typed instruction is the reason and the instruction; HandTask's refusal at once is told, and
 	// the assignment stands (nothing undoes it)
-	c.refuse = ErrAgentUnavailable
+	c.refuse = agents.ErrAgentUnavailable
 	v.showTab(0) // the task followed to In progress; this store's answers keep it in Open
 	v.assign()
 	v.assignPick.Accept(0, "")
@@ -324,7 +325,7 @@ func TestTodosAssignWritesThenHandsOverAtTheReturnedPath(t *testing.T) {
 	if p := (*assigned)[1]; p[4] != "Read the ADR first" {
 		t.Fatalf("todos.assign params %v", p)
 	}
-	if last := c.Notes[len(c.Notes)-1]; !strings.Contains(last, "not delivered ("+ErrAgentUnavailable.Error()+")") {
+	if last := c.Notes[len(c.Notes)-1]; !strings.Contains(last, "not delivered ("+agents.ErrAgentUnavailable.Error()+")") {
 		t.Fatalf("a refused hand-over: %q", last)
 	}
 	if slices.Contains(c.Calls, "todos.status") {
@@ -398,7 +399,7 @@ func TestTodosAssignAnsweredAfterAWorkspaceSwitchIsHandedToNoOne(t *testing.T) {
 		case switched && (len(c.handed) != 0 || len(c.Notes) != 1 ||
 			!strings.Contains(c.Notes[0], "assigned to autodoc:scribe, but not delivered (the workspace changed before the assign landed)")):
 			t.Fatalf("after a switch: handed %+v, notes %q", c.handed, c.Notes)
-		case !switched && (len(c.handed) != 1 || c.handed[0].task.Path != taskFileCopy("/kb/.todo-list/in-progress/t1.md")):
+		case !switched && (len(c.handed) != 1 || c.handed[0].task.Path != taskFile("/kb/.todo-list/in-progress/t1.md")):
 			t.Fatalf("same workspace, answered late: handed %+v", c.handed)
 		}
 	}

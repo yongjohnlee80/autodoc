@@ -16,33 +16,33 @@ func TestARefusedAgentCommandIsNeverSpawned(t *testing.T) {
 	t.Run("a workspace the command can't carry", func(t *testing.T) {
 		a, c, w := crewAgents(t, `[{"name":"One","command":"one {workspace}","codename":"one"}]`)
 		c.ws.name = "kb\x00x"
-		p, _ := a.profile("one")
-		instance, err := a.startInstance(p)
+		p, _ := a.Profile("one")
+		instance, err := a.StartInstance(p)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if instance.State().Refusal == nil || !errors.Is(instance.State().Refusal, usershell.ErrNotCarried) || calledTimes(w, "crew.register") != 0 {
 			t.Fatalf("refusal %v, registered %d; want refused before anything registers", instance.State().Refusal, calledTimes(w, "crew.register"))
 		}
-		if _, spawned, err := startedCmdCopy(a, c, instance); spawned || !errors.Is(err, usershell.ErrNotCarried) {
+		if _, spawned, err := startedCmd(a, c, instance); spawned || !errors.Is(err, usershell.ErrNotCarried) {
 			t.Fatalf("its tab's start: spawned %v, %v; want the refusal and no spawn", spawned, err)
 		}
 	})
 	t.Run("a setup's argument the command can't carry", func(t *testing.T) {
-		a, c, _ := crewAgents(t, crewKindsCopy)
+		a, c, _ := crewAgents(t, crewKinds)
 		setup := seamsOf(a).agentSetupRun
 		seamsOf(a).agentSetupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
 			s, err := setup(kind, dir, environ)
 			s.Argv = append(s.Argv, "--settings", "x\x00y")
 			return s, err
 		}
-		p, _ := a.profile("claude-one")
-		instance, err := a.startInstance(p)
+		p, _ := a.Profile("claude-one")
+		instance, err := a.StartInstance(p)
 		if err != nil {
 			t.Fatal(err)
 		}
 		awaitStart(t, c, instance)
-		if _, spawned, err := startedCmdCopy(a, c, instance); spawned || !errors.Is(err, usershell.ErrNotCarried) {
+		if _, spawned, err := startedCmd(a, c, instance); spawned || !errors.Is(err, usershell.ErrNotCarried) {
 			t.Fatalf("its tab's start: spawned %v, %v; want the setup's refusal and no spawn", spawned, err)
 		}
 	})

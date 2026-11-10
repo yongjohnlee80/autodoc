@@ -16,8 +16,13 @@ import (
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
+
+// EnvEditorCredentialFile names the file holding an agent's editor token, which `autodoc --editor`
+// reads (the agents' own, agents.EnvEditorCredentialFile).
+const EnvEditorCredentialFile = agents.EnvEditorCredentialFile
 
 // THE EDITOR SOCKET (docs/decisions/crew.md#the-editor-socket): the page's functions as tools for
 // the agents this TUI starts. The TUI serves editor.* on a unix socket of its own,
@@ -211,7 +216,7 @@ func (h *Host) agentOf(req *golibrpc.Request) (string, editorArgs, error) {
 	if len(req.Params) > 0 {
 		tok, _ = req.Params[0].(string)
 	}
-	agent := h.agents.agentOfToken(tok)
+	agent := h.agents.AgentOfToken(tok)
 	if agent == "" {
 		return "", nil, &golibrpc.Error{Code: codeEditorNotAgent,
 			Message: "param 1 is not an agent's token: only the agents AutoDoc started reach the page ($AUTODOC_EDITOR_TOKEN)"}
@@ -281,7 +286,7 @@ func (h *Host) editorBuffers(agent string, _ editorArgs) (any, error) {
 			if b.file.ws != "" {
 				row["workspace"] = b.file.ws
 			}
-			h.agents.markForeign(agent, b.file.ws, row)
+			h.agents.MarkForeign(agent, b.file.ws, row)
 		}
 		out = append(out, row)
 	}
@@ -309,7 +314,7 @@ func (h *Host) editorDocument(agent string, a editorArgs) (any, error) {
 		case diskDeleted:
 			doc["disk"] = "deleted"
 		}
-		h.agents.markForeign(agent, b.file.ws, doc)
+		h.agents.MarkForeign(agent, b.file.ws, doc)
 	}
 	if r, ok := c.Selection(); ok {
 		doc["selection"] = []any{r.From.Line + 1, r.From.Col + 1, r.To.Line + 1, r.To.Col + 1}
@@ -562,7 +567,7 @@ func (h *Host) writeAgentScript(path, src string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	f, err := newAgentFile(path)
+	f, err := agents.NewAgentFile(path)
 	if err != nil {
 		return &golibrpc.Error{Code: codeEditorRefused, Message: "not written: " + err.Error()}
 	}

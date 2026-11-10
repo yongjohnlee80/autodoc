@@ -16,6 +16,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc"
 	regindex "github.com/yongjohnlee80/autodoc/core/registry"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -300,7 +301,7 @@ func (cs *candidates) audit(c *candidate) {
 		if cs.auditing != c || c.state != opConfirming {
 			return
 		}
-		agents := defaultFirst(assignable(cs.c.AgentEntries()), cs.c.Prefs().Value(prefAgentDefaultCodename))
+		agents := defaultFirst(assignable(cs.c.AgentEntries()), cs.c.Prefs().Value(agents.PrefAgentDefaultCodename))
 		if len(agents) == 0 {
 			cs.auditing = nil
 			cs.c.Notify(cs.c.Tr("autodoc.notice.candidate.no_autodoc_agent_to_audit_with_add_one_in_system"))
@@ -373,7 +374,7 @@ func (cs *candidates) handOver(c *candidate, a feature.AgentEntry, task string) 
 		}
 		why := err.Error()
 		switch {
-		case errors.Is(err, ErrAgentCancelled):
+		case errors.Is(err, agents.ErrAgentCancelled):
 			why = cs.c.Trf("autodoc.notice.candidate.you_didn_t_start", a.Name)
 		case errors.Is(err, terminal.ErrTerminalPasteUnbracketed):
 			why = cs.c.Tr("autodoc.notice.candidate.its_program_takes_no_bracketed_paste")
@@ -385,7 +386,7 @@ func (cs *candidates) handOver(c *candidate, a feature.AgentEntry, task string) 
 	ref := feature.TaskRef{Title: "Audit " + c.name + " at " + regindex.Short(c.commit), Path: task}
 	done := func(err error) {
 		switch {
-		case errors.Is(err, ErrAgentTypedNotSent): // typed, left for the user's Enter (agentmessaging.go)
+		case errors.Is(err, agents.ErrAgentTypedNotSent): // typed, left for the user's Enter (agentmessaging.go)
 			cs.suspend(c, cs.c.Trf("autodoc.notice.candidate.audit_of_typed_into_input_click_to_install_or_cancel", c.name, a.Name))
 		case err != nil:
 			failed(err)

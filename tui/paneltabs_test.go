@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
@@ -18,7 +19,7 @@ func recordingShell(t *testing.T) (shell, report string) {
 	t.Helper()
 	dir := t.TempDir()
 	shell, report = filepath.Join(dir, "recording-shell"), filepath.Join(dir, "report")
-	script := "#!/bin/sh\nstty raw -echo\nprintf 'ready\\r\\n'\nexec cat >> " + shellQuote(report) + "\n"
+	script := "#!/bin/sh\nstty raw -echo\nprintf 'ready\\r\\n'\nexec cat >> " + agents.ShellQuote(report) + "\n"
 	if err := os.WriteFile(shell, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -82,12 +83,12 @@ func TestCtrlTabMovesBetweenTheTerminalsTabs(t *testing.T) {
 	r.keys(t, decltest.Ctrl('t'))                         // Normal mode
 	to(ctrlTab(false), ids[0], "Ctrl+Tab in Normal mode") // the last's mode is its own: the first's is input
 	r.keys(t, decltest.Type("x")...)
-	r.s.WaitFor(t, "x typed", func(string) bool { return len(reportedCopy(report)) > 0 })
-	if got := reportedCopy(report); got != "x" {
+	r.s.WaitFor(t, "x typed", func(string) bool { return len(reported(report)) > 0 })
+	if got := reported(report); got != "x" {
 		t.Fatalf("the shells got %q, want only the x typed: Ctrl+Tab reached a program", got)
 	}
 	r.keys(t, decltest.Ctrl('\\'), ctrlTab(false))
-	r.s.WaitFor(t, "Ctrl+Tab sent through", func(string) bool { return len(reportedCopy(report)) > 1 })
+	r.s.WaitFor(t, "Ctrl+Tab sent through", func(string) bool { return len(reported(report)) > 1 })
 	if active() != ids[0] {
 		t.Error("Ctrl+\\ then Ctrl+Tab moved the tab")
 	}
@@ -102,14 +103,14 @@ func TestCtrlTabMovesBetweenTheTerminalsTabs(t *testing.T) {
 // round to the first, as Go to › would (the agents' selected agent follows), and Ctrl+Shift+Tab
 // back.
 func TestCtrlTabMovesBetweenTheAgentsTabs(t *testing.T) {
-	agent, _ := recordingAgentCopy(t, true)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{
-		{Name: "one", Command: shellQuote(agent), Codename: "one"},
-		{Name: "two", Command: shellQuote(agent), Codename: "two"},
+	agent, _ := recordingAgent(t, true)
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{
+		{Name: "one", Command: agents.ShellQuote(agent), Codename: "one"},
+		{Name: "two", Command: agents.ShellQuote(agent), Codename: "two"},
 	}, "one")
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitFor(t, "one running", func(string) bool { return onLoop(r, func() bool { return r.h.agents.Snapshot().Running == "one" }) })
-	onLoop(r, func() bool { r.h.agents.openAgentProfiles(); r.h.agents.useAgent(1); return true })
+	onLoop(r, func() bool { r.h.agents.OpenAgentProfiles(); r.h.agents.UseAgent(1); return true })
 	selected := func() string { return onLoop(r, func() string { return r.h.agents.Snapshot().Selected }) }
 	r.s.WaitFor(t, "two running, its tab showing", func(string) bool { return selected() == "two" && r.focused("agentView") })
 	r.keys(t, ctrlTab(false))

@@ -16,17 +16,18 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/todo"
 	"github.com/yongjohnlee80/autodoc/core/todo/todotest"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 )
 
 // todoFeedRig is messagingRig (agent one running in the window's scope) whose daemon serves a
 // todo store at /kb, workspace kb, with one open task; every inbox.send is kept, and answered sent.
-func todoFeedRig(t *testing.T) (a *agents, c *identityHostCopy, w *crewWindow, task todo.Task, sends *[][]any) {
+func todoFeedRig(t *testing.T) (a *agents.Agents, c *identityHost, w *crewWindow, task todo.Task, sends *[][]any) {
 	t.Helper()
 	return todoFeedRigAt(t, time.Now)
 }
 
 // todoFeedRigAt is todoFeedRig whose todo store reads the time from now.
-func todoFeedRigAt(t *testing.T, now func() time.Time) (a *agents, c *identityHostCopy, w *crewWindow, task todo.Task, sends *[][]any) {
+func todoFeedRigAt(t *testing.T, now func() time.Time) (a *agents.Agents, c *identityHost, w *crewWindow, task todo.Task, sends *[][]any) {
 	t.Helper()
 	a, c, w = messagingRig(t)
 	disk := todotest.NewDisk()
@@ -92,7 +93,7 @@ func TestABareAssignmentReachesTheWindowsAgent(t *testing.T) {
 	if key := fmt.Sprintf("todo-%s-%d", store, seq); p[5] != key {
 		t.Errorf("key %v, want %s: the change's", p[5], key)
 	}
-	if p[6] != MessagePlain || p[7] != "[todos] task assigned to you: Re-sync the mirrors" || p[8] != false {
+	if p[6] != agents.MessagePlain || p[7] != "[todos] task assigned to you: Re-sync the mirrors" || p[8] != false {
 		t.Errorf("kind %v, subject %v, fire %v; want a plain message, the notice's subject, queued", p[6], p[7], p[8])
 	}
 	if len(c.panel.pastes)+len(c.panel.keys) != 0 {
@@ -107,7 +108,7 @@ func TestABareAssignmentReachesTheWindowsAgent(t *testing.T) {
 
 // assignAndRead assigns the rig's task again (as read now) to assignee from scope, then the window
 // reads its feed as a todos.changed event makes it.
-func assignAndRead(t *testing.T, a *agents, c *identityHostCopy, w *crewWindow, id, assignee, scope string) {
+func assignAndRead(t *testing.T, a *agents.Agents, c *identityHost, w *crewWindow, id, assignee, scope string) {
 	t.Helper()
 	ctx := context.Background()
 	cur, err := w.d.todos.Get(ctx, todo.At{Workspace: "kb"}, id)
@@ -179,7 +180,7 @@ func TestAStoreNeverReadSkipsItsHistoryOnce(t *testing.T) {
 		t.Fatalf("history mailed: %v", *sends)
 	}
 	scope, _, _ := crewOf(a).held()
-	if seen := readTodoSeen(filepath.Join(crewOf(a).todos.dir, crewFileName(scope))); len(seen) != 1 {
+	if seen := readTodoSeen(filepath.Join(crewOf(a).todos.dir, agents.CrewFileName(scope))); len(seen) != 1 {
 		t.Fatalf("stores kept as read: %v, want the one", seen)
 	}
 
@@ -295,7 +296,7 @@ func TestAResyncMailsOnlyAStoreReadBefore(t *testing.T) {
 	if len(*sends) != 0 {
 		t.Fatalf("a store never read: its resync mailed %v, want nothing", *sends)
 	}
-	if seen := readTodoSeen(filepath.Join(crewOf(a).todos.dir, crewFileName(scope))); len(seen) != 1 {
+	if seen := readTodoSeen(filepath.Join(crewOf(a).todos.dir, agents.CrewFileName(scope))); len(seen) != 1 {
 		t.Fatalf("stores kept as read: %v, want the one", seen)
 	}
 

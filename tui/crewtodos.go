@@ -14,6 +14,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/inbox"
 	"github.com/yongjohnlee80/autodoc/core/mail"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -135,7 +136,7 @@ func (f *todoFeed) read(ctx context.Context, scope, run string, epoch int64, sta
 		return todoFeedRead{} // a daemon without todos, or one away: the next claim or change reads again
 	}
 	d := &todoDelivery{f: f, scope: scope, run: run, epoch: epoch}
-	seenFile := filepath.Join(f.dir, crewFileName(scope))
+	seenFile := filepath.Join(f.dir, agents.CrewFileName(scope))
 	seen := readTodoSeen(seenFile)
 	var out todoFeedRead
 	added := false
@@ -283,9 +284,9 @@ func (d *todoDelivery) deliver(ctx context.Context, s todoFeedStore, assignee, s
 	body := todoAssignedBody(id, title, file, reason, note)
 	var err error
 	if by == "" { // the user's surface made it: the user's mail
-		_, err = d.f.h.c.Call(ctx, "inbox.send", d.scope, d.run, d.epoch, []any{codename}, body, key, MessagePlain, subject, false)
+		_, err = d.f.h.c.Call(ctx, "inbox.send", d.scope, d.run, d.epoch, []any{codename}, body, key, agents.MessagePlain, subject, false)
 	} else { // an agent made it: the daemon sends it from its maker, named by the change, never by the window
-		_, err = d.f.h.c.Call(ctx, "inbox.forward", d.scope, d.run, d.epoch, s.id, seq, id, []any{codename}, body, key, MessagePlain, subject)
+		_, err = d.f.h.c.Call(ctx, "inbox.forward", d.scope, d.run, d.epoch, s.id, seq, id, []any{codename}, body, key, agents.MessagePlain, subject)
 	}
 	switch {
 	case err == nil:
@@ -370,7 +371,7 @@ func writeTodoSeen(file string, seen map[string]bool) {
 	}
 	b, _ := json.Marshal(ids)
 	if os.MkdirAll(filepath.Dir(file), 0o700) == nil {
-		_ = writePrivate(file, b)
+		_ = agents.WritePrivate(file, b)
 	}
 }
 
