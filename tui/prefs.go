@@ -290,7 +290,7 @@ func legacyPrefRows(h *Host, gui bool) []feature.PrefSpec {
 				return map[string]any{"App.rendererAuto": p.renderer == RendererAuto, "App.rendererOpenGL": p.renderer == RendererOpenGL}
 			}),
 		choicePref(prefTitleBar, TitleBarSystem, titleBars, func(p *prefs) *string { return &p.titleBar }).
-			shows(func(v PrefsView) map[string]any {
+			Shows(func(v feature.PrefsView) map[string]any {
 				p := asPrefs(v)
 				h.mirrorTitleBar(p.titleBar) // the next start's window reads it before the store is read
 				return map[string]any{"App.titleBarSystem": p.titleBar == TitleBarSystem, "App.titleBarOwn": p.titleBar == TitleBarOwn}
