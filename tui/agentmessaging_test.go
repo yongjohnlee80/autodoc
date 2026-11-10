@@ -67,7 +67,7 @@ func TestAMessageRingsTheAgentsDoorbell(t *testing.T) {
 	var got []any
 	w.inboxSend = func(p []any) (any, error) { got = p; return map[string]any{"message": "m1"}, nil }
 	var heard []error
-	task := feature.TaskRef{Title: "Ship", Path: "/kb/.todo-list/in-progress/t1.md", ID: "t1"}
+	task := feature.TaskRef{Title: "Ship", Path: taskFile("/kb/.todo-list/in-progress/t1.md"), ID: "t1"}
 	if err := a.HandTask(feature.AgentRef{Codename: "one"}, task, "Go.", func(err error) { heard = append(heard, err) }); err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestAMessageRingsTheAgentsDoorbell(t *testing.T) {
 		t.Fatalf("done heard %v, want one nil", heard)
 	}
 	if len(got) != 9 || got[0] != scope || got[2] != epoch || func() bool { l, ok := got[3].([]any); return !ok || !slices.Equal(l, []any{"one"}) }() ||
-		got[4] != "File: /kb/.todo-list/in-progress/t1.md\nID: t1\nInstruction: Go." || got[6] != MessageRequest ||
+		got[4] != "File: "+taskFile("/kb/.todo-list/in-progress/t1.md")+"\nID: t1\nInstruction: Go." || got[6] != MessageRequest ||
 		got[7] != "Task: Ship" || got[8] != true || got[5] == "" {
 		t.Fatalf("inbox.send %v", got)
 	}

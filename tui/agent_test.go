@@ -428,7 +428,7 @@ func TestUsingAnotherAgentKeepsBothInstancesRunning(t *testing.T) {
 	}
 	delivered := make(chan error, 1)
 	onLoop(r, func() bool {
-		if err := (core{r.h}).HandTask(entries[0].Ref, feature.TaskRef{Title: "only-first", Path: "/tasks/first.md", ID: "first"}, "inspect", func(err error) { delivered <- err }); err != nil {
+		if err := (core{r.h}).HandTask(entries[0].Ref, feature.TaskRef{Title: "only-first", Path: taskFile("/tasks/first.md"), ID: "first"}, "inspect", func(err error) { delivered <- err }); err != nil {
 			t.Error(err)
 		}
 		return true
