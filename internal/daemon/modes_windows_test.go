@@ -4,6 +4,8 @@ package daemon
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
@@ -52,8 +54,10 @@ func TestAWorkspaceConfiguredByAnotherSpellingFindsItsStoreOnWindows(t *testing.
 			m, _ := open(t)
 			real := realTemp(t)
 			// a folder whose long name has a short one
-			real = real + `\a workspace with a long name`
-			writeAll(t, real, map[string]string{"keep.txt": "x"})
+			real = filepath.Join(real, "a workspace with a long name")
+			if err := os.Mkdir(real, 0o755); err != nil {
+				t.Fatal(err)
+			}
 			alias, ok := spell(t, real)
 			if !ok {
 				t.Skipf("%s is not another spelling of %s on this volume", name, real)
