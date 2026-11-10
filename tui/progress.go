@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -295,14 +294,6 @@ func (h *Host) spinWhileEmbedding() {
 	h.after(spinEvery, turn)
 }
 
-// bar is done of total as ten cells, then the numbers.
-func bar(done, total int64) string {
-	const width = 10
-	done = min(max(done, 0), total)
-	filled := int(done * width / max(total, 1))
-	return fmt.Sprintf("%s%s %d/%d", strings.Repeat("█", filled), strings.Repeat("░", width-filled), done, total)
-}
-
 // progressText is the right slot's work: indexing as done of done+pending, then embedding (or a
 // switch's fill) as the texts covered of all of them, the spinner turning while the model works.
 // Each names the workspace it is for; while the daemon's one embedding queue serves another
@@ -310,7 +301,7 @@ func bar(done, total int64) string {
 func progressText(t feature.Wording, p progress) string {
 	var parts []string
 	if p.pending > 0 {
-		done := bar(p.docs, p.docs+p.pending)
+		done := feature.Bar(p.docs, p.docs+p.pending)
 		if p.ws != "" {
 			parts = append(parts, t.Trf("autodoc.notice.progress.indexing_workspace", p.ws, done))
 		} else {
@@ -335,7 +326,7 @@ func progressText(t feature.Wording, p progress) string {
 		if e.failing {
 			mark = "!" // waiting on the provider, not working
 		}
-		done := bar(e.texts-left, e.texts)
+		done := feature.Bar(e.texts-left, e.texts)
 		var what string
 		switch {
 		case e.target != "" && p.ws != "":
