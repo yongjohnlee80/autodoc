@@ -252,6 +252,9 @@ func (d *process) startWorkspaces() error {
 	d.deps = &moduleDeps{store: db, storeID: d.storeID, workspaces: d.ws, journal: sqlitejournal.New(db), log: d.log,
 		onStores: d.ws.TodoStoresChanged, storesSettled: d.ws.TodoStoresSettled}
 	d.mods = modules(d.deps)
+	// the todo system holds each store's directory open while it serves: released before the store
+	// closes, and after the workspaces and the daily refresh stop (stops unwind last first)
+	d.stops.push(func() { _ = d.deps.todos.Close() })
 	d.ws.SetTodoStores(todoStores(d.deps.todos))
 	// the provider the preferences name, before any workspace starts, so each starts with it
 	d.emb = serving.NewEmbedding(db, d.ws, d.log)

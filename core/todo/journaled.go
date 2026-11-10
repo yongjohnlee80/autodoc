@@ -358,11 +358,10 @@ func (m *Manager) MoveStore(ctx context.Context, at At, to string) (Resolved, er
 	if !paths.IsAbs(to) || path.Clean(to) != to || to == "/" {
 		return Resolved{}, fmt.Errorf("%w: %q is not a clean absolute path", ErrInvalid, to)
 	}
-	st, err := m.open(ctx, w)
+	st, err := m.openLocked(ctx, w)
 	if err != nil {
 		return Resolved{}, err
 	}
-	st.mu.Lock()
 	defer st.mu.Unlock()
 	if err := m.ready(ctx, st); err != nil {
 		return Resolved{}, err
@@ -395,6 +394,13 @@ func (m *Manager) MoveStore(ctx context.Context, at At, to string) (Resolved, er
 	if err != nil {
 		return Resolved{}, err
 	}
+	// the store's own directory is released before it moves: on Windows a directory held open is
+	// not renamed. Its next use opens it again, at whichever path the move left it.
+	m.mu.Lock()
+	st.fsys.Close()
+	st.closed = true // under its lock: a holder waiting for it opens the store again
+	delete(m.stores, st.id)
+	m.mu.Unlock()
 	if err := d.Rename(ctx, from, dest); err != nil {
 		if rerr := m.recoverMoves(ctx, st.id, true); rerr != nil {
 			logger.Warning(m.o.log, rerr, logger.Fields{"event": "todos.settle.failed", "store": st.id, "seq": c.Seq})
@@ -404,10 +410,6 @@ func (m *Manager) MoveStore(ctx context.Context, at At, to string) (Resolved, er
 	if err := m.j.Commit(ctx, c.Seq, Edit{Store: st.id, Repath: &Repath{From: st.path, To: target}}); err != nil {
 		return Resolved{}, err // the next open finishes it: the new path is there, the old one gone
 	}
-	m.mu.Lock()
-	st.fsys.Close()
-	delete(m.stores, st.id)
-	m.mu.Unlock()
 	return m.Resolve(ctx, at)
 }
 

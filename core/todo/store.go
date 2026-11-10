@@ -36,6 +36,7 @@ type store struct {
 	docs *docs.Docs
 
 	mu        sync.Mutex
+	closed    bool // its directory released (Manager.Close, a move): a holder of mu opens the store again
 	recovered bool
 	absent    bool              // a store not made yet, read as an empty one (absentStore): nothing journals its reads
 	cache     map[string]cached // the active buckets' files, by path; archives are never cached
@@ -104,6 +105,25 @@ func (m *Manager) open(ctx context.Context, w where) (*store, error) {
 	s := &store{id: w.rec.ID, path: path, fsys: fsys, docs: docs.New(fsys, eligible), cache: map[string]cached{}}
 	m.stores[w.rec.ID] = s
 	return s, nil
+}
+
+// openLocked is an At's store, open and its lock held: a store released while this waited for its
+// lock (Manager.Close, a move) is opened again, so no holder works through a closed directory.
+func (m *Manager) openLocked(ctx context.Context, w where) (*store, error) {
+	for {
+		st, err := m.open(ctx, w)
+		if err != nil {
+			return nil, err
+		}
+		st.mu.Lock()
+		if !st.closed {
+			return st, nil
+		}
+		st.mu.Unlock()
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+	}
 }
 
 // isStore reports a directory that is a todo store: named .todo-list, or holding a bucket or the
