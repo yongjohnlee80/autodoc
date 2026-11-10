@@ -26,7 +26,8 @@ func TestAPathsModeIsTheFirstRuleItMatches(t *testing.T) {
 	ws := t.TempDir() // an absolute root on any OS
 	m.stores.Store(newRegistry(TodoRegistry{Stores: []TodoStore{{ID: "S", Dir: filepath.Join(ws, "tasks"), KB: ws}},
 		Vars: map[string]map[string]string{ws: {"KB_ROOT": ws}}}))
-	h := &modes{m: m, root: ws}
+	h := &modes{m: m}
+	h.setRoot(ws)
 	type want struct {
 		path  string
 		graph bool
@@ -104,7 +105,8 @@ func TestAStoreIsFoundWhateverFormItsPathTakes(t *testing.T) {
 				t.Errorf("registry in %s: %s: KB_ROOT %q, want the workspace's", reg.form, c.abs, got)
 			}
 		}
-		h := &modes{m: m, root: base}
+		h := &modes{m: m}
+		h.setRoot(base)
 		h.set(nil, true)
 		for p, want := range map[string]string{"kb/open/t.md": "S", "kbx/open/t.md": "", "KB/open/t.md": ""} {
 			id := ""
@@ -219,7 +221,7 @@ func TestAddingOrRemovingAWorkspaceRereadsTheTodoRegistry(t *testing.T) {
 // the todo system says, and an edit to a variable file it names, which no call says.
 func TestAVariableChangeReindexesWithoutAnEdit(t *testing.T) {
 	m, _ := open(t)
-	root := t.TempDir()
+	root := realTemp(t)
 	reg := &stores{}
 	reg.setVars(map[string]map[string]string{root: {"PROJECT_ROOT": filepath.Join(root, "a")}})
 	reg.files = []string{filepath.Join(root, ".autodoc-vars.toml")}
@@ -272,6 +274,18 @@ func hits(t *testing.T, m *Workspaces, name, q string) []string {
 	return out
 }
 
+// realTemp is a new temporary directory by the path the disk gives it (its symlinks resolved; on
+// Windows its long names): the spelling the todo registry holds for a root or a store, which a
+// hand-made registry here must hold too.
+func realTemp(t *testing.T) string {
+	t.Helper()
+	dir, err := canonicalDir(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 func writeAll(t *testing.T, root string, files map[string]string) {
 	t.Helper()
 	for p, content := range files {
@@ -293,7 +307,7 @@ func TestAStoreChangeReindexesWithoutAnEdit(t *testing.T) {
 	m, _ := open(t)
 	reg := &stores{}
 	m.SetTodoStores(reg.read)
-	root := t.TempDir()
+	root := realTemp(t)
 	writeAll(t, root, map[string]string{"notes/n.md": "# N\n\nsee [[t]]\n",
 		"tasks/open/t.md": "---\nrelated: [[n]]\n---\nzanzibar task\n"})
 	if _, err := m.Add(context.Background(), workspace.Spec{Name: "kb", Root: root}); err != nil {
@@ -383,7 +397,7 @@ func TestTodoSearchAndGraphOnlyApplyWithoutARestart(t *testing.T) {
 // workspace.list and in an event at start.
 func TestAnExcludedStoreIsSaid(t *testing.T) {
 	m, db := open(t)
-	root := t.TempDir()
+	root := realTemp(t)
 	writeAll(t, root, map[string]string{".todo-list/open/t.md": "t\n", "a.md": "a\n"})
 	reg := &stores{}
 	reg.set(TodoStore{ID: "S", Dir: filepath.Join(root, ".todo-list")})
@@ -550,4 +564,190 @@ func TestTodoStoresSettledWaitsForTheReadOfAChange(t *testing.T) {
 		t.Fatalf("a cancelled wait while the reader is held: %v, want context.Canceled", err)
 	}
 	close(stuck.release)
+}
+
+// aliasOf is another spelling of the directory real, which the disk resolves to it: a symlink to it
+// where the OS lets this process make one. ok is false, with why, where it does not.
+func aliasOf(t *testing.T, real string) (alias string, ok bool) {
+	t.Helper()
+	alias = filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(real, alias); err != nil {
+		t.Logf("no symlink to %s could be made: %v", real, err)
+		return "", false
+	}
+	return alias, true
+}
+
+// aliasFixture is a workspace's files under real, and the todo registry as the todo system gives
+// it: every path where the disk says it is. The note names a document through $KB_ROOT, and the
+// store's task holds a word no other file does.
+func aliasFixture(t *testing.T, m *Workspaces, real string) *stores {
+	t.Helper()
+	writeAll(t, real, map[string]string{"notes/n.md": "---\nrelated: [$KB_ROOT/a/x.md]\n---\nn\n", "a/x.md": "# A\n",
+		"tasks/open/t.md": "zanzibar task\n"})
+	reg := &stores{}
+	reg.set(TodoStore{ID: "S", Dir: filepath.Join(real, "tasks"), KB: real})
+	reg.setVars(map[string]map[string]string{real: {"KB_ROOT": real}})
+	m.SetTodoStores(reg.read)
+	return reg
+}
+
+// servedThroughAnAlias checks a workspace served under name, whose root was configured as another
+// spelling of the directory the registry names: its store's task is the store's (graph-only with
+// todo_search off, so out of search), and its note's $KB_ROOT relation is its own document.
+func servedThroughAnAlias(t *testing.T, m *Workspaces, name string) {
+	t.Helper()
+	indexed(t, m, name, 3)
+	if err := m.Configure(context.Background(), name, store.Changes{TodoSearch: ptr(false)}); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "the task is its store's: with todo_search off it leaves search", func() bool { return len(hits(t, m, name, "zanzibar")) == 0 })
+	w, _ := m.Get(name)
+	eventually(t, "the note's $KB_ROOT relation is the workspace's a/x.md", func() bool {
+		ls, err := w.Index().Store().Links(context.Background(), "notes/n.md", nil)
+		return err == nil && len(ls) == 1 && ls[0].Resolved && ls[0].Path == "a/x.md"
+	})
+}
+
+// TestAWorkspaceConfiguredThroughASymlinkFindsItsStoreAndVariables
+// (docs/decisions/todos.md#which-paths-are-graph-only,
+// docs/decisions/todos.md#resolving-refs-in-every-document): the todo registry names every root and
+// store where the disk says it is. A workspace configured through a symlink to its root is asked,
+// once as it starts, where that leads, and its paths are compared with the registry in that
+// spelling: its store and its variables are found, and an exclude reaching the store is said. It is
+// listed under the root as configured.
+func TestAWorkspaceConfiguredThroughASymlinkFindsItsStoreAndVariables(t *testing.T) {
+	m, db := open(t)
+	real := realTemp(t)
+	alias, ok := aliasOf(t, real)
+	if !ok {
+		t.Skip("this process may not make a symlink here: the other spellings of a root are checked natively on Windows")
+	}
+	aliasFixture(t, m, real)
+	if _, err := db.AddWorkspace(context.Background(), "kb", alias, nil, []string{".git/**", "tasks/done/**"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.OpenAll(); err != nil {
+		t.Fatal(err)
+	}
+	w, _ := m.Get("kb")
+	if w.Root() != alias {
+		t.Errorf("listed under %q; want the root as configured, %q", w.Root(), alias)
+	}
+	servedThroughAnAlias(t, m, "kb")
+	if _, _, excluded := w.(*view).TodoModes(); len(excluded) != 0 {
+		t.Errorf("excluded %v: tasks/done/** reaches no task of the store", excluded)
+	}
+	if err := m.SetPatterns(context.Background(), "kb", workspace.DefaultInclude(), []string{".git/**", "tasks/**"}); err != nil {
+		t.Fatal(err)
+	}
+	w, _ = m.Get("kb")
+	if _, _, excluded := w.(*view).TodoModes(); !slices.Equal(excluded, []string{"tasks/**"}) {
+		t.Errorf("excluded %v; want tasks/**, which keeps the store out of the index", excluded)
+	}
+}
+
+// TestARetargetedRootIsReadAgainAtTheNextStart: where a workspace's root leads is asked at each
+// start, not kept from the first. A symlink configured as the root and then pointed at another
+// directory serves, from its next start, that directory's store and variables: the modes and the
+// index hold the same spelling again.
+func TestARetargetedRootIsReadAgainAtTheNextStart(t *testing.T) {
+	m, _ := open(t)
+	first, second := realTemp(t), realTemp(t)
+	alias, ok := aliasOf(t, first)
+	if !ok {
+		t.Skip("this process may not make a symlink here")
+	}
+	reg := aliasFixture(t, m, first)
+	if _, err := m.Add(context.Background(), workspace.Spec{Name: "kb", Root: alias}); err != nil {
+		t.Fatal(err)
+	}
+	servedThroughAnAlias(t, m, "kb")
+
+	// the link now leads to second, which holds the same files; the registry names the store and
+	// the variables there, as the todo system would after resolving it
+	writeAll(t, second, map[string]string{"notes/n.md": "---\nrelated: [$KB_ROOT/a/x.md]\n---\nn\n", "a/x.md": "# A\n",
+		"tasks/open/t.md": "zanzibar task\n"})
+	if err := os.Remove(alias); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(second, alias); err != nil {
+		t.Fatal(err)
+	}
+	reg.set(TodoStore{ID: "S", Dir: filepath.Join(second, "tasks"), KB: second})
+	reg.setVars(map[string]map[string]string{second: {"KB_ROOT": second}})
+	// a restart: the patterns set again start the workspace anew
+	if err := m.SetPatterns(context.Background(), "kb", workspace.DefaultInclude(), []string{".git/**"}); err != nil {
+		t.Fatal(err)
+	}
+	m.TodoStoresChanged()
+	h := modesOf(t, m, "kb")
+	if got := *h.root.Load(); got != paths.Slash(second) {
+		t.Fatalf("after the restart the modes look under %q; want where the link leads now, %q", got, paths.Slash(second))
+	}
+	eventually(t, "the task is the second directory's store's", func() bool {
+		md := h.mode("tasks/open/t.md")
+		return md.Store != nil && md.Store.ID == "S" && md.Vars.Get("KB_ROOT") == second
+	})
+	w, _ := m.Get("kb")
+	eventually(t, "the note's relation is the workspace's document again", func() bool {
+		ls, err := w.Index().Store().Links(context.Background(), "notes/n.md", nil)
+		return err == nil && len(ls) == 1 && ls[0].Resolved && ls[0].Path == "a/x.md"
+	})
+}
+
+// modesOf are the served workspace name's modes.
+func modesOf(t *testing.T, m *Workspaces, name string) *modes {
+	t.Helper()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s, ok := m.served[name]
+	if !ok || m.modes[s.id] == nil {
+		t.Fatalf("%s is not served", name)
+	}
+	return m.modes[s.id]
+}
+
+// TestASiblingInAnotherCaseIsAnotherWorkspace: on a disk that tells kb from KB, a workspace at KB
+// has none of kb's stores or variables: paths are compared exactly, where the disk says they are,
+// never case-folded.
+func TestASiblingInAnotherCaseIsAnotherWorkspace(t *testing.T) {
+	m, _ := open(t)
+	base := realTemp(t)
+	lower, upper := filepath.Join(base, "kb"), filepath.Join(base, "KB")
+	for _, d := range []string{lower, upper} {
+		if err := os.Mkdir(d, 0o755); err != nil && !errors.Is(err, os.ErrExist) {
+			t.Fatal(err)
+		}
+	}
+	a, err1 := os.Stat(lower)
+	b, err2 := os.Stat(upper)
+	if err1 != nil || err2 != nil {
+		t.Fatal(err1, err2)
+	}
+	if os.SameFile(a, b) {
+		t.Skip("this disk holds kb and KB as one folder: there is no sibling to tell apart")
+	}
+	aliasFixture(t, m, lower) // the registry: kb's store and variables
+	writeAll(t, upper, map[string]string{"notes/n.md": "---\nrelated: [$KB_ROOT/a/x.md]\n---\nn\n", "a/x.md": "# A\n",
+		"tasks/open/t.md": "zanzibar task\n"})
+	if _, err := m.Add(context.Background(), workspace.Spec{Name: "upper", Root: upper}); err != nil {
+		t.Fatal(err)
+	}
+	indexed(t, m, "upper", 3)
+	if err := m.Configure(context.Background(), "upper", store.Changes{TodoSearch: ptr(false)}); err != nil {
+		t.Fatal(err)
+	}
+	h := modesOf(t, m, "upper")
+	if md := h.mode("tasks/open/t.md"); md.Store != nil || md.Vars.Get("KB_ROOT") != "" || md.GraphOnly {
+		t.Errorf("KB's task has kb's mode: store %+v, KB_ROOT %q, graph-only %v", md.Store, md.Vars.Get("KB_ROOT"), md.GraphOnly)
+	}
+	if got := hits(t, m, "upper", "zanzibar"); !slices.Equal(got, []string{"tasks/open/t.md"}) {
+		t.Errorf("KB's task in search: %v; want it there, in no store", got)
+	}
+	w, _ := m.Get("upper")
+	ls, err := w.Index().Store().Links(context.Background(), "notes/n.md", nil)
+	if err != nil || len(ls) != 1 || ls[0].Resolved {
+		t.Errorf("KB's note's $KB_ROOT relation %+v, %v; want it unresolved: KB has no variables", ls, err)
+	}
 }

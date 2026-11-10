@@ -311,9 +311,27 @@ func (m *Workspaces) storeAt(abs string) (*TodoStore, *index.Vars) {
 // (docs/decisions/todos.md#which-paths-are-graph-only), read by its indexer for each path. They
 // outlive its restarts, like its schema.
 type modes struct {
-	m    *Workspaces
-	root string
+	m *Workspaces
+	// root is where the workspace's root leads on the disk (diskRoot), in the slash form: the
+	// spelling the registry's stores and variables carry. Set at each start, once the root is
+	// open; nil before the first.
+	root atomic.Pointer[string]
 	cfg  atomic.Pointer[modeConfig]
+}
+
+// setRoot is the root a path's store and variables are looked up under, in either form.
+func (h *modes) setRoot(root string) {
+	root = paths.Slash(root)
+	h.root.Store(&root)
+}
+
+// diskRoot is the spelling of a workspace's root the todo registry is compared with: canon, where
+// the root leads, or the root as configured when the disk gave none.
+func diskRoot(root, canon string) string {
+	if canon != "" {
+		return canon
+	}
+	return root
 }
 
 // modeConfig is a workspace's graph_only list and todo_search, compiled.
@@ -355,7 +373,11 @@ func (h *modes) set(list []string, search bool) { h.cfg.Store(newModeConfig(list
 func (h *modes) mode(p string) index.Mode {
 	c := h.cfg.Load()
 	var md index.Mode
-	st, vars := h.m.storeAt(paths.Join(paths.Slash(h.root), p))
+	var st *TodoStore
+	var vars *index.Vars
+	if root := h.root.Load(); root != nil {
+		st, vars = h.m.storeAt(paths.Join(*root, p))
+	}
 	if st != nil {
 		md.Store = &index.TodoStore{ID: st.ID, Check: h.m.taskCheck()}
 	}
@@ -370,12 +392,12 @@ func (h *modes) mode(p string) index.Mode {
 }
 
 // modesFor is workspace id's modes, made on its first start from what the store holds.
-func (m *Workspaces) modesFor(id int64, root string, list []string, search bool) *modes {
+func (m *Workspaces) modesFor(id int64, list []string, search bool) *modes {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	h, ok := m.modes[id]
 	if !ok {
-		h = &modes{m: m, root: root} // a workspace's root never changes
+		h = &modes{m: m}
 		m.modes[id] = h
 	}
 	h.set(list, search)
@@ -420,7 +442,7 @@ func (m *Workspaces) noteTodoExcluded() {
 	}
 	var all []ws
 	for name, s := range m.served {
-		all = append(all, ws{s.id, name, s.root, s.exclude})
+		all = append(all, ws{s.id, name, diskRoot(s.root, s.canon), s.exclude})
 	}
 	m.mu.Unlock()
 	for _, w := range all {
