@@ -52,3 +52,6 @@ func runnable(path string) error {
 
 // sameName is whether two variable names are one: exactly equal, as Unix compares them.
 func sameName(a, b string) bool { return a == b }
+
+// programName is base as Unix names a program: the whole name (mise.sh is not mise).
+func programName(_ Env, base string) string { return base }

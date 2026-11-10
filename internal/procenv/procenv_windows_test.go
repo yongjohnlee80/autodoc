@@ -125,3 +125,15 @@ func TestTheWindowsLookupIsExecLookPaths(t *testing.T) {
 		})
 	}
 }
+
+// On Windows a program's name is its file's base name lower-cased, less an extension PATHEXT names:
+// claude.cmd and CLAUDE.EXE are claude; a.sh, an extension PATHEXT doesn't name, is a.sh.
+func TestAProgramsNameIsLessItsPATHEXTExtensionOnWindows(t *testing.T) {
+	e := Env{"PATHEXT=.COM;.EXE;.BAT;.CMD"}
+	for file, want := range map[string]string{`C:\npm\claude.cmd`: "claude", `CLAUDE.EXE`: "claude", `D:/tools/mise.exe`: "mise",
+		`a.sh`: "a.sh", `claude`: "claude", `env.bat`: "env"} {
+		if got := ProgramName(e, file); got != want {
+			t.Errorf("ProgramName(%q) = %q, want %q", file, got, want)
+		}
+	}
+}

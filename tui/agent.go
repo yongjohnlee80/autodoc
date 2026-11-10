@@ -349,7 +349,7 @@ func (p agentProfile) kind() string {
 // NAME=value assignments and the wrappers env, exec, command, nohup and mise exec|x … --; "agent"
 // when there is none. A wrapper not named here is the kind itself, never a vendor's guessed.
 func agentKind(command string) string {
-	if name := filepath.Base(agentProgram(command)); name != "" && name != "." && name != "/" {
+	if name := procenv.ProgramName(nil, agentProgram(command)); name != "" && name != "." && name != "/" {
 		return name
 	}
 	return "agent"
@@ -367,9 +367,9 @@ func agentProgram(command string) string {
 			w = w[1:]
 		case f == "exec" || f == "command" || f == "nohup":
 			w = skipOptions(w[1:], "-a")
-		case filepath.Base(f) == "env":
+		case procenv.ProgramName(nil, f) == "env":
 			w = skipEnvOptions(w[1:])
-		case filepath.Base(f) == "mise" && len(w) > 1 && (w[1].text == "exec" || w[1].text == "x"):
+		case procenv.ProgramName(nil, f) == "mise" && len(w) > 1 && (w[1].text == "exec" || w[1].text == "x"):
 			i := slices.IndexFunc(w, func(x shellWord) bool { return x.text == "--" })
 			if i < 0 {
 				return f // its tools run their own default program: none of them guessed
