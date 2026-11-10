@@ -48,7 +48,7 @@ func newCrewDaemon(t *testing.T) *crewDaemon {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	d := &crewDaemon{t: t, ctx: ctx, sock: short(t) + "/c.sock", run: "run-a"}
+	d := &crewDaemon{t: t, ctx: ctx, sock: ipc.ScratchAddr(short(t), "c.sock"), run: "run-a"}
 	d.deps = &moduleDeps{store: db, storeID: "store-1", workspaces: rpc.Fixed(), journal: sqlitejournal.New(db), log: logger.Nop{}}
 	ms := modules(d.deps)
 	if err := d.deps.mail.EnsureReserved(ctx); err != nil {

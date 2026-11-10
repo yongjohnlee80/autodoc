@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -15,7 +16,6 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
-	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // TestServeWakesOpenCodeSessions: the scheduler serve starts, with serve's own wakers (crewWakers),
@@ -47,7 +47,7 @@ func TestServeWakesOpenCodeSessions(t *testing.T) {
 	}
 	sock := filepath.Join(dir, strconv.Itoa(os.Getpid())+".sock")
 	_ = os.Remove(sock) // this pid's, from nothing but an earlier run of this process: never another's
-	ln, err := ipc.Listen(sock, func(error) {})
+	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatal(err)
 	}

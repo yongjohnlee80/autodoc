@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -25,7 +26,6 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/mail"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/todo/sqlitejournal"
-	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -537,7 +537,7 @@ func TestServeWakesClaudeSessions(t *testing.T) {
 		t.Cleanup(func() { _ = os.Remove(dir) })
 	}
 	sock := filepath.Join(dir, fmt.Sprintf("autodoc-test-%d-%d.sock", os.Getpid(), time.Now().UnixNano()))
-	ln, err := ipc.Listen(sock, func(error) {})
+	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatal(err)
 	}

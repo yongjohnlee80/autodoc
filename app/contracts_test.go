@@ -47,7 +47,7 @@ func TestContractsWithNoDaemon(t *testing.T) {
 	if code != 0 || errOut != "" {
 		t.Fatalf("--contracts: exit %d, %q", code, errOut)
 	}
-	sock := short(t) + "/c.sock"
+	sock := ipc.ScratchAddr(short(t), "c.sock")
 	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)

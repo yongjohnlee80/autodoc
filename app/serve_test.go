@@ -674,7 +674,7 @@ func TestServesWithoutAConfigFile(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", data)
 	missing := filepath.Join(t.TempDir(), "config.toml")
-	d := start(t, missing, ipc.ScratchAddr(dir, "autodoc.sock"))
+	d := start(t, missing, ipc.DefaultAddr(dir)) // with no config, the daemon is at the runtime folder's default address
 	if got := call(t, dial(t, d.sock), "workspace.list").([]any); len(got) != 0 {
 		t.Errorf("workspaces %v", got)
 	}
