@@ -146,8 +146,11 @@ func TestAnAgentIsRegisteredBeforeItStarts(t *testing.T) {
 	scope, _, _ := a.crew.held()
 	p, _ := a.profile("one")
 	instance, err := a.startInstance(p)
-	if err != nil || !instance.running || instance.session.ID == "" {
-		t.Fatalf("start: %v, running %v, session %q", err, instance != nil && instance.running, instance.session.ID)
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	if !instance.running || instance.session.ID == "" {
+		t.Fatalf("start: running %v, session %q", instance.running, instance.session.ID)
 	}
 	dir := c.panel.configs[instance.tab].Dir
 	ctx, fi, ok := readContext(t, dir)
@@ -171,8 +174,11 @@ func TestAnAgentIsRegisteredBeforeItStarts(t *testing.T) {
 		t.Fatal("the context is still there after the agent exited")
 	}
 	again, err := a.startInstance(p)
-	if err != nil || !again.running || again.session.ID == "" || again.session.ID == first {
-		t.Fatalf("its next start: %v, session %q (the first was %q): want a new session, the codename free", err, again.session.ID, first)
+	if err != nil {
+		t.Fatalf("its next start: %v: want a new session, the codename free", err)
+	}
+	if !again.running || again.session.ID == "" || again.session.ID == first {
+		t.Fatalf("its next start: session %q (the first was %q): want a new session, the codename free", again.session.ID, first)
 	}
 }
 
@@ -514,15 +520,21 @@ func TestALostRegistrationReplyIsReplayed(t *testing.T) {
 	w.lost = map[string]int{"crew.register": 1}
 	p, _ := a.profile("one")
 	first, err := a.startInstance(p)
-	if err != nil || first.running || first.starting {
-		t.Fatalf("a lost answer: %v, running %v, starting %v", err, first.running, first.starting)
+	if err != nil {
+		t.Fatalf("a lost answer: %v", err)
+	}
+	if first.running || first.starting {
+		t.Fatalf("a lost answer: running %v, starting %v", first.running, first.starting)
 	}
 	if len(a.crew.pending) != 1 {
 		t.Fatalf("the lost registration is not kept: %v", a.crew.pending)
 	}
 	again, err := a.startInstance(p)
-	if err != nil || !again.running || again.session.ID == "" {
-		t.Fatalf("its next start: %v, running %v, notices %v", err, again.running, c.notes)
+	if err != nil {
+		t.Fatalf("its next start: %v, notices %v", err, c.notes)
+	}
+	if !again.running || again.session.ID == "" {
+		t.Fatalf("its next start: running %v, notices %v", again.running, c.notes)
 	}
 	ctx, _, ok := readContext(t, c.panel.configs[again.tab].Dir)
 	if !ok || ctx.Session != again.session.ID {
@@ -550,8 +562,11 @@ func TestALostRegistrationNobodyStartsIsEnded(t *testing.T) {
 		t.Fatalf("after the renewal: pending %v, owed %v, calls %v; want it replayed and ended", a.crew.pending, a.crew.owed, w.calls)
 	}
 	again, err := a.startInstance(p)
-	if err != nil || !again.running {
-		t.Fatalf("a start after it was ended: %v, running %v (its codename still busy?)", err, again.running)
+	if err != nil {
+		t.Fatalf("a start after it was ended: %v (its codename still busy?)", err)
+	}
+	if !again.running {
+		t.Fatalf("a start after it was ended: not running (its codename still busy?)")
 	}
 }
 
