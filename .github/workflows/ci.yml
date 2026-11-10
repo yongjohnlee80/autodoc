@@ -250,7 +250,7 @@ jobs:
       - name: scratch (not for merge) the todos panel's selection by identity on Windows, three mutants
         if: ${{ !inputs.discover }}
         run: |
-          T='^(TestALoadedFolderIsShownByTheStoreTheDaemonResolves|TestAStoreMovedIntoTheFolderLoadedIsShown|TestAStoreNotListedIsSaidAndNoOtherIsShownInItsPlace|TestTheRootsAndHomeOfAStoreAtAVolumesRoot|TestTheRootsAndHomeOfAStoreAtADrivesRoot|TestTodos.*)$'
+          T='^(TestALoadedFolderIsShownByTheStoreTheDaemonResolves|TestAStoreMovedIntoTheFolderLoadedIsShown|TestAStoreNotListedIsSaidAndNoOtherIsShownInItsPlace|TestAStoreNotListedWithNoneShownShowsNone|TestAMovedStoreStaysShown|TestAFailedNewAsksForNothing|TestTheRootsAndHomeOfAStoreAtAVolumesRoot|TestTheRootsAndHomeOfAStoreAtADrivesRoot|TestTodos.*)$'
           go test -count=1 -timeout 15m -v -run "$T" ./tui/ > "$RUNNER_TEMP/b.txt" 2>&1 && rb=0 || rb=$?
           echo "== base PASS $(grep -cE '^--- PASS' "$RUNNER_TEMP/b.txt" || true) FAIL $(grep -cE '^--- FAIL' "$RUNNER_TEMP/b.txt" || true)"
           grep -E '^--- FAIL|_test\.go:[0-9]+:' "$RUNNER_TEMP/b.txt" | cut -c1-260 | head -20 || true
@@ -262,6 +262,10 @@ jobs:
           python -c "p='tui/todos.go'; s=open(p,encoding='utf-8').read(); o='t.want, t.wantDir = feature.Str(feature.AsMap(v), \"store_id\"), dir'; assert s.count(o)==1; s=s.replace(o,'t.want, t.wantDir = \"root:\"+feature.Str(feature.AsMap(v), \"root\"), dir // mutant spelling'); o='return s.sid == want }); i < 0 {'; assert s.count(o)==1; open(p,'w',encoding='utf-8').write(s.replace(o,'return s.id == want }); i < 0 {'))"; mut spelling; echo "== spelling kills the moved-store cell: $(grep -c '^--- FAIL: TestAStoreMovedIntoTheFolderLoadedIsShown' "$RUNNER_TEMP/m-spelling.txt" || true)"
           python -c "p='tui/todos.go'; s=open(p,encoding='utf-8').read(); o='t.c.Notify(t.c.Trf(\"autodoc.notice.todos.todos_the_store_of_is_not_listed\", tildePath(t.c.Env(), t.wantDir)))'; assert s.count(o)==1; open(p,'w',encoding='utf-8').write(s.replace(o,'_ = 0 // mutant nonotice'))"; mut nonotice
           python -c "p='tui/todos.go'; s=open(p,encoding='utf-8').read(); o='\tif i < 0 && t.cur != nil {\n'; assert s.count(o)==1; open(p,'w',encoding='utf-8').write(s.replace(o,'\tif false && i < 0 && t.cur != nil { // mutant first\n'))"; mut first
+          python -c "p='tui/todos.go'; s=open(p,encoding='utf-8').read(); o='if i < 0 && len(stores) > 0 && !wanted {'; assert s.count(o)==1; open(p,'w',encoding='utf-8').write(s.replace(o,'if i < 0 && len(stores) > 0 { // mutant firstback'))"; mut firstback
+          python -c "p='tui/todos.go'; s=open(p,encoding='utf-8').read(); o='\t\t\tt.want, t.wantDir = s.sid, dir\n'; assert s.count(o)==1; open(p,'w',encoding='utf-8').write(s.replace(o,'\t\t\t_ = 0 // mutant movenowant\n'))"; mut movenowant
+          python -c "p='tui/todos.go'; s=open(p,encoding='utf-8').read(); o='return s.same(cur) })'; assert s.count(o)==1; open(p,'w',encoding='utf-8').write(s.replace(o,'return s.id == cur.id }) // mutant curspelling'))"; mut curspelling
+          python -c "p='tui/todos.go'; s=open(p,encoding='utf-8').read(); o='\t\t\t\t// asked for only once it is made: a failed scaffold leaves nothing wanted\n'; assert s.count(o)==1; open(p,'w',encoding='utf-8').write(s.replace(o,'\t\t\t\tt.want, t.wantDir = sid, dir // mutant newbefore\n'))"; mut newbefore
           [ $rb = 0 ]
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
