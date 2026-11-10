@@ -247,6 +247,14 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: scratch (not for merge) groups 14 and 15 on Windows, fixed, x3
+        if: ${{ !inputs.discover }}
+        run: |
+          go test -count=3 -timeout 20m -v -run '^(TestADebugLaunchRecordsTheTuisTrace|TestLaunchRunsAnotherClientsLayoutAndDaemon|TestTheInstalledVersionIsAutodocsAnswer|TestUpdateRunsUpdateShAndOffersTheRestart|TestAnUpdateThatChangedNothingSaysSo|TestLuaHostEdges|TestOpenPathsResolve|TestAPagesResourcesComeFromItsWorkspace|TestNewFolderMakesTheRoot|TestOpenInBrowserOpensTheThemedPage|TestTheRendererMirrorIsInTheConfigsStateDirectory|TestTheTitleBarMirrorIsInTheConfigsStateDirectory)$' ./tui/ > "$RUNNER_TEMP/t.txt" 2>&1 && rt=0 || rt=$?
+          echo "== PASS $(grep -cE '^--- PASS' "$RUNNER_TEMP/t.txt" || true) FAIL $(grep -cE '^--- FAIL' "$RUNNER_TEMP/t.txt" || true) SKIP $(grep -cE '^--- SKIP' "$RUNNER_TEMP/t.txt" || true)"
+          grep -E '^--- (FAIL|SKIP)|_test\.go:[0-9]+:' "$RUNNER_TEMP/t.txt" | sort -u | cut -c1-300 | head -30 || true
+          echo "== rc=$rt"
+          [ $rt = 0 ]
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
         run: |
