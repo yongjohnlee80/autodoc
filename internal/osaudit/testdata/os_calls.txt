@@ -83,14 +83,6 @@ tui/editorsocket_unix.go	unix-socket	DialTimeout("unix")
 tui/editorsocket_unix.go	unix-socket	Listen("unix")
 tui/html.go	goos	runtime.GOOS
 tui/html.go	syscall	SysProcAttr
-tui/pluginrun.go	syscall	SysProcAttr
-tui/plugins_other.go	os-file	unix
-tui/plugins_other.go	syscall	SysProcAttr
-tui/plugins_unix.go	os-file	unix
-tui/plugins_unix.go	syscall	Kill
-tui/plugins_unix.go	syscall	SIGKILL
-tui/plugins_unix.go	syscall	SIGTERM
-tui/plugins_unix.go	syscall	SysProcAttr
 tui/pluginsurface_linux.go	import	golang.org/x/sys/unix
 tui/pluginsurface_linux.go	os-file	linux
 tui/pluginsurface_other.go	os-file	linux
