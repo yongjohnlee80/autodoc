@@ -138,7 +138,7 @@ func TestTheWindowAsksTheAgentsOwnCrewSetup(t *testing.T) {
 		return string(b)
 	}
 	want := strings.Join([]string{"--config", "/c/autodoc.toml", "crew", "setup", "--kind", "claude", "--host", "window",
-		"--autodoc", shellQuote(filepath.Join(agentDir, "bin", "autodoc")), "--agent-dir", agentDir, "--mail-via", "mcp"}, "\n") + "\n"
+		"--autodoc", shellQuote(bin), "--agent-dir", agentDir, "--mail-via", "mcp"}, "\n") + "\n" // the build by its path
 	if got := read("args"); got != want {
 		t.Errorf("its command line:\n%s\nwant\n%s", got, want)
 	}
