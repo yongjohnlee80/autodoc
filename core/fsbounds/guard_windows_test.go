@@ -103,6 +103,35 @@ func TestAJunctionIsFollowedNotTrusted(t *testing.T) {
 	}
 }
 
+// A junction whose target is gone leads nowhere, as a dangling link does: refused for that, not
+// let through as an empty folder.
+func TestADanglingJunctionLeadsNowhere(t *testing.T) {
+	tr := newTree(t)
+	target := filepath.Join(tr.root, "gone")
+	mustMkdir(t, target)
+	junction(t, filepath.Join(tr.root, "notes", "gone"), target)
+	if err := os.Remove(target); err != nil {
+		t.Fatal(err)
+	}
+	refusedFor(t, "a dangling junction", tr.check("notes/gone/x.md", writeKB, opWrite), whyDangling)
+}
+
+// A workspace may be a drive's root (C:\), whose spelling already ends in the separator: a path
+// below it is in it.
+func TestADrivesRootIsAWorkspace(t *testing.T) {
+	vol := filepath.VolumeName(os.Getenv("SystemRoot"))
+	if vol == "" {
+		t.Skip("no SystemRoot to find a drive by")
+	}
+	tr := newTree(t)
+	root := vol + string(filepath.Separator)
+	tr.g.SetServed(func() []Root { return []Root{{Name: "drive", Dir: root}} })
+	windir := os.Getenv("SystemRoot")
+	if ws, name, err := tr.g.Locate(windir); err != nil || ws.Name != "drive" || !strings.EqualFold(name, filepath.Base(windir)) {
+		t.Errorf("Locate(%s) under the drive's root = %v %q, %v", windir, ws, name, err)
+	}
+}
+
 // A name Windows reads as another is refused before anything is opened: a stream, a device, a
 // trailing dot or space.
 func TestANameWindowsReadsAsAnotherIsRefused(t *testing.T) {
