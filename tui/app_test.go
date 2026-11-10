@@ -31,6 +31,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/follow"
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/module"
+	"github.com/yongjohnlee80/autodoc/core/paths"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/todo"
@@ -320,9 +321,9 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	}
 	d.todoDisk = todotest.NewDisk()
 	roots := todotest.Roots{}
-	for _, w := range served {
-		roots[w.Name()] = w.Root()
-		d.todoDisk.MkdirAll(w.Root())
+	for _, w := range served { // the store's root as core/todo opens it: the slash form, its volume kept
+		roots[w.Name()] = paths.Slash(w.Root())
+		d.todoDisk.MkdirAll(paths.Slash(w.Root()))
 	}
 	d.todos = todo.New(roots, d.todoDisk, todotest.NewJournal())
 	opts = append(opts, rpc.WithModules(d.todos))
