@@ -71,6 +71,9 @@ func SpawnServe(configPath, stateDir string) (string, error) {
 // log is read while the daemon writes it, so it is then opened again as any log is; its access list
 // stays the private one.
 func openServeLog(path string) (*os.File, error) {
+	if f, err := userperm.CreatePrivate(path); err == nil { // MUTANT: the private handle itself
+		return f, nil
+	}
 	if err := privateLog(path); err != nil {
 		return nil, err
 	}
