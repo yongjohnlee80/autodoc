@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -12,8 +13,8 @@ import (
 // vimQuestionPending is the question's condition, read in one place: a true first run, with no
 // keymap and no agent setup ever stored, and no agent profile.
 func vimQuestionPending(s *seams, p feature.PrefsView) bool {
-	return s.offerVimQuestion && !asPrefs(p).keymapChosen && p.Value(prefAgentSetup) == "" &&
-		len(agentProfilesOf(p.Value(prefAgentProfiles))) == 0
+	return s.offerVimQuestion && !asPrefs(p).keymapChosen && p.Value(agents.PrefAgentSetup) == "" &&
+		len(agents.AgentProfilesOf(p.Value(agents.PrefAgentProfiles))) == 0
 }
 
 // answerVimQuestion is the card's answer: "vim" (Yes) or anything else, the text editor's keys (No,
@@ -26,7 +27,7 @@ func (h *Host) answerVimQuestion(answer string) {
 	}
 	h.setKeymap(keymap)
 	h.closeDialog("vimQuestion")
-	if agentSetupPending(&h.seams, h.prefs) {
-		h.agents.openAgentSetup()
+	if agents.AgentSetupPending(&h.seams, h.prefs) {
+		h.agents.OpenAgentSetup()
 	}
 }

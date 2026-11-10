@@ -7,41 +7,42 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 func TestProfileRenamesKeepOwnAndUntouchedLegacyCodenames(t *testing.T) {
-	c := newIdentityHostCopy(`[{"name":"Claude Opus","command":"one"},{"name":"Other Agent","command":"two"}]`)
-	c.p = prefsFor(map[string]any{prefAgentProfiles: c.p.Value(prefAgentProfiles), prefAgentDefaultCopy: "Other Agent"}, false)
-	a := testAgentsCopy(c, "", "")
-	a.startEditAgent(1)
-	a.saveAgent("Renamed", "two")
-	profiles := a.profiles()
-	if profiles[0].Codename != "claude-opus" || profiles[1].Codename != "other-agent" || a.defaultProfile() != "other-agent" {
-		t.Fatalf("display rename changed an identity or lost the name-based default: %+v, default %q", profiles, a.defaultProfile())
+	c := newIdentityHost(`[{"name":"Claude Opus","command":"one"},{"name":"Other Agent","command":"two"}]`)
+	c.p = prefsFor(map[string]any{PrefAgentProfiles: c.p.Value(agents.PrefAgentProfiles), prefAgentDefault: "Other Agent"}, false)
+	a := testAgents(c, "", "")
+	a.StartEditAgent(1)
+	a.SaveAgent("Renamed", "two")
+	profiles := a.Profiles()
+	if profiles[0].Codename != "claude-opus" || profiles[1].Codename != "other-agent" || a.DefaultProfile() != "other-agent" {
+		t.Fatalf("display rename changed an identity or lost the name-based default: %+v, default %q", profiles, a.DefaultProfile())
 	}
-	if raw := c.p.Value(prefAgentProfiles); !strings.Contains(raw, `"codename":"other-agent"`) {
+	if raw := c.p.Value(agents.PrefAgentProfiles); !strings.Contains(raw, `"codename":"other-agent"`) {
 		t.Fatalf("edit did not persist its derived codename: %s", raw)
 	}
 }
 
 func TestLegacyDefaultNameMigratesWithoutConfusingAnotherCodename(t *testing.T) {
-	c := newIdentityHostCopy(`[{"name":"Foo","command":"one"},{"name":"foo","command":"two"},{"name":"foo-2","command":"three"}]`)
-	c.p = prefsFor(map[string]any{prefAgentProfiles: c.p.Value(prefAgentProfiles), prefAgentDefaultCopy: "foo-2"}, false)
-	a := testAgentsCopy(c, "", "")
-	if p, ok := a.profile(a.defaultProfile()); !ok || p.Command != "three" {
+	c := newIdentityHost(`[{"name":"Foo","command":"one"},{"name":"foo","command":"two"},{"name":"foo-2","command":"three"}]`)
+	c.p = prefsFor(map[string]any{PrefAgentProfiles: c.p.Value(agents.PrefAgentProfiles), prefAgentDefault: "foo-2"}, false)
+	a := testAgents(c, "", "")
+	if p, ok := a.Profile(a.DefaultProfile()); !ok || p.Command != "three" {
 		t.Fatalf("legacy name was mistaken for another allocated codename: %+v", p)
 	}
-	a.saveAgentProfile("Other", "other", "other")
-	if a.defaultProfile() != "foo-2-2" || c.p.Value(prefAgentDefaultCodename) != "foo-2-2" {
+	a.SaveAgentProfile("Other", "other", "other")
+	if a.DefaultProfile() != "foo-2-2" || c.p.Value(agents.PrefAgentDefaultCodename) != "foo-2-2" {
 		t.Fatal("list save did not persist the intended default identity")
 	}
-	a.makeAgentDefault(1)
-	if p, ok := a.profile(a.defaultProfile()); !ok || p.Command != "two" {
+	a.MakeAgentDefault(1)
+	if p, ok := a.Profile(a.DefaultProfile()); !ok || p.Command != "two" {
 		t.Fatal("canonical default still resolved through display labels")
 	}
-	a.removeAgentConfirmed(a.profiles()[1])
-	if a.defaultProfile() != "" || c.p.Value(prefAgentDefaultCodename) != "" {
+	a.RemoveAgentConfirmed(a.Profiles()[1])
+	if a.DefaultProfile() != "" || c.p.Value(agents.PrefAgentDefaultCodename) != "" {
 		t.Fatal("removing the default resurrected the legacy label")
 	}
 }
@@ -58,29 +59,29 @@ func TestAgentDefaultMigrationDistinguishesMissingAndExplicitEmptyAtRestart(t *t
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			raw := map[string]any{
-				prefAgentProfiles:    `[{"name":"A","command":"one"},{"name":"B","command":"two"}]`,
-				prefAgentDefaultCopy: "A",
+				PrefAgentProfiles:    `[{"name":"A","command":"one"},{"name":"B","command":"two"}]`,
+				prefAgentDefault: "A",
 			}
 			if tc.present {
-				raw[prefAgentDefaultCodename] = tc.canonical
+				raw[agents.PrefAgentDefaultCodename] = tc.canonical
 			}
-			values, migrated := migrateAgentDefault(raw)
+			values, migrated := agents.MigrateAgentDefault(raw)
 			if migrated == tc.present {
 				t.Fatal("migration ignored canonical key presence")
 			}
 			var rows prefs
-			feature.ReadRows(&rows, values, agentPrefRows(nil))
+			feature.ReadRows(&rows, values, agents.AgentPrefRows(nil))
 			for _, p := range []prefs{rows, prefsFor(raw, false), prefsFor(raw, true)} {
-				c := newIdentityHostCopy(`[]`)
+				c := newIdentityHost(`[]`)
 				c.p = p
-				if got := testAgentsCopy(c, "", "").defaultProfile(); got != tc.want {
+				if got := testAgents(c, "", "").DefaultProfile(); got != tc.want {
 					t.Fatalf("restart default %q, want %q", got, tc.want)
 				}
 			}
-			if _, changed := migrateAgentDefault(values); changed {
+			if _, changed := agents.MigrateAgentDefault(values); changed {
 				t.Fatal("canonical preferences migrated more than once")
 			}
-			if _, added := raw[prefAgentDefaultCodename]; added != tc.present {
+			if _, added := raw[agents.PrefAgentDefaultCodename]; added != tc.present {
 				t.Fatal("migration mutated the raw store map")
 			}
 		})

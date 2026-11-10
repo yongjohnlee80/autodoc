@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/errs"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
@@ -252,7 +253,7 @@ func (s *scopedPanelHost) After(d time.Duration, fn func()) { s.core.After(d, fn
 
 // The agents feature asserts its host is an agentRuntimeHost at run time; this makes a method the
 // scoped host lacks a build error instead of agents that never start.
-var _ agentRuntimeHost = (*scopedPanelHost)(nil)
+var _ agents.AgentRuntimeHost = (*scopedPanelHost)(nil)
 
 func (s *scopedPanelHost) Ticket(seq *uint64, scope feature.TicketScope) feature.Ticket {
 	return s.core.Ticket(seq, scope)

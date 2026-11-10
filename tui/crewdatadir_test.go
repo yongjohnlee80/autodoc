@@ -14,20 +14,20 @@ import (
 func TestACrewOpenCodeAgentWritesNothingIntoTheWorkingFolder(t *testing.T) {
 	cwd := t.TempDir()
 	t.Chdir(cwd)
-	a, c, _ := crewAgents(t, crewKindsCopy)
+	a, c, _ := crewAgents(t, crewKinds)
 	run := seamsOf(a).agentSetupRun
 	var asked string
 	seamsOf(a).agentSetupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
 		asked = dir
 		return run(kind, dir, environ)
 	}
-	p, _ := a.profile("opencode-one")
-	instance, err := a.startInstance(p)
+	p, _ := a.Profile("opencode-one")
+	instance, err := a.StartInstance(p)
 	if err != nil {
 		t.Fatal(err)
 	}
 	awaitStart(t, c, instance)
-	if _, _, err := startedEnvCopy(a, c, instance); err != nil {
+	if _, _, err := startedEnv(a, c, instance); err != nil {
 		t.Fatal(err)
 	}
 	if asked != instance.State().Dir {

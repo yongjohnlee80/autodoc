@@ -4,10 +4,10 @@ package tui
 // preference keys, the panel's edges and the agent server's pid file's name. The host's own code
 // names none of them.
 const (
-	prefAgentDefaultCopy = "tui.agent.default"
-	prefAgentEdgeCopy    = "tui.agent.edge"
-	defaultAgentEdgeCopy = "bottom"
-	serverPidFileCopy    = ".autodoc-server.pid"
+	prefAgentDefault = "tui.agent.default"
+	prefAgentEdge    = "tui.agent.edge"
+	defaultAgentEdge = "bottom"
+	serverPidFile    = ".autodoc-server.pid"
 )
 
-var agentEdgesCopy = []string{"bottom", "top", "left", "right", "center"}
+var agentEdges = []string{"bottom", "top", "left", "right", "center"}

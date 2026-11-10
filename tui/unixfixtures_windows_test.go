@@ -35,19 +35,19 @@ func runAgentTUIIn(t *testing.T, _ string, _ []agentProfile, _ string, _ map[str
 	return nil, nil, ""
 }
 
-func fakeAgentCopy(t *testing.T) (string, string) {
+func fakeAgent(t *testing.T) (string, string) {
 	t.Helper()
 	t.Skip(unixFixture)
 	return "", ""
 }
 
-func recordingAgentCopy(t *testing.T, _ bool) (string, string) {
+func recordingAgent(t *testing.T, _ bool) (string, string) {
 	t.Helper()
 	t.Skip(unixFixture)
 	return "", ""
 }
 
-func fakeServerCopy(t *testing.T, _ string, _ bool) []string {
+func fakeServer(t *testing.T, _ string, _ bool) []string {
 	t.Helper()
 	t.Skip(unixFixture)
 	return nil

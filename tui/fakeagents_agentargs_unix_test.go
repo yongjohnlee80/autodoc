@@ -6,12 +6,13 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 )
 
 // Copies of the agents' test fakes agentargs_unix_test.go declares, for the host's cells.
 
 // agentCommandCases on Unix: /bin/sh, the CLI by its quoted path.
-func agentCommandCasesCopy(t *testing.T) []agentCommandCaseCopy {
-	cli := printingCLICopy(t, "o'brien dir", "agent")
-	return []agentCommandCaseCopy{{label: "sh", env: procenv.Env(nil), call: shellQuote(cli)}}
+func agentCommandCases(t *testing.T) []agentCommandCase {
+	cli := printingCLI(t, "o'brien dir", "agent")
+	return []agentCommandCase{{label: "sh", env: procenv.Env(nil), call: agents.ShellQuote(cli)}}
 }

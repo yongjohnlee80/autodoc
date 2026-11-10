@@ -10,6 +10,7 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 )
 
 // A registration the daemon refuses is shown in the agent's own tab, not only in a toast: the
@@ -17,11 +18,11 @@ import (
 // selected, and it stays stopped; a toast says it too. Before, the tab stayed empty and the toast
 // was the only trace.
 func TestARefusedRegistrationIsShownInItsTab(t *testing.T) {
-	a, c, w := crewAgents(t, oneTwoCopy)
-	c.panel = &modelPanelCopy{owner: c, starts: true}
+	a, c, w := crewAgents(t, oneTwo)
+	c.panel = &modelPanel{owner: c, starts: true}
 	w.d.refuse = &golibrpc.Error{Code: crew.CodeCodenameBusy, Message: "the codename already has a live session"}
-	p, _ := a.profile("one")
-	instance, err := a.startInstance(p)
+	p, _ := a.Profile("one")
+	instance, err := a.StartInstance(p)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,9 +47,9 @@ func TestAPathTheShellResolvesIsNotJudged(t *testing.T) {
 	for _, command := range []string{"~/autodoc-no-such/agent --x", "./autodoc-no-such-agent", "bin/autodoc-no-such-agent", "autodoc-no-such-agent*"} {
 		t.Run(command, func(t *testing.T) {
 			a, c, w := startingCrewAgents(t, `[{"name":"One","command":`+strconv.Quote(command)+`,"codename":"one"}]`)
-			seamsOf(a).agentCommandCheck = commandOnPath // as a window's agents are
-			p, _ := a.profile("one")
-			instance, err := a.startInstance(p)
+			seamsOf(a).agentCommandCheck = agents.CommandOnPath // as a window's agents are
+			p, _ := a.Profile("one")
+			instance, err := a.StartInstance(p)
 			if err != nil { // no instance to read: the start itself failed
 				t.Fatalf("%q: %v, the tab showed %q; want it started, unjudged", command, err, c.panel.reported)
 			}
@@ -63,9 +64,9 @@ func TestAPathTheShellResolvesIsNotJudged(t *testing.T) {
 		// drive's, which the shell resolves)
 		missing := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "autodoc-no-such", "agent")
 		a, c, w := startingCrewAgents(t, `[{"name":"One","command":`+strconv.Quote(missing)+`,"codename":"one"}]`)
-		seamsOf(a).agentCommandCheck = commandOnPath
-		p, _ := a.profile("one")
-		instance, err := a.startInstance(p)
+		seamsOf(a).agentCommandCheck = agents.CommandOnPath
+		p, _ := a.Profile("one")
+		instance, err := a.StartInstance(p)
 		if err != nil { // no instance to read: the start itself failed, rather than being refused
 			t.Fatalf("%v, the tab showed %q; want it refused, naming the path", err, c.panel.reported)
 		}
@@ -84,10 +85,10 @@ func TestAPathTheShellResolvesIsNotJudged(t *testing.T) {
 // its first word, so it isn't.
 func TestAProfileCommandNotOnPathIsRefusedBeforeItsSession(t *testing.T) {
 	a, c, w := crewAgents(t, `[{"name":"Sephiroth","command":"claude-work","codename":"sephiroth"},{"name":"Shell","command":"FOO=1 claude-work","codename":"shell"}]`)
-	c.panel = &modelPanelCopy{owner: c, starts: true}
-	seamsOf(a).agentCommandCheck = commandOnPath // as a window's agents are
-	p, _ := a.profile("sephiroth")
-	instance, err := a.startInstance(p)
+	c.panel = &modelPanel{owner: c, starts: true}
+	seamsOf(a).agentCommandCheck = agents.CommandOnPath // as a window's agents are
+	p, _ := a.Profile("sephiroth")
+	instance, err := a.StartInstance(p)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,12 +104,12 @@ func TestAProfileCommandNotOnPathIsRefusedBeforeItsSession(t *testing.T) {
 	if len(c.notes) == 0 || !strings.Contains(c.notes[len(c.notes)-1], "claude-work") {
 		t.Fatalf("notices %v, want claude-work named", c.notes)
 	}
-	reportedCopy := len(c.panel.reported)
-	shell, _ := a.profile("shell")
-	if _, err := a.startInstance(shell); err != nil {
+	reported := len(c.panel.reported)
+	shell, _ := a.Profile("shell")
+	if _, err := a.StartInstance(shell); err != nil {
 		t.Fatal(err)
 	}
-	if len(c.panel.reported) != reportedCopy && strings.Contains(c.panel.reported[len(c.panel.reported)-1], "isn't a program on") {
+	if len(c.panel.reported) != reported && strings.Contains(c.panel.reported[len(c.panel.reported)-1], "isn't a program on") {
 		t.Fatalf("a command in shell syntax was judged by its first word: %q", c.panel.reported)
 	}
 }

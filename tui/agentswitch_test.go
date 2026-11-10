@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/internal/ipc"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
@@ -28,13 +29,13 @@ import (
 // switch either. editor.document and editor.buffers mark the notes buffer foreign_workspace, and
 // the kb one not. A parameter is refused. The folder's .claude/settings.json runs the notice hook.
 func TestAnAgentIsToldOfAWorkspaceSwitch(t *testing.T) {
-	agent, report := recordingAgentCopy(t, true)
+	agent, report := recordingAgent(t, true)
 	dir := t.TempDir()
 	files := map[string][]string{"kb": {"a.md", "a\n"}, "notes": {"b.md", "b\n"}}
-	_, r, _ := runAgentTUIIn(t, dir, []agentProfile{{Name: "zen", Command: shellQuote(agent), Codename: "zen"}}, "zen", nil,
+	_, r, _ := runAgentTUIIn(t, dir, []agents.AgentProfile{{Name: "zen", Command: agents.ShellQuote(agent), Codename: "zen"}}, "zen", nil,
 		Options{EditorDir: t.TempDir(), Workspace: "kb"}, files)
 	r.s.WaitFor(t, "kb entered", func(string) bool { return onLoop(r, func() bool { return r.h.ws == "kb" }) })
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitForText(t, "ready")
 	r.h.p.Post(func() { r.h.openIn("kb", "a.md") })
 	r.s.WaitFor(t, "a.md open", func(string) bool { n := r.file(); return n.open && n.path == "a.md" })
@@ -45,7 +46,7 @@ func TestAnAgentIsToldOfAWorkspaceSwitch(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer cli.Close()
-	token := onLoop(r, func() string { return r.h.agents.editorToken("zen") })
+	token := onLoop(r, func() string { return r.h.agents.EditorToken("zen") })
 	call := func(verb string, params ...any) (any, error) {
 		t.Helper()
 		return cli.Call(ctx, verb, append([]any{token}, params...)...)
@@ -59,12 +60,12 @@ func TestAnAgentIsToldOfAWorkspaceSwitch(t *testing.T) {
 		m, _ := res.(map[string]any)
 		return m
 	}
-	kb := onLoop(r, func() wsRef { return r.h.wsRefOf("kb") })
-	notes := onLoop(r, func() wsRef { return r.h.wsRefOf("notes") })
+	kb := onLoop(r, func() agents.WsRef { return r.h.wsRefOf("kb") })
+	notes := onLoop(r, func() agents.WsRef { return r.h.wsRefOf("notes") })
 	if kb.Root == "" || notes.Root == "" || kb.Root == notes.Root {
 		t.Fatalf("the workspaces' roots: %v %v", kb, notes)
 	}
-	ref := func(w wsRef) string { return fmt.Sprint(w.value()) }
+	ref := func(w agents.WsRef) string { return fmt.Sprint(w.Value()) }
 
 	// no grant is held: editor.workspace answers all the same, and asks the user nothing
 	before := must("editor.workspace")
@@ -92,7 +93,7 @@ func TestAnAgentIsToldOfAWorkspaceSwitch(t *testing.T) {
 		t.Fatalf("after the switch: %v", after)
 	}
 	notice, _ := sw["notice"].(string)
-	if sw["kind"] != switchEntered || fmt.Sprint(sw["from"]) != ref(kb) || fmt.Sprint(sw["to"]) != ref(notes) || sw["document"] != "b.md" ||
+	if sw["kind"] != agents.SwitchEntered || fmt.Sprint(sw["from"]) != ref(kb) || fmt.Sprint(sw["to"]) != ref(notes) || sw["document"] != "b.md" ||
 		!strings.HasPrefix(notice, "[AutoDoc] ") || !strings.Contains(notice, notes.Root) || !strings.Contains(notice, "You stay in kb") {
 		t.Errorf("the switch: %v", sw)
 	}
@@ -123,7 +124,7 @@ func TestAnAgentIsToldOfAWorkspaceSwitch(t *testing.T) {
 	}
 
 	time.Sleep(200 * time.Millisecond) // anything typed on the switch would have reached it by now
-	if got := reportedCopy(report); got != "" {
+	if got := reported(report); got != "" {
 		t.Errorf("the switch typed into the agent's terminal: %q", got)
 	}
 	guide, err := os.ReadFile(filepath.Join(dir, "kb", "CLAUDE.md"))
@@ -133,13 +134,13 @@ func TestAnAgentIsToldOfAWorkspaceSwitch(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "notes")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("the switch made a folder for notes: %v", err)
 	}
-	if got := onLoop(r, func() wsRef { s, _ := r.h.agents.spawnWorkspace("zen"); return s }); got != kb {
+	if got := onLoop(r, func() agents.WsRef { s, _ := r.h.agents.SpawnWorkspace("zen"); return s }); got != kb {
 		t.Errorf("the agent's workspace after the switch: %v, want kb's", got)
 	}
 	// the notice runs the build by its path, never the folder's wrapper or a bare autodoc
-	bin := onLoop(r, func() string { return r.h.agents.agentBin() })
-	hooks := claudeHookCommandsCopy(t, filepath.Join(dir, "kb"))
-	if want := shellQuote(bin) + " --workspace-notice"; !slices.Contains(hooks["UserPromptSubmit"], want) {
+	bin := onLoop(r, func() string { return r.h.agents.AgentBin() })
+	hooks := claudeHookCommands(t, filepath.Join(dir, "kb"))
+	if want := agents.ShellQuote(bin) + " --workspace-notice"; !slices.Contains(hooks["UserPromptSubmit"], want) {
 		t.Errorf("the folder's Claude hooks: %q, want UserPromptSubmit's %q", hooks, want)
 	}
 }
@@ -151,13 +152,13 @@ func TestAnAgentIsToldOfAWorkspaceSwitch(t *testing.T) {
 func TestAPeersRenameIsToldAsARename(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
-	refs := onLoop(r, func() [3]wsRef {
+	refs := onLoop(r, func() [3]agents.WsRef {
 		kb := r.h.wsRefOf("kb")
 		r.h.applyEvents([]peerEvent{{seq: 1, kind: "workspace.renamed", workspace: "kb", client: "another", detail: "kb2"}})
-		return [3]wsRef{kb, r.h.wsRefOf("kb2"), r.h.wsRefOf("kb")}
+		return [3]agents.WsRef{kb, r.h.wsRefOf("kb2"), r.h.wsRefOf("kb")}
 	})
 	before, after, gone := refs[0], refs[1], refs[2]
-	if before.Root == "" || after != (wsRef{"kb2", before.Root}) || gone.Root != "" {
+	if before.Root == "" || after != (agents.WsRef{"kb2", before.Root}) || gone.Root != "" {
 		t.Fatalf("a peer's rename: kb was %+v; kb2 is %+v and kb %+v, want kb2 at kb's root and kb no longer listed", before, after, gone)
 	}
 }
@@ -169,7 +170,7 @@ func TestTheWorkspaceInUseIsNamedWithItsRoot(t *testing.T) {
 	h := &Host{}
 	h.workspaces = feature.NewRows(tuidecl.NewListModel("key", "label"), workspaceRowOf)
 	h.workspaces.Reset([]wsInfo{{name: "kb", root: "/k"}, {name: "notes", root: "/n"}})
-	for name, want := range map[string]wsRef{"kb": {"kb", "/k"}, "notes": {"notes", "/n"}, "ghost": {Name: "ghost"}, "": {}} {
+	for name, want := range map[string]agents.WsRef{"kb": {"kb", "/k"}, "notes": {"notes", "/n"}, "ghost": {Name: "ghost"}, "": {}} {
 		if got := h.wsRefOf(name); got != want {
 			t.Errorf("wsRefOf(%q) = %+v, want %+v", name, got, want)
 		}

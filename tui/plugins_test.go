@@ -75,7 +75,7 @@ func TestMain(m *testing.M) {
 	if dir := os.Getenv(setupRecorderEnv); dir != "" {
 		os.Exit(recordSetup(dir))
 	}
-	if os.Getenv(argvPrinterEnvCopy) == "1" {
+	if os.Getenv(argvPrinterEnv) == "1" {
 		_ = json.NewEncoder(os.Stdout).Encode(os.Args[1:])
 		os.Exit(0)
 	}

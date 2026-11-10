@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/internal/ipc"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
@@ -25,7 +26,7 @@ func TestARevokedCapabilityIsRefusedAndAskedForAgain(t *testing.T) {
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
 	onLoop(r, func() bool {
-		r.h.agents.agentEnv(feature.Workspace{Name: "kb"}, t.TempDir(), agentProfile{Codename: "zen"})
+		r.h.agents.AgentEnv(feature.Workspace{Name: "kb"}, t.TempDir(), agents.AgentProfile{Codename: "zen"})
 		return true
 	})
 	path := onLoop(r, r.h.editorSocketPath)
@@ -35,7 +36,7 @@ func TestARevokedCapabilityIsRefusedAndAskedForAgain(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer cli.Close()
-	token := onLoop(r, func() string { return r.h.agents.editorToken("zen") })
+	token := onLoop(r, func() string { return r.h.agents.EditorToken("zen") })
 	read := func() *golibrpc.Error {
 		_, err := cli.Call(ctx, "editor.read", token)
 		var re *golibrpc.Error

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 )
 
 // fakeClaude is a claude that writes every line typed to it into heard, a line only once its Enter
@@ -17,7 +19,7 @@ func fakeClaude(t *testing.T) (heard string, onPath func(*running)) {
 	t.Helper()
 	bin := t.TempDir()
 	heard = filepath.Join(t.TempDir(), "heard")
-	script := "#!/bin/sh\necho ready\nwhile IFS= read -r line; do printf '%s\\n' \"$line\" >> " + shellQuote(heard) + "; done\n"
+	script := "#!/bin/sh\necho ready\nwhile IFS= read -r line; do printf '%s\\n' \"$line\" >> " + agents.ShellQuote(heard) + "; done\n"
 	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -43,24 +45,24 @@ func TestSetUpSavesAndStartsTypingNothing(t *testing.T) {
 	r.s.WaitForText(t, "Set up an AI agent?")
 	r.s.WaitForText(t, "Claude (claude)")
 	r.keys(t, key('s')) // &Set up
-	storedPref(t, d, r, prefAgentSetup, "done")
+	storedPref(t, d, r, agents.PrefAgentSetup, "done")
 	r.s.WaitFor(t, "the agent started", func(string) bool { return r.agentRunningNow() })
 	time.Sleep(300 * time.Millisecond) // a line would be typed within a moment of the start
 	if got := heardLines(heard); len(got) != 0 {
 		t.Fatalf("the setup typed into the agent: %q", got)
 	}
-	p := onLoop(r, func() []agentProfile { return r.h.agents.profiles() })
+	p := onLoop(r, func() []agents.AgentProfile { return r.h.agents.Profiles() })
 	if len(p) != 1 || p[0].Name != "Claude" || p[0].Command != "claude" || p[0].Codename == "" ||
-		onLoop(r, func() string { return r.h.agents.defaultProfile() }) != p[0].Codename {
+		onLoop(r, func() string { return r.h.agents.DefaultProfile() }) != p[0].Codename {
 		t.Fatalf("the profile %+v is not Claude's, the default", p)
 	}
 
 	// the menu's card, set up again under another name: a second profile, and no prompt
-	onLoop(r, func() bool { r.h.agents.openAgentSetup(); return true })
+	onLoop(r, func() bool { r.h.agents.OpenAgentSetup(); return true })
 	r.s.WaitForText(t, "Set up an AI agent?")
-	onLoop(r, func() bool { r.h.agents.agentSetupConfirm(0, "Claude two"); return true })
+	onLoop(r, func() bool { r.h.agents.AgentSetupConfirm(0, "Claude two"); return true })
 	r.s.WaitFor(t, "the second profile", func(string) bool {
-		return onLoop(r, func() bool { return len(r.h.agents.profiles()) == 2 })
+		return onLoop(r, func() bool { return len(r.h.agents.Profiles()) == 2 })
 	})
 	time.Sleep(300 * time.Millisecond)
 	if got := heardLines(heard); len(got) != 0 {
@@ -74,12 +76,12 @@ func TestASetupWithATakenCodenameIsRefused(t *testing.T) {
 	t.Parallel()
 	offeringSetup(t)
 	heard, onPath := fakeClaude(t)
-	old := agentProfile{Name: "Old", Command: "claude", Codename: "claude"}
-	d, r, _ := runAgentTUIWith(t, t.TempDir(), []agentProfile{old}, "", nil, Options{})
+	old := agents.AgentProfile{Name: "Old", Command: "claude", Codename: "claude"}
+	d, r, _ := runAgentTUIWith(t, t.TempDir(), []agents.AgentProfile{old}, "", nil, Options{})
 	onPath(r)
-	onLoop(r, func() bool { r.h.agents.openAgentSetup(); return true })
+	onLoop(r, func() bool { r.h.agents.OpenAgentSetup(); return true })
 	r.s.WaitForText(t, "Set up an AI agent?")
-	onLoop(r, func() bool { r.h.agents.agentSetupConfirm(0, "Claude"); return true })
+	onLoop(r, func() bool { r.h.agents.AgentSetupConfirm(0, "Claude"); return true })
 	r.s.WaitFor(t, "the form's refusal", func(string) bool { // its state: a panel may cover the form
 		return onLoop(r, func() bool {
 			v, _ := r.h.p.Tree().Source("App.agentFormError")
@@ -90,8 +92,8 @@ func TestASetupWithATakenCodenameIsRefused(t *testing.T) {
 	if r.agentRunningNow() || len(heardLines(heard)) != 0 {
 		t.Fatalf("a refused setup started the old profile (%v) or prompted (%q)", r.agentRunningNow(), heardLines(heard))
 	}
-	if m, _ := d.db.Preferences(t.Context()); m[prefAgentSetup] != "" {
-		t.Fatalf("a refused setup recorded %q", m[prefAgentSetup])
+	if m, _ := d.db.Preferences(t.Context()); m[agents.PrefAgentSetup] != "" {
+		t.Fatalf("a refused setup recorded %q", m[agents.PrefAgentSetup])
 	}
 }
 
@@ -99,9 +101,9 @@ func TestASetupWithATakenCodenameIsRefused(t *testing.T) {
 func TestTheFormAndTheSetupRefuseAlike(t *testing.T) {
 	t.Parallel()
 	_, r, _ := runAgentTUI(t, t.TempDir(), nil, "")
-	onLoop(r, func() bool { r.h.agents.saveAgentProfile("", "claude", ""); return true })
+	onLoop(r, func() bool { r.h.agents.SaveAgentProfile("", "claude", ""); return true })
 	r.s.WaitForText(t, "not saved: a profile is a name and the command that starts the agent")
-	if onLoop(r, func() bool { _, ok := r.h.agents.storeAgentProfile("x", "", "", "", ""); return ok }) {
+	if onLoop(r, func() bool { _, ok := r.h.agents.StoreAgentProfile("x", "", "", "", ""); return ok }) {
 		t.Fatal("storeAgentProfile saved a profile with no command")
 	}
 }
@@ -114,7 +116,7 @@ func TestNoIsRemembered(t *testing.T) {
 	d, r, _ := runAgentTUIWith(t, t.TempDir(), nil, "", nil, Options{})
 	r.s.WaitForText(t, "Set up an AI agent?")
 	r.keys(t, key('n')) // &No
-	storedPref(t, d, r, prefAgentSetup, "declined")
+	storedPref(t, d, r, agents.PrefAgentSetup, "declined")
 	r2 := runTUI(t, NewSession(d.sock, nil), Options{AgentDir: t.TempDir(), ConfigPath: agentConfig})
 	r2.s.WaitFor(t, "started", func(string) bool { return onLoop(r2, func() bool { return r2.h.started }) })
 	time.Sleep(200 * time.Millisecond)
@@ -156,7 +158,7 @@ func TestNoneFoundSaysWhichAndRecordsNothing(t *testing.T) {
 	}
 	r.keys(t, key('c')) // &Close
 	r.s.WaitFor(t, "the card closed", func(sc string) bool { return !strings.Contains(sc, "No agent CLI was found") })
-	if m, _ := d.db.Preferences(t.Context()); m[prefAgentSetup] != "" {
-		t.Fatalf("Close recorded %q", m[prefAgentSetup])
+	if m, _ := d.db.Preferences(t.Context()); m[agents.PrefAgentSetup] != "" {
+		t.Fatalf("Close recorded %q", m[agents.PrefAgentSetup])
 	}
 }

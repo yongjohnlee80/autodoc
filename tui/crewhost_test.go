@@ -20,6 +20,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/crew/crewtest"
 	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/todo"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -317,7 +318,7 @@ func TestACrashedWindowsScopeComesBack(t *testing.T) {
 	crashed.Connected()
 	scope, epoch, _ := crashed.held()
 	past := time.Now().Add(-time.Hour) // listed earlier than any other: the successor tries it first
-	if err := os.Chtimes(filepath.Join(dir, ".crew-scopes", crewFileName(scope)), past, past); err != nil {
+	if err := os.Chtimes(filepath.Join(dir, ".crew-scopes", agents.CrewFileName(scope)), past, past); err != nil {
 		t.Fatal(err)
 	}
 	early := newCrewHost(&crewWindow{d: d}, nil, dir)

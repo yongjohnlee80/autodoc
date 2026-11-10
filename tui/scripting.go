@@ -512,7 +512,7 @@ func (v luaVerb) bounded(params []any, bounds map[string]any) []any {
 
 // userPreferences are the preferences whose value is rights (the grants) or a command (the agent
 // profiles' commands, run as /bin/sh -c): the user's to write, never a gated script's (AS-2b).
-var userPreferences = map[string]bool{prefLuaGrants: true, prefAgentProfiles: true}
+var userPreferences = map[string]bool{prefLuaGrants: true, PrefAgentProfiles: true}
 
 // refusedPreference is the refusal of a gated script's preference.set of one of userPreferences.
 func refusedPreference(verb string, params []any) error {
