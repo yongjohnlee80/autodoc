@@ -20,7 +20,7 @@ type modelRemovalCopy struct {
 	err  error
 }
 
-func (r *modelRemovalCopy) Done() <-chan struct{}
+func (r *modelRemovalCopy) Done() <-chan struct{} { return r.done }
 
 func (r *modelRemovalCopy) Wait(context.Context) error { <-r.done; return r.err }
 
