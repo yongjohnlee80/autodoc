@@ -35,7 +35,7 @@ var hostile = []string{
 func throughShell(t *testing.T, s Shell, args []string) []string {
 	t.Helper()
 	line := s.Quote(os.Args[0])
-	if s.kind == powershell {
+	if s.kind == powershell || s.kind == winps {
 		line = "& " + line // PowerShell runs a quoted program only through its call operator
 	}
 	for _, a := range args {
@@ -80,7 +80,7 @@ func TestEachShellRunsALineItsWay(t *testing.T) {
 	}{
 		{Shell{"/bin/sh", posix}, []string{"-c", "echo hi"}},
 		{Shell{"pwsh", powershell}, []string{"-NoLogo", "-NoProfile", "-Command", "echo hi"}},
-		{Shell{`C:\Windows\System32\cmd.exe`, cmd}, []string{"/D", "/S", "/C", "echo hi"}},
+		{Shell{"powershell", winps}, []string{"-NoLogo", "-NoProfile", "-Command", "echo hi"}},
 	} {
 		prog, args := c.s.Run("echo hi")
 		if prog != c.s.Program || !reflect.DeepEqual(args, c.want) {
