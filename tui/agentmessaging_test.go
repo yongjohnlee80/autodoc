@@ -63,7 +63,7 @@ func hasNote(notes []string, prefix string) bool {
 // nothing is typed into its terminal (the mutant: the doorbell skipped, the base typing it).
 func TestAMessageRingsTheAgentsDoorbell(t *testing.T) {
 	a, c, w := messagingRig(t)
-	scope, epoch, _ := a.crew.held()
+	scope, epoch, _ := crewOf(a).held()
 	var got []any
 	w.inboxSend = func(p []any) (any, error) { got = p; return map[string]any{"message": "m1"}, nil }
 	var heard []error
@@ -220,7 +220,7 @@ func TestAStartedAgentIsNotRung(t *testing.T) {
 // scope says nothing, and a session the list doesn't name is not reported (the mutants: the lookup
 // skipped; the scope not matched; no session taken as reported).
 func TestTheEnterAsksTheCrewWhetherPromptsAreReported(t *testing.T) {
-	scopeOf := func(a *agents) string { s, _, _ := a.crew.held(); return s }
+	scopeOf := func(a *agents) string { s, _, _ := crewOf(a).held(); return s }
 	for _, c := range []struct {
 		name   string
 		list   func(scope string) []any
@@ -268,7 +268,7 @@ func TestASessionWithNoReporterIsNotReported(t *testing.T) {
 	a, cw, w := messagingRig(t)
 	var said []bool
 	done := false
-	a.crew.promptsReported("one", func(reported bool) { said = append(said, reported); done = true })
+	crewOf(a).promptsReported("one", func(reported bool) { said = append(said, reported); done = true })
 	settleMessaging(cw, w)
 	if !done || len(said) != 1 || said[0] {
 		t.Fatalf("one, of no reporting kind: %v", said)

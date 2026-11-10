@@ -258,7 +258,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 	// a crew session needs the window's scope and the workspace's id (a daemon before it has none)
 	crewed := false
 	if a.crew != nil {
-		_, _, held := a.crew.held()
+		_, _, held := a.crew.Held()
 		crewed = held && ws.ID > 0
 	}
 	crewKind := ""
@@ -391,18 +391,18 @@ func commandOnPath(shell usershell.Shell, command string, env []string) error {
 // (crew.register's mail_via) and with prompts (the window wrote the hooks that report them), then
 // starts its process once the session's context is written; a refused registration starts nothing.
 func (a *agents) registerCrew(panel feature.TerminalPanel, instance *agentInstance, p agentProfile, ws feature.Workspace, dir, token string, prompts bool, stale func() bool) {
-	a.crew.register(p.Codename, p.kind(), prompts, instance.setup.MailVia, ws.ID, token, dir, func(s crewSession, err error) {
+	a.crew.Register(p.Codename, p.kind(), prompts, instance.setup.MailVia, ws.ID, token, dir, func(s crewSession, err error) {
 		instance.starting = false
 		if stale() {
 			if err == nil {
-				a.crew.exit(s, crew.EndedStartFailed) // nobody starts it now
+				a.crew.Exit(s, crew.EndedStartFailed) // nobody starts it now
 			}
 			a.listAgents()
 			return
 		}
 		if err == nil {
-			if instance.context, err = a.crew.publish(s); err != nil {
-				a.crew.exit(s, crew.EndedStartFailed)
+			if instance.context, err = a.crew.Publish(s); err != nil {
+				a.crew.Exit(s, crew.EndedStartFailed)
 			}
 		}
 		if err != nil {
@@ -412,7 +412,7 @@ func (a *agents) registerCrew(panel feature.TerminalPanel, instance *agentInstan
 		}
 		if err := a.start(panel, instance); err != nil {
 			instance.context = ""
-			a.crew.exit(s, crew.EndedStartFailed)
+			a.crew.Exit(s, crew.EndedStartFailed)
 			a.c.Notify(a.c.Trf("autodoc.crew.did_not_start", p.Name, err.Error()))
 			a.listAgents()
 			return
@@ -613,7 +613,7 @@ func (a *agents) endSession(instance *agentInstance) string {
 		return ""
 	}
 	instance.context = ""
-	a.crew.exit(instance.session, crew.EndedExit)
+	a.crew.Exit(instance.session, crew.EndedExit)
 	instance.session = crewSession{}
 	return id
 }
@@ -644,14 +644,14 @@ func (a *agents) instanceExited(instance *agentInstance, code int) {
 			// a Claude that exits before it started may have declined its folder-trust question: the
 			// crew says whether it started before its exit ends the session (and its endpoint)
 			name, dir := instance.profile.Name, instance.dir
-			a.crew.startedOf(instance.profile.Codename, func(started bool) {
+			a.crew.StartedOf(instance.profile.Codename, func(started bool) {
 				if !started {
 					a.c.Notify(a.c.Trf("autodoc.crew.exited_before_start", name, code, dir))
 				}
-				a.crew.exit(s, crew.EndedExit)
+				a.crew.Exit(s, crew.EndedExit)
 			})
 		} else {
-			a.crew.exit(s, crew.EndedExit)
+			a.crew.Exit(s, crew.EndedExit)
 		}
 		instance.session = crewSession{}
 	}
@@ -739,7 +739,7 @@ func (a *agents) awaitInstanceRetirement(instance *agentInstance, result feature
 			if ended == "" {
 				a.startAgent(p)
 			} else {
-				a.crew.whenExited(ended, func() { a.startAgent(p) }) // the codename is free once the old session has ended
+				a.crew.WhenExited(ended, func() { a.startAgent(p) }) // the codename is free once the old session has ended
 			}
 		}
 	}
@@ -950,7 +950,7 @@ func (a *agents) deliver(to feature.AgentRef, check func() error, what string, o
 			// nothing is typed into a CLI that may be showing its startup question: the crew says
 			// first whether it has started, asked again while an agent just started comes up
 			session := instance.session.ID
-			a.crew.startedOf(instance.profile.Codename, func(started bool) {
+			a.crew.StartedOf(instance.profile.Codename, func(started bool) {
 				switch {
 				case accepted.finished:
 				case instance.session.ID != session:

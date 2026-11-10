@@ -14,9 +14,9 @@ func TestAGrantAnswerIsMailedToTheAgentThatAsked(t *testing.T) {
 	a, c, w := messagingRig(t)
 	var sends [][]any
 	w.inboxSend = func(p []any) (any, error) { sends = append(sends, p); return map[string]any{"message": "m1"}, nil }
-	a.crew.grantAnswered("one", []string{"editor.write"}, true)
+	crewOf(a).grantAnswered("one", []string{"editor.write"}, true)
 	settleMessaging(c, w)
-	a.crew.grantAnswered("one", []string{"editor.write", "commands"}, false)
+	crewOf(a).grantAnswered("one", []string{"editor.write", "commands"}, false)
 	settleMessaging(c, w)
 	if len(sends) != 2 {
 		t.Fatalf("%d sends for two answers, want one each", len(sends))

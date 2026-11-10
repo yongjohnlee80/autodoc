@@ -71,12 +71,12 @@ func TestABareAssignmentReachesTheWindowsAgent(t *testing.T) {
 		t.Fatal(err)
 	}
 	store, seq := storeOf(t, w)
-	a.crew.Connected() // the window reconnects, and catches up
+	crewOf(a).Connected() // the window reconnects, and catches up
 	settleMessaging(c, w)
 	if len(*sends) != 1 {
 		t.Fatalf("inbox.send %d times (%v), want once, to one", len(*sends), *sends)
 	}
-	scope, _, _ := a.crew.held()
+	scope, _, _ := crewOf(a).held()
 	p := (*sends)[0]
 	if p[0] != scope || !slices.Equal(p[3].([]any), []any{"one"}) {
 		t.Fatalf("sent %v, want to one in the window's scope %s", p, scope)
@@ -98,7 +98,7 @@ func TestABareAssignmentReachesTheWindowsAgent(t *testing.T) {
 	if len(c.panel.pastes)+len(c.panel.keys) != 0 {
 		t.Errorf("typed %q and pressed %q into the agent, want nothing", c.panel.pastes, c.panel.keys)
 	}
-	a.crew.Connected()
+	crewOf(a).Connected()
 	settleMessaging(c, w)
 	if len(*sends) != 1 {
 		t.Errorf("after another reconnect: %d sends, want the one", len(*sends))
@@ -117,7 +117,7 @@ func assignAndRead(t *testing.T, a *agents, c *identityHost, w *crewWindow, id, 
 	if _, err := w.d.todos.Assign(ctx, todo.At{Workspace: "kb"}, id, cur.Rev, assignee, "", scope); err != nil {
 		t.Fatal(err)
 	}
-	a.crew.Event("todos.changed", "kb", id)
+	crewOf(a).Event("todos.changed", "kb", id)
 	settleMessaging(c, w)
 }
 
@@ -130,7 +130,7 @@ func assignAndRead(t *testing.T, a *agents, c *identityHost, w *crewWindow, id, 
 // none, is mailed too. Each is mailed once, whatever reads follow.
 func TestOnlyTheWindowsOwnAgentsGetAnotherHostsAssignments(t *testing.T) {
 	a, c, w, task, sends := todoFeedRig(t)
-	scope, _, _ := a.crew.held()
+	scope, _, _ := crewOf(a).held()
 	for _, x := range []struct{ assignee, scope string }{
 		{"autodoc:one", scope},
 		{"autodoc:two", ""},
@@ -154,8 +154,8 @@ func TestOnlyTheWindowsOwnAgentsGetAnotherHostsAssignments(t *testing.T) {
 			t.Errorf("sent %v, want a queued mail to one", p)
 		}
 	}
-	a.crew.Event("todos.changed", "kb", task.ID)
-	a.crew.Connected()
+	crewOf(a).Event("todos.changed", "kb", task.ID)
+	crewOf(a).Connected()
 	settleMessaging(c, w)
 	if len(*sends) != 3 {
 		t.Errorf("after more reads: %d sends, want the three", len(*sends))
@@ -172,19 +172,19 @@ func TestAStoreNeverReadSkipsItsHistoryOnce(t *testing.T) {
 	if _, err := w.d.todos.Assign(ctx, todo.At{Workspace: "kb"}, task.ID, task.Rev, "autodoc:one", "", ""); err != nil {
 		t.Fatal(err)
 	}
-	a.crew.todos.start = time.Now().Add(time.Hour) // the window started after the assignment
-	a.crew.Connected()
+	crewOf(a).todos.start = time.Now().Add(time.Hour) // the window started after the assignment
+	crewOf(a).Connected()
 	settleMessaging(c, w)
 	if len(*sends) != 0 {
 		t.Fatalf("history mailed: %v", *sends)
 	}
-	scope, _, _ := a.crew.held()
-	if seen := readTodoSeen(filepath.Join(a.crew.todos.dir, crewFileName(scope))); len(seen) != 1 {
+	scope, _, _ := crewOf(a).held()
+	if seen := readTodoSeen(filepath.Join(crewOf(a).todos.dir, crewFileName(scope))); len(seen) != 1 {
 		t.Fatalf("stores kept as read: %v, want the one", seen)
 	}
 
 	// the next process, after a reassignment made while it was away
-	a.crew.todos = &todoFeed{h: a.crew, dir: a.crew.todos.dir, start: time.Now().Add(2 * time.Hour)}
+	crewOf(a).todos = &todoFeed{h: crewOf(a), dir: crewOf(a).todos.dir, start: time.Now().Add(2 * time.Hour)}
 	assignAndRead(t, a, c, w, task.ID, "autodoc:one", "")
 	if len(*sends) != 1 {
 		t.Fatalf("the catch-up of a store read before: %d sends, want one", len(*sends))
@@ -210,7 +210,7 @@ func TestAnAssignmentWithNoOutcomeIsAskedAgainByItsKey(t *testing.T) {
 	if len(*sends) != 2 || (*sends)[0][5] != (*sends)[1][5] {
 		t.Fatalf("sends %v, want the lost one asked again by its key", *sends)
 	}
-	a.crew.Connected()
+	crewOf(a).Connected()
 	settleMessaging(c, w)
 	if len(*sends) != 2 {
 		t.Fatalf("after the answer: %d sends, want two", len(*sends))
@@ -221,7 +221,7 @@ func TestAnAssignmentWithNoOutcomeIsAskedAgainByItsKey(t *testing.T) {
 		return nil, &golibrpc.Error{Code: mail.CodeNoRecipient, Message: "an address names no active profile or live session"}
 	}
 	assignAndRead(t, a, c, w, task.ID, "autodoc:one", "")
-	a.crew.Connected()
+	crewOf(a).Connected()
 	settleMessaging(c, w)
 	if len(*sends) != 3 {
 		t.Fatalf("a refusal for good: %d sends in all, want it asked once", len(*sends))
@@ -245,7 +245,7 @@ func TestAnAssignmentsMailStatesItAndQuotesItsReason(t *testing.T) {
 		if _, err := w.d.todos.Assign(ctx, todo.At{Workspace: "kb"}, task.ID, cur.Rev, "autodoc:one", reason, scope); err != nil {
 			t.Fatal(err)
 		}
-		a.crew.Event("todos.changed", "kb", task.ID)
+		crewOf(a).Event("todos.changed", "kb", task.ID)
 		settleMessaging(c, w)
 		body, _ := (*sends)[len(*sends)-1][4].(string)
 		if !strings.HasPrefix(body, "You've been assigned a new task.\n") {
@@ -281,7 +281,7 @@ func TestAResyncMailsOnlyAStoreReadBefore(t *testing.T) {
 	var away time.Duration
 	a, c, w, task, sends := todoFeedRigAt(t, func() time.Time { return time.Now().Add(away) })
 	ctx := context.Background()
-	scope, _, _ := a.crew.held()
+	scope, _, _ := crewOf(a).held()
 	consumer := "autodoc-window:" + scope
 	if _, err := w.d.todos.Changes(ctx, todo.At{Root: "/kb"}, consumer, 0); err != nil { // the consumer, as an earlier process left it
 		t.Fatal(err)
@@ -290,17 +290,17 @@ func TestAResyncMailsOnlyAStoreReadBefore(t *testing.T) {
 		t.Fatal(err)
 	}
 	away = todo.ConsumerSilence + time.Hour
-	a.crew.Connected()
+	crewOf(a).Connected()
 	settleMessaging(c, w)
 	if len(*sends) != 0 {
 		t.Fatalf("a store never read: its resync mailed %v, want nothing", *sends)
 	}
-	if seen := readTodoSeen(filepath.Join(a.crew.todos.dir, crewFileName(scope))); len(seen) != 1 {
+	if seen := readTodoSeen(filepath.Join(crewOf(a).todos.dir, crewFileName(scope))); len(seen) != 1 {
 		t.Fatalf("stores kept as read: %v, want the one", seen)
 	}
 
 	away += todo.ConsumerSilence + time.Hour // away again, now from a store it has read
-	a.crew.Connected()
+	crewOf(a).Connected()
 	settleMessaging(c, w)
 	if len(*sends) != 1 {
 		t.Fatalf("a store read before: its resync mailed %d, want the one assigned task", len(*sends))
@@ -327,15 +327,15 @@ func TestAnAssignmentLostThenARestartIsStillDelivered(t *testing.T) {
 	if _, err := w.d.todos.Assign(context.Background(), todo.At{Workspace: "kb"}, task.ID, task.Rev, "autodoc:one", "", ""); err != nil {
 		t.Fatal(err)
 	}
-	a.crew.Event("todos.changed", "kb", task.ID)
+	crewOf(a).Event("todos.changed", "kb", task.ID)
 	if len(*sends) != 1 {
 		t.Fatalf("%d sends, want the lost one", len(*sends))
 	}
 	w.timers = nil // the window quits before its read again
 
 	lost = false
-	a.crew.todos = &todoFeed{h: a.crew, dir: a.crew.todos.dir, start: time.Now().Add(time.Hour)} // the next process
-	a.crew.Connected()
+	crewOf(a).todos = &todoFeed{h: crewOf(a), dir: crewOf(a).todos.dir, start: time.Now().Add(time.Hour)} // the next process
+	crewOf(a).Connected()
 	settleMessaging(c, w)
 	if len(*sends) != 2 || (*sends)[1][5] != (*sends)[0][5] {
 		t.Fatalf("after the restart: sends %v, want the lost one asked again by its key", *sends)
@@ -365,7 +365,7 @@ func TestAPeersAssignmentIsForwardedByTheDaemon(t *testing.T) {
 		t.Fatal(err)
 	}
 	store, seq := storeOf(t, w)
-	a.crew.Connected()
+	crewOf(a).Connected()
 	settleMessaging(c, w)
 	if len(*sends) != 0 {
 		t.Fatalf("inbox.send %v: a peer's assignment went out as the user's", *sends)
@@ -373,8 +373,8 @@ func TestAPeersAssignmentIsForwardedByTheDaemon(t *testing.T) {
 	if len(forwards) != 2 {
 		t.Fatalf("inbox.forward %d times (%v), want the lost one asked again", len(forwards), forwards)
 	}
-	scope, epoch, _ := a.crew.held()
-	run := a.crew.run
+	scope, epoch, _ := crewOf(a).held()
+	run := crewOf(a).run
 	p := forwards[1]
 	key := fmt.Sprintf("todo-%s-%d", store, seq)
 	if p[0] != scope || p[1] != run || p[2] != epoch || p[3] != store || p[4] != seq || p[5] != task.ID ||
@@ -389,7 +389,7 @@ func TestAPeersAssignmentIsForwardedByTheDaemon(t *testing.T) {
 			t.Errorf("the window named the sender: %v", p)
 		}
 	}
-	a.crew.Connected()
+	crewOf(a).Connected()
 	settleMessaging(c, w)
 	if len(forwards) != 2 || len(*sends) != 0 {
 		t.Fatalf("a read after the answer: %d forwards, %d sends; want nothing more", len(forwards), len(*sends))
@@ -403,7 +403,7 @@ func TestAPeersAssignmentIsForwardedByTheDaemon(t *testing.T) {
 	if _, err := w.d.todos.Assign(ctx, todo.At{Workspace: "kb"}, task.ID, cur.Rev, "autodoc:one", "", scope); err != nil {
 		t.Fatal(err)
 	}
-	a.crew.Event("todos.changed", "kb", task.ID)
+	crewOf(a).Event("todos.changed", "kb", task.ID)
 	settleMessaging(c, w)
 	if len(forwards) != 2 || len(*sends) != 0 {
 		t.Fatalf("the window's own scope: %d forwards, %d sends; want none more", len(forwards), len(*sends))
@@ -421,14 +421,14 @@ func TestAResyncForwardsAPeersAssignment(t *testing.T) {
 		forwards = append(forwards, p)
 		return map[string]any{"message": "m1"}, nil
 	}
-	a.crew.Connected() // the store read once: a resync of it mails again
+	crewOf(a).Connected() // the store read once: a resync of it mails again
 	settleMessaging(c, w)
 	ctx := module.WithCaller(context.Background(), module.CallerUnverified)
 	if _, err := w.d.todos.Assign(ctx, todo.At{Workspace: "kb"}, task.ID, task.Rev, "autodoc:one", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	away = todo.ConsumerSilence + time.Hour
-	a.crew.Connected()
+	crewOf(a).Connected()
 	settleMessaging(c, w)
 	store, _ := storeOf(t, w)
 	if len(*sends) != 0 || len(forwards) != 1 {
@@ -444,16 +444,16 @@ func TestAResyncForwardsAPeersAssignment(t *testing.T) {
 func TestTheFeedTellsTheBuffersTheTaskFilesItsChangesMoved(t *testing.T) {
 	a, c, w, task, _ := todoFeedRig(t)
 	var told []todoFileChange
-	a.crew.onTodoFiles = func(cs []todoFileChange) { told = append(told, cs...) }
+	crewOf(a).onTodoFiles = func(cs []todoFileChange) { told = append(told, cs...) }
 	ctx := context.Background()
-	a.crew.Connected() // the store read once: what follows is news
+	crewOf(a).Connected() // the store read once: what follows is news
 	settleMessaging(c, w)
 	told = nil
 	moved, err := w.d.todos.Status(ctx, todo.At{Workspace: "kb"}, task.ID, task.Rev, "deferred")
 	if err != nil {
 		t.Fatal(err)
 	}
-	a.crew.Event("todos.changed", "kb", task.ID)
+	crewOf(a).Event("todos.changed", "kb", task.ID)
 	settleMessaging(c, w)
 	stores, _ := w.d.todos.Stores(ctx)
 	want := todoFileChange{store: stores[0].Path, from: task.Path, to: moved.Path}
@@ -464,7 +464,7 @@ func TestTheFeedTellsTheBuffersTheTaskFilesItsChangesMoved(t *testing.T) {
 	if err := w.d.todos.Remove(ctx, todo.At{Workspace: "kb"}, task.ID, moved.Rev); err != nil {
 		t.Fatal(err)
 	}
-	a.crew.Event("todos.changed", "kb", task.ID)
+	crewOf(a).Event("todos.changed", "kb", task.ID)
 	settleMessaging(c, w)
 	if want := (todoFileChange{store: stores[0].Path, from: moved.Path, removed: true}); !slices.Contains(told, want) {
 		t.Fatalf("told %+v, want the removal %+v", told, want)

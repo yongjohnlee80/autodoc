@@ -117,13 +117,6 @@ type crewOwedExit struct {
 	inflight bool
 }
 
-// crewSession is one agent's session, as registered under the window's scope.
-type crewSession struct {
-	ID, Profile, Scope string
-	Epoch              int64
-	Dir                string // the folder whose context file names it
-}
-
 // errNoCrewScope is a registration asked of a window that holds no scope.
 var errNoCrewScope = errors.New("this window holds no crew scope")
 
