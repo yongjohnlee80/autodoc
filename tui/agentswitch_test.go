@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -155,11 +156,11 @@ func TestAnAgentIsToldOfAWorkspaceSwitch(t *testing.T) {
 	if got := onLoop(r, func() wsRef { s, _ := r.h.agents.spawnWorkspace("zen"); return s }); got != kb {
 		t.Errorf("the agent's workspace after the switch: %v, want kb's", got)
 	}
-	settings, err := os.ReadFile(filepath.Join(dir, "kb", ".claude", "settings.json"))
 	// the notice runs the build by its path, never the folder's wrapper or a bare autodoc
 	bin := onLoop(r, func() string { return r.h.agents.agentBin() })
-	if want := shellQuote(bin) + " --workspace-notice"; err != nil || !strings.Contains(string(settings), want) {
-		t.Errorf("the folder's Claude settings: %v, want the hook %q:\n%s", err, want, settings)
+	hooks := claudeHookCommands(t, filepath.Join(dir, "kb"))
+	if want := shellQuote(bin) + " --workspace-notice"; !slices.Contains(hooks["UserPromptSubmit"], want) {
+		t.Errorf("the folder's Claude hooks: %q, want UserPromptSubmit's %q", hooks, want)
 	}
 }
 
