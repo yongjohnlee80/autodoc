@@ -11,6 +11,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/internal/userdirs"
+	"github.com/yongjohnlee80/autodoc/internal/usershell"
 )
 
 // A profile's env (docs/decisions/crew.md#a-profiles-environment) is set on its agent's process over
@@ -65,15 +66,15 @@ func keptProfileEnv(env map[string]string) map[string]string {
 	return out
 }
 
-// parseProfileEnv reads the form's env field: NAME=value words, quoted as a shell's (shellWords),
+// parseProfileEnv reads the form's env field: NAME=value words, quoted as a POSIX shell's (usershell.POSIXWords),
 // nothing expanded. Blank is none. A word that isn't NAME=value, a key a profile can't set, or a
 // key twice is refused, naming it.
 func parseProfileEnv(text string) (map[string]string, error) {
 	var env map[string]string
-	for _, w := range shellWords(text) {
-		key, value, ok := strings.Cut(w.text, "=")
+	for _, w := range usershell.POSIXWords(text) {
+		key, value, ok := strings.Cut(w.Text, "=")
 		if !ok || key == "" {
-			return nil, &envError{w.text, errEnvKeyInvalid}
+			return nil, &envError{w.Text, errEnvKeyInvalid}
 		}
 		if err := profileEnvKey(key); err != nil {
 			return nil, &envError{key, err}
