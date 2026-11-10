@@ -40,7 +40,7 @@ done
 // runKeyAgent runs the agents panel, docked at the bottom, on keyAgent, its keyboard there, typing.
 func runKeyAgent(t *testing.T) *running {
 	t.Helper()
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(keyAgent(t)), Codename: "heron"}}, "heron")
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuoteCopy(keyAgent(t)), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	r.s.WaitForText(t, "ready")
