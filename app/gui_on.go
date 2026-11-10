@@ -24,11 +24,8 @@ func runGUI(ctx context.Context, o tui.LaunchOptions, owned []owner) error {
 	}
 	configureGUIPreferences()
 	gui.Main(func() error {
-		opts := append([]gui.Option{gui.WithTitle("AutoDoc")}, rendererOptions(tui.GUIRendererFile(o.ConfigPath))...)
-		// tui.gui.titlebar: AutoDoc's own title bar, in a window opened without the system's
-		if o.TitleBar = ownsTitleBar(tui.GUITitleBarFile(o.ConfigPath)); o.TitleBar {
-			opts = append(opts, gui.WithDecorations(false))
-		}
+		var opts []gui.Option
+		o, opts = windowFor(o)
 		if o.DebugRecorder != nil {
 			// --debug: the window's input path records into the same file the TUI's
 			// trace does, but wrapped: the backend closes what it is given on window
@@ -54,6 +51,19 @@ func runGUI(ctx context.Context, o tui.LaunchOptions, owned []owner) error {
 		return nil
 	})
 	return nil // not reached: gui.Main exits the process
+}
+
+// windowFor is how the window opens, read from the state directory's mirrors before the store can
+// be read: its title and renderer, and, when tui.gui.titlebar names AutoDoc's own, no frame of the
+// system's (gui.WithDecorations(false)) and o.TitleBar set, so the layout gets AutoDoc's bar. The
+// two go together: a window without the system's frame and without AutoDoc's bar would have no
+// title bar at all.
+func windowFor(o tui.LaunchOptions) (tui.LaunchOptions, []gui.Option) {
+	opts := append([]gui.Option{gui.WithTitle("AutoDoc")}, rendererOptions(tui.GUIRendererFile(o.ConfigPath))...)
+	if o.TitleBar = ownsTitleBar(tui.GUITitleBarFile(o.ConfigPath)); o.TitleBar {
+		opts = append(opts, gui.WithDecorations(false))
+	}
+	return o, opts
 }
 
 // rendererOptions are the window's renderer, chosen as it opens: Vulkan first where it can have it,
