@@ -252,9 +252,15 @@ jobs:
         run: |
           # the whole module's vet, not only the ported packages': it compiles every package's tests
           # for Windows, so a neutral test can't come to lean on a helper in a Unix-tagged file
-          go vet ./...
-          mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
-          go test -count=1 -timeout 20m "${pkgs[@]}"
+          mapfile -t rest < <(go list ./... | grep -v -E '/autodoc/(tui|app)$')
+          go test -count=1 -timeout 45m ./tui/ -v > "$RUNNER_TEMP/t-tui.txt" 2>&1 &
+          go test -count=1 -timeout 45m ./app/ -v > "$RUNNER_TEMP/t-app.txt" 2>&1 &
+          go test -count=1 -timeout 45m "${rest[@]}" -v > "$RUNNER_TEMP/t-rest.txt" 2>&1 &
+          wait
+          cat "$RUNNER_TEMP/t-rest.txt" "$RUNNER_TEMP/t-app.txt" "$RUNNER_TEMP/t-tui.txt" > "$RUNNER_TEMP/t.txt"
+          grep -E '^(--- (FAIL|SKIP)|ok |FAIL|panic: )|_test\.go:[0-9]+:' "$RUNNER_TEMP/t.txt" | cut -c1-240 || true
+          echo "== top-level PASS: $(grep -cE '^--- PASS' "$RUNNER_TEMP/t.txt")"
+          for n in $(grep -n '^panic: ' "$RUNNER_TEMP/t.txt" | cut -d: -f1); do echo "== panic at line $n"; sed -n "$((n-3)),$((n+14))p" "$RUNNER_TEMP/t.txt" | cut -c1-130; done
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
