@@ -8,6 +8,7 @@ import (
 	"unicode"
 
 	"github.com/yongjohnlee80/autodoc/core/mail"
+	"github.com/yongjohnlee80/autodoc/internal/usershell"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -214,11 +215,13 @@ func (h *Host) terminalRunExited(agent, line string, code int, mailed bool) {
 	})
 }
 
-// runFor starts line, as sh -c, in a new tab of the terminal panel named for agent, in dir, and
+// runFor starts line, run by the shell for command lines (internal/usershell: sh -c on Unix,
+// PowerShell on Windows), in a new tab of the terminal panel named for agent, in dir, and
 // gives it the keyboard so the user can type a passphrase; exited hears its code. The tab stays
 // after the command ends, so the user can read what it printed and close it.
 func (t *terminals) runFor(agent, line, dir string, exited func(int)) (string, error) {
-	return t.runProgramFor(agent, "/bin/sh", []string{"-c", line}, dir, exited)
+	program, args := usershell.Commands(t.c.Env()).Run(line)
+	return t.runProgramFor(agent, program, args, dir, exited)
 }
 
 // runProgramFor is runFor for a program and its arguments, through no shell.
