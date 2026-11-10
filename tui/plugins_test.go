@@ -249,6 +249,8 @@ func runTestPlugin(mode string) int {
 			return 1
 		}
 		return 0
+	case "deaf": // ignores plugin.close and SIGTERM, starting nothing: only the kill ends it
+		signal.Ignore(syscall.SIGTERM)
 	case "stubborn": // ignores plugin.close and SIGTERM, and starts a child of its own
 		signal.Ignore(syscall.SIGTERM)
 		child := exec.Command("sleep", "60")
@@ -402,6 +404,9 @@ func (e *echo) Close() {
 	fmt.Fprintln(os.Stderr, "echo: closing")
 	if e.mode == "stubborn" {
 		select {} // never returns: the host must stop it
+	}
+	for e.mode == "deaf" {
+		time.Sleep(time.Hour) // never returns either, asleep (silent's note)
 	}
 }
 
@@ -581,6 +586,9 @@ func pluginTUIOn(t *testing.T, d *daemon, dir, luaDir string) (*running, string)
 		runs := onLoop(r, func() []*pluginRun {
 			var out []*pluginRun
 			for _, p := range r.h.plugins.running {
+				out = append(out, p)
+			}
+			for p := range r.h.plugins.stopping { // stopped, still closing: its folder is in use until it exits
 				out = append(out, p)
 			}
 			return out
@@ -1066,12 +1074,18 @@ func commitPlugin(t *testing.T, repo, title, build string) {
 // commitPluginNamed commits the test plugin's manifest, as the plugin name, into repo.
 func commitPluginNamed(t *testing.T, repo, name, title, build string) {
 	t.Helper()
+	commitPluginAs(t, repo, name, "echo", title, build)
+}
+
+// commitPluginAs commits the test plugin's manifest, as the plugin name in mode, into repo.
+func commitPluginAs(t *testing.T, repo, name, mode, title, build string) {
+	t.Helper()
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
-	toml := fmt.Sprintf("name = %q\ntitle = %q\nkind = \"dialog\"\nprotocol = 1\ncommand = [%q, %q, \"echo\"]\n[dialog]\nwidth = 30\nheight = 6\n[install]\nbuild = [\"sh\", \"-c\", %q]\n",
-		name, title, exe, testPluginArg, build)
+	toml := fmt.Sprintf("name = %q\ntitle = %q\nkind = \"dialog\"\nprotocol = 1\ncommand = [%q, %q, %q]\n[dialog]\nwidth = 30\nheight = 6\n[install]\nbuild = [\"sh\", \"-c\", %q]\n",
+		name, title, exe, testPluginArg, mode, build)
 	if err := os.WriteFile(filepath.Join(repo, "plugin.toml"), []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
 	}
