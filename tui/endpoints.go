@@ -92,7 +92,7 @@ func (e *endpoints) State() map[string]any {
 	for i, k := range e.spec.kinds {
 		labels[i] = k.label
 	}
-	state := map[string]any{e.src("s"): e.rows.Model(), e.src("Kinds"): choices(labels...), e.src("KindIndex"): 0}
+	state := map[string]any{e.src("s"): e.rows.Model(), e.src("Kinds"): feature.Choices(labels...), e.src("KindIndex"): 0}
 	for _, name := range []string{"sStatus", "Detail", "FormTitle", "FormError", "Name", "Base", "Model", "Key", "KeyLabel", "ModelsStatus"} {
 		state[e.src(name)] = ""
 	}

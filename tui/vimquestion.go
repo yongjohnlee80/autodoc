@@ -1,6 +1,8 @@
 package tui
 
-import "github.com/yongjohnlee80/autodoc/tui/feature"
+import (
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+)
 
 // THE FIRST RUN'S VIM QUESTION — before the agent setup's card (agentsetup.go), a true first run
 // asks whether the user uses Vim. Yes is the Vim keymap; No is the text editor's, whose terminals

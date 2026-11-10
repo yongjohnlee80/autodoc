@@ -179,7 +179,7 @@ func (h *Host) keysChanged() {
 
 func (h *Host) themesReloaded() {
 	h.set("App.userThemes", h.userThemeRows())
-	h.set("App.themes", choices(h.themeLabels()...))
+	h.set("App.themes", feature.Choices(h.themeLabels()...))
 	chosen := h.prefs.theme
 	if chosen != "" && !isTheme(chosen) {
 		if _, err := h.themeValues(chosen); err == nil && chosen != h.theme {

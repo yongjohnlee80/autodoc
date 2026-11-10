@@ -89,7 +89,7 @@ func (r *rankers) status(m map[string]any, active, why string) string {
 }
 
 // rankersStatus is the line under the list: the ranker in use and its window, or the build's own.
-func rankersStatus(t wording, active, supplied, why string, window int64) string {
+func rankersStatus(t feature.Wording, active, supplied, why string, window int64) string {
 	switch {
 	case supplied != "" && why != "":
 		return t.Trf("autodoc.text.rankers.re_ranking_supplied_by_the_build_no_probe_answer", supplied, window, why)
@@ -211,7 +211,7 @@ func (r *rankers) checked(models []string, err error) {
 }
 
 // rankedTitle is what the hits' title says of their order: the ranker's, or why it is recall's.
-func rankedTitle(t wording, rk map[string]any) string {
+func rankedTitle(t feature.Wording, rk map[string]any) string {
 	switch feature.Str(rk, "state") {
 	case "ready":
 		return " · " + t.Trf("autodoc.text.rankers.re_ranked_by", shortModel(feature.Str(rk, "model")))

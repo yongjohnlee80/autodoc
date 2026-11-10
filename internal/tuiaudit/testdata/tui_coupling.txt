@@ -21,7 +21,6 @@ gui	crew	host	Host.ws	field
 gui	crew	host	asPrefs	func
 gui	crew	host	boolPref	func
 gui	crew	host	choicePref	func
-gui	crew	host	choices	func
 gui	crew	host	core	type
 gui	crew	host	core.h	field
 gui	crew	host	do	func
@@ -248,7 +247,6 @@ gui	relations	host	Host.notify	method
 gui	relations	host	Host.relationViewFeatures	method
 gui	relations	host	bar	func
 gui	relations	host	choiceModel	func
-gui	relations	host	choices	func
 gui	relations	host	decodeMap	func
 gui	relations	host	defaultPalette	func
 gui	relations	host	globeMapPanelID	const
@@ -294,8 +292,6 @@ gui	relations	host	relPalette.muted	field
 gui	relations	host	relPalette.relation	field
 gui	relations	host	relPalette.superseded	field
 gui	relations	host	relPalette.text	field
-gui	relations	host	wording	type
-gui	relations	host	wording.Trf	method
 gui	relations	terminals	abs	func
 gui	relations	terminals	keyedChoices	func
 gui	relations	terminals	prefTermTheme	const
@@ -362,11 +358,6 @@ gui	scripting	host	widgetTarget.open	field
 gui	scripting	host	widgetTarget.title	field
 gui	scripting	host	withAuthority	func
 gui	scripting	plugins	launchCapability	const
-gui	searchsetup	host	bytesText	func
-gui	searchsetup	host	choices	func
-gui	searchsetup	host	wording	type
-gui	searchsetup	host	wording.Tr	method
-gui	searchsetup	host	wording.Trf	method
 gui	system	host	prefAboutAt	const
 gui	system	host	prefUpdates	const
 gui	terminals	host	Host	type
@@ -384,7 +375,6 @@ gui	terminals	host	Host.tr	method
 gui	terminals	host	Host.trf	method
 gui	terminals	host	boolPref	func
 gui	terminals	host	choicePref	func
-gui	terminals	host	choices	func
 gui	terminals	host	indexOf	func
 gui	terminals	host	isTheme	func
 gui	terminals	host	layoutRows	func
@@ -409,7 +399,6 @@ term	crew	host	Host.ws	field
 term	crew	host	asPrefs	func
 term	crew	host	boolPref	func
 term	crew	host	choicePref	func
-term	crew	host	choices	func
 term	crew	host	core	type
 term	crew	host	core.h	field
 term	crew	host	do	func
@@ -623,7 +612,6 @@ term	plugins	todos	assignable	func
 term	plugins	todos	newAgentPick	func
 term	relations	explorer	linksTab	const
 term	relations	host	choiceModel	func
-term	relations	host	choices	func
 term	relations	host	decodeMap	func
 term	relations	host	globeMapPanelID	const
 term	relations	host	globeMapViewID	const
@@ -649,8 +637,6 @@ term	relations	host	relMap.Nodes	field
 term	relations	host	relMap.Types	field
 term	relations	host	relMap.label	method
 term	relations	host	relMap.mindIndex	method
-term	relations	host	wording	type
-term	relations	host	wording.Trf	method
 term	relations	terminals	abs	func
 term	scripting	host	Host	type
 term	scripting	host	Host.active	field
@@ -713,11 +699,6 @@ term	scripting	host	widgetTarget.open	field
 term	scripting	host	widgetTarget.title	field
 term	scripting	host	withAuthority	func
 term	scripting	plugins	launchCapability	const
-term	searchsetup	host	bytesText	func
-term	searchsetup	host	choices	func
-term	searchsetup	host	wording	type
-term	searchsetup	host	wording.Tr	method
-term	searchsetup	host	wording.Trf	method
 term	system	host	prefAboutAt	const
 term	system	host	prefUpdates	const
 term	terminals	host	Host	type
@@ -735,7 +716,6 @@ term	terminals	host	Host.tr	method
 term	terminals	host	Host.trf	method
 term	terminals	host	boolPref	func
 term	terminals	host	choicePref	func
-term	terminals	host	choices	func
 term	terminals	host	indexOf	func
 term	terminals	host	isTheme	func
 term	terminals	host	layoutRows	func

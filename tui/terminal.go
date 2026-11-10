@@ -61,9 +61,9 @@ func (*terminals) Name() string { return "terminals" }
 func (t *terminals) State() map[string]any {
 	st := map[string]any{
 		"App.terminalShown":   false,
-		"App.terminalEdges":   choices(termEdgeLabels...),
-		"App.terminalSizes":   choices(percentLabels(termSizes)...),
-		"App.terminalLengths": choices(percentLabels(termLengths)...),
+		"App.terminalEdges":   feature.Choices(termEdgeLabels...),
+		"App.terminalSizes":   feature.Choices(percentLabels(termSizes)...),
+		"App.terminalLengths": feature.Choices(percentLabels(termLengths)...),
 		"App.terminalThemes":  t.themeChooser(),
 	}
 	maps.Copy(st, t.lookState())
