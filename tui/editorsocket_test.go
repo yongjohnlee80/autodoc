@@ -32,8 +32,15 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 	r.waitFile(t, "a.md")
 
 	path := onLoop(r, r.h.editorSocketPath)
-	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o600 || filepath.Dir(path) != sockDir {
-		t.Fatalf("the socket %s: %v %v", path, fi, err)
+	if want := ipc.AddrIn(sockDir, fmt.Sprintf("%d.sock", os.Getpid())); path != want {
+		t.Fatalf("the socket is at %s, want %s", path, want)
+	}
+	// a unix socket's lock is its 0600 in a private folder; a named pipe's is the access list
+	// ipc.Listen gives it, whose cells are internal/ipc's
+	if ipc.Network == "unix" {
+		if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o600 || filepath.Dir(path) != sockDir {
+			t.Fatalf("the socket %s: %v %v", path, fi, err)
+		}
 	}
 	env := strings.Join(onLoop(r, func() []string {
 		return r.h.agents.agentEnv(wsInfo{name: "kb"}, t.TempDir(), agentProfile{Codename: "zen"})
@@ -70,7 +77,7 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	cli, err := golibrpc.Dial(ctx, path, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	cli, err := golibrpc.Dial(ctx, path, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +269,7 @@ func TestTheTokenRegistryIsTheLoops(t *testing.T) {
 	path := onLoop(r, r.h.editorSocketPath)
 	token := onLoop(r, func() string { return r.h.agents.editorToken("zen") })
 	ctx := context.Background()
-	cli, err := golibrpc.Dial(ctx, path, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	cli, err := golibrpc.Dial(ctx, path, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -309,7 +316,7 @@ func TestTheEditorSocketServesOnlyItsUsersProcesses(t *testing.T) {
 	restore()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	cli, err := golibrpc.Dial(ctx, path, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	cli, err := golibrpc.Dial(ctx, path, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 	if err != nil {
 		t.Fatal(err)
 	}

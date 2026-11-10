@@ -6,17 +6,21 @@ import (
 	"time"
 )
 
-// The contract every OS keeps: a scratch address is the daemon's kind of address, its own for each
-// folder and name, the same when asked again, and one a listener and a dial can meet on.
-func TestAScratchAddressIsARealAddressOfItsOwn(t *testing.T) {
+// The contract every OS keeps: AddrIn is the daemon's kind of address, its own for each folder and
+// name, the same when asked again, and one a listener and a dial can meet on; a scratch address is
+// one of them.
+func TestAnAddressInAFolderIsARealAddressOfItsOwn(t *testing.T) {
 	dir, other := t.TempDir(), t.TempDir()
-	addr := ScratchAddr(dir, "a.sock")
-	if again := ScratchAddr(dir, "a.sock"); again != addr {
+	addr := AddrIn(dir, "a.sock")
+	if scratch := ScratchAddr(dir, "a.sock"); scratch != addr {
+		t.Errorf("ScratchAddr = %q, want AddrIn's %q", scratch, addr)
+	}
+	if again := AddrIn(dir, "a.sock"); again != addr {
 		t.Errorf("asked again: %q, was %q", again, addr)
 	}
-	for _, o := range []string{ScratchAddr(dir, "b.sock"), ScratchAddr(other, "a.sock")} {
+	for _, o := range []string{AddrIn(dir, "b.sock"), AddrIn(other, "a.sock")} {
 		if o == addr {
-			t.Errorf("two scratch addresses are both %q", addr)
+			t.Errorf("two addresses are both %q", addr)
 		}
 	}
 	if err := CheckAddr(addr); err != nil {

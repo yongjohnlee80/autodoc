@@ -88,6 +88,10 @@ func Dial(ctx context.Context, addr string) (net.Conn, error) {
 	return c, nil
 }
 
+// ScratchAddr is an address for a daemon a test or sandbox starts, named name, private to dir: the
+// AddrIn of both, so each dir and name has its own.
+func ScratchAddr(dir, name string) string { return AddrIn(dir, name) }
+
 // RPCDialer is Dial with golib rpc's WithConnDialer signature, for a client given Network: the
 // network is ipc's own, whatever it is passed.
 func RPCDialer(ctx context.Context, _, addr string) (net.Conn, error) { return Dial(ctx, addr) }

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
@@ -57,7 +58,7 @@ func TestAnAgentIsToldOfAWorkspaceSwitch(t *testing.T) {
 	r.s.WaitFor(t, "a.md open", func(string) bool { n := r.file(); return n.open && n.path == "a.md" })
 
 	ctx := context.Background()
-	cli, err := golibrpc.Dial(ctx, onLoop(r, r.h.editorSocketPath), msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	cli, err := golibrpc.Dial(ctx, onLoop(r, r.h.editorSocketPath), msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 	if err != nil {
 		t.Fatal(err)
 	}

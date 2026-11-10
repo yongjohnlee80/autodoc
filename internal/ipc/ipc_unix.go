@@ -20,9 +20,9 @@ const Network = "unix"
 // DefaultAddr is the daemon's address when none is configured: its socket in runtimeDir.
 func DefaultAddr(runtimeDir string) string { return filepath.Join(runtimeDir, "autodoc.sock") }
 
-// ScratchAddr is an address for a daemon a test or sandbox starts, named name, private to dir: the
-// socket's file there. Each dir and name has its own.
-func ScratchAddr(dir, name string) string { return filepath.Join(dir, name) }
+// AddrIn is an address of ipc's kind for a server of this user's other than the daemon, its own for
+// each folder and name: here the socket at dir/name.
+func AddrIn(dir, name string) string { return filepath.Join(dir, name) }
 
 // IsLocal is whether a, a connection's peer address, is ipc's: a process of this machine.
 func IsLocal(a net.Addr) bool { return a != nil && a.Network() == Network }

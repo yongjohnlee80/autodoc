@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
@@ -260,7 +261,7 @@ func TestAnAgentActsOnABufferNotShown(t *testing.T) {
 	n, cn := onLoop(r, func() int { return a.n }), onLoop(r, func() int { return c.n })
 
 	ctx := context.Background()
-	cli, err := golibrpc.Dial(ctx, onLoop(r, r.h.editorSocketPath), msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	cli, err := golibrpc.Dial(ctx, onLoop(r, r.h.editorSocketPath), msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 	if err != nil {
 		t.Fatal(err)
 	}

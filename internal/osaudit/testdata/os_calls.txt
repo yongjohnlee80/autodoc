@@ -80,12 +80,12 @@ tui/detach_other.go	os-file	unix
 tui/detach_other.go	syscall	SysProcAttr
 tui/detach_unix.go	os-file	unix
 tui/detach_unix.go	syscall	SysProcAttr
-tui/editorsocket.go	unix-socket	Listen("unix")
 tui/editorsocket_other.go	os-file	unix
 tui/editorsocket_unix.go	os-file	unix
 tui/editorsocket_unix.go	syscall	ECONNREFUSED
 tui/editorsocket_unix.go	syscall	Stat_t
 tui/editorsocket_unix.go	unix-socket	DialTimeout("unix")
+tui/editorsocket_unix.go	unix-socket	Listen("unix")
 tui/html.go	goos	runtime.GOOS
 tui/html.go	syscall	SysProcAttr
 tui/pluginrun.go	syscall	SysProcAttr
