@@ -250,7 +250,7 @@ jobs:
       - name: scratch (not for merge) the todos panel's selection by identity on Windows, three mutants
         if: ${{ !inputs.discover }}
         run: |
-          T='^(TestALoadedFolderIsShownByTheStoreTheDaemonResolves|TestAStoreMovedIntoTheFolderLoadedIsShown|TestAStoreNotListedIsSaidAndNoOtherIsShownInItsPlace|TestAStoreNotListedWithNoneShownShowsNone|TestAMovedStoreStaysShown|TestAFailedNewAsksForNothing|TestTheRootsAndHomeOfAStoreAtAVolumesRoot|TestTheRootsAndHomeOfAStoreAtADrivesRoot|TestTodos.*)$'
+          T='^(TestALoadedFolderIsShownByTheStoreTheDaemonResolves|TestAStoreMovedIntoTheFolderLoadedIsShown|TestAStoreNotListedIsSaidAndNoOtherIsShownInItsPlace|TestAStoreNotListedWithNoneShownShowsNone|TestAMovedStoreStaysShown|TestAFailedNewAsksForNothing|TestAStoreMovedByAnotherClientStaysShown|TestAMovedStoreNotListedIsSaid|TestTheRootsAndHomeOfAStoreAtAVolumesRoot|TestTheRootsAndHomeOfAStoreAtADrivesRoot|TestTodos.*)$'
           go test -count=1 -timeout 15m -v -run "$T" ./tui/ > "$RUNNER_TEMP/b.txt" 2>&1 && rb=0 || rb=$?
           echo "== base PASS $(grep -cE '^--- PASS' "$RUNNER_TEMP/b.txt" || true) FAIL $(grep -cE '^--- FAIL' "$RUNNER_TEMP/b.txt" || true)"
           grep -E '^--- FAIL|_test\.go:[0-9]+:' "$RUNNER_TEMP/b.txt" | cut -c1-260 | head -20 || true
