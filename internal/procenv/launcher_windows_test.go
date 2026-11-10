@@ -128,3 +128,66 @@ func TestAnAgentsAutodocIsTheBuildWithItsConfigOnWindows(t *testing.T) {
 		}
 	}
 }
+
+// gitBash is Git for Windows' bash, the one a Windows agent CLI may run its commands through (never
+// WSL's, which a bare bash on the PATH may be); "" when the runner has none.
+func gitBash() string {
+	for _, root := range []string{os.Getenv("ProgramFiles"), os.Getenv("ProgramW6432")} {
+		if p := filepath.Join(root, "Git", "bin", "bash.exe"); root != "" {
+			if _, err := os.Stat(p); err == nil {
+				return p
+			}
+		}
+	}
+	return ""
+}
+
+// Under Git for Windows' bash, which rebuilds the PATH in its own form (and, as a login shell, puts
+// its own folders first), a bare autodoc is still the build: command -v autodoc names the build's
+// own file, and autodoc --call's JSON argument arrives as itself, its config the window's.
+func TestAnAgentsAutodocIsTheBuildUnderGitBash(t *testing.T) {
+	bash := gitBash()
+	if bash == "" {
+		t.Skip("no Git for Windows on this runner")
+	}
+	build := buildAs(t)
+	config := filepath.Join(t.TempDir(), "window's config.toml")
+	sys32 := filepath.Join(os.Getenv("SystemRoot"), "System32")
+	path := PathEntry("", "", build) + string(os.PathListSeparator) + sys32
+	env := Env(nil).With("PATH="+path, "PATHEXT=.COM;.EXE;.BAT;.CMD", "AUTODOC_CONFIG="+config, argvHelper+"=1")
+	want, err := os.Stat(build)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mode := range []string{"-c", "-lc"} { // a plain shell, and a login one, its PATH rebuilt
+		where := exec.Command(bash, mode, `cygpath -w "$(command -v autodoc)"`)
+		where.Env = env.With(argvHelper + "=")
+		out, err := where.Output()
+		found := strings.TrimSpace(string(out))
+		if err != nil {
+			t.Errorf("bash %s: command -v autodoc: %v (%q)", mode, err, out)
+			continue
+		}
+		if fi, err := os.Stat(found); err != nil || !os.SameFile(fi, want) {
+			t.Errorf("bash %s: a bare autodoc is %q (%v), not the build %s", mode, found, err, build)
+		}
+		run := exec.Command(bash, mode, `autodoc --call search.query '["kb","a b.md"]'`)
+		run.Env = env
+		out, err = run.Output()
+		if err != nil {
+			t.Errorf("bash %s: %v (%s)", mode, err, out)
+			continue
+		}
+		var got struct {
+			Args   []string
+			Config string
+		}
+		if err := json.Unmarshal(out, &got); err != nil {
+			t.Errorf("bash %s printed %q", mode, out)
+			continue
+		}
+		if call := []string{"--call", "search.query", `["kb","a b.md"]`}; !reflect.DeepEqual(got.Args, call) || got.Config != config {
+			t.Errorf("bash %s: autodoc was given %q with config %q; want %q and %q", mode, got.Args, got.Config, call, config)
+		}
+	}
+}
