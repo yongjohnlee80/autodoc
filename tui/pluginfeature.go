@@ -43,6 +43,10 @@ type plugins struct {
 	pluginCards map[string]*pluginCard
 	cardPlugin  string
 	running     map[string]*pluginRun
+	// stopping are the runs stopped and not yet shut down: out of running, their process still in its
+	// close (shutDown). Loop-owned. A quit, a removal and an update wait for them: on Windows a
+	// running program's folder can be neither removed nor renamed.
+	stopping map[*pluginRun]struct{}
 	// sessions are the plugins' session slots, by plugin name (protocol 7,
 	// docs/decisions/plugins.md#plugin-sessions): memory only, until AutoDoc quits or the plugin is
 	// removed. Loop-owned; acceptSession is their one writer, and a run gets a copy at its open,
