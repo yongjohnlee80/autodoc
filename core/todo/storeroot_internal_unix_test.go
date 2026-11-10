@@ -12,7 +12,7 @@ func TestAStoresRootIsItsFolderAVolumesRootIncluded(t *testing.T) {
 			t.Errorf("storeRootOf(%q) = %q, %v; want %q", p, got, ok, want)
 		}
 	}
-	for _, p := range []string{"/p/x", "/p/.todo-lists", "p/.todo-list", ".todo-list", "/"} {
+	for _, p := range []string{"/p/x", "/p/.todo-lists", "p/.todo-list", ".todo-list", "/", "/a/.todo-list/", "/a//.todo-list", "/a/./.todo-list"} {
 		if got, ok := storeRootOf(p); ok {
 			t.Errorf("storeRootOf(%q) = %q; want none", p, got)
 		}
