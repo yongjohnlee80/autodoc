@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -142,7 +143,9 @@ func TestACrewRenameCutShortIsFinishedNextTime(t *testing.T) {
 }
 
 // An old name whose new one is already there is never written over: both stay as they were, and
-// the old one is reported.
+// the old one is reported. Both kinds collide: an agents' folder, which the OS would refuse to rename
+// over a full one anyway, and a regular file (a todo feed's record), which a rename would replace.
+// Each one's content is checked before the error, so a lost record is what a failure shows.
 func TestAnOldCrewNameWhoseNewOneIsThereIsKept(t *testing.T) {
 	base := t.TempDir()
 	const scope = "autodoc:00000000000000cc"
@@ -154,19 +157,27 @@ func TestAnOldCrewNameWhoseNewOneIsThereIsKept(t *testing.T) {
 	if err := os.WriteFile(newer, []byte("the newer guide"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	oldTodos, newerTodos := filepath.Join(base, ".crew-todos", scope), filepath.Join(base, ".crew-todos", crewFileName(scope))
+	if err := os.WriteFile(newerTodos, []byte(`{"stores":["newer"]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	kept, err := migrateCrewNames(base)
+	old := filepath.Join(base, "kb", scope)
+	for _, f := range []struct{ path, body, what string }{
+		{newerTodos, `{"stores":["newer"]}`, "the new todo record was written over"},
+		{oldTodos, `{"stores":["S"]}`, "the old todo record"},
+		{newer, "the newer guide", "the new folder's guide was written over"},
+		{filepath.Join(old, "zen", "AGENTS.md"), "zen's guide", "the old folder's guide"},
+	} {
+		if b, rerr := os.ReadFile(f.path); rerr != nil || string(b) != f.body {
+			t.Errorf("%s: %q, %v; want %q", f.what, b, rerr, f.body)
+		}
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
-	old := filepath.Join(base, "kb", scope)
-	if len(kept) != 1 || kept[0] != old {
-		t.Errorf("kept %v, want the old folder %s", kept, old)
-	}
-	if b, err := os.ReadFile(filepath.Join(old, "zen", "AGENTS.md")); err != nil || string(b) != "zen's guide" {
-		t.Errorf("the old folder's guide: %q, %v", b, err)
-	}
-	if b, err := os.ReadFile(newer); err != nil || string(b) != "the newer guide" {
-		t.Errorf("the new folder's guide was written over: %q, %v", b, err)
+	if want := []string{oldTodos, old}; !slices.Equal(kept, want) {
+		t.Errorf("kept %v, want %v", kept, want)
 	}
 }
 
