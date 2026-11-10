@@ -504,8 +504,8 @@ func TestTheAgentOpensWherePreferencesSay(t *testing.T) {
 	if e := onLoop(r, func() string { return r.h.prefs.Value(prefAgentEdge) }); e != "bottom" {
 		t.Fatalf("the agent opens at %q by default, want bottom", e)
 	}
-	onLoop(r, func() bool { r.h.agents.setAgentSize(nearest(termSizes, 70)); return true })
-	onLoop(r, func() bool { r.h.agents.setAgentLength(nearest(termLengths, 60)); return true })
+	onLoop(r, func() bool { r.h.agents.setAgentSize(feature.Nearest(feature.PanelSizes, 70)); return true })
+	onLoop(r, func() bool { r.h.agents.setAgentLength(feature.Nearest(feature.PanelLengths, 60)); return true })
 	onLoop(r, func() bool { r.h.agents.setAgentEdge(indexOf(agentEdges, "center")); return true })
 	onLoop(r, func() bool {
 		r.h.agents.setAgentEdge(len(agentEdges))
