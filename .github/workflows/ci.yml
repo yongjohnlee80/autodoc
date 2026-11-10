@@ -255,6 +255,12 @@ jobs:
           go vet ./...
           mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
           go test -count=1 -timeout 20m "${pkgs[@]}"
+      - name: scratch (not for merge) the terminal_run consumer cells through the shell seam
+        if: ${{ !inputs.discover }}
+        run: |
+          go test -count=1 -timeout 15m -v ./internal/usershell/ ./tui/ -run 'TestAnAgentRunsALineOnlyAfterTheUserSaysRun|TestTheExitMailSaysTheCodeAndNothingOfTheTab|TestARunTypedAheadNeverRunsTheNextLine|TestALineTheCardCantShowIsRefused|TestEachShellRunsALineItsWay|TestAQuotedArgumentReachesTheProgramAsItself|TestTheShellsOnWindows' > "$RUNNER_TEMP/c.txt" 2>&1; rc=$?
+          grep -E '^(=== RUN|--- (PASS|FAIL|SKIP)|ok |FAIL|panic: )|_test\.go:[0-9]+:' "$RUNNER_TEMP/c.txt" | cut -c1-240 || true
+          echo "== rc=$rc"; exit $rc
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
