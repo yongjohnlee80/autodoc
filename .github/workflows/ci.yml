@@ -255,6 +255,20 @@ jobs:
           go vet ./...
           mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
           go test -count=1 -timeout 20m "${pkgs[@]}"
+      - name: scratch (not for merge) the outside-file cells on Windows and one mutant
+        if: ${{ !inputs.discover }}
+        run: |
+          T='^(TestADraftIsSavedAsAnyTextFile|TestAFileAPluginOpensGoesToItsCommand|TestAFileOutsideEveryWorkspaceFollowsTheDisk|TestAFileOutsideEveryWorkspaceOpensEditsAndSaves|TestAFindOnARawHTMLPageCountsWhatItShows|TestAFindOnlyARawHTMLFilesSourceHasGoesToTheText|TestAGatedSaveIsHeldToTheWorkspace|TestAnEditingKeyFromARawHTMLPageActsOnce|TestAnHTMLFileIsCreatedAsItsOwnBytes|TestAnOutsideFileGoneFromDiskIsClosedOnRecheck|TestAnOutsideFileHasNoRelations|TestAnOutsideFileStaysOpenAcrossWorkspacesAndReachesTheFeedAndRecent|TestAQuestionsAnswerContinuesTheScriptsStep|TestARawHTMLFilesPageIsItsRenderedView|TestARawHTMLFilesPageWearsTheDocumentAccent|TestARawHTMLPagesReadingKeysKeepItRendered|TestARefusedCreateIsSaid|TestARightPressOnARawHTMLPageOpensTheEditorsMenu|TestATerminalDrawsARawHTMLFilesPage|TestCoreOpensAFileByItsAbsolutePath|TestCoreReadsAndWritesAnAbsoluteFile|TestLuaReloadReadsTheScriptsAgain|TestNewFileInAnyFolder|TestNewFileMakesAnyTextFile|TestOpenFileDialogOpensTheFileChosen|TestOpeningAnHTMLFileAsksSimplifiedOrRaw|TestReopeningTheOpenOutsideFileKeepsThePage|TestSPCjOnARawHTMLPageFollowsItsLink|TestSPCjOnARawHTMLPageWithNoLinkSaysSo|TestTheCommandLineOpensFromARawHTMLPage|TestTheDefaultAppOpensAnOutsideFileAtItsPath|TestTheDiagramViewShowsTheEmbedUnderTheCursor|TestTheFileDialogsFollowALinkToAFolder|TestTheOpenPreferenceAnswersForTheUser|TestTheRenderedViewIsToldTheNotesFile|TestTheTextKeymapTypesEveryPrintingKeyOnARawHTMLPage)$'
+          go test -count=1 -timeout 20m -v -run "$T" ./tui/ > "$RUNNER_TEMP/base.txt" 2>&1 && rt=0 || rt=$?
+          echo "== base PASS $(grep -cE '^--- PASS' "$RUNNER_TEMP/base.txt" || true) FAIL $(grep -cE '^--- FAIL' "$RUNNER_TEMP/base.txt" || true) SKIP $(grep -cE '^--- SKIP' "$RUNNER_TEMP/base.txt" || true)"
+          grep -E '^--- (FAIL|SKIP)|_test\.go:[0-9]+:' "$RUNNER_TEMP/base.txt" | cut -c1-260 | head -60 || true
+          echo "== base tui rc=$rt"
+          python -c "p='tui/app_test.go'; s=open(p,encoding='utf-8').read(); o='rpc.WithDisks(diskVolumes(t, docOpts...))'; assert s.count(o)==1; open(p,'w',encoding='utf-8').write(s.replace(o,'rpc.WithFiles(onetree(t, docOpts...)) /* mutant onetree */'))"
+          go test -count=1 -timeout 20m -run "$T" ./tui/ > "$RUNNER_TEMP/m.txt" 2>&1 && mt=0 || mt=$?
+          echo "== mutant onetree applied: $(grep -c 'mutant onetree' tui/app_test.go) FAIL $(grep -cE '^--- FAIL' "$RUNNER_TEMP/m.txt" || true)"
+          grep -E '_test\.go:[0-9]+:' "$RUNNER_TEMP/m.txt" | head -3 | cut -c1-240 || true
+          echo "== mutant onetree tui rc=$mt (want a non-zero: killed)"
+          [ $rt = 0 ]
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
