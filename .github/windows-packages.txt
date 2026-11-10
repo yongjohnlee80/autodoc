@@ -21,9 +21,12 @@
 ./enterprise/opcode
 ./enterprise/ops
 ./enterprise/search
+./examples/card-go
+./examples/card-qml
 ./internal/luarefgen
 ./internal/profiling
 ./internal/tuiaudit
+./plugin/...
 ./plugin/card
 ./plugin/decl
 ./script
