@@ -4,12 +4,13 @@ package tui
 
 import (
 	"cmp"
-	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"image/color"
 	"maps"
 	"reflect"
 	"slices"
 	"strings"
+
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE GLOBEMAP'S SETTINGS — Relations › GlobeMap settings… and Preferences › GlobeMap…: the
@@ -60,7 +61,13 @@ type globeLook struct {
 }
 
 // defaultLook is the look of no preferences in the default palette: a test's view.
-var defaultLook = newGlobeLook(prefs{}, defaultPalette())
+var defaultLook = newGlobeLook(unsetPrefs{}, defaultPalette())
+
+// unsetPrefs is preferences with nothing set: every look's default.
+type unsetPrefs struct{}
+
+func (unsetPrefs) Value(string) string                     { return "" }
+func (unsetPrefs) PanelGeometry(string, string) (int, int) { return 0, 0 }
 
 // newGlobeLook is the look of preferences p over the theme's palette pal. A colour or a choice
 // that does not read is the default's.
@@ -116,14 +123,14 @@ func globeThemeValues(p feature.PrefsView, ts globeThemeSource) (map[string]stri
 	return viewThemeValues(cmp.Or(p.Value(prefGlobeTheme), "terminal"), p, ts)
 }
 
-// viewThemeValues are the values of the theme a view chose: the terminals' (terminalThemeValues),
+// viewThemeValues are the values of the theme a view chose: the terminals' (feature.TerminalThemeValues),
 // the page's, or one named; one that can't be read is the page's.
 func viewThemeValues(choice string, p feature.PrefsView, ts globeThemeSource) (map[string]string, bool) {
 	page := ts.Theme()
 	name := choice
 	switch name {
 	case "terminal":
-		return terminalThemeValues(p, page, ts.ThemeValues)
+		return feature.TerminalThemeValues(p, page, ts.ThemeValues)
 	case "", "page":
 		name = page
 	}
@@ -140,7 +147,7 @@ func (g *globeMap) themeChoices() (names, labels []string) { return viewThemeCho
 // viewThemeChoices are a view's theme chooser's values and labels: the terminals', the page's (in
 // the UI's language), then every theme the window can wear.
 func viewThemeChoices(c feature.Core) (names, labels []string) {
-	return themeChoices(c, []string{"terminal", "page"}, []string{
+	return feature.ThemeChoices(c, []string{"terminal", "page"}, []string{
 		c.Tr("autodoc.text.globesettings_gui.the_terminals"), c.Tr("autodoc.text.globesettings_gui.the_page_s")})
 }
 
@@ -184,7 +191,7 @@ func (g *globeMap) PreferencesChanged() { g.restyle() }
 
 // PrefSet: a preference set alone — the GlobeMap's own fields, or the terminals' theme.
 func (g *globeMap) PrefSet(name string) {
-	if name == prefTermTheme || strings.HasPrefix(name, "tui.globemap.") {
+	if name == feature.PrefTermTheme || strings.HasPrefix(name, "tui.globemap.") {
 		g.restyle()
 	}
 }
@@ -230,22 +237,6 @@ func (g *globeMap) filterChosen() {
 	}
 }
 
-// openGlobeSettings is App.openGlobeSettings, the host's in every build (Preferences.qml names it):
-// the GlobeMap's settings in a window, and a word of why not elsewhere.
-func (h *Host) openGlobeSettings() {
-	for _, f := range h.relationViewFeatures() {
-		switch g := f.(type) {
-		case *globeMap:
-			g.openSettings()
-			return
-		case *cellGlobeMap: // a GUI build run as a terminal (--ui)
-			g.openSettings()
-			return
-		}
-	}
-	h.notify(h.globeSettingsElsewhereNotice())
-}
-
 // openSettings is Relations › GlobeMap settings… and Preferences › GlobeMap….
 func (g *globeMap) openSettings() {
 	g.c.Set("App.globeSettingsError", "")
@@ -287,7 +278,7 @@ func (g *globeMap) settingsState() map[string]any {
 	names, themes := g.themeChoices()
 	st := g.editor.state()
 	maps.Copy(st, map[string]any{
-		"App.globeThemes": keyedChoices(names, themes), "App.globeFilters": relationChoice(g.c, "App.globeFilters"),
+		"App.globeThemes": feature.KeyedChoices(names, themes), "App.globeFilters": relationChoice(g.c, "App.globeFilters"),
 		"App.globeDotSizes": relationChoice(g.c, "App.globeDotSizes"), "App.globeSpeeds": relationChoice(g.c, "App.globeSpeeds"),
 		"App.globeSettingsError": "",
 	})

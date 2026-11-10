@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
@@ -681,12 +682,12 @@ func TestTheTerminalsLookDialogSetsTheSameSettings(t *testing.T) {
 	look()
 	r.s.WaitForText(t, "a terminal draws in its own") // the terminal UI: no font row
 	onLoop(r, func() bool { r.h.terminals.setTerminalTheme(light); return true })
-	storedPref(t, d, r, prefTermTheme, "light")
+	storedPref(t, d, r, feature.PrefTermTheme, "light")
 	r.keys(t, esc())
-	storedPref(t, d, r, prefTermTheme, "page") // Esc: what was chosen before
+	storedPref(t, d, r, feature.PrefTermTheme, "page") // Esc: what was chosen before
 	look()
 	onLoop(r, func() bool { r.h.terminals.setTerminalTheme(light); return true })
-	storedPref(t, d, r, prefTermTheme, "light")
+	storedPref(t, d, r, feature.PrefTermTheme, "light")
 	onLoop(r, func() bool { r.h.terminalLookKept(); r.h.closeDialog("terminalLook"); return true })
 	if got := onLoop(r, func() string { return r.h.prefs.termTheme }); got != "light" {
 		t.Errorf("OK kept %q", got)

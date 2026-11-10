@@ -90,9 +90,9 @@ func terminalPrefRows(t *terminals) []feature.PrefSpec {
 	if t != nil {
 		names = t.themeNames()
 	}
-	theme := choicePref(prefTermTheme, "page", names, func(p *prefs) *string { return &p.termTheme }).
+	theme := choicePref(feature.PrefTermTheme, "page", names, func(p *prefs) *string { return &p.termTheme }).
 		Shows(func(p feature.PrefsView) map[string]any {
-			return map[string]any{"App.terminalThemeIndex": max(indexOf(names, cmp.Or(p.Value(prefTermTheme), "page")), 0)}
+			return map[string]any{"App.terminalThemeIndex": max(indexOf(names, cmp.Or(p.Value(feature.PrefTermTheme), "page")), 0)}
 		})
 	if t != nil {
 		row = row.Then(func(feature.PrefsView) { t.c.DockPanel("terminal") })
@@ -122,56 +122,30 @@ func panelKeysRow() feature.PrefSpec {
 // the page's, and the minimum contrast raises a program's colours against the theme's background.
 // A program's own 16 colours (ls's, a prompt's) stay the program's: no theme recolours them.
 
-const prefTermTheme = "tui.terminal.theme"
-
 // termThemes are the choices, "page" first.
 func termThemes() []string {
-	names, _ := themeChoices(nil, []string{"page"}, nil)
+	names, _ := feature.ThemeChoices(nil, []string{"page"}, nil)
 	return names
 }
 
 func (t *terminals) themeNames() []string {
-	names, _ := themeChoices(t.c, []string{"page"}, nil)
+	names, _ := feature.ThemeChoices(t.c, []string{"page"}, nil)
 	return names
 }
 
 // themeChooser is the theme chooser's rows: the page's, in the UI's language, then every theme.
 func (t *terminals) themeChooser() *tuidecl.ListModel {
-	return keyedChoices(themeChoices(t.c, []string{"page"}, []string{t.c.Tr("autodoc.text.terminal.the_page_s")}))
+	return feature.KeyedChoices(feature.ThemeChoices(t.c, []string{"page"}, []string{t.c.Tr("autodoc.text.terminal.the_page_s")}))
 }
 
 // LanguageChanged composes the theme chooser's rows again, in the UI's language.
 func (t *terminals) LanguageChanged() { t.c.Set("App.terminalThemes", t.themeChooser()) }
 
-// keyedChoices is a chooser's rows: row i keyed keys[i] (a value, never translated), labelled
-// labels[i] (in the UI's language).
-func keyedChoices(keys, labels []string) *tuidecl.ListModel {
-	m := tuidecl.NewListModel("key", "label")
-	rows := make([]feature.RowOf, len(keys))
-	for i, k := range keys {
-		rows[i] = feature.RowOf{"key": k, "label": labels[i]}
-	}
-	m.Reset(rows)
-	return m
-}
-
-// themeChoices are a theme chooser's values and labels: lead's first (the page's, the terminals'),
-// then every theme the window can wear (c's ThemeNames and ThemeLabels), else golib's.
-func themeChoices(c any, lead, leadLabels []string) (names, labels []string) {
-	names, labels = slices.Clone(lead), slices.Clone(leadLabels)
-	n, ok1 := c.(interface{ ThemeNames() []string })
-	l, ok2 := c.(interface{ ThemeLabels() []string })
-	if ok1 && ok2 {
-		return append(names, n.ThemeNames()...), append(labels, l.ThemeLabels()...)
-	}
-	return append(names, themeNames...), append(labels, themeNames...)
-}
-
 // termLook is the theme the terminals are drawn in for p on a page drawn in page: its document's
 // text, background and cursor colours. One golib does not ship falls back to the page's, and a page
 // theme it does not ship (a layout of one's own) to its first.
 func termLook(p feature.PrefsView, page string) map[string]any {
-	name := termThemeOf(p)
+	name := feature.TermThemeOf(p)
 	if name == "" || name == "page" || !isTheme(name) {
 		name = page
 	}
@@ -184,32 +158,6 @@ func termLook(p feature.PrefsView, page string) map[string]any {
 		"App.terminalText":   v["document.text"],
 		"App.terminalCursor": v["document.cursor"],
 	}
-}
-
-// terminalThemeValues are the values of the theme the terminals are drawn in, for preferences p on
-// a page drawn in page: the one chosen, else the page's; one that can't be read falls back to the
-// page's. values reads a theme by name (the host's: golib's or the user's). false when neither reads.
-// The GlobeMap is drawn in it too (globemap_gui.go).
-func terminalThemeValues(p feature.PrefsView, page string, values func(string) (map[string]string, error)) (map[string]string, bool) {
-	name := termThemeOf(p)
-	if name == "" || name == "page" {
-		name = page
-	}
-	if v, err := values(name); err == nil {
-		return v, true
-	}
-	if v, err := values(page); err == nil {
-		return v, true
-	}
-	return nil, false
-}
-
-// termThemeOf is the terminals' theme as p holds it; "" with no preferences (a cell's own terminals).
-func termThemeOf(p feature.PrefsView) string {
-	if p == nil {
-		return ""
-	}
-	return p.Value(prefTermTheme)
 }
 
 // lookState is the terminals' colours now.
@@ -225,7 +173,7 @@ func (t *terminals) lookState() map[string]any {
 	if c, ok := t.c.(interface {
 		ThemeValues(string) (map[string]string, error)
 	}); ok {
-		if v, ok := terminalThemeValues(p, page, c.ThemeValues); ok {
+		if v, ok := feature.TerminalThemeValues(p, page, c.ThemeValues); ok {
 			return map[string]any{"App.terminalBase": v["document.base"], "App.terminalText": v["document.text"], "App.terminalCursor": v["document.cursor"]}
 		}
 	}
@@ -382,7 +330,7 @@ func (t *terminals) setTerminalSize(i int) {
 // setTerminalTheme is the Preferences row: the terminals' theme, kept.
 func (t *terminals) setTerminalTheme(i int) {
 	if all := t.themeNames(); i >= 0 && i < len(all) {
-		t.c.SetPref(prefTermTheme, all[i])
+		t.c.SetPref(feature.PrefTermTheme, all[i])
 	}
 }
 

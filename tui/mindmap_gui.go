@@ -262,7 +262,7 @@ func (m *mindmap) statusText() string {
 // heading (and the legend, as the view is drawn again), its choosers' rows and its groups' note.
 func (m *mindmap) LanguageChanged() {
 	names, labels := viewThemeChoices(m.c)
-	m.c.Set("App.mindThemes", keyedChoices(names, labels))
+	m.c.Set("App.mindThemes", feature.KeyedChoices(names, labels))
 	for _, src := range []string{"App.mindDepths", "App.mindShapeChoices"} {
 		m.c.Set(src, relationChoice(m.c, src))
 	}
