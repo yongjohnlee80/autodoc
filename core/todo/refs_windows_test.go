@@ -59,16 +59,31 @@ func TestARefInWindowsOwnFormIsStoredInTheSlashForm(t *testing.T) {
 	if len(task.Review) != 1 || task.Review[0] != paths.Slash(share) || !strings.HasPrefix(strings.ToLower(task.Review[0]), "//localhost/") {
 		t.Errorf("the review %q: want %q, the share kept", task.Review, paths.Slash(share))
 	}
-	for _, e := range task.Errors {
-		if e.Field == "adr[0]" {
-			t.Errorf("the adr under the KB was not found: %+v", e)
-		}
-	}
+	// each ref resolves and is found: the adr under the KB, the lower-case drive's spelling of it, and
+	// the review on the share
+	refErrors(t, "added", task)
 	updated, err := m.Update(ctx, ws, task.ID, task.Rev, todo.Patch{"adr": filepath.Join(kb, "adrs", "y.md")})
 	if err != nil {
 		t.Fatalf("update: %v", err)
 	}
 	if len(updated.ADR) != 1 || updated.ADR[0] != "$KB_ROOT/adrs/y.md" {
 		t.Errorf("the updated adr %q: want $KB_ROOT/adrs/y.md", updated.ADR)
+	}
+	refErrors(t, "updated", updated)
+	got, err := m.Get(ctx, ws, task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refErrors(t, "read back", got)
+}
+
+// refErrors fails for each adr or review error the task carries: a ref that did not resolve, or
+// resolved to a path the disk does not have.
+func refErrors(t *testing.T, when string, task todo.Task) {
+	t.Helper()
+	for _, e := range task.Errors {
+		if strings.HasPrefix(e.Field, "adr[") || strings.HasPrefix(e.Field, "review[") {
+			t.Errorf("%s: %s %s: %s", when, e.Field, e.Code, e.Message)
+		}
 	}
 }
