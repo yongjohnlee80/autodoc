@@ -13,47 +13,70 @@ import (
 // by volume: on Unix one tree, "/", whose volume is ""; on Windows each drive ("C:") or share
 // (\\server\share) has a tree of its own, opened the first time a path on it is asked for.
 //
-// Concurrency: safe for concurrent use.
+// Concurrency: safe for concurrent use. A volume being opened holds back only the calls for that
+// volume, never another's: opening a share can block for as long as its server takes.
 type Disks struct {
 	open    func(root string) (*docs.Docs, func(), error)
 	mu      sync.Mutex
-	opened  map[string]*docs.Docs
+	volumes map[string]*volume
 	closers []func()
 	closed  bool
+}
+
+// volume is one volume's tree: opened once, by the first call that asks for it.
+type volume struct {
+	once sync.Once
+	d    *docs.Docs
+	err  error
 }
 
 // NewDisks are the disks open makes: open is given a volume's root ("/", "C:\", "\\server\share\")
 // and answers its documents and how to close them.
 func NewDisks(open func(root string) (*docs.Docs, func(), error)) *Disks {
-	return &Disks{open: open, opened: map[string]*docs.Docs{}}
+	return &Disks{open: open, volumes: map[string]*volume{}}
 }
 
 // errDisksClosed is a volume asked for after Close.
 var errDisksClosed = errors.New("rpc: the disks are closed")
 
-// For is the documents of volume's tree, opened on the first call.
-func (k *Disks) For(volume string) (*docs.Docs, error) {
+// For is the documents of volume's tree, opened on the first call. After Close every call is
+// refused, a volume opened before included. A volume that failed to open is tried again next time.
+func (k *Disks) For(name string) (*docs.Docs, error) {
 	k.mu.Lock()
-	defer k.mu.Unlock()
-	if d, ok := k.opened[volume]; ok {
-		return d, nil
-	}
 	if k.closed {
+		k.mu.Unlock()
 		return nil, errDisksClosed
 	}
-	if k.open == nil {
-		return nil, errNoFiles
+	v, ok := k.volumes[name]
+	if !ok {
+		if k.open == nil {
+			k.mu.Unlock()
+			return nil, errNoFiles
+		}
+		v = &volume{}
+		k.volumes[name] = v
 	}
-	d, closer, err := k.open(volume + string(filepath.Separator))
-	if err != nil {
-		return nil, err
-	}
-	k.opened[volume] = d
-	k.closers = append(k.closers, closer)
-	return d, nil
+	k.mu.Unlock()
+	v.once.Do(func() {
+		d, closer, err := k.open(name + string(filepath.Separator))
+		k.mu.Lock()
+		defer k.mu.Unlock()
+		switch {
+		case err != nil:
+			v.err = err
+			delete(k.volumes, name) // the next call tries again
+		case k.closed: // closed while it opened: it is closed at once, never served
+			closer()
+			v.err = errDisksClosed
+		default:
+			v.d = d
+			k.closers = append(k.closers, closer)
+		}
+	})
+	return v.d, v.err
 }
 
-// Close closes every volume opened; a later For is refused.
+// Close closes every volume opened; every later For is refused.
 func (k *Disks) Close() {
 	k.mu.Lock()
 	defer k.mu.Unlock()
@@ -71,7 +94,9 @@ func WithDisks(k *Disks) Option { return func(o *options) { o.disks = k } }
 // WithFiles serves file.read and file.write on d, the documents of a vfs rooted at "/": Unix's one
 // volume. On Windows, where a path names its drive, a server takes WithDisks.
 func WithFiles(d *docs.Docs) Option {
-	return WithDisks(&Disks{opened: map[string]*docs.Docs{"": d}})
+	one := &volume{d: d}
+	one.once.Do(func() {})
+	return WithDisks(&Disks{volumes: map[string]*volume{"": one}})
 }
 
 // diskName is abs's volume and its name in that volume's tree, when abs is an absolute, clean path

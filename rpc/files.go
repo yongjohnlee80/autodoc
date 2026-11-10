@@ -72,21 +72,13 @@ func (s *Server) local(method string, lo, hi int, h func(context.Context, Worksp
 	}
 }
 
-// diskFile is the disk documents abs is on, and its name there: a bounded call is routed into its
-// workspace after (boundedFile), and never reaches them.
-func (s *Server) diskFile(abs string) (*docs.Docs, string, error) {
+// disk is the documents of volume's tree outside every workspace: for the user's call only, once
+// boundedFile has said the call is not bounded.
+func (s *Server) disk(volume string) (*docs.Docs, error) {
 	if s.disks == nil {
-		return nil, "", errNoFiles
+		return nil, errNoFiles
 	}
-	volume, name, err := diskName(abs)
-	if err != nil {
-		return nil, "", err
-	}
-	d, err := s.disks.For(volume)
-	if err != nil {
-		return nil, "", err
-	}
-	return d, name, nil
+	return s.disks.For(volume)
 }
 
 // fileErr is a Files error as the client sees it: Docs' "not a file of this workspace" means, for
@@ -121,16 +113,20 @@ func (s *Server) fileVerbs() []module.Verb {
 	local := module.ScopeLocalPeer
 	read := func(c module.Contract, raw bool) module.Verb {
 		return module.Handle(c, func(ctx context.Context, p filePath) (*contentJSON, error) {
-			files, name, err := s.diskFile(p.Path)
+			volume, name, err := diskName(p.Path)
 			if err != nil {
 				return nil, err
 			}
+			// a bounded call is routed into its workspace, or refused, before any disk is opened
 			w, rel, bounded, err := s.boundedFile(ctx, p.Path)
 			if err != nil {
 				return nil, err
 			}
+			var files *docs.Docs
 			if bounded {
 				files, name = w.Files(), rel
+			} else if files, err = s.disk(volume); err != nil {
+				return nil, err
 			}
 			read := files.Read
 			if raw {
@@ -148,13 +144,15 @@ func (s *Server) fileVerbs() []module.Verb {
 	}
 	write := func(c module.Contract, raw bool) module.Verb {
 		return module.Handle(c, func(ctx context.Context, p fileWrite) (*versionJSON, error) {
-			files, name, err := s.diskFile(p.Path)
+			volume, name, err := diskName(p.Path)
 			if err != nil {
 				return nil, err
 			}
 			if !kind.Textual(p.Content) {
 				return nil, errNotText
 			}
+			// a bounded call is routed into its workspace, or refused, before any disk is opened
+			var files *docs.Docs
 			bw, brel, bounded, err := s.boundedFile(ctx, p.Path)
 			if err != nil {
 				return nil, err
@@ -174,6 +172,8 @@ func (s *Server) fileVerbs() []module.Verb {
 					return nil, err
 				}
 				return &versionJSON{Version: string(v)}, nil
+			} else if files, err = s.disk(volume); err != nil {
+				return nil, err
 			}
 			write := files.Write
 			if raw {
