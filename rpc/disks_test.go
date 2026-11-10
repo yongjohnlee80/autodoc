@@ -40,8 +40,32 @@ func TestADisksVolumeIsOpenedOnce(t *testing.T) {
 		t.Fatalf("the same volume twice: %p %p, %v, opened %d times", a, b, err, opened)
 	}
 	k.Close()
+	if _, err := k.For(""); !errors.Is(err, errDisksClosed) {
+		t.Errorf("the volume already open, after Close: %v, want refused", err)
+	}
 	if _, err := k.For("other"); !errors.Is(err, errDisksClosed) {
-		t.Fatalf("a volume after Close: %v", err)
+		t.Errorf("another volume after Close: %v, want refused", err)
+	}
+	if opened != 1 {
+		t.Errorf("opened %d times; Close opens nothing", opened)
+	}
+}
+
+// A volume that fails to open is tried again by the next call, not kept failed.
+func TestAVolumeThatFailedIsTriedAgain(t *testing.T) {
+	tries := 0
+	k := NewDisks(func(root string) (*docs.Docs, func(), error) {
+		tries++
+		if tries == 1 {
+			return nil, nil, errors.New("the share did not answer")
+		}
+		return docs.New(nil, nil), func() {}, nil
+	})
+	if _, err := k.For("v"); err == nil {
+		t.Fatal("the first try's error was not answered")
+	}
+	if _, err := k.For("v"); err != nil || tries != 2 {
+		t.Fatalf("the second try: %v, %d tries", err, tries)
 	}
 }
 

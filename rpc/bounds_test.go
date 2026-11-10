@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
@@ -135,7 +136,19 @@ func TestABoundedFileCallIsRoutedIntoItsWorkspace(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	srv := New(Fixed(ws), "v-test", WithListener(ln), WithDisks(localDisks(t)), WithGuard(g))
+	// the disks outside every workspace count their opens: a bounded call, let through or refused,
+	// must never open one
+	var opens atomic.Int32
+	disks := NewDisks(func(root string) (*docs.Docs, func(), error) {
+		opens.Add(1)
+		d, err := local.New(root)
+		if err != nil {
+			return nil, nil, err
+		}
+		return docs.New(d, nil), func() { _ = d.Close() }, nil
+	})
+	t.Cleanup(disks.Close)
+	srv := New(Fixed(ws), "v-test", WithListener(ln), WithDisks(disks), WithGuard(g))
 	done := make(chan error, 1)
 	go func() { done <- srv.Run(ctx) }()
 	t.Cleanup(func() { cancel(); <-done })
@@ -153,8 +166,21 @@ func TestABoundedFileCallIsRoutedIntoItsWorkspace(t *testing.T) {
 			t.Errorf("%s, bounded: %v, want access denied (%s)", p, err, why)
 		}
 	}
+	write := map[string]any{"within": "kb"}
+	if _, err := cli.Call(context.Background(), "file.write", filepath.Join(root, "new.csv"), []byte("c\n"), "", write); err != nil {
+		t.Errorf("a bounded write into the workspace: %v", err)
+	}
+	if _, err := cli.Call(context.Background(), "file.write", outside, []byte("x\n"), "", write); !errors.As(err, &re) || re.Code != golibrpc.CodeAccessDenied {
+		t.Errorf("a bounded write outside: %v, want access denied", err)
+	}
+	if n := opens.Load(); n != 0 {
+		t.Errorf("bounded calls opened the disk outside every workspace %d times, want none", n)
+	}
 	if _, err := cli.Call(context.Background(), "file.read", outside); err != nil {
 		t.Errorf("the user's own read outside: %v", err)
+	}
+	if n := opens.Load(); n != 1 {
+		t.Errorf("the user's read opened the disk %d times, want once", n)
 	}
 }
 
