@@ -247,6 +247,20 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: scratch (not for merge) the MCP config file on Windows and one mutant
+        if: ${{ !inputs.discover }}
+        run: |
+          C='^(TestSetupForClaudeTakesTheCrewMCPServer|TestCrewSetupOffersTheMCPServerOnlyToAHostThatRegistersItsMode|TestACrewClaudeAgentOnMCPMailStartsWithItsServer)$'
+          go test -count=1 -timeout 15m -v -run "$C" ./core/crew/ ./app/ ./tui/ > "$RUNNER_TEMP/b.txt" 2>&1 && rb=0 || rb=$?
+          echo "== base PASS $(grep -cE '^--- PASS' "$RUNNER_TEMP/b.txt" || true) FAIL $(grep -cE '^--- FAIL' "$RUNNER_TEMP/b.txt" || true) SKIP $(grep -cE '^--- SKIP' "$RUNNER_TEMP/b.txt" || true)"
+          grep -E '^(--- |ok |FAIL)|_test\.go:[0-9]+:' "$RUNNER_TEMP/b.txt" | cut -c1-260 | head -30 || true
+          echo "== base rc=$rb"
+          python -c "p='core/crew/setup.go'; s=open(p,encoding='utf-8').read(); o='s.Argv = append(s.Argv, \"--mcp-config\", filepath.Join(in.AgentDir, ClaudeMCPConfig))'; assert s.count(o)==1; open(p,'w',encoding='utf-8').write(s.replace(o,'s.Argv = append(s.Argv, \"--mcp-config\", string(cfg)) // mutant inline'))"
+          go test -count=1 -timeout 15m -run "$C" ./core/crew/ ./app/ ./tui/ > "$RUNNER_TEMP/m.txt" 2>&1 && rm=0 || rm=$?
+          echo "== mutant inline applied: $(grep -c 'mutant inline' core/crew/setup.go)"
+          grep -E '_test\.go:[0-9]+:' "$RUNNER_TEMP/m.txt" | head -4 | cut -c1-240 || true
+          echo "== mutant inline rc=$rm (want a non-zero: killed)"
+          [ $rb = 0 ]
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
         run: |
