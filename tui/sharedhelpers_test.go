@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -136,4 +138,11 @@ func (r *running) shellTabs() []terminal.TerminalTab {
 		}
 		return tabs.Tabs()
 	})
+}
+
+// taskPath is the absolute path slash names, in this OS's form: on Unix slash itself, on Windows
+// under the system drive's root (C:\tasks\task.md for /tasks/task.md). A task handed to an agent
+// names its file absolutely (HandTask refuses any other), so a cell's must be absolute where it runs.
+func taskPath(slash string) string {
+	return filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), filepath.FromSlash(slash))
 }
