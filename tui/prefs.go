@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"maps"
 	"slices"
 	"strconv"
@@ -38,7 +39,7 @@ const (
 	prefMermaid    = "tui.preview.mermaid"
 	prefOpenAs     = "tui.documents.open"
 	prefDiskReload = "tui.disk_reload"
-	prefLuaGrants  = "lua.grants" // a JSON map: gated script → capability → true (luagate.go)
+	prefLuaGrants  = feature.PrefGrants // a JSON map: holder → capability → true (luagate.go)
 	prefCorner     = "tui.toast.corner"
 	prefSeconds    = "tui.toast.seconds"
 	// a plugin's placement: tui.plugin.<name>.placement
@@ -118,8 +119,6 @@ type prefs struct {
 	// termPanelKeys: Ctrl+h/j/k/l move between panels from a terminal's or agent's input mode too,
 	// kept from their programs (terminal.go); on by default
 	termPanelKeys bool
-	// agentBell: a crew agent's decision request or permission prompt rings (crewbell.go)
-	agentBell bool
 	// pluginPlace is each plugin's placement the user chose, by name (tui.plugin.<name>.placement);
 	// one its manifest does not offer is ignored where it is read (plugins.go placement)
 	pluginPlace map[string]string
@@ -147,8 +146,6 @@ type prefs struct {
 	// agentScale is the agent and terminal panels' text, in percent of the window's
 	// (tui.agent.text.scale, fonts.go): 0 is the default, defaultAgentScale; the GUI's alone
 	agentScale int
-	// agentEdge is where the agent panel opens: an edge or the centre (agentplace.go)
-	agentEdge string
 	// values are the features' own preferences (ValuePref), by name: read with Value
 	values map[string]string
 }
@@ -185,6 +182,13 @@ func hostField(name string) (read func(feature.PrefsView) string, ok bool) {
 func (p prefs) Value(name string) string {
 	if read, ok := hostField(name); ok {
 		return read(p)
+	}
+	if name == prefLuaGrants { // kept read (luagate.go): its value is the grants' JSON, as stored
+		if len(p.luaGrants) == 0 {
+			return ""
+		}
+		b, _ := json.Marshal(p.luaGrants)
+		return string(b)
 	}
 	return p.values[name]
 }
@@ -371,7 +375,7 @@ func prefsForPanels(m map[string]any, gui bool, specs []feature.PanelSpec) prefs
 		p.searchStages = stageChoiceOf(s)
 	}
 	if s, ok := str(prefLuaGrants); ok {
-		p.luaGrants = luaGrantsOf(s)
+		p.luaGrants = feature.GrantsOf(s)
 	}
 	_, p.keymapChosen = str(prefKeymap) // the first run's Vim question asks only while none is (vimquestion.go)
 	for k, v := range m {
