@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"maps"
@@ -361,53 +360,35 @@ func TestProviderNameAndDurations(t *testing.T) {
 	}
 }
 
-// heldCore is a scripted core whose Go holds the worker itself, not only its answer, until run: a
-// worker started earlier runs after what happened since, as a slow daemon makes it.
-type heldCore struct {
-	*featuretest.ScriptedCore
-	held []func()
-}
-
-func (h *heldCore) Go(fn func(context.Context) any, then func(any)) {
-	h.held = append(h.held, func() { then(fn(context.Background())) })
-}
-
-// run runs the held worker i, and its answer.
-func (h *heldCore) run(i int) {
-	f := h.held[i]
-	h.held[i] = func() {}
-	f()
-}
-
 // Each worker asks the Ollama its operation was started on: a Check, an estimate and a download
 // started on one URL ask it, not the URL a later Check set before they ran.
 func TestEachOperationKeepsItsOwnOllama(t *testing.T) {
-	asked := func(h *heldCore) {
+	asked := func(h *featuretest.HeldCore) {
 		t.Helper()
 		if slices.ContainsFunc(h.Calls, func(c string) bool { return strings.Contains(c, "http://second") }) {
 			t.Fatalf("a worker started on the first Ollama asked the second: %v", h.Calls)
 		}
 	}
 	// a Check's worker, run after a second Check
-	h := &heldCore{ScriptedCore: setupDaemon(false)}
+	h := &featuretest.HeldCore{ScriptedCore: setupDaemon(false)}
 	s := newEmbedSetup(h)
 	s.check("http://first")
 	s.check("http://second")
-	h.run(0)
+	h.Run(0)
 	if !h.Called("host.probe[http://first]") || !h.Called("embedding.catalog[http://first]") {
 		t.Fatalf("the first Check's worker: %v", h.Calls)
 	}
 	asked(h)
 
 	// an estimate's and a download's, run after a second Check
-	h = &heldCore{ScriptedCore: setupDaemon(false)}
+	h = &featuretest.HeldCore{ScriptedCore: setupDaemon(false)}
 	s = newEmbedSetup(h)
 	s.check("http://first")
-	h.run(0) // the check's answer starts the estimate (1)
+	h.Run(0) // the check's answer starts the estimate (1)
 	s.pull() // 2
 	s.check("http://second")
-	h.run(1)
-	h.run(2)
+	h.Run(1)
+	h.Run(2)
 	for _, want := range []string{"embedding.estimate[" + setupModel + " [] http://first]", "embedding.pull[" + setupModel + " http://first]"} {
 		if !h.Called(want) {
 			t.Errorf("no %s in %v", want, h.Calls)
@@ -443,11 +424,11 @@ func TestADownloadInstallsItsOwnModel(t *testing.T) {
 // Picking another model hides Use until that model's own estimate is exact, and Use sent anyway
 // changes nothing.
 func TestPickingAnotherModelHidesUseUntilItsEstimate(t *testing.T) {
-	h := &heldCore{ScriptedCore: setupDaemon(true)}
+	h := &featuretest.HeldCore{ScriptedCore: setupDaemon(true)}
 	s := newEmbedSetup(h)
 	s.open()
-	h.run(0)
-	h.run(1)
+	h.Run(0)
+	h.Run(1)
 	if !shown(h.ScriptedCore, "Use") {
 		t.Fatalf("Use not offered for the installed model: %q", h.Sets["App.embedSetupStatus"])
 	}
@@ -457,10 +438,10 @@ func TestPickingAnotherModelHidesUseUntilItsEstimate(t *testing.T) {
 	}
 	h.Calls = nil
 	s.use()
-	if len(h.Calls) != 0 || len(h.held) != 3 || s.running {
+	if len(h.Calls) != 0 || len(h.Held) != 3 || s.running {
 		t.Fatalf("Use, sent with no exact estimate for the model picked, ran: %v", h.Calls)
 	}
-	h.run(2)
+	h.Run(2)
 	if shown(h.ScriptedCore, "Use") || s.exactFor != "" {
 		t.Fatalf("Use offered on another model's provisional estimate (exact for %q)", s.exactFor)
 	}
@@ -531,15 +512,15 @@ func TestRetrySkipsWhatAlreadyTook(t *testing.T) {
 
 // A plan whose dialog closed before it ended does not leave the setup believing it still runs.
 func TestAPlanEndingAfterCloseLeavesNothingRunning(t *testing.T) {
-	h := &heldCore{ScriptedCore: setupDaemon(true)}
+	h := &featuretest.HeldCore{ScriptedCore: setupDaemon(true)}
 	h.Answers["embedding.providers"] = func([]any) (any, error) { return map[string]any{"providers": []any{}}, nil }
 	s := newEmbedSetup(h)
 	s.open()
-	h.run(0)
-	h.run(1)
+	h.Run(0)
+	h.Run(1)
 	s.use()
 	s.Commands()["App.embedSetupClosed"].Run(nil)
-	h.run(2)
+	h.Run(2)
 	if s.running {
 		t.Fatal("the plan ended after its dialog closed, and the setup still says one runs")
 	}
@@ -548,18 +529,18 @@ func TestAPlanEndingAfterCloseLeavesNothingRunning(t *testing.T) {
 // Switching to another model and back asks again: the first estimate of that model, answering
 // late, is not the one shown, so Use waits for the latest.
 func TestALateEstimateOfAModelPickedAgainIsDropped(t *testing.T) {
-	h := &heldCore{ScriptedCore: setupDaemon(true)}
+	h := &featuretest.HeldCore{ScriptedCore: setupDaemon(true)}
 	s := newEmbedSetup(h)
 	s.open()
-	h.run(0)    // the check's answer asks the first estimate (1), held
+	h.Run(0)    // the check's answer asks the first estimate (1), held
 	s.picked(0) // 2
 	s.picked(1) // 3: the first model again
-	h.run(1)
+	h.Run(1)
 	if shown(h.ScriptedCore, "Use") || s.exactFor != "" {
 		t.Fatalf("a late estimate asked before two picks was shown (exact for %q)", s.exactFor)
 	}
-	h.run(2)
-	h.run(3)
+	h.Run(2)
+	h.Run(3)
 	if !shown(h.ScriptedCore, "Use") || s.exactFor != setupModel {
 		t.Fatalf("the latest estimate did not offer Use (exact for %q)", s.exactFor)
 	}
@@ -568,11 +549,11 @@ func TestALateEstimateOfAModelPickedAgainIsDropped(t *testing.T) {
 // Switching to another model and straight back, before either estimate answers, hides Use until
 // the new estimate does: the one exact before the switch is not that answer.
 func TestSwitchingAwayAndBackWaitsForTheNewEstimate(t *testing.T) {
-	h := &heldCore{ScriptedCore: setupDaemon(true)}
+	h := &featuretest.HeldCore{ScriptedCore: setupDaemon(true)}
 	s := newEmbedSetup(h)
 	s.open()
-	h.run(0)
-	h.run(1)
+	h.Run(0)
+	h.Run(1)
 	if !shown(h.ScriptedCore, "Use") {
 		t.Fatalf("Use not offered for the installed model: %q", h.Sets["App.embedSetupStatus"])
 	}
@@ -581,7 +562,7 @@ func TestSwitchingAwayAndBackWaitsForTheNewEstimate(t *testing.T) {
 	if shown(h.ScriptedCore, "Use") {
 		t.Fatal("Use offered on the estimate from before the switch")
 	}
-	h.run(3)
+	h.Run(3)
 	if !shown(h.ScriptedCore, "Use") {
 		t.Fatal("the new estimate did not offer Use")
 	}
@@ -670,7 +651,7 @@ func TestAPlanWhoseEndCannotBeReadWaitsForACheck(t *testing.T) {
 func TestACheckDuringADownloadKeepsFollowingIt(t *testing.T) {
 	for _, recheck := range []string{embed.DefaultOllamaURL, "http://elsewhere:11434"} {
 		t.Run(recheck, func(t *testing.T) {
-			h := &heldCore{ScriptedCore: setupDaemon(false)}
+			h := &featuretest.HeldCore{ScriptedCore: setupDaemon(false)}
 			s := newEmbedSetup(h)
 			var later []func()
 			s.after = func(_ time.Duration, fn func()) { later = append(later, fn) }
@@ -678,24 +659,24 @@ func TestACheckDuringADownloadKeepsFollowingIt(t *testing.T) {
 			h.Answers["embedding.pull"] = func([]any) (any, error) { return map[string]any{"job": "pull-1"}, nil }
 			h.Answers["embedding.pull_status"] = func([]any) (any, error) { return map[string]any{"state": state}, nil }
 			s.open()
-			h.run(0) // the check; its estimate (1)
-			h.run(1)
+			h.Run(0) // the check; its estimate (1)
+			h.Run(1)
 			s.pull()         // 2
 			s.check(recheck) // 3
-			h.run(2)         // the download's answer, under the new check; its poll (4)
+			h.Run(2)         // the download's answer, under the new check; its poll (4)
 			if s.job != "pull-1" || !shown(h.ScriptedCore, "Stop") {
 				t.Fatalf("the download answered after a Check was dropped: job %q, stop %v", s.job, shown(h.ScriptedCore, "Stop"))
 			}
 			s.check(recheck) // 5: another Check, the poll chain running
-			h.run(4)
+			h.Run(4)
 			if len(later) != 1 {
 				t.Fatalf("the poll did not go on after the Check: %d queued", len(later))
 			}
-			h.run(3) // the older check's answer, dropped
-			h.run(5) // the latest check's; its estimate (6)
+			h.Run(3) // the older check's answer, dropped
+			h.Run(5) // the latest check's; its estimate (6)
 			state = "done"
 			later[0]()
-			h.run(len(h.held) - 1)
+			h.Run(len(h.Held) - 1)
 			if s.job != "" || shown(h.ScriptedCore, "Stop") {
 				t.Fatalf("the download's end not followed: job %q, stop %v", s.job, shown(h.ScriptedCore, "Stop"))
 			}
@@ -733,28 +714,28 @@ func TestReopeningFollowsARunningDownload(t *testing.T) {
 // A plan ending after the dialog was closed and opened again leaves nothing running, and the new
 // view, which read the workspaces before the plan ended, offers Use again after a Check.
 func TestAPlanEndingAfterReopenRefreshesTheControls(t *testing.T) {
-	h := &heldCore{ScriptedCore: setupDaemon(true)}
+	h := &featuretest.HeldCore{ScriptedCore: setupDaemon(true)}
 	h.Answers["embedding.providers"] = func([]any) (any, error) { return map[string]any{"providers": []any{}}, nil }
 	s := newEmbedSetup(h)
 	s.open()
-	h.run(0)
-	h.run(1)
+	h.Run(0)
+	h.Run(1)
 	s.use() // 2, held
 	s.closed()
 	s.open() // 3
-	h.run(3) // its estimate (4)
-	h.run(4)
+	h.Run(3) // its estimate (4)
+	h.Run(4)
 	if shown(h.ScriptedCore, "Use") {
 		t.Fatal("Use offered while the old plan still runs")
 	}
-	h.run(2)
+	h.Run(2)
 	// the old plan ran after this view read the workspaces: it ended, and the view checks again first
 	if s.running || shown(h.ScriptedCore, "Use") || h.Sets["App.embedSetupStatus"] != h.Tr("autodoc.text.embedsetup.workspaces_changed_check_again") {
 		t.Fatalf("after the old plan ended: running %v, use %v, status %q", s.running, shown(h.ScriptedCore, "Use"), h.Sets["App.embedSetupStatus"])
 	}
 	s.check(s.base) // 5
-	h.run(5)
-	h.run(6)
+	h.Run(5)
+	h.Run(6)
 	if !shown(h.ScriptedCore, "Use") {
 		t.Fatal("Use not offered after the Check")
 	}
@@ -763,21 +744,21 @@ func TestAPlanEndingAfterReopenRefreshesTheControls(t *testing.T) {
 // A plan from an earlier view that ends after a new view read the workspaces leaves that view's rows
 // behind the daemon's: Use waits for a Check that reads them again, and says so.
 func TestAnOldPlanEndingMakesTheNewViewCheckAgain(t *testing.T) {
-	h := &heldCore{ScriptedCore: setupDaemon(true)}
+	h := &featuretest.HeldCore{ScriptedCore: setupDaemon(true)}
 	h.Answers["embedding.providers"] = func([]any) (any, error) { return map[string]any{"providers": []any{}}, nil }
 	ok := true
 	ws := statefulWorkspaces(h.ScriptedCore, "", &ok)
 	s := newEmbedSetup(h)
 	s.open()
-	h.run(0)
-	h.run(1)
+	h.Run(0)
+	h.Run(1)
 	tick(s, "b")
 	s.use() // 2, held before it changes anything
 	s.closed()
 	s.open() // 3: reads b with its own provider
-	h.run(3)
-	h.run(4)
-	h.run(2) // the old plan clears b's provider
+	h.Run(3)
+	h.Run(4)
+	h.Run(2) // the old plan clears b's provider
 	if ws["b"]["provider"] != "" {
 		t.Fatalf("the old plan did not run: b's provider %v", ws["b"]["provider"])
 	}
@@ -785,8 +766,8 @@ func TestAnOldPlanEndingMakesTheNewViewCheckAgain(t *testing.T) {
 		t.Fatalf("the new view kept its rows from before the old plan: canUse %v, use %v, status %q", s.canUse(), shown(h.ScriptedCore, "Use"), h.Sets["App.embedSetupStatus"])
 	}
 	s.check(s.base) // 5
-	h.run(5)
-	h.run(6)
+	h.Run(5)
+	h.Run(6)
 	if !shown(h.ScriptedCore, "Use") {
 		t.Fatal("Use not offered after a Check read the workspaces again")
 	}
@@ -798,28 +779,28 @@ func TestAnOldPlanEndingMakesTheNewViewCheckAgain(t *testing.T) {
 // A download's end outlives a Check that began before it: that Check's catalog may have been read
 // before the download ended, so its answer does not mark the model not installed again.
 func TestADownloadsEndOutlivesALateCheck(t *testing.T) {
-	h := &heldCore{ScriptedCore: setupDaemon(false)}
+	h := &featuretest.HeldCore{ScriptedCore: setupDaemon(false)}
 	s := newEmbedSetup(h)
 	s.after = func(time.Duration, func()) {}
 	h.Answers["embedding.pull"] = func([]any) (any, error) { return map[string]any{"job": "pull-1"}, nil }
 	h.Answers["embedding.pull_status"] = func([]any) (any, error) { return map[string]any{"state": "done"}, nil }
 	s.open()
-	h.run(0)
-	h.run(1)
+	h.Run(0)
+	h.Run(1)
 	s.pull()        // 2
-	h.run(2)        // the job; its poll (3)
+	h.Run(2)        // the job; its poll (3)
 	s.check(s.base) // 4: begins before the download ends
-	h.run(3)        // done; its estimate (5)
+	h.Run(3)        // done; its estimate (5)
 	if s.cards[1]["installed"] != true {
 		t.Fatal("the download's end did not mark the model installed")
 	}
 	h.Answers["embedding.estimate"] = setupDaemon(true).Answers["embedding.estimate"]
-	h.run(4) // the Check's answer, its catalog saying not installed; its estimate (6)
+	h.Run(4) // the Check's answer, its catalog saying not installed; its estimate (6)
 	if s.cards[1]["installed"] != true {
 		t.Fatal("a Check begun before the download ended marked the model not installed again")
 	}
-	h.run(5) // the estimate asked before the Check answered: dropped
-	h.run(6)
+	h.Run(5) // the estimate asked before the Check answered: dropped
+	h.Run(6)
 	if !shown(h.ScriptedCore, "Use") || shown(h.ScriptedCore, "Pull") {
 		t.Fatalf("after the Check's estimate: use %v, pull %v", shown(h.ScriptedCore, "Use"), shown(h.ScriptedCore, "Pull"))
 	}
