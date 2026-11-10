@@ -60,7 +60,7 @@ func readConnInfo(v any) *connInfo {
 
 // where is the connection in one line: the engine, then user@host/database, its schema, and
 // whether a password is kept.
-func (c *connInfo) where(t wording) string {
+func (c *connInfo) where(t feature.Wording) string {
 	if c == nil {
 		return t.Tr("autodoc.text.settings.none")
 	}
@@ -195,7 +195,7 @@ func asText(stored []string) (text, derived []string) {
 
 // textsNote says which stored text types the Edit tab dropped, and why; "" for none. It is in t's
 // language.
-func textsNote(t wording, derived []string) string {
+func textsNote(t feature.Wording, derived []string) string {
 	if len(derived) == 0 {
 		return ""
 	}
@@ -514,7 +514,7 @@ func anyStrings(list []string) []any {
 }
 
 // changed names what a save changed, for its notice.
-func changed(t wording, c map[string]any) string {
+func changed(t feature.Wording, c map[string]any) string {
 	destination := t.Tr("autodoc.notice.settings.destination")
 	words := map[string]string{"name": t.Tr("autodoc.notice.settings.name"), "schema": t.Tr("autodoc.notice.settings.schema"),
 		"text_extensions": t.Tr("autodoc.notice.settings.text_types"), "include": t.Tr("autodoc.notice.settings.rules"),
@@ -937,7 +937,7 @@ func (h *Host) saved(name string, c map[string]any) {
 // todoExcludedNote says which exclude patterns keep a todo store of w out of the index
 // (docs/decisions/todos.md#excluded-todo-stores-are-reported): its tasks open in no workspace,
 // without relations; "" for none. It is in t's language.
-func todoExcludedNote(t wording, w wsInfo) string {
+func todoExcludedNote(t feature.Wording, w wsInfo) string {
 	if len(w.todoExcluded) == 0 {
 		return ""
 	}
@@ -984,7 +984,7 @@ func settingsArgs(fn func(settingsForm)) feature.Command {
 // managerDetail is workspace w's settings as the manager shows them beside the list: its Edit
 // settings, then its Advanced ones; the databases only where the edition offers them. It is in t's
 // language.
-func managerDetail(t wording, w wsInfo, databases bool, registered []string) string {
+func managerDetail(t feature.Wording, w wsInfo, databases bool, registered []string) string {
 	none := func(s string) string {
 		if s == "" {
 			return t.Tr("autodoc.text.settings.none")

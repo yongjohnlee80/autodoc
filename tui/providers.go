@@ -189,7 +189,7 @@ func (p *providers) countRemoved(r endpointRow, asked feature.Asked) {
 		return a
 	}, func(v any) {
 		a := v.(answer)
-		asked.Say(p.c.Trf("autodoc.notice.providers.remove_the_provider_its_key_its_usage_and_its_lo", r.name, r.model, a.vectors, bytesText(a.bytes), a.spaces))
+		asked.Say(p.c.Trf("autodoc.notice.providers.remove_the_provider_its_key_its_usage_and_its_lo", r.name, r.model, a.vectors, feature.BytesText(a.bytes), a.spaces))
 	})
 }
 

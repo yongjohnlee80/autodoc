@@ -71,7 +71,7 @@ func (e *groupEditor) show(note string) {
 	if note == "" {
 		note = e.c.Trf("autodoc.text.groupeditor_gui.a_document_wears_the_first_group_its_query_match", e.ws)
 	}
-	e.c.Set(e.source("GroupRows"), choices(rows...))
+	e.c.Set(e.source("GroupRows"), feature.Choices(rows...))
 	e.c.Set(e.source("GroupRow"), e.row)
 	e.c.Set(e.source("GroupQuery"), query)
 	e.c.Set(e.source("GroupColour"), colour)
@@ -198,7 +198,7 @@ func (e *groupEditor) addMissing() {
 // state is the dialog's sources before it first shows.
 func (e *groupEditor) state() map[string]any {
 	return map[string]any{
-		e.source("GroupRows"): choices(), e.source("GroupRow"): 0, e.source("GroupQuery"): "",
+		e.source("GroupRows"): feature.Choices(), e.source("GroupRow"): 0, e.source("GroupQuery"): "",
 		e.source("GroupColour"): "", e.source("GroupShape"): 0, e.source("GroupsNote"): "",
 	}
 }
