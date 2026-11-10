@@ -1,12 +1,14 @@
 package client
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/yongjohnlee80/autodoc/internal/proctree"
+	"github.com/yongjohnlee80/autodoc/internal/userperm"
 )
 
 // SpawnServe starts this executable's `--serve` detached from the TUI (its own session, so it
@@ -35,7 +37,7 @@ func SpawnServe(configPath, stateDir string) (string, error) {
 		return "", err
 	}
 	logPath := filepath.Join(stateDir, "serve.log")
-	f, err := os.OpenFile(logPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
+	f, err := openServeLog(logPath)
 	if err != nil {
 		return "", err
 	}
@@ -60,4 +62,14 @@ func SpawnServe(configPath, stateDir string) (string, error) {
 		_ = f.Close()
 	}()
 	return logPath, nil
+}
+
+// openServeLog opens the daemon's log at path to append to it: a new one made private to this user
+// on every OS (internal/userperm: it holds what the daemon logged), else the one there.
+func openServeLog(path string) (*os.File, error) {
+	f, err := userperm.CreatePrivate(path)
+	if errors.Is(err, os.ErrExist) {
+		return os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0)
+	}
+	return f, err
 }

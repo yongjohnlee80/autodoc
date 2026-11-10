@@ -20,6 +20,9 @@ import (
 // so nobody else can have bound the path first for a client to reach. The default-like 0700 folder
 // is served by every other daemon test here.
 func TestASocketInAFolderOthersCanWriteIsRefused(t *testing.T) {
+	if ipc.Network != "unix" { // the seam: a named pipe's access control is its DACL, which ipc's cells check
+		t.Skip("about a socket's folder: a named pipe lives in no folder")
+	}
 	for _, mode := range []os.FileMode{0o777 | os.ModeSticky, 0o770} {
 		dir := short(t)
 		shared := filepath.Join(dir, "shared")

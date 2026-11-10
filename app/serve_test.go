@@ -28,6 +28,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/internal/client"
 	"github.com/yongjohnlee80/autodoc/internal/ipc"
+	"github.com/yongjohnlee80/autodoc/internal/userperm"
 	"github.com/yongjohnlee80/autodoc/rpc"
 	"github.com/yongjohnlee80/autodoc/tui"
 )
@@ -659,9 +660,10 @@ func TestSpawnServeStartsADetachedDaemon(t *testing.T) {
 			t.Errorf("the daemon is not its own session leader: stat %q, pid %d", rest, p)
 		}
 	}
-	fi, err := os.Stat(logPath)
-	if err != nil || fi.Mode().Perm() != 0o600 {
-		t.Errorf("serve.log %v, %v", fi, err)
+	if f, err := userperm.OpenPrivate(logPath); err != nil { // as this OS keeps a file private
+		t.Errorf("serve.log is not private to this user: %v", err)
+	} else {
+		_ = f.Close()
 	}
 	call(t, cli, "sys.shutdown")
 	eventually(t, "the daemon gone", func() bool {
