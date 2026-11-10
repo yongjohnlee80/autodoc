@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/relations"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/i18n"
@@ -158,7 +159,7 @@ var choiceLabels = map[string][]string{
 // featureChoiceLabels are the choosers a feature owns (the GlobeMap's and the Mindmap's, in the GUI
 // build), by their App.* source: the feature sets them through choiceModel, and sets them again on a
 // switch (LanguageSink); their rows are catalog text as choiceLabels' are.
-var featureChoiceLabels = relationViewChoices()
+var featureChoiceLabels = relations.RelationViewChoices()
 
 // choiceState is the choosers' rows in the UI's language.
 func (h *Host) choiceState() map[string]any {

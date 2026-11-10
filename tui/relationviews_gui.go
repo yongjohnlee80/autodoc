@@ -5,6 +5,8 @@ package tui
 import (
 	"fmt"
 
+	"github.com/yongjohnlee80/autodoc/tui/relations"
+
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
@@ -31,9 +33,9 @@ const relationColours = `background: Theme.document.base; text: Theme.document.t
 // user moves or sizes it, and their dialogs.
 // The GlobeMap takes no colours here: it is drawn in the terminals' theme (globemap_gui.go). The
 // Mindmap is drawn in the page's.
-var relationViewsQML = relationDialogsQML + relationPanelQML(globeMapPanelID, globeMapViewID, "GlobeMap",
+var relationViewsQML = relationDialogsQML + relationPanelQML(relations.GlobeMapPanelID, relations.GlobeMapViewID, "GlobeMap",
 	"the GlobeMap (globemap_gui.go): the workspace's documents and their links, laid out by force, in the terminals' theme", "") +
-	relationPanelQML(mindmapPanelID, mindmapViewID, "Mindmap",
+	relationPanelQML(relations.MindmapPanelID, relations.MindmapViewID, "Mindmap",
 		"the Mindmap (mindmap_gui.go): the page's document and those two links from it, as a mind map", relationColours)
 
 // relationDialogsQML is the views' dialogs as main.qml holds them: their settings
@@ -69,21 +71,23 @@ func relationPanelQML(id, view, typ, what, colours string) string {
 func (h *Host) relationViewFeatures() []feature.Feature {
 	if h.relationViews == nil {
 		if h.gui {
-			h.relationViews = windowViews(core{h}, core{h}, h.graphUserFile, h.seams.globeMapPage, func() any { return h.backend })
+			h.relationViews = relations.WindowViews(core{h}, core{h}, h.graphUserFile, h.seams.globeMapPage, func() any { return h.backend })
 		} else {
-			h.relationViews = cellViews(core{h}, core{h}, h.graphUserFile, h.seams.globeMapPage)
+			h.relationViews = relations.CellViews(core{h}, core{h}, h.graphUserFile, h.seams.globeMapPage)
 		}
 	}
 	return h.relationViews
 }
 
 // relationViewTypes are their views' QML types.
-func (h *Host) relationViewTypes() []tuidecl.Type { return viewTypes(h.relationViewFeatures()) }
+func (h *Host) relationViewTypes() []tuidecl.Type {
+	return relations.ViewTypes(h.relationViewFeatures())
+}
 
 // openGlobeSettings is App.openGlobeSettings, the host's in every build (Preferences.qml names it):
 // the GlobeMap's settings, and a word of why not where there is none.
 func (h *Host) openGlobeSettings() {
-	if !openGlobeSettings(h.relationViewFeatures()) {
+	if !relations.OpenGlobeSettings(h.relationViewFeatures()) {
 		h.notify(h.globeSettingsElsewhereNotice())
 	}
 }

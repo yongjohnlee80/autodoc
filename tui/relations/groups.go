@@ -1,4 +1,4 @@
-package tui
+package relations
 
 import (
 	"cmp"
@@ -32,13 +32,13 @@ type Group struct {
 // groupPalette is the palette with no graph file to name one: sixteen hues apart (Tableau 10, and
 // six more of their weight).
 var groupPalette = []color.NRGBA{
-	hexColour(0x4e79a7), hexColour(0xf28e2b), hexColour(0xe15759), hexColour(0x76b7b2), hexColour(0x59a14f),
-	hexColour(0xedc948), hexColour(0xb07aa1), hexColour(0xff9da7), hexColour(0x9c755f), hexColour(0xbab0ac),
-	hexColour(0x17becf), hexColour(0xbcbd22), hexColour(0x7f3c8d), hexColour(0x11a579), hexColour(0xe73f74),
-	hexColour(0x3969ac),
+	HexColour(0x4e79a7), HexColour(0xf28e2b), HexColour(0xe15759), HexColour(0x76b7b2), HexColour(0x59a14f),
+	HexColour(0xedc948), HexColour(0xb07aa1), HexColour(0xff9da7), HexColour(0x9c755f), HexColour(0xbab0ac),
+	HexColour(0x17becf), HexColour(0xbcbd22), HexColour(0x7f3c8d), HexColour(0x11a579), HexColour(0xe73f74),
+	HexColour(0x3969ac),
 }
 
-func hexColour(v uint32) color.NRGBA {
+func HexColour(v uint32) color.NRGBA {
 	return color.NRGBA{R: uint8(v >> 16), G: uint8(v >> 8), B: uint8(v), A: 0xff}
 }
 
@@ -80,7 +80,7 @@ func initGroups(queries []string, palette []color.NRGBA, ground color.NRGBA, rnd
 			rnd.Shuffle(len(deck), func(i, j int) { deck[i], deck[j] = deck[j], deck[i] })
 			turn++
 		}
-		base := onGround(deck[0], ground)
+		base := OnGround(deck[0], ground)
 		deck = deck[1:]
 		c := away(base, ground, turn)
 		for t := turn + 1; worn[c] && t <= turn+4; t++ {
@@ -96,7 +96,7 @@ func initGroups(queries []string, palette []color.NRGBA, ground color.NRGBA, rnd
 }
 
 // onGround is c made legible on ground (golib style.Legible, at 3: WCAG's ratio for graphics).
-func onGround(c, ground color.NRGBA) color.NRGBA {
+func OnGround(c, ground color.NRGBA) color.NRGBA {
 	r, g, b, ok := style.Legible(style.RGB(c.R, c.G, c.B), style.RGB(ground.R, ground.G, ground.B), 3).RGBValues()
 	if !ok {
 		return c
@@ -111,7 +111,7 @@ func away(c, ground color.NRGBA, turn int) color.NRGBA {
 		return c
 	}
 	to := color.NRGBA{A: 0xff}
-	if contrast(ground, to) < contrast(ground, color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}) {
+	if Contrast(ground, to) < Contrast(ground, color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}) {
 		to = color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff} // a dark ground: away is lighter
 	}
 	t := min(0.2*float64(turn), 0.8)
@@ -120,7 +120,7 @@ func away(c, ground color.NRGBA, turn int) color.NRGBA {
 }
 
 // contrast is WCAG's contrast ratio of a and b (golib style.ContrastRatio): 1 to 21.
-func contrast(a, b color.NRGBA) float64 {
+func Contrast(a, b color.NRGBA) float64 {
 	r, _ := style.ContrastRatio(style.RGB(a.R, a.G, a.B), style.RGB(b.R, b.G, b.B))
 	return r
 }

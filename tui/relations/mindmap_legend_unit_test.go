@@ -1,4 +1,4 @@
-package tui
+package relations
 
 import (
 	"strings"
@@ -17,7 +17,7 @@ func legendWorn(n int) (relMap, *relGroups) {
 		dir := string(rune('a'+i)) + "/"
 		rm.Nodes = append(rm.Nodes, mapNode{Path: dir + "x.md", Title: "X" + dir})
 		rm.Edges = append(rm.Edges, mapEdge{Src: 0, Dst: i + 1})
-		list = append(list, Group{Query: "path:" + dir, Colour: hexColour(0x4e79a7), Shape: pm.MindSquare})
+		list = append(list, Group{Query: "path:" + dir, Colour: HexColour(0x4e79a7), Shape: pm.MindSquare})
 	}
 	gs := newRelGroups(list)
 	return rm, &gs

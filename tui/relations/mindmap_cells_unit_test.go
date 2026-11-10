@@ -1,4 +1,4 @@
-package tui
+package relations
 
 import (
 	"context"
@@ -160,7 +160,7 @@ func TestTheCellMindmapGolden(t *testing.T) {
 	b.WriteString("selected: " + sel.Label + "\n")
 	got := b.String()
 	path := filepath.Join("testdata", "mindmap_tui", "small.golden")
-	if *updateKeys {
+	if *update {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -185,17 +185,16 @@ func TestTheCellMindmapGolden(t *testing.T) {
 
 // builtMindmap is a terminal's Mindmap with rm rooted at root installed, its view w×h cells, as a
 // load installs a build.
-func builtMindmap(t *testing.T, rm relMap, root string, w, h int) (*cellMindmap, *cellMindView) {
+func builtMindmap(t *testing.T, rm relMap, root string, w, h int) (*CellMindmap, *cellMindView) {
 	t.Helper()
-	host := newHost(NewSession("unused", nil), Options{})
-	var m *cellMindmap
-	for _, f := range host.relationViewFeatures() { // the GlobeMap's and the Mindmap's, in cells
-		if c, ok := f.(*cellMindmap); ok {
+	var m *CellMindmap
+	for _, f := range CellViews(newScripted("kb"), nil, "", 0) { // the GlobeMap's and the Mindmap's, in cells
+		if c, ok := f.(*CellMindmap); ok {
 			m = c
 		}
 	}
 	if m == nil {
-		t.Fatal("a terminal host has no cell Mindmap")
+		t.Fatal("a terminal's relation views have no cell Mindmap")
 	}
 	v := m.newView().(*cellMindView)
 	v.cells = tuicore.Size{W: w, H: h}

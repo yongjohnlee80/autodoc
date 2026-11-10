@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/relations"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
@@ -27,9 +28,9 @@ func TestTheTerminalsGlobeMapWearsItsGroups(t *testing.T) {
 	if !strings.Contains(string(withRelationViews(layout, false)), `onTriggered: App.toggleGlobeMap()`) {
 		t.Fatal("a terminal's Relations menu has no GlobeMap item")
 	}
-	g := onLoop(r, func() *cellGlobeMap {
+	g := onLoop(r, func() *relations.CellGlobeMap {
 		for _, f := range r.h.reg.Features {
-			if g, ok := f.(*cellGlobeMap); ok {
+			if g, ok := f.(*relations.CellGlobeMap); ok {
 				return g
 			}
 		}
@@ -40,7 +41,7 @@ func TestTheTerminalsGlobeMapWearsItsGroups(t *testing.T) {
 	}
 	onLoop(r, func() bool { r.h.switchTheme("sepia"); return true })
 	r.s.WaitFor(t, "sepia", func(string) bool { return onLoop(r, func() string { return r.h.theme }) == "sepia" })
-	onLoop(r, func() bool { g.toggle(); return true })
+	onLoop(r, func() bool { g.Toggle(); return true })
 	r.s.WaitFor(t, "the GlobeMap built in the workspace's groups", func(string) bool {
 		return onLoop(r, func() bool { s := g.Snapshot(); return s.Open && s.Loaded && len(s.Nodes) == 2 && s.Workspace == "kb" })
 	})
@@ -70,8 +71,8 @@ func TestTheTerminalsGlobeMapWearsItsGroups(t *testing.T) {
 				if bg.Kind != tuicore.CellColorRGB {
 					return false
 				}
-				want := onGround(hexColour(yellow), color.NRGBA{R: bg.R, G: bg.G, B: bg.B, A: 0xff})
-				if theme == "sepia" && want == hexColour(yellow) {
+				want := relations.OnGround(relations.HexColour(yellow), color.NRGBA{R: bg.R, G: bg.G, B: bg.B, A: 0xff})
+				if theme == "sepia" && want == relations.HexColour(yellow) {
 					return false // a frame still on a page that leaves the yellow as it is: not sepia's paper yet
 				}
 				if fg == (tuicore.CellColor{Kind: tuicore.CellColorRGB, R: want.R, G: want.G, B: want.B}) && (len(seen) == 0 || bg != seen[0]) {
@@ -80,7 +81,7 @@ func TestTheTerminalsGlobeMapWearsItsGroups(t *testing.T) {
 			}
 			return false
 		})
-		if c := contrast(color.NRGBA{R: fg.R, G: fg.G, B: fg.B, A: 0xff}, color.NRGBA{R: bg.R, G: bg.G, B: bg.B, A: 0xff}); c < 3 {
+		if c := relations.Contrast(color.NRGBA{R: fg.R, G: fg.G, B: fg.B, A: 0xff}, color.NRGBA{R: bg.R, G: bg.G, B: bg.B, A: 0xff}); c < 3 {
 			t.Errorf("%s: Beta's dot %v on its page %v is %.2f:1; want 3:1 at least", theme, fg, bg, c)
 		}
 		seen = append(seen, bg)
@@ -104,19 +105,19 @@ func TestATerminalsGlobeMapSettingsEditItsGroups(t *testing.T) {
 	if !strings.Contains(string(withRelationViews(layout, false)), `onTriggered: App.openGlobeSettings()`) {
 		t.Fatal("a terminal's Relations menu has no GlobeMap settings… item")
 	}
-	g := onLoop(r, func() *cellGlobeMap {
+	g := onLoop(r, func() *relations.CellGlobeMap {
 		for _, f := range r.h.reg.Features {
-			if g, ok := f.(*cellGlobeMap); ok {
+			if g, ok := f.(*relations.CellGlobeMap); ok {
 				return g
 			}
 		}
 		return nil
 	})
-	onLoop(r, func() bool { g.toggle(); return true })
+	onLoop(r, func() bool { g.Toggle(); return true })
 	r.s.WaitFor(t, "the GlobeMap built in its groups", func(s string) bool {
 		return strings.Contains(s, "Beta") && onLoop(r, func() bool { s := g.Snapshot(); return s.Loaded && s.Workspace == "kb" })
 	})
-	onLoop(r, func() bool { g.openSettings(); return true })
+	onLoop(r, func() bool { g.OpenSettings(); return true })
 	r.s.WaitFor(t, "the settings, the group listed", func(s string) bool {
 		return strings.Contains(s, "GlobeMap settings") && strings.Contains(s, "path:notes/  #edc948")
 	})
@@ -127,10 +128,10 @@ func TestATerminalsGlobeMapSettingsEditItsGroups(t *testing.T) {
 	r.keys(t, key('q'))
 	r.s.WaitFor(t, "the settings closed", func(s string) bool { return !strings.Contains(s, "GlobeMap settings") })
 
-	onLoop(r, func() bool { g.EditGroups().setColour("#123456"); return true })
-	file := func() string { b, _ := os.ReadFile(graphFile(kb)); return string(b) }
+	onLoop(r, func() bool { g.EditGroups().SetColour("#123456"); return true })
+	file := func() string { b, _ := os.ReadFile(relations.GraphFile(kb)); return string(b) }
 	r.s.WaitFor(t, "the edit written", func(string) bool { return strings.Contains(file(), `colour = "#123456"`) })
-	if c := onLoop(r, func() color.NRGBA { return g.Snapshot().Groups[0].Colour }); c != hexColour(0x123456) {
+	if c := onLoop(r, func() color.NRGBA { return g.Snapshot().Groups[0].Colour }); c != relations.HexColour(0x123456) {
 		t.Fatalf("the map's group colour %v; want the edit's", c)
 	}
 
@@ -140,7 +141,7 @@ func TestATerminalsGlobeMapSettingsEditItsGroups(t *testing.T) {
 	if sel == "Beta" {
 		other = "Alpha"
 	}
-	onLoop(r, func() bool { core{r.h}.SetPref(prefGlobeNames, "false"); return true })
+	onLoop(r, func() bool { core{r.h}.SetPref(relations.PrefGlobeNames, "false"); return true })
 	r.s.WaitFor(t, "only the selected document named", func(s string) bool {
 		return strings.Contains(s, " "+sel+" ") && !strings.Contains(s, " "+other+" ")
 	})
@@ -161,7 +162,7 @@ func TestTheGlobeMapSettingsListACachedWorkspacesGroups(t *testing.T) {
 			t.Fatal(err)
 		}
 		graph := "[[globemap.groups]]\nquery = \"path:" + folder + "/\"\ncolour = \"#4e79a7\"\n"
-		if err := os.WriteFile(graphFile(root), []byte(graph), 0o600); err != nil {
+		if err := os.WriteFile(relations.GraphFile(root), []byte(graph), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		return root
@@ -170,9 +171,9 @@ func TestTheGlobeMapSettingsListACachedWorkspacesGroups(t *testing.T) {
 	d := startManaged(t, map[string]string{"a": a, "b": b})
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 120, 36)
 	r.waitAttached(t, "a")
-	g := onLoop(r, func() *cellGlobeMap {
+	g := onLoop(r, func() *relations.CellGlobeMap {
 		for _, f := range r.h.reg.Features {
-			if c, ok := f.(*cellGlobeMap); ok {
+			if c, ok := f.(*relations.CellGlobeMap); ok {
 				return c
 			}
 		}
@@ -191,14 +192,14 @@ func TestTheGlobeMapSettingsListACachedWorkspacesGroups(t *testing.T) {
 		}
 	}
 	enter("b")
-	onLoop(r, func() bool { g.openSettings(); return true })
+	onLoop(r, func() bool { g.OpenSettings(); return true })
 	r.waitWithin(t, "b's groups listed", daemonWait, listedIn("b"))
 	r.keys(t, key('q'))
 	enter("a")
 	enter("b")
-	onLoop(r, func() bool { g.openSettings(); return true })
+	onLoop(r, func() bool { g.OpenSettings(); return true })
 	r.waitWithin(t, "b's groups listed again on its revisit", daemonWait, listedIn("b"))
-	onLoop(r, func() bool { g.EditGroups().setColour("#123456"); return true })
-	file := func() string { bs, _ := os.ReadFile(graphFile(b)); return string(bs) }
+	onLoop(r, func() bool { g.EditGroups().SetColour("#123456"); return true })
+	file := func() string { bs, _ := os.ReadFile(relations.GraphFile(b)); return string(bs) }
 	r.waitWithin(t, "the edit written to b", daemonWait, func() bool { return strings.Contains(file(), `colour = "#123456"`) })
 }

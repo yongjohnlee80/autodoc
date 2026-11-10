@@ -1,6 +1,6 @@
 //go:build gui
 
-package tui
+package relations
 
 import (
 	"cmp"
@@ -34,7 +34,7 @@ type mind struct {
 }
 
 // mindmap is the Mindmap feature: its builds, fenced (load), and the view's scroll.
-type mindmap struct {
+type Mindmap struct {
 	c         feature.Core
 	seq       uint64
 	open      bool
@@ -48,33 +48,33 @@ type mindmap struct {
 	depth     int     // the links out from the root it shows: 1, or 2 (d toggles)
 	noKey     bool    // l hid the legend
 
-	store    *graphStore
+	store    *GraphStore
 	editor   *groupEditor // the settings' groups
 	groups   *relGroups   // groupsWS's groups (graphstore_gui.go): each document's outline and colour
 	groupsWS string
 }
 
-func newMindmap(c feature.Core) *mindmap {
-	m := &mindmap{c: c, depth: 1}
-	m.editor = &groupEditor{c: c, view: viewMindmap, name: "mind", shapes: true, changed: m.groupsEdited,
+func newMindmap(c feature.Core) *Mindmap {
+	m := &Mindmap{c: c, depth: 1}
+	m.editor = &groupEditor{c: c, view: ViewMindmap, name: "mind", shapes: true, changed: m.groupsEdited,
 		ground: func() color.NRGBA { return m.palette().background }}
 	return m
 }
 
 // toggleDepth is d in the Mindmap: two links out, or one again, read afresh at the page shown.
-func (m *mindmap) toggleDepth() {
+func (m *Mindmap) toggleDepth() {
 	m.depth = 3 - m.depth
-	m.load()
+	m.Load()
 }
 
-func (*mindmap) Name() string { return "mindmap" }
+func (*Mindmap) Name() string { return "mindmap" }
 
-func (m *mindmap) Panels() []feature.PanelSpec {
-	return []feature.PanelSpec{{ID: mindmapPanelID, View: mindmapViewID, Priority: 71, Icon: "⎇",
+func (m *Mindmap) Panels() []feature.PanelSpec {
+	return []feature.PanelSpec{{ID: MindmapPanelID, View: MindmapViewID, Priority: 71, Icon: "⎇",
 		Edge: func(feature.PrefsView) string { return "center" },
 		Opened: func(feature.PanelHost) {
 			m.open, m.depth = true, m.prefDepth() // it opens at the depth its settings choose
-			m.load()
+			m.Load()
 		},
 		Closed: func(c feature.PanelHost) {
 			m.open = false
@@ -83,51 +83,51 @@ func (m *mindmap) Panels() []feature.PanelSpec {
 		}}}
 }
 
-func (m *mindmap) State() map[string]any {
+func (m *Mindmap) State() map[string]any {
 	st := m.settingsState()
 	st["App.mindmapTitle"] = "Mindmap"
 	return st
 }
 
-func (m *mindmap) Commands() map[string]feature.Command {
+func (m *Mindmap) Commands() map[string]feature.Command {
 	c := m.settingsCommands()
-	c["App.toggleMindmap"] = feature.None(m.toggle)
+	c["App.toggleMindmap"] = feature.None(m.Toggle)
 	return c
 }
 
-func (m *mindmap) Catalog() []feature.Entry {
-	return []feature.Entry{feature.Builtin("mindmap.toggle", "the Mindmap", "App.toggleMindmap()", m.toggle),
-		feature.Builtin("mindmap.settings", "the Mindmap's settings", "App.openMindmapSettings()", m.openSettings)}
+func (m *Mindmap) Catalog() []feature.Entry {
+	return []feature.Entry{feature.Builtin("mindmap.toggle", "the Mindmap", "App.toggleMindmap()", m.Toggle),
+		feature.Builtin("mindmap.settings", "the Mindmap's settings", "App.openMindmapSettings()", m.OpenSettings)}
 }
 
-func (m *mindmap) toggle() { m.c.TogglePanel(mindmapPanelID) }
+func (m *Mindmap) Toggle() { m.c.TogglePanel(MindmapPanelID) }
 
 // Shown roots the map at the page shown, while it is open. A click whose open is cancelled, fails
 // or is overtaken shows no page, so it roots nothing.
-func (m *mindmap) Shown(p feature.Page) {
+func (m *Mindmap) Shown(p feature.Page) {
 	m.page = p
 	if m.open {
-		m.load()
+		m.Load()
 	}
 }
 
 // ThemeChanged lays the map out again in the theme's colours, while it is open: a build keeps the
 // colours it was laid out in.
-func (m *mindmap) ThemeChanged() {
+func (m *Mindmap) ThemeChanged() {
 	if m.open {
-		m.load()
+		m.Load()
 	}
 }
 
-func (*mindmap) Edited(feature.Page) {}
-func (*mindmap) Moved(int, int)      {}
-func (*mindmap) Reread(feature.Page) {}
-func (*mindmap) Closed()             {}
+func (*Mindmap) Edited(feature.Page) {}
+func (*Mindmap) Moved(int, int)      {}
+func (*Mindmap) Reread(feature.Page) {}
+func (*Mindmap) Closed()             {}
 
 // load reads the page's document's neighbourhood and lays it out off the loop; on the loop it
 // installs the build whole, or drops it when a newer load, another page or the panel's closing
 // came first.
-func (m *mindmap) load() {
+func (m *Mindmap) Load() {
 	ref := m.page.Ref
 	tk := m.c.Ticket(&m.seq, feature.TicketFile)
 	if ref.Path == "" || ref.WS == "" || m.page.Outside {
@@ -197,7 +197,7 @@ func (m *mindmap) load() {
 
 // width is the width a build is laid out for: the view's, less its margins; a default before it
 // has one.
-func (m *mindmap) width() float32 {
+func (m *Mindmap) width() float32 {
 	if m.view != nil && m.view.ctx != nil {
 		if w := m.view.pixels().W - 2*mindMargin; w > 0 {
 			return w
@@ -208,7 +208,7 @@ func (m *mindmap) width() float32 {
 
 // palette is the map's colours: the page's theme (the document's colours, as the view's properties
 // bind them), or the theme its settings choose.
-func (m *mindmap) palette() relPalette {
+func (m *Mindmap) palette() relPalette {
 	page := defaultPalette()
 	if m.view != nil {
 		page = m.view.pal
@@ -237,7 +237,7 @@ func mindTheme(p relPalette) guimermaid.Theme {
 }
 
 // title says what the panel shows, in the UI's language, and redraws it.
-func (m *mindmap) title() {
+func (m *Mindmap) title() {
 	t := "Mindmap"
 	switch {
 	case m.status != "":
@@ -251,7 +251,7 @@ func (m *mindmap) title() {
 }
 
 // statusText is what a load says, in the UI's language; "" none.
-func (m *mindmap) statusText() string {
+func (m *Mindmap) statusText() string {
 	if m.status == "" {
 		return ""
 	}
@@ -260,7 +260,7 @@ func (m *mindmap) statusText() string {
 
 // LanguageChanged composes again, in the UI's language, what the Mindmap keeps on screen: its
 // heading (and the legend, as the view is drawn again), its choosers' rows and its groups' note.
-func (m *mindmap) LanguageChanged() {
+func (m *Mindmap) LanguageChanged() {
 	names, labels := viewThemeChoices(m.c)
 	m.c.Set("App.mindThemes", feature.KeyedChoices(names, labels))
 	for _, src := range []string{"App.mindDepths", "App.mindShapeChoices"} {
@@ -272,7 +272,7 @@ func (m *mindmap) LanguageChanged() {
 	m.title()
 }
 
-func (m *mindmap) dirty() {
+func (m *Mindmap) dirty() {
 	if m.view != nil && m.view.ctx != nil {
 		m.view.ctx.MarkDirty()
 	}
@@ -282,7 +282,7 @@ func (m *mindmap) dirty() {
 const mindMargin = 16
 
 // origin is where the map's top left is in the view: centred across, scrolled down.
-func (m *mindmap) origin(view gui.Size) gui.Point {
+func (m *Mindmap) origin(view gui.Size) gui.Point {
 	if m.cur == nil {
 		return gui.Point{}
 	}
@@ -291,7 +291,7 @@ func (m *mindmap) origin(view gui.Size) gui.Point {
 }
 
 // click opens the document under the view point p, the keyboard kept here.
-func (m *mindmap) click(p, at gui.Point) {
+func (m *Mindmap) click(p, at gui.Point) {
 	cur := m.cur
 	if cur == nil {
 		return
@@ -303,20 +303,20 @@ func (m *mindmap) click(p, at gui.Point) {
 	if i, ok := cur.m.mindIndex(id); ok {
 		// hidden, not closed, as the GlobeMap is: the dock shows it again
 		// (docs/decisions/editor.md#dock-clicks-hide-and-show)
-		m.c.HidePanel(mindmapPanelID)
+		m.c.HidePanel(MindmapPanelID)
 		m.c.OpenRef(cur.root.WS, cur.m.Nodes[i].Path)
 	}
 }
 
 // mindView is the Mindmap's native view, in its panel.
 type mindView struct {
-	m     *mindmap
+	m     *Mindmap
 	pal   relPalette
 	ctx   *tuicore.Context
 	cells tuicore.Size
 }
 
-func (m *mindmap) newView(p relPalette) tuicore.Component {
+func (m *Mindmap) newView(p relPalette) tuicore.Component {
 	v := &mindView{m: m, pal: p}
 	m.view = v
 	return v
@@ -330,7 +330,7 @@ func (v *mindView) Layout(c tuicore.Constraints) tuicore.Size {
 	m := v.m
 	if w := m.width(); m.open && m.cur != nil && w != m.cur.width && w != m.asked {
 		m.asked = w
-		m.c.Post(m.load) // after the frame: a load sets what the frame reads
+		m.c.Post(m.Load) // after the frame: a load sets what the frame reads
 	}
 	return v.cells
 }

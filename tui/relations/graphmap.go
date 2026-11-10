@@ -1,4 +1,4 @@
-package tui
+package relations
 
 import (
 	"fmt"
@@ -18,8 +18,8 @@ import (
 
 // The relation views' panels and their views, in every build.
 const (
-	globeMapPanelID, globeMapViewID = "globeMap", "globeMapView"
-	mindmapPanelID, mindmapViewID   = "mindmap", "mindmapView"
+	GlobeMapPanelID, GlobeMapViewID = "globeMap", "globeMapView"
+	MindmapPanelID, MindmapViewID   = "mindmap", "mindmapView"
 )
 
 // mapNode is a document of graph.map: its path, title, frontmatter type, whether another document

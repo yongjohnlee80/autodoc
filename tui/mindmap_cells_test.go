@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/relations"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
@@ -22,9 +23,9 @@ func TestATerminalRunOpensTheCellMindmap(t *testing.T) {
 	if !strings.Contains(string(withRelationViews(layout, false)), `onTriggered: App.toggleMindmap()`) {
 		t.Fatal("a terminal's main.qml has no Relations › Mindmap item")
 	}
-	m := onLoop(r, func() *cellMindmap {
+	m := onLoop(r, func() *relations.CellMindmap {
 		for _, f := range r.h.reg.Features {
-			if m, ok := f.(*cellMindmap); ok {
+			if m, ok := f.(*relations.CellMindmap); ok {
 				return m
 			}
 		}
@@ -35,7 +36,7 @@ func TestATerminalRunOpensTheCellMindmap(t *testing.T) {
 	}
 	onLoop(r, func() bool { r.h.openPath("a.md"); return true })
 	r.waitFile(t, "a.md")
-	onLoop(r, func() bool { m.toggle(); return true })
+	onLoop(r, func() bool { m.Toggle(); return true })
 	r.s.WaitFor(t, "the cell Mindmap open", func(string) bool {
 		return onLoop(r, func() bool { s := m.Snapshot(); return s.Open && s.Viewed })
 	})
@@ -47,9 +48,9 @@ func TestSPCMOpensTheMindmap(t *testing.T) {
 	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")}, tableInclude)
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
-	m := onLoop(r, func() *cellMindmap {
+	m := onLoop(r, func() *relations.CellMindmap {
 		for _, f := range r.h.reg.Features {
-			if m, ok := f.(*cellMindmap); ok {
+			if m, ok := f.(*relations.CellMindmap); ok {
 				return m
 			}
 		}
@@ -88,9 +89,9 @@ func TestTheCellMindmapTakesTheKeyboard(t *testing.T) {
 				r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: 't', Mods: tuicore.ModCtrl})
 				r.s.WaitFor(t, "the note's text", func(string) bool { return shownView(r) == editor.ViewRaw })
 			}
-			m := onLoop(r, func() *cellMindmap {
+			m := onLoop(r, func() *relations.CellMindmap {
 				for _, f := range r.h.reg.Features {
-					if m, ok := f.(*cellMindmap); ok {
+					if m, ok := f.(*relations.CellMindmap); ok {
 						return m
 					}
 				}
@@ -102,13 +103,13 @@ func TestTheCellMindmapTakesTheKeyboard(t *testing.T) {
 				r.s.WaitFor(t, "the Relations menu", func(string) bool { return r.focused("menuBar") || strings.Contains(r.s.String(), "Mindmap") })
 				r.keys(t, key('m'))
 			} else {
-				onLoop(r, func() bool { m.toggle(); return true })
+				onLoop(r, func() bool { m.Toggle(); return true })
 			}
 			r.s.WaitFor(t, "the Mindmap built", func(string) bool {
 				return onLoop(r, func() bool { s := m.Snapshot(); return s.Open && s.Loaded })
 			})
 			r.s.WaitFor(t, "the Mindmap has the keyboard", func(string) bool {
-				return onLoop(r, func() bool { return r.h.paneHasKeyboard(mindmapViewID) })
+				return onLoop(r, func() bool { return r.h.paneHasKeyboard(relations.MindmapViewID) })
 			})
 			r.keys(t, key('d'))
 			r.s.WaitFor(t, "d reached the Mindmap (two links out)", func(string) bool {
@@ -117,7 +118,7 @@ func TestTheCellMindmapTakesTheKeyboard(t *testing.T) {
 			if got := r.editorText(); got != before {
 				t.Fatalf("a key for the Mindmap changed the note:\n%q\nwant\n%q", got, before)
 			}
-			onLoop(r, func() bool { m.toggle(); return true })
+			onLoop(r, func() bool { m.Toggle(); return true })
 			r.s.WaitFor(t, "the editor has the keyboard again", func(string) bool {
 				return onLoop(r, func() bool { return !m.Snapshot().Open && r.h.paneHasKeyboard("editor") })
 			})

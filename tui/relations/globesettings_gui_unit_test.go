@@ -1,6 +1,6 @@
 //go:build gui
 
-package tui
+package relations
 
 import (
 	"context"
@@ -12,29 +12,27 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	graphlayout "github.com/yongjohnlee80/golib/graph/layout"
 	"github.com/yongjohnlee80/golib/gui"
 	pm "github.com/yongjohnlee80/golib/parse/mermaid"
 )
-
-// valuesPrefs is preferences of the features' values v alone.
-func valuesPrefs(v map[string]string) prefs { return prefs{values: v} }
 
 // The look is the theme's colours with the user's over them: a document no group matches, the
 // links and the ring; a field that does not read is the theme's. The names, the dots and the pace
 // are each their setting's. A dot is its first matching group's colour, else no group's.
 func TestTheGlobeLookIsItsSettingsOverTheTheme(t *testing.T) {
 	pal := defaultPalette()
-	def := newGlobeLook(prefs{}, pal)
+	def := newGlobeLook(mapPrefs(nil), pal)
 	if !def.names || def.dot != 1 || def.steps != 2 || def.ring != pal.superseded || def.other != pal.text ||
 		def.edges[edgeBody] != mixNRGBA(pal.background, pal.muted, 0.8) {
 		t.Fatalf("no settings: %+v; want the theme's colours, names, medium dots, gentle pace", def)
 	}
-	l := newGlobeLook(valuesPrefs(map[string]string{
-		prefGlobeNames: "false", prefGlobeDots: "large", prefGlobeSpeed: "slow",
-		prefGlobeColour + "other": "#445566", prefGlobeColour + "link.body": "#778899",
-		prefGlobeColour + "link.relation": "#12", // reads not: the theme's
-		prefGlobeColour + "superseded":    "#aabbcc",
+	l := newGlobeLook(mapPrefs(map[string]string{
+		PrefGlobeNames: "false", prefGlobeDots: "large", prefGlobeSpeed: "slow",
+		PrefGlobeColour + "other": "#445566", PrefGlobeColour + "link.body": "#778899",
+		PrefGlobeColour + "link.relation": "#12", // reads not: the theme's
+		PrefGlobeColour + "superseded":    "#aabbcc",
 	}), pal)
 	if l.names || l.dot != 1.4 || l.steps != 1 || l.ring != rgb(0xaabbcc) || l.edges[edgeBody] != rgb(0x778899) ||
 		l.edges[edgeRelation] != def.edges[edgeRelation] || l.other != rgb(0x445566) {
@@ -87,8 +85,7 @@ func TestTheGlobeMapsThemeIsTheTerminalsUnlessChosen(t *testing.T) {
 		{"term", "gone", "#000001"}, // one that does not read: the page's
 		{"gone", "terminal", "#000001"},
 	} {
-		p := valuesPrefs(map[string]string{prefGlobeTheme: c.globe})
-		p.termTheme = c.term
+		p := mapPrefs{prefGlobeTheme: c.globe, feature.PrefTermTheme: c.term}
 		v, ok := globeThemeValues(p, ts)
 		if !ok || v["document.base"] != c.want {
 			t.Errorf("terminals %q, GlobeMap %q: %v %v; want %s", c.term, c.globe, v, ok, c.want)
@@ -110,7 +107,7 @@ func TestTheGlobeMapSettlesAtItsSpeed(t *testing.T) {
 		defer cancel()
 		views := make(chan globeViewState, 1)
 		views <- globeViewState{size: gui.Size{W: 640, H: 480}, hover: -1,
-			look: newGlobeLook(valuesPrefs(map[string]string{prefGlobeSpeed: speed}), defaultPalette())}
+			look: newGlobeLook(mapPrefs(map[string]string{prefGlobeSpeed: speed}), defaultPalette())}
 		n := 0
 		push := func(shot *globeShot, _ func(gui.Canvas)) globeReceipt {
 			if n++; shot.f.final || n > 100000 {
@@ -163,7 +160,7 @@ func TestTheGlobeMapNamesNoneWhenItsSettingsSaySo(t *testing.T) {
 	if len(pictureOf(gl, view, globeDots{}).nameRows(view.size)) == 0 {
 		t.Fatal("names on: none drawn")
 	}
-	view.look = newGlobeLook(valuesPrefs(map[string]string{prefGlobeNames: "false"}), defaultPalette())
+	view.look = newGlobeLook(mapPrefs(map[string]string{PrefGlobeNames: "false"}), defaultPalette())
 	p := pictureOf(gl, view, globeDots{})
 	if rows := p.nameRows(view.size); rows != nil {
 		t.Errorf("names off: %d rows drawn", len(rows))
@@ -185,7 +182,7 @@ func TestTheGlobeMapsLegendIsItsGroups(t *testing.T) {
 	gs := newRelGroups([]Group{{Query: "type:adr"}, {Query: "type:pr"}, {Query: "path:notes/"}, {Query: "#x"}})
 	texts := func(rows []legendRow) []string {
 		var out []string
-		for _, r := range legendIn(rows, inEnglish{}.Trf) {
+		for _, r := range legendIn(rows, englishf) {
 			out = append(out, r.text)
 		}
 		return out
@@ -196,14 +193,14 @@ func TestTheGlobeMapsLegendIsItsGroups(t *testing.T) {
 		1: {"body link", "supersedes", "other relation"}, // every link
 		2: {"body link"},                                 // body links
 	} {
-		g := &globeMap{filter: filter, groups: &gs, cur: &globe{m: m}}
+		g := &GlobeMap{filter: filter, groups: &gs, cur: &globe{m: m}}
 		want := append(append(slices.Clone(common), links...), "larger: more links")
 		if got := texts(g.legend(l)); !slices.Equal(got, want) {
 			t.Errorf("%s: legend %q; want %q", globeFilters[filter].name, got, want)
 		}
 	}
-	g := &globeMap{groups: &gs, cur: &globe{m: m}}
-	rows := legendIn(g.legend(l), inEnglish{}.Trf)
+	g := &GlobeMap{groups: &gs, cur: &globe{m: m}}
+	rows := legendIn(g.legend(l), englishf)
 	rc := gui.NewRecordingCanvas(gui.Size{W: 800, H: 600}, gui.Size{W: 8, H: 16})
 	globeOverlay{pal: l.pal, legend: rows}.paint(rc)
 	if n := countOps(rc, "DrawText"); n != len(rows) {
@@ -238,7 +235,7 @@ func TestTheMindmapsLegendIsItsGroups(t *testing.T) {
 	m := relMap{Nodes: []mapNode{{Type: "adr"}, {Type: "review"}}}
 	gs := newRelGroups([]Group{{Query: "type:adr", Colour: rgb(0xff0000), Shape: pm.MindDefault},
 		{Query: "type:review", Colour: rgb(0x0000ff), Shape: pm.MindHexagon}, {Query: "type:pr"}})
-	rows := legendIn(mindLegend(th, &gs, m), inEnglish{}.Trf)
+	rows := legendIn(mindLegend(th, &gs, m), englishf)
 	var texts []string
 	for _, r := range rows {
 		texts = append(texts, r.text)

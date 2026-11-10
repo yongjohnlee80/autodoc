@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -89,5 +90,15 @@ func TestInvalidUserThemeAtStartupDoesNotBreakTheScreen(t *testing.T) {
 	r.s.WaitFor(t, "default theme", func(string) bool { return onLoop(r, func() string { return r.h.theme }) == defaultTheme })
 	if len(r.h.themeCatalog.Problems) == 0 {
 		t.Fatal("no file/key diagnostics")
+	}
+}
+
+// A feature reads the themes the window can wear through its core: golib's, with no catalog of the
+// user's.
+func TestCoreNamesTheThemes(t *testing.T) {
+	var h Host
+	c := core{&h}
+	if !reflect.DeepEqual(c.ThemeNames(), h.themeNames()) || !reflect.DeepEqual(c.ThemeLabels(), h.themeLabels()) || len(c.ThemeNames()) == 0 {
+		t.Errorf("themes %q, labels %q", c.ThemeNames(), c.ThemeLabels())
 	}
 }

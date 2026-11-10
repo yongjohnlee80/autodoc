@@ -1,4 +1,4 @@
-package tui
+package relations
 
 import (
 	"image/color"
@@ -62,7 +62,7 @@ func nodePaths(m relMap) []string {
 }
 
 // Snapshot is the GlobeMap's in cells.
-func (g *cellGlobeMap) Snapshot() ViewState {
+func (g *CellGlobeMap) Snapshot() ViewState {
 	s := ViewState{Open: g.open, Viewed: g.view != nil, Workspace: g.groupsWS, Groups: groupsOf(g.groups),
 		Builds: g.seq, Editor: editorState(g.editor)}
 	if g.cur != nil {
@@ -75,7 +75,7 @@ func (g *cellGlobeMap) Snapshot() ViewState {
 }
 
 // Snapshot is the Mindmap's in cells.
-func (m *cellMindmap) Snapshot() ViewState {
+func (m *CellMindmap) Snapshot() ViewState {
 	s := ViewState{Open: m.open, Viewed: m.view != nil, Workspace: m.groupsWS, Groups: groupsOf(m.groups),
 		Depth: m.depth, Builds: m.seq, Editor: editorState(m.editor)}
 	if m.cur != nil {
@@ -88,13 +88,13 @@ func (m *cellMindmap) Snapshot() ViewState {
 }
 
 // EditGroups is the terminal GlobeMap's settings' group editor.
-func (g *cellGlobeMap) EditGroups() *groupEditor { return g.editor }
+func (g *CellGlobeMap) EditGroups() *groupEditor { return g.editor }
 
 // EditGroups is the terminal Mindmap's settings' group editor.
-func (m *cellMindmap) EditGroups() *groupEditor { return m.editor }
+func (m *CellMindmap) EditGroups() *groupEditor { return m.editor }
 
 // UseStore makes s the store the Mindmap and its editor read their groups from.
-func (m *cellMindmap) UseStore(s *graphStore) { m.store, m.editor.store = s, s }
+func (m *CellMindmap) UseStore(s *GraphStore) { m.store, m.editor.store = s, s }
 
 // RelatedState is the Links drawer's: its rows' labels, whether it shows the second ring, and the
 // row under its cursor.
@@ -105,6 +105,6 @@ type RelatedState struct {
 }
 
 // Snapshot is the Links drawer's.
-func (r *related) Snapshot() RelatedState {
+func (r *Related) Snapshot() RelatedState {
 	return RelatedState{Rows: r.labels(), Deep: r.deep, At: r.at}
 }
