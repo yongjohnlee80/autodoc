@@ -242,7 +242,7 @@ func TestAPeersRenameIsToldAsARename(t *testing.T) {
 		sw, _ := r.h.takeSwitch("zen")
 		return sw
 	})
-	root := onLoop(r, func() string { return r.h.agents.instances["zen"].workspace.root })
+	root := onLoop(r, func() string { return r.h.agents.instances["zen"].workspace.Root })
 	if root == "" || sw != (wsSwitch{Kind: switchRenamed, From: wsRef{"kb", root}, To: wsRef{"kb2", root}}) {
 		t.Fatalf("a peer's rename told the agent %+v, want renamed kb → kb2 at %s", sw, root)
 	}
