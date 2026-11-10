@@ -228,8 +228,8 @@ func TestAgentProfilesAreAddedEditedAndRemoved(t *testing.T) {
 func TestAnExplicitlyClearedAgentDefaultStaysClearedAfterLoad(t *testing.T) {
 	t.Parallel()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{
-		PrefAgentProfiles:    `[{"name":"A","command":"false","codename":"a"}]`,
-		prefAgentDefault: "A", PrefAgentDefaultCodename: "",
+		PrefAgentProfiles: `[{"name":"A","command":"false","codename":"a"}]`,
+		prefAgentDefault:  "A", PrefAgentDefaultCodename: "",
 	}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitFor(t, "stored cleared default loaded", func(string) bool {

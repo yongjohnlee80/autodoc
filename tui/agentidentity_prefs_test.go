@@ -59,8 +59,8 @@ func TestAgentDefaultMigrationDistinguishesMissingAndExplicitEmptyAtRestart(t *t
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			raw := map[string]any{
-				PrefAgentProfiles:    `[{"name":"A","command":"one"},{"name":"B","command":"two"}]`,
-				prefAgentDefault: "A",
+				PrefAgentProfiles: `[{"name":"A","command":"one"},{"name":"B","command":"two"}]`,
+				prefAgentDefault:  "A",
 			}
 			if tc.present {
 				raw[agents.PrefAgentDefaultCodename] = tc.canonical
