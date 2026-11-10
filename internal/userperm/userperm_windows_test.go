@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"unsafe"
 
@@ -118,5 +119,69 @@ func TestInheritedAccessAndAPrivateCreateUnderABroadFolderOnWindows(t *testing.T
 		if sid := (*windows.SID)(unsafe.Pointer(&ace.SidStart)); !sid.Equals(mine) {
 			t.Errorf("a file CreatePrivate made under a broad folder holds an entry for %v at its creation", sid)
 		}
+	}
+}
+
+// tokenOwner is TOKEN_OWNER: the owner a token gives the objects it creates.
+type tokenOwner struct{ Owner *windows.SID }
+
+// ownerOf is the owner of the file at path.
+func ownerOf(t *testing.T, path string) *windows.SID {
+	t.Helper()
+	sd, err := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o, _, err := sd.Owner()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return o
+}
+
+// A created file's owner is this user, not the token's default owner: under a token whose
+// default owner is the Administrators (an elevated administrator's), a file made the ordinary way
+// is theirs, while CreatePrivate's is this user's, and OpenPrivate opens it.
+func TestACreatedFileIsThisUsersWhateverTheTokensDefaultOwnerOnWindows(t *testing.T) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	var proc windows.Token
+	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_DUPLICATE|windows.TOKEN_QUERY, &proc); err != nil {
+		t.Fatal(err)
+	}
+	defer proc.Close()
+	var tok windows.Token
+	if err := windows.DuplicateTokenEx(proc, windows.TOKEN_IMPERSONATE|windows.TOKEN_QUERY|windows.TOKEN_ADJUST_DEFAULT, nil,
+		windows.SecurityImpersonation, windows.TokenImpersonation, &tok); err != nil {
+		t.Fatal(err)
+	}
+	defer tok.Close()
+	admins, err := windows.CreateWellKnownSid(windows.WinBuiltinAdministratorsSid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := tokenOwner{Owner: admins}
+	if err := windows.SetTokenInformation(tok, windows.TokenOwner, (*byte)(unsafe.Pointer(&o)), uint32(unsafe.Sizeof(o))); err != nil {
+		t.Fatalf("the cell's premise: a token defaulting its owner to the Administrators (an elevated administrator's): %v", err)
+	}
+	dir := t.TempDir()
+	if err := windows.SetThreadToken(nil, tok); err != nil {
+		t.Fatal(err)
+	}
+	defer windows.RevertToSelf()
+	plain := filepath.Join(dir, "plain")
+	if err := os.WriteFile(plain, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := ownerOf(t, plain); !got.Equals(admins) {
+		t.Fatalf("the premise: a file made the ordinary way is owned by %v, not the Administrators", got)
+	}
+	key := filepath.Join(dir, "key")
+	write(t, key, "secret")
+	if got, want := ownerOf(t, key), me(t); got.String() != want {
+		t.Fatalf("CreatePrivate's file is owned by %v, want this user %s", got, want)
+	}
+	if got, err := read(t, key); err != nil || got != "secret" {
+		t.Fatalf("CreatePrivate then OpenPrivate: %q, %v", got, err)
 	}
 }
