@@ -17,10 +17,6 @@ app/app.go	syscall	SIGTERM
 app/crewbridge.go	syscall	ECONNREFUSED
 app/crewbridge_other.go	os-file	unix
 app/crewbridge_unix.go	os-file	unix
-app/crewbridge_unix.go	syscall	EWOULDBLOCK
-app/crewbridge_unix.go	syscall	Flock
-app/crewbridge_unix.go	syscall	LOCK_EX
-app/crewbridge_unix.go	syscall	LOCK_NB
 app/crewbridge_unix.go	syscall	O_NOFOLLOW
 app/crewbridge_unix.go	syscall	SysProcAttr
 app/crewclaude_darwin.go	os-file	darwin
