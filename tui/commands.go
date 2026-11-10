@@ -136,6 +136,7 @@ func (h *Host) commands() map[string]feature.Command {
 		"App.openGlobeSettings":       feature.None(h.openGlobeSettings), // Preferences names it in every build
 		"App.setKeymap":               feature.OneString("vim or text", h.setKeymap),
 		"App.setRenderer":             feature.OneString("auto or opengl", h.setRenderer),
+		"App.setTitleBar":             feature.OneString("system or own", h.setTitleBar),
 		"App.answerVimQuestion":       feature.OneString("vim or text", h.answerVimQuestion),
 		"App.setLanguage":             feature.OneString("a language's tag", h.setLanguage),
 		"App.toggleKeymap":            feature.None(h.toggleKeymap),

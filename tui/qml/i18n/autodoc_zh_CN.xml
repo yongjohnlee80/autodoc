@@ -3965,6 +3965,18 @@ WHAT A KEY NEEDS
         <source>This &amp;machine</source>
         <translation>本机(&amp;M)</translation>
     </message>
+    <message id="autodoc.main.title_bar">
+        <source>Title &amp;bar</source>
+        <translation>标题栏(&amp;B)</translation>
+    </message>
+    <message id="autodoc.main.title_bar_own">
+        <source>&amp;2. AutoDoc's own</source>
+        <translation>&amp;2. AutoDoc 自己的</translation>
+    </message>
+    <message id="autodoc.main.title_bar_system">
+        <source>&amp;1. The system's</source>
+        <translation>&amp;1. 系统的</translation>
+    </message>
     <message id="autodoc.main.todos">
         <source>&amp;Todos</source>
         <translation>待办(&amp;T)</translation>
@@ -5416,6 +5428,14 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.theme.theme">
         <source>theme: %1</source>
         <translation>主题：%1</translation>
+    </message>
+    <message id="autodoc.notice.titlebar.from_the_next_start">
+        <source>the title bar changes at the next start: the window takes it as it opens</source>
+        <translation>标题栏在下次启动时更改：窗口打开时决定</translation>
+    </message>
+    <message id="autodoc.notice.titlebar.no_title_bar_s">
+        <source>no title bar %1: system or own</source>
+        <translation>没有标题栏 %1：system 或 own</translation>
     </message>
     <message id="autodoc.notice.todomove.moved_to">
         <source>%1 moved to %2 with its task: the buffer follows it</source>

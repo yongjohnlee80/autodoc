@@ -301,6 +301,10 @@ type Host struct {
 
 	// tui.gui.renderer's mirror for the next start's window (renderer.go), and what it was last written
 	rendererFile, rendererMirrored string
+	// tui.gui.titlebar's mirror for the next start's window, and what it was last written; titleBar:
+	// this window opened without the system's title bar, so its own is in the layout (titlebar.go)
+	titleBarFile, titleBarMirrored string
+	titleBar                       bool
 
 	// the Lua commands (scripts.go): the engine, and the user's folder of scripts
 	scripts   *script.Engine
@@ -427,6 +431,12 @@ type Options struct {
 	// RendererFile is where tui.gui.renderer is mirrored for the next start's window, which opens
 	// before the store is read (renderer.go); "" mirrors nothing.
 	RendererFile string
+	// TitleBarFile is where tui.gui.titlebar is mirrored for the next start's window, as RendererFile
+	// is (titlebar.go); "" mirrors nothing.
+	TitleBarFile string
+	// TitleBar is set when the window opened without the system's title bar: the layout gets AutoDoc's
+	// own, at its top (titlebar.go). Only a window (GUI) draws it.
+	TitleBar bool
 	// CrashDir is where a contained panic's crash log goes, and a fatal one's report (crash.go); ""
 	// writes none, the notice still said.
 	CrashDir string
@@ -485,7 +495,7 @@ func New(session *Session, opt Options) (*Host, error) {
 func newHost(session *Session, opt Options) *Host {
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &Host{session: session, seams: defaultSeams, ctx: ctx, cancel: cancel, about: opt.About, aboutInfo: opt.AboutInfo, dev: opt.Dev,
-		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, installRecord: opt.InstallRecord, profiler: opt.Profiler, ownTables: opt.Registrations, recoveryDir: opt.RecoveryDir, rendererFile: opt.RendererFile, crashDir: opt.CrashDir, luaDir: opt.LuaDir, editorDir: opt.EditorDir,
+		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, installRecord: opt.InstallRecord, profiler: opt.Profiler, ownTables: opt.Registrations, recoveryDir: opt.RecoveryDir, rendererFile: opt.RendererFile, titleBarFile: opt.TitleBarFile, titleBar: opt.TitleBar, crashDir: opt.CrashDir, luaDir: opt.LuaDir, editorDir: opt.EditorDir,
 		awaitExit:       awaitExit,
 		browser:         openDefaultApp,
 		wsLeft:          make(chan struct{}),
@@ -624,7 +634,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		src, _ = os.ReadFile(filepath.Join(opt.Dev, "main.qml"))
 		files := os.DirFS(opt.Dev)
 		// main.qml with the card plugins' panels written in, on every reload (pluginpanels.go)
-		opts = append(modulesFrom(files), tuidecl.Layout(cardFS{FS: files, pl: h.plugins, gui: h.gui}, "main.qml"),
+		opts = append(modulesFrom(files), tuidecl.Layout(cardFS{FS: files, pl: h.plugins, layout: h.windowLayout}, "main.qml"),
 			tuidecl.HotReload(tuidecl.OnReloadError(h.themeReloadError), tuidecl.OnReload(func(decl.Result) { h.reloaded() })))
 	} else {
 		src = opt.Layout
@@ -634,7 +644,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 				src = themeImport.ReplaceAll(src, []byte("import autodoc.theme."+defaultGUITheme+" "+moduleVersion))
 			}
 		}
-		h.layoutBase = withRelationViews(src, h.gui) // the GUI's relation views (relationmap.go)
+		h.layoutBase = h.windowLayout(src)           // the GUI's relation views and its own title bar (titlebar.go)
 		src = h.plugins.withCardPanels(h.layoutBase) // a panel for each card plugin found (pluginpanels.go)
 		opts = append(modulesFrom(qmlFiles), tuidecl.LayoutSource("main.qml", src))
 		// Names added later require a restart; with no registered user modules and no key file
@@ -674,6 +684,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		tuidecl.Types(feature.NoteRendererType), // the note editor's renderer (feature/noterenderer.go)
 		tuidecl.Types(h.plugins.cardType()),     // a card plugin's view in its panel (pluginpanels.go)
 		tuidecl.Types(h.relationViewTypes()...), // the GUI's GlobeMap and Mindmap views (relationmap.go)
+		tuidecl.Types(h.titleBarTypes()...),     // the window's own title bar, when it has one (titlebar.go)
 		// The file dialogs read the local disk, not the daemon's: same machine, so the daemon adds
 		// nothing to a listing. Off the loop, so a slow mount cannot hold it; os.DirFS, not
 		// vfs/local, whose root refuses an absolute link and lists every link as a file.
