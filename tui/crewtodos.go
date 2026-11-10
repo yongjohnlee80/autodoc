@@ -373,3 +373,14 @@ func writeTodoSeen(file string, seen map[string]bool) {
 		_ = writeAtomic(file, b, 0o600)
 	}
 }
+
+// assigneePrefix is an AutoDoc agent's assignee: autodoc:<codename>, never AutoVim's agent:<name>.
+const assigneePrefix = "autodoc:"
+
+// todoFileChange is a change of the todo change log as the open buffers take it: a task's file
+// moved (from → to), rewritten in place (to == from), or removed (removed, to ""), its paths
+// relative to the store at store.
+type todoFileChange struct {
+	store, from, to string
+	removed         bool
+}
