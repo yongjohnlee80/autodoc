@@ -37,8 +37,6 @@ const (
 	prefDiskReload = "tui.disk_reload"
 	prefLuaGrants  = "lua.grants" // a JSON map: gated script → capability → true (luagate.go)
 	prefCorner     = "tui.toast.corner"
-	prefAboutAt    = "tui.about.atstart"
-	prefUpdates    = "tui.update.check"
 	prefSeconds    = "tui.toast.seconds"
 	// a plugin's placement: tui.plugin.<name>.placement
 	prefPluginPrefix = "tui.plugin."
