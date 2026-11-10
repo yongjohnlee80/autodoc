@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/internal/ipc"
+	"github.com/yongjohnlee80/autodoc/internal/userperm"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
@@ -266,8 +267,10 @@ func TestTheNoticeHookIsMergedIntoTheUsersSettings(t *testing.T) {
 	if err := json.Unmarshal(b, &s); err != nil || ours(b) != 1 {
 		t.Fatalf("a new file: %v\n%s", err, b)
 	}
-	if fi, _ := os.Stat(path); fi.Mode().Perm() != 0o600 {
-		t.Errorf("the file's mode %v, want 0600", fi.Mode().Perm())
+	if f, err := userperm.OpenPrivate(path); err != nil { // as this OS keeps a file private
+		t.Errorf("the file is not private to this user: %v", err)
+	} else {
+		_ = f.Close()
 	}
 
 	user := `{"model": "opus", "cleanupPeriodDays": 12345678901234567, "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "say done"}]}],` +
