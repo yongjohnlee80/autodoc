@@ -140,12 +140,12 @@ func TestALoadedFolderIsShownByTheStoreTheDaemonResolves(t *testing.T) {
 }
 
 // A store moved into the folder loaded is shown, by its identity: todos.stores lists it by its first
-// root (the one it was made under), never by the folder chosen, so a match by a root's spelling
-// would miss it and show another store in its place.
+// root (/a, the one it was made under), not by the folder chosen (/moved), so a match by a root's
+// spelling would miss it and leave another store shown in its place.
 func TestAStoreMovedIntoTheFolderLoadedIsShown(t *testing.T) {
 	ctx := context.Background()
 	disk := todotest.NewDisk()
-	for _, d := range []string{"/before", "/a", "/b"} {
+	for _, d := range []string{"/before", "/a", "/moved"} {
 		disk.MkdirAll(slashFile(d))
 	}
 	m := todo.New(todotest.Roots{}, disk, todotest.NewJournal())
@@ -161,16 +161,20 @@ func TestAStoreMovedIntoTheFolderLoadedIsShown(t *testing.T) {
 	if _, err := m.Scaffold(ctx, todo.At{Root: slashFile("/a")}); err != nil {
 		t.Fatal(err)
 	}
-	moved, err := m.MoveStore(ctx, todo.At{Root: slashFile("/a")}, slashFile("/b")+"/.todo-list")
+	moved, err := m.MoveStore(ctx, todo.At{Root: slashFile("/a")}, slashFile("/moved")+"/.todo-list")
 	if err != nil {
 		t.Fatal(err)
 	}
 	v := newTodos(managerCore(t, m))
 	v.list()
+	if v.cur == nil || v.cur.sid == moved.StoreID {
+		t.Fatalf("the store shown first: %+v; want another than the moved one (the cell's premise)", v.cur)
+	}
 	v.folderAs = "load"
-	v.folderChosen(taskFile("/b"))
-	if v.cur == nil || v.cur.sid != moved.StoreID || v.cur.path != slashFile("/b")+"/.todo-list" {
-		t.Errorf("/b loaded: shown %+v; want the store moved there, %s at %s/.todo-list", v.cur, moved.StoreID, slashFile("/b"))
+	v.folderChosen(taskFile("/moved"))
+	// listed by its first root, /a: the folder chosen is not its listed root
+	if v.cur == nil || v.cur.sid != moved.StoreID || v.cur.path != slashFile("/moved")+"/.todo-list" || v.cur.id != "root:"+slashFile("/a") {
+		t.Errorf("/moved loaded: shown %+v; want the store moved there, %s at %s/.todo-list, listed as root:%s", v.cur, moved.StoreID, slashFile("/moved"), slashFile("/a"))
 	}
 }
 
