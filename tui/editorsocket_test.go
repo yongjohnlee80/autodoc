@@ -194,8 +194,8 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 	case <-time.After(20 * time.Second):
 		t.Fatal("add_command never answered")
 	}
-	if fi, err := os.Stat(filepath.Join(luaDir, "hi.lua")); err != nil || fi.Mode().Perm() != 0o600 {
-		t.Fatalf("lua/hi.lua: %v %v", fi, err)
+	if err := privateFile(filepath.Join(luaDir, "hi.lua")); err != nil {
+		t.Fatalf("lua/hi.lua: %v", err)
 	}
 	r.page("", 1, 1)
 	r.mustRun(t, "hi-agent")
