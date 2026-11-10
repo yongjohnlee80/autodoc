@@ -100,38 +100,59 @@ func TestACaseSensitiveFoldersSiblingIsNotTheServedRoot(t *testing.T) {
 	}
 }
 
-// A served root given in another spelling of the same folder (its 8.3 short name; its drive letter
-// in lower case) is that folder: its store is the workspace's, writable, and a ref under it in the
-// disk's spelling is written as $KB_ROOT.
+// A served root given in another spelling of the same folder (its drive letter in lower case; its
+// 8.3 short name) is that folder: its store is the workspace's, writable, and a ref under it in the
+// disk's spelling is written as $KB_ROOT. Each spelling has a folder and a Manager of its own.
 func TestAServedRootSpelledAnotherWayIsTheSameFolder(t *testing.T) {
-	base := longDir(t)
-	kb := filepath.Join(base, "knowledge-base-folder") // long enough to be given an 8.3 short name
-	workspaceFolder(t, kb)
-	spellings := map[string]string{"a lower-case drive letter": strings.ToLower(kb[:1]) + kb[1:]}
-	if short := shortName(t, kb); short != "" {
-		spellings["its 8.3 short name"] = short
-	} else {
-		t.Logf("the volume keeps no 8.3 short name for %s: that spelling is not tried here", kb)
+	t.Run("a lower-case drive letter", func(t *testing.T) {
+		kb := filepath.Join(longDir(t), "knowledge-base-folder")
+		workspaceFolder(t, kb)
+		servedAs(t, kb, strings.ToLower(kb[:1])+kb[1:])
+	})
+	t.Run("its 8.3 short name", func(t *testing.T) {
+		// the runner gives its temporary folder by its short name (C:\Users\RUNNER~1\…): that spelling
+		// first, then the folder's own short name where the volume keeps one
+		raw := t.TempDir()
+		long, err := filepath.EvalSymlinks(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		kb := filepath.Join(long, "knowledge-base-folder") // long enough to be given an 8.3 short name
+		workspaceFolder(t, kb)
+		root := filepath.Join(raw, "knowledge-base-folder")
+		if !strings.Contains(root, "~") {
+			root = shortName(t, kb) // the temporary folder is not given short: the folder's own short name
+		}
+		if root == "" {
+			t.Skipf("this volume keeps no 8.3 short name: neither the temporary folder %s nor %s has one", raw, kb)
+		}
+		if !strings.Contains(root, "~") {
+			t.Fatalf("the short spelling %s of %s holds no 8.3 name", root, kb)
+		}
+		t.Logf("served as %s, the folder %s", root, kb)
+		servedAs(t, kb, root)
+	})
+}
+
+// servedAs serves the folder kb as the workspace root root, another spelling of it, and checks the
+// workspace's store is kb's, writable, and a ref under kb is written as $KB_ROOT.
+func servedAs(t *testing.T, kb, root string) {
+	t.Helper()
+	m := todo.New(todotest.Roots{"kb": root}, localDisk{}, todotest.NewJournal())
+	t.Cleanup(func() { m.Close() }) // before the directory is removed: Windows removes no directory held open
+	ws := todo.At{Workspace: "kb"}
+	if err := m.Claim(ctx, ws); err != nil {
+		t.Fatalf("claim with the root spelled %s: %v", root, err)
 	}
-	for what, root := range spellings {
-		t.Run(what, func(t *testing.T) {
-			m := todo.New(todotest.Roots{"kb": root}, localDisk{}, todotest.NewJournal())
-			t.Cleanup(func() { m.Close() })
-			ws := todo.At{Workspace: "kb"}
-			if err := m.Claim(ctx, ws); err != nil {
-				t.Fatalf("claim with the root spelled %s: %v", root, err)
-			}
-			r, err := m.Resolve(ctx, ws)
-			if err != nil || !r.Writable || r.Root != paths.Slash(kb) {
-				t.Errorf("the store with the root spelled %s: %+v, %v; want writable at %s", root, r, err, paths.Slash(kb))
-			}
-			task, err := m.Add(ctx, ws, todo.Spec{Title: "t", ADR: []string{filepath.Join(kb, "adrs", "x.md")}}, "")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(task.ADR) != 1 || task.ADR[0] != "$KB_ROOT/adrs/x.md" {
-				t.Errorf("with the root spelled %s, the adr %q: want $KB_ROOT/adrs/x.md", root, task.ADR)
-			}
-		})
+	r, err := m.Resolve(ctx, ws)
+	if err != nil || !r.Writable || r.Root != paths.Slash(kb) {
+		t.Errorf("the store with the root spelled %s: %+v, %v; want writable at %s", root, r, err, paths.Slash(kb))
+	}
+	task, err := m.Add(ctx, ws, todo.Spec{Title: "t", ADR: []string{filepath.Join(kb, "adrs", "x.md")}}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(task.ADR) != 1 || task.ADR[0] != "$KB_ROOT/adrs/x.md" {
+		t.Errorf("with the root spelled %s, the adr %q: want $KB_ROOT/adrs/x.md", root, task.ADR)
 	}
 }
