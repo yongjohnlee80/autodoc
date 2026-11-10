@@ -98,8 +98,8 @@ func (a *agents) State() map[string]any {
 		"App.agentTitle":          "agent",
 		"App.agentShown":          false,
 		"App.agentEdges":          feature.Choices(agentEdgeLabels...),
-		"App.agentSizes":          feature.Choices(percentLabels(termSizes)...),
-		"App.agentLengths":        feature.Choices(percentLabels(termLengths)...),
+		"App.agentSizes":          feature.Choices(feature.PercentLabels(feature.PanelSizes)...),
+		"App.agentLengths":        feature.Choices(feature.PercentLabels(feature.PanelLengths)...),
 		"App.agentProfiles":       a.agentRows,
 		"App.agentProfilesStatus": "",
 		"App.agentFormTitle":      "",
@@ -145,8 +145,8 @@ func agentPreferenceState(p feature.PrefsView) map[string]any {
 	size, length := p.PanelGeometry("agent", p.Value(prefAgentEdge))
 	maps.Copy(st, map[string]any{
 		"App.agentEdgeIndex":   indexOf(agentEdges, p.Value(prefAgentEdge)),
-		"App.agentSizeIndex":   nearest(termSizes, size),
-		"App.agentLengthIndex": nearest(termLengths, length),
+		"App.agentSizeIndex":   feature.Nearest(feature.PanelSizes, size),
+		"App.agentLengthIndex": feature.Nearest(feature.PanelLengths, length),
 	})
 	return st
 }
