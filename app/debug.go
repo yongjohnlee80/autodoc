@@ -50,7 +50,7 @@ func defaultDebugPath() string {
 // everything typed — and a path that already exists, a file or a symlink, is
 // refused: never truncated, never followed.
 func openDebugRecording(path string) (*os.File, *record.JSONLRecorder, error) {
-	f, err := userperm.CreatePrivate(path) // new, never an existing file or a link, and private on every OS
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600) // MUTANT: not a private create
 	if err != nil {
 		if errors.Is(err, os.ErrExist) {
 			return nil, nil, fmt.Errorf("the debug recording %s already exists: choose a new one, or omit =PATH for the timestamped default", path)
