@@ -298,6 +298,79 @@ func TestAMovedStoreStaysShown(t *testing.T) {
 	}
 }
 
+// movedRig is a store shown at /x, with a store at /0before listed first and a folder /a0 registered
+// that sorts before /x: moving /x's store into /a0 changes the root it is listed by.
+func movedRig(t *testing.T) (m *todo.Manager, core *featuretest.ScriptedCore, v *todos, x todo.Opened) {
+	t.Helper()
+	ctx := context.Background()
+	disk := todotest.NewDisk()
+	for _, d := range []string{"/0before", "/a0", "/x"} {
+		disk.MkdirAll(slashFile(d))
+	}
+	m = todo.New(todotest.Roots{}, disk, todotest.NewJournal())
+	t.Cleanup(func() { _ = m.Close() })
+	for _, root := range []string{"/0before", "/a0", "/x"} {
+		if _, err := m.Register(ctx, slashFile(root)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := m.Resolve(ctx, todo.At{Root: slashFile("/0before")}); err != nil {
+		t.Fatal(err)
+	}
+	x, err := m.Scaffold(ctx, todo.At{Root: slashFile("/x")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	core = managerCore(t, m)
+	v = newTodos(core)
+	v.list()
+	v.folderAs = "load"
+	v.folderChosen(taskFile("/x"))
+	if v.cur == nil || v.cur.sid != x.StoreID {
+		t.Fatalf("/x loaded: shown %+v; want its store %s (the rig's premise)", v.cur, x.StoreID)
+	}
+	return m, core, v, x
+}
+
+// The store shown, moved by another client so it is listed by another root, stays shown when the
+// stores are listed again: it is found by its id, nothing having been asked for.
+func TestAStoreMovedByAnotherClientStaysShown(t *testing.T) {
+	m, _, v, x := movedRig(t)
+	if _, err := m.MoveStore(context.Background(), todo.At{Root: slashFile("/x")}, slashFile("/a0")+"/.todo-list"); err != nil {
+		t.Fatal(err)
+	}
+	v.list()
+	if v.cur == nil || v.cur.sid != x.StoreID || v.cur.id != "root:"+slashFile("/a0") {
+		t.Errorf("after another client's move: shown %+v; want the store %s, listed as root:%s", v.cur, x.StoreID, slashFile("/a0"))
+	}
+}
+
+// The store shown, moved here and then not listed, is said so, and none is shown in its place.
+func TestAMovedStoreNotListedIsSaid(t *testing.T) {
+	_, core, v, x := movedRig(t)
+	stores := core.Answers["todos.stores"]
+	core.Answers["todos.stores"] = func(p []any) (any, error) { // the moved store left out of the listing
+		listed, err := stores(p)
+		var kept []any
+		for _, s := range feature.AsList(listed) {
+			if feature.Str(feature.AsMap(s), "id") != x.StoreID {
+				kept = append(kept, s)
+			}
+		}
+		return kept, err
+	}
+	v.folderAs = "move"
+	v.folderChosen(taskFile("/a0"))
+	if v.cur != nil {
+		t.Errorf("a moved store not listed: shown %+v; want none", v.cur)
+	}
+	if !slices.ContainsFunc(core.Notes, func(n string) bool {
+		return (strings.Contains(n, "todos_the_store_of_is_not_listed") || strings.Contains(n, "isn't listed")) && strings.Contains(n, "a0")
+	}) {
+		t.Errorf("a moved store not listed was not said: notes %q", core.Notes)
+	}
+}
+
 // A New whose scaffold fails asks for nothing: the next listing keeps the store shown, and says
 // nothing of a store not listed.
 func TestAFailedNewAsksForNothing(t *testing.T) {
