@@ -218,7 +218,7 @@ func TestTheGlobeMapsSettingsApplyAtOnce(t *testing.T) {
 	r.s.WaitForText(t, "kb · 2 documents, 1 links · every link") // opened again: the settings' choice
 
 	was := onLoop(r, func() color.NRGBA { return g.currentLook().pal.background })
-	onLoop(r, func() bool { core{r.h}.SetPref(prefTermTheme, "light"); return true })
+	onLoop(r, func() bool { core{r.h}.SetPref(feature.PrefTermTheme, "light"); return true })
 	if now := onLoop(r, func() color.NRGBA { return g.currentLook().pal.background }); now == was {
 		t.Error("the terminals' theme set alone left the GlobeMap in the old one")
 	}
