@@ -82,11 +82,6 @@ func TestProbeCallerArgs(t *testing.T) {
 			if p[1] == "" {
 				continue
 			}
-			c := exec.Command(p[1], "-NoLogo", "-NoProfile", "-Command", ps)
-			c.Env = []string{"PROBE_ARGS=" + string(j)}
-			cc := *c
-			cmd := &cc
-			cmd.Env = nil
 			cmd2 := exec.Command(p[1], "-NoLogo", "-NoProfile", "-Command", ps)
 			env2 := append(append([]string{}, env...), "PROBE_ARGS="+string(j), argvHelper+"=1")
 			cmd2.Env = env2
