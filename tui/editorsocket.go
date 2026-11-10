@@ -577,7 +577,7 @@ func (h *Host) writeAgentScript(path, src string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	f, err := newAgentFile(path)
 	if err != nil {
 		return &golibrpc.Error{Code: codeEditorRefused, Message: "not written: " + err.Error()}
 	}

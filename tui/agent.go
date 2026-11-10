@@ -589,6 +589,11 @@ func writeEditorCredential(dir, token string) (string, error) {
 	return path, nil
 }
 
+// newAgentFile makes a file an agent asked for (a command it offered, written at the user's Yes):
+// new, never replacing what is there (an error wrapping os.ErrExist), and private to this user from
+// its creation by the OS's rules (userperm).
+func newAgentFile(path string) (*os.File, error) { return userperm.CreatePrivate(path) }
+
 // agentPathDir is the folder first on the PATH of the agent working in dir (agentEnv):
 // <agentDir>/.bin/<the first 16 hex digits of dir's sha256>, a link to dir/bin (linkAgentPath). A crew
 // agent's folder holds the window's scope in its name (autodoc:<id>), and a PATH entry can't hold
