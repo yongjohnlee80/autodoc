@@ -439,8 +439,9 @@ In the code: `tui/globemap.go`, `tui/globemap_cells.go`, `tui/relationviews_cell
 ## Process stats
 
 AutoDoc reports what its own processes use. One package reads a process: resident and peak memory,
-CPU seconds so far, Go memory, goroutines and start time, using only the standard library; a size
-a platform cannot report is 0. The daemon serves its own as `sys.stats`, and the app answers
+CPU seconds so far, Go memory, goroutines and start time. Each OS's reading is its own file:
+getrusage on Linux and macOS, GetProcessTimes and the working set on Windows. A size a platform
+cannot report is 0. The daemon serves its own as `sys.stats`, and the app answers
 `autodoc.app.stats()` from the same package. CPU stays cumulative seconds; a reader takes a
 percentage between two samples.
 
