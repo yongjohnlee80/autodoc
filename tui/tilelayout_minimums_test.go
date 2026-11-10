@@ -101,7 +101,7 @@ func TestTheTerminalTiledAtItsLeastTakesTheKeyboard(t *testing.T) {
 // The agent's least: 27 columns at the right, its edge, and 6 rows at the bottom, SPC g each time.
 func TestTheAgentTiledAtItsLeastTakesTheKeyboard(t *testing.T) {
 	agent, _ := fakeAgentCopy(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuoteCopy(agent), Codename: "heron"}}, "heron")
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
 	spcG := func() { r.leader(t, 'g') }
 	atItsLeast(t, r, "agent", "right", 27, spcG)
 	closePanel(t, r, "agent")

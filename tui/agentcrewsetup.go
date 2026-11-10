@@ -97,9 +97,9 @@ func crewSetupArgs(config, kind, dir, bin string) []string {
 // askSetup runs kind's setup for the agent folder dir under environ off the loop, as the crew
 // host runs its calls (its registration's too), every start: its answer depends on the folder, the
 // profile's env, the program and the build, so none is kept for another start. then runs on the
-// loop with it. agents.setupRun replaces the run (a cell's).
+// loop with it. A test's seams may replace the run (agentSeams.SetupRun).
 func (a *agents) askSetup(kind, dir string, environ []string, then func(crew.Setup, error)) {
-	run := a.setupRun
+	run := a.seams.SetupRun()
 	if run == nil {
 		bin, config := a.agentBin(), a.agentConfig // read on the loop
 		run = func(kind, dir string, environ []string) (crew.Setup, error) {

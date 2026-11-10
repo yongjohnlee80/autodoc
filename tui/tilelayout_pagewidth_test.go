@@ -15,7 +15,7 @@ import (
 // page 143: the page keeps its width, and the agent takes the rest, beside it with no gap.
 func TestTheAgentTiledBesideThePageTakesWhatThePageLeaves(t *testing.T) {
 	agent, _ := fakeAgentCopy(t)
-	_, r, _ := runAgentTUIWith(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuoteCopy(agent), Codename: "heron"}}, "heron",
+	_, r, _ := runAgentTUIWith(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron",
 		map[string]string{layoutKey("agent"): layoutTiled, tileEdgeKey("agent"): "right"}, Options{})
 	r.s.Backend.InjectResize(220, 30)
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })

@@ -18,7 +18,7 @@ func elsewhereRig(t *testing.T) (*agents, *identityHostCopy, *crewWindow) {
 	a, c, w := messagingRig(t)
 	c.ws = wsInfo{id: 8, name: "other", root: t.TempDir()}
 	c.epoch++
-	if one := a.instances["one"]; one == nil || !one.running || one.workspace.Name != "kb" {
+	if one, ok := a.Snapshot().Instances["one"]; !ok || !one.Running || one.Workspace.Name != "kb" {
 		t.Fatalf("agent one isn't running in kb: %+v", one)
 	}
 	return a, c, w
