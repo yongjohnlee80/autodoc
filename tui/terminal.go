@@ -10,6 +10,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/internal/userdirs"
+	"github.com/yongjohnlee80/autodoc/internal/usershell"
 	"github.com/yongjohnlee80/golib/errs"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
@@ -37,17 +38,18 @@ func newTerminals(c PanelHost) *terminals {
 	return &terminals{c: c, restore: true}
 }
 
-// inOwnEnv is config to run in the program's environment when a test gave it one of its own: the
-// shell it names for a tab that names none, and its variables under the tab's own (golib's terminal
-// otherwise starts the process's $SHELL, with the process's environment under the tab's). In
-// AutoDoc's own (env nil), config is as it was.
+// inOwnEnv is config to run in the program's environment: a tab that names no program starts the
+// interactive shell (internal/usershell: $SHELL on Unix, PowerShell on Windows), and, when a test
+// gave the program an environment of its own, its variables go under the tab's own (golib's
+// terminal otherwise starts with the process's environment under the tab's).
 func (t *terminals) inOwnEnv(config TerminalConfig) TerminalConfig {
 	env := t.c.Env()
+	if config.Command == "" && config.Start == nil {
+		sh := usershell.Interactive(env)
+		config.Command, config.Args = sh[0], sh[1:]
+	}
 	if env == nil {
 		return config
-	}
-	if config.Command == "" && config.Start == nil {
-		config.Command = env.Get("SHELL")
 	}
 	config.Env = append(env.Environ(), config.Env...)
 	return config

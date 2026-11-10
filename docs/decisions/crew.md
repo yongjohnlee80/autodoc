@@ -31,7 +31,7 @@ In the code: `tui/agent.go`, `tui/agentprofiles.go`, `tui/agenttabs.go`, `agents
 
 A profile can carry an `env` map, set on its agent's process: for example, Claude Code on another
 account is `{"name": "Sephiroth", "command": "claude", "env": {"CLAUDE_CONFIG_DIR":
-"~/.claude-work"}}`. AutoDoc starts the agent's command with `/bin/sh -c`, which reads no shell
+"~/.claude-work"}}`. AutoDoc starts the agent's command with `/bin/sh -c` (on Windows, PowerShell's `-Command`: see `internal/usershell`), which reads no shell
 startup file, so a `.bashrc` alias never reaches it. A wrapper script would, but its name would
 be the agent's kind, so it would not get Claude's crew setup.
 
@@ -105,7 +105,7 @@ user alone, as the daemon's does; a pipe goes with the TUI, so there is nothing 
   needs the user (sudo, pkexec, an installer) never needs a pasted command or a passphrase given to
   the agent. It needs the `terminal` grant, and every call shows the user the exact
   line, the agent and the folder on a card: Run or Don't run. Nothing runs without that Run, and only
-  the line the card showed runs, as `sh -c` in a new tab of its own, in the root of the workspace in
+  the line the card showed runs, as `sh -c` (PowerShell's `-Command` on Windows) in a new tab of its own, in the root of the workspace in
   use, where the user types any passphrase. The call answers `{started, tab, exit_by_mail}` once the
   user has; Don't run, or a closed card, refuses it. Nothing of the tab is read back for the agent:
   when the command exits, its code reaches the agent as the user's mail, and the user is told when
