@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -74,6 +75,10 @@ func managerCore(t *testing.T, m *todo.Manager) *featuretest.ScriptedCore {
 	s.Answers["todos.scaffold"] = func(p []any) (any, error) {
 		o, err := m.Scaffold(ctx, atOf(p[0]))
 		return asSent(t, o), err
+	}
+	s.Answers["todos.move_store"] = func(p []any) (any, error) {
+		r, err := m.MoveStore(ctx, atOf(p[0]), p[1].(string))
+		return asSent(t, r), err
 	}
 	s.Answers["todos.list"] = func(p []any) (any, error) {
 		var buckets []string
@@ -220,6 +225,114 @@ func TestAStoreNotListedIsSaidAndNoOtherIsShownInItsPlace(t *testing.T) {
 		return (strings.Contains(n, "todos_the_store_of_is_not_listed") || strings.Contains(n, "isn't listed")) && strings.Contains(n, "gone")
 	}) {
 		t.Errorf("a store not listed was not said: notes %q", core.Notes)
+	}
+}
+
+// A store asked for and not listed, with none shown before, is said, and none is shown: never the
+// first listed in its place.
+func TestAStoreNotListedWithNoneShownShowsNone(t *testing.T) {
+	ctx := context.Background()
+	disk := todotest.NewDisk()
+	disk.MkdirAll(slashFile("/gone"))
+	m := todo.New(todotest.Roots{}, disk, todotest.NewJournal())
+	t.Cleanup(func() { _ = m.Close() })
+	core := managerCore(t, m)
+	resolve := core.Answers["todos.resolve"]
+	core.Answers["todos.resolve"] = func(p []any) (any, error) {
+		v, err := resolve(p)
+		if r, ok := v.(map[string]any); ok {
+			r["store_id"] = "not-listed"
+		}
+		return v, err
+	}
+	v := newTodos(core)
+	v.list()
+	if v.cur != nil {
+		t.Fatalf("shown before: %+v; want none (the cell's premise)", v.cur)
+	}
+	v.folderAs = "load"
+	v.folderChosen(taskFile("/gone")) // /gone's store is listed, by another id than the one asked for
+	if v.cur != nil {
+		t.Errorf("a store not listed, none shown before: shown %+v; want none", v.cur)
+	}
+	if !slices.ContainsFunc(core.Notes, func(n string) bool {
+		return (strings.Contains(n, "todos_the_store_of_is_not_listed") || strings.Contains(n, "isn't listed")) && strings.Contains(n, "gone")
+	}) {
+		t.Errorf("a store not listed was not said: notes %q", core.Notes)
+	}
+}
+
+// The store shown, moved into a folder already registered that sorts first, stays shown, by its id:
+// its listed root becomes that folder, so its place no longer matches the one shown before.
+func TestAMovedStoreStaysShown(t *testing.T) {
+	ctx := context.Background()
+	disk := todotest.NewDisk()
+	for _, d := range []string{"/0before", "/a0", "/x"} {
+		disk.MkdirAll(slashFile(d))
+	}
+	m := todo.New(todotest.Roots{}, disk, todotest.NewJournal())
+	t.Cleanup(func() { _ = m.Close() })
+	for _, root := range []string{"/0before", "/a0", "/x"} {
+		if _, err := m.Register(ctx, slashFile(root)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := m.Resolve(ctx, todo.At{Root: slashFile("/0before")}); err != nil { // listed first
+		t.Fatal(err)
+	}
+	x, err := m.Scaffold(ctx, todo.At{Root: slashFile("/x")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := newTodos(managerCore(t, m))
+	v.list()
+	v.folderAs = "load"
+	v.folderChosen(taskFile("/x"))
+	if v.cur == nil || v.cur.sid != x.StoreID {
+		t.Fatalf("/x loaded: shown %+v; want its store %s (the cell's premise)", v.cur, x.StoreID)
+	}
+	v.folderAs = "move"
+	v.folderChosen(taskFile("/a0"))
+	want := slashFile("/a0") + "/.todo-list"
+	if v.cur == nil || v.cur.sid != x.StoreID || v.cur.path != want || v.cur.id != "root:"+slashFile("/a0") {
+		t.Errorf("after the move: shown %+v; want the store %s at %s, listed as root:%s", v.cur, x.StoreID, want, slashFile("/a0"))
+	}
+}
+
+// A New whose scaffold fails asks for nothing: the next listing keeps the store shown, and says
+// nothing of a store not listed.
+func TestAFailedNewAsksForNothing(t *testing.T) {
+	ctx := context.Background()
+	disk := todotest.NewDisk()
+	for _, d := range []string{"/before", "/made"} {
+		disk.MkdirAll(slashFile(d))
+	}
+	m := todo.New(todotest.Roots{}, disk, todotest.NewJournal())
+	t.Cleanup(func() { _ = m.Close() })
+	if _, err := m.Register(ctx, slashFile("/before")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Resolve(ctx, todo.At{Root: slashFile("/before")}); err != nil {
+		t.Fatal(err)
+	}
+	core := managerCore(t, m)
+	core.Answers["todos.scaffold"] = func([]any) (any, error) { return nil, errors.New("the disk is full") }
+	v := newTodos(core)
+	v.list()
+	shown := v.cur
+	if shown == nil {
+		t.Fatal("nothing shown before (the cell's premise)")
+	}
+	v.folderAs = "new"
+	v.folderChosen(taskFile("/made"))
+	v.list()
+	if v.cur == nil || v.cur.id != shown.id {
+		t.Errorf("after a failed New and a listing: shown %+v; want the one shown before, %s", v.cur, shown.id)
+	}
+	if slices.ContainsFunc(core.Notes, func(n string) bool {
+		return strings.Contains(n, "todos_the_store_of_is_not_listed") || strings.Contains(n, "isn't listed")
+	}) {
+		t.Errorf("a failed New left a store asked for: notes %q", core.Notes)
 	}
 }
 
