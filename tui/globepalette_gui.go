@@ -75,8 +75,8 @@ const (
 )
 
 // legendRow is one row of a legend. A text in AutoDoc's words is a catalog message, msg with its
-// %1, %2 … filled by args: English until legendIn puts the rows in the UI's language. A group's
-// query is shown as written.
+// %1, %2 … filled by args: legendIn puts it in the UI's language, before the rows are drawn. A
+// group's query is shown as written.
 type legendRow struct {
 	mark func(c gui.Canvas, box gui.Rect)
 	text string
@@ -84,9 +84,9 @@ type legendRow struct {
 	args []any
 }
 
-// legendMsg is a row whose text is the catalog message id, filled with args: its English.
+// legendMsg is a row whose text is the catalog message id, filled with args; legendIn writes it.
 func legendMsg(mark func(gui.Canvas, gui.Rect), id string, args ...any) legendRow {
-	return legendRow{mark: mark, text: inEnglish{}.Trf(id, args...), msg: id, args: args}
+	return legendRow{mark: mark, msg: id, args: args}
 }
 
 // legendIn is rows in the UI's language, by trf (a Core's Trf): each catalog message's text again.

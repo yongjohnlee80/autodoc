@@ -253,7 +253,7 @@ func TestTheGlobeMapsLegendIsItsGroups(t *testing.T) {
 	gs := newRelGroups([]relGroup{{Query: "type:adr"}, {Query: "type:pr"}, {Query: "path:notes/"}, {Query: "#x"}})
 	texts := func(rows []legendRow) []string {
 		var out []string
-		for _, r := range rows {
+		for _, r := range legendIn(rows, inEnglish{}.Trf) {
 			out = append(out, r.text)
 		}
 		return out
@@ -271,7 +271,7 @@ func TestTheGlobeMapsLegendIsItsGroups(t *testing.T) {
 		}
 	}
 	g := &globeMap{groups: &gs, cur: &globe{m: m}}
-	rows := g.legend(l)
+	rows := legendIn(g.legend(l), inEnglish{}.Trf)
 	rc := gui.NewRecordingCanvas(gui.Size{W: 800, H: 600}, gui.Size{W: 8, H: 16})
 	globeOverlay{pal: l.pal, legend: rows}.paint(rc)
 	if n := countOps(rc, "DrawText"); n != len(rows) {
@@ -306,7 +306,7 @@ func TestTheMindmapsLegendIsItsGroups(t *testing.T) {
 	m := relMap{Nodes: []mapNode{{Type: "adr"}, {Type: "review"}}}
 	gs := newRelGroups([]relGroup{{Query: "type:adr", Colour: rgb(0xff0000), Shape: pm.MindDefault},
 		{Query: "type:review", Colour: rgb(0x0000ff), Shape: pm.MindHexagon}, {Query: "type:pr"}})
-	rows := mindLegend(th, &gs, m)
+	rows := legendIn(mindLegend(th, &gs, m), inEnglish{}.Trf)
 	var texts []string
 	for _, r := range rows {
 		texts = append(texts, r.text)
