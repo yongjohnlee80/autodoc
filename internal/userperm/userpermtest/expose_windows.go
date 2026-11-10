@@ -23,10 +23,13 @@ func ExposeNew(t testing.TB, dir string) {
 }
 
 // Unreadable makes path one this user may write but not read: a protected DACL granting this user
-// write access alone (and so its security read, with no data).
+// write access alone (and so its security read, with no data). A process that reads it all the same
+// (as a backup privilege may let userperm's open) has no such file, and the test is skipped
+// (unreadable).
 func Unreadable(t testing.TB, path string) {
 	t.Helper()
 	setDACL(t, path, "D:P(A;;FW;;;"+me(t)+")")
+	unreadable(t, path)
 }
 
 func me(t testing.TB) string {
