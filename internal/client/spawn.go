@@ -95,8 +95,8 @@ func privateLog(path string) error {
 		return r.Close()
 	case errors.Is(err, userperm.ErrInUse):
 		return nil
-	case !errors.Is(err, userperm.ErrExposed):
-		return err
+	case err != nil: // MUTANT: an exposed log left as it is
+		return nil
 	}
 	old, err := os.ReadFile(path)
 	if err != nil {
