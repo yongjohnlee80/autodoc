@@ -10,6 +10,7 @@ import (
 	"io"
 	"maps"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -79,7 +80,7 @@ func WithClock(now func() time.Time) Option { return func(o *options) { o.now = 
 func WithLogger(l logger.Logger) Option { return func(o *options) { o.log = l } }
 
 // WithHome sets $HOME and what a leading ~ in a ref means.
-func WithHome(home string) Option { return func(o *options) { o.home = home } }
+func WithHome(home string) Option { return func(o *options) { o.home = paths.Slash(home) } }
 
 // WithEnv sets where a $VAR that is neither built in nor the user's is looked up last.
 func WithEnv(env func(string) string) Option { return func(o *options) { o.env = env } }
@@ -134,6 +135,12 @@ func New(roots Roots, disk Filesystems, journal Journal, opts ...Option) *Manage
 	o := options{now: time.Now, log: logger.Nop{}, refreshCheck: time.Hour}
 	for _, opt := range opts {
 		opt(&o)
+	}
+	if roots != nil {
+		roots = slashRoots{roots} // a workspace's root in the form core/todo keeps (ospaths.go)
+	}
+	if disk != nil {
+		disk = slashDisk{disk} // the disk's canonical paths in that form too
 	}
 	m := &Manager{roots: roots, disk: disk, o: o, stores: map[string]*store{}, blocked: map[string]string{},
 		movesSettled: map[string]bool{}}
@@ -217,7 +224,7 @@ func (m *Manager) resolve(ctx context.Context, at At) (where, error) {
 			return w, fmt.Errorf("%w: %s", ErrNoWorkspace, at.Workspace)
 		}
 		raw, w.workspace = r, true
-	case !path.IsAbs(at.Root):
+	case !paths.IsAbs(at.Root):
 		return w, fmt.Errorf("%w: root %q is not an absolute path", ErrInvalid, at.Root)
 	}
 	fsys, canon, err := m.disk.Open(ctx, raw)
@@ -231,7 +238,7 @@ func (m *Manager) resolve(ctx context.Context, at At) (where, error) {
 	w.root = canon
 	if !w.workspace {
 		for _, name := range m.roots.Names() {
-			if r, ok := m.roots.Root(name); ok && (path.Clean(r) == canon || path.Clean(r) == path.Clean(raw)) {
+			if r, ok := m.roots.Root(name); ok && (r == canon || r == paths.Slash(raw)) {
 				w.workspace = true
 			}
 		}
@@ -297,7 +304,7 @@ func (m *Manager) Resolve(ctx context.Context, at At) (Resolved, error) {
 // Register enrolls a project root that is not an AutoDoc workspace, so its .todo-list is a
 // writable store. It writes no file, so it needs no claim. It reports whether the root was new.
 func (m *Manager) Register(ctx context.Context, root string) (bool, error) {
-	if !path.IsAbs(root) {
+	if !paths.IsAbs(root) {
 		return false, fmt.Errorf("%w: root %q is not an absolute path", ErrInvalid, root)
 	}
 	fsys, canon, err := m.disk.Open(ctx, root)
@@ -336,7 +343,7 @@ func (m *Manager) SetDir(ctx context.Context, at At, dir string) (Resolved, erro
 	}
 	canonDir := ""
 	if dir != "" {
-		if !path.IsAbs(dir) {
+		if !paths.IsAbs(dir) {
 			return Resolved{}, fmt.Errorf("%w: %q is not an absolute path", ErrInvalid, dir)
 		}
 		fsys, c, err := m.disk.Open(ctx, dir)
@@ -447,7 +454,8 @@ func (m *Manager) Claim(ctx context.Context, at At, opts ...ClaimOpts) error {
 		}
 		o.automatic = o.automatic || x.automatic
 	}
-	if o.LegacyWorkspace != "" && (!path.IsAbs(o.LegacyWorkspace) || path.Clean(o.LegacyWorkspace) != o.LegacyWorkspace) {
+	o.LegacyWorkspace = filepath.ToSlash(o.LegacyWorkspace) // in the form core/todo keeps, still to be found clean
+	if o.LegacyWorkspace != "" && (!paths.IsAbs(o.LegacyWorkspace) || path.Clean(o.LegacyWorkspace) != o.LegacyWorkspace) {
 		return fmt.Errorf("%w: legacy_workspace %q is not a clean absolute path", ErrInvalid, o.LegacyWorkspace)
 	}
 	w, err := m.resolve(ctx, at)

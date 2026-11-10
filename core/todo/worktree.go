@@ -3,6 +3,8 @@ package todo
 import (
 	"path"
 	"strings"
+
+	"github.com/yongjohnlee80/autodoc/core/paths"
 )
 
 // REFS INTO A GIT WORKTREE THAT IS GONE. Agents link a design doc from inside the feature worktree
@@ -29,7 +31,7 @@ var mainBranches = []string{"main", "master"}
 // in a removed worktree of one of the two layouts. ok is false otherwise, or when the main worktree has
 // no file at that path.
 func (s scope) movedFromWorktree(abs string) (string, bool) {
-	if s.exists == nil || s.read == nil || s.list == nil || !strings.HasPrefix(abs, "/") {
+	if s.exists == nil || s.read == nil || s.list == nil || !paths.IsAbs(abs) {
 		return "", false
 	}
 	abs = path.Clean(abs)
