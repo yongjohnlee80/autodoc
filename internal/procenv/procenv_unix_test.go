@@ -21,3 +21,12 @@ func writeProgram(t *testing.T, dir, name string, runnable bool) string {
 	}
 	return path
 }
+
+// On Unix a program's name is its file's whole base name: mise.sh is not mise, Claude not claude.
+func TestAProgramsNameIsItsWholeBaseNameOnUnix(t *testing.T) {
+	for file, want := range map[string]string{"claude": "claude", "/usr/bin/mise": "mise", "mise.sh": "mise.sh", "./bin/Claude": "Claude"} {
+		if got := ProgramName(nil, file); got != want {
+			t.Errorf("ProgramName(%q) = %q, want %q", file, got, want)
+		}
+	}
+}

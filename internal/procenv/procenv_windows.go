@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -129,3 +130,12 @@ func sameFile(a, b string) bool {
 
 // sameName is whether two variable names are one: equal but for case, as Windows compares them.
 func sameName(a, b string) bool { return strings.EqualFold(a, b) }
+
+// programName is base as Windows names a program: case-blind, less an extension PATHEXT names.
+func programName(e Env, base string) string {
+	base = strings.ToLower(base)
+	if ext := filepath.Ext(base); ext != "" && slices.Contains(pathExts(e), ext) {
+		return strings.TrimSuffix(base, ext)
+	}
+	return base
+}
