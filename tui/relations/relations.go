@@ -185,7 +185,7 @@ func (r *Related) State() map[string]any {
 func (r *Related) Commands() map[string]feature.Command {
 	return map[string]feature.Command{
 		"App.toggleRelations": feature.None(r.Toggle),
-		"App.relationsMoved":  feature.OneNumber("a row", r.Moved),
+		"App.relationsMoved":  feature.OneNumber("a row", r.moved),
 		"App.openRelation":    feature.OneNumber("a row", r.Open),
 		"App.relationsDepth":  feature.None(r.depth),
 	}
@@ -217,7 +217,7 @@ func (r *Related) Toggle() {
 }
 
 // moved is the drawer's cursor moving.
-func (r *Related) Moved(i int) { r.at = i }
+func (r *Related) moved(i int) { r.at = i }
 
 // ofPage reads the page's relations, or says why it has none.
 func (r *Related) ofPage() {
