@@ -13,6 +13,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/feature/featuretest"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
@@ -493,16 +494,16 @@ func TestALuaCardReplacedWaitsOnItsToast(t *testing.T) {
 }
 
 // handingCore is a scripted Core whose agents take every task handed to them.
-type handingCore struct{ *scriptedCore }
+type handingCore struct{ *featuretest.ScriptedCore }
 
 func (handingCore) HandTask(feature.AgentRef, feature.TaskRef, string, func(error)) error { return nil }
 
 // scriptedCandidate is a live plugin candidate over a real, pristine stage, its card shown counted,
 // on a scripted Core whose background answers wait until delivered and whose agents take tasks.
-func scriptedCandidate(t *testing.T) (*scriptedCore, *candidates, *candidate, *int) {
+func scriptedCandidate(t *testing.T) (*featuretest.ScriptedCore, *candidates, *candidate, *int) {
 	t.Helper()
 	s := newScripted("kb")
-	s.deferred = true
+	s.Deferred = true
 	cs := newCandidates(handingCore{s})
 	repo := pluginRepo(t, "Echo", "true")
 	c := &candidate{kind: "plugin", name: "echo", commit: runGit(t, repo, "rev-parse", "HEAD"), stage: repo, toasted: true}
@@ -550,7 +551,7 @@ func TestAnAuditCopyInFlightCannotBeClaimed(t *testing.T) {
 	if cs.auditing == c {
 		t.Fatal("another Audit started while the copy was made")
 	}
-	s.deliver(0)
+	s.Deliver(0)
 	if c.state != opSuspended || len(c.auditCopies) != 1 {
 		t.Fatalf("after the copy's answer: state %d, %d copies", c.state, len(c.auditCopies))
 	}
@@ -570,7 +571,7 @@ func TestAnAuditCopyAnsweredAfterItsCandidateEndedIsRemoved(t *testing.T) {
 	cs.auditing = c
 	cs.auditWith(feature.AgentEntry{})
 	cs.end(c, "cancelled")
-	s.deliver(0, 1) // the end's removal, then the copy's answer
+	s.Deliver(0, 1) // the end's removal, then the copy's answer
 	if copies, _ := filepath.Glob(filepath.Join(root, "autodoc-audit-*")); len(copies) != 0 || c.state != opEnded {
 		t.Fatalf("copies left %v, state %d", copies, c.state)
 	}

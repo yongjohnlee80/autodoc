@@ -127,9 +127,9 @@ func TestTodosAssignSendsNoPeerTaskFromAWindowWithoutACrew(t *testing.T) {
 	v := newTodos(ac)
 	v.list()
 	s, _ := v.cursor()
-	before := len(ac.notes)
+	before := len(ac.Notes)
 	v.sendToPeer(&todoAssign{store: s, agent: peer("jarvis", "autovim:plugins", "plugins", true, "")}, s, map[string]any{"id": "t1"}, "Go.")
-	if len(ac.notes) != before {
-		t.Errorf("a window without a crew noticed %v", ac.notes[before:])
+	if len(ac.Notes) != before {
+		t.Errorf("a window without a crew noticed %v", ac.Notes[before:])
 	}
 }

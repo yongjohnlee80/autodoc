@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/feature/featuretest"
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
@@ -17,7 +18,7 @@ import (
 // submitted and cancelled.
 type testPick struct {
 	*feature.Pick[string]
-	c                          *scriptedCore
+	c                          *featuretest.ScriptedCore
 	chosen, entered, submitted []string
 	cancelled, read            int
 }
@@ -45,7 +46,7 @@ func newTestPick() *testPick {
 }
 
 func (t *testPick) Shown() []string { return slices.Clone(t.List.All()) }
-func (t *testPick) title() any      { return t.c.set["App.testPreviewTitle"] }
+func (t *testPick) title() any      { return t.c.Sets["App.testPreviewTitle"] }
 
 // The filter keeps the items whose text holds it, case and the spaces around it aside, counts them
 // in the list's title, and previews the first; no match previews nothing.
@@ -55,24 +56,24 @@ func TestAPickFilters(t *testing.T) {
 	if got := p.Shown(); !slices.Equal(got, []string{"Notes/A.md", "notes/c.md"}) {
 		t.Fatalf("the filter kept %v", got)
 	}
-	if got := p.c.set["App.testStatus"]; got != "files (2 of 3)" {
+	if got := p.c.Sets["App.testStatus"]; got != "files (2 of 3)" {
 		t.Errorf("the list's title = %v", got)
 	}
-	if p.title() != "Notes/A.md" || p.c.set["App.testPreviewText"] != "text of Notes/A.md" || p.c.set["App.testPreviewAt"] != 3 {
-		t.Errorf("the first row previewed: %v %v %v", p.title(), p.c.set["App.testPreviewText"], p.c.set["App.testPreviewAt"])
+	if p.title() != "Notes/A.md" || p.c.Sets["App.testPreviewText"] != "text of Notes/A.md" || p.c.Sets["App.testPreviewAt"] != 3 {
+		t.Errorf("the first row previewed: %v %v %v", p.title(), p.c.Sets["App.testPreviewText"], p.c.Sets["App.testPreviewAt"])
 	}
 	if rows := p.List.Model().Len(); rows != 2 {
 		t.Errorf("the model shows %d rows, want 2", rows)
 	}
 	p.Filter("zzz")
-	if got := p.Shown(); len(got) != 0 || p.c.set["App.testStatus"] != "files (0 of 3)" || p.title() != "nothing" {
-		t.Errorf("no match: rows %v, title %v, preview %v", got, p.c.set["App.testStatus"], p.title())
+	if got := p.Shown(); len(got) != 0 || p.c.Sets["App.testStatus"] != "files (0 of 3)" || p.title() != "nothing" {
+		t.Errorf("no match: rows %v, title %v, preview %v", got, p.c.Sets["App.testStatus"], p.title())
 	}
 
 	// open empties the field, lists every item, and opens the dialog
 	p.Open()
-	if p.c.set["App.testField"] != "" || len(p.Shown()) != 3 || !slices.Equal(p.c.opened, []string{"testDialog"}) {
-		t.Errorf("open: field %q, rows %v, opened %v", p.c.set["App.testField"], p.Shown(), p.c.opened)
+	if p.c.Sets["App.testField"] != "" || len(p.Shown()) != 3 || !slices.Equal(p.c.Opened, []string{"testDialog"}) {
+		t.Errorf("open: field %q, rows %v, opened %v", p.c.Sets["App.testField"], p.Shown(), p.c.Opened)
 	}
 }
 
@@ -80,26 +81,26 @@ func TestAPickFilters(t *testing.T) {
 // dropped, and so is one still being read when the filter leaves no row or the picker closes.
 func TestAPickPreviewsTheLatestOnly(t *testing.T) {
 	p := newTestPick()
-	p.c.deferred = true
+	p.c.Deferred = true
 	p.Filter("") // asks for row 0
 	p.Move(2)    // then row 2
-	p.c.deliver(1, 0)
+	p.c.Deliver(1, 0)
 	if p.title() != "notes/c.md" {
 		t.Fatalf("after the later answer, then the earlier: the preview shows %v, want notes/c.md", p.title())
 	}
 
 	p.Move(1)       // b.md, still being read …
 	p.Filter("zzz") // … when nothing matches
-	p.c.deliver(0)
+	p.c.Deliver(0)
 	if p.title() != "nothing" {
 		t.Errorf("a preview read before the filter emptied the list replaced the empty one: %v", p.title())
 	}
 
 	p.Filter("")
-	p.c.deliver(0)
+	p.c.Deliver(0)
 	p.Move(1) // b.md, still being read …
 	p.Dismiss()
-	p.c.deliver(0)
+	p.c.Deliver(0)
 	if p.title() != "Notes/A.md" {
 		t.Errorf("a preview read before the picker closed was shown: %v", p.title())
 	}
@@ -116,8 +117,8 @@ func TestAPickIgnoresARowItDoesNotShow(t *testing.T) {
 		p.EnterRow(i)
 		p.Accept(i, "")
 	}
-	if p.read != 0 || len(p.chosen) != 0 || len(p.c.closed) != 0 {
-		t.Errorf("rows out of range: %d previews, chose %v, closed %v", p.read, p.chosen, p.c.closed)
+	if p.read != 0 || len(p.chosen) != 0 || len(p.c.Closed) != 0 {
+		t.Errorf("rows out of range: %d previews, chose %v, closed %v", p.read, p.chosen, p.c.Closed)
 	}
 }
 
@@ -129,8 +130,8 @@ func TestAPickChoosesAndCancels(t *testing.T) {
 	p.Filter("")
 	p.EnterRow(1)
 	p.Accept(2, "typed")
-	if !slices.Equal(p.chosen, []string{"b.md", "notes/c.md"}) || !slices.Equal(p.c.closed, []string{"testDialog", "testDialog"}) {
-		t.Fatalf("chose %v, closed %v", p.chosen, p.c.closed)
+	if !slices.Equal(p.chosen, []string{"b.md", "notes/c.md"}) || !slices.Equal(p.c.Closed, []string{"testDialog", "testDialog"}) {
+		t.Fatalf("chose %v, closed %v", p.chosen, p.c.Closed)
 	}
 	p.Dismiss()
 	if p.cancelled != 1 {
@@ -138,7 +139,7 @@ func TestAPickChoosesAndCancels(t *testing.T) {
 	}
 
 	// the draft's name: Enter on a row takes its folder, accept the path typed
-	p.chosen, p.c.closed = nil, nil
+	p.chosen, p.c.Closed = nil, nil
 	p.Enter = func(x string) { p.entered = append(p.entered, x) }
 	p.Submit = func(text string) { p.submitted = append(p.submitted, text) }
 	p.EnterRow(2)
@@ -146,8 +147,8 @@ func TestAPickChoosesAndCancels(t *testing.T) {
 	if !slices.Equal(p.entered, []string{"notes/c.md"}) || !slices.Equal(p.submitted, []string{"ideas/draft"}) {
 		t.Errorf("entered %v, submitted %v", p.entered, p.submitted)
 	}
-	if len(p.chosen) != 0 || len(p.c.closed) != 0 {
-		t.Errorf("Enter and accept chose %v and closed %v; the picker's own did", p.chosen, p.c.closed)
+	if len(p.chosen) != 0 || len(p.c.Closed) != 0 {
+		t.Errorf("Enter and accept chose %v and closed %v; the picker's own did", p.chosen, p.c.Closed)
 	}
 }
 
@@ -291,10 +292,10 @@ func TestAPickChosenDropsThePreviewInFlight(t *testing.T) {
 	} {
 		p := newTestPick()
 		p.Filter("")
-		p.c.deferred = true
+		p.c.Deferred = true
 		p.Move(1) // b.md, still being read …
 		choose(p) // … when the picker closes on a choice
-		p.c.deliver(0)
+		p.c.Deliver(0)
 		if p.title() != "Notes/A.md" {
 			t.Errorf("%s: a preview read before the choice was shown: %v", name, p.title())
 		}
