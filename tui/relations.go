@@ -225,7 +225,7 @@ func (r *related) ofPage() {
 	case ref.Path == "":
 		r.clear(r.c.Tr("autodoc.text.relations.title_links"))
 	case r.page.Outside:
-		r.clear(r.c.Trf("autodoc.text.relations.title_links_outside", outsideBadge)) // it is in no workspace's graph
+		r.clear(r.c.Trf("autodoc.text.relations.title_links_outside", feature.OutsideBadge)) // it is in no workspace's graph
 	default:
 		// another document's rows go at once: until this one's are read, the drawer has none
 		// rather than the last document's

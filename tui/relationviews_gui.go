@@ -22,11 +22,6 @@ import (
 // (relationmap.go), each a native view drawn over its cells. Their colours are the theme's, given
 // to the view as properties, so a theme switch (the document built again) recolours them.
 
-const (
-	globeMapPanelID, globeMapViewID = "globeMap", "globeMapView"
-	mindmapPanelID, mindmapViewID   = "mindmap", "mindmapView"
-)
-
 // relationMenuQML is the views' Relations menu items.
 const relationMenuQML = `            MenuItem { text: qsTrId("autodoc.gui.relations.globemap"); onTriggered: App.toggleGlobeMap() }
             MenuItem { text: qsTrId("autodoc.gui.relations.globemap_settings"); onTriggered: App.openGlobeSettings() }
