@@ -316,9 +316,20 @@ func withPath(err error, path string) error {
 	return refuse(path, whyUnknown)
 }
 
-// within reports whether p is root or below it, element by element, case-blind where the OS is:
-// both are real paths (candidate's), so the lexical comparison of paths.Within is the right one.
-func within(root, p string) bool { return paths.Within(paths.OS(root), paths.OS(p)) }
+// within reports whether p is root or below it. Both are real paths (candidate's, made canonical:
+// on Windows the disk's own case, long names, links and junctions resolved), so they are compared as
+// the disk names them, case and all. Folding case here would merge two folders that differ only by
+// it, which a case-sensitive directory on Windows, like most Unix file systems, can hold side by side.
+func within(root, p string) bool {
+	if p == root {
+		return true
+	}
+	sep := string(filepath.Separator)
+	if !strings.HasSuffix(root, sep) { // a drive's root (C:\) and "/" end in it already
+		root += sep
+	}
+	return strings.HasPrefix(p, root)
+}
 
 // canonical is realPath's answer for the walk's existing part, or errUnknown.
 func canonical(p string) (string, error) {

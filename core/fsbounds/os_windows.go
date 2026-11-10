@@ -39,12 +39,19 @@ func realPath(p string) (string, error) {
 		return "", err
 	}
 	defer windows.CloseHandle(h)
-	buf := make([]uint16, windows.MAX_LONG_PATH)
-	n, err := windows.GetFinalPathNameByHandle(h, &buf[0], uint32(len(buf)), volumeNameDOS)
-	if err != nil {
-		return "", err
+	buf := make([]uint16, windows.MAX_PATH)
+	for {
+		n, err := windows.GetFinalPathNameByHandle(h, &buf[0], uint32(len(buf)), volumeNameDOS)
+		if err != nil {
+			return "", err
+		}
+		if int(n) < len(buf) { // the path, without its terminating NUL
+			buf = buf[:n]
+			break
+		}
+		buf = make([]uint16, n) // too small: n is the size it needs, its NUL included
 	}
-	final := windows.UTF16ToString(buf[:n])
+	final := windows.UTF16ToString(buf)
 	if rest, ok := strings.CutPrefix(final, `\\?\UNC\`); ok {
 		return `\\` + rest, nil
 	}
