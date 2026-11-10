@@ -166,10 +166,10 @@ func (s scope) symbolize(p string) string {
 		abs := s.osAbs(s.expandHome(p))
 		var best *root
 		for i, r := range roots {
-			// compared as the scope's OS compares paths: on Windows without regard to case. A name
-			// written in its 8.3 short form (RUNNER~1) is another spelling, not compared as its long
-			// form: core/todo reads no disk to resolve it, so such a ref is kept as written.
-			if paths.UnderAbsFor(abs, r.value, s.windows) {
+			// exactly: the roots are canonical (canonRoots), the disk's own spelling, and a ref is
+			// compared byte for byte, never by case (a case-sensitive folder's KB is not its kb). A ref
+			// spelled otherwise (another case, an 8.3 short name) is under no root and kept as written.
+			if paths.Under(abs, r.value) {
 				if best == nil || len(r.value) > len(best.value) {
 					best = &roots[i]
 				}

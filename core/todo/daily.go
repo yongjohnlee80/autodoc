@@ -135,7 +135,7 @@ func (m *Manager) whereOf(ctx context.Context, st Settings, rec StoreRecord) (wh
 // store by the workspace's name, any other by its root.
 func (m *Manager) changedOf(w where) Event {
 	for _, name := range m.roots.Names() {
-		if r, ok := m.roots.Root(name); ok && paths.SameAbs(paths.Clean(r), w.root) {
+		if r, ok := m.roots.Root(name); ok && paths.Clean(r) == w.root {
 			return Event{Kind: "todos.changed", Workspace: name}
 		}
 	}

@@ -186,7 +186,7 @@ func (m *Manager) readVarsFile(ctx context.Context, dir string) (sv storeVars, o
 func (m *Manager) containing(dir string) string {
 	best := ""
 	for _, name := range m.roots.Names() {
-		if r, ok := m.roots.Root(name); ok && paths.UnderAbs(dir, paths.Clean(r)) && len(r) > len(best) {
+		if r, ok := m.roots.Root(name); ok && paths.Under(dir, paths.Clean(r)) && len(r) > len(best) {
 			best = paths.Clean(r)
 		}
 	}
@@ -196,7 +196,7 @@ func (m *Manager) containing(dir string) string {
 // nameOf is the name of the workspace whose root is root, "" for none.
 func (m *Manager) nameOf(root string) string {
 	for _, name := range m.roots.Names() {
-		if r, ok := m.roots.Root(name); ok && paths.SameAbs(paths.Clean(r), root) {
+		if r, ok := m.roots.Root(name); ok && paths.Clean(r) == root {
 			return name
 		}
 	}

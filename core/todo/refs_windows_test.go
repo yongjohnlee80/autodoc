@@ -48,19 +48,19 @@ func TestARefInWindowsOwnFormIsStoredInTheSlashForm(t *testing.T) {
 		t.Fatal(err)
 	}
 	x := filepath.Join(kb, "adrs", "x.md")
-	lower := strings.ToLower(x[:1]) + x[1:] // a drive letter in lower case, as some shells give it
+	lower := strings.ToLower(x[:1]) + x[1:] // another spelling of the drive: no proof of identity
 	task, err := m.Add(ctx, ws, todo.Spec{Title: "t", ADR: []string{x, lower}, Review: []string{share}}, "")
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
-	if len(task.ADR) != 2 || task.ADR[0] != "$KB_ROOT/adrs/x.md" || task.ADR[1] != "$KB_ROOT/adrs/x.md" {
-		t.Errorf("the adrs %q: want both $KB_ROOT/adrs/x.md, the lower-case drive's too", task.ADR)
+	if len(task.ADR) != 2 || task.ADR[0] != "$KB_ROOT/adrs/x.md" || task.ADR[1] != paths.Slash(lower) {
+		t.Errorf("the adrs %q: want $KB_ROOT/adrs/x.md, then the lower-case drive's kept absolute (%s)", task.ADR, paths.Slash(lower))
 	}
 	if len(task.Review) != 1 || task.Review[0] != paths.Slash(share) || !strings.HasPrefix(strings.ToLower(task.Review[0]), "//localhost/") {
 		t.Errorf("the review %q: want %q, the share kept", task.Review, paths.Slash(share))
 	}
 	for _, e := range task.Errors {
-		if strings.HasPrefix(e.Field, "adr[") {
+		if e.Field == "adr[0]" {
 			t.Errorf("the adr under the KB was not found: %+v", e)
 		}
 	}

@@ -136,11 +136,11 @@ func New(roots Roots, disk Filesystems, journal Journal, opts ...Option) *Manage
 	for _, opt := range opts {
 		opt(&o)
 	}
-	if roots != nil {
-		roots = slashRoots{roots} // a workspace's root in the form core/todo keeps (ospaths.go)
-	}
 	if disk != nil {
-		disk = slashDisk{disk} // the disk's canonical paths in that form too
+		disk = slashDisk{disk} // the disk's canonical paths in the form core/todo keeps (ospaths.go)
+	}
+	if roots != nil {
+		roots = canonRoots{Roots: roots, disk: disk} // each workspace's root as the disk resolves it
 	}
 	m := &Manager{roots: roots, disk: disk, o: o, stores: map[string]*store{}, blocked: map[string]string{},
 		movesSettled: map[string]bool{}}
@@ -258,7 +258,7 @@ func (m *Manager) resolve(ctx context.Context, at At) (where, error) {
 	w.root = canon
 	if !w.workspace {
 		for _, name := range m.roots.Names() {
-			if r, ok := m.roots.Root(name); ok && (paths.SameAbs(r, canon) || paths.SameAbs(r, paths.Slash(raw))) {
+			if r, ok := m.roots.Root(name); ok && (r == canon || r == paths.Slash(raw)) {
 				w.workspace = true
 			}
 		}
