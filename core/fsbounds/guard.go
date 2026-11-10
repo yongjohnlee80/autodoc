@@ -10,6 +10,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/yongjohnlee80/golib/paths"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -102,7 +103,20 @@ func (g *Guard) check(ws Root, name string, b Bounds, o op) error {
 	if err != nil || len(tail) > 0 {
 		return refuse(shown, whyUnknown) // a root that does not resolve whole serves no bounded call
 	}
-	abs := filepath.Join(ws.Dir, filepath.FromSlash(name)) // name is a valid vfs path: no "..", no root
+	// name is a valid vfs path (no "..", no root); paths.Under also refuses, on Windows, a name it
+	// would read as another: a stream (a:b), a device (CON), a trailing dot or space, a short name
+	l, err := paths.ParseLogical(name)
+	if err != nil {
+		return refuse(shown, whyUnknown)
+	}
+	under, err := paths.Under(paths.OS(ws.Dir), l)
+	if errors.Is(err, paths.ErrRefused) {
+		return refuse(shown, whyName)
+	}
+	if err != nil {
+		return refuse(shown, whyUnknown)
+	}
+	abs := string(under)
 	existing, tail, err := candidate(abs)
 	if err != nil {
 		return withPath(err, shown)
@@ -131,7 +145,7 @@ func (g *Guard) check(ws Root, name string, b Bounds, o op) error {
 		if err != nil {
 			return refuse(shown, whyUnknown)
 		}
-		if fi.Mode().IsRegular() && links(fi) > 1 {
+		if fi.Mode().IsRegular() && links(full, fi) > 1 {
 			return refuse(shown, whyLinked)
 		}
 	}
@@ -252,8 +266,16 @@ func foldedPrefix(tail, prefix []string) bool {
 // missing only when the disk says so (ENOENT, ENOTDIR); a link that leads nowhere, a folder without
 // search permission or any other error refuses.
 func candidate(p string) (existing string, tail []string, err error) {
-	comps := strings.Split(strings.TrimPrefix(p, string(filepath.Separator)), string(filepath.Separator))
-	cur := string(filepath.Separator)
+	// from the volume's root: "/" on Unix, "C:\" or "\\server\share\" on Windows
+	vol := filepath.VolumeName(p)
+	sep := string(filepath.Separator)
+	comps := strings.Split(strings.TrimPrefix(p[len(vol):], sep), sep)
+	cur := vol + sep
+	defer func() {
+		if err == nil {
+			existing, err = canonical(existing)
+		}
+	}()
 	for i, c := range comps {
 		if c == "" {
 			continue
@@ -265,8 +287,8 @@ func candidate(p string) (existing string, tail []string, err error) {
 			return cur, comps[i:], nil
 		case err != nil:
 			return "", nil, errUnknown
-		case fi.Mode()&fs.ModeSymlink != 0:
-			r, err := filepath.EvalSymlinks(next)
+		case isLink(fi):
+			r, err := resolve(next)
 			if errors.Is(err, fs.ErrNotExist) {
 				return "", nil, errDangling
 			}
@@ -294,9 +316,17 @@ func withPath(err error, path string) error {
 	return refuse(path, whyUnknown)
 }
 
-// within reports whether p is root or below it.
-func within(root, p string) bool {
-	return p == root || strings.HasPrefix(p, root+string(filepath.Separator)) || root == string(filepath.Separator)
+// within reports whether p is root or below it, element by element, case-blind where the OS is:
+// both are real paths (candidate's), so the lexical comparison of paths.Within is the right one.
+func within(root, p string) bool { return paths.Within(paths.OS(root), paths.OS(p)) }
+
+// canonical is realPath's answer for the walk's existing part, or errUnknown.
+func canonical(p string) (string, error) {
+	r, err := realPath(p)
+	if err != nil {
+		return "", errUnknown
+	}
+	return r, nil
 }
 
 // CheckRead is the check a bounded read of name in ws gets: nil when b lets it through. file.locate

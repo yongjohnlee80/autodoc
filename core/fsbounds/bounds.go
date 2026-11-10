@@ -68,6 +68,7 @@ const (
 	whyHidden   = "is hidden"
 	whyOwn      = "is AutoDoc's own"
 	whyLinked   = "has another name (a second hard link)"
+	whyName     = "is a name Windows reads as another (a stream, a device, a trailing dot or space)"
 	whyFolder   = "is a folder: a script may move, copy or remove files, not folders"
 	whyDangling = "goes through a link that leads nowhere"
 	whyUnknown  = "cannot be resolved"
