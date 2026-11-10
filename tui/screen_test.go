@@ -33,6 +33,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/searchsetup"
 )
 
 // THE WRITING SCREEN — the page alone until asked for more, centred at the ruler; the panels as
@@ -633,7 +634,7 @@ func TestTheProviderForm(t *testing.T) {
 	// list is read again after the save's notice, so wait for its row: "cloud" is on the screen
 	// already (the notice, the name typed), and editing row 0 of a list not yet read does nothing.
 	r.s.WaitFor(t, "cloud listed, its key sealed", func(string) bool {
-		return onLoop(r, func() bool { p, ok := r.h.ai.providers.at(0); return ok && p.name == "cloud" && p.hasKey })
+		return onLoop(r, func() bool { p, ok := r.h.ai.Providers.At(0); return ok && p.Name == "cloud" && p.HasKey })
 	})
 	r.app(t, "App.startEditProvider", num(0))
 	r.s.WaitForText(t, "API key (sealed; leave empty to keep it)")
@@ -1069,7 +1070,7 @@ func TestAProviderInUse(t *testing.T) {
 		text := strings.Join(strings.Fields(strings.ReplaceAll(sc, "│", " ")), " ")
 		return strings.Contains(text, "missing not used: the provider has no such model")
 	})
-	if got := onLoop(r, func() string { return r.h.ai.providers.active }); got != "local" {
+	if got := onLoop(r, func() string { return r.h.ai.Providers.Active }); got != "local" {
 		t.Fatalf("after a refused Use the provider in use is %q", got)
 	}
 
@@ -1774,14 +1775,14 @@ func TestRemovingAProviderSaysWhatItDeletes(t *testing.T) {
 	// ask opens the removal's question for name, once the list holds listed too
 	ask := func(name, listed string) {
 		t.Helper()
-		onLoop(r, func() bool { r.h.ai.reloadProviders(); return true })
+		onLoop(r, func() bool { r.h.ai.ReloadProviders(); return true })
 		r.s.WaitFor(t, "the providers listed", func(string) bool {
 			return onLoop(r, func() bool {
-				return slices.ContainsFunc(r.h.ai.providers.rows.All(), func(p endpointRow) bool { return p.name == listed })
+				return slices.ContainsFunc(r.h.ai.Providers.Rows.All(), func(p searchsetup.EndpointRow) bool { return p.Name == listed })
 			})
 		})
 		if err := onLoop(r, func() error { // the row and its removal in one turn, as a click is
-			i := slices.IndexFunc(r.h.ai.providers.rows.All(), func(p endpointRow) bool { return p.name == name })
+			i := slices.IndexFunc(r.h.ai.Providers.Rows.All(), func(p searchsetup.EndpointRow) bool { return p.Name == name })
 			return r.h.reg.Handlers["App.startRemoveProvider"]([]qml.SpecValue{num(i)})
 		}); err != nil {
 			t.Fatal(err)

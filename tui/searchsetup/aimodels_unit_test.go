@@ -1,12 +1,13 @@
-package tui
+package searchsetup
 
 import (
 	"errors"
-	"github.com/yongjohnlee80/autodoc/tui/feature"
-	"github.com/yongjohnlee80/autodoc/tui/feature/featuretest"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/feature/featuretest"
 )
 
 // endpointCase is one of the AI models' lists, built over a scripted core.
@@ -38,7 +39,7 @@ func TestEndpointDetailsReportUsageAndLogFailures(t *testing.T) {
 			t.Run(endpoint.name+"/"+stage, func(t *testing.T) {
 				c := newScripted("kb")
 				e := endpoint.make(c)
-				e.rows.Reset([]endpointRow{{name: "a", kind: e.spec.kinds[0].kind}})
+				e.Rows.Reset([]EndpointRow{{Name: "a", kind: e.spec.kinds[0].kind}})
 				c.Answers[e.spec.verb+"."+stage] = func([]any) (any, error) {
 					return nil, errors.New(stage + " unavailable")
 				}
@@ -70,10 +71,10 @@ func TestTheEndpointsCoreServesBothLists(t *testing.T) {
 			noun, changed := e.spec.noun, "search.changed ranker="+map[bool]string{true: "true", false: "false"}[e.spec.ranker]
 
 			e.load()
-			if e.rows.Len() != 2 || e.active != "a" || !strings.Contains(c.Sets[e.src("sStatus")].(string), "a") {
-				t.Fatalf("listed %d, in use %q, status %q", e.rows.Len(), e.active, c.Sets[e.src("sStatus")])
+			if e.Rows.Len() != 2 || e.Active != "a" || !strings.Contains(c.Sets[e.src("sStatus")].(string), "a") {
+				t.Fatalf("listed %d, in use %q, status %q", e.Rows.Len(), e.Active, c.Sets[e.src("sStatus")])
 			}
-			if row := e.rowOf(0, e.rows.All()[0]); row["use"] != "●" || row["apiKey"] != "sealed" || row["kind"] != e.spec.kinds[1].label {
+			if row := e.rowOf(0, e.Rows.All()[0]); row["use"] != "●" || row["apiKey"] != "sealed" || row["kind"] != e.spec.kinds[1].label {
 				t.Fatalf("a's row %v", row)
 			}
 			if !c.Called(e.spec.verb + ".usage[a") {
@@ -210,7 +211,7 @@ func TestAProvidersWindowIsBounded(t *testing.T) {
 // Window… do nothing, and the dialog's buttons say so on the rankers' tab.
 func TestASuppliedRankerCannotBeChosen(t *testing.T) {
 	c := newScripted("kb")
-	a := newAIModels(c)
+	a := NewAIModels(c)
 	c.Answers["ranker.list"] = func([]any) (any, error) {
 		return map[string]any{"rankers": []any{map[string]any{"name": "r", "kind": "tei"}}, "supplied": "build-ranker", "window": int64(10)}, nil
 	}
@@ -231,14 +232,14 @@ func TestASuppliedRankerCannotBeChosen(t *testing.T) {
 // on the rankers' the row under the rankers' cursor.
 func TestTheSharedButtonsActOnTheTabShowing(t *testing.T) {
 	c := newScripted("kb")
-	a := newAIModels(c)
-	scriptedList(c, a.providers.endpoints)
+	a := NewAIModels(c)
+	scriptedList(c, a.Providers.endpoints)
 	scriptedList(c, a.rankers.endpoints)
-	a.providers.load()
+	a.Providers.load()
 	a.rankers.load()
 	a.edit(1)
-	if a.providers.editing != "b" {
-		t.Fatalf("Edit… on the providers' tab edits %q, want the row passed, b", a.providers.editing)
+	if a.Providers.editing != "b" {
+		t.Fatalf("Edit… on the providers' tab edits %q, want the row passed, b", a.Providers.editing)
 	}
 	a.tabMoved(rankerTab)
 	a.rankers.cursor = 0
