@@ -160,7 +160,7 @@ func TestFileVerbsOnAServerWithoutFiles(t *testing.T) {
 			t.Errorf("%s without files: %v, want unsupported", c[0], err)
 		}
 	}
-	if got := call(t, cli, "file.locate", "/roots/kb/a.md"); !reflect.DeepEqual(got, map[string]any{"workspace": "kb", "path": "a.md"}) {
+	if got := call(t, cli, "file.locate", filepath.Join(r.roots, "kb", "a.md")); !reflect.DeepEqual(got, map[string]any{"workspace": "kb", "path": "a.md"}) {
 		t.Errorf("file.locate without files = %v", got)
 	}
 }

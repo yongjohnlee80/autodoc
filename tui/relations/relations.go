@@ -1,4 +1,4 @@
-package tui
+package relations
 
 import (
 	"context"
@@ -158,7 +158,7 @@ func relationRowOf(i int, r relRow) feature.RowOf {
 }
 
 // related is the Links drawer (Relations › Links): the shown page's relations, as rows.
-type related struct {
+type Related struct {
 	c    feature.Core
 	rows *feature.Rows[relRow]
 	page feature.Page    // the page shown
@@ -168,13 +168,13 @@ type related struct {
 	seq  uint64          // numbers the reads: only the latest is shown, and a clear drops any in flight
 }
 
-func newRelated(c feature.Core) *related {
-	return &related{c: c, rows: feature.NewRows(tuidecl.NewListModel("key", "label"), relationRowOf)}
+func NewRelated(c feature.Core) *Related {
+	return &Related{c: c, rows: feature.NewRows(tuidecl.NewListModel("key", "label"), relationRowOf)}
 }
 
-func (*related) Name() string { return "relations" }
+func (*Related) Name() string { return "relations" }
 
-func (r *related) State() map[string]any {
+func (r *Related) State() map[string]any {
 	return map[string]any{
 		"App.relations":      r.rows.Model(),
 		"App.relationsTitle": r.c.Tr("autodoc.text.relations.title_links"),
@@ -182,62 +182,62 @@ func (r *related) State() map[string]any {
 	}
 }
 
-func (r *related) Commands() map[string]feature.Command {
+func (r *Related) Commands() map[string]feature.Command {
 	return map[string]feature.Command{
-		"App.toggleRelations": feature.None(r.toggle),
+		"App.toggleRelations": feature.None(r.Toggle),
 		"App.relationsMoved":  feature.OneNumber("a row", r.moved),
-		"App.openRelation":    feature.OneNumber("a row", r.open),
+		"App.openRelation":    feature.OneNumber("a row", r.Open),
 		"App.relationsDepth":  feature.None(r.depth),
 	}
 }
 
 // Catalog is the drawer's user command (feature/catalog.go).
-func (r *related) Catalog() []feature.Entry {
+func (r *Related) Catalog() []feature.Entry {
 	return []feature.Entry{
-		feature.Builtin("links.toggle", "the links", "App.toggleRelations()", r.toggle),
+		feature.Builtin("links.toggle", "the links", "App.toggleRelations()", r.Toggle),
 	}
 }
 
 // Shown reads the relations of the page shown. The rest of the page's lifecycle changes none:
 // a page's links are the ones indexed, read when it is shown or the drawer opens.
-func (r *related) Shown(p feature.Page) {
+func (r *Related) Shown(p feature.Page) {
 	r.page = p
 	r.ofPage()
 }
-func (*related) Edited(feature.Page) {}
-func (*related) Moved(int, int)      {}
-func (*related) Reread(feature.Page) {}
-func (*related) Closed()             {}
+func (*Related) Edited(feature.Page) {}
+func (*Related) Moved(int, int)      {}
+func (*Related) Reread(feature.Page) {}
+func (*Related) Closed()             {}
 
 // toggle is SPC l: the explorer's drawer opened on its Links tab, or switched to it, or closed when
 // it shows it already (panels.go: togglePanelTab). Showing the tab reads the relations again.
-func (r *related) toggle() {
+func (r *Related) Toggle() {
 	r.ofPage()
 	r.c.TogglePanelTab(feature.ExplorerPanelSpec().ID, feature.ExplorerLinksTab)
 }
 
 // moved is the drawer's cursor moving.
-func (r *related) moved(i int) { r.at = i }
+func (r *Related) moved(i int) { r.at = i }
 
 // ofPage reads the page's relations, or says why it has none.
-func (r *related) ofPage() {
+func (r *Related) ofPage() {
 	switch ref := r.page.Ref; {
 	case ref.Path == "":
 		r.clear(r.c.Tr("autodoc.text.relations.title_links"))
 	case r.page.Outside:
-		r.clear(r.c.Trf("autodoc.text.relations.title_links_outside", outsideBadge)) // it is in no workspace's graph
+		r.clear(r.c.Trf("autodoc.text.relations.title_links_outside", feature.OutsideBadge)) // it is in no workspace's graph
 	default:
 		// another document's rows go at once: until this one's are read, the drawer has none
 		// rather than the last document's
 		if r.of != ref {
 			r.clear(r.c.Tr("autodoc.text.relations.title_links_reading"))
 		}
-		r.load(ref.WS, ref.Path)
+		r.Load(ref.WS, ref.Path)
 	}
 }
 
 // clear empties the drawer, saying why; a read still in flight is of rows it no longer shows.
-func (r *related) clear(why string) {
+func (r *Related) clear(why string) {
 	r.seq++
 	r.of = feature.FileRef{}
 	r.rows.Reset(nil)
@@ -245,7 +245,7 @@ func (r *related) clear(why string) {
 }
 
 // load reads the relations of p in workspace ws and shows them in the drawer.
-func (r *related) load(ws, p string) {
+func (r *Related) Load(ws, p string) {
 	tk, deep := r.c.Ticket(&r.seq, feature.TicketFile), r.deep
 	r.c.Go(func(ctx context.Context) any {
 		var rl relations
@@ -320,7 +320,7 @@ func (r *related) load(ws, p string) {
 // show lays out the drawer's rows: each section with what it holds, its count in its heading;
 // under each document, at depth 2, the ones it links with that are not a neighbour; then the
 // unresolved relations and cycles.
-func (r *related) show(ws, p string, rl relations) {
+func (r *Related) show(ws, p string, rl relations) {
 	rows, neighbours := relationRows(r.c, ws, p, rl)
 	// the same document's rows read again (SPC l reads them again while the drawer may show them
 	// already, and the cursor may have moved since): the cursor stays on its row, when it is still
@@ -346,24 +346,24 @@ func (r *related) show(ws, p string, rl relations) {
 
 // LanguageChanged composes the drawer again in the UI's language: its title and its rows, read
 // again for the page shown.
-func (r *related) LanguageChanged() { r.ofPage() }
+func (r *Related) LanguageChanged() { r.ofPage() }
 
 // moveTo puts the drawer's cursor on row i.
-func (r *related) moveTo(i int) {
+func (r *Related) moveTo(i int) {
 	r.c.Set("App.relationsIndex", -1) // moved away first: the same row twice still reaches the view
 	r.c.Set("App.relationsIndex", i)
 	r.at = i
 }
 
 // FindPane is the drawer's rows for find, as it shows them.
-func (r *related) FindPane() feature.FindPane {
+func (r *Related) FindPane() feature.FindPane {
 	return feature.FindPane{Name: "links", View: feature.RelationsView, Scope: "links", Rows: func() ([]string, int, func(int, int) error) {
 		return r.labels(), r.at, func(row, _ int) error { r.moveTo(row); return nil }
 	}}
 }
 
 // labels are the drawer's rows as it shows them.
-func (r *related) labels() []string {
+func (r *Related) labels() []string {
 	var out []string
 	for _, row := range r.rows.All() {
 		out = append(out, row.label)
@@ -374,7 +374,7 @@ func (r *related) labels() []string {
 // open opens the Links tab's row i in the editor, the explorer's drawer hidden first, not closed, as
 // the GlobeMap is: the dock shows it again, on this tab
 // (docs/decisions/editor.md#dock-clicks-hide-and-show).
-func (r *related) open(i int) {
+func (r *Related) Open(i int) {
 	row, ok := r.rows.At(i)
 	if !ok || row.external == "" && row.path == "" {
 		return // a heading, or a relation that names nothing: the drawer stays
@@ -389,7 +389,7 @@ func (r *related) open(i int) {
 }
 
 // depth is d: the drawer shows the second ring, or no longer does. Only the drawer answers it.
-func (r *related) depth() {
+func (r *Related) depth() {
 	if !r.c.HasFocus(feature.RelationsView) {
 		return
 	}

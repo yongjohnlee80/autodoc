@@ -4,6 +4,7 @@ package tui
 
 import (
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/relations"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
@@ -11,52 +12,27 @@ import (
 // (globemap_cells.go, mindmap_cells.go, relationviews_cells.go), beside Relations › Links
 // (relationmap.go).
 
-const (
-	globeMapPanelID, globeMapViewID = "globeMap", "globeMapView"
-	mindmapPanelID, mindmapViewID   = "mindmap", "mindmapView"
-)
-
 // relationMenuQML and relationViewsQML are the window's: a build without the GUI has none, and
 // writes the terminal's (relationviews_cells.go).
 const relationMenuQML, relationViewsQML = "", ""
 
+// relationViewFeatures are the terminal's GlobeMap and Mindmap, in cells, made once.
 func (h *Host) relationViewFeatures() []feature.Feature {
 	if h.relationViews == nil {
-		h.relationViews = cellRelationViews(h)
+		h.relationViews = relations.CellViews(core{h}, core{h}, h.graphUserFile, h.seams.globeMapPage)
 	}
 	return h.relationViews
-}
-
-// relationViewChoices are the GlobeMap's and the Mindmap's settings' choosers (language.go's
-// choiceLabels).
-func relationViewChoices() map[string][]string {
-	out := mindChoices()
-	out["App.globeFilters"] = globeFilterNames()
-	return out
 }
 
 // openGlobeSettings is App.openGlobeSettings, which Preferences.qml names in every build: the
 // GlobeMap's settings, the terminal's.
 func (h *Host) openGlobeSettings() {
-	for _, f := range h.relationViewFeatures() {
-		if g, ok := f.(*cellGlobeMap); ok {
-			g.openSettings()
-			return
-		}
+	if !relations.OpenGlobeSettings(h.relationViewFeatures()) {
+		h.notify(h.globeSettingsElsewhereNotice())
 	}
-	h.notify(h.globeSettingsElsewhereNotice())
 }
 
 // relationViewTypes are their views' QML types: the Mindmap's view joins its feature.
 func (h *Host) relationViewTypes() []tuidecl.Type {
-	var out []tuidecl.Type
-	for _, f := range h.relationViewFeatures() {
-		switch f := f.(type) {
-		case *cellGlobeMap:
-			out = append(out, f.viewType())
-		case *cellMindmap:
-			out = append(out, f.viewType())
-		}
-	}
-	return out
+	return relations.ViewTypes(h.relationViewFeatures())
 }

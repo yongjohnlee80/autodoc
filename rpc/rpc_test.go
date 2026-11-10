@@ -42,6 +42,7 @@ func (c committing) WriteFileIf(ctx context.Context, name string, r io.Reader, w
 
 type rig struct {
 	t      *testing.T
+	roots  string // the folder the workspaces' roots are named in: absolute on any OS, never made
 	sock   string
 	srv    *Server
 	fsys   *memfs.FS
@@ -71,27 +72,27 @@ func serve(t *testing.T) *rig {
 func serveWith(t *testing.T, opts ...Option) *rig {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
-	r := &rig{t: t, fsys: memfs.New(), cancel: cancel, done: make(chan error, 1)}
+	r := &rig{t: t, roots: filepath.Join(t.TempDir(), "roots"), fsys: memfs.New(), cancel: cancel, done: make(chan error, 1)}
 	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "autodoc.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	open := func(name string, fsys vfs.FS) Workspace {
-		row, err := db.AddWorkspace(ctx, name, "/roots/"+name, nil, nil)
+		row, err := db.AddWorkspace(ctx, name, filepath.Join(r.roots, name), nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 		ix := index.New(index.NewStore(db, row.ID), fsys, index.WithMatch(md), index.WithBatching(0, 5*time.Millisecond),
-			index.WithModes(rigModes), index.WithRoot("/roots/"+name))
+			index.WithModes(rigModes), index.WithRoot(filepath.Join(r.roots, name)))
 		f := follow.New(fsys, ix, ix, follow.WithMatch(md), follow.WithPollInterval(20*time.Millisecond))
 		ix.SetRescanner(f)
 		r.cores.Go(func() { _ = ix.Run(ctx) })
 		r.cores.Go(func() { _ = f.Run(ctx) })
-		return Static(WorkspaceInfo{Name: name, Root: "/roots/" + name, Index: ix, Docs: docs.New(fsys, md), Following: f.Status})
+		return Static(WorkspaceInfo{Name: name, Root: filepath.Join(r.roots, name), Index: ix, Docs: docs.New(fsys, md), Following: f.Status})
 	}
 	ws := []Workspace{open("kb", r.fsys), open("flaky", committing{memfs.New()}),
-		Static(WorkspaceInfo{Name: "broken", Root: "/roots/broken", Err: fmt.Errorf("workspace %q: %w", "broken", workspace.ErrNotADirectory)})}
+		Static(WorkspaceInfo{Name: "broken", Root: filepath.Join(r.roots, "broken"), Err: fmt.Errorf("workspace %q: %w", "broken", workspace.ErrNotADirectory)})}
 	r.sock = shortSocket(t) // macOS bounds a socket's path at 104 bytes; a test's TempDir can pass it
 	ln, err := ipc.Listen(r.sock, func(error) {})
 	if err != nil {

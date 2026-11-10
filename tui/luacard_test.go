@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	tuivegalite "github.com/yongjohnlee80/golib/tui/vegalite"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
@@ -289,7 +290,7 @@ func TestUsageShowsTablesAndChartsWhereDrawn(t *testing.T) {
 	}
 	r.s.WaitFor(t, "the charts in a terminal", func(string) bool { return strings.Count(text(), "```vega-lite") == 2 })
 	for _, spec := range vegaFences(text()) {
-		if _, err := tuivegalite.Lay(context.Background(), spec, cellMeasure{}, 60); err != nil {
+		if _, err := tuivegalite.Lay(context.Background(), spec, feature.CellMeasure{}, 60); err != nil {
 			t.Errorf("a terminal draws a chart of :usage as its notice: %v\n%s", err, spec)
 		}
 	}
