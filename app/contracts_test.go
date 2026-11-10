@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"net"
 	"reflect"
 	"strings"
 	"testing"
@@ -12,6 +11,7 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -48,7 +48,7 @@ func TestContractsWithNoDaemon(t *testing.T) {
 		t.Fatalf("--contracts: exit %d, %q", code, errOut)
 	}
 	sock := short(t) + "/c.sock"
-	ln, err := net.Listen("unix", sock)
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestContractsWithNoDaemon(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- srv.Run(ctx) }()
 	defer func() { cancel(); <-done }()
-	cli, err := golibrpc.Dial(ctx, sock, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	cli, err := golibrpc.Dial(ctx, sock, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 	if err != nil {
 		t.Fatal(err)
 	}
