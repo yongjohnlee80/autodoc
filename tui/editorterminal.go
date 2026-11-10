@@ -9,6 +9,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/mail"
 	"github.com/yongjohnlee80/autodoc/internal/usershell"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -209,7 +210,7 @@ func (h *Host) terminalRunExited(agent, line string, code int, mailed bool) {
 	}
 	subject, body := terminalExitBody(line, code)
 	h.crew.userSend(agent, mail.KindMessage, subject, body, func(err error) {
-		if err != nil && !errors.Is(err, errHandedOver) {
+		if err != nil && !errors.Is(err, agents.ErrHandedOver) {
 			h.notify(h.trf("autodoc.notice.editorterminal.the_exit_mail_to_the_agent_was_not_sent", agent, err.Error()))
 		}
 	})

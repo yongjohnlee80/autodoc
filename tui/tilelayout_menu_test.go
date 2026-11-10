@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
@@ -26,7 +27,7 @@ func wantLayoutAbove(t *testing.T, menu string, rows []widgetcore.MenuItemModel,
 	t.Helper()
 	l, g := rowAt(rows, "layout"), rowAt(rows, goTo)
 	if l < 0 || g != l+1 {
-		t.Fatalf("%s: Layout at %d, Go to at %d; want Layout right above Go to: %v", menu, l, g, rowIDsCopy(rows))
+		t.Fatalf("%s: Layout at %d, Go to at %d; want Layout right above Go to: %v", menu, l, g, rowIDs(rows))
 	}
 	wantLayoutChecked(t, menu, rows[l].Children, tiled)
 }
@@ -36,14 +37,14 @@ func wantLayoutAbove(t *testing.T, menu string, rows []widgetcore.MenuItemModel,
 // it is tiled and none while it floats.
 func wantLayoutChecked(t *testing.T, menu string, choices []widgetcore.MenuItemModel, tiled bool) {
 	t.Helper()
-	tr, okT := menuRowCopy(choices, "layout.tiled")
-	fl, okF := menuRowCopy(choices, "layout.float")
+	tr, okT := menuRow(choices, "layout.tiled")
+	fl, okF := menuRow(choices, "layout.float")
 	if !okT || !okF || fl.Kind != widgetcore.ItemKindRadio {
-		t.Fatalf("%s: Layout holds %v; want Tiled and the radio Float", menu, rowIDsCopy(choices))
+		t.Fatalf("%s: Layout holds %v; want Tiled and the radio Float", menu, rowIDs(choices))
 	}
 	isTiled := tr.Checked
 	if tr.Kind == widgetcore.ItemKindSubmenu {
-		if ids := rowIDsCopy(tr.Children); !slices.Equal(ids, []string{"layout.tiled.left", "layout.tiled.right", "layout.tiled.top", "layout.tiled.bottom"}) {
+		if ids := rowIDs(tr.Children); !slices.Equal(ids, []string{"layout.tiled.left", "layout.tiled.right", "layout.tiled.top", "layout.tiled.bottom"}) {
 			t.Fatalf("%s: Tiled holds %v; want the edges Left, Right, Top and Bottom", menu, ids)
 		}
 		checked := 0
@@ -73,11 +74,11 @@ func edgeRow(rows []widgetcore.MenuItemModel, edge string) (widgetcore.MenuItemM
 	if l < 0 {
 		return widgetcore.MenuItemModel{}, false
 	}
-	tiled, ok := menuRowCopy(rows[l].Children, "layout.tiled")
+	tiled, ok := menuRow(rows[l].Children, "layout.tiled")
 	if !ok {
 		return widgetcore.MenuItemModel{}, false
 	}
-	return menuRowCopy(tiled.Children, "layout.tiled."+edge)
+	return menuRow(tiled.Children, "layout.tiled."+edge)
 }
 
 // The page's buffer strip and the terminal's tabs have Layout › right above Go to ›, checked as
@@ -92,7 +93,7 @@ func TestLayoutIsRightAboveGoToOnTheBufferAndShellMenus(t *testing.T) {
 	wantLayoutAbove(t, "the terminal", rows, "tabs.goto", false)
 	bottom, ok := edgeRow(rows, "bottom")
 	if !ok {
-		t.Fatalf("the terminal's Layout has no Tiled › Bottom: %v", rowIDsCopy(rows))
+		t.Fatalf("the terminal's Layout has no Tiled › Bottom: %v", rowIDs(rows))
 	}
 	onLoop(r, func() bool { bottom.Action.(terminal.TerminalTabsMenuAction).Run(""); return true })
 	r.s.WaitFor(t, "the terminal's Layout Tiled", func(string) bool {
@@ -103,12 +104,12 @@ func TestLayoutIsRightAboveGoToOnTheBufferAndShellMenus(t *testing.T) {
 
 // The agent's tabs have Layout › right above Go to ›, Float as stored.
 func TestLayoutIsRightAboveGoToOnTheAgentsMenu(t *testing.T) {
-	agent, _ := fakeAgentCopy(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	agent, _ := fakeAgent(t)
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron")
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	tab := onLoop(r, func() terminal.TerminalTabID { return r.h.agents.Snapshot().Instances["heron"].Tab })
-	wantLayoutAbove(t, "the agent", onLoop(r, func() []widgetcore.MenuItemModel { return r.h.agents.tabRows(tab) }), "tabs.goto", false)
+	wantLayoutAbove(t, "the agent", onLoop(r, func() []widgetcore.MenuItemModel { return r.h.agents.TabRows(tab) }), "tabs.goto", false)
 }
 
 // The results panel has no strip: its Layout › ends its table's menu, after a separator.
@@ -117,7 +118,7 @@ func TestTheResultsLayoutEndsItsTablesMenu(t *testing.T) {
 	rows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.plugins.resultsMenuRows() })
 	l := rowAt(rows, "layout")
 	if l != len(rows)-1 || l < 1 || rows[l-1].Kind != widgetcore.ItemKindSeparator {
-		t.Fatalf("the results' menu %v; want Layout last, after a separator", rowIDsCopy(rows))
+		t.Fatalf("the results' menu %v; want Layout last, after a separator", rowIDs(rows))
 	}
 	wantLayoutChecked(t, "the results", rows[l].Children, false)
 }
@@ -217,7 +218,7 @@ func TestAPanelsEdgeIsChosenOnItsLayout(t *testing.T) {
 		t.Helper()
 		row, ok := edgeRow(rows(), edge)
 		if !ok {
-			t.Fatalf("the terminal's Layout has no Tiled › %s: %v", edge, rowIDsCopy(rows()))
+			t.Fatalf("the terminal's Layout has no Tiled › %s: %v", edge, rowIDs(rows()))
 		}
 		onLoop(r, func() bool { row.Action.(terminal.TerminalTabsMenuAction).Run(""); return true })
 	}

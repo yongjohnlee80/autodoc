@@ -23,8 +23,8 @@ import (
 // would put sleep's command line in its place, which names no socket, so the server would be taken
 // for another process by whatever looked after the exec (a flake, 1 in 5 under -race, 2026-11-01).
 // It ends with t (endsWithTheTest).
-func fakeServerCopy(t *testing.T, socket string, listens bool) []string {
-	endsWithTheTestCopy(t, socket)
+func fakeServer(t *testing.T, socket string, listens bool) []string {
+	endsWithTheTest(t, socket)
 	script := "while :; do sleep 1; done"
 	if listens {
 		script = `touch "$1"; while :; do sleep 1; done`
@@ -38,27 +38,27 @@ func fakeServerCopy(t *testing.T, socket string, listens bool) []string {
 // nothing else stops it: fake servers ran on for as long as the machine did. Only a process naming
 // socket, which is in the cell's own temporary folder, is touched, so a reused pid never is; and
 // never the test's own group.
-func endsWithTheTestCopy(t *testing.T, socket string) {
+func endsWithTheTest(t *testing.T, socket string) {
 	t.Helper()
 	t.Cleanup(func() {
-		for _, p := range liveProcessesNamingCopy(socket) {
+		for _, p := range liveProcessesNaming(socket) {
 			pid, _ := strconv.Atoi(p)
 			if pgid, err := syscall.Getpgid(pid); err == nil && pgid > 1 && pgid != syscall.Getpgrp() {
 				_ = syscall.Kill(-pgid, syscall.SIGKILL)
 			}
 			_ = syscall.Kill(pid, syscall.SIGKILL)
 		}
-		if !eventuallyCopy(t, func() bool { return len(liveProcessesNamingCopy(socket)) == 0 }) {
-			t.Errorf("processes naming %s outlive the test: %v", socket, liveProcessesNamingCopy(socket))
+		if !eventually(t, func() bool { return len(liveProcessesNaming(socket)) == 0 }) {
+			t.Errorf("processes naming %s outlive the test: %v", socket, liveProcessesNaming(socket))
 		}
 	})
 }
 
 // liveProcessesNaming is processesNaming where there is a /proc, and ps's answer where there is
 // none (macOS), so a cell's servers end with it there too.
-func liveProcessesNamingCopy(s string) []string {
+func liveProcessesNaming(s string) []string {
 	if _, err := os.Stat("/proc/self/cmdline"); err == nil {
-		return processesNamingCopy(s)
+		return processesNaming(s)
 	}
 	b, err := exec.Command("ps", "-A", "-o", "pid=,stat=,command=").Output()
 	if err != nil {
@@ -75,7 +75,7 @@ func liveProcessesNamingCopy(s string) []string {
 }
 
 // processesNaming are the live processes whose command line names s (/proc, as stopStaleServer reads).
-func processesNamingCopy(s string) []string {
+func processesNaming(s string) []string {
 	var out []string
 	ents, _ := os.ReadDir("/proc")
 	for _, e := range ents {
@@ -93,10 +93,10 @@ func processesNamingCopy(s string) []string {
 }
 
 // alive reports whether pid is a process (a zombie aside: its parent has reaped it).
-func aliveCopy(pid int) bool { return syscall.Kill(pid, 0) == nil }
+func alive(pid int) bool { return syscall.Kill(pid, 0) == nil }
 
 // eventually waits up to 5 s for ok.
-func eventuallyCopy(t *testing.T, ok func() bool) bool {
+func eventually(t *testing.T, ok func() bool) bool {
 	t.Helper()
 	for end := time.Now().Add(5 * time.Second); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
 		if ok() {
@@ -106,7 +106,7 @@ func eventuallyCopy(t *testing.T, ok func() bool) bool {
 	return ok()
 }
 
-func serverDirCopy(t *testing.T) (dir, socket string) {
+func serverDir(t *testing.T) (dir, socket string) {
 	t.Helper()
 	dir = t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, ".autodoc-crew"), 0o700); err != nil {
@@ -116,10 +116,10 @@ func serverDirCopy(t *testing.T) (dir, socket string) {
 }
 
 // shellSets are the variables a POSIX shell sets itself at its start, whatever its environment held.
-var shellSetsCopy = map[string]bool{"PWD": true, "OLDPWD": true, "SHLVL": true, "_": true}
+var shellSets = map[string]bool{"PWD": true, "OLDPWD": true, "SHLVL": true, "_": true}
 
 // environMap is environ (os.Environ's form) as a map, a later entry winning, as exec.Cmd takes it.
-func environMapCopy(environ []string) map[string]string {
+func environMap(environ []string) map[string]string {
 	out := map[string]string{}
 	for _, kv := range environ {
 		if k, v, ok := strings.Cut(kv, "="); ok {

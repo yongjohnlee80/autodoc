@@ -10,7 +10,7 @@ import (
 // Copies of the agents' test fakes agenthookpath_own_test.go declares, for the host's cells.
 
 // claudeHookCommands are the hook commands of the Claude settings in dir, by event.
-func claudeHookCommandsCopy(t *testing.T, dir string) map[string][]string {
+func claudeHookCommands(t *testing.T, dir string) map[string][]string {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join(dir, ".claude", "settings.json"))
 	if err != nil {

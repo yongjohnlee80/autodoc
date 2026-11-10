@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
@@ -15,8 +16,8 @@ import (
 // natively, so none of it is in the grid's cells; a Fonts change rescales both panels' views, and a
 // panel without them gets them at the next apply.
 func TestTheShellsTextIsAViewOfItsOwnInTheGUI(t *testing.T) {
-	agent, _ := fakeAgentCopy(t)
-	_, r, _ := runAgentTUIWith(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake",
+	agent, _ := fakeAgent(t)
+	_, r, _ := runAgentTUIWith(t, t.TempDir(), []agents.AgentProfile{{Name: "fake", Command: agents.ShellQuote(agent)}}, "fake",
 		map[string]string{"tui.agent.text.scale": "80"}, Options{GUI: true, Fonts: &fakeFonts{}})
 	tabs := onLoop(r, func() *terminal.TerminalTabs {
 		c, _ := r.h.p.Find("agentView")

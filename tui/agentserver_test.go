@@ -16,6 +16,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 )
 
 // TestTheServerIsStartedWithTheCLIsEnvironment, end to end through runAgent: a crew Codex agent's
@@ -26,25 +27,25 @@ import (
 // /proc/<pid>/cmdline shows every user of the machine: the CLI is /bin/sh -c <command>.
 func TestTheServerIsStartedWithTheCLIsEnvironment(t *testing.T) {
 	tuneEnv(t, "AUTO_AGENTS_MAILBOX_ID=agent:the-window:1") // the window's spawner identity
-	a, c, _ := crewAgents(t, crewKindsCopy)
-	a.editorPath = func() string { return "/run/the-editor.sock" }
-	p, _ := a.profile("codex-one")
+	a, c, _ := crewAgents(t, crewKinds)
+	a.EditorPath = func() string { return "/run/the-editor.sock" }
+	p, _ := a.Profile("codex-one")
 	const secret = "tok-setup-9a1b"
 	var socket, envFile string
 	seamsOf(a).agentSetupRun = func(_, dir string, _ []string) (crew.Setup, error) {
 		socket, envFile = filepath.Join(dir, crew.CodexServerSocket), filepath.Join(dir, "server.env")
-		endsWithTheTestCopy(t, socket)
+		endsWithTheTest(t, socket)
 		server := []string{"sh", "-c", `env > "$2"; touch "$1"; while :; do sleep 1; done`, "sh", socket, envFile}
 		return crew.Setup{Server: server, ServerSocket: socket, MailVia: crew.MailViaMCP, Env: map[string]string{"SVC_TOKEN": secret}}, nil
 	}
-	instance, err := a.startInstance(p)
+	instance, err := a.StartInstance(p)
 	if err != nil {
 		t.Fatal(err)
 	}
 	awaitStart(t, c, instance)
 	cfg := c.panel.configs[instance.State().Tab]
 	var spawned pty.Cmd // the CLI, as runAgent gives it
-	seamsOf(a).agentSpawn = func(c pty.Cmd) (terminal.TerminalProcess, error) { spawned = c; return newFakeTerminalCopy(), nil }
+	seamsOf(a).agentSpawn = func(c pty.Cmd) (terminal.TerminalProcess, error) { spawned = c; return newFakeTerminal(), nil }
 	proc, err := cfg.Start(pty.Cmd{Path: cfg.Command, Args: cfg.Args, Dir: cfg.Dir})
 	if err != nil {
 		t.Fatal(err)
@@ -59,14 +60,14 @@ func TestTheServerIsStartedWithTheCLIsEnvironment(t *testing.T) {
 		k, v, _ := strings.Cut(kv, "=")
 		server[k] = v
 	}
-	cli := environMapCopy(spawned.Env)
+	cli := environMap(spawned.Env)
 	for _, k := range []string{crew.EnvContext, "AUTODOC_SOCKET", "AUTODOC_EDITOR", "AUTODOC_EDITOR_TOKEN", "PATH", "SVC_TOKEN"} {
 		if cli[k] == "" {
 			t.Fatalf("fixture: the CLI's environment has no %s: %q", k, spawned.Env)
 		}
 	}
 	for k, v := range cli {
-		if shellSetsCopy[k] {
+		if shellSets[k] {
 			continue // the server's shell sets its own, as the CLI's /bin/sh does
 		}
 		if server[k] != v {
@@ -95,14 +96,14 @@ func TestTheServerIsStartedWithTheCLIsEnvironment(t *testing.T) {
 // agent whose setup has a server has it started before its CLI, and stopped when the CLI fails to
 // start, nothing of it left (the mutant: the server left running).
 func TestTheWindowStopsTheServerWhenItsCLIFailsToStart(t *testing.T) {
-	a, c, _ := crewAgents(t, crewKindsCopy)
-	p, _ := a.profile("codex-one")
+	a, c, _ := crewAgents(t, crewKinds)
+	p, _ := a.Profile("codex-one")
 	var socket string
 	seamsOf(a).agentSetupRun = func(_, dir string, _ []string) (crew.Setup, error) {
 		socket = filepath.Join(dir, crew.CodexServerSocket)
-		return crew.Setup{Server: fakeServerCopy(t, socket, true), ServerSocket: socket, MailVia: crew.MailViaMCP}, nil
+		return crew.Setup{Server: fakeServer(t, socket, true), ServerSocket: socket, MailVia: crew.MailViaMCP}, nil
 	}
-	instance, err := a.startInstance(p)
+	instance, err := a.StartInstance(p)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,10 +113,10 @@ func TestTheWindowStopsTheServerWhenItsCLIFailsToStart(t *testing.T) {
 	if _, err := cfg.Start(pty.Cmd{Path: cfg.Command, Args: cfg.Args, Dir: cfg.Dir}); err == nil {
 		t.Fatal("a CLI that failed to start: started")
 	}
-	if !eventuallyCopy(t, func() bool { return len(processesNamingCopy(socket)) == 0 }) {
-		t.Fatalf("the CLI didn't start and its server still runs: %v", processesNamingCopy(socket))
+	if !eventually(t, func() bool { return len(processesNaming(socket)) == 0 }) {
+		t.Fatalf("the CLI didn't start and its server still runs: %v", processesNaming(socket))
 	}
-	if _, err := os.Stat(filepath.Join(cfg.Dir, serverPidFileCopy)); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(cfg.Dir, serverPidFile)); !os.IsNotExist(err) {
 		t.Fatalf("its pid file: %v, want it gone", err)
 	}
 }
@@ -130,7 +131,7 @@ func TestACellsServersEndWithIt(t *testing.T) {
 		if pgid <= 1 || pgid == syscall.Getpgrp() {
 			t.Fatalf("%s: no server's group (%d) to look for", name, pgid)
 		}
-		if !eventuallyCopy(t, func() bool { return syscall.Kill(-pgid, 0) != nil }) {
+		if !eventually(t, func() bool { return syscall.Kill(-pgid, 0) != nil }) {
 			_ = syscall.Kill(-pgid, syscall.SIGKILL)
 			t.Fatalf("%s: the server's group %d outlives its cell", name, pgid)
 		}
@@ -138,56 +139,56 @@ func TestACellsServersEndWithIt(t *testing.T) {
 
 	var pgid, child int
 	t.Run("a server never stopped, its child naming no socket", func(t *testing.T) {
-		dir, socket := serverDirCopy(t)
-		endsWithTheTestCopy(t, socket)
+		dir, socket := serverDir(t)
+		endsWithTheTest(t, socket)
 		childFile := filepath.Join(dir, "child.pid")
-		s, err := startAgentServer([]string{"sh", "-c", `touch "$1"; sleep 300 & echo $! > "$2"; while :; do sleep 1; done`, "sh", socket, childFile}, socket, dir, os.Environ(), defaultSeams.serverReady)
+		s, err := agents.StartAgentServer([]string{"sh", "-c", `touch "$1"; sleep 300 & echo $! > "$2"; while :; do sleep 1; done`, "sh", socket, childFile}, socket, dir, os.Environ(), defaultSeams.serverReady)
 		if err != nil {
 			t.Fatal(err)
 		}
-		pgid = s.cmd.Process.Pid
-		if !slices.Contains(liveProcessesNamingCopy(socket), strconv.Itoa(pgid)) {
+		pgid = s.Cmd.Process.Pid
+		if !slices.Contains(liveProcessesNaming(socket), strconv.Itoa(pgid)) {
 			t.Fatalf("fixture: the server %d doesn't name %s", pgid, socket)
 		}
 		// the child is live in the server's group, exec'd (its command line names no socket, so only
 		// the group kill reaches it) before the subtest ends: its pid is published once it is forked
 		var g int
-		if !eventuallyCopy(t, func() bool {
+		if !eventually(t, func() bool {
 			b, _ := os.ReadFile(childFile)
 			child, _ = strconv.Atoi(strings.TrimSpace(string(b)))
 			var err error
 			g, err = syscall.Getpgid(child)
-			return child > 1 && err == nil && g == pgid && !slices.Contains(liveProcessesNamingCopy(socket), strconv.Itoa(child))
+			return child > 1 && err == nil && g == pgid && !slices.Contains(liveProcessesNaming(socket), strconv.Itoa(child))
 		}) {
 			t.Fatalf("fixture: the server's child %d (group %d) isn't live in the server's group %d, its command line naming no socket", child, g, pgid)
 		}
 	})
 	groupEnded("a server never stopped", pgid)
-	if !eventuallyCopy(t, func() bool { return !aliveCopy(child) }) {
+	if !eventually(t, func() bool { return !alive(child) }) {
 		t.Fatalf("the server's child %d outlives its cell", child)
 	}
 
 	var socket string
 	t.Run("a crew Codex agent's server, its CLI never ending", func(t *testing.T) {
-		a, c, _ := crewAgents(t, crewKindsCopy)
-		p, _ := a.profile("codex-one")
-		instance, err := a.startInstance(p)
+		a, c, _ := crewAgents(t, crewKinds)
+		p, _ := a.Profile("codex-one")
+		instance, err := a.StartInstance(p)
 		if err != nil {
 			t.Fatal(err)
 		}
 		awaitStart(t, c, instance)
-		if _, _, err := startedEnvCopy(a, c, instance); err != nil { // a spawn that starts nothing: the server is never stopped
+		if _, _, err := startedEnv(a, c, instance); err != nil { // a spawn that starts nothing: the server is never stopped
 			t.Fatal(err)
 		}
 		socket = instance.State().Setup.ServerSocket
-		pids := liveProcessesNamingCopy(socket)
+		pids := liveProcessesNaming(socket)
 		if len(pids) != 1 {
 			t.Fatalf("fixture: %d processes name the agent's socket %q, want its server", len(pids), socket)
 		}
 		pgid, _ = strconv.Atoi(pids[0])
 	})
 	groupEnded("a crew Codex agent's server", pgid)
-	if pids := liveProcessesNamingCopy(socket); len(pids) > 0 {
+	if pids := liveProcessesNaming(socket); len(pids) > 0 {
 		t.Fatalf("the agent's server outlives its cell: %v", pids)
 	}
 }

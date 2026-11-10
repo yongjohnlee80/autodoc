@@ -2,7 +2,11 @@
 
 package tui
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/yongjohnlee80/autodoc/tui/agents"
+)
 
 // The fixtures below start a POSIX shell or a shell-script stand-in for an agent's CLI
 // (terminal_test.go, agent_test.go, agentswitch_test.go, agentserver_test.go, terminalkeymap_test.go).
@@ -17,37 +21,37 @@ func runShellTUI(t *testing.T, _ map[string]string) (*daemon, *running) {
 	return nil, nil
 }
 
-func runAgentTUI(t *testing.T, _ string, _ []agentProfile, _ string) (*daemon, *running, string) {
+func runAgentTUI(t *testing.T, _ string, _ []agents.AgentProfile, _ string) (*daemon, *running, string) {
 	t.Helper()
 	t.Skip(unixFixture)
 	return nil, nil, ""
 }
 
-func runAgentTUIWith(t *testing.T, _ string, _ []agentProfile, _ string, _ map[string]string, _ Options) (*daemon, *running, string) {
+func runAgentTUIWith(t *testing.T, _ string, _ []agents.AgentProfile, _ string, _ map[string]string, _ Options) (*daemon, *running, string) {
 	t.Helper()
 	t.Skip(unixFixture)
 	return nil, nil, ""
 }
 
-func runAgentTUIIn(t *testing.T, _ string, _ []agentProfile, _ string, _ map[string]string, _ Options, _ map[string][]string) (*daemon, *running, string) {
+func runAgentTUIIn(t *testing.T, _ string, _ []agents.AgentProfile, _ string, _ map[string]string, _ Options, _ map[string][]string) (*daemon, *running, string) {
 	t.Helper()
 	t.Skip(unixFixture)
 	return nil, nil, ""
 }
 
-func fakeAgentCopy(t *testing.T) (string, string) {
+func fakeAgent(t *testing.T) (string, string) {
 	t.Helper()
 	t.Skip(unixFixture)
 	return "", ""
 }
 
-func recordingAgentCopy(t *testing.T, _ bool) (string, string) {
+func recordingAgent(t *testing.T, _ bool) (string, string) {
 	t.Helper()
 	t.Skip(unixFixture)
 	return "", ""
 }
 
-func fakeServerCopy(t *testing.T, _ string, _ bool) []string {
+func fakeServer(t *testing.T, _ string, _ bool) []string {
 	t.Helper()
 	t.Skip(unixFixture)
 	return nil

@@ -9,8 +9,8 @@ import (
 	"testing"
 )
 
-// crewFiles are the crew's own sources: everything they show a person goes through the catalog.
-var crewFiles = []string{"crewhost.go", "crewinbox.go", "crewinboxfallback.go", "crewfallback.go", "crewreply.go", "crewbell.go", "creworphans.go", "agentclaude.go", "crewgrant.go"}
+// crewFiles are the crew's own sources (the agents' crew notices in tui/agents): everything they show a person goes through the catalog.
+var crewFiles = []string{"crewhost.go", "crewinbox.go", "crewinboxfallback.go", "crewfallback.go", "crewreply.go", "crewbell.go", "creworphans.go", "agents/agentclaude.go", "crewgrant.go"}
 
 // TestTheCrewSpeaksThroughItsCatalog: no notice, toast, title or button in the crew's sources is a
 // literal or a Sprintf (each is Tr or Trf of an autodoc.crew.* id), every id they and the agents'
@@ -19,7 +19,7 @@ func TestTheCrewSpeaksThroughItsCatalog(t *testing.T) {
 	literal := regexp.MustCompile(`Notify\("|Notify\(fmt\.|Notify\("[^"]*"\s*\+|\b(Title|Text|Yes|No|Other):\s*("|fmt\.)|\b(text|done):\s*fmt\.|Set\("App\.\w+",\s*fmt\.`)
 	idRef := regexp.MustCompile(`"(autodoc\.crew\.[a-z_]+)"`)
 	used := map[string]bool{}
-	for _, f := range append(slices.Clone(crewFiles), "agentinstances.go") {
+	for _, f := range append(slices.Clone(crewFiles), "agents/agentinstances.go") {
 		b, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)

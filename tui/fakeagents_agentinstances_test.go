@@ -9,6 +9,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/internal/usershell"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/pty"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
@@ -17,19 +18,19 @@ import (
 
 // Copies of the agents' test fakes agentinstances_test.go declares, for the host's cells.
 
-type modelRemovalCopy struct {
+type modelRemoval struct {
 	done chan struct{}
 	err  error
 }
 
-func (r *modelRemovalCopy) Done() <-chan struct{} { return r.done }
+func (r *modelRemoval) Done() <-chan struct{} { return r.done }
 
-func (r *modelRemovalCopy) Wait(context.Context) error { <-r.done; return r.err }
+func (r *modelRemoval) Wait(context.Context) error { <-r.done; return r.err }
 
-func (*modelRemovalCopy) Generation() int { return 1 }
+func (*modelRemoval) Generation() int { return 1 }
 
-type modelPanelCopy struct {
-	owner     *identityHostCopy
+type modelPanel struct {
+	owner     *identityHost
 	configs   map[terminal.TerminalTabID]feature.TerminalConfig
 	tabs      []terminal.TerminalTab
 	active    terminal.TerminalTabID
@@ -44,7 +45,7 @@ type modelPanelCopy struct {
 	// unbracketed is how many bracketed pastes the programs refuse before they take them, a program
 	// still starting; below zero, they never do
 	unbracketed int
-	removal     *modelRemovalCopy
+	removal     *modelRemoval
 	addMenu     func() []widgetcore.MenuItemModel
 	tabMenu     func(terminal.TerminalTabID) []widgetcore.MenuItemModel
 	// starts runs a tab's starter at Start, as the terminal does, and keeps what each failed one
@@ -57,7 +58,7 @@ type modelPanelCopy struct {
 // (nil, AutoDoc's own), the wait for an agent server's socket, whether a first run offers the agent
 // setup, how the setup finds the CLIs (nil, on the PATH) and whether a first run's Vim question is
 // still to be asked.
-type fakeSeamsCopy struct {
+type fakeSeams struct {
 	env             procenv.Env
 	serverReady     time.Duration
 	offerAgentSetup bool
@@ -68,7 +69,7 @@ type fakeSeamsCopy struct {
 	spawn           func(pty.Cmd) (terminal.TerminalProcess, error)
 	commandCheck    func(shell usershell.Shell, command string, env []string) error
 	codexHere       func(environ []string, args ...string) error
-	promptsReported func(kind string, reportedCopy bool) bool
+	promptsReported func(kind string, reported bool) bool
 	agentBin        string
 }
 
@@ -76,56 +77,56 @@ type fakeSeamsCopy struct {
 // program sets its own: a server's socket waited for 10 s, no first-run setup offered (a setup cell
 // turns it on), no Vim question pending, and
 // no command looked up on a PATH (a cell of that check sets commandOnPath).
-func newFakeSeamsCopy() *fakeSeamsCopy {
-	return &fakeSeamsCopy{serverReady: 10 * time.Second, commandCheck: noCommandCheckCopy}
+func newFakeSeams() *fakeSeams {
+	return &fakeSeams{serverReady: 10 * time.Second, commandCheck: noCommandCheck}
 }
 
-func (s *fakeSeamsCopy) Env() procenv.Env { return s.env }
+func (s *fakeSeams) Env() procenv.Env { return s.env }
 
-func (s *fakeSeamsCopy) ServerReady() time.Duration { return s.serverReady }
+func (s *fakeSeams) ServerReady() time.Duration { return s.serverReady }
 
-func (s *fakeSeamsCopy) OfferAgentSetup() bool { return s.offerAgentSetup }
+func (s *fakeSeams) OfferAgentSetup() bool { return s.offerAgentSetup }
 
-func (s *fakeSeamsCopy) LookAgentCLI() func(string) (string, error) { return s.lookAgentCLI }
+func (s *fakeSeams) LookAgentCLI() func(string) (string, error) { return s.lookAgentCLI }
 
-func (s *fakeSeamsCopy) VimQuestionPending(feature.PrefsView) bool { return s.vimPending }
+func (s *fakeSeams) VimQuestionPending(feature.PrefsView) bool { return s.vimPending }
 
-func (s *fakeSeamsCopy) SetupRun() func(kind, dir string, environ []string) (crew.Setup, error) {
+func (s *fakeSeams) SetupRun() func(kind, dir string, environ []string) (crew.Setup, error) {
 	return s.setupRun
 }
 
-func (s *fakeSeamsCopy) Spawn() func(pty.Cmd) (terminal.TerminalProcess, error) { return s.spawn }
+func (s *fakeSeams) Spawn() func(pty.Cmd) (terminal.TerminalProcess, error) { return s.spawn }
 
-func (s *fakeSeamsCopy) CommandCheck() func(shell usershell.Shell, command string, env []string) error {
+func (s *fakeSeams) CommandCheck() func(shell usershell.Shell, command string, env []string) error {
 	return s.commandCheck
 }
 
-func (s *fakeSeamsCopy) CodexHere() func(environ []string, args ...string) error { return s.codexHere }
+func (s *fakeSeams) CodexHere() func(environ []string, args ...string) error { return s.codexHere }
 
-func (s *fakeSeamsCopy) PromptsReported() func(kind string, reportedCopy bool) bool {
+func (s *fakeSeams) PromptsReported() func(kind string, reported bool) bool {
 	return s.promptsReported
 }
 
-func (s *fakeSeamsCopy) AgentBin() string { return s.agentBin }
+func (s *fakeSeams) AgentBin() string { return s.agentBin }
 
 // noCommandCheck checks no command: the cells' profiles name programs that don't exist ("one",
 // "two").
-func noCommandCheckCopy(usershell.Shell, string, []string) error { return nil }
+func noCommandCheck(usershell.Shell, string, []string) error { return nil }
 
 // testAgents is newAgents for cells whose profiles name programs that don't exist ("one", "two"),
 // on newFakeSeams: their commands aren't looked up on a PATH.
-func testAgentsCopy(c agentHost, dir, config string) *agents {
+func testAgents(c agents.AgentHost, dir, config string) *agents.Agents {
 	s := defaultSeams
-	return testAgentsWithCopy(c, &s, dir, config)
+	return testAgentsWith(c, &s, dir, config)
 }
 
 // testAgentsWith is testAgents with the seams s (a test's tune, its environment's included).
-func testAgentsWithCopy(c agentHost, s agentSeams, dir, config string) *agents {
+func testAgentsWith(c agents.AgentHost, s agents.AgentSeams, dir, config string) *agents.Agents {
 	hs, ok := s.(*seams)
 	if ok && hs.agentCommandCheck == nil {
-		hs.agentCommandCheck = noCommandCheckCopy // as the agents' own testAgents: no command looked up
+		hs.agentCommandCheck = noCommandCheck // as the agents' own testAgents: no command looked up
 	}
-	a := newAgents(c, s, dir, config)
+	a := agents.NewAgents(c, s, dir, config)
 	if ok {
 		agentsSeams.Lock()
 		agentsSeams.m[a] = hs // seamsOf: the cell sets its hooks there
@@ -134,23 +135,23 @@ func testAgentsWithCopy(c agentHost, s agentSeams, dir, config string) *agents {
 	return a
 }
 
-func (p *modelPanelCopy) SameOwner(other feature.TerminalPanel) bool {
-	peer, ok := other.(*modelPanelCopy)
+func (p *modelPanel) SameOwner(other feature.TerminalPanel) bool {
+	peer, ok := other.(*modelPanel)
 	return ok && p == peer
 }
 
-func (p *modelPanelCopy) Shutdown() feature.TerminalCompletion {
+func (p *modelPanel) Shutdown() feature.TerminalCompletion {
 	for i := range p.tabs {
 		p.tabs[i].Running = false
 	}
 	if p.removal == nil {
-		p.removal = &modelRemovalCopy{done: make(chan struct{})}
+		p.removal = &modelRemoval{done: make(chan struct{})}
 		close(p.removal.done)
 	}
 	return p.removal
 }
 
-func (p *modelPanelCopy) Add(label string, config feature.TerminalConfig) (terminal.TerminalTabID, error) {
+func (p *modelPanel) Add(label string, config feature.TerminalConfig) (terminal.TerminalTabID, error) {
 	p.next++
 	id := terminal.TerminalTabID(fmt.Sprintf("tab-%d", p.next))
 	if p.configs == nil {
@@ -164,7 +165,7 @@ func (p *modelPanelCopy) Add(label string, config feature.TerminalConfig) (termi
 	return id, nil
 }
 
-func (p *modelPanelCopy) Select(id terminal.TerminalTabID) error {
+func (p *modelPanel) Select(id terminal.TerminalTabID) error {
 	if p.selectErr != nil {
 		return p.selectErr
 	}
@@ -172,7 +173,7 @@ func (p *modelPanelCopy) Select(id terminal.TerminalTabID) error {
 	return nil
 }
 
-func (p *modelPanelCopy) Start(id terminal.TerminalTabID) error {
+func (p *modelPanel) Start(id terminal.TerminalTabID) error {
 	if p.startErr != nil {
 		return p.startErr
 	}
@@ -190,17 +191,17 @@ func (p *modelPanelCopy) Start(id terminal.TerminalTabID) error {
 			return nil
 		}
 	}
-	return ErrAgentUnavailable
+	return agents.ErrAgentUnavailable
 }
 
 // Resume keeps the tab it was asked for.
-func (p *modelPanelCopy) Resume(id terminal.TerminalTabID) error {
+func (p *modelPanel) Resume(id terminal.TerminalTabID) error {
 	p.resumed = append(p.resumed, id)
 	return nil
 }
 
 // SendText records literal keys sent to a tab (the messaging base's Enter).
-func (p *modelPanelCopy) SendText(id terminal.TerminalTabID, text string) error {
+func (p *modelPanel) SendText(id terminal.TerminalTabID, text string) error {
 	if p.sendErr != nil {
 		return p.sendErr
 	}
@@ -209,7 +210,7 @@ func (p *modelPanelCopy) SendText(id terminal.TerminalTabID, text string) error 
 }
 
 // SendBracketedPaste is SendPaste, recorded as bracketed, once the programs take them (unbracketed).
-func (p *modelPanelCopy) SendBracketedPaste(id terminal.TerminalTabID, text string) error {
+func (p *modelPanel) SendBracketedPaste(id terminal.TerminalTabID, text string) error {
 	if p.sendErr != nil {
 		return p.sendErr
 	}
@@ -223,37 +224,37 @@ func (p *modelPanelCopy) SendBracketedPaste(id terminal.TerminalTabID, text stri
 	return nil
 }
 
-func (p *modelPanelCopy) SetMode(id terminal.TerminalTabID, mode terminal.TerminalMode) error {
+func (p *modelPanel) SetMode(id terminal.TerminalTabID, mode terminal.TerminalMode) error {
 	p.modes = append(p.modes, fmt.Sprintf("%s:%v", id, mode))
 	return nil
 }
 
-func (p *modelPanelCopy) Remove(id terminal.TerminalTabID) (feature.TerminalRemoval, error) {
+func (p *modelPanel) Remove(id terminal.TerminalTabID) (feature.TerminalRemoval, error) {
 	if p.owner != nil && p.owner.stopErr != nil {
 		return nil, p.owner.stopErr
 	}
 	if p.removal == nil {
-		p.removal = &modelRemovalCopy{done: make(chan struct{})}
+		p.removal = &modelRemoval{done: make(chan struct{})}
 		close(p.removal.done)
 	}
 	return p.removal, nil
 }
 
-func (*modelPanelCopy) ForceRemove(terminal.TerminalTabID) error { return nil }
+func (*modelPanel) ForceRemove(terminal.TerminalTabID) error { return nil }
 
-func (p *modelPanelCopy) Tabs() []terminal.TerminalTab {
+func (p *modelPanel) Tabs() []terminal.TerminalTab {
 	return append([]terminal.TerminalTab(nil), p.tabs...)
 }
 
-func (p *modelPanelCopy) Active() terminal.TerminalTabID { return p.active }
+func (p *modelPanel) Active() terminal.TerminalTabID { return p.active }
 
-func (*modelPanelCopy) Actions(func(), func(terminal.TerminalTabID)) {}
+func (*modelPanel) Actions(func(), func(terminal.TerminalTabID)) {}
 
-func (p *modelPanelCopy) Menus(add func() []widgetcore.MenuItemModel, tab func(terminal.TerminalTabID) []widgetcore.MenuItemModel) {
+func (p *modelPanel) Menus(add func() []widgetcore.MenuItemModel, tab func(terminal.TerminalTabID) []widgetcore.MenuItemModel) {
 	p.addMenu, p.tabMenu = add, tab
 }
 
-func (p *modelPanelCopy) exit(id terminal.TerminalTabID, code int) {
+func (p *modelPanel) exit(id terminal.TerminalTabID, code int) {
 	for i := range p.tabs {
 		if p.tabs[i].ID == id {
 			p.tabs[i].Running = false
@@ -264,30 +265,30 @@ func (p *modelPanelCopy) exit(id terminal.TerminalTabID, code int) {
 	}
 }
 
-func (c *identityHostCopy) Terminals(string) (feature.TerminalPanel, error) {
+func (c *identityHost) Terminals(string) (feature.TerminalPanel, error) {
 	if c.panel == nil {
-		c.panel = &modelPanelCopy{owner: c}
+		c.panel = &modelPanel{owner: c}
 	}
 	return c.panel, nil
 }
 
-func (c *identityHostCopy) OpenDrawer(id string) { c.opened = append(c.opened, id) }
+func (c *identityHost) OpenDrawer(id string) { c.opened = append(c.opened, id) }
 
-func (c *identityHostCopy) CloseDrawer(id string) { c.closed = append(c.closed, id) }
+func (c *identityHost) CloseDrawer(id string) { c.closed = append(c.closed, id) }
 
-func (c *identityHostCopy) Post(fn func()) {
+func (c *identityHost) Post(fn func()) {
 	c.postMu.Lock()
 	defer c.postMu.Unlock()
 	c.posts = append(c.posts, fn)
 }
 
-func (c *identityHostCopy) After(d time.Duration, fn func()) {
+func (c *identityHost) After(d time.Duration, fn func()) {
 	c.delays = append(c.delays, d)
 	c.afters = append(c.afters, fn)
 }
 
 // fireAfters runs the waits After scheduled, as their timers would, then what they posted.
-func (c *identityHostCopy) fireAfters() {
+func (c *identityHost) fireAfters() {
 	for len(c.afters) > 0 {
 		afters := c.afters
 		c.afters = nil
@@ -298,17 +299,17 @@ func (c *identityHostCopy) fireAfters() {
 	}
 }
 
-func (c *identityHostCopy) Ticket(_ *uint64, _ feature.TicketScope) feature.Ticket {
+func (c *identityHost) Ticket(_ *uint64, _ feature.TicketScope) feature.Ticket {
 	epoch := c.epoch
 	return feature.NewTicket(func() bool { return c.epoch == epoch })
 }
 
-func (c *identityHostCopy) Ask(q feature.Question) feature.Asked {
+func (c *identityHost) Ask(q feature.Question) feature.Asked {
 	c.questions = append(c.questions, q)
 	return feature.Asked{}
 }
 
-func (c *identityHostCopy) drainPosts() {
+func (c *identityHost) drainPosts() {
 	for {
 		c.postMu.Lock()
 		posts := c.posts
@@ -324,7 +325,7 @@ func (c *identityHostCopy) drainPosts() {
 }
 
 // settle runs what a held removal's retirement posts, as the loop would, until done holds.
-func (c *identityHostCopy) settle(t *testing.T, what string, done func() bool) {
+func (c *identityHost) settle(t *testing.T, what string, done func() bool) {
 	t.Helper()
 	for deadline := time.Now().Add(5 * time.Second); !done(); time.Sleep(time.Millisecond) {
 		if time.Now().After(deadline) {
@@ -334,10 +335,10 @@ func (c *identityHostCopy) settle(t *testing.T, what string, done func() bool) {
 	}
 }
 
-func modelAgentsCopy(t *testing.T) (*agents, *identityHostCopy) {
+func modelAgents(t *testing.T) (*agents.Agents, *identityHost) {
 	t.Helper()
-	c := newIdentityHostCopy(`[{"name":"One","command":"one","codename":"one"},{"name":"Two","command":"two","codename":"two"}]`)
+	c := newIdentityHost(`[{"name":"One","command":"one","codename":"one"},{"name":"Two","command":"two","codename":"two"}]`)
 	c.ws = wsInfo{name: "kb", root: t.TempDir()}
-	a := testAgentsCopy(c, t.TempDir(), "")
+	a := testAgents(c, t.TempDir(), "")
 	return a, c
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
 	"github.com/yongjohnlee80/autodoc/internal/ipc"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -44,36 +45,36 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 		}
 	}
 	env := strings.Join(onLoop(r, func() []string {
-		return r.h.agents.agentEnv(feature.Workspace{Name: "kb"}, t.TempDir(), agentProfile{Codename: "zen"})
+		return r.h.agents.AgentEnv(feature.Workspace{Name: "kb"}, t.TempDir(), agents.AgentProfile{Codename: "zen"})
 	}), "\n")
 	if !strings.Contains(env, "AUTODOC_EDITOR="+path) || !strings.Contains(env, "AUTODOC_AGENT=zen") ||
 		!strings.Contains(env, "AUTODOC_EDITOR_TOKEN=") {
 		t.Fatalf("the agent's environment: %s", env)
 	}
-	if strings.Contains(env, EnvEditorCredentialFile) {
+	if strings.Contains(env, agents.EnvEditorCredentialFile) {
 		t.Fatalf("a Claude agent's environment names a token file: %s", env)
 	}
 	// a Codex agent's tool shells drop *TOKEN*: its token is a 0600 file of its own folder too, named
 	// by a variable Codex keeps
 	codexDir := t.TempDir()
 	cenv := onLoop(r, func() []string {
-		return r.h.agents.agentEnv(feature.Workspace{Name: "kb"}, codexDir, agentProfile{Codename: "cx", Command: "codex"})
+		return r.h.agents.AgentEnv(feature.Workspace{Name: "kb"}, codexDir, agents.AgentProfile{Codename: "cx", Command: "codex"})
 	})
 	file := ""
 	for _, kv := range cenv {
-		if v, ok := strings.CutPrefix(kv, EnvEditorCredentialFile+"="); ok {
+		if v, ok := strings.CutPrefix(kv, agents.EnvEditorCredentialFile+"="); ok {
 			file = v
 		}
 	}
 	fi, ferr := os.Stat(file)
 	body, _ := os.ReadFile(file)
 	if file == "" || filepath.Dir(file) != codexDir || ferr != nil || privateFile(file) != nil ||
-		string(body) != onLoop(r, func() string { return r.h.agents.editorToken("cx") }) {
+		string(body) != onLoop(r, func() string { return r.h.agents.EditorToken("cx") }) {
 		t.Fatalf("a Codex agent's token file %q (%v, %v, %q) in its environment %v", file, fi, ferr, body, cenv)
 	}
 	for _, w := range []string{"KEY", "SECRET", "TOKEN"} {
-		if strings.Contains(EnvEditorCredentialFile, w) {
-			t.Fatalf("%s holds %s, which Codex's shells filter", EnvEditorCredentialFile, w)
+		if strings.Contains(agents.EnvEditorCredentialFile, w) {
+			t.Fatalf("%s holds %s, which Codex's shells filter", agents.EnvEditorCredentialFile, w)
 		}
 	}
 
@@ -83,7 +84,7 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer cli.Close()
-	token := onLoop(r, func() string { return r.h.agents.editorToken("zen") })
+	token := onLoop(r, func() string { return r.h.agents.EditorToken("zen") })
 	callAs := func(tok, verb string, params ...any) (map[string]any, *golibrpc.Error) {
 		t.Helper()
 		res, err := cli.Call(ctx, verb, append([]any{tok}, params...)...)
@@ -135,7 +136,7 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 
 	// another agent, granted write, is known by its own token: zen naming it gets nothing of its
 	onLoop(r, func() bool {
-		r.h.agents.editorToken("other")
+		r.h.agents.EditorToken("other")
 		r.h.prefs.luaGrants["agent:other"] = map[string]bool{"editor.write": true, "commands": true}
 		r.h.prefs.luaGrants["agent:zen"]["editor.write"] = false
 		return true
@@ -268,7 +269,7 @@ func TestTheTokenRegistryIsTheLoops(t *testing.T) {
 	r := runTUI(t, NewSession(d.sock, nil), Options{EditorDir: t.TempDir()})
 	r.connected(t)
 	path := onLoop(r, r.h.editorSocketPath)
-	token := onLoop(r, func() string { return r.h.agents.editorToken("zen") })
+	token := onLoop(r, func() string { return r.h.agents.EditorToken("zen") })
 	ctx := context.Background()
 	cli, err := golibrpc.Dial(ctx, path, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 	if err != nil {
@@ -279,7 +280,7 @@ func TestTheTokenRegistryIsTheLoops(t *testing.T) {
 	go func() {
 		defer close(done)
 		for i := range 100 {
-			r.h.p.Post(func() { r.h.agents.editorToken(fmt.Sprintf("agent%d", i)) })
+			r.h.p.Post(func() { r.h.agents.EditorToken(fmt.Sprintf("agent%d", i)) })
 		}
 	}()
 	for range 100 {

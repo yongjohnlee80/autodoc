@@ -5,6 +5,7 @@ import (
 	"go/build"
 	"go/parser"
 	"go/token"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
@@ -12,27 +13,29 @@ import (
 	"testing"
 )
 
-// Every preference a file of this build reads by name (PrefsView.Value with a pref… constant) is a
-// row the program declares: Value answers "" for a name no row declares, so a misspelt or a
-// forgotten one would read as unset without a word. The names are this build's (the GUI's rows
+// Every preference a file of this build reads by name (PrefsView.Value with a pref… constant, the
+// agents' in tui/agents too) is a row the program declares: Value answers "" for a name no row
+// declares, so a misspelt or a forgotten one would read as unset without a word. The names are this build's (the GUI's rows
 // are -tags gui's); a name built at run time (prefGlobeColour + key) must begin with a row's name.
 func TestEveryPreferenceReadByNameIsADeclaredRow(t *testing.T) {
 	ctx := build.Default
 	if guiBuild() {
 		ctx.BuildTags = append(ctx.BuildTags, "gui")
 	}
-	pkg, err := ctx.ImportDir(".", 0)
-	if err != nil {
-		t.Fatal(err)
-	}
 	fset := token.NewFileSet()
 	var files []*ast.File
-	for _, name := range pkg.GoFiles {
-		f, err := parser.ParseFile(fset, name, nil, parser.SkipObjectResolution)
+	for _, dir := range []string{".", "agents"} { // the host and the agents, whose rows the program declares
+		pkg, err := ctx.ImportDir(dir, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
-		files = append(files, f)
+		for _, name := range pkg.GoFiles {
+			f, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, parser.SkipObjectResolution)
+			if err != nil {
+				t.Fatal(err)
+			}
+			files = append(files, f)
+		}
 	}
 	consts := map[string]string{} // the package's string constants
 	for _, f := range files {
@@ -72,8 +75,11 @@ func TestEveryPreferenceReadByNameIsADeclaredRow(t *testing.T) {
 			if b, ok := arg.(*ast.BinaryExpr); ok && b.Op == token.ADD {
 				arg, prefix = b.X, true
 			}
+			if sel, ok := arg.(*ast.SelectorExpr); ok { // the agents' constant, as the host names it
+				arg = sel.Sel
+			}
 			id, ok := arg.(*ast.Ident)
-			if !ok || !strings.HasPrefix(id.Name, "pref") {
+			if !ok || !strings.HasPrefix(id.Name, "pref") && !strings.HasPrefix(id.Name, "Pref") {
 				return true
 			}
 			v, ok := consts[id.Name]

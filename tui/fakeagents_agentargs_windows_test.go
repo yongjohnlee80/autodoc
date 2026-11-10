@@ -17,8 +17,8 @@ import (
 // agentCommandCases on Windows: Windows PowerShell 5.1 (a PATH without pwsh) and pwsh where the
 // runner has it, each calling the CLI two ways: an .exe by its quoted path, and a batch file (npm's
 // .cmd shim, which runs the .exe through %*) by its bare name, found through PATHEXT.
-func agentCommandCasesCopy(t *testing.T) []agentCommandCaseCopy {
-	exe := printingCLICopy(t, "o'brien dir", "agent.exe")
+func agentCommandCases(t *testing.T) []agentCommandCase {
+	exe := printingCLI(t, "o'brien dir", "agent.exe")
 	shimDir := filepath.Join(t.TempDir(), "o'brien shim")
 	if err := os.MkdirAll(shimDir, 0o700); err != nil {
 		t.Fatal(err)
@@ -37,13 +37,13 @@ func agentCommandCasesCopy(t *testing.T) []agentCommandCaseCopy {
 			path  string
 		}{"pwsh", filepath.Dir(pwsh)})
 	}
-	var cases []agentCommandCaseCopy
+	var cases []agentCommandCase
 	for _, s := range shells {
 		env := procenv.Env(nil).With("PATH="+shimDir+";"+s.path+";"+sys32, "PATHEXT=.COM;.EXE;.BAT;.CMD")
 		sh := usershell.Commands(env)
 		cases = append(cases,
-			agentCommandCaseCopy{label: s.label + " exe", env: env, call: "& " + sh.Quote(exe)},
-			agentCommandCaseCopy{label: s.label + " cmd shim", env: env, call: "agentcli"})
+			agentCommandCase{label: s.label + " exe", env: env, call: "& " + sh.Quote(exe)},
+			agentCommandCase{label: s.label + " cmd shim", env: env, call: "agentcli"})
 	}
 	return cases
 }

@@ -10,6 +10,7 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -214,7 +215,7 @@ func (t *todos) sendToPeer(a *todoAssign, s *todoStore, task map[string]any, ins
 		return
 	}
 	ref := feature.TaskRef{Title: feature.Str(task, "title"), Path: filepath.Join(s.path, filepath.FromSlash(feature.Str(task, "path"))), ID: feature.Str(task, "id")}
-	m := taskMessage(ref, instruction)
+	m := agents.TaskMessage(ref, instruction)
 	e := a.agent
 	p.sendTask(e.Ref.Codename, e.Peer.Scope, m.Subject, m.Body, "assign:"+feature.Str(task, "id")+":"+feature.Str(task, "rev"), func(err error) {
 		switch {
@@ -261,7 +262,7 @@ func (t *todos) handedOver(name, assignee string, err error) {
 		t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_sent", name))
 		return
 	}
-	if errors.Is(err, ErrAgentTypedNotSent) { // typed, left for the user's Enter (agentmessaging.go)
+	if errors.Is(err, agents.ErrAgentTypedNotSent) { // typed, left for the user's Enter (agentmessaging.go)
 		t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_typed_into_its_input", name))
 		return
 	}
@@ -269,13 +270,13 @@ func (t *todos) handedOver(name, assignee string, err error) {
 		t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_its_program_takes_no_bracketed_paste", name))
 		return
 	}
-	var e *agentElsewhere
+	var e *agents.AgentElsewhere
 	if errors.As(err, &e) { // running, in another workspace: neither rung nor typed
-		t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_but_not_delivered_it_runs_in", name, e.workspace, e.why.Error()))
+		t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_but_not_delivered_it_runs_in", name, e.Workspace, e.Why.Error()))
 		return
 	}
 	why := err.Error()
-	if errors.Is(err, ErrAgentCancelled) {
+	if errors.Is(err, agents.ErrAgentCancelled) {
 		why = t.c.Tr("autodoc.notice.todos_assign.you_didn_t_start_it")
 	}
 	t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_but_not_delivered_start_the_ag", assignee, why))

@@ -10,6 +10,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/mail"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -17,7 +18,7 @@ import (
 // lookup from crew.list: each live agent of another scope, none of its own scope's; a crew.list
 // that fails, or a window holding no scope, answers none.
 func TestTheCrewHostListsOtherScopesLiveAgents(t *testing.T) {
-	a, _, w := crewAgents(t, oneTwoCopy)
+	a, _, w := crewAgents(t, oneTwo)
 	own, _, _ := crewOf(a).held()
 	w.crewList = func() (any, error) {
 		return []any{
@@ -74,7 +75,7 @@ func TestTheCrewHostListsOtherScopesLiveAgents(t *testing.T) {
 // is queued and woken as any mail; the daemon's refusal is the caller's to hear. A window holding no
 // scope sends nothing and says so.
 func TestTheCrewHostSendsAnotherHostsAgentATaskUnrung(t *testing.T) {
-	a, _, w := crewAgents(t, oneTwoCopy)
+	a, _, w := crewAgents(t, oneTwo)
 	own, _, _ := crewOf(a).held()
 	var sent [][]any
 	w.inboxSend = func(p []any) (any, error) {
@@ -103,7 +104,7 @@ func TestTheCrewHostSendsAnotherHostsAgentATaskUnrung(t *testing.T) {
 	h := newCrewHost(&crewWindow{d: newCrewDaemonForHost()}, nil, t.TempDir())
 	heard = nil
 	h.sendTask("jarvis", "autovim:plugins", "Task: t", "body", "k", func(err error) { heard = append(heard, err) })
-	if len(heard) != 1 || !errors.Is(heard[0], errDoorbellNotSent) {
+	if len(heard) != 1 || !errors.Is(heard[0], agents.ErrDoorbellNotSent) {
 		t.Errorf("a window holding no scope heard %v, want a send it couldn't make", heard)
 	}
 }

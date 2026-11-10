@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 )
 
 // An agent AutoDoc starts is a session of its own: the identity of the agent host that started
@@ -20,12 +21,12 @@ func TestAnAgentStartsWithoutItsSpawnersIdentity(t *testing.T) {
 	polluted, kept := pollute(t)
 	dir := t.TempDir()
 	agent, report := filepath.Join(dir, "env-agent"), filepath.Join(dir, "env")
-	script := "#!/bin/sh\nenv > " + shellQuote(report) + ".part && mv " + shellQuote(report) + ".part " + shellQuote(report) + "\nwhile read line; do :; done\n"
+	script := "#!/bin/sh\nenv > " + agents.ShellQuote(report) + ".part && mv " + agents.ShellQuote(report) + ".part " + agents.ShellQuote(report) + "\nwhile read line; do :; done\n"
 	if err := os.WriteFile(agent, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron")
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	env := envReported(t, r, report)
 	wantOwnEnv(t, "the agent", env, polluted, kept)
 	for _, k := range []string{"AUTODOC_WORKSPACE", "AUTODOC_SOCKET", "AUTODOC_BIN", "PATH", "HOME"} {
@@ -41,13 +42,13 @@ func TestAProfileKeepsWhatItSetsItself(t *testing.T) {
 	pollute(t)
 	dir := t.TempDir()
 	agent, report := filepath.Join(dir, "env-agent"), filepath.Join(dir, "env")
-	script := "#!/bin/sh\nenv > " + shellQuote(report) + ".part && mv " + shellQuote(report) + ".part " + shellQuote(report) + "\nwhile read line; do :; done\n"
+	script := "#!/bin/sh\nenv > " + agents.ShellQuote(report) + ".part && mv " + agents.ShellQuote(report) + ".part " + agents.ShellQuote(report) + "\nwhile read line; do :; done\n"
 	if err := os.WriteFile(agent, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	command := "ENABLE_IDE_INTEGRATION=false " + shellQuote(agent)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: command, Codename: "heron"}}, "heron")
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	command := "ENABLE_IDE_INTEGRATION=false " + agents.ShellQuote(agent)
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: command, Codename: "heron"}}, "heron")
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	env := envReported(t, r, report)
 	if env["ENABLE_IDE_INTEGRATION"] != "false" || env["CLAUDE_CODE_SSE_PORT"] != "" {
 		t.Fatalf("the profile's own ENABLE_IDE_INTEGRATION %q, the inherited CLAUDE_CODE_SSE_PORT %q; want false, none",
@@ -63,7 +64,7 @@ func TestAProfilesEnvReachesItsAgent(t *testing.T) {
 	pollute(t)
 	dir := t.TempDir()
 	agent, report := filepath.Join(dir, "env-agent"), filepath.Join(dir, "env")
-	script := "#!/bin/sh\nenv > " + shellQuote(report) + ".part && mv " + shellQuote(report) + ".part " + shellQuote(report) + "\nwhile read line; do :; done\n"
+	script := "#!/bin/sh\nenv > " + agents.ShellQuote(report) + ".part && mv " + agents.ShellQuote(report) + ".part " + agents.ShellQuote(report) + "\nwhile read line; do :; done\n"
 	if err := os.WriteFile(agent, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -75,10 +76,10 @@ func TestAProfilesEnvReachesItsAgent(t *testing.T) {
 		"AUTODOC_ROOT":      "/not/autodocs", // AutoDoc's own, which a profile never sets
 		"PATH":              extra + ":$PATH",
 	}
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron", Env: env}}, "heron")
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron", Env: env}}, "heron")
 	own := onLoop(r, func() procenv.Env { return r.h.seams.env })
 	home, path := own.Get("HOME"), own.Get("PATH") // the program's own (runAgentTUI's), which the spawn expands from
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	got := envReported(t, r, report)
 	if want := filepath.Join(home, ".claude-work"); got["CLAUDE_CONFIG_DIR"] != want {
 		t.Errorf("CLAUDE_CONFIG_DIR %q, want %q (~ expanded)", got["CLAUDE_CONFIG_DIR"], want)
@@ -128,7 +129,7 @@ func envReported(t *testing.T, r *running, report string) map[string]string {
 func TestAPluginsBuildRunsWithoutItsSpawnersIdentity(t *testing.T) {
 	polluted, kept := pollute(t)
 	report := filepath.Join(t.TempDir(), "env")
-	repo := pluginRepo(t, "Echo", "env > "+shellQuote(report)+".part && mv "+shellQuote(report)+".part "+shellQuote(report))
+	repo := pluginRepo(t, "Echo", "env > "+agents.ShellQuote(report)+".part && mv "+agents.ShellQuote(report)+".part "+agents.ShellQuote(report))
 	r, _ := pluginTUI(t, t.TempDir())
 	r.h.p.Post(func() { r.h.plugins.addPlugin("file://" + repo) })
 	r.question(t)
@@ -150,7 +151,7 @@ func TestAPluginsCloneRunsWithoutItsSpawnersIdentity(t *testing.T) {
 	repo := pluginRepo(t, "Echo", "true") // made with the real git, before the wrapper is on PATH
 	polluted, kept := pollute(t)
 	bin, report := t.TempDir(), filepath.Join(t.TempDir(), "env")
-	wrapper := "#!/bin/sh\ncase \"$*\" in *clone*) env > " + shellQuote(report) + ".part && mv " + shellQuote(report) + ".part " + shellQuote(report) + " ;; esac\nexec " + shellQuote(realGit) + " \"$@\"\n"
+	wrapper := "#!/bin/sh\ncase \"$*\" in *clone*) env > " + agents.ShellQuote(report) + ".part && mv " + agents.ShellQuote(report) + ".part " + agents.ShellQuote(report) + " ;; esac\nexec " + agents.ShellQuote(realGit) + " \"$@\"\n"
 	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(wrapper), 0o755); err != nil {
 		t.Fatal(err)
 	}

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature/featuretest"
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
@@ -16,7 +17,7 @@ import (
 func newScripted(ws string) *featuretest.ScriptedCore {
 	c := featuretest.NewScripted(ws)
 	c.Preferences = prefs{} // the host's preferences, catalog and agents, as the cells were written against
-	c.Text, c.Textf, c.AgentErr = englishText, (&Host{}).trf, ErrAgentUnavailable
+	c.Text, c.Textf, c.AgentErr = englishText, (&Host{}).trf, agents.ErrAgentUnavailable
 	return c
 }
 
@@ -206,7 +207,7 @@ func TestTodosTabsAreNumberedTablesReadWhenShown(t *testing.T) {
 		t.Errorf("a tab read already was read again: %v", s.Calls[n:])
 	}
 	v.activated(2, 1)
-	if !slices.Equal(s.OpenedFiles, []string{taskFileCopy("/kb/.todo-list/deferred/1.md")}) || !slices.Contains(s.Views, "todos.close") {
+	if !slices.Equal(s.OpenedFiles, []string{taskFile("/kb/.todo-list/deferred/1.md")}) || !slices.Contains(s.Views, "todos.close") {
 		t.Errorf("Enter on a task: files %v, views %v", s.OpenedFiles, s.Views)
 	}
 	v.activated(2, 9) // no such row
@@ -365,18 +366,18 @@ func TestTodosEventsAndFolders(t *testing.T) {
 		}
 		return resolveWS(p)
 	}
-	v.folderChosen(taskFileCopy("/r/.todo-list"))
+	v.folderChosen(taskFile("/r/.todo-list"))
 	if !s.Called("todos.register["+slashFile("/r")+"]") || v.cur == nil || v.cur.id != "root:"+slashFile("/r") || s.Sets["App.todoStoreIndex"] != 2 {
 		t.Errorf("load: calls %v, shown %+v, index %v", s.Calls, v.cur, s.Sets["App.todoStoreIndex"])
 	}
 	v.folderAs = "new"
-	v.folderChosen(taskFileCopy("/n"))
+	v.folderChosen(taskFile("/n"))
 	if !s.Called("todos.scaffold[map[root:" + slashFile("/n") + "]]") {
 		t.Errorf("new: %v", s.Calls)
 	}
 	v.storeChosen(0)
 	v.folderAs = "move"
-	v.folderChosen(taskFileCopy("/m"))
+	v.folderChosen(taskFile("/m"))
 	if !s.Called("todos.move_store[kb " + slashFile("/m/.todo-list") + "]") {
 		t.Errorf("move: %v", s.Calls)
 	}
@@ -444,7 +445,7 @@ func TestTodosAtTheEdges(t *testing.T) {
 	w.label()
 	w.enter()
 	w.folderAs = "move"
-	w.folderChosen(taskFileCopy("/m"))
+	w.folderChosen(taskFile("/m"))
 	w.Event("todos.changed", "kb", "")
 	if len(idle.Calls) != n {
 		t.Errorf("with no store, the keys asked %v", idle.Calls[n:])
