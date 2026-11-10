@@ -441,7 +441,7 @@ func (m *Manager) Stores(ctx context.Context) ([]StoreInfo, error) {
 		}
 		// a <root>/.todo-list no root record names is its root's, unless that root's override took
 		// it elsewhere: then the record is what the move left behind, and no root reaches it
-		if root, ok := strings.CutSuffix(rec.Path, "/"+todoDir); ok && len(info.Roots) == 0 && st.Roots[root].Override == "" {
+		if root, ok := storeRootOf(rec.Path); ok && len(info.Roots) == 0 && st.Roots[root].Override == "" {
 			info.Roots = append(info.Roots, root)
 		}
 		out = append(out, info)

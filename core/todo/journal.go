@@ -2,7 +2,7 @@ package todo
 
 import (
 	"context"
-	"strings"
+	"path"
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/paths"
@@ -169,7 +169,7 @@ func (s *Settings) ApplyRepath(store string, r Repath) {
 		}
 	}
 	// the root whose default store moved, when the daemon had no record of it yet
-	if root, ok := strings.CutSuffix(r.From, "/"+todoDir); ok {
+	if root, ok := storeRootOf(r.From); ok {
 		if _, known := s.Roots[root]; !known {
 			if s.Roots == nil {
 				s.Roots = map[string]RootRecord{}
@@ -177,4 +177,14 @@ func (s *Settings) ApplyRepath(store string, r Repath) {
 			s.Roots[root] = RootRecord{Root: root, Override: r.To}
 		}
 	}
+}
+
+// storeRootOf is the root whose default store is p (<root>/.todo-list, paths.Join(root, todoDir)'s
+// inverse), a volume's root included: "/.todo-list" is "/"'s and "C:/.todo-list" "C:/"'s, never ""
+// or "C:", which name no folder a root can be. ok is false for any other path.
+func storeRootOf(p string) (root string, ok bool) {
+	if path.Base(p) != todoDir || !paths.IsAbs(p) {
+		return "", false
+	}
+	return paths.Dir(p), true
 }
