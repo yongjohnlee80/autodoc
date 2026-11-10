@@ -1347,6 +1347,10 @@
         <source>This window lost its crew scope %1 while away; its agents now live under %2.</source>
         <translation>이 창은 자리를 비운 동안 크루 범위 %1을(를) 잃었습니다. 에이전트는 이제 %2 아래에 있습니다.</translation>
     </message>
+    <message id="autodoc.crew.names_kept">
+        <source>Agent folders from an earlier AutoDoc kept their old names, since their new ones were already there: %1</source>
+        <translation>새 이름이 이미 있어서, 이전 AutoDoc의 일부 에이전트 폴더는 예전 이름을 그대로 유지했습니다: %1</translation>
+    </message>
     <message id="autodoc.crew.scope_unlisted">
         <source>This window's crew scope is held, but not listed for a successor: %1</source>
         <translation>이 창의 크루 범위를 보유하고 있지만 후속 창을 위해 기록되지 않았습니다: %1</translation>

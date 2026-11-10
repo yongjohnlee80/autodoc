@@ -134,7 +134,7 @@ func (f *todoFeed) read(ctx context.Context, scope, run string, epoch int64, sta
 		return todoFeedRead{} // a daemon without todos, or one away: the next claim or change reads again
 	}
 	d := &todoDelivery{f: f, scope: scope, run: run, epoch: epoch}
-	seenFile := filepath.Join(f.dir, scope)
+	seenFile := filepath.Join(f.dir, crewFileName(scope))
 	seen := readTodoSeen(seenFile)
 	var out todoFeedRead
 	added := false

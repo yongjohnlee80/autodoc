@@ -676,7 +676,7 @@ func (h *agents) agentFolder(ws wsInfo, codename string) string {
 		return dir
 	}
 	if scope, _, ok := h.crew.held(); ok {
-		return filepath.Join(dir, safeName(scope), safeName(codename))
+		return filepath.Join(dir, crewFileName(scope), crewFileName(codename))
 	}
 	return dir
 }
