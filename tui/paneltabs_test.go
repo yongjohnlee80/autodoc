@@ -108,9 +108,9 @@ func TestCtrlTabMovesBetweenTheAgentsTabs(t *testing.T) {
 		{Name: "two", Command: shellQuote(agent), Codename: "two"},
 	}, "one")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
-	r.s.WaitFor(t, "one running", func(string) bool { return onLoop(r, func() bool { return r.h.agents.agentRunning == "one" }) })
+	r.s.WaitFor(t, "one running", func(string) bool { return onLoop(r, func() bool { return r.h.agents.Snapshot().Running == "one" }) })
 	onLoop(r, func() bool { r.h.agents.openAgentProfiles(); r.h.agents.useAgent(1); return true })
-	selected := func() string { return onLoop(r, func() string { return r.h.agents.selectedAgent }) }
+	selected := func() string { return onLoop(r, func() string { return r.h.agents.Snapshot().Selected }) }
 	r.s.WaitFor(t, "two running, its tab showing", func(string) bool { return selected() == "two" && r.focused("agentView") })
 	r.keys(t, ctrlTab(false))
 	r.s.WaitFor(t, "Ctrl+Tab round to one", func(string) bool { return selected() == "one" && r.focused("agentView") })
