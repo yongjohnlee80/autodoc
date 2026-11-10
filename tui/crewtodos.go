@@ -370,6 +370,6 @@ func writeTodoSeen(file string, seen map[string]bool) {
 	}
 	b, _ := json.Marshal(ids)
 	if os.MkdirAll(filepath.Dir(file), 0o700) == nil {
-		_ = writeAtomic(file, b, 0o600)
+		_ = writePrivate(file, b)
 	}
 }
