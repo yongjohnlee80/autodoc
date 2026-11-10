@@ -64,7 +64,7 @@ func TestTheDACLsVerdictsOnWindows(t *testing.T) {
 		"D:P(A;;FA;;;" + u + ")(A;;FR;;;BU)":             true,  // Users
 		"D:P(A;;FA;;;" + u + ")(A;;FR;;;AU)":             true,  // Authenticated Users
 		"D:P(A;;FA;;;" + u + ")(D;;FA;;;WD)":             false, // a deny alone exposes nothing
-		"D:P(D;;FA;;;BU)(A;;FA;;;" + u + ")(A;;FR;;;BU)": true,  // a deny never cancels an allow
+		"D:P(D;;FA;;;AN)(A;;FA;;;" + u + ")(A;;FR;;;AN)": true,  // a deny never cancels an allow (Anonymous: a deny of a group this user is in would lock the user out too)
 		"D:NO_ACCESS_CONTROL":                            true,  // no DACL: everyone, everything
 	} {
 		setDACL(t, key, sddl)

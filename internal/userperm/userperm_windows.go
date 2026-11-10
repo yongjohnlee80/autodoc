@@ -12,7 +12,10 @@ import (
 )
 
 // openNoFollow opens path for reading and for its security (READ_CONTROL), the entry itself: a
-// reparse point (a symbolic link, a junction) is not followed, and regular then refuses it.
+// reparse point (a symbolic link, a junction) is not followed, and regular then refuses it. A folder
+// opens too (FILE_FLAG_BACKUP_SEMANTICS, as os.Open opens one), so regular refuses it as exposed
+// rather than the open failing with access denied. A backup privilege the flag may honour lets
+// nothing pass: exposure reads the DACL itself, through the handle.
 func openNoFollow(path string) (*os.File, error) {
 	p, err := windows.UTF16PtrFromString(path)
 	if err != nil {
@@ -20,7 +23,7 @@ func openNoFollow(path string) (*os.File, error) {
 	}
 	h, err := windows.CreateFile(p, windows.GENERIC_READ|windows.READ_CONTROL,
 		windows.FILE_SHARE_READ, nil, windows.OPEN_EXISTING,
-		windows.FILE_ATTRIBUTE_NORMAL|windows.FILE_FLAG_OPEN_REPARSE_POINT, 0)
+		windows.FILE_ATTRIBUTE_NORMAL|windows.FILE_FLAG_OPEN_REPARSE_POINT|windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
 	if err != nil {
 		if errors.Is(err, windows.ERROR_FILE_NOT_FOUND) || errors.Is(err, windows.ERROR_PATH_NOT_FOUND) {
 			return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
