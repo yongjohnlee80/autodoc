@@ -3,6 +3,7 @@ package crew_test
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -85,6 +86,70 @@ func TestAgyPromptOfReadsTheTrajectorysTail(t *testing.T) {
 	}
 	if _, _, err := crew.AgyPromptOf(ctx, c, addr, "wrong-token", agyConv, 0); err == nil {
 		t.Fatal("a refused token gave a prompt")
+	}
+}
+
+// TestAgyPromptOfReadsATailOfAnySize: a step carries what the agent read or wrote, so a trajectory's
+// tail can be far over what a small answer may be. The prompt after such a step is still read, from
+// the conversation's start and from an offset, and the offset moves past the long step, so the next
+// read is short again. A tail the read refused would be asked again at the same offset forever, and
+// no prompt after it would be reported.
+func TestAgyPromptOfReadsATailOfAnySize(t *testing.T) {
+	long := map[string]any{"status": "CORTEX_STEP_STATUS_DONE", "viewFile": map[string]any{"content": strings.Repeat("a line of a long file\n", 20000)}} // about 440 KiB
+	tr := &trajectory{steps: []map[string]any{done(), long, waiting("touch build/x")}}
+	addr := tr.serve(t)
+	ctx, c := context.Background(), crew.AgyClient()
+	p, next, err := crew.AgyPromptOf(ctx, c, addr, agyToken, agyConv, 0)
+	if err != nil || !p.Showing || p.Asks != "command: touch build/x" || next != 2 {
+		t.Fatalf("a prompt after a long step, read from the start: %+v next %d %v", p, next, err)
+	}
+	// the bridge was at the long step when it was written: its next read starts there
+	if p, next, err = crew.AgyPromptOf(ctx, c, addr, agyToken, agyConv, 1); err != nil || !p.Showing || next != 2 {
+		t.Fatalf("a prompt after a long step, read from the step: %+v next %d %v", p, next, err)
+	}
+	tr.mu.Lock()
+	tr.steps[2] = done()
+	tr.steps = append(tr.steps, long, done())
+	tr.mu.Unlock()
+	if p, next, err = crew.AgyPromptOf(ctx, c, addr, agyToken, agyConv, next); err != nil || p.Showing || next != 4 {
+		t.Fatalf("no prompt after another long step: %+v next %d %v", p, next, err)
+	}
+}
+
+// TestAgyPromptOfRefusesAnAnswerThatIsNotTheSteps: an answer cut short, one that is not an object
+// and one whose steps are not a list are errors, the offset as it was, never a prompt.
+func TestAgyPromptOfRefusesAnAnswerThatIsNotTheSteps(t *testing.T) {
+	for name, body := range map[string]string{
+		"cut short":           `{"steps":[{"status":"CORTEX_STEP_STATUS_WAITING","requestedInteraction":{"permission":{`,
+		"not an object":       `[]`,
+		"steps are no list":   `{"steps":{"status":"CORTEX_STEP_STATUS_WAITING"}}`,
+		"a step is no object": `{"steps":["CORTEX_STEP_STATUS_WAITING"]}`,
+	} {
+		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = io.Copy(io.Discard, r.Body)
+			_, _ = io.WriteString(w, body)
+		}))
+		p, next, err := crew.AgyPromptOf(context.Background(), crew.AgyClient(), strings.TrimPrefix(s.URL, "http://"), agyToken, agyConv, 7)
+		s.Close()
+		if err == nil || p.Showing || next != 7 {
+			t.Errorf("%s: %+v next %d %v; want an error, no prompt, the offset kept", name, p, next, err)
+		}
+	}
+	// fields the read does not use are passed over, steps absent or null are no steps
+	for name, body := range map[string]string{
+		"other fields": `{"cascadeId":"x","meta":{"steps":[1,2]},"steps":[{"status":"CORTEX_STEP_STATUS_DONE"}],"more":[{"a":1}]}`,
+		"null steps":   `{"steps":null}`,
+		"no steps":     `{}`,
+	} {
+		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = io.Copy(io.Discard, r.Body)
+			_, _ = io.WriteString(w, body)
+		}))
+		p, _, err := crew.AgyPromptOf(context.Background(), crew.AgyClient(), strings.TrimPrefix(s.URL, "http://"), agyToken, agyConv, 0)
+		s.Close()
+		if err != nil || p.Showing {
+			t.Errorf("%s: %+v %v; want no prompt and no error", name, p, err)
+		}
 	}
 }
 

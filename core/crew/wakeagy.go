@@ -171,21 +171,28 @@ func connectCode(answer []byte) (string, bool) {
 	return e.Code, true
 }
 
-// agyCall POSTs body as Connect-JSON to method on the server at address, with token, and answers
-// the status and the answer, read whole up to agyMaxAnswer: an answer cut short or over that is an
-// error.
-func agyCall(ctx context.Context, c *http.Client, address, token, method string, body any) (int, []byte, error) {
+// agyPost POSTs body as Connect-JSON to method on the server at address, with token, and answers
+// the response, its body the caller's to read and close.
+func agyPost(ctx context.Context, c *http.Client, address, token, method string, body any) (*http.Response, error) {
 	b, err := json.Marshal(body)
 	if err != nil {
-		return 0, nil, err
+		return nil, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://"+address+agyService+method, bytes.NewReader(b))
 	if err != nil {
-		return 0, nil, err
+		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-codeium-csrf-token", token)
-	res, err := c.Do(req)
+	return c.Do(req)
+}
+
+// agyCall is agyPost's status and answer, read whole up to agyMaxAnswer: an answer cut short or
+// over that is an error. It is for the answers that are small by their nature (a conversation's
+// metadata, the summary of the conversations, a message's receipt); a trajectory's steps are not
+// (agySteps).
+func agyCall(ctx context.Context, c *http.Client, address, token, method string, body any) (int, []byte, error) {
+	res, err := agyPost(ctx, c, address, token, method, body)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -240,50 +247,109 @@ type AgyPrompt struct {
 // The trajectory step states AgyPromptOf reads (GetCascadeTrajectorySteps).
 const agyStepWaiting = "CORTEX_STEP_STATUS_WAITING"
 
+// agyMaxTrajectory is the most of a trajectory's steps read in one answer. A step carries what the
+// agent read or wrote, so a tail is megabytes where a long file was read; this bounds a read
+// without refusing one.
+const agyMaxTrajectory = 256 << 20
+
+// agyStep is what AgyPromptOf reads of a trajectory step: its state, and the permission it asks.
+type agyStep struct {
+	Status      string `json:"status"`
+	Interaction *struct {
+		Permission *struct {
+			Resource struct {
+				Action string `json:"action"`
+				Target string `json:"target"`
+			} `json:"resource"`
+			Description string `json:"actionDescription"`
+		} `json:"permission"`
+	} `json:"requestedInteraction"`
+}
+
+// agySteps reads a GetCascadeTrajectorySteps answer as a stream: how many steps it holds, and the
+// last. Each step is decoded alone and dropped, and every other field is passed over, so no more
+// than one step is held however long the answer is. An answer that is not the steps' object, or is
+// cut short (the connection, or agyMaxTrajectory), is an error.
+func agySteps(r io.Reader) (n int, last agyStep, err error) {
+	fail := func(err error) (int, agyStep, error) {
+		if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
+			return 0, agyStep{}, fmt.Errorf("crew: the agy trajectory was cut short, or is over %d bytes", agyMaxTrajectory)
+		}
+		return 0, agyStep{}, fmt.Errorf("crew: the agy trajectory: %w", err)
+	}
+	dec := json.NewDecoder(io.LimitReader(r, agyMaxTrajectory))
+	if tok, err := dec.Token(); err != nil {
+		return fail(err)
+	} else if tok != json.Delim('{') {
+		return fail(errors.New("not an object"))
+	}
+	for dec.More() {
+		key, err := dec.Token()
+		if err != nil {
+			return fail(err)
+		}
+		if key != "steps" {
+			var skip json.RawMessage
+			if err := dec.Decode(&skip); err != nil {
+				return fail(err)
+			}
+			continue
+		}
+		tok, err := dec.Token()
+		if err != nil {
+			return fail(err)
+		}
+		if tok == nil { // "steps": null
+			continue
+		}
+		if tok != json.Delim('[') {
+			return fail(errors.New("its steps are not a list"))
+		}
+		for dec.More() {
+			var s agyStep
+			if err := dec.Decode(&s); err != nil {
+				return fail(err)
+			}
+			n, last = n+1, s
+		}
+		if _, err := dec.Token(); err != nil { // the list's end
+			return fail(err)
+		}
+	}
+	if _, err := dec.Token(); err != nil { // the object's end
+		return fail(err)
+	}
+	return n, last, nil
+}
+
 // AgyPromptOf reads conversation's trajectory from step offset on (its tail: offset is the answer a
 // read before gave, 0 at first) and answers its permission prompt, and the offset the next read
 // takes, which keeps the last step read in view, since its state is what changes. A trajectory
-// shorter than offset (reverted) is read again from its start.
+// shorter than offset (reverted) is read again from its start. The tail is read as a stream
+// (agySteps), whatever its size: a read that failed on a long tail would be asked the same tail
+// again, and never report a prompt after it.
 func AgyPromptOf(ctx context.Context, c *http.Client, address, token, conversation string, offset int) (AgyPrompt, int, error) {
-	type step struct {
-		Status      string `json:"status"`
-		Interaction *struct {
-			Permission *struct {
-				Resource struct {
-					Action string `json:"action"`
-					Target string `json:"target"`
-				} `json:"resource"`
-				Description string `json:"actionDescription"`
-			} `json:"permission"`
-		} `json:"requestedInteraction"`
-	}
-	read := func(from int) ([]step, error) {
-		code, answer, err := agyCall(ctx, c, address, token, "GetCascadeTrajectorySteps",
+	read := func(from int) (int, agyStep, error) {
+		res, err := agyPost(ctx, c, address, token, "GetCascadeTrajectorySteps",
 			map[string]any{"cascadeId": conversation, "stepOffset": from})
 		if err != nil {
-			return nil, err
+			return 0, agyStep{}, err
 		}
-		if code != http.StatusOK {
-			return nil, fmt.Errorf("crew: the agy language server answered status %d for the trajectory", code)
+		defer res.Body.Close()
+		if res.StatusCode != http.StatusOK {
+			return 0, agyStep{}, fmt.Errorf("crew: the agy language server answered status %d for the trajectory", res.StatusCode)
 		}
-		var got struct {
-			Steps []step `json:"steps"`
-		}
-		if err := json.Unmarshal(answer, &got); err != nil {
-			return nil, fmt.Errorf("crew: the agy trajectory: %w", err)
-		}
-		return got.Steps, nil
+		return agySteps(res.Body)
 	}
-	steps, err := read(offset)
-	if err == nil && len(steps) == 0 && offset > 0 {
+	n, last, err := read(offset)
+	if err == nil && n == 0 && offset > 0 {
 		offset = 0
-		steps, err = read(0)
+		n, last, err = read(0)
 	}
-	if err != nil || len(steps) == 0 {
+	if err != nil || n == 0 {
 		return AgyPrompt{}, offset, err
 	}
-	last := steps[len(steps)-1]
-	next := offset + len(steps) - 1
+	next := offset + n - 1
 	if last.Status != agyStepWaiting || last.Interaction == nil || last.Interaction.Permission == nil {
 		return AgyPrompt{}, next, nil
 	}
