@@ -359,13 +359,23 @@ func (a *agents) refuse(panel feature.TerminalPanel, instance *agentInstance, wh
 // functions: an alias for another account's Claude Code (e.g. claude-work) is not found there. Only
 // what shell looks up as it is written is judged (usershell.Shell.LooksUp): a bare name, found as
 // the OS finds a program (PATHEXT on Windows), and an absolute path. The shell resolves the rest
-// itself, and they pass: its own syntax, a leading ~, a relative path (from the agent's folder, its
-// process's working directory, never AutoDoc's), a glob; so does a name found only through a
-// relative PATH entry, which is the agent's folder's to resolve too.
+// itself, and they pass: its own syntax and words (a builtin such as exec or command, PowerShell's
+// cmdlets and aliases), a leading ~, a relative path (from the agent's folder, its process's
+// working directory, never AutoDoc's), a glob; so does a bare name while the PATH holds a relative
+// entry, which is the agent's folder's to resolve too.
 func commandOnPath(shell usershell.Shell, command string, env []string) error {
 	word, judged := shell.LooksUp(command)
 	if !judged {
 		return nil
+	}
+	if !filepath.IsAbs(word) {
+		// a PATH entry that is relative (or empty: the current folder) is the agent's folder's,
+		// its process's working directory, which this check doesn't run in: the shell decides
+		for _, dir := range filepath.SplitList(procenv.Env(env).Get("PATH")) {
+			if !filepath.IsAbs(dir) {
+				return nil
+			}
+		}
 	}
 	if _, err := procenv.LookPath(procenv.Env(env), word); err == nil || errors.Is(err, exec.ErrDot) {
 		return nil

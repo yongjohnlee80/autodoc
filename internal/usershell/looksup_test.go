@@ -3,7 +3,8 @@ package usershell
 import "testing"
 
 // A shell looks up a bare name as it is written; everything else in a line it resolves itself, in
-// its own syntax, so nobody else can judge it. PowerShell's syntax is not /bin/sh's: its braces and
+// its own syntax or as one of its own words (a builtin, a keyword, PowerShell's aliases and
+// cmdlets), so nobody else can judge it. PowerShell's syntax is not /bin/sh's: its braces and
 // @ are its own, and on Windows a backslash is a separator.
 func TestAShellLooksUpOnlyABareName(t *testing.T) {
 	cases := []struct {
@@ -33,6 +34,21 @@ func TestAShellLooksUpOnlyABareName(t *testing.T) {
 		{powershell, "claude*", ""},
 		{winps, "claude --resume", "claude"},
 		{winps, "claude; claude", ""},
+		// the shell's own words: never on PATH, never judged
+		{posix, "exec claude", ""},
+		{posix, "command claude", ""},
+		{posix, "cd x", ""},
+		{posix, "claude-work", "claude-work"},
+		{powershell, "Write-Output hi", ""},
+		{powershell, "write-output hi", ""},
+		{powershell, "Get-ChildItem", ""},
+		{winps, "ls -x", ""},
+		{winps, "LS", ""},
+		{powershell, "foreach x", ""},
+		{powershell, "if x", ""},
+		{powershell, "claude-work", "claude-work"}, // no approved verb: a program's name
+		{winps, "My-Tool --x", "My-Tool"},
+		{powershell, "exec claude", "exec"}, // /bin/sh's word, PowerShell's program
 	}
 	for _, c := range cases {
 		got, ok := Shell{kind: c.kind}.LooksUp(c.line)
