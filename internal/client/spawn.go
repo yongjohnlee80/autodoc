@@ -79,7 +79,8 @@ func openServeLog(path string) (*os.File, error) {
 
 // privateLog makes the log at path private to this user: a new one empty, one that isn't private
 // replaced by a private copy (its lines kept), one that is left as it is. One another process holds
-// open (Windows' sharing refusal) is left to be appended to.
+// open so that it can't be read now (userperm.ErrInUse: on Windows, the daemon writing it) is left
+// to be appended to; any other failure to read it is the open's error.
 func privateLog(path string) error {
 	f, err := userperm.CreatePrivate(path)
 	if err == nil {
@@ -89,11 +90,13 @@ func privateLog(path string) error {
 		return err
 	}
 	r, err := userperm.OpenPrivate(path)
-	if err == nil {
+	switch {
+	case err == nil:
 		return r.Close()
-	}
-	if !errors.Is(err, userperm.ErrExposed) {
+	case errors.Is(err, userperm.ErrInUse):
 		return nil
+	case !errors.Is(err, userperm.ErrExposed):
+		return err
 	}
 	old, err := os.ReadFile(path)
 	if err != nil {

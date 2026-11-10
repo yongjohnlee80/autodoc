@@ -1,6 +1,7 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -109,5 +110,52 @@ func TestAnEarlierLogThatIsNotPrivateIsMadePrivate(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(path); string(b) != "earlier\nnow\n" {
 		t.Fatalf("the earlier log: %q, want its lines kept and appended to", b)
+	}
+}
+
+// TestALogAnotherProcessHoldsIsAppendedTo: a log the daemon still writes is appended to. On Windows
+// its writer's handle refuses the private read (userperm.ErrInUse), and so its privacy, made when
+// it was new, is left as it is.
+func TestALogAnotherProcessHoldsIsAppendedTo(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "serve.log")
+	f, err := openServeLog(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+	daemon, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0) // the daemon's own, open as it writes
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer daemon.Close()
+	if _, err := daemon.WriteString("daemon\n"); err != nil {
+		t.Fatal(err)
+	}
+	again, err := openServeLog(path)
+	if err != nil {
+		t.Fatalf("a log the daemon holds open: %v, want it appended to", err)
+	}
+	if _, err := again.WriteString("ui\n"); err != nil {
+		t.Fatal(err)
+	}
+	_ = again.Close()
+	if b, _ := os.ReadFile(path); string(b) != "daemon\nui\n" {
+		t.Fatalf("the held log: %q, want it appended to", b)
+	}
+}
+
+// TestALogThatCantBeReadIsNotAppendedTo: a log this user may write but not read can't be checked
+// for privacy, so it is not appended to: the open fails, saying why.
+func TestALogThatCantBeReadIsNotAppendedTo(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "serve.log")
+	if err := os.WriteFile(path, []byte("earlier\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	userpermtest.Unreadable(t, path)
+	if f, err := openServeLog(path); err == nil {
+		_ = f.Close()
+		t.Fatal("a log that can't be read was opened, its privacy unchecked")
+	} else if errors.Is(err, userperm.ErrExposed) || errors.Is(err, userperm.ErrInUse) {
+		t.Fatalf("a log that can't be read: %v, want the read's own error", err)
 	}
 }

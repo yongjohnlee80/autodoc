@@ -28,6 +28,9 @@ func openNoFollow(path string) (*os.File, error) {
 		if errors.Is(err, windows.ERROR_FILE_NOT_FOUND) || errors.Is(err, windows.ERROR_PATH_NOT_FOUND) {
 			return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
 		}
+		if errors.Is(err, windows.ERROR_SHARING_VIOLATION) { // open for writing elsewhere: this read shares no writer
+			return nil, &os.PathError{Op: "open", Path: path, Err: fmt.Errorf("%w: %w", ErrInUse, err)}
+		}
 		return nil, err
 	}
 	return os.NewFile(uintptr(h), path), nil

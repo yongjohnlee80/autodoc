@@ -185,3 +185,30 @@ func TestACreatedFileIsThisUsersWhateverTheTokensDefaultOwnerOnWindows(t *testin
 		t.Fatalf("CreatePrivate then OpenPrivate: %q, %v", got, err)
 	}
 }
+
+// TestAFileHeldOpenForWritingIsInUseOnWindows: a file another handle holds open for writing refuses
+// the private read, which shares no writer: ErrInUse, never ErrExposed, its privacy unread.
+func TestAFileHeldOpenForWritingIsInUseOnWindows(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "log")
+	f, err := CreatePrivate(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+	w, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r, err := OpenPrivate(path); err == nil || !errors.Is(err, ErrInUse) || errors.Is(err, ErrExposed) {
+		if err == nil {
+			_ = r.Close()
+		}
+		t.Fatalf("a file held open for writing: %v, want ErrInUse", err)
+	}
+	_ = w.Close()
+	if r, err := OpenPrivate(path); err != nil {
+		t.Fatalf("let go, the private file: %v", err)
+	} else {
+		_ = r.Close()
+	}
+}
