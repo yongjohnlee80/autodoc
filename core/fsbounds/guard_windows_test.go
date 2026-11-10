@@ -173,3 +173,33 @@ func TestAUNCRootServesItsOwnSpelling(t *testing.T) {
 		t.Error("the drive letter's spelling of a UNC root's file was let through")
 	}
 }
+
+// caseSensitive makes dir case-sensitive (fsutil setCaseSensitiveInfo), or skips where Windows can't.
+func caseSensitive(t *testing.T, dir string) {
+	t.Helper()
+	if out, err := exec.Command("fsutil.exe", "file", "setCaseSensitiveInfo", dir, "enable").CombinedOutput(); err != nil {
+		t.Skipf("this Windows makes no case-sensitive folder here: %v %s", err, out)
+	}
+}
+
+// In a case-sensitive directory kb and KB are two folders: a junction from kb into KB is outside
+// kb, a path in KB is not kb's, and kb by another case of its own name still is kb.
+func TestACaseSensitiveFoldersSiblingIsOutside(t *testing.T) {
+	base := t.TempDir()
+	caseSensitive(t, base)
+	kb, other := filepath.Join(base, "kb"), filepath.Join(base, "KB")
+	mustMkdir(t, filepath.Join(kb, "notes"))
+	mustMkdir(t, other)
+	mustWrite(t, filepath.Join(kb, "notes", "a.md"), "a")
+	mustWrite(t, filepath.Join(other, "secret.md"), "s")
+	junction(t, filepath.Join(kb, "notes", "sib"), other)
+	g := mustGuard(t)
+	g.SetServed(func() []Root { return []Root{{Name: "kb", Dir: kb}} })
+	refusedFor(t, "a junction into the case sibling", g.check(Root{Name: "kb", Dir: kb}, "notes/sib/secret.md", readAny, opRead), whyOutside)
+	if ws, name, err := g.Locate(filepath.Join(other, "secret.md")); err == nil {
+		t.Errorf("Locate in the case sibling = %v %q: want it outside kb", ws, name)
+	}
+	if ws, name, err := g.Locate(filepath.Join(kb, "notes", "a.md")); err != nil || ws.Name != "kb" || name != "notes/a.md" {
+		t.Errorf("Locate in kb itself = %v %q, %v", ws, name, err)
+	}
+}
