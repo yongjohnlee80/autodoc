@@ -80,6 +80,10 @@ func IsAbsFor(p string, windows bool) bool {
 	return root != ""
 }
 
+// RootFor is Root of p, in either form, under Windows' rule when windows is set, Unix' otherwise:
+// for data with a rule of its own (a test's disk), on any OS.
+func RootFor(p string, windows bool) (root, rel string) { return rootOf(slash(p, windows), windows) }
+
 // IsAbs reports whether p, in either form (the OS's own or the slash form), is an absolute path:
 // rooted ("/srv/kb"), or a drive's or a share's on Windows ("C:/Users/u", `C:\Users\u`,
 // "//server/share/kb"); "C:u", a drive's current directory, is not. The disk that opens p has the
