@@ -112,6 +112,14 @@ func TestProfileRenamesKeepOwnAndUntouchedLegacyCodenames(t *testing.T) {
 	}
 }
 
+// ranAs is command as the agent's shell is given it, its last argument (agentArgv): what
+// ConfigureTerminal records. The line itself under /bin/sh; under pwsh behind its Standard
+// argument passing (internal/usershell's Run).
+func ranAs(a *agents, command string) string {
+	_, args := agentArgv(a.seams.env, command)
+	return args[len(args)-1]
+}
+
 func TestDuplicateLabelsEditEachExactProfileAndResolveTargetsByCodename(t *testing.T) {
 	for _, row := range []int{0, 1} {
 		c := newIdentityHost(`[{"name":"Same","command":"one"},{"name":"Same","command":"two"}]`)
@@ -135,13 +143,13 @@ func TestDuplicateLabelsEditEachExactProfileAndResolveTargetsByCodename(t *testi
 			t.Fatalf("default selected another Same label: %+v", p)
 		}
 		a.openAgentPanel()
-		if c.configuredCommand != got[row].Command || a.agentRunning != got[row].Codename {
+		if c.configuredCommand != ranAs(a, got[row].Command) || a.agentRunning != got[row].Codename {
 			t.Fatal("opening the default started another profile with the same label")
 		}
 		a.stopAgent()
 		c.configuredCommand = ""
 		a.useAgent(row)
-		if c.configuredCommand != got[row].Command || a.agentRunning != got[row].Codename {
+		if c.configuredCommand != ranAs(a, got[row].Command) || a.agentRunning != got[row].Codename {
 			t.Fatal("Use started another profile with the same label")
 		}
 		a.stopAgent()
@@ -153,7 +161,7 @@ func TestDuplicateLabelsEditEachExactProfileAndResolveTargetsByCodename(t *testi
 		}
 		a.switchingAgent = got[row].Codename
 		a.switchAgentConfirmed() // retained compatibility command selects without stopping peers
-		if c.configuredCommand != got[row].Command || a.agentRunning != got[row].Codename {
+		if c.configuredCommand != ranAs(a, got[row].Command) || a.agentRunning != got[row].Codename {
 			t.Fatalf("switch started another Same label: command %q, identity %q", c.configuredCommand, a.agentRunning)
 		}
 	}
