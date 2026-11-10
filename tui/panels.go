@@ -59,6 +59,7 @@ func (h *Host) togglePanel(name string) {
 	}
 	if h.panelOpen[name] && (h.panelHidden(name) || h.panelCovered(name)) {
 		h.goTo(widgetTarget{panel: name})
+		h.raisePanel(name) // the keyboard may be in it already, where focusing it raises nothing
 		return
 	}
 	if h.panelOpen[name] {
@@ -92,6 +93,17 @@ func (h *Host) togglePanelTab(name string, tab int) {
 	s.ShowTab(tab)
 	if !shown || h.panelCovered(name) {
 		h.togglePanel(name) // shown on it, and to the front when covered
+	}
+}
+
+// raisePanel brings panel name above the panels and windows over it, the keyboard where it is
+// (golib's Drawer and FloatWindow Raise). A panel comes forward by itself when the keyboard enters
+// it; one that holds the keyboard already would not.
+func (h *Host) raisePanel(name string) {
+	if c, ok := h.p.Find(name); ok {
+		if r, ok := c.(interface{ Raise() }); ok {
+			r.Raise()
+		}
 	}
 }
 

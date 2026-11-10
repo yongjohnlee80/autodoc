@@ -172,6 +172,7 @@ func (h *Host) goDock(key string) {
 		h.focusEditor()
 	default: // closed, hidden, or covered by a window over it: there, in front
 		h.goTo(t)
+		h.raisePanel(t.panel)
 	}
 }
 
