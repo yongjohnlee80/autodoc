@@ -2,10 +2,11 @@ package tui
 
 import (
 	"context"
-	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"maps"
 	"strings"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // A plugin that starts with AutoDoc (start = "launch") asks once (docs/plugins.md#starting-with-autodoc).
@@ -132,7 +133,7 @@ func TestALaunchQuestionDisplacedReturnsAndClosedRemembersNothing(t *testing.T) 
 // The grant shows in Agent permissions with what it lets the plugin do; the question's text says
 // that a plugin is a program of its own, with the daemon's whole socket.
 func TestTheLaunchGrantSaysWhatItAllows(t *testing.T) {
-	if got := (inEnglish{}).Trf(luaCapabilityText[launchCapability]); !strings.Contains(got, "start with AutoDoc") {
+	if got := (inEnglish{}).Trf(feature.CapabilityText[launchCapability]); !strings.Contains(got, "start with AutoDoc") {
 		t.Fatalf("the launch grant reads %q", got)
 	}
 	if got := (inEnglish{}).Trf("autodoc.question.pluginlaunch.it_is_a_program_of_its_own", "atstart"); !strings.Contains(got, "whole socket") ||

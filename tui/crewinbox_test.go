@@ -121,7 +121,7 @@ func (w *inboxWindow) Ask(q feature.Question) feature.Asked {
 }
 func (w *inboxWindow) SetPref(name, value string) {
 	if name == prefAgentBell {
-		w.prefs.agentBell = value == "true"
+		w.prefs.SetValue(prefAgentBell, value)
 	}
 }
 func (w *inboxWindow) Open(id string)  { w.opened = append(w.opened, id) }
@@ -593,7 +593,7 @@ func TestTheReplyClosesWithItsRequest(t *testing.T) {
 // it off, nothing rings.
 func TestTheBellRingsOnceForWhatOpens(t *testing.T) {
 	w := newInboxWindow()
-	w.prefs.agentBell = true
+	w.prefs.SetValue(prefAgentBell, "true")
 	permission := map[string]any{"session": "s9", "codename": "tifa", "kind": "permission", "text": "edit?"}
 	blocked := map[string]any{"session": "s8", "codename": "aerith", "kind": "blocked", "text": "stuck"}
 	r1, r2, r3 := request("r1", "gold", "one", "s1"), request("r2", "gold", "two", "s1"), request("r3", "gold", "three", "s1")
@@ -649,12 +649,12 @@ func TestTheAgentBellToggles(t *testing.T) {
 		t.Fatalf("the catalog %+v, want :agent-bell", cmds)
 	}
 	_ = cmds[0].Run(feature.Invocation{})
-	if !w.prefs.agentBell || len(w.notes) != 1 || !strings.Contains(w.notes[0], "is on") {
-		t.Fatalf("after one toggle: on %v, notes %v", w.prefs.agentBell, w.notes)
+	if w.prefs.Value(prefAgentBell) != "true" || len(w.notes) != 1 || !strings.Contains(w.notes[0], "is on") {
+		t.Fatalf("after one toggle: on %v, notes %v", w.prefs.Value(prefAgentBell), w.notes)
 	}
 	_ = cmds[0].Run(feature.Invocation{})
-	if w.prefs.agentBell || !strings.Contains(w.notes[1], "is off") {
-		t.Fatalf("after two toggles: on %v, notes %v", w.prefs.agentBell, w.notes)
+	if w.prefs.Value(prefAgentBell) == "true" || !strings.Contains(w.notes[1], "is off") {
+		t.Fatalf("after two toggles: on %v, notes %v", w.prefs.Value(prefAgentBell), w.notes)
 	}
 }
 
@@ -739,7 +739,7 @@ func TestALateFailureNeverBringsADraftBack(t *testing.T) {
 // on a permission prompt (the same session, its attention raised again) rings.
 func TestAWaitThatBecomesAPermissionRings(t *testing.T) {
 	w := newInboxWindow()
-	w.prefs.agentBell = true
+	w.prefs.SetValue(prefAgentBell, "true")
 	blocked := map[string]any{"session": "s9", "codename": "tifa", "kind": "blocked", "text": "stuck"}
 	permission := map[string]any{"session": "s9", "codename": "tifa", "kind": "permission", "text": "edit?"}
 	w.answers = []any{snapshot(1, "", nil, []any{blocked}), changes(2, "attention"), snapshot(2, "", nil, []any{permission})}
