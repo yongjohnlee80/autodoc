@@ -27,14 +27,6 @@ func (h *Host) relationViewFeatures() []feature.Feature {
 	return h.relationViews
 }
 
-// relationViewChoices are the GlobeMap's and the Mindmap's settings' choosers (language.go's
-// choiceLabels).
-func relationViewChoices() map[string][]string {
-	out := mindChoices()
-	out["App.globeFilters"] = globeFilterNames()
-	return out
-}
-
 // openGlobeSettings is App.openGlobeSettings, which Preferences.qml names in every build: the
 // GlobeMap's settings, the terminal's.
 func (h *Host) openGlobeSettings() {

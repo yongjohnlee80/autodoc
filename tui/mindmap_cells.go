@@ -123,7 +123,7 @@ func (m *cellMindmap) State() map[string]any {
 	st := m.editor.state()
 	maps.Copy(st, map[string]any{
 		"App.mindmapTitle": "Mindmap", "App.mindThemes": feature.Choices(), "App.mindThemeIndex": 0,
-		"App.mindDepths": choiceModel(m.c, "App.mindDepths"), "App.mindShapeChoices": choiceModel(m.c, "App.mindShapeChoices"),
+		"App.mindDepths": relationChoice(m.c, "App.mindDepths"), "App.mindShapeChoices": relationChoice(m.c, "App.mindShapeChoices"),
 	})
 	return st
 }
@@ -186,7 +186,7 @@ func (*cellMindmap) Closed()             {}
 // rows.
 func (m *cellMindmap) LanguageChanged() {
 	for _, src := range []string{"App.mindDepths", "App.mindShapeChoices"} {
-		m.c.Set(src, choiceModel(m.c, src))
+		m.c.Set(src, relationChoice(m.c, src))
 	}
 	m.title()
 }
