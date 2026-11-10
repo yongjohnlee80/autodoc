@@ -231,7 +231,6 @@ func TestAStoreNotListedIsSaidAndNoOtherIsShownInItsPlace(t *testing.T) {
 // A store asked for and not listed, with none shown before, is said, and none is shown: never the
 // first listed in its place.
 func TestAStoreNotListedWithNoneShownShowsNone(t *testing.T) {
-	ctx := context.Background()
 	disk := todotest.NewDisk()
 	disk.MkdirAll(slashFile("/gone"))
 	m := todo.New(todotest.Roots{}, disk, todotest.NewJournal())
