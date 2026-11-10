@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/decl"
+	"github.com/yongjohnlee80/golib/paths"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
@@ -298,7 +299,8 @@ func (r *running) clickInPane(t *testing.T, text string) {
 }
 
 // TestThePanesLinks: a page's link opens the note it names (a wikilink's page), a file: URL opens
-// that file, and a web address goes to the browser.
+// that file (localhost's too, and with a fragment, the file it is in), a file: URL that names no
+// file here is said so, and a web address goes to the browser.
 func TestThePanesLinks(t *testing.T) {
 	t.Parallel()
 	r, kb := runPane(t)
@@ -312,8 +314,22 @@ func TestThePanesLinks(t *testing.T) {
 	if got := <-browsed; got != "https://example.com" {
 		t.Errorf("the browser was given %q", got)
 	}
-	r.h.p.Post(func() { r.h.htmlLink("file://" + filepath.ToSlash(filepath.Join(kb, "a.md"))) })
+	a, err := paths.URL(paths.OS(filepath.Join(kb, "a.md")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.h.p.Post(func() { r.h.htmlLink(a) })
 	r.waitOpen(t, "kb", "a.md")
+	b, err := paths.URL(paths.OS(filepath.Join(kb, "b.md")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.h.p.Post(func() { r.h.htmlLink(b + "#b") })
+	r.waitOpen(t, "kb", "b.md")
+	r.h.p.Post(func() { r.h.htmlLink(strings.Replace(a, "file://", "file://localhost", 1)) })
+	r.waitOpen(t, "kb", "a.md")
+	r.h.p.Post(func() { r.h.htmlLink("file:a.md") })
+	r.s.WaitFor(t, "the notice", func(string) bool { return r.noticed("file:a.md names no file on this computer") })
 }
 
 // TestThePaneFollowsTheOpenNote: with the pane open, another note opened shows its page at once
