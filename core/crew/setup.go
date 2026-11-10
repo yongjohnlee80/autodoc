@@ -235,8 +235,9 @@ func agySetup(in SetupInput, _ string, s *Setup) error {
 
 // JunieMCPFolder is the folder of the agent's own that holds Junie's MCP config (mcp.json), relative
 // to the agent's folder. Junie reads mcp.json from the folders --mcp-location names, beside its user
-// and project defaults, which stay on: the agent's own servers are added, nothing of the user's is
-// replaced or written.
+// and project defaults, which stay on: the agent's own servers are added and nothing of the user's
+// is written. Which of two servers of one name Junie keeps is not documented, so a user server
+// named like the crew's may shadow it, or be shadowed.
 const JunieMCPFolder = ".junie-crew/mcp"
 
 // JunieMCPConfig is Junie's MCP config file in the agent's folder, in JunieMCPFolder.
@@ -244,10 +245,11 @@ const JunieMCPConfig = JunieMCPFolder + "/mcp.json"
 
 // junieSetup gives a Junie agent its crew mail as in.Servers' tools
 // (docs/decisions/crew.md#the-crew-mcp-server): their config, mcp.json, in a folder of the agent's own
-// (FolderFiles), which its command line adds with --mcp-location. Junie has no session-scoped
-// allowlist (its rules are the user's ~/.junie/allowlist.json, which AutoDoc never writes), so a
-// tool call may ask the user; and no prompt reporter: its prompts are unreported. Without servers
-// or a folder it keeps its mail as commands, with a notice.
+// (FolderFiles), which its command line adds with --mcp-location. The config names no env, so the
+// server is expected to inherit the agent's (Junie documents neither way). No session-scoped
+// allowlist is documented for Junie (its rules are the user's ~/.junie/allowlist.json, which AutoDoc
+// never writes), so a tool call may ask the user; and it has no prompt reporter: its prompts are
+// unreported. Without servers or a folder it keeps its mail as commands, with a notice.
 func junieSetup(in SetupInput, _ string, s *Setup) error {
 	if len(in.Servers) == 0 || in.AgentDir == "" {
 		if len(in.Servers) > 0 {
@@ -265,7 +267,7 @@ func junieSetup(in SetupInput, _ string, s *Setup) error {
 	}
 	s.FolderFiles = append(s.FolderFiles, FolderFile{Path: JunieMCPConfig, Content: string(cfg)})
 	s.Argv = append(s.Argv, "--mcp-location", filepath.Join(in.AgentDir, filepath.FromSlash(JunieMCPFolder)))
-	s.Notices = append(s.Notices, "Junie may ask before each crew mail tool: allow the autodoc server's tools in your ~/.junie/allowlist.json (rules.mcpTools) to stop it")
+	s.Notices = append(s.Notices, "Junie may ask before each crew mail tool: its allowlist (~/.junie/allowlist.json, rules.mcpTools) can allow the autodoc server's tools")
 	s.MailVia = MailViaMCP
 	return nil
 }
