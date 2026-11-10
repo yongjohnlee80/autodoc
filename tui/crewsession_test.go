@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -434,7 +435,7 @@ func TestAClaudeThatCantBeReadGetsTheFloor(t *testing.T) {
 	if err := os.WriteFile(wrapper, []byte("#!/bin/sh\nexec somewhere-else \"$@\"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	a, c, w := crewAgents(t, `[{"name":"Claude","command":"`+wrapper+`","codename":"cl"}]`)
+	a, c, w := crewAgents(t, `[{"name":"Claude","command":`+strconv.Quote(wrapper)+`,"codename":"cl"}]`)
 	p, _ := a.profile("cl")
 	for range 2 {
 		instance, err := a.startInstance(p)
