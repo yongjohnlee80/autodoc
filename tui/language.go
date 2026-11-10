@@ -134,13 +134,6 @@ func englishText(id string) string {
 	return id
 }
 
-// wording is a catalog's text for a function that composes it: core{h} (or a feature's Core) in the
-// UI's language, or inEnglish.
-type wording interface {
-	Tr(id string) string
-	Trf(id string, args ...any) string
-}
-
 // inEnglish is wording in the English catalog's words, filled as trf fills: for text no screen
 // shows (a test's, a script's, an agent's task).
 type inEnglish struct{}
@@ -201,7 +194,7 @@ func (h *Host) choiceState() map[string]any {
 
 // choiceModel is the chooser src's rows (choiceLabels) in w's language, for a feature that sets them
 // again: each key its English, each label its catalog text (autodoc.choice.<slug>).
-func choiceModel(w wording, src string) *tuidecl.ListModel {
+func choiceModel(w feature.Wording, src string) *tuidecl.ListModel {
 	labels, ok := choiceLabels[src]
 	if !ok {
 		labels = featureChoiceLabels[src]

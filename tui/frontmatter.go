@@ -36,7 +36,7 @@ func readSchemaInfo(v any) schemaInfo {
 }
 
 // state is the schema's standing, a sentence for the settings dialog.
-func (s schemaInfo) state(t wording) string {
+func (s schemaInfo) state(t feature.Wording) string {
 	var out string
 	switch {
 	case s.path == "":

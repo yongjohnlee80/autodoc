@@ -74,7 +74,7 @@ type relations struct {
 }
 
 // relationRows are the drawer's rows for p's relations rl, and how many neighbours they list.
-func relationRows(t wording, ws, p string, rl relations) ([]relRow, int) {
+func relationRows(t feature.Wording, ws, p string, rl relations) ([]relRow, int) {
 	ring := map[string]bool{p: true}
 	for _, e := range append(slices.Clone(rl.out), rl.in...) {
 		if e.resolved {

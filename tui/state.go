@@ -4,7 +4,6 @@ import (
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/internal/userdirs"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
-	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
@@ -87,8 +86,8 @@ func (h *Host) state() map[string]any {
 		// the leader card
 
 		// the editor's preferences
-		"App.languages":     choices(languageLabels()...),
-		"App.themes":        choices(h.themeLabels()...),
+		"App.languages":     feature.Choices(languageLabels()...),
+		"App.themes":        feature.Choices(h.themeLabels()...),
 		"App.userThemes":    h.userThemeRows(),
 		"App.builtinThemes": h.builtinThemeRows(),
 		"App.prefsError":    "",
@@ -169,9 +168,9 @@ func (h *Host) state() map[string]any {
 		"App.cellFonts":     h.cellFontModel,
 		"App.terminalFonts": h.termFontModel,
 		"App.proseFonts":    h.proseFontModel,
-		"App.fontSizes":     choices(fontSizeLabels()...),
-		"App.agentScales":   choices(percentLabels(feature.AgentScales)...),
-		"App.zoomSteps":     choices(zoomLabels()...),
+		"App.fontSizes":     feature.Choices(fontSizeLabels()...),
+		"App.agentScales":   feature.Choices(percentLabels(feature.AgentScales)...),
+		"App.zoomSteps":     feature.Choices(zoomLabels()...),
 		"App.cellFontIndex": 0, "App.proseFontIndex": 0, "App.terminalFontIndex": 0, "App.terminalLookNote": "",
 	}
 	for k, v := range h.cardState() {
@@ -206,17 +205,6 @@ func (h *Host) languageState() map[string]any {
 		"App.aboutText":    h.aboutTextNow(),
 		"App.aboutLog":     h.trf("autodoc.text.help.log", h.aboutInfo.Log),
 	}
-}
-
-// choices are a chooser's rows: each a label.
-func choices(labels ...string) *tuidecl.ListModel {
-	m := tuidecl.NewListModel("key", "label")
-	rows := make([]feature.RowOf, len(labels))
-	for i, l := range labels {
-		rows[i] = feature.RowOf{"key": l, "label": l}
-	}
-	m.Reset(rows)
-	return m
 }
 
 // homeDir is where the folder picker starts: the home directory (env's, nil for AutoDoc's own),

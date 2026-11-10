@@ -110,7 +110,7 @@ func TestTheSetupChecksTheMachineAndTicksTheWorkspaces(t *testing.T) {
 	if !c.set["App.embedSetupReady"].(bool) || !shown(c, "Pull") || shown(c, "Use") || shown(c, "Stop") || shown(c, "Retry") {
 		t.Fatalf("buttons: pull %v use %v stop %v retry %v", shown(c, "Pull"), shown(c, "Use"), shown(c, "Stop"), shown(c, "Retry"))
 	}
-	if st := c.set["App.embedSetupStatus"]; st != c.Trf("autodoc.text.embedsetup.to_download", bytesText(600<<20)) {
+	if st := c.set["App.embedSetupStatus"]; st != c.Trf("autodoc.text.embedsetup.to_download", feature.BytesText(600<<20)) {
 		t.Fatalf("status %q", st)
 	}
 }
@@ -303,7 +303,7 @@ func TestTheDownloadIsPolledAndStops(t *testing.T) {
 			if !shown(c, "Stop") || shown(c, "Pull") || len(later) != 1 {
 				t.Fatalf("while running: stop %v, pull %v, polls queued %d", shown(c, "Stop"), shown(c, "Pull"), len(later))
 			}
-			if got := c.set["App.embedSetupStatus"]; got != c.Trf("autodoc.text.embedsetup.downloading", bytesText(10<<20), bytesText(600<<20)) {
+			if got := c.set["App.embedSetupStatus"]; got != c.Trf("autodoc.text.embedsetup.downloading", feature.BytesText(10<<20), feature.BytesText(600<<20)) {
 				t.Fatalf("progress %q", got)
 			}
 			if end == "cancelled" {
