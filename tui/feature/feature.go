@@ -429,9 +429,12 @@ type Core interface {
 // Workspace is one of the daemon's workspaces as a feature reads it: its name, its state, and what
 // decides its files.
 type Workspace struct {
+	ID                int64 // the store's own id, which a rename keeps (0 from a daemon before it)
 	Name, Root, State string
 	Include, Exclude  []string
-	SectionTokens     int64 // the tokens a section holds: its own, or 0 for the default
+	SectionTokens     int64    // the tokens a section holds: its own, or 0 for the default
+	Schema            string   // its frontmatter schema's path; "" for none
+	TextExtensions    []string // its own plain-text extensions
 }
 
 // same reports whether w and o are the same workspace, in the same state, over the same files.

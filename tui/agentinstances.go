@@ -63,7 +63,7 @@ type agentInstance struct {
 	env              []string
 	tab              terminal.TerminalTabID
 	token            string
-	workspace        wsInfo
+	workspace        feature.Workspace
 	running, closing bool
 	restart          bool // Restart closed it: its profile starts again, in a new tab, once it is gone
 	cleanupError     error
@@ -242,7 +242,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 	}
 	a.c.OpenDrawer("agent") // Start must return the actual startup outcome, not a pre-mount promise
 	instance := a.instances[p.Codename]
-	if instance != nil && (instance.workspace.name != ws.name || instance.workspace.root != ws.root) {
+	if instance != nil && (instance.workspace.Name != ws.Name || instance.workspace.Root != ws.Root) {
 		return nil, fmt.Errorf("close the old workspace's agent tab before starting in another workspace: %w", ErrAgentStale)
 	}
 	if instance != nil && (instance.running || instance.starting) {
@@ -259,7 +259,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 	crewed := false
 	if a.crew != nil {
 		_, _, held := a.crew.held()
-		crewed = held && ws.id > 0
+		crewed = held && ws.ID > 0
 	}
 	crewKind := ""
 	if crewed {
@@ -390,8 +390,8 @@ func commandOnPath(shell usershell.Shell, command string, env []string) error {
 // registerCrew registers instance's crew session, as its setup said it reads its mail
 // (crew.register's mail_via) and with prompts (the window wrote the hooks that report them), then
 // starts its process once the session's context is written; a refused registration starts nothing.
-func (a *agents) registerCrew(panel feature.TerminalPanel, instance *agentInstance, p agentProfile, ws wsInfo, dir, token string, prompts bool, stale func() bool) {
-	a.crew.register(p.Codename, p.kind(), prompts, instance.setup.MailVia, ws.id, token, dir, func(s crewSession, err error) {
+func (a *agents) registerCrew(panel feature.TerminalPanel, instance *agentInstance, p agentProfile, ws feature.Workspace, dir, token string, prompts bool, stale func() bool) {
+	a.crew.register(p.Codename, p.kind(), prompts, instance.setup.MailVia, ws.ID, token, dir, func(s crewSession, err error) {
 		instance.starting = false
 		if stale() {
 			if err == nil {
@@ -428,7 +428,7 @@ func (a *agents) registerCrew(panel feature.TerminalPanel, instance *agentInstan
 // the guide in its mail mode's form (crew.GuideOfVia), its folder files, and for Claude Code the
 // wake's hooks (the window's, from what its Claude Code knows) with the setup's allowance, which on
 // MCP mail is its tools alone. prompts is that the hooks that report its prompts were written.
-func (a *agents) applySetup(ws wsInfo, p agentProfile, dir string, setup crew.Setup) (prompts bool, err error) {
+func (a *agents) applySetup(ws feature.Workspace, p agentProfile, dir string, setup crew.Setup) (prompts bool, err error) {
 	kind := p.kind()
 	for _, n := range setup.Notices { // what the host tells the user, once: the setup's own words
 		a.c.Notify(n)
@@ -885,9 +885,9 @@ func (a *agents) deliver(to feature.AgentRef, check func() error, what string, o
 	if !ok {
 		return ErrAgentUnavailable
 	}
-	elsewhere := instance != nil && instance.running && (instance.workspace.name != ws.name || instance.workspace.root != ws.root)
+	elsewhere := instance != nil && instance.running && (instance.workspace.Name != ws.Name || instance.workspace.Root != ws.Root)
 	if elsewhere && o.ring == nil { // nothing reaches it but the base, which types only in its own workspace
-		return &agentElsewhere{workspace: instance.workspace.name, why: errNoDoorbell}
+		return &agentElsewhere{workspace: instance.workspace.Name, why: errNoDoorbell}
 	}
 	ticket := c.Ticket(nil, feature.TicketWorkspace)
 	accepted := &agentDelivery{done: done}
@@ -907,7 +907,7 @@ func (a *agents) deliver(to feature.AgentRef, check func() error, what string, o
 			return ErrAgentShuttingDown
 		}
 		currentWS, exists := a.c.ActiveWorkspaceInfo()
-		if !exists || !ticket.Current() || currentWS.name != ws.name || currentWS.root != ws.root {
+		if !exists || !ticket.Current() || currentWS.Name != ws.Name || currentWS.Root != ws.Root {
 			return ErrAgentStale
 		}
 		current := a.instances[to.Codename]
@@ -1049,7 +1049,7 @@ func (a *agents) deliver(to feature.AgentRef, check func() error, what string, o
 				}
 				finish(nil)
 			case errors.Is(err, errDoorbellNotSent) && elsewhere: // nothing was sent, and the base never types there
-				finish(&agentElsewhere{workspace: instance.workspace.name, why: err})
+				finish(&agentElsewhere{workspace: instance.workspace.Name, why: err})
 			case errors.Is(err, errDoorbellNotSent):
 				attempt(tries) // nothing was sent: the base, checked again first
 			default:
@@ -1174,5 +1174,5 @@ type agentHost interface {
 	DaemonAddress() string
 	// ActiveWorkspaceInfo is the workspace in use, all the agents read of it (its id, its folder
 	// settings); PanelHost's ActiveWorkspace is the kit's Workspace.
-	ActiveWorkspaceInfo() (wsInfo, bool)
+	ActiveWorkspaceInfo() (feature.Workspace, bool)
 }

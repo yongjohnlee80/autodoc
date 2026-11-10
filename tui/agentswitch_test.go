@@ -168,7 +168,7 @@ func TestAnAgentIsToldOfAWorkspaceSwitch(t *testing.T) {
 // starts again from its own.
 func TestTheSwitchIsCoalesced(t *testing.T) {
 	h := &Host{agents: &agents{instances: map[string]*agentInstance{
-		"zen": {token: "t1", workspace: wsInfo{name: "kb", root: "/k"}},
+		"zen": {token: "t1", workspace: feature.Workspace{Name: "kb", Root: "/k"}},
 	}}}
 	h.workspaces = feature.NewRows(tuidecl.NewListModel("key", "label"), workspaceRowOf)
 	list := func(ws ...wsInfo) { h.workspaces.Reset(ws) }
@@ -237,7 +237,7 @@ func TestAPeersRenameIsToldAsARename(t *testing.T) {
 	r := attached(t, d)
 	sw := onLoop(r, func() wsSwitch {
 		kb := r.h.wsRefOf("kb")
-		r.h.agents.instances["zen"] = &agentInstance{token: "t", workspace: wsInfo{name: kb.Name, root: kb.Root}}
+		r.h.agents.instances["zen"] = &agentInstance{token: "t", workspace: feature.Workspace{Name: kb.Name, Root: kb.Root}}
 		r.h.applyEvents([]peerEvent{{seq: 1, kind: "workspace.renamed", workspace: "kb", client: "another", detail: "kb2"}})
 		sw, _ := r.h.takeSwitch("zen")
 		return sw

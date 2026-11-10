@@ -15,6 +15,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/internal/usershell"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // agentSetupArgs are arguments as an agent's setup gives them (crew.Setup's Argv): a JSON config
@@ -70,7 +71,7 @@ func TestAnAgentsCommandReachesItsCLIWhole(t *testing.T) {
 	for _, c := range agentCommandCases(t) {
 		t.Run(c.label, func(t *testing.T) {
 			root := filepath.Join(t.TempDir(), "it's a root")
-			ws := wsInfo{id: 1, name: `say "hi" now it's`, root: root} // quotes, but no space after an odd one
+			ws := feature.Workspace{ID: 1, Name: `say "hi" now it's`, Root: root} // quotes, but no space after an odd one
 			filled, err := fillAgentCommand(c.env, c.call+" {root} {workspace}", ws)
 			if err != nil {
 				t.Fatal(err)
@@ -104,17 +105,17 @@ func TestAnAgentsCommandRefusesAValueItCannotCarry(t *testing.T) {
 	for _, c := range agentCommandCases(t) {
 		t.Run(c.label, func(t *testing.T) {
 			refused := runtime.GOOS == "windows" // stated here, not asked of Carries, so a Carries that refuses nothing fails
-			ws := wsInfo{id: 1, name: "kb", root: filepath.Join(t.TempDir(), "50% & more")}
+			ws := feature.Workspace{ID: 1, Name: "kb", Root: filepath.Join(t.TempDir(), "50% & more")}
 			_, err := fillAgentCommand(c.env, c.call+" {root}", ws)
 			if refused != (err != nil) || (err != nil && !errors.Is(err, usershell.ErrNotCarried)) {
 				t.Errorf("a root holding %% and &: %v; want refused %v", err, refused)
 			}
 			// a workspace name with a space after a double quote: Windows PowerShell 5.1 would split
 			// the quoted {workspace}, so there it is refused; every other shell hands it on whole
-			split := wsInfo{id: 1, name: `a"b c`, root: t.TempDir()}
+			split := feature.Workspace{ID: 1, Name: `a"b c`, Root: t.TempDir()}
 			filled, err := fillAgentCommand(c.env, c.call+" {workspace}", split)
 			if winps := strings.HasPrefix(c.label, "winps"); winps != (err != nil) || (err != nil && !errors.Is(err, usershell.ErrNotCarried)) {
-				t.Errorf("the workspace %q: %v; want refused %v", split.name, err, winps)
+				t.Errorf("the workspace %q: %v; want refused %v", split.Name, err, winps)
 			} else if err == nil {
 				prog, args := agentArgv(c.env, filled)
 				cmd := exec.Command(prog, args...)

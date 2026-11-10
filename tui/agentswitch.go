@@ -11,7 +11,7 @@ import "fmt"
 // prompt, through the UserPromptSubmit hook in its folder (agenthook.go). editor.document and
 // editor.buffers say when a buffer is in a workspace other than the asking agent's.
 
-// wsRef is a workspace as an agent sees it: its name and root. wsInfo's fields are the TUI's own.
+// wsRef is a workspace as an agent sees it: its name and root.
 type wsRef struct{ Name, Root string }
 
 // value is r on the socket: {name, root}, msgpack's map.
@@ -67,7 +67,7 @@ func (a *agents) takeSwitch(agent string, cur wsRef, document func(ws string) st
 		return wsSwitch{}, false
 	}
 	if inst.seenToken != inst.token { // a new incarnation: it knows only the workspace it started in
-		inst.seen, inst.seenToken = wsRef{Name: inst.workspace.name, Root: inst.workspace.root}, inst.token
+		inst.seen, inst.seenToken = wsRef{Name: inst.workspace.Name, Root: inst.workspace.Root}, inst.token
 	}
 	if cur == inst.seen || (cur.Name != "" && cur.Root == "") {
 		return wsSwitch{}, false
@@ -90,7 +90,7 @@ func (a *agents) spawnWorkspace(codename string) (wsRef, bool) {
 	if inst == nil {
 		return wsRef{}, false
 	}
-	return wsRef{Name: inst.workspace.name, Root: inst.workspace.root}, true
+	return wsRef{Name: inst.workspace.Name, Root: inst.workspace.Root}, true
 }
 
 // workspaceAnswer is editor.workspace's answer to agent: its own workspace (spawn_workspace), the

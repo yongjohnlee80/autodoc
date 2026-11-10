@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // The crew agent's guide and launch: an agent started under the window's crew scope is told its
@@ -73,7 +74,7 @@ func TestACrewAgentIsToldItsCLIsCrewProcedure(t *testing.T) {
 		}
 	}
 	// outside a crew scope: no crew procedure
-	if g := agentGuide(wsInfo{name: "kb", root: "/kb"}, "/bin/autodoc", "", "/w/bin/autodoc", "", crew.MailViaCLI); strings.Contains(g, "## Mail and your crew") {
+	if g := agentGuide(feature.Workspace{Name: "kb", Root: "/kb"}, "/bin/autodoc", "", "/w/bin/autodoc", "", crew.MailViaCLI); strings.Contains(g, "## Mail and your crew") {
 		t.Fatal("an agent outside a crew scope is told the crew procedure")
 	}
 }

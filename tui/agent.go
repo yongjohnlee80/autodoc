@@ -318,16 +318,16 @@ func (h *agents) stopAgent() bool {
 // fillAgentCommand fills {root} and {workspace} in a profile's command, each quoted for the shell
 // that runs it in env (internal/usershell). A value that shell can't hand the program as itself
 // (usershell.Shell.CarriesQuoted) is an error, and the command is not filled.
-func fillAgentCommand(env procenv.Env, command string, ws wsInfo) (string, error) {
+func fillAgentCommand(env procenv.Env, command string, ws feature.Workspace) (string, error) {
 	sh := usershell.Commands(env)
-	for _, f := range []struct{ placeholder, value string }{{"{root}", ws.root}, {"{workspace}", ws.name}} {
+	for _, f := range []struct{ placeholder, value string }{{"{root}", ws.Root}, {"{workspace}", ws.Name}} {
 		if strings.Contains(command, f.placeholder) {
 			if err := sh.CarriesQuoted(f.value); err != nil {
 				return "", fmt.Errorf("its command's %s can't reach it whole: %w", f.placeholder, err)
 			}
 		}
 	}
-	return strings.NewReplacer("{root}", sh.Quote(ws.root), "{workspace}", sh.Quote(ws.name)).Replace(command), nil
+	return strings.NewReplacer("{root}", sh.Quote(ws.Root), "{workspace}", sh.Quote(ws.Name)).Replace(command), nil
 }
 
 // shellQuote is s as one word of a POSIX shell: for AutoDoc's own sh scripts (a wrapper, a hook).
@@ -545,11 +545,11 @@ func withCommandArgs(env procenv.Env, args, extra []string) ([]string, error) {
 // store, not the default config's, and is found when no autodoc is installed, the rest p's own
 // (agentPath); and, with the editor socket, where the page is (AUTODOC_EDITOR) and who the agent
 // is there (AUTODOC_AGENT). They come after p's env (envList), so they are AutoDoc's.
-func (h *agents) agentEnv(ws wsInfo, dir string, p agentProfile) []string {
+func (h *agents) agentEnv(ws feature.Workspace, dir string, p agentProfile) []string {
 	codename := p.Codename
 	env := []string{
-		"AUTODOC_WORKSPACE=" + ws.name,
-		"AUTODOC_ROOT=" + ws.root,
+		"AUTODOC_WORKSPACE=" + ws.Name,
+		"AUTODOC_ROOT=" + ws.Root,
 		"AUTODOC_SOCKET=" + h.c.DaemonAddress(),
 		"AUTODOC_BIN=" + h.agentBin(),
 		"AUTODOC_CONFIG=" + h.agentConfig,
@@ -705,8 +705,8 @@ func agentWrapper(bin, config string) string {
 // agentFolder is the folder codename's agent works in for ws: AutoDoc's, never the workspace's. While
 // the window holds a crew scope it is the agent's own, under the scope, the same across that agent's
 // sessions so its CLI keeps one project folder; else the workspace's, shared by its profiles.
-func (h *agents) agentFolder(ws wsInfo, codename string) string {
-	dir := filepath.Join(agentBase(h.seams.env, h.agentDir), safeName(ws.name))
+func (h *agents) agentFolder(ws feature.Workspace, codename string) string {
+	dir := filepath.Join(agentBase(h.seams.env, h.agentDir), safeName(ws.Name))
 	if h.crew == nil {
 		return dir
 	}
@@ -740,7 +740,7 @@ func safeName(s string) string {
 // agentWrapper; and the workspace notice hook into .claude/settings.json (agenthook.go). A crew
 // agent's guide (crewKind its CLI's kind, "" for an agent outside a crew scope) holds the crew and
 // mail procedure for that CLI, so it registers how it is woken. It returns the folder.
-func (h *agents) writeAgentGuide(ws wsInfo, codename, crewKind string, via crew.MailVia) (string, error) {
+func (h *agents) writeAgentGuide(ws feature.Workspace, codename, crewKind string, via crew.MailVia) (string, error) {
 	dir := h.agentFolder(ws, codename)
 	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o700); err != nil {
 		return "", err
@@ -780,7 +780,7 @@ func writeAtomic(path string, text []byte, mode os.FileMode) error {
 // (its own AGENTS.md): as wrapper, the build bin on the TUI's config. A crew agent (crewKind its
 // CLI's kind) is also told the crew and mail procedure for its CLI in the form its session reads its
 // mail (crew.GuideOfVia, via): who it is, how it registers to be woken, and how it handles mail.
-func agentGuide(ws wsInfo, bin, config, wrapper, crewKind string, via crew.MailVia) string {
+func agentGuide(ws feature.Workspace, bin, config, wrapper, crewKind string, via crew.MailVia) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# You are working in AutoDoc\n\n")
 	fmt.Fprintf(&b, "You were started from AutoDoc, a search engine and editor over the user's files. ")
@@ -793,20 +793,20 @@ func agentGuide(ws wsInfo, bin, config, wrapper, crewKind string, via crew.MailV
 		b.WriteString("\n")
 	}
 	fmt.Fprintf(&b, "## The workspace\n\n")
-	fmt.Fprintf(&b, "- name: `%s` (also `$AUTODOC_WORKSPACE`)\n", ws.name)
-	fmt.Fprintf(&b, "- root: `%s` (also `$AUTODOC_ROOT`): the user's files, by path under it\n", ws.root)
-	if len(ws.include) > 0 {
-		fmt.Fprintf(&b, "- indexed: `%s`", strings.Join(ws.include, "`, `"))
-		if len(ws.exclude) > 0 {
-			fmt.Fprintf(&b, ", except `%s`", strings.Join(ws.exclude, "`, `"))
+	fmt.Fprintf(&b, "- name: `%s` (also `$AUTODOC_WORKSPACE`)\n", ws.Name)
+	fmt.Fprintf(&b, "- root: `%s` (also `$AUTODOC_ROOT`): the user's files, by path under it\n", ws.Root)
+	if len(ws.Include) > 0 {
+		fmt.Fprintf(&b, "- indexed: `%s`", strings.Join(ws.Include, "`, `"))
+		if len(ws.Exclude) > 0 {
+			fmt.Fprintf(&b, ", except `%s`", strings.Join(ws.Exclude, "`, `"))
 		}
 		b.WriteString("\n")
 	}
-	if ws.schema.path != "" {
-		fmt.Fprintf(&b, "- frontmatter schema: `%s`\n", ws.schema.path)
+	if ws.Schema != "" {
+		fmt.Fprintf(&b, "- frontmatter schema: `%s`\n", ws.Schema)
 	}
-	if len(ws.textExtensions) > 0 {
-		fmt.Fprintf(&b, "- also read as text: `%s`\n", strings.Join(ws.textExtensions, "`, `"))
+	if len(ws.TextExtensions) > 0 {
+		fmt.Fprintf(&b, "- also read as text: `%s`\n", strings.Join(ws.TextExtensions, "`, `"))
 	}
 	fmt.Fprintf(&b, "\n## Calling AutoDoc\n\n`autodoc` on your PATH is `%s`: it runs `%s` (`$AUTODOC_BIN`), the build the user runs", wrapper, bin)
 	if config != "" {
