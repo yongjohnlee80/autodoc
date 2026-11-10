@@ -25,22 +25,6 @@ import (
 // crumbSep separates the breadcrumb's parts, and the file's name from them.
 const crumbSep = " › "
 
-// showTitle titles the page's frame: the file's name, then the breadcrumb a feature put there.
-func (h *Host) showTitle() {
-	title := h.file.title(h.tr)
-	if len(h.crumbs) > 0 {
-		title += crumbSep + strings.Join(h.crumbs, crumbSep)
-	}
-	h.set("App.fileTitle", title)
-}
-
-// cursorMoved is the editor's cursor landing elsewhere: the watchers hear it (the breadcrumb follows).
-func (h *Host) cursorMoved() {
-	h.followCursorInPane()
-	line, _ := h.core.Line()
-	h.reg.Moved(line, h.cursorBytes())
-}
-
 // outliner is Go › Outline and the breadcrumb: the page's outline, read at each pause, and the
 // cursor's place in it.
 type outliner struct {
@@ -119,7 +103,7 @@ func (o *outliner) Closed() {
 // page read again (Reread, the picker's) may be a snapshot taken before the cursor last moved.
 func (o *outliner) read(p feature.Page) {
 	o.page = p
-	title := untitled
+	title := feature.Untitled
 	if p.Ref.Path != "" {
 		title = strings.TrimSuffix(path.Base(p.Ref.Path), path.Ext(p.Ref.Path))
 	}
@@ -164,7 +148,7 @@ func (o *outliner) jump(hd outline.Heading) {
 // pageName is the page's file as its title names it: its path, or untitled for the draft.
 func pageName(p feature.Page) string {
 	if p.Ref.Path == "" {
-		return untitled
+		return feature.Untitled
 	}
 	return p.Ref.Path
 }

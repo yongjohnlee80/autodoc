@@ -54,6 +54,9 @@ func Fill(s string, args ...any) string {
 	})
 }
 
+// Untitled is the draft's name wherever a file's path would show: the page no file holds.
+const Untitled = "untitled"
+
 // BytesText is a size as the list shows it.
 func BytesText(n int64) string {
 	switch {
