@@ -15,7 +15,8 @@ import (
 // (graphstore.go) and handed to the view, which draws in it at once. A window's GlobeMap and
 // Mindmap have one each; a terminal's Mindmap in cells has its own (mindmap_cells.go).
 
-type groupEditor struct {
+// GroupEditor is a view's settings' groups editor.
+type GroupEditor struct {
 	c       feature.Core
 	store   *GraphStore
 	view    string // viewGlobeMap or viewMindmap
@@ -35,21 +36,21 @@ type groupEditor struct {
 
 // loadingFor binds the editor to ws, whose groups are being read: no rows, and no edits, until
 // they are listed.
-func (e *groupEditor) loadingFor(ws string) {
+func (e *GroupEditor) loadingFor(ws string) {
 	e.ws, e.list, e.row, e.loading = ws, nil, 0, true
 	e.show(e.c.Trf("autodoc.text.mindmap_gui.reading", ws))
 }
 
-func (e *groupEditor) source(s string) string { return "App." + e.name + s }
+func (e *GroupEditor) source(s string) string { return "App." + e.name + s }
 
 // listed is the view's groups for ws, as read or edited: the dialog shows them.
-func (e *groupEditor) listed(ws string, types []string, list []Group) {
+func (e *GroupEditor) listed(ws string, types []string, list []Group) {
 	e.ws, e.types, e.list, e.loading = ws, types, list, false
 	e.show("")
 }
 
 // show publishes the rows, the selected group's fields, and note (or the groups' word when "").
-func (e *groupEditor) show(note string) {
+func (e *GroupEditor) show(note string) {
 	var rows []string
 	for _, g := range e.list {
 		row := g.Query + "  " + hexOf(g.Colour)
@@ -81,7 +82,7 @@ func (e *groupEditor) show(note string) {
 }
 
 // edit puts list as the groups: saved, shown, and handed to the view.
-func (e *groupEditor) edit(list []Group) {
+func (e *GroupEditor) edit(list []Group) {
 	if e.loading {
 		return
 	}
@@ -95,7 +96,7 @@ func (e *groupEditor) edit(list []Group) {
 	}
 }
 
-func (e *groupEditor) Moved(i int) {
+func (e *GroupEditor) Moved(i int) {
 	if i >= 0 && i < len(e.list) && i != e.row {
 		e.row = i
 		e.show("")
@@ -103,7 +104,7 @@ func (e *groupEditor) Moved(i int) {
 }
 
 // setQuery is the query field, as it is typed: a query that reads applies at once.
-func (e *groupEditor) SetQuery(text string) {
+func (e *GroupEditor) SetQuery(text string) {
 	if e.row >= len(e.list) {
 		return
 	}
@@ -117,7 +118,7 @@ func (e *groupEditor) SetQuery(text string) {
 }
 
 // setColour is the colour field, as it is typed: #rrggbb applies at once.
-func (e *groupEditor) SetColour(text string) {
+func (e *GroupEditor) SetColour(text string) {
 	if e.row >= len(e.list) {
 		return
 	}
@@ -132,7 +133,7 @@ func (e *groupEditor) SetColour(text string) {
 }
 
 // setShape is the outline chooser's row i (mindShapes) for the group selected.
-func (e *groupEditor) setShape(i int) {
+func (e *GroupEditor) setShape(i int) {
 	if e.row >= len(e.list) || i < 0 || i >= len(mindShapes) {
 		return
 	}
@@ -143,7 +144,7 @@ func (e *groupEditor) setShape(i int) {
 
 // add is a new group after the one selected, a tag's for the user to name, in a colour of the
 // palette none of the groups wears when there is one, legible on the view's ground.
-func (e *groupEditor) Add() {
+func (e *GroupEditor) Add() {
 	if e.loading {
 		return
 	}
@@ -160,14 +161,14 @@ func (e *groupEditor) Add() {
 	e.edit(slices.Insert(slices.Clone(e.list), at, Group{Query: "tag:#tag", Colour: col}))
 }
 
-func (e *groupEditor) remove() {
+func (e *GroupEditor) remove() {
 	if e.row < len(e.list) {
 		e.edit(slices.Delete(slices.Clone(e.list), e.row, e.row+1))
 	}
 }
 
 // move moves the group selected by d rows: earlier groups win.
-func (e *groupEditor) move(d int) {
+func (e *GroupEditor) move(d int) {
 	to := e.row + d
 	if e.row >= len(e.list) || to < 0 || to >= len(e.list) {
 		return
@@ -179,7 +180,7 @@ func (e *groupEditor) move(d int) {
 }
 
 // addMissing adds a group for each schema type and folder no group queries.
-func (e *groupEditor) AddMissing() {
+func (e *GroupEditor) AddMissing() {
 	if e.store == nil || e.ws == "" || e.loading {
 		return
 	}
@@ -197,7 +198,7 @@ func (e *groupEditor) AddMissing() {
 }
 
 // state is the dialog's sources before it first shows.
-func (e *groupEditor) state() map[string]any {
+func (e *GroupEditor) state() map[string]any {
 	return map[string]any{
 		e.source("GroupRows"): feature.Choices(), e.source("GroupRow"): 0, e.source("GroupQuery"): "",
 		e.source("GroupColour"): "", e.source("GroupShape"): 0, e.source("GroupsNote"): "",
@@ -205,7 +206,7 @@ func (e *groupEditor) state() map[string]any {
 }
 
 // commands are the dialog's.
-func (e *groupEditor) commands() map[string]feature.Command {
+func (e *GroupEditor) commands() map[string]feature.Command {
 	return map[string]feature.Command{
 		e.source("GroupMoved"):       feature.OneNumber("a row", e.Moved),
 		e.source("GroupQuerySet"):    feature.OneString("type:<type>, tag:#<tag> or path:<folder>", e.SetQuery),

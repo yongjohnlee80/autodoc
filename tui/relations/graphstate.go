@@ -39,7 +39,7 @@ type EditorState struct {
 	Groups    []Group
 }
 
-func editorState(e *groupEditor) EditorState {
+func editorState(e *GroupEditor) EditorState {
 	if e == nil {
 		return EditorState{}
 	}
@@ -88,10 +88,10 @@ func (m *CellMindmap) Snapshot() ViewState {
 }
 
 // EditGroups is the terminal GlobeMap's settings' group editor.
-func (g *CellGlobeMap) EditGroups() *groupEditor { return g.editor }
+func (g *CellGlobeMap) EditGroups() *GroupEditor { return g.editor }
 
 // EditGroups is the terminal Mindmap's settings' group editor.
-func (m *CellMindmap) EditGroups() *groupEditor { return m.editor }
+func (m *CellMindmap) EditGroups() *GroupEditor { return m.editor }
 
 // UseStore makes s the store the Mindmap and its editor read their groups from.
 func (m *CellMindmap) UseStore(s *GraphStore) { m.store, m.editor.store = s, s }

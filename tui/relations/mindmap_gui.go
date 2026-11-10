@@ -49,14 +49,14 @@ type Mindmap struct {
 	noKey     bool    // l hid the legend
 
 	store    *GraphStore
-	editor   *groupEditor // the settings' groups
+	editor   *GroupEditor // the settings' groups
 	groups   *relGroups   // groupsWS's groups (graphstore_gui.go): each document's outline and colour
 	groupsWS string
 }
 
 func newMindmap(c feature.Core) *Mindmap {
 	m := &Mindmap{c: c, depth: 1}
-	m.editor = &groupEditor{c: c, view: ViewMindmap, name: "mind", shapes: true, changed: m.groupsEdited,
+	m.editor = &GroupEditor{c: c, view: ViewMindmap, name: "mind", shapes: true, changed: m.groupsEdited,
 		ground: func() color.NRGBA { return m.palette().background }}
 	return m
 }

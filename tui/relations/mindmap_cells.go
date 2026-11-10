@@ -80,7 +80,7 @@ type CellMindmap struct {
 	x0, y0    int                   // the scroll: the grid's cell at the view's top left
 	opens     func(ws, path string) // Enter's: the panel hidden, the document opened
 	store     *GraphStore           // the workspaces' graph files: the groups; nil for none
-	editor    *groupEditor          // the settings' groups
+	editor    *GroupEditor          // the settings' groups
 	groups    *relGroups            // groupsWS's groups: each document's outline and colour
 	groupsWS  string
 	ground    color.NRGBA // the page's background, as last painted: what new groups are legible on
@@ -88,7 +88,7 @@ type CellMindmap struct {
 
 func newCellMindmap(c feature.Core, store *GraphStore) *CellMindmap {
 	m := &CellMindmap{c: c, depth: 1, store: store, ground: themeGround(nil)}
-	m.editor = &groupEditor{c: c, store: store, view: ViewMindmap, name: "mind", shapes: true,
+	m.editor = &GroupEditor{c: c, store: store, view: ViewMindmap, name: "mind", shapes: true,
 		changed: m.groupsEdited, ground: func() color.NRGBA { return m.ground }}
 	m.opens = func(ws, path string) {
 		m.c.HidePanel(MindmapPanelID) // hidden, not closed, as the window's: the dock shows it again
