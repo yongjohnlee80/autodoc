@@ -531,7 +531,7 @@ func withCommandArgs(env procenv.Env, args, extra []string) []string {
 
 // agentEnv are the variables p's agent is started with, in its folder dir: the workspace, its root,
 // the daemon the TUI is attached to, the build and the config it runs on, and a PATH whose first
-// folder holds the autodoc that runs them (agentWrapper, through agentPathDir's link), so `autodoc --call` reaches the TUI's
+// folder holds the autodoc that runs them (agentWrapper, through agentPathDir), so `autodoc --call` reaches the TUI's
 // store, not the default config's, and is found when no autodoc is installed, the rest p's own
 // (agentPath); and, with the editor socket, where the page is (AUTODOC_EDITOR) and who the agent
 // is there (AUTODOC_AGENT). They come after p's env (envList), so they are AutoDoc's.
@@ -601,41 +601,21 @@ func writeEditorCredential(dir, token string) (string, error) {
 // its creation by the OS's rules (userperm).
 func newAgentFile(path string) (*os.File, error) { return userperm.CreatePrivate(path) }
 
-// agentPathDir is the folder first on the PATH of the agent working in dir (agentEnv):
-// <agentDir>/.bin/<the first 16 hex digits of dir's sha256>, a link to dir/bin (linkAgentPath). A crew
-// agent's folder holds the window's scope in its name (autodoc:<id>), and a PATH entry can't hold
-// the PATH separator: split there, the entry named nothing, and the agent's bare autodoc was the
-// user's installed one, not this build on this config.
+// agentPathDir is the folder first on the PATH of the agent working in dir (agentEnv), the one
+// holding its autodoc (agentWrapper): procenv's PATH entry for dir/bin, made at the agent's start
+// (writeAgentGuide). On Unix it is a link, agentPathLink, since a crew agent's folder holds the
+// window's scope in its name (autodoc:<id>), and a PATH entry can't hold the PATH separator: split
+// there, the entry named nothing, and the agent's bare autodoc was the user's installed one, not
+// this build on this config. On Windows it is dir/bin itself.
 func (h *agents) agentPathDir(dir string) string {
-	sum := sha256.Sum256([]byte(dir))
-	return filepath.Join(agentBase(h.seams.env, h.agentDir), ".bin", hex.EncodeToString(sum[:])[:16])
+	return procenv.PathEntry(h.agentPathLink(dir), filepath.Join(dir, "bin"))
 }
 
-// linkAgentPath makes link a symbolic link to target (the agent folder's bin), replacing one that
-// points elsewhere or nowhere, through a temporary link renamed over it. A link whose own path holds
-// the PATH separator (an agent folder under such a path) is refused: the agent would get a PATH
-// whose autodoc is someone else's, so it isn't started on one.
-func linkAgentPath(link, target string) error {
-	if strings.ContainsRune(link, os.PathListSeparator) {
-		return fmt.Errorf("the agent's PATH folder %s holds %q, which splits a PATH: move AutoDoc's agent folder to a path without it", link, string(os.PathListSeparator))
-	}
-	if cur, err := os.Readlink(link); err == nil && cur == target {
-		return nil
-	}
-	if err := os.MkdirAll(filepath.Dir(link), 0o700); err != nil {
-		return err
-	}
-	b := make([]byte, 4)
-	_, _ = rand.Read(b)
-	tmp := link + ".new-" + hex.EncodeToString(b)
-	if err := os.Symlink(target, tmp); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, link); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	return nil
+// agentPathLink is where the link to dir/bin is, where the OS needs one:
+// <agentDir>/.bin/<the first 16 hex digits of dir's sha256>.
+func (h *agents) agentPathLink(dir string) string {
+	sum := sha256.Sum256([]byte(dir))
+	return filepath.Join(agentBase(h.seams.env, h.agentDir), ".bin", hex.EncodeToString(sum[:])[:16])
 }
 
 // editorToken is codename's secret on the editor socket: random, made once a run.
@@ -672,13 +652,14 @@ func (h *agents) agentBin() string {
 	return bin
 }
 
-// agentWrapper is the agent's autodoc: this build, on the TUI's config.
-func agentWrapper(bin, config string) string {
-	cmd := "exec " + shellQuote(bin)
+// agentWrapper is the agent's autodoc, the files of its launcher in bin (procenv.Launcher): this
+// build, on the TUI's config.
+func agentWrapper(bin, config string) ([]procenv.LauncherFile, error) {
+	argv := []string{bin}
 	if config != "" {
-		cmd += " --config " + shellQuote(config)
+		argv = append(argv, "--config", config)
 	}
-	return "#!/bin/sh\n# AutoDoc as the TUI that started this agent runs it: its build, its config.\n" + cmd + ` "$@"` + "\n"
+	return procenv.Launcher("autodoc", argv)
 }
 
 // agentFolder is the folder codename's agent works in for ws: AutoDoc's, never the workspace's. While
@@ -725,16 +706,24 @@ func (h *agents) writeAgentGuide(ws wsInfo, codename, crewKind string, via crew.
 		return "", err
 	}
 	guide := agentGuide(ws, h.agentBin(), h.agentConfig, filepath.Join(dir, "bin", "autodoc"), crewKind, via)
-	for _, f := range []struct {
-		name, text string
-		mode       os.FileMode
-	}{{"AGENTS.md", guide, 0o600}, {"CLAUDE.md", guide, 0o600}, {filepath.Join("bin", "autodoc"), agentWrapper(h.agentBin(), h.agentConfig), 0o700}} {
-		if err := writeAtomic(filepath.Join(dir, f.name), []byte(f.text), f.mode); err != nil {
+	for _, name := range []string{"AGENTS.md", "CLAUDE.md"} {
+		if err := writeAtomic(filepath.Join(dir, name), []byte(guide), 0o600); err != nil {
 			return "", err
 		}
 	}
-	if err := linkAgentPath(h.agentPathDir(dir), filepath.Join(dir, "bin")); err != nil {
+	launcher, err := agentWrapper(h.agentBin(), h.agentConfig)
+	if err != nil {
 		return "", err
+	}
+	for _, f := range launcher {
+		if err := writeAtomic(filepath.Join(dir, "bin", f.Name), f.Text, 0o700); err != nil {
+			return "", err
+		}
+	}
+	// the agent's PATH entry: an agent folder under a path holding the PATH separator is refused, so
+	// the agent is never started on a PATH whose autodoc is someone else's
+	if err := procenv.MakePathEntry(h.agentPathLink(dir), filepath.Join(dir, "bin")); err != nil {
+		return "", fmt.Errorf("the agent's PATH: %w", err)
 	}
 	// the workspace notice, for a Claude agent (agenthook.go): without it the agent still starts, and
 	// asks editor.workspace by the guide's rule

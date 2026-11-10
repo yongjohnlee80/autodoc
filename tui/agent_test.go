@@ -563,7 +563,11 @@ func TestAgentProfilesReadOnlyTheWholeOnes(t *testing.T) {
 // With no config named, the agent's autodoc is the build alone, on the default config.
 func TestAnAgentsAutodocWithoutAConfigIsTheBuildAlone(t *testing.T) {
 	t.Parallel()
-	if got, want := agentWrapper("/opt/auto doc", ""), "exec '/opt/auto doc' \"$@\"\n"; !strings.HasSuffix(got, want) || strings.Contains(got, "--config") {
+	files, err := agentWrapper("/opt/auto doc", "")
+	if err != nil || len(files) == 0 {
+		t.Fatalf("the wrapper: %v", err)
+	}
+	if got, want := string(files[0].Text), "exec '/opt/auto doc' \"$@\"\n"; !strings.HasSuffix(got, want) || strings.Contains(got, "--config") {
 		t.Fatalf("the wrapper is\n%s\nwant it to end %q, with no --config", got, want)
 	}
 }
