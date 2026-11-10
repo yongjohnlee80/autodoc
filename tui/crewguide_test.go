@@ -120,13 +120,13 @@ func TestACrewOpenCodeAgentLoadsTheAutoDocPlugin(t *testing.T) {
 // is refused.
 func TestTheWindowAsksTheAgentsOwnCrewSetup(t *testing.T) {
 	rec, agentDir := t.TempDir(), t.TempDir()
-	bin := filepath.Join(rec, "autodoc")
-	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + shellQuote(filepath.Join(rec, "args")) + "\nenv > " + shellQuote(filepath.Join(rec, "env")) +
-		"\npwd > " + shellQuote(filepath.Join(rec, "pwd")) + "\necho '{\"argv\":[],\"env\":{},\"mail_via\":\"mcp\"}'\n"
-	if err := os.WriteFile(bin, []byte(script), 0o700); err != nil {
+	// the agent's own autodoc: this test binary, recording what it was given (setupRecorderEnv), so
+	// the cell runs on every OS
+	bin, err := os.Executable()
+	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := crewSetupOf(bin, "/c/autodoc.toml", crew.KindClaude, agentDir, []string{"PATH=/usr/bin:/bin", "ANTHROPIC_API_KEY=s3cr3t-value"})
+	s, err := crewSetupOf(bin, "/c/autodoc.toml", crew.KindClaude, agentDir, []string{"PATH=/usr/bin:/bin", "ANTHROPIC_API_KEY=s3cr3t-value", setupRecorderEnv + "=" + rec})
 	if err != nil || s.MailVia != crew.MailViaMCP {
 		t.Fatalf("crewSetupOf: %+v %v, want its answer, mail via MCP", s, err)
 	}
@@ -148,10 +148,7 @@ func TestTheWindowAsksTheAgentsOwnCrewSetup(t *testing.T) {
 	if got := strings.TrimSpace(read("pwd")); got != agentDir {
 		t.Errorf("it ran in %q, want the agent's folder %q", got, agentDir)
 	}
-	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho 'something else'\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := crewSetupOf(bin, "", crew.KindClaude, agentDir, nil); err == nil {
+	if _, err := crewSetupOf(bin, "", crew.KindClaude, agentDir, []string{setupRecorderEnv + "=" + rec, setupAnswerEnv + "=other"}); err == nil {
 		t.Error("output that is no setup was taken")
 	}
 }
