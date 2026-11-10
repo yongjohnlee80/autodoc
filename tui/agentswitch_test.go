@@ -158,7 +158,7 @@ func TestAPeersRenameIsToldAsARename(t *testing.T) {
 		return [3]agents.WsRef{kb, r.h.wsRefOf("kb2"), r.h.wsRefOf("kb")}
 	})
 	before, after, gone := refs[0], refs[1], refs[2]
-	if before.Root == "" || after != (agents.WsRef{"kb2", before.Root}) || gone.Root != "" {
+	if before.Root == "" || after != (agents.WsRef{Name: "kb2", Root: before.Root}) || gone.Root != "" {
 		t.Fatalf("a peer's rename: kb was %+v; kb2 is %+v and kb %+v, want kb2 at kb's root and kb no longer listed", before, after, gone)
 	}
 }
@@ -170,7 +170,7 @@ func TestTheWorkspaceInUseIsNamedWithItsRoot(t *testing.T) {
 	h := &Host{}
 	h.workspaces = feature.NewRows(tuidecl.NewListModel("key", "label"), workspaceRowOf)
 	h.workspaces.Reset([]wsInfo{{name: "kb", root: "/k"}, {name: "notes", root: "/n"}})
-	for name, want := range map[string]agents.WsRef{"kb": {"kb", "/k"}, "notes": {"notes", "/n"}, "ghost": {Name: "ghost"}, "": {}} {
+	for name, want := range map[string]agents.WsRef{"kb": {Name: "kb", Root: "/k"}, "notes": {Name: "notes", Root: "/n"}, "ghost": {Name: "ghost"}, "": {}} {
 		if got := h.wsRefOf(name); got != want {
 			t.Errorf("wsRefOf(%q) = %+v, want %+v", name, got, want)
 		}

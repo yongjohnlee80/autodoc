@@ -20,6 +20,10 @@ import (
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
+// EnvEditorCredentialFile names the file holding an agent's editor token, which `autodoc --editor`
+// reads (the agents' own, agents.EnvEditorCredentialFile).
+const EnvEditorCredentialFile = agents.EnvEditorCredentialFile
+
 // THE EDITOR SOCKET (docs/decisions/crew.md#the-editor-socket): the page's functions as tools for
 // the agents this TUI starts. The TUI serves editor.* on a unix socket of its own,
 // <state>/editor/<pid>.sock, mode 0600, and tells its agents where (AUTODOC_EDITOR) and who they
