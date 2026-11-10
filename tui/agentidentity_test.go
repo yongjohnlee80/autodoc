@@ -118,7 +118,7 @@ func TestProfileRenamesKeepOwnAndUntouchedLegacyCodenames(t *testing.T) {
 // ConfigureTerminal records. The line itself under /bin/sh; under pwsh behind its Standard
 // argument passing (internal/usershell's Run).
 func ranAs(a *agents, command string) string {
-	_, args := agentArgv(a.seams.env, command)
+	_, args := agentArgv(a.seams.Env(), command)
 	return args[len(args)-1]
 }
 

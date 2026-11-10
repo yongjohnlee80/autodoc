@@ -24,7 +24,7 @@ type claudeAnswer struct {
 // program of another name that is none (a profile set to Claude Code, agentKinds), the claude there.
 // On the loop.
 func (a *agents) warmClaude(p agentProfile) *claudeAnswer {
-	program, path := agentProgram(p.Command), p.agentPath(a.seams.env)
+	program, path := agentProgram(p.Command), p.agentPath(a.seams.Env())
 	key := program + "\x00" + path
 	if f := a.claudeAnswers[key]; f != nil {
 		return f
@@ -53,7 +53,7 @@ func (a *agents) claudeHooks(p agentProfile) crew.ClaudeHooks {
 	program, name := agentProgram(p.Command), p.Name
 	f := a.warmClaude(p)
 	<-f.done
-	delete(a.claudeAnswers, program+"\x00"+p.agentPath(a.seams.env))
+	delete(a.claudeAnswers, program+"\x00"+p.agentPath(a.seams.Env()))
 	a.warmClaude(p) // found again, off the loop: a shim may name another version by the next spawn
 	err := f.err
 	if err == nil {
