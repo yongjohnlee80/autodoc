@@ -16,8 +16,6 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/errs"
-
-	"github.com/yongjohnlee80/autodoc/core/paths"
 )
 
 // SetupSince, in an After step's argument, is the agent's start, as Unix seconds.
@@ -264,7 +262,9 @@ const ClaudeMCPConfig = ".autodoc-crew-mcp.json"
 // holds a scope's ":" encoded (%3A), and on Windows a CLI's .cmd shim reads %3 as its third
 // argument, so no command line through cmd.exe may name that folder.
 func claudeMCPConfigArg(in SetupInput) string {
-	if rel, ok := paths.Rel(paths.Clean(paths.Slash(in.AgentDir)), paths.Clean(paths.Slash(in.Dir))); ok && rel == "." {
+	// compared as paths (filepath.Rel cleans both), never as strings; core/paths is outside the comms
+	// module, which may import only its own packages
+	if rel, err := filepath.Rel(in.AgentDir, in.Dir); err == nil && rel == "." && filepath.IsAbs(in.Dir) {
 		return ClaudeMCPConfig
 	}
 	return filepath.Join(in.AgentDir, ClaudeMCPConfig)
