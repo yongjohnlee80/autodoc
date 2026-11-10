@@ -58,3 +58,35 @@ func fakeBuild(t *testing.T, dir string) string {
 	}
 	return path
 }
+
+// TestAnAgentCallsTheBuildTheSeamsName: an agent's autodoc ($AUTODOC_BIN in its environment) is
+// the build the program's seams name (a test's), else this running program itself.
+func TestAnAgentCallsTheBuildTheSeamsName(t *testing.T) {
+	c := newIdentityHost(oneTwo)
+	c.ws = feature.Workspace{ID: 7, Name: "kb", Root: t.TempDir()}
+	a := testAgents(c, t.TempDir(), "")
+	p, _ := a.Profile("one")
+	bin := func() string {
+		for _, kv := range a.AgentEnv(c.ws, t.TempDir(), p) {
+			if v, ok := strings.CutPrefix(kv, "AUTODOC_BIN="); ok {
+				return v
+			}
+		}
+		return ""
+	}
+	self, err := os.Executable()
+	if err == nil {
+		self, err = filepath.EvalSymlinks(self) // the program itself, not a link to it
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := bin(); got != self {
+		t.Errorf("no build in the seams: the agent calls %q, want this program %q", got, self)
+	}
+	build := filepath.Join(t.TempDir(), "autodoc")
+	fakeSeamsOf(a).agentBin = build
+	if got := bin(); got != build {
+		t.Errorf("the seams' build: the agent calls %q, want %q", got, build)
+	}
+}
