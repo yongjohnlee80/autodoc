@@ -21,31 +21,29 @@ func quotePowerShell(s string) string {
 	return b.String()
 }
 
-// quoteCmd is s as one argument of a program cmd.exe starts: in double quotes, a " inside doubled
-// (""), which the program's own parsing reads as one quote and which leaves cmd's own idea of being
-// inside quotes as it was, so & | < > ^ stay inert; each % is written outside the quotes as ^%, the
-// one way cmd leaves a %NAME% unexpanded; backslashes before any quote are doubled, so it is never
-// read as escaped.
-func quoteCmd(s string) string {
+// legacyNative is s as Windows PowerShell 5.1 must be given it so a program it starts reads s: that
+// PowerShell puts an argument holding a space in double quotes but writes a " inside as it is, so a
+// " is given as \" with the backslashes before it doubled, and, where the argument will be quoted,
+// a last run of backslashes is doubled so the closing quote isn't read as escaped.
+func legacyNative(s string) string {
 	var b strings.Builder
-	b.WriteByte('"')
-	slashes := 0 // backslashes not yet written: doubled when a quote follows them
+	slashes := 0
 	for _, r := range s {
 		switch r {
 		case '\\':
 			slashes++
 			continue
 		case '"':
-			b.WriteString(strings.Repeat(`\`, 2*slashes) + `""`)
-		case '%':
-			b.WriteString(strings.Repeat(`\`, 2*slashes) + `"^%"`) // out of the quotes, the % escaped, back in
+			b.WriteString(strings.Repeat(`\`, 2*slashes+1))
 		default:
 			b.WriteString(strings.Repeat(`\`, slashes))
-			b.WriteRune(r)
 		}
 		slashes = 0
+		b.WriteRune(r)
 	}
-	b.WriteString(strings.Repeat(`\`, 2*slashes))
-	b.WriteByte('"')
+	if strings.ContainsAny(s, " \t") {
+		slashes *= 2
+	}
+	b.WriteString(strings.Repeat(`\`, slashes))
 	return b.String()
 }

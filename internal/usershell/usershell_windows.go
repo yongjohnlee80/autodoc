@@ -8,24 +8,41 @@ import (
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 )
 
-// commands is PowerShell: pwsh when it is on env's PATH, else Windows PowerShell, else %COMSPEC%
-// (cmd.exe), each found as env's PATH and PATHEXT find it.
+// commands is PowerShell: pwsh when it is on env's PATH, else Windows PowerShell on it, else Windows
+// PowerShell where Windows keeps it (every Windows AutoDoc runs on has it), each found as env's PATH
+// and PATHEXT find it.
 func commands(env procenv.Env) Shell {
-	for _, name := range []string{"pwsh", "powershell"} {
-		if p, err := procenv.LookPath(env, name); err == nil {
-			return Shell{Program: p, kind: powershell}
-		}
+	if s, ok := onPath(env); ok {
+		return s
 	}
-	return Shell{Program: comspec(env), kind: cmd}
+	return Shell{Program: filepath.Join(systemRoot(env), "System32", "WindowsPowerShell", "v1.0", "powershell.exe"), kind: winps}
 }
 
-// interactive is commands' shell, started for a person: PowerShell without its banner, or cmd.exe.
+// onPath is pwsh, else powershell, on env's PATH.
+func onPath(env procenv.Env) (Shell, bool) {
+	if p, err := procenv.LookPath(env, "pwsh"); err == nil {
+		return Shell{Program: p, kind: powershell}, true
+	}
+	if p, err := procenv.LookPath(env, "powershell"); err == nil {
+		return Shell{Program: p, kind: winps}, true
+	}
+	return Shell{}, false
+}
+
+// interactive is PowerShell on env's PATH without its banner, else %COMSPEC%, else cmd.exe.
 func interactive(env procenv.Env) []string {
-	s := commands(env)
-	if s.kind == powershell {
+	if s, ok := onPath(env); ok {
 		return []string{s.Program, "-NoLogo"}
 	}
-	return []string{s.Program}
+	return []string{comspec(env)}
+}
+
+// systemRoot is env's %SystemRoot%, else C:\Windows.
+func systemRoot(env procenv.Env) string {
+	if root := env.Get("SystemRoot"); root != "" {
+		return root
+	}
+	return `C:\Windows`
 }
 
 // comspec is env's %COMSPEC%, else cmd.exe in its %SystemRoot%.
@@ -33,9 +50,5 @@ func comspec(env procenv.Env) string {
 	if c := env.Get("ComSpec"); c != "" {
 		return c
 	}
-	root := env.Get("SystemRoot")
-	if root == "" {
-		root = `C:\Windows`
-	}
-	return filepath.Join(root, "System32", "cmd.exe")
+	return filepath.Join(systemRoot(env), "System32", "cmd.exe")
 }
