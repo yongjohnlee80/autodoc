@@ -2,22 +2,13 @@ package tui
 
 import (
 	"errors"
-	"github.com/yongjohnlee80/autodoc/tui/feature"
-	"github.com/yongjohnlee80/autodoc/tui/feature/featuretest"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/feature/featuretest"
 )
-
-// Use the host's actual workspace/file tickets while controlling callback delivery.
-type relatedTicketCore struct {
-	*featuretest.ScriptedCore
-	h *Host
-}
-
-func (c relatedTicketCore) Ticket(seq *uint64, scope feature.TicketScope) feature.Ticket {
-	return c.h.ticket(seq, scope)
-}
 
 // scriptedGraph answers the graph verbs: a.md links to b.md, c.md links back to it, and at depth 2
 // b.md links on to d.md.
@@ -135,19 +126,17 @@ func TestTheLaterRelationsReadWins(t *testing.T) {
 	}
 }
 
-// A stale or failed refresh must preserve the currently displayed relations.
-// This replaces the former Host.applyRelations test after relations became a Feature.
+// A stale or failed refresh must preserve the currently displayed relations: an answer for a file
+// no longer shown, or a workspace no longer in use, and a read that failed.
 func TestRelationsCallbackKeepsRowsForStaleOrFailedAnswers(t *testing.T) {
-	c := relatedTicketCore{newScripted("kb"), newHost(NewSession("unused", nil), Options{Workspace: "kb"})}
-	defer c.h.cancel()
-	scriptedGraph(c.ScriptedCore)
+	c := newScripted("kb")
+	scriptedGraph(c)
 	r := newRelated(c)
 	r.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}})
 	c.Deferred = true
 	for _, scope := range []string{"document", "workspace", "graph.links", "graph.backlinks", "graph.unresolved", "graph.neighborhood"} {
 		before, of := slices.Clone(r.rows.All()), r.of
-		gen, epoch := c.h.file.gen, c.h.epoch
-		scriptedGraph(c.ScriptedCore)
+		scriptedGraph(c)
 		r.deep = scope == "graph.neighborhood"
 		if strings.HasPrefix(scope, "graph.") {
 			c.Answers[scope] = func([]any) (any, error) {
@@ -157,12 +146,11 @@ func TestRelationsCallbackKeepsRowsForStaleOrFailedAnswers(t *testing.T) {
 		r.load("kb", "a.md")
 		switch scope {
 		case "document":
-			c.h.file.gen++
+			c.File++
 		case "workspace":
-			c.h.epoch++
+			c.Epoch++
 		}
 		c.Deliver(0)
-		c.h.file.gen, c.h.epoch = gen, epoch
 		if !slices.Equal(before, r.rows.All()) || r.of != of {
 			t.Fatalf("%s answer replaced the current relations", scope)
 		}
