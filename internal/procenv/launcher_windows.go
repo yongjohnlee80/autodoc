@@ -4,7 +4,6 @@ package procenv
 
 import (
 	"fmt"
-	"os"
 	"strings"
 )
 
@@ -34,9 +33,7 @@ func quoteBatch(s string) string {
 
 // pathEntry is target itself: no link, since a symbolic link needs Developer Mode or an
 // administrator, and a Windows name can't hold ':', the separator a link stood in for on Unix.
-func pathEntry(_, target string) (string, error) {
-	if strings.ContainsRune(target, os.PathListSeparator) {
-		return "", fmt.Errorf("the PATH folder %s holds %q, which splits a PATH: move it to a path without it", target, string(os.PathListSeparator))
-	}
-	return target, nil
-}
+func pathEntry(_, target string) string { return target }
+
+// makePathEntry has nothing to make.
+func makePathEntry(_, _ string) error { return nil }

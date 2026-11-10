@@ -39,13 +39,13 @@ func TestThePathEntryIsALinkOnUnix(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		got, err := PathEntry(link, target)
-		if cur, _ := os.Readlink(link); err != nil || got != link || cur != target {
-			t.Fatalf("from %q: %q, %v, the link %q; want %s to %s", stale, got, err, cur, link, target)
+		err := MakePathEntry(link, target)
+		if cur, _ := os.Readlink(link); err != nil || PathEntry(link, target) != link || cur != target {
+			t.Fatalf("from %q: %v, the link %q; want %s to %s", stale, err, cur, link, target)
 		}
 	}
 	odd := filepath.Join(t.TempDir(), "a:b", "x")
-	if _, err := PathEntry(odd, target); err == nil || !strings.Contains(err.Error(), `":"`) {
+	if err := MakePathEntry(odd, target); err == nil || !strings.Contains(err.Error(), `":"`) {
 		t.Fatalf("a link holding ':': %v; want it refused, naming ':'", err)
 	}
 }
