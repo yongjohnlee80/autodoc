@@ -28,12 +28,6 @@ app/crewclaude_linux.go	os-file	linux
 app/crewclaude_other.go	os-file	darwin
 app/crewclaude_other.go	os-file	linux
 app/crewcodexbridge.go	syscall	ECONNREFUSED
-app/editorcred_other.go	os-file	unix
-app/editorcred_unix.go	os-file	unix
-app/editorcred_unix.go	syscall	ELOOP
-app/editorcred_unix.go	syscall	O_NOFOLLOW
-app/editorcred_unix.go	syscall	O_NONBLOCK
-app/editorcred_unix.go	syscall	Stat_t
 app/gui_preferences_darwin.go	os-file	darwin
 app/gui_preferences_other.go	os-file	darwin
 app/keys_darwin.go	os-file	darwin

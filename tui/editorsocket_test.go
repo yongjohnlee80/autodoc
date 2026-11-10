@@ -59,7 +59,7 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 	}
 	fi, ferr := os.Stat(file)
 	body, _ := os.ReadFile(file)
-	if file == "" || filepath.Dir(file) != codexDir || ferr != nil || fi.Mode().Perm() != 0o600 ||
+	if file == "" || filepath.Dir(file) != codexDir || ferr != nil || privateFile(file) != nil ||
 		string(body) != onLoop(r, func() string { return r.h.agents.editorToken("cx") }) {
 		t.Fatalf("a Codex agent's token file %q (%v, %v, %q) in its environment %v", file, fi, ferr, body, cenv)
 	}

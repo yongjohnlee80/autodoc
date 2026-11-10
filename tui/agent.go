@@ -15,6 +15,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/internal/userdirs"
+	"github.com/yongjohnlee80/autodoc/internal/userperm"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/pty"
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
@@ -563,12 +564,13 @@ const EnvEditorCredentialFile = "AUTODOC_EDITOR_CREDENTIAL_FILE"
 // editorCredentialFile is that file, in the agent's own folder.
 const editorCredentialFile = ".autodoc-editor-credential"
 
-// writeEditorCredential writes token as the agent folder dir's editor credential file, mode 0600,
-// through a temporary file renamed over it, and answers its path. The secret is never in the
-// environment Codex's tools see: only the file's path is.
+// writeEditorCredential writes token as the agent folder dir's editor credential file, private to
+// this user from its creation (userperm: 0600 on Unix, an access list on Windows), through a
+// temporary file renamed over it, and answers its path. The secret is never in the environment
+// Codex's tools see: only the file's path is.
 func writeEditorCredential(dir, token string) (string, error) {
 	path := filepath.Join(dir, editorCredentialFile)
-	f, err := os.CreateTemp(dir, editorCredentialFile+".*") // 0600
+	f, err := userperm.CreatePrivateTemp(dir, editorCredentialFile+".*")
 	if err != nil {
 		return "", err
 	}
