@@ -1,6 +1,6 @@
 //go:build windows
 
-package proglook
+package crew
 
 import (
 	"os"
@@ -28,14 +28,14 @@ func TestEveryProgramOnPathInOrderOnWindows(t *testing.T) {
 		}
 	}
 	path := strings.Join([]string{none, cmd, exe, both, cmd}, string(os.PathListSeparator))
-	got := All("claude", path, work)
+	got := programsOn("claude", path, work)
 	want := []string{filepath.Join(cmd, "claude.cmd"), filepath.Join(exe, "claude.exe"), filepath.Join(both, "claude.exe")}
 	if len(got) != len(want) {
-		t.Fatalf("All = %v, want %v", got, want)
+		t.Fatalf("programsOn = %v, want %v", got, want)
 	}
 	for i := range want {
 		if !strings.EqualFold(got[i], want[i]) {
-			t.Errorf("All[%d] = %s, want %s (all: %v)", i, got[i], want[i], got)
+			t.Errorf("programsOn[%d] = %s, want %s (all: %v)", i, got[i], want[i], got)
 		}
 	}
 	if slices.ContainsFunc(got, func(p string) bool { return strings.EqualFold(filepath.Ext(p), ".txt") }) {

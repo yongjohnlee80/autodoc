@@ -16,8 +16,6 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/errs"
-
-	"github.com/yongjohnlee80/autodoc/core/crew/proglook"
 )
 
 // SetupSince, in an After step's argument, is the agent's start, as Unix seconds.
@@ -409,8 +407,8 @@ var codexNoDaemon sync.Map
 // find, run or read within codexProbeTimeout.
 func codexHasNoDaemon(program string, env map[string]string, dir string) (bool, error) {
 	bin := program
-	if !proglook.IsPath(program) {
-		found := proglook.All(program, env["PATH"], dir)
+	if !isPath(program) {
+		found := programsOn(program, env["PATH"], dir)
 		if len(found) == 0 {
 			return false, fmt.Errorf("no %s on PATH", program)
 		}

@@ -1,6 +1,6 @@
 //go:build unix
 
-package proglook
+package crew
 
 import (
 	"os"
@@ -37,7 +37,7 @@ func TestEveryProgramOnPathInOrderOnUnix(t *testing.T) {
 	}
 	path := strings.Join([]string{plain, a, filepath.Join(work, "dir"), "rel", a, b}, string(os.PathListSeparator))
 	want := []string{filepath.Join(a, "claude"), filepath.Join(work, "rel", "claude"), filepath.Join(b, "claude")}
-	if got := All("claude", path, work); !slices.Equal(got, want) {
-		t.Errorf("All = %v, want %v", got, want)
+	if got := programsOn("claude", path, work); !slices.Equal(got, want) {
+		t.Errorf("programsOn = %v, want %v", got, want)
 	}
 }
