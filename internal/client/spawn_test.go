@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/internal/userperm"
+	"github.com/yongjohnlee80/autodoc/internal/userperm/userpermtest"
 )
 
 // TestMain is a spawned daemon's stand-in when SpawnServe runs this test binary with --serve: it
@@ -81,5 +82,32 @@ func TestTheDaemonsLogIsPrivateAndReadWhileWritten(t *testing.T) {
 	_ = again.Close()
 	if b, _ := os.ReadFile(path); string(b) != "one\ntwo\n" {
 		t.Fatalf("the log reopened: %q, want it appended to", b)
+	}
+}
+
+// TestAnEarlierLogThatIsNotPrivateIsMadePrivate: a daemon's log an earlier version left readable by
+// others (made 0600, which on Windows took its folder's access list) is made private as it is opened,
+// its lines kept, and appended to.
+func TestAnEarlierLogThatIsNotPrivateIsMadePrivate(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "serve.log")
+	if err := os.WriteFile(path, []byte("earlier\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	userpermtest.Expose(t, path) // readable by others, as this OS says it
+	f, err := openServeLog(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("now\n"); err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+	if p, err := userperm.OpenPrivate(path); err != nil {
+		t.Fatalf("the earlier log is still not private: %v", err)
+	} else {
+		_ = p.Close()
+	}
+	if b, _ := os.ReadFile(path); string(b) != "earlier\nnow\n" {
+		t.Fatalf("the earlier log: %q, want its lines kept and appended to", b)
 	}
 }
