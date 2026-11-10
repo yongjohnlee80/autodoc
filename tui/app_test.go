@@ -75,16 +75,9 @@ func fakeRoot(ws string) string {
 	return filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), ws)
 }
 
-// taskFile is a slash path from a root (/kb/.todo-list/open/t1.md) as an absolute path on this OS:
-// itself on Unix; on Windows from the temporary folder's drive (C:\kb\.todo-list\open\t1.md), as a
-// task's file is, where /kb/... is not absolute.
-func taskFile(p string) string {
-	return filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), filepath.FromSlash(p))
-}
-
 // slashFile is taskFile's path in the slash form, the daemon's for a store or a root, its volume
 // kept: itself on Unix, C:/kb/.todo-list on Windows.
-func slashFile(p string) string { return paths.Slash(taskFile(p)) }
+func slashFile(p string) string { return paths.Slash(taskFileCopy(p)) }
 
 // startDaemon serves the workspaces named (each with its files, path then content). A name ending
 // in "!" is served on a filesystem whose writes land and then fail (Committed).
