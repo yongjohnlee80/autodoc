@@ -21,9 +21,17 @@ func scriptInstall(update string) func() (install.Record, bool, error) {
 	}
 }
 
-// updateScript writes an update.sh that says it ran and exits code.
+// updateScript writes the update script this OS's install runs (install.Record.UpdateCommand), which
+// says it ran and exits code: update.sh, run by /bin/sh; on Windows update.ps1, run by PowerShell.
 func updateScript(t *testing.T, code string) string {
 	t.Helper()
+	if filepath.Separator == '\\' {
+		p := filepath.Join(t.TempDir(), "update.ps1")
+		if err := os.WriteFile(p, []byte("Write-Output (\"update-sh-\" + (40 + 2))\nexit "+code+"\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
 	p := filepath.Join(t.TempDir(), "update.sh")
 	if err := os.WriteFile(p, []byte("echo update-sh-$((40+2))\nexit "+code+"\n"), 0o755); err != nil {
 		t.Fatal(err)
@@ -84,14 +92,15 @@ func TestUpdateRunsUpdateShAndOffersTheRestart(t *testing.T) {
 	r.s.WaitForText(t, "restart AutoDoc?")
 	r.s.WaitForText(t, "AutoDoc v9.9.9 is installed (this is v9.9.8)")
 
+	script := updateScript(t, "3")
 	failed := runTUI(t, NewSession(d.sock, nil), Options{
-		InstallRecord: scriptInstall(updateScript(t, "3")),
+		InstallRecord: scriptInstall(script),
 		AboutInfo:     AboutInfo{Version: "v9.9.8"},
 		Installed:     func() (string, error) { return "v9.9.9", nil },
 	})
 	failed.connected(t)
 	failed.h.p.Post(failed.h.updateAutoDoc)
-	failed.waitNotice(t, "Update: update.sh exited 3; its tab in the terminal panel says why")
+	failed.waitNotice(t, "Update: "+filepath.Base(script)+" exited 3; its tab in the terminal panel says why")
 	if strings.Contains(failed.s.String(), "restart AutoDoc?") {
 		t.Fatal("a failed update offered the restart")
 	}

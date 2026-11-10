@@ -13,7 +13,7 @@ import (
 // the theme's colours; the page reads the file's relative links from the file's own folder.
 func TestOpenInBrowserOpensTheThemedPage(t *testing.T) {
 	cache := t.TempDir()
-	tuneEnv(t, "XDG_CACHE_HOME="+cache)
+	tuneEnv(t, "XDG_CACHE_HOME="+cache, "LocalAppData="+cache) // the cache folder on Unix; on Windows LocalAppData
 	root := fileDir(t, "n.md", "# On disk\n")
 	d := startManaged(t, map[string]string{"kb": root})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})

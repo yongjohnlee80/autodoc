@@ -30,7 +30,7 @@ func TestADebugLaunchRecordsTheTuisTrace(t *testing.T) {
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	sock, state := ipc.ScratchAddr(dir, "s.sock"), filepath.Join(dir, "state")
 	conf := filepath.Join(dir, "config.toml")
-	body := "[server]\nsocket = \"" + sock + "\"\nstate_dir = \"" + state + "\"\ndata_dir = \"" + filepath.Join(dir, "data") + "\"\n"
+	body := "[server]\nsocket = " + tomlString(t, sock) + "\nstate_dir = " + tomlString(t, state) + "\ndata_dir = " + tomlString(t, filepath.Join(dir, "data")) + "\n"
 	if err := os.WriteFile(conf, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
