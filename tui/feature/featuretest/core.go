@@ -38,6 +38,9 @@ type ScriptedCore struct {
 	Focused     bool                // what HasFocus answers
 	ViewErr     error               // what View answers
 	Shown       bool                // what PanelShown answers
+	// Epoch and File stand for the workspace in use and the file shown: a ticket goes stale when its
+	// scope's moves (a test moves them), as the host's do. Neither moves on its own.
+	Epoch, File uint64
 	// deferred holds each Go's answer until deliver runs it: answers late and in any order
 	Deferred bool
 	Pending  []func()
@@ -140,14 +143,27 @@ func (s *ScriptedCore) Failed(what string, err error) {
 	s.Failures = append(s.Failures, what+": "+err.Error())
 }
 
-// Ticket is the host's latest-wins rule over the sequence (there is no connection to move).
-func (s *ScriptedCore) Ticket(seq *uint64, _ feature.TicketScope) feature.Ticket {
-	if seq == nil {
-		return feature.Ticket{}
+// Ticket is the host's rule: the latest over the sequence, its scope not moved since (Epoch for
+// TicketWorkspace, Epoch and File for TicketFile; there is no connection to move).
+func (s *ScriptedCore) Ticket(seq *uint64, scope feature.TicketScope) feature.Ticket {
+	var n uint64
+	if seq != nil {
+		*seq++
+		n = *seq
 	}
-	*seq++
-	n := *seq
-	return feature.NewTicket(func() bool { return *seq == n })
+	epoch, file := s.Epoch, s.File
+	return feature.NewTicket(func() bool {
+		if seq != nil && *seq != n {
+			return false
+		}
+		switch scope {
+		case feature.TicketLocal, feature.TicketSession:
+			return true
+		case feature.TicketWorkspace:
+			return s.Epoch == epoch
+		}
+		return s.Epoch == epoch && s.File == file
+	})
 }
 
 func (s *ScriptedCore) Go(fn func(context.Context) any, then func(any)) {
