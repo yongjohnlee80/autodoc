@@ -12,14 +12,15 @@ import (
 // (docs/decisions/crew.md#the-crew-registry-and-durable-mail). Its state machines run on a Store's
 // transactions, so every engine shares them.
 type Manager struct {
-	store   Store
-	ender   SessionEnder
-	storeID string // the daemon's store id (sys.hello's store_id): a session context names it
-	uid     int    // the daemon's user: endpoint sockets must be this user's
-	started time.Time
-	sched   atomic.Pointer[Scheduler] // the daemon's scheduler, once NewScheduler made it: Watch hears its pokes
-	polls   *LongPolls                // the connections' long-polls (crew.wait's cap); nil caps nothing
-	refused func(Registration, error) // each refused registration, its secret blanked (WithRefusals); nil tells no one
+	store       Store
+	ender       SessionEnder
+	storeID     string // the daemon's store id (sys.hello's store_id): a session context names it
+	uid         int    // the daemon's user: endpoint sockets must be this user's
+	socketWakes bool   // this OS can wake an agent through its CLI's socket (SocketWakes)
+	started     time.Time
+	sched       atomic.Pointer[Scheduler] // the daemon's scheduler, once NewScheduler made it: Watch hears its pokes
+	polls       *LongPolls                // the connections' long-polls (crew.wait's cap); nil caps nothing
+	refused     func(Registration, error) // each refused registration, its secret blanked (WithRefusals); nil tells no one
 
 	// secrets are the endpoint secrets a waker needs and the store never holds (an agy session's
 	// language-server token, docs/decisions/crew.md#wakers-and-the-wake-scheduler), by session,
@@ -181,6 +182,10 @@ func WithStarted(t time.Time) Option { return func(m *Manager) { m.started = t }
 // WithUID sets the user whose CLI sockets endpoints may name (os.Getuid() by default).
 func WithUID(uid int) Option { return func(m *Manager) { m.uid = uid } }
 
+// WithSocketWakes sets whether agents can be woken through their CLI's socket (SocketWakes, this
+// OS's answer, by default): without, a socket locator is refused and the addressbook says why.
+func WithSocketWakes(can bool) Option { return func(m *Manager) { m.socketWakes = can } }
+
 // WithStoreID sets the daemon's store id, which crew.whoami checks a session context against.
 func WithStoreID(id string) Option { return func(m *Manager) { m.storeID = id } }
 
@@ -200,7 +205,7 @@ func WithSessionEnder(e SessionEnder) Option { return func(m *Manager) { m.ender
 // New is the crew module over store. A nil store builds a Manager that only answers Name, Verbs and
 // Errors, as --contracts needs.
 func New(store Store, opts ...Option) *Manager {
-	m := &Manager{store: store, uid: os.Getuid(), started: time.Now()}
+	m := &Manager{store: store, uid: os.Getuid(), started: time.Now(), socketWakes: SocketWakes()}
 	for _, o := range opts {
 		o(m)
 	}
