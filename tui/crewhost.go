@@ -67,8 +67,9 @@ type crewHost struct {
 	// claimFailing is that the claims have failed since the last one that held: the outage was told
 	// of (autodoc.crew.no_scope), once, and its retries say nothing
 	claimFailing bool
-	offered      bool                   // the orphans were offered this run (creworphans.go)
-	sessions     map[string]crewSession // the agents' sessions registered and not yet ended, by id
+	offered      bool                         // the orphans were offered this run (creworphans.go)
+	sessions     map[string]crewSession       // the agents' sessions registered and not yet ended, by id
+	regs         map[string]*crewRegistration // what registered each of sessions, by id: its secret, kind and daemon, for its context
 	// pending is each codename's registration whose answer was lost: the daemon may have committed
 	// it, so its exact tuple is replayed, by the codename's next start or by settle, never a fresh
 	// one that would find the session it left as busy. owed is each ended session whose crew.exit
@@ -120,8 +121,7 @@ type crewOwedExit struct {
 type crewSession struct {
 	ID, Profile, Scope string
 	Epoch              int64
-	Dir                string            // the folder whose context file names it
-	reg                *crewRegistration // what registered it: its secret, kind and daemon, for its context
+	Dir                string // the folder whose context file names it
 }
 
 // errNoCrewScope is a registration asked of a window that holds no scope.
@@ -134,7 +134,7 @@ func newCrewHost(c crewCore, env procenv.Env, agentDir string) *crewHost {
 	_, _ = rand.Read(b) // crypto/rand: never fails on the platforms AutoDoc runs on
 	proc, _ := crew.ProcRef(os.Getpid())
 	h := &crewHost{c: c, dir: filepath.Join(agentBase(env, agentDir), ".crew-scopes"), run: hex.EncodeToString(b), proc: proc,
-		sessions: map[string]crewSession{}, pending: map[string]*crewRegistration{}, owed: map[string]crewOwedExit{}}
+		sessions: map[string]crewSession{}, regs: map[string]*crewRegistration{}, pending: map[string]*crewRegistration{}, owed: map[string]crewOwedExit{}}
 	h.todos = &todoFeed{h: h, dir: filepath.Join(agentBase(env, agentDir), ".crew-todos"), start: time.Now()}
 	if len(kept) > 0 {
 		migrateErr = errors.Join(migrateErr, fmt.Errorf("%s", strings.Join(kept, ", ")))
@@ -351,6 +351,7 @@ func (h *crewHost) Stopped() {
 	for id, s := range h.sessions { // released: every session has ended, and its credential with it
 		_ = crew.RemoveContext(s.Dir, s.ID)
 		delete(h.sessions, id)
+		delete(h.regs, id)
 	}
 	clear(h.pending)
 	clear(h.owed)
@@ -435,7 +436,7 @@ func (h *crewHost) send(ctx context.Context, r *crewRegistration) any {
 		return err
 	}
 	m, _ := v.(map[string]any)
-	return crewSession{ID: feature.Str(m, "session"), Profile: feature.Str(m, "profile"), Scope: r.scope, Epoch: r.epoch, Dir: r.dir, reg: r}
+	return crewSession{ID: feature.Str(m, "session"), Profile: feature.Str(m, "profile"), Scope: r.scope, Epoch: r.epoch, Dir: r.dir}
 }
 
 // registered is r's answer v, on the loop: a session, now counted live, or why there is none. r
@@ -453,7 +454,7 @@ func (h *crewHost) registered(r *crewRegistration, v any) (crewSession, error) {
 		return crewSession{}, err
 	}
 	h.forget(r)
-	h.sessions[s.ID] = s
+	h.sessions[s.ID], h.regs[s.ID] = s, r
 	return s, nil
 }
 
@@ -484,7 +485,7 @@ func (h *crewHost) resolve(r *crewRegistration) {
 // context names that daemon, and its credential the registration's secret, which is then dropped. A
 // session no longer the window's is refused (errCrewStale), and the caller ends it.
 func (h *crewHost) publish(s crewSession) (string, error) {
-	r := s.reg
+	r := h.regs[s.ID]
 	if _, live := h.sessions[s.ID]; !live || r == nil || r.secret == "" || s.Scope != h.scope || s.Epoch != h.epoch ||
 		r.store != h.c.StoreID() || r.socket != h.c.DaemonAddress() {
 		return "", errCrewStale
@@ -501,6 +502,7 @@ func (h *crewHost) publish(s crewSession) (string, error) {
 func (h *crewHost) exit(s crewSession, why string) {
 	_ = crew.RemoveContext(s.Dir, s.ID)
 	delete(h.sessions, s.ID)
+	delete(h.regs, s.ID)
 	h.owed[s.ID] = crewOwedExit{s: s, why: why}
 	h.sendExit(s.ID)
 }
