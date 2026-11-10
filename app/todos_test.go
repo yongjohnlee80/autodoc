@@ -15,6 +15,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/mail"
+	"github.com/yongjohnlee80/autodoc/core/paths"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/todo"
 	"github.com/yongjohnlee80/autodoc/core/todo/sqlitejournal"
@@ -45,7 +46,7 @@ func TestTheDaemonServesTheTodosModule(t *testing.T) {
 	m := ms[0].(*todo.Manager)
 	// the served workspace resolves through the daemon's roots and disk
 	r, err := m.Resolve(ctx, todo.At{Workspace: "kb"})
-	if err != nil || r.Store != filepath.Join(mustEval(t, kb), ".todo-list") {
+	if err != nil || r.Store != paths.Slash(filepath.Join(mustEval(t, kb), ".todo-list")) { // core/todo's form
 		t.Fatalf("kb's store: %+v %v", r, err)
 	}
 	// registering a project root is an event the todo system records itself
