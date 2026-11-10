@@ -44,9 +44,8 @@ func TestAProvidersKeyIsSealed(t *testing.T) {
 	if err != nil || key != "sk-secret-123" {
 		t.Fatalf("ProviderWithKey = %q, %v", key, err)
 	}
-	fi, err := os.Stat(path + ".key")
-	if err != nil || fi.Mode().Perm() != 0o600 {
-		t.Fatalf("the keyslot: %v, %v; want a 0600 file beside the store", fi, err)
+	if err := privateFile(path + ".key"); err != nil {
+		t.Fatalf("the keyslot: %v; want a file private to this user beside the store", err)
 	}
 	raw := s.raw(t)
 	var stored []byte
@@ -109,8 +108,9 @@ func TestAnExposedKeyslotIsRefused(t *testing.T) {
 	if err := os.WriteFile(p, bytes.Repeat([]byte{1}, keySize), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	expose(t, p)
 	if _, err := (&keyslot{path: p}).seal([]byte("k"), "aad"); !errors.Is(err, ErrKeyslotExposed) {
-		t.Fatalf("a 0644 keyslot: %v, want ErrKeyslotExposed", err)
+		t.Fatalf("an exposed keyslot: %v, want ErrKeyslotExposed", err)
 	}
 }
 
