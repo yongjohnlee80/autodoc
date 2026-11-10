@@ -47,7 +47,6 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
-	"github.com/yongjohnlee80/golib/tui/widget/files"
 	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 	"github.com/yongjohnlee80/golib/vfs"
 
@@ -687,9 +686,10 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		tuidecl.Types(h.relationViewTypes()...), // the GUI's GlobeMap and Mindmap views (relationmap.go)
 		tuidecl.Types(h.titleBarTypes()...),     // the window's own title bar, when it has one (titlebar.go)
 		// The file dialogs read the local disk, not the daemon's: same machine, so the daemon adds
-		// nothing to a listing. Off the loop, so a slow mount cannot hold it; os.DirFS, not
-		// vfs/local, whose root refuses an absolute link and lists every link as a file.
-		tuidecl.Files(files.FileSource{FS: os.DirFS("/"), Root: "/", Async: true}),
+		// nothing to a listing. Off the loop, so a slow mount cannot hold it; golib's local disk
+		// (os.DirFS at "/"; on Windows every drive, its paths Windows' own), not vfs/local, whose
+		// root refuses an absolute link and lists every link as a file.
+		tuidecl.Files(localDisk()),
 		// The too-small screen's Quit is AutoDoc's own, which asks before unsaved changes are lost;
 		// the caller's options come after, and may set another.
 		tuidecl.AppOptions(append([]tuicore.AppOption{tuicore.WithQuit(h.quit), tuicore.WithOnStopping(h.reg.Stopping),
