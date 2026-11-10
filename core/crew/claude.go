@@ -14,8 +14,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/yongjohnlee80/autodoc/core/crew/proglook"
 )
 
 // A crew Claude agent's settings (docs/decisions/crew.md#wake-acceptance-not-tool-approvals): what
@@ -328,7 +326,7 @@ var (
 // runs. The error, when neither is found, is the program's, then claude's.
 func ClaudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
 	bin, k, err := claudeOf(program, path, dir, cache)
-	if err == nil || proglook.Name(program) == KindClaude {
+	if err == nil || programName(program) == KindClaude {
 		return bin, k, err
 	}
 	cbin, ck, cerr := claudeOf(KindClaude, path, dir, cache)
@@ -348,7 +346,7 @@ func ClaudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
 // be the one the launcher runs, and naming hooks the running one doesn't know can stall its start.
 // The error says first why mise didn't answer, if it didn't, then names every file tried.
 func claudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
-	if proglook.IsPath(program) {
+	if isPath(program) {
 		bin := program
 		if !filepath.IsAbs(bin) {
 			bin = filepath.Join(dir, bin)
@@ -356,11 +354,11 @@ func claudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
 		k, err := ClaudeKnowsIn(bin, cache)
 		return bin, k, err
 	}
-	hits := proglook.All(program, path, dir)
+	hits := programsOn(program, path, dir)
 	if len(hits) == 0 {
 		return "", nil, fmt.Errorf("crew: %s is not on the agent's PATH", program)
 	}
-	mise := proglook.All("mise", path, dir)
+	mise := programsOn("mise", path, dir)
 	var tried []string
 	seen := map[string]bool{}
 	try := func(bin string) (ClaudeHooks, bool) {
@@ -390,7 +388,7 @@ func claudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
 			continue
 		}
 		bin := hit
-		if proglook.Name(real) == "mise" { // a shim: the tool mise runs for it
+		if programName(real) == "mise" { // a shim: the tool mise runs for it
 			if bin = which(real); bin == "" {
 				continue
 			}
