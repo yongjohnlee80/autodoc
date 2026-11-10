@@ -535,7 +535,7 @@ func TestTheAgentOpensWherePreferencesSay(t *testing.T) {
 // {root} and {workspace} are one shell word each, whatever they hold.
 func TestAnAgentsCommandIsFilledInQuoted(t *testing.T) {
 	t.Parallel()
-	ws := wsInfo{name: "it's", root: "/a b/$HOME"}
+	ws := feature.Workspace{Name: "it's", Root: "/a b/$HOME"}
 	got, err := fillAgentCommand(nil, "agent {root} --ws={workspace}", ws)
 	if want := `agent '/a b/$HOME' --ws='it'\''s'`; err != nil || got != want {
 		t.Fatalf("filled %q, %v; want %q", got, err, want)

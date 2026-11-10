@@ -17,6 +17,7 @@ import (
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
 	"github.com/yongjohnlee80/autodoc/internal/ipc"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // TestAgentsReachThePageThroughTheEditorSocket: an agent's call is refused until the user allows
@@ -43,7 +44,7 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 		}
 	}
 	env := strings.Join(onLoop(r, func() []string {
-		return r.h.agents.agentEnv(wsInfo{name: "kb"}, t.TempDir(), agentProfile{Codename: "zen"})
+		return r.h.agents.agentEnv(feature.Workspace{Name: "kb"}, t.TempDir(), agentProfile{Codename: "zen"})
 	}), "\n")
 	if !strings.Contains(env, "AUTODOC_EDITOR="+path) || !strings.Contains(env, "AUTODOC_AGENT=zen") ||
 		!strings.Contains(env, "AUTODOC_EDITOR_TOKEN=") {
@@ -56,7 +57,7 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 	// by a variable Codex keeps
 	codexDir := t.TempDir()
 	cenv := onLoop(r, func() []string {
-		return r.h.agents.agentEnv(wsInfo{name: "kb"}, codexDir, agentProfile{Codename: "cx", Command: "codex"})
+		return r.h.agents.agentEnv(feature.Workspace{Name: "kb"}, codexDir, agentProfile{Codename: "cx", Command: "codex"})
 	})
 	file := ""
 	for _, kv := range cenv {

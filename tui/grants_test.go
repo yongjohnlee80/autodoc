@@ -209,7 +209,7 @@ func TestARevokedCapabilityIsRefusedAndAskedForAgain(t *testing.T) {
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
 	onLoop(r, func() bool {
-		r.h.agents.agentEnv(wsInfo{name: "kb"}, t.TempDir(), agentProfile{Codename: "zen"})
+		r.h.agents.agentEnv(feature.Workspace{Name: "kb"}, t.TempDir(), agentProfile{Codename: "zen"})
 		return true
 	})
 	path := onLoop(r, r.h.editorSocketPath)

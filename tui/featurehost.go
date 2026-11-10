@@ -195,7 +195,8 @@ func (c core) Workspaces() []feature.Workspace {
 
 // workspaceOf is w as a feature reads it (Workspace).
 func workspaceOf(w wsInfo) feature.Workspace {
-	return feature.Workspace{Name: w.name, Root: w.root, State: w.state, Include: w.include, Exclude: w.exclude, SectionTokens: w.sectionTokens}
+	return feature.Workspace{ID: w.id, Name: w.name, Root: w.root, State: w.state, Include: w.include, Exclude: w.exclude,
+		SectionTokens: w.sectionTokens, Schema: w.schema.path, TextExtensions: w.textExtensions}
 }
 
 func (c core) View(id, method string, args ...any) error { return c.h.p.Call(id, method, args...) }
@@ -284,7 +285,10 @@ func (c core) ActiveWorkspace() (feature.Workspace, bool) {
 	w, ok := c.h.activeWorkspaceInfo()
 	return workspaceOf(w), ok
 }
-func (c core) ActiveWorkspaceInfo() (wsInfo, bool) { return c.h.activeWorkspaceInfo() }
+func (c core) ActiveWorkspaceInfo() (feature.Workspace, bool) {
+	w, ok := c.h.activeWorkspaceInfo()
+	return workspaceOf(w), ok
+}
 
 func (c core) SetFormText(name, value string) { c.h.setField(name, value) }
 

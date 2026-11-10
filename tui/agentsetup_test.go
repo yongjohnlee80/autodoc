@@ -11,6 +11,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc"
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/autodoc/tui/system"
 )
 
@@ -242,7 +243,7 @@ func TestTheAgentsGuideHasTheJobs(t *testing.T) {
 		!strings.Contains(autodoc.AgentsGuide, "Proof-read as a professional editor") {
 		t.Fatal("AGENTS.md has no \"What you can do for the user\" section")
 	}
-	guide := agentGuide(wsInfo{name: "kb", root: "/kb"}, "/bin/autodoc", "/autodoc.toml", "/w/bin/autodoc", "", crew.MailViaCLI)
+	guide := agentGuide(feature.Workspace{Name: "kb", Root: "/kb"}, "/bin/autodoc", "/autodoc.toml", "/w/bin/autodoc", "", crew.MailViaCLI)
 	if strings.Count(guide, "What you can do for the user") != 1 || strings.Contains(guide, "## What to help with") {
 		t.Fatal("the generated guide lists the jobs twice, or keeps its old list")
 	}
