@@ -19,6 +19,7 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -68,9 +69,9 @@ type crewHost struct {
 	// claimFailing is that the claims have failed since the last one that held: the outage was told
 	// of (autodoc.crew.no_scope), once, and its retries say nothing
 	claimFailing bool
-	offered      bool                         // the orphans were offered this run (creworphans.go)
-	sessions     map[string]crewSession       // the agents' sessions registered and not yet ended, by id
-	regs         map[string]*crewRegistration // what registered each of sessions, by id: its secret, kind and daemon, for its context
+	offered      bool                          // the orphans were offered this run (creworphans.go)
+	sessions     map[string]agents.CrewSession // the agents' sessions registered and not yet ended, by id
+	regs         map[string]*crewRegistration  // what registered each of sessions, by id: its secret, kind and daemon, for its context
 	// pending is each codename's registration whose answer was lost: the daemon may have committed
 	// it, so its exact tuple is replayed, by the codename's next start or by settle, never a fresh
 	// one that would find the session it left as busy. owed is each ended session whose crew.exit
@@ -113,7 +114,7 @@ type crewRegistration struct {
 
 // crewOwedExit is a session ended here whose crew.exit the daemon has not confirmed.
 type crewOwedExit struct {
-	s        crewSession
+	s        agents.CrewSession
 	why      string
 	inflight bool
 }
@@ -123,13 +124,13 @@ var errNoCrewScope = errors.New("this window holds no crew scope")
 
 func newCrewHost(c crewCore, env procenv.Env, agentDir string) *crewHost {
 	// before anything reads the folders: an earlier build's names (crewnames.go)
-	kept, migrateErr := migrateCrewNames(agentBase(env, agentDir))
+	kept, migrateErr := migrateCrewNames(agents.AgentBase(env, agentDir))
 	b := make([]byte, 32)
 	_, _ = rand.Read(b) // crypto/rand: never fails on the platforms AutoDoc runs on
 	proc, _ := crew.ProcRef(os.Getpid())
-	h := &crewHost{c: c, dir: filepath.Join(agentBase(env, agentDir), ".crew-scopes"), run: hex.EncodeToString(b), proc: proc,
-		sessions: map[string]crewSession{}, regs: map[string]*crewRegistration{}, pending: map[string]*crewRegistration{}, owed: map[string]crewOwedExit{}}
-	h.todos = &todoFeed{h: h, dir: filepath.Join(agentBase(env, agentDir), ".crew-todos"), start: time.Now()}
+	h := &crewHost{c: c, dir: filepath.Join(agents.AgentBase(env, agentDir), ".crew-scopes"), run: hex.EncodeToString(b), proc: proc,
+		sessions: map[string]agents.CrewSession{}, regs: map[string]*crewRegistration{}, pending: map[string]*crewRegistration{}, owed: map[string]crewOwedExit{}}
+	h.todos = &todoFeed{h: h, dir: filepath.Join(agents.AgentBase(env, agentDir), ".crew-todos"), start: time.Now()}
 	if len(kept) > 0 {
 		migrateErr = errors.Join(migrateErr, fmt.Errorf("%s", strings.Join(kept, ", ")))
 	}
@@ -257,7 +258,7 @@ func (h *crewHost) claimScope(ctx context.Context) claimed {
 	r := claimed{scope: id, epoch: epoch}
 	if err := os.MkdirAll(h.dir, 0o700); err != nil {
 		r.warn = err
-	} else if err := writePrivate(filepath.Join(h.dir, crewFileName(id)), nil); err != nil {
+	} else if err := agents.WritePrivate(filepath.Join(h.dir, agents.CrewFileName(id)), nil); err != nil {
 		r.warn = err
 	}
 	return r
@@ -385,16 +386,16 @@ func newSecret() string {
 // codename's next start (or by settle, which ends it); one the daemon refused is dropped. A lost
 // one with other arguments (its profile edited since) is ended first. workspace is the workspace's
 // id in the store; instance the host's spawn id.
-func (h *crewHost) register(codename, kind string, prompts bool, via crew.MailVia, workspace int64, instance, dir string, then func(crewSession, error)) {
+func (h *crewHost) register(codename, kind string, prompts bool, via crew.MailVia, workspace int64, instance, dir string, then func(agents.CrewSession, error)) {
 	scope, epoch, ok := h.held()
 	if !ok {
-		then(crewSession{}, errNoCrewScope)
+		then(agents.CrewSession{}, errNoCrewScope)
 		return
 	}
 	store, socket := h.c.StoreID(), h.c.DaemonAddress()
 	r := h.pending[codename]
 	if r != nil && r.inflight {
-		then(crewSession{}, errCrewResolving)
+		then(agents.CrewSession{}, errCrewResolving)
 		return
 	}
 	if r != nil && (r.scope != scope || r.epoch != epoch || r.store != store) {
@@ -403,7 +404,7 @@ func (h *crewHost) register(codename, kind string, prompts bool, via crew.MailVi
 	}
 	if r != nil && (r.kind != kind || r.prompts != prompts || r.via != via || r.workspace != workspace) {
 		h.resolve(r)
-		then(crewSession{}, errCrewResolving)
+		then(agents.CrewSession{}, errCrewResolving)
 		return
 	}
 	if r == nil {
@@ -430,13 +431,13 @@ func (h *crewHost) send(ctx context.Context, r *crewRegistration) any {
 		return err
 	}
 	m, _ := v.(map[string]any)
-	return crewSession{ID: feature.Str(m, "session"), Profile: feature.Str(m, "profile"), Scope: r.scope, Epoch: r.epoch, Dir: r.dir}
+	return agents.CrewSession{ID: feature.Str(m, "session"), Profile: feature.Str(m, "profile"), Scope: r.scope, Epoch: r.epoch, Dir: r.dir}
 }
 
 // registered is r's answer v, on the loop: a session, now counted live, or why there is none. r
 // stays pending only when the answer was lost.
-func (h *crewHost) registered(r *crewRegistration, v any) (crewSession, error) {
-	s, ok := v.(crewSession)
+func (h *crewHost) registered(r *crewRegistration, v any) (agents.CrewSession, error) {
+	s, ok := v.(agents.CrewSession)
 	if !ok {
 		err, _ := v.(error)
 		if err == nil {
@@ -445,7 +446,7 @@ func (h *crewHost) registered(r *crewRegistration, v any) (crewSession, error) {
 		if crewRefused(err) {
 			h.forget(r)
 		}
-		return crewSession{}, err
+		return agents.CrewSession{}, err
 	}
 	h.forget(r)
 	h.sessions[s.ID], h.regs[s.ID] = s, r
@@ -479,7 +480,7 @@ func (h *crewHost) resolve(r *crewRegistration) {
 // registered with. The context names that daemon, and its credential the registration's secret,
 // which is then dropped. A session no longer the window's is refused (errCrewStale), and the caller
 // ends it.
-func (h *crewHost) publish(s crewSession) (string, error) {
+func (h *crewHost) publish(s agents.CrewSession) (string, error) {
 	r := h.regs[s.ID]
 	if _, live := h.sessions[s.ID]; !live || r == nil || r.secret == "" || s.Scope != h.scope || s.Epoch != h.epoch ||
 		r.store != h.c.StoreID() || r.socket != h.c.DaemonAddress() {
@@ -494,7 +495,7 @@ func (h *crewHost) publish(s crewSession) (string, error) {
 // exit ends s, why: its context file is removed at once on the loop, so no later process reads its
 // credential; it is s's own file, so a newer session's in the folder stays. The daemon is told off
 // the loop; until it answers, the exit is owed, and settle asks again.
-func (h *crewHost) exit(s crewSession, why string) {
+func (h *crewHost) exit(s agents.CrewSession, why string) {
 	_ = crew.RemoveContext(s.Dir, s.ID)
 	delete(h.sessions, s.ID)
 	delete(h.regs, s.ID)

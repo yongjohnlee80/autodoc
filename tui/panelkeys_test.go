@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
@@ -40,8 +41,8 @@ done
 // runKeyAgent runs the agents panel, docked at the bottom, on keyAgent, its keyboard there, typing.
 func runKeyAgent(t *testing.T) *running {
 	t.Helper()
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(keyAgent(t)), Codename: "heron"}}, "heron")
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(keyAgent(t)), Codename: "heron"}}, "heron")
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	r.s.WaitForText(t, "ready")
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })

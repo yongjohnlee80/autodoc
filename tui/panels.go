@@ -3,6 +3,7 @@ package tui
 import (
 	"slices"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
@@ -352,7 +353,7 @@ func legacyPanelSpecs() []feature.PanelSpec {
 func defaultPanelSpecs() []feature.PanelSpec {
 	return []feature.PanelSpec{
 		feature.ExplorerPanelSpec(),
-		terminalPanelSpec(), agentPanelSpec(), legacyPanelSpecs()[0],
+		terminalPanelSpec(), agents.AgentPanelSpec(), legacyPanelSpecs()[0],
 	}
 }
 

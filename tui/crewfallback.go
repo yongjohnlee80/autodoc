@@ -11,6 +11,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/mail"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -114,7 +115,7 @@ func (h *crewHost) takeJob(j fallbackJob) {
 		switch {
 		case err == nil:
 			h.c.Notify(h.c.Trf("autodoc.notice.crewfallback.delivered", j.Codename, j.From))
-		case errors.Is(err, ErrAgentTypedNotSent):
+		case errors.Is(err, agents.ErrAgentTypedNotSent):
 			outcome = string(mail.FallbackTypedNotSent)
 		case err != nil: // nothing typed: the user has the text instead
 			outcome = string(mail.FallbackUnknown)
@@ -159,7 +160,7 @@ func (h *crewHost) writeFallbackRecord(id, state string) error {
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return err
 	}
-	return writePrivate(p, []byte(state))
+	return agents.WritePrivate(p, []byte(state))
 }
 
 // tookJob is whether this run took job, and so told the user of its outcome itself.

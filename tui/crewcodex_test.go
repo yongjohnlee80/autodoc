@@ -29,19 +29,19 @@ func (r *codexRuns) run(environ []string, args ...string) error {
 // its setup's included, so a Codex agent given its own app-server (crew.EnvCodexServer) looks for its
 // thread there, not on the shared one (the mutant: the profile's environment alone, as before).
 func TestACodexAgentsStepLooksOnItsOwnServer(t *testing.T) {
-	a, c, _ := crewAgents(t, crewKindsCopy)
+	a, c, _ := crewAgents(t, crewKinds)
 	runs := &codexRuns{calls: make(chan []string, 4), environ: make(chan []string, 4)}
 	seamsOf(a).agentCodexHere = runs.run
 	seamsOf(a).agentSetupRun = func(string, string, []string) (crew.Setup, error) {
 		return crew.Setup{Env: map[string]string{crew.EnvCodexServer: "/agent/codex.sock"},
 			After: [][]string{{"crew", "endpoint", "--codex-here", "--since", crew.SetupSince, "--wait", "60s"}}}, nil
 	}
-	p, _ := a.profile("codex-one")
-	instance, err := a.startInstance(p)
+	p, _ := a.Profile("codex-one")
+	instance, err := a.StartInstance(p)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := startedEnvCopy(a, c, instance); err != nil {
+	if _, _, err := startedEnv(a, c, instance); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -61,16 +61,16 @@ func TestACodexAgentsStepLooksOnItsOwnServer(t *testing.T) {
 // The window sets no timer of its own. Another CLI's spawn runs none of it.
 func TestACrewCodexAgentIsRegisteredAsItStarts(t *testing.T) {
 	t.Run("one waiting registration", func(t *testing.T) {
-		a, c, _ := crewAgents(t, crewKindsCopy)
+		a, c, _ := crewAgents(t, crewKinds)
 		runs := &codexRuns{calls: make(chan []string, 4)}
 		seamsOf(a).agentCodexHere = runs.run
-		p, _ := a.profile("codex-one")
-		instance, err := a.startInstance(p)
+		p, _ := a.Profile("codex-one")
+		instance, err := a.StartInstance(p)
 		if err != nil {
 			t.Fatal(err)
 		}
 		before := time.Now().Unix()
-		if _, _, err := startedEnvCopy(a, c, instance); err != nil {
+		if _, _, err := startedEnv(a, c, instance); err != nil {
 			t.Fatal(err)
 		}
 		var args []string
@@ -95,15 +95,15 @@ func TestACrewCodexAgentIsRegisteredAsItStarts(t *testing.T) {
 	})
 
 	t.Run("another CLI's spawn runs none", func(t *testing.T) {
-		a, c, _ := crewAgents(t, crewKindsCopy)
+		a, c, _ := crewAgents(t, crewKinds)
 		runs := &codexRuns{calls: make(chan []string, 4)}
 		seamsOf(a).agentCodexHere = runs.run
-		p, _ := a.profile("claude-one")
-		instance, err := a.startInstance(p)
+		p, _ := a.Profile("claude-one")
+		instance, err := a.StartInstance(p)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, _, err := startedEnvCopy(a, c, instance); err != nil {
+		if _, _, err := startedEnv(a, c, instance); err != nil {
 			t.Fatal(err)
 		}
 		select {

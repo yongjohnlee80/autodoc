@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
@@ -99,8 +100,8 @@ func TestTheTerminalsStripHideAndEscapePaintItsDockIconLitThenDimmed(t *testing.
 }
 
 func TestTheAgentsStripHidePaintsItsDockIconLitThenDimmed(t *testing.T) {
-	agent, _ := fakeAgentCopy(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
+	agent, _ := fakeAgent(t)
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "fake", Command: agents.ShellQuote(agent)}}, "fake")
 	r.leader(t, 'g')
 	r.s.WaitForText(t, "started")
 	shown, after := dockIconPaints(t, r, "✦", func() { windowControl(t, r, "_") })

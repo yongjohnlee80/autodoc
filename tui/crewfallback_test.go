@@ -10,14 +10,15 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/inbox"
 	"github.com/yongjohnlee80/autodoc/core/mail"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // fallbackRig is messagingRig with the window taking fallback jobs: mail.fallbacks answers jobs
 // from offer once, then nothing; every mail.fallback_done is kept in reported.
 type fallbackRig struct {
-	a        *agents
-	c        *identityHostCopy
+	a        *agents.Agents
+	c        *identityHost
 	w        *crewWindow
 	offer    []map[string]any
 	reported [][]any
@@ -38,7 +39,7 @@ func newFallbackRig(t *testing.T, offer ...map[string]any) *fallbackRig {
 		return map[string]any{"jobs": jobs}, nil
 	}
 	r.w.fallbackDone = func(p []any) (any, error) { r.reported = append(r.reported, p); return map[string]any{}, nil }
-	crewOf(r.a).deliverJob = r.a.deliverFallback
+	crewOf(r.a).deliverJob = r.a.DeliverFallback
 	return r
 }
 
@@ -72,7 +73,7 @@ func TestAFallbackJobIsTypedOnceAndReported(t *testing.T) {
 	var atTyping string // the record as the job is handed to the base
 	crewOf(r.a).deliverJob = func(codename, text string, done func(error)) {
 		atTyping, _ = crewOf(r.a).fallbackRecord("j1")
-		r.a.deliverFallback(codename, text, done)
+		r.a.DeliverFallback(codename, text, done)
 	}
 	r.start()
 	if atTyping != fallbackTyping {
@@ -165,7 +166,7 @@ func TestAHandedOverSendTypesNothing(t *testing.T) {
 // A daemon before protocol 42 has no jobs: the window asks once and never again.
 func TestAnOlderDaemonIsAskedForJobsOnce(t *testing.T) {
 	a, c, w := messagingRig(t)
-	crewOf(a).deliverJob = a.deliverFallback
+	crewOf(a).deliverJob = a.DeliverFallback
 	crewOf(a).pollFallbacks(crewOf(a).gen)
 	settleMessaging(c, w)
 	if n := strings.Count(strings.Join(w.calls, " "), "mail.fallbacks"); n != 1 {

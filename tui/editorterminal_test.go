@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/internal/ipc"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
@@ -54,7 +55,7 @@ func TestAnAgentRunsALineOnlyAfterTheUserSaysRun(t *testing.T) {
 	r.connected(t)
 	path := onLoop(r, r.h.editorSocketPath)
 	onLoop(r, func() []string {
-		return r.h.agents.agentEnv(feature.Workspace{Name: "kb"}, t.TempDir(), agentProfile{Codename: "zen"})
+		return r.h.agents.AgentEnv(feature.Workspace{Name: "kb"}, t.TempDir(), agents.AgentProfile{Codename: "zen"})
 	})
 	ctx := context.Background()
 	cli, err := golibrpc.Dial(ctx, path, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
@@ -62,7 +63,7 @@ func TestAnAgentRunsALineOnlyAfterTheUserSaysRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer cli.Close()
-	token := onLoop(r, func() string { return r.h.agents.editorToken("zen") })
+	token := onLoop(r, func() string { return r.h.agents.EditorToken("zen") })
 	type answer struct {
 		res map[string]any
 		re  *golibrpc.Error

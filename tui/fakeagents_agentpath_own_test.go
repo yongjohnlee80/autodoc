@@ -10,7 +10,7 @@ import (
 // Copies of the agents' test fakes agentpath_own_test.go declares, for the host's cells.
 
 // pathOf is the PATH an agent's start sets (its argv's PATH=), "" for none.
-func pathOfCopy(args []string) string {
+func pathOf(args []string) string {
 	path := ""
 	for _, a := range args {
 		if v, ok := strings.CutPrefix(a, "PATH="); ok {
@@ -22,7 +22,7 @@ func pathOfCopy(args []string) string {
 
 // fakeBuild makes an empty autodoc build in a new folder dir, named as this OS names a program
 // (autodoc.exe on Windows), and answers its path: what an agent's PATH leads to.
-func fakeBuildCopy(t *testing.T, dir string) string {
+func fakeBuild(t *testing.T, dir string) string {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)

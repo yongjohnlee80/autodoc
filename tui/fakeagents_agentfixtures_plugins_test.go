@@ -4,4 +4,4 @@ package tui
 
 // argvPrinterEnv, set to 1, makes this test binary print its arguments as JSON and exit: an agent
 // CLI stand-in that says what it was given (agentargs_test.go).
-const argvPrinterEnvCopy = "AUTODOC_TUI_ARGV_PRINTER"
+const argvPrinterEnv = "AUTODOC_TUI_ARGV_PRINTER"

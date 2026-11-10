@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/system"
 )
 
@@ -65,12 +66,12 @@ func TestTheVimQuestionIsNotAskedOfAnExistingUser(t *testing.T) {
 	offeringVimQuestion(t)
 	for name, prefs := range map[string]map[string]string{
 		"a keymap":  {system.PrefAboutAt: "true", prefKeymap: "vim"},
-		"an answer": {system.PrefAboutAt: "true", prefAgentSetup: "declined"},
+		"an answer": {system.PrefAboutAt: "true", agents.PrefAgentSetup: "declined"},
 		"a profile": {system.PrefAboutAt: "true"},
 	} {
-		var profiles []agentProfile
+		var profiles []agents.AgentProfile
 		if name == "a profile" {
-			profiles = []agentProfile{{Name: "Mine", Command: "true", Codename: "mine"}}
+			profiles = []agents.AgentProfile{{Name: "Mine", Command: "true", Codename: "mine"}}
 		}
 		_, r, _ := runAgentTUIWith(t, t.TempDir(), profiles, "", prefs, Options{})
 		r.s.WaitForText(t, "about autodoc")

@@ -1,0 +1,813 @@
+package agents
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"maps"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/internal/userdirs"
+	"github.com/yongjohnlee80/autodoc/internal/userperm"
+	"github.com/yongjohnlee80/autodoc/internal/usershell"
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+	"github.com/yongjohnlee80/golib/tui/pty"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
+
+	"github.com/yongjohnlee80/autodoc"
+	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+)
+
+// agents owns profile forms and the running agent's identity. Its single panel
+// CrewScope is what the agents ask of the window's crew scope (the host's crew host, crewhost.go):
+// its scope while held, an agent's session registered, its context published and its exit told,
+// what the crew says of an agent (its prompts reported, its start, its exit), and mail sent
+// through it, queued as a task or as the user's own.
+type CrewScope interface {
+	Held() (scope string, epoch int64, ok bool)
+	Register(codename, kind string, prompts bool, via crew.MailVia, workspace int64, instance, dir string, then func(CrewSession, error))
+	Publish(s CrewSession) (string, error)
+	Exit(s CrewSession, why string)
+	PromptsReported(codename string, then func(reported bool))
+	StartedOf(codename string, then func(started bool))
+	WhenExited(id string, fn func())
+	QueueSend(codename, kind, subject, body string, then func(error))
+	UserSend(codename, kind, subject, body string, then func(error))
+	// Go runs work off the loop as the crew host runs its calls, then on the loop with its answer:
+	// a crew start's setup.
+	Go(work func(context.Context) any, then func(any))
+}
+
+// CrewAttention is what the agents ask of the human's crew inbox: whether an agent waits on the
+// user (a decision or a permission prompt).
+type CrewAttention interface {
+	AwaitsUser(codename string) bool
+}
+
+// agentSeams are the program's seams the agents read (seams.go), each read when used: a test may
+// change one while the program runs.
+type AgentSeams interface {
+	// Env is the program's environment: an agent's PATH, its CLI's lookup, its server's.
+	Env() procenv.Env
+	// ServerReady bounds the wait for a started agent server's socket.
+	ServerReady() time.Duration
+	// OfferAgentSetup is whether a first run offers the agent setup.
+	OfferAgentSetup() bool
+	// LookAgentCLI, when a test sets it, is how the setup's card finds the CLIs; nil is on the PATH.
+	LookAgentCLI() func(string) (string, error)
+	// VimQuestionPending is whether a first run's Vim question is still to be asked: the setup waits
+	// for it.
+	VimQuestionPending(p feature.PrefsView) bool
+	// The rest are a test's, each nil (or "") for the program's own: SetupRun runs a crew start's
+	// setup in place of the agent's autodoc (`crew setup`, crewSetupOf); Spawn starts an agent's
+	// program in place of a pseudo-terminal (pty.Start, as a terminal tab's own start is);
+	// CommandCheck refuses a start whose command's program the agent can't find, in place of
+	// commandOnPath (one answering nil checks nothing); CodexHere runs a setup's after-steps in place
+	// of the agent's autodoc (runAfterSteps); PromptsReported replaces the crew's answer of whether
+	// the window sees the agent's permission prompts (promptsSeen); AgentBin is the autodoc build
+	// an agent calls in place of this one.
+	SetupRun() func(kind, dir string, environ []string) (crew.Setup, error)
+	Spawn() func(pty.Cmd) (terminal.TerminalProcess, error)
+	CommandCheck() func(shell usershell.Shell, command string, env []string) error
+	CodexHere() func(environ []string, args ...string) error
+	PromptsReported() func(kind string, reported bool) bool
+	AgentBin() string
+}
+
+// remains one contribution even when the later agents model gains more tabs.
+type Agents struct {
+	c                      AgentHost
+	seams                  AgentSeams // its host's (seams.go), read when used
+	agentDir, agentRunning string
+	agentRunningLabel      string // label captured at start; agentRunning itself is the codename
+	agentConfig            string
+	Crew                   CrewScope     // the window's crew scope; nil in a program without one
+	Inbox                  CrewAttention // the human's crew inbox: which agents wait on a prompt; nil without one
+	// claudeAnswers are what each Claude Code program knows (warmClaude), by the word that runs it,
+	// on the loop; claudeWarned the programs a failed read was told of
+	claudeAnswers map[string]*claudeAnswer
+	claudeWarned  map[string]bool
+	EditorPath    func() string // the TUI's editor socket, "" without one (editorsocket.go)
+	// editorTokens are the agents' secrets on the editor socket, by codename: made at an agent's
+	// first start in this run, and what the socket knows an agent by (editorsocket.go)
+	editorTokens        map[string]string
+	editingAgent        string
+	editingAgentProfile *AgentProfile // exact record shown in the form; stale edits are refused
+	formKind            string        // the kind the form's dropdown is at (agentKinds)
+	kindRows            *tuidecl.ListModel
+	// the setup card (agentsetup.go): the CLIs it lists
+	setupFound     []agentCLI
+	setupCLIs      *tuidecl.ListModel
+	switchingAgent string
+	agentRows      *tuidecl.ListModel
+	instances      map[string]*AgentInstance
+	instanceOrder  []string
+	selectedAgent  string
+	deliveries     map[*agentDelivery]bool
+	stopping       bool
+}
+
+func NewAgents(c AgentHost, s AgentSeams, dir, config string) *Agents {
+	return &Agents{c: c, seams: s, agentDir: dir, agentConfig: config, instances: map[string]*AgentInstance{}, deliveries: map[*agentDelivery]bool{},
+		agentRows: tuidecl.NewListModel("key", "default", "name", "codename", "command")}
+}
+func (a *Agents) BindPanelHost(c feature.PanelHost) error {
+	host, ok := c.(AgentHost)
+	if !ok {
+		return fmt.Errorf("agents panel requires terminal configuration services")
+	}
+	a.c = host
+	return nil
+}
+func (*Agents) Name() string { return "agents" }
+func (a *Agents) State() map[string]any {
+	st := map[string]any{
+		"App.agentSetupCLIs": a.setupList(), "App.agentSetupIndex": 0, "App.agentSetupName": "", "App.agentSetupNone": false,
+		"App.agentSetupSome": false, "App.agentSetupReject": "&No",
+		"App.agentTitle":          "agent",
+		"App.agentShown":          false,
+		"App.agentEdges":          feature.Choices(agentEdgeLabels...),
+		"App.agentSizes":          feature.Choices(feature.PercentLabels(feature.PanelSizes)...),
+		"App.agentLengths":        feature.Choices(feature.PercentLabels(feature.PanelLengths)...),
+		"App.agentProfiles":       a.agentRows,
+		"App.agentProfilesStatus": "",
+		"App.agentFormTitle":      "",
+		"App.agentFormError":      "",
+		"App.agentName":           "",
+		"App.agentCodename":       "",
+		"App.agentCommand":        "",
+		"App.agentEnv":            "",
+		"App.agentKinds":          a.kindList(),
+		"App.agentKindIndex":      0,
+		"App.agentSwitchQuestion": "",
+	}
+	return st
+}
+func (a *Agents) Prefs() []feature.PrefSpec { return AgentPrefRows(a) }
+
+func (a *Agents) Catalog() []feature.Entry {
+	return []feature.Entry{
+		feature.Builtin("agent.toggle", "AI agent", "App.toggleAgent()", a.ToggleAgent),
+		feature.Builtin("prefs.agent_profiles", "agent profiles", "App.openAgentProfiles()", a.OpenAgentProfiles),
+		feature.Builtin("agent.setup", "set up an agent", "App.openAgentSetup()", a.OpenAgentSetup),
+	}
+}
+
+func AgentPrefRows(a *Agents) []feature.PrefSpec {
+	edge := feature.ValuePref(prefAgentEdge, defaultAgentEdge, agentEdges).
+		Shows(agentPreferenceState)
+	profiles := feature.ValuePref(PrefAgentProfiles, "[]", nil)
+	def := feature.ValuePref(prefAgentDefault, "", nil)
+	identity := feature.ValuePref(PrefAgentDefaultCodename, "", nil)
+	setup := feature.ValuePref(PrefAgentSetup, "", nil) // the setup's answer (agentsetup.go)
+	if a != nil {
+		edge = edge.Then(func(feature.PrefsView) { a.c.DockPanel("agent") })
+		profiles = profiles.Then(func(feature.PrefsView) { a.listAgents() })
+		def = def.Then(func(feature.PrefsView) { a.listAgents() })
+		identity = identity.Then(func(feature.PrefsView) { a.listAgents() })
+	}
+	return []feature.PrefSpec{edge, profiles, def, identity, setup}
+}
+
+func agentPreferenceState(p feature.PrefsView) map[string]any {
+	st := agentState(p)
+	size, length := p.PanelGeometry("agent", p.Value(prefAgentEdge))
+	maps.Copy(st, map[string]any{
+		"App.agentEdgeIndex":   max(slices.Index(agentEdges, p.Value(prefAgentEdge)), 0),
+		"App.agentSizeIndex":   feature.Nearest(feature.PanelSizes, size),
+		"App.agentLengthIndex": feature.Nearest(feature.PanelLengths, length),
+	})
+	return st
+}
+
+func (a *Agents) Profiles() []AgentProfile {
+	return AgentProfilesOf(a.c.Prefs().Value(PrefAgentProfiles))
+}
+func (a *Agents) DefaultProfile() string {
+	return a.c.Prefs().Value(PrefAgentDefaultCodename)
+}
+func (a *Agents) Commands() map[string]feature.Command {
+	return map[string]feature.Command{
+		"App.toggleAgent":             feature.None(a.ToggleAgent),
+		"App.stopAllAgents":           feature.None(a.StopAllAgents),
+		"App.openAgentProfiles":       feature.None(a.OpenAgentProfiles),
+		"App.startAddAgent":           feature.None(a.StartAddAgent),
+		"App.startEditAgent":          feature.OneNumber("a row", a.StartEditAgent),
+		"App.saveAgent":               feature.TwoStrings("a name and a command", a.SaveAgent),
+		"App.saveAgentProfile":        feature.ThreeStrings("a name, command and codename", a.SaveAgentProfile),
+		"App.saveAgentProfileWithEnv": feature.FourStrings("a name, command, codename and env", a.saveAgentProfileWithEnv),
+		"App.agentKindPicked":         feature.NumberAndTwoStrings("a row, the name and the command", a.agentKindChosen),
+		"App.removeAgent":             feature.OneNumber("a row", a.RemoveAgent),
+		"App.makeAgentDefault":        feature.OneNumber("a row", a.MakeAgentDefault),
+		"App.openAgentSetup":          feature.None(a.OpenAgentSetup),
+		"App.agentSetupPicked":        feature.NumberAndString("a row and the name", a.agentSetupPicked),
+		"App.agentSetupConfirm":       feature.NumberAndString("a row and the name", a.AgentSetupConfirm),
+		"App.agentSetupDecline":       feature.None(a.agentSetupDecline),
+		"App.useAgent":                feature.OneNumber("a row", a.UseAgent),
+		"App.switchAgentConfirmed":    feature.None(a.switchAgentConfirmed),
+		"App.agentTabsChanged":        feature.None(a.agentTabsChanged),
+		"App.setAgentEdge":            feature.OneNumber("a row", a.SetAgentEdge),
+		"App.setAgentSize":            feature.OneNumber("a row", a.SetAgentSize),
+		"App.setAgentLength":          feature.OneNumber("a row", a.SetAgentLength),
+	}
+}
+func (a *Agents) Panels() []feature.PanelSpec {
+	s := AgentPanelSpec()
+	s.Open = func(feature.PanelHost) { a.openAgentPanel() }
+	s.Opened = func(c feature.PanelHost) { c.Set("App.agentShown", true) }
+	s.Closed = func(c feature.PanelHost) { c.Set("App.agentShown", false); c.Keep(c.RestoreKeyboardHome()) }
+	return []feature.PanelSpec{s}
+}
+func (a *Agents) PreferencesChanged() {
+	for name, value := range agentState(a.c.Prefs()) {
+		a.c.Set(name, value)
+	}
+	a.syncAgentDialog()
+}
+
+// THE AGENT — an AI agent's CLI in a terminal of its own, floating over the page
+// (docs/decisions/crew.md#an-agent-terminal-inside-autodoc): SPC g, Go › Agent. The user keeps
+// profiles, each a name and the command that starts the agent (claude, codex --model o4, agy,
+// opencode, …), and marks one the default: the key opens it. Each running agent has a tab of its
+// own (agenttabs.go); they keep running while hidden. The agent works in AutoDoc's own folder for
+// the workspace (Options.AgentDir), never the workspace's: there AutoDoc writes AGENTS.md and
+// CLAUDE.md, telling it the workspace and how to call AutoDoc, and its environment names them too.
+// The command is the user's, as written; {root} and {workspace} in it are filled in.
+
+// Profiles are JSON; the canonical default is a codename, with a legacy name mirror.
+const (
+	PrefAgentProfiles        = "tui.agent.profiles"
+	prefAgentDefault         = "tui.agent.default"
+	PrefAgentDefaultCodename = "tui.agent.default.codename"
+)
+
+// agentProfile is one way to start an agent.
+type AgentProfile struct {
+	Name     string `json:"name"`
+	Command  string `json:"command"`
+	Codename string `json:"codename,omitempty"`
+	// Kind is the crew kind the agent is (agentKinds), "" for the one its command names (agentKind):
+	// a CLI started under another name, a wrapper or a script, is still Claude Code or Codex.
+	Kind string `json:"kind,omitempty"`
+	// Env is set on the agent's process over AutoDoc's environment (agentprofileenv.go): plain text
+	// in the preferences, never for secrets.
+	Env map[string]string `json:"env,omitempty"`
+}
+
+// agentProfilesOf reads the profiles preference; one without a name or a command is dropped.
+func AgentProfilesOf(s string) []AgentProfile {
+	var all []AgentProfile
+	if json.Unmarshal([]byte(s), &all) != nil {
+		return nil
+	}
+	out := all[:0]
+	for _, p := range all {
+		if strings.TrimSpace(p.Name) != "" && strings.TrimSpace(p.Command) != "" {
+			p.Env = keptProfileEnv(p.Env) // a key written by hand that a profile can't set is dropped
+			if !slices.Contains(agentKinds, p.Kind) {
+				p.Kind = "" // a kind written by hand that AutoDoc doesn't know: the command's
+			}
+			out = append(out, p)
+		}
+	}
+	return uniqueAgentCodenames(out)
+}
+
+func AgentProfilesJSON(ps []AgentProfile) string {
+	if len(ps) == 0 {
+		return "[]"
+	}
+	b, _ := json.Marshal(ps)
+	return string(b)
+}
+
+// profile resolves the stable codename, never the display label.
+func (a *Agents) Profile(codename string) (AgentProfile, bool) {
+	for _, a := range a.Profiles() {
+		if a.Codename == codename {
+			return a, true
+		}
+	}
+	return AgentProfile{}, false
+}
+
+// toggleAgent is SPC g: the agent running shown or hidden; none running, the default started;
+// no default, the profiles, which say what to do.
+func (h *Agents) ToggleAgent() {
+	h.c.TogglePanel("agent")
+}
+
+// openAgentPanel shows the running agent, or starts the default profile. With no
+// default, it opens the profiles dialog instead of an empty terminal.
+func (h *Agents) openAgentPanel() {
+	h.syncInstances()
+	if instance := h.instances[h.selectedAgent]; instance != nil && instance.running {
+		h.c.OpenDrawer("agent")
+		h.c.Keep(h.selectInstance(instance))
+		return
+	}
+	for _, instance := range h.instances {
+		if instance.running {
+			h.c.OpenDrawer("agent")
+			h.c.Keep(h.selectInstance(instance))
+			return
+		}
+	}
+	p, ok := h.Profile(h.DefaultProfile())
+	if !ok {
+		h.OpenAgentProfiles()
+		return
+	}
+	h.startAgent(p)
+}
+
+// startAgent starts p in the agent's terminal and shows it. The shell runs the command as written,
+// so it decides what the command is: one it cannot find exits 127, which agentExited explains.
+func (h *Agents) startAgent(p AgentProfile) {
+	if p.Codename == "" {
+		p.Codename = agentCodename(p.Name)
+	}
+	if _, err := h.StartInstance(p); err != nil {
+		h.c.Notify(h.c.Trf("autodoc.notice.agent.the_agent_could_not_start", err.Error()))
+	}
+}
+
+// stopAgent releases the running identity only after the terminal accepts stop.
+func (h *Agents) stopAgent() bool {
+	if h.selectedAgent == "" {
+		return true
+	}
+	if err := h.RemoveInstance(h.selectedAgent); err != nil {
+		h.c.Keep(err)
+		return false
+	}
+	return true
+}
+
+// fillAgentCommand fills {root} and {workspace} in a profile's command, each quoted for the shell
+// that runs it in env (internal/usershell). A value that shell can't hand the program as itself
+// (usershell.Shell.CarriesQuoted) is an error, and the command is not filled.
+func fillAgentCommand(env procenv.Env, command string, ws feature.Workspace) (string, error) {
+	sh := usershell.Commands(env)
+	for _, f := range []struct{ placeholder, value string }{{"{root}", ws.Root}, {"{workspace}", ws.Name}} {
+		if strings.Contains(command, f.placeholder) {
+			if err := sh.CarriesQuoted(f.value); err != nil {
+				return "", fmt.Errorf("its command's %s can't reach it whole: %w", f.placeholder, err)
+			}
+		}
+	}
+	return strings.NewReplacer("{root}", sh.Quote(ws.Root), "{workspace}", sh.Quote(ws.Name)).Replace(command), nil
+}
+
+// shellQuote is s as one word of a POSIX shell: for AutoDoc's own sh scripts (a wrapper, a hook).
+func ShellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+
+// agentKinds are the kinds a profile can be set to, "" first: the command's (agentKind).
+var agentKinds = []string{"", crew.KindClaude, crew.KindCodex, crew.KindAgy, crew.KindOpenCode}
+
+// kind is the profile's crew kind: the one it was set to, or else the one its command names.
+func (p AgentProfile) kind() string {
+	if p.Kind != "" {
+		return p.Kind
+	}
+	return agentKind(p.Command)
+}
+
+// agentKind is the crew kind of the CLI command runs (claude, codex, agy, opencode, …): the name of
+// the program its first simple command runs, its words read as the shell that runs it reads them
+// (usershell.Words: /bin/sh's, PowerShell's on Windows), past any NAME=value assignments,
+// PowerShell's call operator & and the wrappers env, exec, command, nohup and mise exec|x … --;
+// "agent" when there is none. A wrapper not named here is the kind itself, never a vendor's guessed.
+func agentKind(command string) string {
+	if name := procenv.ProgramName(nil, agentProgram(command)); name != "" && name != "." && name != "/" {
+		return name
+	}
+	return "agent"
+}
+
+// agentProgram is the program command's first simple command runs, as agentKind reads it: the word
+// as written (a name the shell looks up on PATH, or a path), "" when there is none. A mise exec
+// with no -- is mise itself.
+func agentProgram(command string) string {
+	w := usershell.Words(command)
+	for len(w) > 0 {
+		f := w[0].Text
+		switch {
+		case w[0].Assignment(), f == "&": // an assignment; PowerShell's call operator, before a quoted path
+			w = w[1:]
+		case f == "exec" || f == "command" || f == "nohup":
+			w = skipOptions(w[1:], "-a")
+		case procenv.ProgramName(nil, f) == "env":
+			w = skipEnvOptions(w[1:])
+		case procenv.ProgramName(nil, f) == "mise" && len(w) > 1 && (w[1].Text == "exec" || w[1].Text == "x"):
+			i := slices.IndexFunc(w, func(x usershell.Word) bool { return x.Text == "--" })
+			if i < 0 {
+				return f // its tools run their own default program: none of them guessed
+			}
+			w = w[i+1:]
+		default:
+			return f
+		}
+	}
+	return ""
+}
+
+// skipOptions is w past its leading options and a "--"; an option in valued takes the next word.
+func skipOptions(w []usershell.Word, valued ...string) []usershell.Word {
+	for len(w) > 0 && strings.HasPrefix(w[0].Text, "-") {
+		f := w[0].Text
+		w = w[1:]
+		if f == "--" {
+			break
+		}
+		if slices.Contains(valued, f) && len(w) > 0 {
+			w = w[1:]
+		}
+	}
+	return w
+}
+
+// skipEnvOptions is w, env's arguments, past its options: -S's string is split into the words it
+// runs, as env splits it (usershell.POSIXWords).
+func skipEnvOptions(w []usershell.Word) []usershell.Word {
+	for len(w) > 0 && strings.HasPrefix(w[0].Text, "-") {
+		f := w[0].Text
+		switch {
+		case f == "--":
+			return w[1:]
+		case f == "-S" || f == "--split-string":
+			if len(w) < 2 {
+				return nil
+			}
+			return append(usershell.POSIXWords(w[1].Text), w[2:]...)
+		case strings.HasPrefix(f, "--split-string="):
+			return append(usershell.POSIXWords(strings.TrimPrefix(f, "--split-string=")), w[1:]...)
+		case strings.HasPrefix(f, "-S"):
+			return append(usershell.POSIXWords(f[2:]), w[1:]...)
+		case f == "-u" || f == "-C" || f == "--unset" || f == "--chdir":
+			if len(w) < 2 {
+				return nil
+			}
+			w = w[2:]
+		default: // -i, -0, -v, -, -uNAME, -CDIR, --unset=NAME, --chdir=DIR, …
+			w = w[1:]
+		}
+	}
+	return w
+}
+
+// agentArgv is how the terminal runs command: the shell that runs command lines in env
+// (internal/usershell: /bin/sh on Unix, PowerShell on Windows) on the command as the user wrote it,
+// so its quoting and arguments are the shell's. Its variables are never on a command line, which
+// /proc/<pid>/cmdline shows every user of the machine (AUTODOC_EDITOR_TOKEN among them): the
+// process gets them in its environment (agentEnviron, runAgent).
+func agentArgv(env procenv.Env, command string) (string, []string) {
+	return usershell.Commands(env).Run(command)
+}
+
+// withCommandArgs is agentArgv's args with extra appended to the program's own command line as
+// env's shell writes them (usershell.Shell.Args), so a setup's argument (a JSON config, a prompt)
+// reaches the program as one word, itself; one the shell can't hand on as itself
+// (usershell.Shell.Carries) is an error.
+func withCommandArgs(env procenv.Env, args, extra []string) ([]string, error) {
+	if len(extra) == 0 || len(args) == 0 {
+		return args, nil
+	}
+	written, err := usershell.Commands(env).Args(extra)
+	if err != nil {
+		return nil, fmt.Errorf("its setup's argument can't reach it whole: %w", err)
+	}
+	out := slices.Clone(args)
+	out[len(out)-1] += written
+	return out, nil
+}
+
+// agentEnv are the variables p's agent is started with, in its folder dir: the workspace, its root,
+// the daemon the TUI is attached to, the build and the config it runs on, and a PATH whose first
+// folder holds the autodoc that runs them (agentWrapper, through agentPathDir), so `autodoc --call` reaches the TUI's
+// store, not the default config's, and is found when no autodoc is installed, the rest p's own
+// (agentPath); and, with the editor socket, where the page is (AUTODOC_EDITOR) and who the agent
+// is there (AUTODOC_AGENT). They come after p's env (envList), so they are AutoDoc's.
+func (h *Agents) AgentEnv(ws feature.Workspace, dir string, p AgentProfile) []string {
+	codename := p.Codename
+	env := []string{
+		"AUTODOC_WORKSPACE=" + ws.Name,
+		"AUTODOC_ROOT=" + ws.Root,
+		"AUTODOC_SOCKET=" + h.c.DaemonAddress(),
+		"AUTODOC_BIN=" + h.AgentBin(),
+		"AUTODOC_CONFIG=" + h.agentConfig,
+		"PATH=" + h.AgentPathDir(dir) + string(os.PathListSeparator) + p.agentPath(h.seams.Env()),
+	}
+	// the page in this TUI's editor, for `autodoc --editor`
+	// (docs/decisions/crew.md#the-editor-socket)
+	if h.EditorPath != nil {
+		if path := h.EditorPath(); path != "" {
+			token := h.EditorToken(codename)
+			env = append(env, "AUTODOC_EDITOR="+path, "AUTODOC_AGENT="+codename, "AUTODOC_EDITOR_TOKEN="+token)
+			// Codex's tool shells drop every variable named *TOKEN* (its shell environment policy), so a
+			// Codex agent's token is a file of its own folder too, which a name Codex keeps points to
+			if p.kind() == crew.KindCodex && dir != "" {
+				if file, err := writeEditorCredential(dir, token); err == nil {
+					env = append(env, EnvEditorCredentialFile+"="+file)
+				}
+			}
+		}
+	}
+	return env
+}
+
+// EnvEditorCredentialFile names the file holding an agent's editor token (its AUTODOC_EDITOR_TOKEN),
+// for `autodoc --editor` where that variable doesn't reach: a Codex agent's tool shells, which drop
+// every variable named *TOKEN*. Its name holds none of the words Codex filters (KEY, SECRET, TOKEN).
+const EnvEditorCredentialFile = "AUTODOC_EDITOR_CREDENTIAL_FILE"
+
+// editorCredentialFile is that file, in the agent's own folder.
+const editorCredentialFile = ".autodoc-editor-credential"
+
+// writeEditorCredential writes token as the agent folder dir's editor credential file, private to
+// this user from its creation (userperm: 0600 on Unix, an access list on Windows), through a
+// temporary file renamed over it, and answers its path. The secret is never in the environment
+// Codex's tools see: only the file's path is.
+func writeEditorCredential(dir, token string) (string, error) {
+	path := filepath.Join(dir, editorCredentialFile)
+	return path, WritePrivate(path, []byte(token))
+}
+
+// writePrivate makes path hold text, private to this user from its creation (userperm: 0600 on
+// Unix, an access list on Windows): written into a new temporary file beside it, renamed over
+// whatever was there, so an earlier file, whatever its permissions, is replaced whole, never
+// opened or appended to.
+func WritePrivate(path string, text []byte) error {
+	name := filepath.Base(path)
+	if !strings.HasPrefix(name, ".") { // a dot file's temporary is its name, never ".." and its name
+		name = "." + name
+	}
+	f, err := userperm.CreatePrivateTemp(filepath.Dir(path), name+".*")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	_, werr := f.Write(text)
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr == nil {
+		werr = os.Rename(tmp, path)
+	}
+	if werr != nil {
+		_ = os.Remove(tmp)
+	}
+	return werr
+}
+
+// newAgentFile makes a file an agent asked for (a command it offered, written at the user's Yes):
+// new, never replacing what is there (an error wrapping os.ErrExist), and private to this user from
+// its creation by the OS's rules (userperm).
+func NewAgentFile(path string) (*os.File, error) { return userperm.CreatePrivate(path) }
+
+// agentPathDir is the folder first on the PATH of the agent working in dir (agentEnv): procenv's
+// PATH entry (procenv.PathEntry). On Unix it is agentPathLink, a link to dir/bin, which holds the
+// agent's autodoc (agentWrapper): a crew agent's folder holds the window's scope in its name
+// (autodoc:<id>), and a PATH entry can't hold the PATH separator, so the folder itself can't be the
+// entry. On Windows it is the build's own folder, the config reaching it through $AUTODOC_CONFIG.
+func (h *Agents) AgentPathDir(dir string) string {
+	return procenv.PathEntry(h.AgentPathLink(dir), filepath.Join(dir, "bin"), h.AgentBin())
+}
+
+// agentPathLink is where the link to dir/bin is, where the OS needs one:
+// <agentDir>/.bin/<the first 16 hex digits of dir's sha256>.
+func (h *Agents) AgentPathLink(dir string) string {
+	sum := sha256.Sum256([]byte(dir))
+	return filepath.Join(AgentBase(h.seams.Env(), h.agentDir), ".bin", hex.EncodeToString(sum[:])[:16])
+}
+
+// editorToken is codename's secret on the editor socket: random, made once a run.
+func (h *Agents) EditorToken(codename string) string {
+	if h.editorTokens == nil {
+		h.editorTokens = map[string]string{}
+	}
+	if t, ok := h.editorTokens[codename]; ok {
+		return t
+	}
+	b := make([]byte, 16)
+	_, _ = rand.Read(b) // crypto/rand: never fails on the platforms AutoDoc runs on
+	t := hex.EncodeToString(b)
+	h.editorTokens[codename] = t
+	return t
+}
+
+// agentOfToken is the codename whose editor token t is; "" for none.
+func (h *Agents) AgentOfToken(t string) string {
+	for codename, tok := range h.editorTokens {
+		if t != "" && subtle.ConstantTimeCompare([]byte(t), []byte(tok)) == 1 {
+			return codename
+		}
+	}
+	return ""
+}
+
+// agentBin is the autodoc binary the agent calls: this one, unless a test's seams say otherwise
+// (agentSeams.AgentBin).
+func (h *Agents) AgentBin() string {
+	if bin := h.seams.AgentBin(); bin != "" {
+		return bin
+	}
+	bin, _ := procenv.Self()
+	return bin
+}
+
+// agentWrapper is the files of the agent's launcher in its folder's bin (procenv.Launcher): this
+// build, on the TUI's config. On Windows there are none: the build is on the PATH itself.
+func agentWrapper(bin, config string) ([]procenv.LauncherFile, error) {
+	argv := []string{bin}
+	if config != "" {
+		argv = append(argv, "--config", config)
+	}
+	return procenv.Launcher("autodoc", argv)
+}
+
+// agentFolder is the folder codename's agent works in for ws: AutoDoc's, never the workspace's. While
+// the window holds a crew scope it is the agent's own, under the scope, the same across that agent's
+// sessions so its CLI keeps one project folder; else the workspace's, shared by its profiles.
+func (h *Agents) AgentFolder(ws feature.Workspace, codename string) string {
+	dir := filepath.Join(AgentBase(h.seams.Env(), h.agentDir), SafeName(ws.Name))
+	if h.Crew == nil {
+		return dir
+	}
+	if scope, _, ok := h.Crew.Held(); ok {
+		return filepath.Join(dir, CrewFileName(scope), CrewFileName(codename))
+	}
+	return dir
+}
+
+// agentBase is the root of the agents' folders: the configured one, else a folder in the temp dir
+// (env's, nil for AutoDoc's own).
+func AgentBase(env procenv.Env, dir string) string {
+	if dir == "" {
+		return filepath.Join(userdirs.Temp(env), "autodoc-agent")
+	}
+	return dir
+}
+
+// safeName is a workspace's name as a folder's.
+func SafeName(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '/' || r == '\\' || r == 0 {
+			return '_'
+		}
+		return r
+	}, s)
+}
+
+// writeAgentGuide writes AGENTS.md, and CLAUDE.md as the same text, into codename's folder for ws
+// (agentFolder): most agent CLIs read one of the two from where they start; bin/autodoc,
+// agentWrapper; and the workspace notice hook into .claude/settings.json (agenthook.go). A crew
+// agent's guide (crewKind its CLI's kind, "" for an agent outside a crew scope) holds the crew and
+// mail procedure for that CLI, so it registers how it is woken. It returns the folder.
+func (h *Agents) writeAgentGuide(ws feature.Workspace, codename, crewKind string, via crew.MailVia) (string, error) {
+	dir := h.AgentFolder(ws, codename)
+	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o700); err != nil {
+		return "", err
+	}
+	launcher, err := agentWrapper(h.AgentBin(), h.agentConfig)
+	if err != nil {
+		return "", err
+	}
+	// the agent's autodoc, as its PATH finds it: its launcher, or on Windows the build itself
+	own := h.AgentBin()
+	if len(launcher) > 0 {
+		own = filepath.Join(dir, "bin", launcher[0].Name)
+	}
+	guide := AgentGuide(ws, h.AgentBin(), h.agentConfig, own, crewKind, via)
+	for _, name := range []string{"AGENTS.md", "CLAUDE.md"} {
+		if err := writeAtomic(filepath.Join(dir, name), []byte(guide), 0o600); err != nil {
+			return "", err
+		}
+	}
+	for _, f := range launcher {
+		if err := writeAtomic(filepath.Join(dir, "bin", f.Name), f.Text, 0o700); err != nil {
+			return "", err
+		}
+	}
+	// the agent's PATH entry: a folder under a path holding the PATH separator is refused, so the
+	// agent is never started on a PATH whose autodoc is someone else's
+	if err := procenv.MakePathEntry(h.AgentPathLink(dir), filepath.Join(dir, "bin"), h.AgentBin()); err != nil {
+		return "", fmt.Errorf("the agent's PATH: %w", err)
+	}
+	// the workspace notice, for a Claude agent (agenthook.go): without it the agent still starts, and
+	// asks editor.workspace by the guide's rule
+	h.c.Keep(mergeClaudeHook(filepath.Join(dir, ".claude", "settings.json"), noticeCommand(h.AgentBin())))
+	return dir, nil
+}
+
+// writeAtomic writes path as text, mode mode, through a temporary file beside it: a reader sees the
+// old file or the new one, never part of one.
+func writeAtomic(path string, text []byte, mode os.FileMode) error {
+	tmp := filepath.Join(filepath.Dir(path), "."+filepath.Base(path)+".tmp")
+	if err := os.WriteFile(tmp, text, mode); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp, mode); err != nil { // an old temporary file keeps its mode through WriteFile
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+// agentGuide is what the agent is told: the workspace, what to help with, and how to call AutoDoc
+// (its own AGENTS.md): as wrapper, the build bin on the TUI's config. A crew agent (crewKind its
+// CLI's kind) is also told the crew and mail procedure for its CLI in the form its session reads its
+// mail (crew.GuideOfVia, via): who it is, how it registers to be woken, and how it handles mail.
+func AgentGuide(ws feature.Workspace, bin, config, wrapper, crewKind string, via crew.MailVia) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# You are working in AutoDoc\n\n")
+	fmt.Fprintf(&b, "You were started from AutoDoc, a search engine and editor over the user's files. ")
+	fmt.Fprintf(&b, "This folder is AutoDoc's, not the user's: the user's files are in the workspace below.\n\n")
+	// a crew agent's mail comes first, before anything it might read past: an agent told how only
+	// deep in the reference spent its first turn finding out
+	if crewKind != "" {
+		b.WriteString("## Mail and your crew\n\n")
+		b.WriteString(crew.GuideOfVia(crewKind, via).Markdown)
+		b.WriteString("\n")
+	}
+	fmt.Fprintf(&b, "## The workspace\n\n")
+	fmt.Fprintf(&b, "- name: `%s` (also `$AUTODOC_WORKSPACE`)\n", ws.Name)
+	fmt.Fprintf(&b, "- root: `%s` (also `$AUTODOC_ROOT`): the user's files, by path under it\n", ws.Root)
+	if len(ws.Include) > 0 {
+		fmt.Fprintf(&b, "- indexed: `%s`", strings.Join(ws.Include, "`, `"))
+		if len(ws.Exclude) > 0 {
+			fmt.Fprintf(&b, ", except `%s`", strings.Join(ws.Exclude, "`, `"))
+		}
+		b.WriteString("\n")
+	}
+	if ws.Schema != "" {
+		fmt.Fprintf(&b, "- frontmatter schema: `%s`\n", ws.Schema)
+	}
+	if len(ws.TextExtensions) > 0 {
+		fmt.Fprintf(&b, "- also read as text: `%s`\n", strings.Join(ws.TextExtensions, "`, `"))
+	}
+	fmt.Fprintf(&b, "\n## Calling AutoDoc\n\n`autodoc` on your PATH is `%s`: it runs `%s` (`$AUTODOC_BIN`), the build the user runs", wrapper, bin)
+	if config != "" {
+		fmt.Fprintf(&b, ", with `--config %s` (`$AUTODOC_CONFIG`)", config)
+	}
+	b.WriteString(", so it reaches the same store and daemon as the TUI that started you. Call it as `autodoc`, as the ")
+	b.WriteString("examples below do, never another autodoc. Search before you answer, and cite the paths you read.\n\n")
+	b.WriteString(editorGuide)
+	b.WriteString("---\n\n")
+	b.WriteString(autodoc.WrittenAgentsGuide())
+	return b.String()
+}
+
+// editorGuide is the agents' guide to the page in the editor (editorsocket.go,
+// docs/decisions/crew.md#the-editor-socket).
+const editorGuide = "## The page the user is writing\n\n" +
+	"`autodoc --editor <verb> '[params]'` reaches the page open in the AutoDoc that started you, its unsaved text " +
+	"included (`$AUTODOC_EDITOR`; it knows you by `$AUTODOC_EDITOR_TOKEN`, which `autodoc --editor` passes). Positions are 1-based lines and columns (a column is a character).\n\n" +
+	"- `editor.document`: path, kind, modified, revision, cursor, selection; `editor.buffers`: every open buffer.\n" +
+	"- `editor.workspace`: the workspace you were started in (`spawn_workspace`), the one the editor is in now " +
+	"(`workspace_in_use`), and, when the editor has moved since you last asked, the `switch` from the one you last " +
+	"saw, with a `notice` line. It needs no permission.\n" +
+	"- `editor.read '[from_line, to_line]'`, `editor.find '[\"term\", {\"ignore_case\": true}]'`.\n" +
+	"- `editor.insert '[line, col, \"text\", revision]'`, `editor.replace '[l1, c1, l2, c2, \"text\", revision]'`, " +
+	"`editor.delete '[l1, c1, l2, c2, revision]'`: pass the revision you read, so an edit of a page the user has " +
+	"changed since is refused rather than misplaced. Each edit is one undo step for the user.\n" +
+	"- `editor.commands`: every command, its `:` name and aliases, its arguments and what it does, Lua and plugin " +
+	"commands included. It needs no permission. Check it before you run a command, rather than guess one.\n" +
+	"- `editor.run '[\"command line\"]'`: a `:` command, as the user would type it, such as `:open <path>`.\n" +
+	"- `editor.open '[\"path\"]'`: open a file, its path absolute or relative to the root of the workspace the " +
+	"editor is in (`workspace_in_use`). It needs the `commands` permission, as `editor.run` does: the first call " +
+	"asks the user, and is refused with `needs commands` until they allow it. It answers once the open is on its " +
+	"way, not once the file is open: the user may be asked first (unsaved changes), so read `editor.document` " +
+	"until it shows the file before you act on it.\n" +
+	"- `editor.add_command '[\"name\", \"lua source\"]'`: offer the user a Lua command (docs/lua); it is added " +
+	"to their lua/ folder only if they say yes.\n" +
+	"- `editor.terminal_run '[\"command line\"]'`: run a step that needs the user (sudo, an installer) in AutoDoc's " +
+	"terminal. It needs `terminal`, and the user sees the exact line and clicks Run: it answers `{started, tab, " +
+	"exit_by_mail}`, or is refused. They type any passphrase there; never ask for one. The exit code comes as mail. " +
+	"At most 5 lines of 60 cells, printable only. The line is `sh -c`'s on Linux and macOS, and PowerShell's on " +
+	"Windows: write it for the shell of the user's OS.\n\n" +
+	"The user can switch the editor to another workspace while you work. You stay in yours: `$AUTODOC_WORKSPACE` and " +
+	"`$AUTODOC_ROOT` don't change. Before you act on each message from the user, run `autodoc --editor editor.workspace`, " +
+	"and when it has a `switch`, tell the user what changed (a Claude Code session in this folder is told by a hook " +
+	"instead: its `[AutoDoc]` line arrives with the message). When `editor.document` says `foreign_workspace`, its path " +
+	"is relative to that workspace's root (`editor.workspace` names it), not `$AUTODOC_ROOT`: resolve it there, or not " +
+	"at all. Keep your task unless the user asks you to move, and tell them which workspace you are working in.\n\n" +
+	"The first call of each kind asks the user to allow it: until they do, it is refused with `needs <capability>` " +
+	"(code -32098: the user is asked by a card; wait for their answer by mail, then call again). " +
+	"Say so to the user. When the refusal says their answer comes as mail, wait for that mail rather than retrying: " +
+	"allowed, call again; not allowed, don't. Without it, try again once they have answered.\n\n"
+
+func AgentPanelSpec() feature.PanelSpec {
+	return feature.PanelSpec{ID: "agent", View: "agentView", Priority: 40, Icon: "✦",
+		Edge: func(p feature.PrefsView) string { return p.Value(prefAgentEdge) }, Places: slices.Clone(agentEdges),
+		Size: [2]int{feature.SidePanelMin, 90}, Length: [2]int{20, 100}, Default: agentDefault}
+}

@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 )
@@ -22,7 +23,7 @@ func formAt(sc, label string) (int, int) {
 // Antigravity chosen, no command typed, Save — refused with "a profile is a name and the command
 // that starts the agent". Choosing the kind fills in its command, and the profile saves.
 func TestChoosingAKindIsEnoughToAddAnAgent(t *testing.T) {
-	r := openAddAgentForm(t, []agentProfile{{Name: "claude", Command: "claude", Codename: "claude"}})
+	r := openAddAgentForm(t, []agents.AgentProfile{{Name: "claude", Command: "claude", Codename: "claude"}})
 	r.keys(t, decltest.Type("Tifa")...)
 	formClick(t, r, "the command's")
 	formClick(t, r, "Antigravity")
@@ -37,7 +38,7 @@ func TestChoosingAKindIsEnoughToAddAnAgent(t *testing.T) {
 // TestAKindAloneNamesTheAgentToo: nothing typed at all, Codex chosen, Save — the profile takes the
 // kind's name and its CLI.
 func TestAKindAloneNamesTheAgentToo(t *testing.T) {
-	r := openAddAgentForm(t, []agentProfile{{Name: "claude", Command: "claude", Codename: "claude"}})
+	r := openAddAgentForm(t, []agents.AgentProfile{{Name: "claude", Command: "claude", Codename: "claude"}})
 	formClick(t, r, "the command's")
 	formClick(t, r, "Codex")
 	formClick(t, r, "Save")
@@ -50,7 +51,7 @@ func TestAKindAloneNamesTheAgentToo(t *testing.T) {
 // TestChoosingAKindKeepsATypedCommand: a command the user typed is theirs; choosing a kind (a
 // wrapper of Claude Code is still Claude Code) never replaces it.
 func TestChoosingAKindKeepsATypedCommand(t *testing.T) {
-	r := openAddAgentForm(t, []agentProfile{{Name: "claude", Command: "claude", Codename: "claude"}})
+	r := openAddAgentForm(t, []agents.AgentProfile{{Name: "claude", Command: "claude", Codename: "claude"}})
 	tab := tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyTab}
 	r.keys(t, decltest.Type("Work")...)
 	r.keys(t, tab, tab)

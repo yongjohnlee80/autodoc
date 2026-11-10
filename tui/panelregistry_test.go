@@ -1,10 +1,11 @@
 package tui
 
 import (
-	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 type panelFixture struct {
