@@ -202,7 +202,7 @@ func TestAGatedOpenIsHeldToTheWorkspace(t *testing.T) {
 	g := newGatedRig(t)
 	g.openByPicker(t, "a.md")
 	g.waitFile(t, "a.md")
-	g.page("[f](file://"+g.probe+") and [w](https://example.com/x)", 1, 2)
+	g.page("[f]("+fileURL(g.probe)+") and [w](https://example.com/x)", 1, 2)
 	g.mustRun(t, "follow")
 	g.waitKept(t, "a script may not open it")
 	if p := onLoop(g.running, func() string { return g.h.file.path }); p != "a.md" {
