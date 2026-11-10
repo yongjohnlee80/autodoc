@@ -41,6 +41,7 @@
 ./core/pgstore/pgwriter
 ./core/pluginproto
 ./core/schema
+./core/todo
 ./core/todo/sqlitejournal
 ./core/todo/todotest
 ./docs
