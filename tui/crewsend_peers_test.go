@@ -18,7 +18,7 @@ import (
 // that fails, or a window holding no scope, answers none.
 func TestTheCrewHostListsOtherScopesLiveAgents(t *testing.T) {
 	a, _, w := crewAgents(t, oneTwo)
-	own, _, _ := a.crew.held()
+	own, _, _ := crewOf(a).held()
 	w.crewList = func() (any, error) {
 		return []any{
 			map[string]any{"codename": "one", "scope": own, "presence": crew.PresenceLive, "reachable": true},
@@ -27,7 +27,7 @@ func TestTheCrewHostListsOtherScopesLiveAgents(t *testing.T) {
 		}, nil
 	}
 	var got []string
-	a.crew.peerAgents(func(peers []feature.AgentEntry) {
+	crewOf(a).peerAgents(func(peers []feature.AgentEntry) {
 		for _, e := range peers {
 			got = append(got, e.Ref.Codename+"@"+e.Peer.Scope)
 		}
@@ -38,7 +38,7 @@ func TestTheCrewHostListsOtherScopesLiveAgents(t *testing.T) {
 
 	w.crewList = func() (any, error) { return nil, io.ErrUnexpectedEOF }
 	asked := false
-	a.crew.peerAgents(func(peers []feature.AgentEntry) {
+	crewOf(a).peerAgents(func(peers []feature.AgentEntry) {
 		asked = true
 		if len(peers) != 0 {
 			t.Errorf("a failed crew.list answered peers %v", peers)
@@ -56,14 +56,14 @@ func TestTheCrewHostListsOtherScopesLiveAgents(t *testing.T) {
 	}
 
 	// Connected, but holding no scope (its claim lost): the crew would answer, and is never asked.
-	a.crew.scope = ""
+	crewOf(a).scope = ""
 	listed := 0
 	w.crewList = func() (any, error) {
 		listed++
 		return []any{map[string]any{"codename": "jarvis", "scope": "autovim:plugins", "presence": crew.PresenceLive}}, nil
 	}
 	asked = false
-	a.crew.peerAgents(func(peers []feature.AgentEntry) { asked = len(peers) == 0 })
+	crewOf(a).peerAgents(func(peers []feature.AgentEntry) { asked = len(peers) == 0 })
 	if !asked || listed != 0 {
 		t.Errorf("a connected window holding no scope: answered none %v, crew.list asked %d times; want none, never asked", asked, listed)
 	}
@@ -75,14 +75,14 @@ func TestTheCrewHostListsOtherScopesLiveAgents(t *testing.T) {
 // scope sends nothing and says so.
 func TestTheCrewHostSendsAnotherHostsAgentATaskUnrung(t *testing.T) {
 	a, _, w := crewAgents(t, oneTwo)
-	own, _, _ := a.crew.held()
+	own, _, _ := crewOf(a).held()
 	var sent [][]any
 	w.inboxSend = func(p []any) (any, error) {
 		sent = append(sent, p)
 		return map[string]any{}, nil
 	}
 	var heard []error
-	a.crew.sendTask("jarvis", "autovim:plugins", "Task: t", "body", "assign:1:2", func(err error) { heard = append(heard, err) })
+	crewOf(a).sendTask("jarvis", "autovim:plugins", "Task: t", "body", "assign:1:2", func(err error) { heard = append(heard, err) })
 	if len(sent) != 1 || len(heard) != 1 || heard[0] != nil {
 		t.Fatalf("sent %v, heard %v; want one send, answered ok", sent, heard)
 	}
@@ -95,7 +95,7 @@ func TestTheCrewHostSendsAnotherHostsAgentATaskUnrung(t *testing.T) {
 	refused := errors.New("refused")
 	w.inboxSend = func([]any) (any, error) { return nil, refused }
 	heard = nil
-	a.crew.sendTask("jarvis", "autovim:plugins", "Task: t", "body", "assign:1:3", func(err error) { heard = append(heard, err) })
+	crewOf(a).sendTask("jarvis", "autovim:plugins", "Task: t", "body", "assign:1:3", func(err error) { heard = append(heard, err) })
 	if len(heard) != 1 || !errors.Is(heard[0], refused) {
 		t.Errorf("a refused send was heard as %v", heard)
 	}
