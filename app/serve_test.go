@@ -674,7 +674,16 @@ func TestServesWithoutAConfigFile(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", data)
 	missing := filepath.Join(t.TempDir(), "config.toml")
-	d := start(t, missing, ipc.DefaultAddr(dir)) // with no config, the daemon is at the runtime folder's default address
+	// with no config the daemon takes the default address. On Unix that is in the runtime folder set
+	// above; a named pipe's is the user's own (ipc.DefaultAddr), which no folder isolates, so there the
+	// cell runs only while no daemon holds it. The state and data folders are XDG's on every OS.
+	sock := ipc.DefaultAddr(dir)
+	if ipc.Network != "unix" {
+		if _, err := rpc.ProbeOn(context.Background(), ipc.Network, sock); err == nil {
+			t.Skip("a daemon already holds this user's default pipe")
+		}
+	}
+	d := start(t, missing, sock)
 	if got := call(t, dial(t, d.sock), "workspace.list").([]any); len(got) != 0 {
 		t.Errorf("workspaces %v", got)
 	}
