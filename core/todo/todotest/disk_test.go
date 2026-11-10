@@ -75,3 +75,16 @@ func TestTheDiskUnderUnixRuleIsAsItWas(t *testing.T) {
 		t.Errorf("C:/kb under Unix' rule: %v; want it refused, not absolute", err)
 	}
 }
+
+// Under Windows' rule, on any OS, the disk's helpers take a path in either of Windows' forms: a file
+// written as C:\fresh\note.md is C:/fresh/note.md, its folder made with it.
+func TestTheDiskWritesWindowsOwnFormUnderWindowsRule(t *testing.T) {
+	d := todotest.NewDiskFor(true)
+	d.WriteFile(`C:\fresh\note.md`, []byte("native"))
+	if got := readBack(t, d, "C:/fresh", "note.md"); got != "native" {
+		t.Errorf("C:/fresh/note.md: %q; want what was written as C:\\fresh\\note.md", got)
+	}
+	if b, err := d.ReadFile(`C:\fresh\note.md`); err != nil || string(b) != "native" {
+		t.Errorf("read back in Windows' own form: %q, %v", b, err)
+	}
+}

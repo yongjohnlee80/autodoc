@@ -446,9 +446,13 @@ func (d *Disk) MkdirAll(abs string) {
 }
 
 func (d *Disk) WriteFile(abs string, content []byte) {
-	dir, _ := path.Split(abs)
-	d.MkdirAll(dir)
-	if _, err := d.FS.WriteFile(context.Background(), d.tree(abs), strings.NewReader(string(content))); err != nil {
+	key := d.tree(abs) // the path in the disk's tree, either form of abs read under its rule
+	if dir := path.Dir(key); dir != "." {
+		if err := d.FS.MkdirAll(context.Background(), dir); err != nil {
+			panic(err)
+		}
+	}
+	if _, err := d.FS.WriteFile(context.Background(), key, strings.NewReader(string(content))); err != nil {
 		panic(err)
 	}
 }
