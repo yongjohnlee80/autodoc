@@ -22,6 +22,13 @@ func ExposeNew(t testing.TB, dir string) {
 	setDACL(t, dir, "D:P(A;OICI;FA;;;"+me(t)+")(A;OICI;FR;;;WD)")
 }
 
+// Unreadable makes path one this user may write but not read: a protected DACL granting this user
+// write access alone (and so its security read, with no data).
+func Unreadable(t testing.TB, path string) {
+	t.Helper()
+	setDACL(t, path, "D:P(A;;FW;;;"+me(t)+")")
+}
+
 func me(t testing.TB) string {
 	t.Helper()
 	u, err := windows.GetCurrentProcessToken().GetTokenUser()

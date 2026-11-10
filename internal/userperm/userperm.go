@@ -29,10 +29,16 @@ import (
 // regular file at all (a link, a reparse point, a device): never one to read a secret from.
 var ErrExposed = errors.New("userperm: the file is not private to this user")
 
+// ErrInUse is a file another process holds open in a way that refuses this read: on Windows, one
+// open for writing, whose handle shares no reader that refuses to share writing (a log its writer
+// holds). Its privacy is unread; on Unix an open file never refuses a read.
+var ErrInUse = errors.New("userperm: another process holds the file open")
+
 // OpenPrivate opens the regular file at path for reading, its final name not followed, when it is
 // private to this user, and returns that handle: read the secret through it. An entry that is not
 // private, not this user's, a link or not a regular file is an error wrapping ErrExposed, saying
-// what and how to fix it in the OS's terms; a missing one wraps os.ErrNotExist.
+// what and how to fix it in the OS's terms; a missing one wraps os.ErrNotExist, and one another
+// process holds open so that it can't be read now wraps ErrInUse.
 func OpenPrivate(path string) (*os.File, error) {
 	f, err := openNoFollow(path)
 	if err != nil {
