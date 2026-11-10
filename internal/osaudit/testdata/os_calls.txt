@@ -58,9 +58,10 @@ core/crew/wakeagy.go	syscall	RawConn
 core/crew/wakeclaude.go	unix-socket	DialContext("unix")
 core/crew/wakeopencode.go	unix-socket	DialContext("unix")
 core/fsbounds/guard.go	syscall	ENOTDIR
-core/fsbounds/links_other.go	os-file	unix
-core/fsbounds/links_unix.go	os-file	unix
-core/fsbounds/links_unix.go	syscall	Stat_t
+core/fsbounds/os_unix.go	os-file	unix
+core/fsbounds/os_unix.go	syscall	Stat_t
+core/fsbounds/os_windows.go	import	golang.org/x/sys/windows
+core/fsbounds/os_windows.go	os-file	windows
 examples/surface-go/main.go	os-file	linux
 plugin/stdio_other.go	os-file	unix
 plugin/stdio_unix.go	os-file	unix
