@@ -16,7 +16,7 @@ func TestPanelPreferenceRowsApplyLiveAndQueueWritesInOrder(t *testing.T) {
 	got := onLoop(r, func() bool {
 		before := len(r.h.prefWrites)
 		r.h.terminals.c.SetPref(prefTermEdge, "left")
-		r.h.agents.Snapshot().Host.SetPref(prefAgentEdge, "center")
+		r.h.agents.Snapshot().Host.SetPref(prefAgentEdgeCopy, "center")
 		r.h.agents.Snapshot().Host.SetPref(prefAgentProfiles, json)
 		r.h.agents.Snapshot().Host.SetPref(prefAgentDefaultCodename, "alpha")
 		for name, want := range map[string]string{
@@ -32,7 +32,7 @@ func TestPanelPreferenceRowsApplyLiveAndQueueWritesInOrder(t *testing.T) {
 		if !strings.Contains(status.Raw, "SPC g opens alpha") || r.h.agents.defaultProfile() != "alpha" || len(r.h.agents.profiles()) != 1 {
 			return false
 		}
-		want := [][2]string{{prefTermEdge, "left"}, {prefAgentEdge, "center"}, {prefAgentProfiles, json}, {prefAgentDefaultCodename, "alpha"}}
+		want := [][2]string{{prefTermEdge, "left"}, {prefAgentEdgeCopy, "center"}, {prefAgentProfiles, json}, {prefAgentDefaultCodename, "alpha"}}
 		return reflect.DeepEqual(r.h.prefWrites[before:], want)
 	})
 	if !got {
@@ -42,10 +42,10 @@ func TestPanelPreferenceRowsApplyLiveAndQueueWritesInOrder(t *testing.T) {
 
 func TestAgentValuePreferencesDecodeWithoutSharedMutableProfileState(t *testing.T) {
 	p := prefsOf(map[string]any{
-		prefAgentProfiles: `[{"name":"alpha","command":"alpha"}]`, prefAgentDefault: "alpha",
-		prefTermEdge: "right", prefAgentEdge: "center",
+		prefAgentProfiles: `[{"name":"alpha","command":"alpha"}]`, prefAgentDefaultCopy: "alpha",
+		prefTermEdge: "right", prefAgentEdgeCopy: "center",
 	})
-	if p.Value(prefAgentDefault) != "alpha" || p.termEdge != "right" || p.Value(prefAgentEdge) != "center" {
+	if p.Value(prefAgentDefaultCopy) != "alpha" || p.termEdge != "right" || p.Value(prefAgentEdgeCopy) != "center" {
 		t.Fatalf("existing preferences did not read through feature rows: %+v", p)
 	}
 	profiles := agentProfilesOf(p.Value(prefAgentProfiles))
@@ -53,8 +53,8 @@ func TestAgentValuePreferencesDecodeWithoutSharedMutableProfileState(t *testing.
 	if again := agentProfilesOf(p.Value(prefAgentProfiles)); again[0].Command != "alpha" {
 		t.Fatal("editing decoded profiles mutated the saved preference snapshot")
 	}
-	bad := prefsOf(map[string]any{prefAgentProfiles: "not JSON", prefTermEdge: "nowhere", prefAgentEdge: "nowhere"})
-	if len(agentProfilesOf(bad.Value(prefAgentProfiles))) != 0 || bad.termEdge != "bottom" || bad.Value(prefAgentEdge) != defaultAgentEdge {
+	bad := prefsOf(map[string]any{prefAgentProfiles: "not JSON", prefTermEdge: "nowhere", prefAgentEdgeCopy: "nowhere"})
+	if len(agentProfilesOf(bad.Value(prefAgentProfiles))) != 0 || bad.termEdge != "bottom" || bad.Value(prefAgentEdgeCopy) != defaultAgentEdgeCopy {
 		t.Fatal("invalid saved values escaped the feature defaults")
 	}
 }

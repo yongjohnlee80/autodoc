@@ -50,7 +50,7 @@ func runAgentTUIIn(t *testing.T, dir string, profiles []agentProfile, def string
 	}
 	prefs := map[string]string{prefAgentProfiles: agentProfilesJSON(profiles)}
 	if def != "" {
-		prefs[prefAgentDefault] = def
+		prefs[prefAgentDefaultCopy] = def
 	}
 	maps.Copy(prefs, more)
 	d = startDaemonWith(t, "", files, daemonOpts{prefs: prefs})
@@ -223,8 +223,8 @@ func TestAgentProfilesAreAddedEditedAndRemoved(t *testing.T) {
 func TestAnExplicitlyClearedAgentDefaultStaysClearedAfterLoad(t *testing.T) {
 	t.Parallel()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{
-		prefAgentProfiles: `[{"name":"A","command":"false","codename":"a"}]`,
-		prefAgentDefault:  "A", prefAgentDefaultCodename: "",
+		prefAgentProfiles:    `[{"name":"A","command":"false","codename":"a"}]`,
+		prefAgentDefaultCopy: "A", prefAgentDefaultCodename: "",
 	}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitFor(t, "stored cleared default loaded", func(string) bool {
@@ -242,7 +242,7 @@ func TestAnExplicitlyClearedAgentDefaultStaysClearedAfterLoad(t *testing.T) {
 func TestLegacyAgentDefaultMigratesOnceAndNeverReadsItsMirrorAgain(t *testing.T) {
 	t.Parallel()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{
-		prefAgentProfiles: `[{"name":"A","command":"false"}]`, prefAgentDefault: "A",
+		prefAgentProfiles: `[{"name":"A","command":"false"}]`, prefAgentDefaultCopy: "A",
 	}})
 	sess := NewSession(d.sock, nil)
 	var writes atomic.Int32
@@ -256,12 +256,12 @@ func TestLegacyAgentDefaultMigratesOnceAndNeverReadsItsMirrorAgain(t *testing.T)
 		m, err := d.db.Preferences(context.Background())
 		return err == nil && m[prefAgentDefaultCodename] == "a"
 	})
-	if _, err := sess.Call(context.Background(), "preference.set", prefAgentDefault, "B"); err != nil {
+	if _, err := sess.Call(context.Background(), "preference.set", prefAgentDefaultCopy, "B"); err != nil {
 		t.Fatal(err)
 	}
 	onLoop(r, func() bool { r.h.loadPrefs(); return true })
 	r.s.WaitFor(t, "mirror reloaded without retargeting", func(string) bool {
-		return onLoop(r, func() bool { return r.h.prefs.Value(prefAgentDefault) == "B" && r.h.agents.defaultProfile() == "a" })
+		return onLoop(r, func() bool { return r.h.prefs.Value(prefAgentDefaultCopy) == "B" && r.h.agents.defaultProfile() == "a" })
 	})
 	if got := writes.Load(); got != 1 {
 		t.Fatalf("canonical migration wrote %d times, want once", got)
@@ -366,7 +366,7 @@ func TestUsingAnotherAgentKeepsBothInstancesRunning(t *testing.T) {
 	}
 	delivered := make(chan error, 1)
 	onLoop(r, func() bool {
-		if err := (core{r.h}).HandTask(entries[0].Ref, feature.TaskRef{Title: "only-first", Path: taskFile("/tasks/first.md"), ID: "first"}, "inspect", func(err error) { delivered <- err }); err != nil {
+		if err := (core{r.h}).HandTask(entries[0].Ref, feature.TaskRef{Title: "only-first", Path: taskFileCopy("/tasks/first.md"), ID: "first"}, "inspect", func(err error) { delivered <- err }); err != nil {
 			t.Error(err)
 		}
 		return true
@@ -439,14 +439,14 @@ func TestTheAgentsPanelSizeIsKept(t *testing.T) {
 func TestTheAgentOpensWherePreferencesSay(t *testing.T) {
 	t.Parallel()
 	d, r, _ := runAgentTUI(t, t.TempDir(), nil, "")
-	if e := onLoop(r, func() string { return r.h.prefs.Value(prefAgentEdge) }); e != "bottom" {
+	if e := onLoop(r, func() string { return r.h.prefs.Value(prefAgentEdgeCopy) }); e != "bottom" {
 		t.Fatalf("the agent opens at %q by default, want bottom", e)
 	}
 	onLoop(r, func() bool { r.h.agents.setAgentSize(feature.Nearest(feature.PanelSizes, 70)); return true })
 	onLoop(r, func() bool { r.h.agents.setAgentLength(feature.Nearest(feature.PanelLengths, 60)); return true })
-	onLoop(r, func() bool { r.h.agents.setAgentEdge(indexOf(agentEdges, "center")); return true })
+	onLoop(r, func() bool { r.h.agents.setAgentEdge(indexOf(agentEdgesCopy, "center")); return true })
 	onLoop(r, func() bool {
-		r.h.agents.setAgentEdge(len(agentEdges))
+		r.h.agents.setAgentEdge(len(agentEdgesCopy))
 		r.h.agents.setAgentSize(-1)
 		r.h.agents.setAgentLength(99)
 		return true
@@ -466,7 +466,7 @@ func TestTheAgentOpensWherePreferencesSay(t *testing.T) {
 	// loaded runner can answer after the notes. Wait for them; one that never reads center still fails.
 	again := attached(t, d)
 	again.s.WaitFor(t, "a new TUI opens the agent at the chosen center", func(string) bool {
-		return onLoop(again, func() string { return again.h.prefs.Value(prefAgentEdge) }) == "center"
+		return onLoop(again, func() string { return again.h.prefs.Value(prefAgentEdgeCopy) }) == "center"
 	})
 }
 
@@ -540,9 +540,70 @@ func (d *daemon) waitStored(t *testing.T, def, profiles string) {
 	var got map[string]string
 	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
 		got, _ = d.db.Preferences(context.Background())
-		if got[prefAgentDefault] == def && got[prefAgentProfiles] == profiles {
+		if got[prefAgentDefaultCopy] == def && got[prefAgentProfiles] == profiles {
 			return
 		}
 	}
-	t.Fatalf("stored: default %q, profiles %s; want %q, %s", got[prefAgentDefault], got[prefAgentProfiles], def, profiles)
+	t.Fatalf("stored: default %q, profiles %s; want %q, %s", got[prefAgentDefaultCopy], got[prefAgentProfiles], def, profiles)
+}
+
+// Desktop drops are ordinary pastes from the GUI backend. The currently focused
+// agent terminal must receive the quoted paths unchanged, without a focus switch.
+func TestTheFocusedAgentReceivesDroppedPathsAsAnOrdinaryPaste(t *testing.T) {
+	t.Parallel()
+	agent, _ := fakeAgentCopy(t)
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
+	r.leader(t, 'g')
+	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
+	r.s.WaitForText(t, "started")
+	paths := "'/tmp/screen shot.png' /tmp/second.png"
+	r.keys(t, tuicore.PasteEvent{Text: paths})
+	if !r.focused("agentView") {
+		t.Fatal("pasting dropped paths changed keyboard focus")
+	}
+	r.keys(t, decltest.Type("\r")...)
+	r.s.WaitForText(t, "heard-"+paths)
+}
+
+// SPC G opens Agent profiles, and the card names it beside SPC g, the agent.
+func TestSpaceShiftGOpensAgentProfiles(t *testing.T) {
+	t.Parallel()
+	_, r, _ := runAgentTUI(t, t.TempDir(), nil, "")
+	r.keys(t, key(' '))
+	r.s.WaitForText(t, "G  agent profiles")
+	r.keys(t, esc())
+	r.leader(t, 'G')
+	r.s.WaitFor(t, "the dialog, not the card", func(sc string) bool {
+		return !strings.Contains(sc, "SPC — commands") && strings.Contains(sc, "┌ agent profiles")
+	})
+}
+
+// Shift+Enter in the agents panel is a new line in the prompt, not a send. An agent CLI (Claude
+// Code, Codex) asks for the kitty keyboard protocol at startup (CSI > 5 u), and then reads
+// Shift+Enter as CSI 13;2u, apart from Enter's \r. The fake agent asks as they do, then reports
+// the bytes the key sends it.
+func TestShiftEnterReachesAnAgentApartFromEnter(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	agent := filepath.Join(t.TempDir(), "kitty-agent")
+	script := `#!/bin/sh
+printf '\033[>5u'
+echo ready
+stty raw -echo
+got=$(dd bs=1 count=7 2>/dev/null | od -An -tx1 | tr -d ' \n')
+stty sane
+echo "got-$got"
+read line
+`
+	if err := os.WriteFile(agent, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, r, _ := runAgentTUI(t, dir, []agentProfile{{Name: "kitty", Command: shellQuote(agent)}}, "kitty")
+	r.leader(t, 'g')
+	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
+	r.s.WaitForText(t, "ready")
+	r.keys(t, tuicore.KeyEvent{Code: tuicore.KeyEnter, Mods: tuicore.ModShift})
+	// ESC [ 1 3 ; 2 u: Shift+Enter in the protocol the agent asked for. A plain \r here (0d) is
+	// the bug: the agent would have sent the prompt.
+	r.s.WaitForText(t, "got-1b5b31333b3275")
 }

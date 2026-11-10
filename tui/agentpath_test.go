@@ -15,14 +15,14 @@ import (
 // $AUTODOC_CONFIG). A crew agent's folder holds the window's scope in its name, so on Unix that
 // folder can't be the entry itself.
 func TestAnAgentsPathHasItsOwnAutodocFirst(t *testing.T) {
-	a, c, _ := crewAgents(t, oneTwo)
+	a, c, _ := crewAgents(t, oneTwoCopy)
 	a.agentBinPath = fakeBuildCopy(t, filepath.Join(t.TempDir(), "build"))
 	p, _ := a.profile("one")
 	instance, err := a.startInstance(p)
 	if err != nil {
 		t.Fatal(err)
 	}
-	args, _, err := startedEnv(a, c, instance)
+	args, _, err := startedEnvCopy(a, c, instance)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestAnAgentsPathHasItsOwnAutodocFirst(t *testing.T) {
 func TestAnAgentsStalePathLinkIsReplaced(t *testing.T) {
 	for _, stale := range []string{"elsewhere", "nowhere"} {
 		t.Run(stale, func(t *testing.T) {
-			a, c, _ := crewAgents(t, oneTwo)
+			a, c, _ := crewAgents(t, oneTwoCopy)
 			p, _ := a.profile("one")
 			dir := a.agentFolder(workspaceOf(c.ws), "one")
 			link := a.agentPathLink(dir)
@@ -70,7 +70,7 @@ func TestAnAgentsStalePathLinkIsReplaced(t *testing.T) {
 			if got, err := os.Readlink(link); err != nil || got != filepath.Join(instance.dir, "bin") {
 				t.Fatalf("the agent's PATH link after its start: %q, %v; want %s", got, err, filepath.Join(instance.dir, "bin"))
 			}
-			args, _, err := startedEnv(a, c, instance)
+			args, _, err := startedEnvCopy(a, c, instance)
 			if err != nil {
 				t.Fatal(err)
 			}

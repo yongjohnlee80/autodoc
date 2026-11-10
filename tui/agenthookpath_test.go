@@ -47,7 +47,7 @@ func TestTheCommandsAutoDocWritesNameTheBuildByItsPath(t *testing.T) {
 	if i := slices.Index(args, "--autodoc"); i < 0 || i+1 >= len(args) || args[i+1] != shellQuote(build) {
 		t.Errorf("crew setup's arguments %q: want --autodoc %s", args, shellQuote(build))
 	}
-	a, c, _ := crewAgents(t, crewKinds)
+	a, c, _ := crewAgents(t, crewKindsCopy)
 	a.agentBinPath = build
 	p, _ := a.profile("claude-one")
 	instance, err := a.startInstance(p)
@@ -68,7 +68,7 @@ func TestTheCommandsAutoDocWritesNameTheBuildByItsPath(t *testing.T) {
 			}
 		}
 	}
-	env, _, err := startedEnv(a, c, instance)
+	env, _, err := startedEnvCopy(a, c, instance)
 	if err != nil {
 		t.Fatal(err)
 	}
