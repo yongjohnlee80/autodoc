@@ -16,8 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yongjohnlee80/autodoc/core/paths"
-
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/golib/paths"
 )
