@@ -74,7 +74,7 @@ func TestOpeningAnHTMLFileAsksSimplifiedOrRaw(t *testing.T) {
 	waitDisk(t, r, page, "<!-- edited --><h1>Title</h1><p>body</p>\n")
 
 	r.h.p.Post(func() { r.h.load(r.h.file.ws, r.h.file.path, nil) }) // read again: no question
-	r.s.WaitForText(t, "opened "+page)
+	r.waitStatus(t, "opened "+page)
 	if f := r.file(); !f.raw || onLoop(r, func() bool { return r.h.htmlAsk != nil }) {
 		t.Errorf("read again: raw %v, asked %v", f.raw, onLoop(r, func() bool { return r.h.htmlAsk != nil }))
 	}
