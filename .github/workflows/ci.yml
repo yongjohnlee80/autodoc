@@ -247,6 +247,14 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: scratch (not for merge) the task-move cells on Windows, read whole
+        if: ${{ !inputs.discover }}
+        continue-on-error: true
+        run: |
+          T='^(TestAMoveTheFeedReadIsFollowedWithoutTheDiskWatch|TestARemovedTasksCleanBufferCloses|TestATaskMovedWhileUnwatchedIsFollowedOnANewConnection|TestARemovedTasksModifiedBufferKeepsItsEditsAndRefusesItsSave|TestAFileThatIsNoTaskIsStillDeleted|TestAModifiedTaskFollowsItsMoveAndAsks|TestThePickerKeepsTheFileName|TestAnOpenTaskFollowsItsStatusMove)$'
+          go test -count=1 -timeout 15m -v -parallel 1 -run "$T" ./tui/ > "$RUNNER_TEMP/t.txt" 2>&1 && rt=0 || rt=$?
+          grep -E '^(=== RUN|--- |\s+[a-z_]+_test\.go:[0-9]+:|panic)' "$RUNNER_TEMP/t.txt" | cut -c1-400 | head -120 || true
+          echo "== tasks rc=$rt"
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
         run: |
