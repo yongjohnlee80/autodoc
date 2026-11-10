@@ -71,10 +71,10 @@ type agentDoorbell interface {
 }
 
 // crewDoorbell is the crew's doorbell: inbox.send with fire, from the window that holds the scope.
-type crewDoorbell struct{ crew *crewHost }
+type crewDoorbell struct{ crew CrewScope }
 
 func (d crewDoorbell) ring(to feature.AgentRef, m AgentMessage, answer func(rang bool, err error)) {
-	d.crew.userSend(to.Codename, m.Kind, m.Subject, m.Body, func(err error) {
+	d.crew.UserSend(to.Codename, m.Kind, m.Subject, m.Body, func(err error) {
 		if errors.Is(err, errHandedOver) { // the fallback job delivers it: the send is done, typing nothing
 			answer(true, nil)
 			return
@@ -110,7 +110,7 @@ func (a *agents) sendMessage(to feature.AgentRef, m AgentMessage, done func(erro
 	o := deliverOpts{present: m.Kind == MessageRequest, submit: a.submitter(to, func() error { return refused })}
 	if a.crew != nil {
 		// an agent that hasn't started gets it as mail, for its first receive: never typed
-		o.queue = func(finish func(error)) { a.crew.queueSend(to.Codename, m.Kind, m.Subject, m.Body, finish) }
+		o.queue = func(finish func(error)) { a.crew.QueueSend(to.Codename, m.Kind, m.Subject, m.Body, finish) }
 		var bell agentDoorbell = crewDoorbell{crew: a.crew}
 		o.ring = func(answer func(rang bool, err error)) {
 			bell.ring(to, m, func(rang bool, err error) {
@@ -148,7 +148,7 @@ func (a *agents) submitter(to feature.AgentRef, refused func() error) func(featu
 				finish(ErrAgentTypedNotSent)
 				return
 			}
-			if a.inbox.awaitsUser(to.Codename) { // an Enter would answer its permission or blocked prompt
+			if a.inbox.AwaitsUser(to.Codename) { // an Enter would answer its permission or blocked prompt
 				a.c.Notify(a.c.Trf("autodoc.notice.agentmessaging.typed_not_sent_it_waits_on_a_prompt", to.Codename))
 				finish(ErrAgentTypedNotSent)
 				return
@@ -160,7 +160,7 @@ func (a *agents) submitter(to feature.AgentRef, refused func() error) func(featu
 				decide(false)
 				return
 			}
-			a.crew.promptsReported(to.Codename, decide)
+			a.crew.PromptsReported(to.Codename, decide)
 		}
 		if c, ok := a.c.(agentRuntimeHost); ok {
 			c.After(submitDelay, look)
