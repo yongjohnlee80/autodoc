@@ -21,6 +21,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/internal/userdirs"
 	"github.com/yongjohnlee80/autodoc/rpc"
 	"github.com/yongjohnlee80/golib/dao/sqlite"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
@@ -31,6 +32,7 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 
+	"github.com/yongjohnlee80/autodoc/core/paths"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/autodoc/tui/searchsetup"
@@ -1115,16 +1117,19 @@ func TestEveryCommandRefusesArgumentsNotItsOwn(t *testing.T) {
 	}
 }
 
-// TestTheFolderPickerStartsAtHome: adding a workspace starts in the home directory, or at the root
-// when there is none.
+// TestTheFolderPickerStartsAtHome: adding a workspace starts in the home directory, or, when there
+// is none, at the root of a volume the dialogs' disk opens: "/" on Unix, the temporary folder's
+// drive's root on Windows, never "/" there.
 func TestTheFolderPickerStartsAtHome(t *testing.T) {
 	t.Parallel()
 	home := t.TempDir()
-	if got := homeDir(procenv.Env(nil).With("HOME=" + home)); got != home {
+	if got := homeDir(procenv.Env(nil).With("HOME="+home, "USERPROFILE="+home)); got != home {
 		t.Errorf("with a home: %q", got)
 	}
-	if got := homeDir(procenv.Env(nil).With("HOME=")); got != "/" {
-		t.Errorf("with none: %q, want /", got)
+	none := procenv.Env(nil).With("HOME=", "USERPROFILE=", "HOMEDRIVE=", "HOMEPATH=")
+	want := filepath.VolumeName(userdirs.Temp(none)) + string(filepath.Separator)
+	if got := homeDir(none); got != want || !paths.IsRoot(got) {
+		t.Errorf("with none: %q, want the volume's root %q", got, want)
 	}
 }
 

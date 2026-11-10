@@ -6,7 +6,11 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/yongjohnlee80/golib/logger"
+	"github.com/yongjohnlee80/golib/vfs/local"
+
 	"github.com/yongjohnlee80/autodoc/core/docs"
+	"github.com/yongjohnlee80/autodoc/core/fsbounds"
 )
 
 // Disks are a local peer's files outside every workspace (docs/decisions/editor.md#files-outside-every-workspace),
@@ -34,6 +38,22 @@ type volume struct {
 // and answers its documents and how to close them.
 func NewDisks(open func(root string) (*docs.Docs, func(), error)) *Disks {
 	return &Disks{open: open, volumes: map[string]*volume{}}
+}
+
+// LocalDisks are the local disk's documents, each volume opened through vfs/local (log its logger,
+// nil for none) behind no guard, with opts: what the daemon serves outside every workspace, the one
+// opener its tests share. A bounded file.* is routed into its workspace (boundedFile) and never
+// reaches a disk: behind no guard at all, every bounded operation here is refused, should a route
+// ever skip that.
+func LocalDisks(log logger.Logger, opts ...docs.Option) *Disks {
+	return NewDisks(func(root string) (*docs.Docs, func(), error) {
+		disk, err := local.New(root, local.WithLogger(log))
+		if err != nil {
+			return nil, nil, err
+		}
+		var none *fsbounds.Guard
+		return docs.New(none.Wrap(func() string { return "" }, root, disk), nil, opts...), func() { _ = disk.Close() }, nil
+	})
 }
 
 // errDisksClosed is a volume asked for after Close.

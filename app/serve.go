@@ -22,7 +22,6 @@ import (
 
 	"github.com/yongjohnlee80/golib/logger"
 	"github.com/yongjohnlee80/golib/search/rank"
-	"github.com/yongjohnlee80/golib/vfs/local"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/crewmail/sqlitecrewmail"
@@ -528,17 +527,7 @@ func newRunID() string {
 // that is the one tree at "/"; on Windows each drive or share is its own, opened when a path on it
 // is first asked for.
 func (d *process) openFiles() error {
-	d.files = rpc.NewDisks(func(root string) (*docs.Docs, func(), error) {
-		disk, err := local.New(root, local.WithLogger(d.log))
-		if err != nil {
-			return nil, nil, err
-		}
-		// a bounded file.* is routed into its workspace (rpc's boundedFile) and never reaches a disk:
-		// behind no guard at all, every bounded operation here is refused, should a route ever skip that
-		var none *fsbounds.Guard
-		return docs.New(none.Wrap(func() string { return "" }, root, disk), nil, docs.WithRegistrations(d.b.reg.Kinds()), docs.WithDeriver(d.b.reg)),
-			func() { _ = disk.Close() }, nil
-	})
+	d.files = rpc.LocalDisks(d.log, docs.WithRegistrations(d.b.reg.Kinds()), docs.WithDeriver(d.b.reg))
 	d.stops.push(d.files.Close)
 	return nil
 }
