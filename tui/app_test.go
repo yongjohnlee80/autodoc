@@ -547,7 +547,16 @@ func (r *running) editorText() string { return onLoop(r, r.h.core.Value) }
 func (r *running) waitFile(t *testing.T, p string) {
 	t.Helper()
 	r.s.WaitFor(t, "note "+p+" open", func(string) bool { n := r.file(); return n.open && n.path == p && !n.dirty })
-	r.s.WaitForText(t, "opened "+p)
+	r.waitStatus(t, "opened "+p)
+}
+
+// waitStatus waits for the status line to hold text, read whole from App.status: the screen
+// elides a long one at its width (a path under Windows' temporary folder is longer than one line).
+func (r *running) waitStatus(t *testing.T, text string) {
+	t.Helper()
+	r.s.WaitFor(t, "the status "+text, func(string) bool {
+		return strings.Contains(onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.status"); return v.Raw }), text)
+	})
 }
 
 func TestEveryQMLFileIsSound(t *testing.T) {
