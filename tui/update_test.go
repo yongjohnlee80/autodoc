@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/internal/install"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // scriptInstall is a record install-autodoc.sh wrote, its update.sh at update.
@@ -148,7 +149,7 @@ func TestRestartNowRestartsTheBackendThenRelaunches(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir)
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	notes := map[string][]string{"kb": {"a.md", "a\n"}}
 	old := startDaemonWith(t, sock, notes, daemonOpts{version: "v1"})
 	var spawns atomic.Int32

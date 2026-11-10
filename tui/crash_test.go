@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
@@ -262,7 +263,7 @@ func TestRestartsQuestionWhenTheInstalledVersionIsNotKnown(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer os.RemoveAll(dir)
-			sock := filepath.Join(dir, "s.sock")
+			sock := ipc.ScratchAddr(dir, "s.sock")
 			startDaemonWith(t, sock, map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{version: "v1"})
 			sess := NewSession(sock, func() (string, error) { return "", errors.New("not in this test") })
 			r := runTUI(t, sess, Options{Installed: tc.installed, CrashDir: t.TempDir()})

@@ -16,6 +16,7 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 
 	"github.com/yongjohnlee80/autodoc/core/config"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // A launch with a debug recorder holds the TUI's own trace in the recording: tui
@@ -27,7 +28,7 @@ func TestADebugLaunchRecordsTheTuisTrace(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	sock, state := filepath.Join(dir, "s.sock"), filepath.Join(dir, "state")
+	sock, state := ipc.ScratchAddr(dir, "s.sock"), filepath.Join(dir, "state")
 	conf := filepath.Join(dir, "config.toml")
 	body := "[server]\nsocket = \"" + sock + "\"\nstate_dir = \"" + state + "\"\ndata_dir = \"" + filepath.Join(dir, "data") + "\"\n"
 	if err := os.WriteFile(conf, []byte(body), 0o600); err != nil {
