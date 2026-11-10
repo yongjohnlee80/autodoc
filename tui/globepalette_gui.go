@@ -3,12 +3,15 @@
 package tui
 
 import (
+	"fmt"
 	"image/color"
 
 	graphlayout "github.com/yongjohnlee80/golib/graph/layout"
 	"github.com/yongjohnlee80/golib/gui"
 	guimermaid "github.com/yongjohnlee80/golib/gui/mermaid"
 	pm "github.com/yongjohnlee80/golib/parse/mermaid"
+	tuicore "github.com/yongjohnlee80/golib/tui"
+	"github.com/yongjohnlee80/golib/tui/style"
 )
 
 // THE RELATION VIEWS' PALETTE AND LEGEND — the colours the GlobeMap and the Mindmap draw with, from
@@ -175,4 +178,54 @@ func groupLegend(gs *relGroups, m relMap, mark func(relGroup) func(gui.Canvas, g
 		rows = append(rows, legendMsg(none, "autodoc.text.relationviews_gui.more_groups", more))
 	}
 	return rows
+}
+
+// paletteFields reads each colour property into its place.
+func paletteFields(cs map[string]*style.Color) map[string]tuidecl.Field {
+	out := map[string]tuidecl.Field{}
+	for k, c := range cs {
+		out[k] = tuidecl.ColorField(c)
+	}
+	return out
+}
+
+// paletteProps are a view's colour properties.
+var paletteProps = append([]string{"background", "text", "muted", "accent", "superseded", "relation"}, relationTypes...)
+
+// relationViewType is the QML type of a view: name, built by build from its palette, and dropped
+// by gone. A view takes no children. Its colours are constructor properties: a theme switch
+// changes them, and the document builds the view again (gone runs for the old one). A colour the
+// theme gives without RGB values (a terminal's palette index) keeps defaultPalette's.
+func relationViewType(name string, build func(relPalette) tuicore.Component, gone func(tuicore.Component)) tuidecl.Type {
+	return tuidecl.Type{Name: name, Ctor: paletteProps, Destroyed: gone, Build: func(b tuidecl.Build) (tuicore.Component, []string, error) {
+		if len(b.Children) != 0 {
+			return nil, nil, fmt.Errorf("a %s takes no children (at %s)", name, b.Pos)
+		}
+		names := paletteProps
+		cs := map[string]*style.Color{}
+		for _, n := range names {
+			cs[n] = new(style.Color)
+		}
+		consumed, err := b.ReadProps(paletteFields(cs))
+		if err != nil {
+			return nil, nil, err
+		}
+		def := defaultPalette()
+		rgb := func(c *style.Color, fallback color.NRGBA) color.NRGBA {
+			if r, g, bl, ok := c.RGBValues(); ok {
+				return color.NRGBA{R: r, G: g, B: bl, A: 0xff}
+			}
+			return fallback
+		}
+		p := relPalette{
+			background: rgb(cs["background"], def.background), text: rgb(cs["text"], def.text),
+			muted: rgb(cs["muted"], def.muted), accent: rgb(cs["accent"], def.accent),
+			superseded: rgb(cs["superseded"], def.superseded), relation: rgb(cs["relation"], def.relation),
+			types: map[string]color.NRGBA{},
+		}
+		for _, t := range relationTypes {
+			p.types[t] = rgb(cs[t], def.types[t])
+		}
+		return build(p), consumed, nil
+	}}
 }
