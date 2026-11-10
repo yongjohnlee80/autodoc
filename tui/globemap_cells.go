@@ -483,7 +483,7 @@ func (g *cellGlobeMap) at(x, y int) int {
 	best, bestD := -1, 3
 	for i := range g.cur.at {
 		cx, cy := g.cellOf(i)
-		if d := max(abs(cx-x), abs(cy-y)); d < bestD {
+		if d := max(absInt(cx-x), absInt(cy-y)); d < bestD {
 			best, bestD = i, d
 		}
 	}
@@ -755,4 +755,12 @@ func (v *cellGlobeView) HandleEvent(ev tuicore.Event) bool {
 		return true
 	}
 	return false
+}
+
+// absInt is n's distance from 0.
+func absInt(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }
