@@ -1,0 +1,217 @@
+package tui
+
+import (
+	"context"
+	"fmt"
+	"net/url"
+	"path/filepath"
+	"strings"
+
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
+
+	"github.com/yongjohnlee80/autodoc/core/export"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+)
+
+// THE HTML PREVIEW PANE — File › Preview HTML (docs/decisions/editor.md#the-html-preview-pane):
+// the note exported in-process and shown in golib's HTMLView, in a pane beside the editor, live.
+// In a window it is drawn natively and selectable; in a terminal in cells, the note page's view
+// (htmlpane_cells.go): one menu item, the view chosen by the backend that runs.
+//
+// The pane follows the editor one way: an edit exports the note again after a moment of quiet,
+// and the cursor's block comes to the pane's top. A link clicked in it opens a note, a file or
+// the browser.
+
+// htmlPaneState is the pane's: whether it shows the open note, and the latest render.
+type htmlPaneState struct {
+	gen    uint64 // numbers the renders; a later one supersedes an earlier
+	dir    string // the folder the page's images load from
+	dirSet bool   // dir has been given to the view
+}
+
+// native reports whether the backend draws native views: a GUI window (--gui).
+func (h *Host) native() bool {
+	if h.nativeViews != nil {
+		return h.nativeViews()
+	}
+	return h.p != nil && h.p.App() != nil && h.p.App().Capabilities().NativeViews
+}
+
+// htmlView is the pane's HTMLView.
+func (h *Host) htmlView() (*htmlview.HTMLView, bool) {
+	return tuidecl.FindAs[*htmlview.HTMLView](h.p, "htmlView")
+}
+
+// openPaneInBrowser opens the note's page, as the pane shows it, in the browser: the pane's Open in
+// browser, as the terminal preview's button is. The page is written to the preview's file, its
+// relative links and embeds read from the note's folder.
+func (h *Host) openPaneInBrowser() {
+	if !h.previewable() {
+		h.notify(h.tr("autodoc.notice.htmlpane.html_preview_currently_accepts_markdown_files"))
+		return
+	}
+	source, theme, env := []byte(h.pageNow().Text), h.exportTheme(), h.seams.env // read on the loop
+	options := export.Options{Chart: h.chart}
+	if full := h.diskPath(); full != "" {
+		options.Base, options.Document = filepath.Dir(full), full
+	}
+	h.say(h.tr("autodoc.notice.htmlpane.opening_the_page_in_the_browser"))
+	do(h, func(ctx context.Context) feature.AnswerOf[string] {
+		content, err := export.RenderWith(source, export.HTML, theme, options)
+		if err != nil {
+			return feature.AnswerFailed[string](err)
+		}
+		path, err := htmlPreviewFile(env, content)
+		if err != nil {
+			return feature.AnswerFailed[string](err)
+		}
+		return feature.Answered(path, h.browser(ctx, path))
+	}, func(a feature.AnswerOf[string]) {
+		if a.Err() != nil {
+			h.failed(h.tr("autodoc.notice.htmlpane.the_browser_did_not_open"), a.Err())
+			return
+		}
+		h.say(h.trf("autodoc.notice.htmlpane.html_preview_opened_in_the_browser", filepath.Base(a.Value)))
+	})
+}
+
+// closeHTMLPane closes the HTML preview pane: its Close (q).
+func (h *Host) closeHTMLPane() { h.keep(h.p.Call("htmlPane", "close")) }
+
+// openHTMLPane shows the open note in the pane beside the editor.
+func (h *Host) openHTMLPane() {
+	if !h.previewable() {
+		h.notify(h.tr("autodoc.notice.htmlpane.html_preview_currently_accepts_markdown_files"))
+		return
+	}
+	h.keep(h.p.Call("htmlPane", "open"))
+	if v, ok := h.htmlView(); ok {
+		h.paneDiagrams(v) // its diagrams drawn by mermaid.js, where a browser is (mermaidjs_gui.go)
+	}
+	h.paneLooks() // on a terminal, the page's highlighting and notice (htmlpane_cells.go)
+	h.renderHTMLPane()
+}
+
+// previewable reports whether the editor holds Markdown: a .md file, or the draft.
+func (h *Host) previewable() bool { return !h.file.open || filepath.Ext(h.file.path) == ".md" }
+
+// htmlPaneNoteChanged is another note in the editor, opened or closed for the draft, which no
+// typing reports: an open pane shows the new note at once (its render supersedes the old note's
+// still on its way), or closes when it is not Markdown.
+func (h *Host) htmlPaneNoteChanged() {
+	if !h.htmlPaneShown() {
+		return
+	}
+	if !h.previewable() {
+		h.keep(h.p.Call("htmlPane", "close"))
+		return
+	}
+	h.renderHTMLPane()
+}
+
+// htmlPaneShown reports whether the pane is open.
+func (h *Host) htmlPaneShown() bool { return h.panelOpen["htmlPane"] }
+
+// renderHTMLPane exports the editor's text off the loop and shows it in the pane, its images read
+// from the note's folder and its blocks carrying their source bytes.
+func (h *Host) renderHTMLPane() {
+	tk := h.ticket(&h.htmlPane.gen, feature.TicketLocal)
+	source, theme := h.pageNow().Text, h.exportTheme()
+	options := export.Options{SourceSpans: true}
+	dir, root, base := "", "", ""
+	if full := h.diskPath(); full != "" {
+		dir = filepath.Dir(full)
+		options.Base, options.Document = dir, full
+		root, base = h.resourcesFor(h.file.ws, h.file.path)
+	}
+	do(h, func(context.Context) feature.AnswerOf[[]byte] {
+		page, err := export.RenderWith(source, export.HTML, theme, options)
+		return feature.Answered(page, err)
+	}, func(a feature.AnswerOf[[]byte]) {
+		if !tk.Current() {
+			return // an edit since: its render follows
+		}
+		if a.Err() != nil {
+			h.failed(h.tr("autodoc.notice.htmlpane.html_preview"), a.Err())
+			return
+		}
+		v, ok := h.htmlView()
+		if !ok {
+			return
+		}
+		// a new resolver drops the page's images, so it is set before the page, and only for another
+		// folder: at each render it would decode every image again
+		if key := root + "\x00" + base; !h.htmlPane.dirSet || key != h.htmlPane.dir {
+			h.htmlPane.dir, h.htmlPane.dirSet = key, true
+			v.SetOnRefused(h.resourceRefused)
+			if dir != "" {
+				v.SetImageResolver(htmlview.DirResources(root, base))
+			} else {
+				v.SetImageResolver(nil)
+			}
+		}
+		v.SetHTML(a.Value)
+		h.followCursorInPane()
+	})
+}
+
+// followCursorInPane brings the block holding the cursor to the pane's top.
+func (h *Host) followCursorInPane() {
+	if !h.htmlPaneShown() {
+		return
+	}
+	if v, ok := h.htmlView(); ok {
+		v.ScrollToSource(h.cursorBytes())
+	}
+}
+
+// htmlLink is a link clicked in the pane: a web or mail address goes to the system browser; a
+// file: URL, or a path relative to the note (a wikilink's page, a Markdown link), opens in the
+// editor, a workspace's file as that workspace's.
+func (h *Host) htmlLink(href string) { h.htmlLinkAs(h.authorityNow(), href) }
+
+// htmlLinkAs is htmlLink as a acts. A gated script's link goes to the browser only as a web or mail
+// address: any other scheme the desktop's opener would launch (an app, a script) is the user's to
+// follow, as file.open_default_app is; a file opens within its bounds
+// (docs/decisions/contract.md#path-commands-run-within-the-workspace).
+func (h *Host) htmlLinkAs(a authority, href string) {
+	u, err := url.Parse(strings.TrimSpace(href))
+	if err != nil || href == "" {
+		return
+	}
+	scheme := strings.ToLower(u.Scheme)
+	if a.gated() && scheme != "" && scheme != "file" && scheme != "http" && scheme != "https" && scheme != "mailto" {
+		h.notify(fmt.Sprintf("%s is the user's to follow: a script may not", href))
+		return
+	}
+	switch scheme {
+	case "file":
+		h.openAbsoluteAs(a, filepath.FromSlash(u.Path))
+		return
+	case "":
+	default:
+		do(h, func(ctx context.Context) error { return h.browser(ctx, href) }, func(err error) {
+			if err != nil {
+				h.failed(h.trf("autodoc.notice.htmlpane.open", href), err)
+			}
+		})
+		return
+	}
+	if u.Path == "" {
+		return // a fragment of this note
+	}
+	full := h.diskPath()
+	if full == "" {
+		h.notify(h.tr("autodoc.notice.htmlpane.the_note_is_not_on_disk_yet_save_it_then_its_lin"))
+		return
+	}
+	p := filepath.Join(filepath.Dir(full), filepath.FromSlash(u.Path))
+	if filepath.IsAbs(filepath.FromSlash(u.Path)) {
+		p = filepath.FromSlash(u.Path)
+	}
+	if filepath.Ext(p) == "" {
+		p += ".md" // a wikilink names its page without the extension
+	}
+	h.openAbsoluteAs(a, p)
+}
