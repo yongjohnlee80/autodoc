@@ -80,7 +80,7 @@ func TestAnAgentsStalePathLinkIsReplaced(t *testing.T) {
 		t.Run(stale, func(t *testing.T) {
 			a, c, _ := crewAgents(t, oneTwo)
 			p, _ := a.profile("one")
-			dir := a.agentFolder(c.ws, "one")
+			dir := a.agentFolder(workspaceOf(c.ws), "one")
 			link := a.agentPathLink(dir)
 			if a.agentPathDir(dir) != link {
 				t.Skip("this OS puts the build's folder on the agent's PATH, with no link")
