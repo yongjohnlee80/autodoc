@@ -514,18 +514,15 @@ func agentArgv(env procenv.Env, command string) (string, []string) {
 	return usershell.Commands(env).Run(command)
 }
 
-// withCommandArgs is agentArgv's args with extra appended to the program's own command line, each
-// one quoted for env's shell, so a setup's argument (a JSON config, a prompt) reaches the program
-// as one word.
+// withCommandArgs is agentArgv's args with extra appended to the program's own command line as
+// env's shell writes them (usershell.Shell.Args), so a setup's argument (a JSON config, a prompt)
+// reaches the program as one word, itself.
 func withCommandArgs(env procenv.Env, args, extra []string) []string {
 	if len(extra) == 0 || len(args) == 0 {
 		return args
 	}
-	sh := usershell.Commands(env)
 	out := slices.Clone(args)
-	for _, e := range extra {
-		out[len(out)-1] += " " + sh.Quote(e)
-	}
+	out[len(out)-1] += usershell.Commands(env).Args(extra)
 	return out
 }
 

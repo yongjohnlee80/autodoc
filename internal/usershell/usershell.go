@@ -8,7 +8,11 @@
 // The OS-specific part, which shell, is in this package's per-OS files.
 package usershell
 
-import "github.com/yongjohnlee80/autodoc/internal/procenv"
+import (
+	"strings"
+
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
+)
 
 // kind is how a shell reads a command line.
 type kind int
@@ -32,14 +36,39 @@ func Commands(env procenv.Env) Shell { return commands(env) }
 // Interactive is the program and arguments a new terminal tab starts in env (nil: this process's).
 func Interactive(env procenv.Env) []string { return interactive(env) }
 
-// Run is the program and arguments that run line in s.
+// Run is the program and arguments that run line in s. pwsh is told to pass a program's arguments
+// in its Standard way whatever the program is: by default it passes a batch file's (an agent CLI's
+// .cmd shim) in its Legacy way, which Quote's words are not written for.
 func (s Shell) Run(line string) (string, []string) {
 	switch s.kind {
-	case powershell, winps:
+	case powershell:
+		return s.Program, []string{"-NoLogo", "-NoProfile", "-Command", "$PSNativeCommandArgumentPassing = 'Standard'; " + line}
+	case winps:
 		return s.Program, []string{"-NoLogo", "-NoProfile", "-Command", line}
 	default:
 		return s.Program, []string{"-c", line}
 	}
+}
+
+// Args is args written after a command of a line s runs, so the program it starts receives each one
+// as itself: each Quote'd, or under Windows PowerShell 5.1 after its stop-parsing token (--%), each
+// as Windows writes a program's argument (quoteWindowsArg), since 5.1's own passing splits an
+// argument holding a quote and a space and drops an empty one. In 5.1's --% text a %NAME% naming a
+// variable it has is that variable's value. "" when args is empty.
+func (s Shell) Args(args []string) string {
+	var b strings.Builder
+	if s.kind == winps && len(args) > 0 {
+		b.WriteString(" --%")
+	}
+	for _, a := range args {
+		b.WriteByte(' ')
+		if s.kind == winps {
+			b.WriteString(quoteWindowsArg(a))
+		} else {
+			b.WriteString(s.Quote(a))
+		}
+	}
+	return b.String()
 }
 
 // Quote is arg as one word of a command line s runs, standing for itself: no character in it is
