@@ -769,7 +769,7 @@ func writeAtomic(path string, text []byte, mode os.FileMode) error {
 // every OS (internal/userperm): a file holding a credential, a session's state or an agent's
 // settings, which mode bits alone keep private nowhere but Unix.
 func writePrivate(path string, text []byte) error {
-	f, err := userperm.CreatePrivateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
+	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp") // MUTANT
 	if err != nil {
 		return err
 	}

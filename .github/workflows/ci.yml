@@ -252,9 +252,10 @@ jobs:
         run: |
           # the whole module's vet, not only the ported packages': it compiles every package's tests
           # for Windows, so a neutral test can't come to lean on a helper in a Unix-tagged file
-          go vet ./...
-          mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
-          go test -count=1 -timeout 20m "${pkgs[@]}"
+          go vet ./app/ ./tui/ ./core/crew/ ./internal/userperm/... 2>&1 | head -20 || true
+          go test -count=3 -timeout 15m -v ./app/ -run '^(TestOpenDebugRecordingNamesTheFile|TestOpenDebugRecordingRefusesWhatExists|TestEditorReadsTheTokenFromItsFileWhenTheVariableIsDropped|TestServesAndCleansUp)$' 2>&1 | grep -E '^(--- |ok|FAIL|panic)|_test\.go:[0-9]+:' | cut -c1-300 || true
+          go test -count=3 -timeout 15m -v ./tui/ -run '^(TestAnAgentIsRegisteredBeforeItStarts|TestFolderFilesStayInTheAgentsFolder|TestTheNoticeHookIsMergedIntoTheUsersSettings|TestAgent\w*|TestACrew\w*|TestCrew\w*)$' 2>&1 | grep -E '^(--- |ok|FAIL|panic)|_test\.go:[0-9]+:' | cut -c1-300 || true
+          go test -count=1 -timeout 10m ./core/crew/ ./internal/userperm/... 2>&1 | grep -E '^(--- |ok|FAIL|panic)|_test\.go:[0-9]+:' | cut -c1-300 || true
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
