@@ -6,13 +6,13 @@ import (
 	"maps"
 	"net/url"
 	"path"
-	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/yongjohnlee80/golib/parse/markdown"
 	"github.com/yongjohnlee80/golib/search/chunk"
 
+	"github.com/yongjohnlee80/autodoc/core/paths"
 	"github.com/yongjohnlee80/autodoc/core/schema"
 )
 
@@ -159,7 +159,8 @@ func todoKey(store, id string) string { return todoPrefix + store + "/" + id }
 func taskID(p string) string { return strings.TrimSuffix(path.Base(p), ".md") }
 
 // externalPrefix starts the name of a link to a file outside the workspace: no document answers to
-// it, so it never resolves inside the index.
+// it, so it never resolves inside the index. The path after it, and a link's Target, are in the
+// slash form (core/paths): "/src/x.md", "C:/src/x.md" on Windows.
 const externalPrefix = "#file:"
 
 // storeRelations are a task's relations that only a store's documents make: "blocked" names other
@@ -171,7 +172,8 @@ var storeRelations = []string{"blocked"}
 //   - a $NAME path resolves through vars: inside the workspace it is looked up by its workspace
 //     path, outside it is an external link, and an unknown or unset name is unresolved rather than
 //     read from the workspace root;
-//   - an absolute path is a workspace path, or an external link.
+//   - an absolute path (core/paths' rule: "/x", and a drive's or a share's on Windows) is a
+//     workspace path, or an external link.
 func varRelations(doc *markdown.Document, p string, vars *Vars, root string) []DocLink {
 	var out []DocLink
 	for _, r := range chunk.Relations(doc, RelationFields) {
@@ -184,9 +186,9 @@ func varRelations(doc *markdown.Document, p string, vars *Vars, root string) []D
 				out = append(out, unresolvedVar(r.Raw, ref, r.Field, true))
 				continue
 			}
-			abs = filepath.Join(v, ref.Target)
-		case ref.Form == chunk.RefPath && strings.HasPrefix(ref.Target, "/"):
-			abs = filepath.Clean(ref.Target)
+			abs = varPath(v, ref.Target)
+		case ref.Form == chunk.RefPath && paths.IsAbs(ref.Target):
+			abs = paths.Slash(ref.Target)
 		default:
 			out = append(out, relationsOf(p, r, ref)...)
 			continue
@@ -227,14 +229,21 @@ func taskRelations(doc *markdown.Document, p string, t *TodoStore, vars *Vars, r
 	return out
 }
 
-// inside is abs as a path under root ("" never holds it), slash-separated.
+// varPath is target, a $NAME ref's path, joined to v, its variable's value, in the slash form
+// (core/paths), whichever form v and target are written in.
+func varPath(v, target string) string { return paths.Join(paths.Slash(v), paths.Slash(target)) }
+
+// inside is abs as a path under root ("" never holds it), slash-separated. Both are compared in the
+// slash form (core/paths), cleaned, by whole segments and exactly (never case-folded): a sibling
+// sharing root's prefix is outside, a name like "..x" under root inside, and another volume never
+// holds it.
 func inside(root, abs string) (string, bool) {
 	if root == "" {
 		return "", false
 	}
-	rel, err := filepath.Rel(root, abs)
-	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, "../") || filepath.IsAbs(rel) {
+	rel, ok := paths.Rel(paths.Slash(root), paths.Slash(abs))
+	if !ok || rel == "." {
 		return "", false
 	}
-	return filepath.ToSlash(rel), true
+	return rel, true
 }
