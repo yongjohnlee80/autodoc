@@ -821,8 +821,8 @@ func TestThePanelHoldsAtMostItsCap(t *testing.T) {
 		return true
 	})
 	// the reader walks to the last row loaded, again as each page lands: the table asks for more
-	// each time, until the cap
-	r.s.WaitFor(t, "the panel filled to its cap", func(string) bool {
+	// each time, until the cap. As long as a plugin's start (waitResults): its process starts now.
+	r.waitWithin(t, "the panel filled to its cap", 20*time.Second, func() bool {
 		return onLoop(r, func() bool {
 			if tc := r.h.plugins.c.TableCore(resultsView); tc != nil && tc.Len() > 0 {
 				tc.SetCursor(table.TablePos{Row: tc.Len() - 1})
