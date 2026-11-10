@@ -247,6 +247,14 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: scratch (not for merge) the plugin cells on Windows, each read whole
+        if: ${{ !inputs.discover }}
+        continue-on-error: true
+        run: |
+          for c in TestAPluginsMenuRows TestAPluginsNotices TestANoticeQueuedBeforeAStopPostsNothing TestAPluginOpensAPathAndUpdatesItself TestTheSlotIsFencedToTheLiveRun TestTheSlotOutlivesARunNotItsPlugin TestAPluginIsToldWhyItCloses TestAPluginThatFailsClosesItsDialogAndSaysWhy TestAPluginRedrawsTheRenderedView TestAPluginOpensADraftWithBufferNew TestAProtocolTwoPluginsCallIsDropped TestPastSixtyFourWaitingCallsTheHostIsBusy TestACallReusingAWaitingNumberIsNeverAnswered TestTheCloseStopsAStubbornPluginAndWhatItStarted TestAGatedOpenIsHeldToTheWorkspace; do
+            echo "==== $c"; go test -count=1 -timeout 5m -v -run "^$c\$" ./tui/ 2>&1 | grep -vE '^=== (RUN|PAUSE|CONT)' | grep -vE '^\s*│\s*│?\s*$' | cut -c1-240 | head -30 || true
+          done
+          for f in $(find "$TEMP" -name 'silent.log' 2>/dev/null | head -3); do echo "==== $f"; head -c 2000 "$f"; done || true
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
         run: |
