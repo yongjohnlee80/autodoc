@@ -1000,16 +1000,18 @@ notice.
 Junie's setup gives the agent its mail as the crew MCP servers' tools too. The servers' config,
 `mcp.json`, goes in a folder of the agent's own, `.junie-crew/mcp`, which its command line adds with
 `--mcp-location`; Junie's own default locations (the user's `~/.junie/mcp` and the project's
-`.junie/mcp`) stay on, so the user's servers are kept and nothing of theirs is written. The server's
-config has no env: Junie starts it with the agent's environment, which holds the session's context.
+`.junie/mcp`) stay on, and nothing of the user's is written. The server's config has no env, so it is
+expected to inherit the agent's environment, which holds the session's context.
 
-- **No allowance.** Junie's tool rules are the user's own `~/.junie/allowlist.json`, with no
-  session-scoped one, and AutoDoc never writes a user's settings. So a mail tool may ask the user
-  before it runs; the setup's notice says how to allow the server's tools.
+- **No allowance.** Junie's tool rules are the user's own `~/.junie/allowlist.json`; no
+  session-scoped one is documented, and AutoDoc never writes a user's settings. So a mail tool may
+  ask the user before it runs; the setup's notice points at the allowlist's MCP rules.
 - **No prompt reporter and no waker.** Junie's prompts are unreported, and its host tells it when
   mail is waiting (its guide says so); a mail it didn't receive in time falls back to its terminal.
 - **Unproven parts**, checked only by launching a Junie with the setup: that `--mcp-location` reads
-  `mcp.json` from the folder it names, and that Junie passes its environment to the server.
+  `mcp.json` from the folder it names; that Junie passes its environment to the server; which server
+  wins when a user's own is also named `autodoc` (undocumented); and the exact tool-name form an
+  allowlist rule must use.
 
 Claude Code's settings have one source, which AutoDoc's own agents get and another host gets from
 `autodoc crew setup` (or, alone, `autodoc crew claude-settings`: the JSON `claude --settings`
