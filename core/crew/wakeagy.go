@@ -275,6 +275,25 @@ func agySteps(r io.Reader) (n int, last agyStep, err error) {
 	return agyStepsWithin(r, agyMaxTrajectory)
 }
 
+// atEOF is nil when r has nothing more to give: its read ends in io.EOF. A byte more, or any other
+// error (a body cut short of its length, a connection reset), is an error; a read giving neither
+// is asked again, a few times, as io.Reader allows.
+func atEOF(r io.Reader) error {
+	var b [1]byte
+	for range 8 {
+		k, err := r.Read(b[:])
+		switch {
+		case k > 0:
+			return errors.New("there is more after the bound")
+		case errors.Is(err, io.EOF):
+			return nil
+		case err != nil:
+			return err
+		}
+	}
+	return io.ErrNoProgress
+}
+
 // agyStepsWithin is agySteps with the answer bounded at limit bytes: an answer longer, its object
 // whole within the bound or not, is an error.
 func agyStepsWithin(r io.Reader, limit int64) (n int, last agyStep, err error) {
@@ -340,8 +359,8 @@ func agyStepsWithin(r io.Reader, limit int64) (n int, last agyStep, err error) {
 	// the bound read to its end is the limiter's EOF, not the answer's: the answer ended only if
 	// nothing is left to read past it
 	if lr.N == 0 {
-		if k, _ := r.Read(make([]byte, 1)); k > 0 {
-			return 0, agyStep{}, fmt.Errorf("crew: the agy trajectory is over %d bytes", limit)
+		if err := atEOF(r); err != nil {
+			return 0, agyStep{}, fmt.Errorf("crew: the agy trajectory is over %d bytes, or was cut short: %w", limit, err)
 		}
 	}
 	return n, last, nil
