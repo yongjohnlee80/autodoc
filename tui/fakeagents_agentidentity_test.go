@@ -17,7 +17,7 @@ type identityHostCopy struct {
 	state             map[string]any
 	notes             []string
 	stopErr           error
-	ws                feature.Workspace
+	ws                wsInfo
 	configuredCommand string
 	panel             *modelPanelCopy
 	postMu            sync.Mutex // a held removal's retirement posts from its own goroutine
@@ -53,11 +53,11 @@ func (*identityHostCopy) Focus(string) error { return nil }
 func (*identityHostCopy) DaemonAddress() string { return "unused" }
 
 func (c *identityHostCopy) ActiveWorkspace() (feature.Workspace, bool) {
-	return c.ws, c.ws.Name != ""
+	return workspaceOf(c.ws), c.ws.name != ""
 }
 
 func (c *identityHostCopy) ActiveWorkspaceInfo() (feature.Workspace, bool) {
-	return c.ws, c.ws.Name != ""
+	return workspaceOf(c.ws), c.ws.name != ""
 }
 
 func (c *identityHostCopy) ConfigureTerminal(_, _, _ string, args ...string) error {
