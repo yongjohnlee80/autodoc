@@ -90,6 +90,14 @@ type todoStore struct {
 // title is how the store is called: its label, or its derived name.
 func (s *todoStore) title() string { return cmp.Or(s.alias, s.name) }
 
+// same reports whether s and o are one store: by the daemon's id when s has one, else by its place.
+func (s *todoStore) same(o *todoStore) bool {
+	if s.sid != "" {
+		return s.sid == o.sid
+	}
+	return s.id == o.id
+}
+
 // labelKey is the store's label's preference: by its id, or its path while the id is not known.
 func (s *todoStore) labelKey() string { return todoLabelPref + cmp.Or(s.sid, s.path) }
 
@@ -579,9 +587,10 @@ func (t *todos) show(stores []*todoStore) {
 	t.stores = stores
 	t.storeRows.Reset(stores)
 	i := -1
-	if t.want != "" {
+	wanted := t.want != ""
+	if wanted {
 		// the store asked for, by its id; when it isn't listed, that is said, and no other store is
-		// shown in its place: the one shown before stays
+		// shown in its place: the one shown before stays, or none
 		want := t.want
 		if i = slices.IndexFunc(stores, func(s *todoStore) bool { return s.sid == want }); i < 0 {
 			t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_the_store_of_is_not_listed", tildePath(t.c.Env(), t.wantDir)))
@@ -589,10 +598,10 @@ func (t *todos) show(stores []*todoStore) {
 	}
 	t.want, t.wantDir = "", ""
 	if i < 0 && t.cur != nil {
-		cur := t.cur.id
-		i = slices.IndexFunc(stores, func(s *todoStore) bool { return s.id == cur })
+		cur := t.cur
+		i = slices.IndexFunc(stores, func(s *todoStore) bool { return s.same(cur) })
 	}
-	if i < 0 && len(stores) > 0 {
+	if i < 0 && len(stores) > 0 && !wanted { // the first only when no store was asked for
 		i = 0
 	}
 	t.selectStore(i)
@@ -602,8 +611,8 @@ func (t *todos) show(stores []*todoStore) {
 		t.showStore()
 		return
 	}
-	if t.cur != nil && t.cur.id == stores[i].id {
-		t.cur = stores[i] // its label or its claim may have changed
+	if t.cur != nil && t.cur.same(stores[i]) {
+		t.cur = stores[i] // its label, its claim or its listed root may have changed
 		t.showDetail()
 		t.reload()
 		return
@@ -1230,14 +1239,19 @@ func (t *todos) folderChosen(dir string) {
 			t.call("todos.resolve", []any{at}, nil, func(v any) {
 				canon, at := resolved(v)
 				sid := feature.Str(feature.AsMap(v), "store_id")
-				t.want, t.wantDir = sid, dir
 				s := &todoStore{id: "root:" + canon, at: at, sid: sid, name: storeName(dir), released: feature.AsMap(v)["released"] == true}
 				if t.readOnly(s) { // the folder is loaded; a store released there takes no new buckets
 					t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_is_loaded_read_only_its_store_was_released", tildePath(t.c.Env(), dir)))
+					t.want, t.wantDir = sid, dir
 					t.list()
 					return
 				}
-				t.write(s, "todos.scaffold", []any{at}, func(any) { t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_a_new_store_in", dir)); t.list() })
+				// asked for only once it is made: a failed scaffold leaves nothing wanted
+				t.write(s, "todos.scaffold", []any{at}, func(any) {
+					t.want, t.wantDir = sid, dir
+					t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_a_new_store_in", dir))
+					t.list()
+				})
 			})
 		})
 	case "move":
@@ -1246,6 +1260,8 @@ func (t *todos) folderChosen(dir string) {
 			return
 		}
 		t.write(s, "todos.move_store", []any{s.at, paths.Join(root, ".todo-list")}, func(any) {
+			// the store moved is still the one shown, by its id: its listed root may now be another
+			t.want, t.wantDir = s.sid, dir
 			t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_the_store_is_now_in", dir))
 			t.list()
 		})
