@@ -5481,6 +5481,10 @@ WHAT A KEY NEEDS
         <source>todos: %1 is loaded, read-only: its store was released (todos.release)</source>
         <translation>待办：%1 已加载，只读：其待办库已释放 (todos.release)</translation>
     </message>
+    <message id="autodoc.notice.todos.todos_the_store_of_is_not_listed">
+        <source>todos: the store of %1 isn't listed, so no other is shown in its place</source>
+        <translation>待办：%1 的待办库不在列表中，因此不会显示其他待办库代替它</translation>
+    </message>
     <message id="autodoc.notice.todos.todos_refreshed_moved_archived_rewritten">
         <source>todos: refreshed: %1 moved, %2 archived, %3 rewritten</source>
         <translation>待办：已刷新：移动 %1 项，归档 %2 项，重写 %3 项</translation>

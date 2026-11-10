@@ -5492,6 +5492,10 @@ WHAT A KEY NEEDS
         <source>todos: %1 is loaded, read-only: its store was released (todos.release)</source>
         <translation>ToDo: %1 を読み取り専用で読み込みました: ストアは解放されています (todos.release)</translation>
     </message>
+    <message id="autodoc.notice.todos.todos_the_store_of_is_not_listed">
+        <source>todos: the store of %1 isn't listed, so no other is shown in its place</source>
+        <translation>ToDo: %1 のストアは一覧にないため、代わりに別のストアは表示しません</translation>
+    </message>
     <message id="autodoc.notice.todos.todos_refreshed_moved_archived_rewritten">
         <source>todos: refreshed: %1 moved, %2 archived, %3 rewritten</source>
         <translation>ToDo: 更新しました: 移動 %1、アーカイブ %2、書き直し %3</translation>

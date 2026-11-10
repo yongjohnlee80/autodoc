@@ -5497,6 +5497,10 @@ LO QUE NECESITA UNA TECLA
         <source>todos: %1 is loaded, read-only: its store was released (todos.release)</source>
         <translation>tareas: %1 está cargado, en solo lectura: su almacén fue liberado (todos.release)</translation>
     </message>
+    <message id="autodoc.notice.todos.todos_the_store_of_is_not_listed">
+        <source>todos: the store of %1 isn't listed, so no other is shown in its place</source>
+        <translation>tareas: el almacén de %1 no está en la lista, así que no se muestra otro en su lugar</translation>
+    </message>
     <message id="autodoc.notice.todos.todos_refreshed_moved_archived_rewritten">
         <source>todos: refreshed: %1 moved, %2 archived, %3 rewritten</source>
         <translation>tareas: actualizado: %1 movidas, %2 archivadas, %3 reescritas</translation>

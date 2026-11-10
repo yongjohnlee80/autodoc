@@ -147,8 +147,11 @@ type todos struct {
 	cur       *todoStore
 	// storeIndex is the dropdown's row as last set (-2 before the first)
 	storeIndex int
-	// want is the store to show once the stores are listed again (one just loaded); "" keeps cur
-	want string
+	// want is the daemon's id of the store to show once the stores are listed again (todos.resolve's
+	// store_id for a folder just loaded or made), matched by identity, never by a root's spelling: a
+	// store is listed by its first root, which need not be the folder chosen (a store moved there).
+	// wantDir is that folder, for the notice when the store isn't listed. "" keeps cur
+	want, wantDir string
 	// tab is the tab shown; month the archived month open in the Archived tab, "" for none
 	tab   int
 	month string
@@ -575,14 +578,20 @@ func (t *todos) labels(then func(map[string]string)) {
 func (t *todos) show(stores []*todoStore) {
 	t.stores = stores
 	t.storeRows.Reset(stores)
-	want := cmp.Or(t.want, func() string {
-		if t.cur != nil {
-			return t.cur.id
+	i := -1
+	if t.want != "" {
+		// the store asked for, by its id; when it isn't listed, that is said, and no other store is
+		// shown in its place: the one shown before stays
+		want := t.want
+		if i = slices.IndexFunc(stores, func(s *todoStore) bool { return s.sid == want }); i < 0 {
+			t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_the_store_of_is_not_listed", tildePath(t.c.Env(), t.wantDir)))
 		}
-		return ""
-	}())
-	t.want = ""
-	i := slices.IndexFunc(stores, func(s *todoStore) bool { return s.id == want })
+	}
+	t.want, t.wantDir = "", ""
+	if i < 0 && t.cur != nil {
+		cur := t.cur.id
+		i = slices.IndexFunc(stores, func(s *todoStore) bool { return s.id == cur })
+	}
 	if i < 0 && len(stores) > 0 {
 		i = 0
 	}
@@ -1198,10 +1207,10 @@ func (t *todos) folderChosen(dir string) {
 	}
 	root := paths.Slash(dir) // the daemon's form, the slash form with its volume kept
 	at := map[string]any{"root": root}
-	// the store the daemon resolves for the folder: its canonical root (another spelling of the same
-	// folder, a link, a short name or another case, is the one store), which todos.stores lists the
-	// store under, so it is found among them and shown; resolving it also records a store never
-	// listed before
+	// the store the daemon resolves for the folder (another spelling of the same folder, a link, a
+	// short name or another case, is the one store), shown by its id once the stores are listed
+	// (show); resolving it also records a store never listed before. resolved is its canonical root,
+	// where New… makes its buckets
 	resolved := func(v any) (string, map[string]any) {
 		if r := feature.Str(feature.AsMap(v), "root"); r != "" {
 			return r, map[string]any{"root": r}
@@ -1212,8 +1221,7 @@ func (t *todos) folderChosen(dir string) {
 	case "load":
 		t.call("todos.register", []any{root}, nil, func(any) {
 			t.call("todos.resolve", []any{at}, nil, func(v any) {
-				canon, _ := resolved(v)
-				t.want = "root:" + canon
+				t.want, t.wantDir = feature.Str(feature.AsMap(v), "store_id"), dir
 				t.list()
 			})
 		})
@@ -1221,8 +1229,9 @@ func (t *todos) folderChosen(dir string) {
 		t.call("todos.register", []any{root}, nil, func(any) {
 			t.call("todos.resolve", []any{at}, nil, func(v any) {
 				canon, at := resolved(v)
-				t.want = "root:" + canon
-				s := &todoStore{id: "root:" + canon, at: at, name: storeName(dir), released: feature.AsMap(v)["released"] == true}
+				sid := feature.Str(feature.AsMap(v), "store_id")
+				t.want, t.wantDir = sid, dir
+				s := &todoStore{id: "root:" + canon, at: at, sid: sid, name: storeName(dir), released: feature.AsMap(v)["released"] == true}
 				if t.readOnly(s) { // the folder is loaded; a store released there takes no new buckets
 					t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_is_loaded_read_only_its_store_was_released", tildePath(t.c.Env(), dir)))
 					t.list()
