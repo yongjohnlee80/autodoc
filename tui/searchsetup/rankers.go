@@ -1,4 +1,4 @@
-package tui
+package searchsetup
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 // in use: the stored rankers can still be added, edited and removed, but none chosen.
 
 // shortModel is a model's name without its owner: bge-reranker-v2-m3 for BAAI/bge-reranker-v2-m3.
-func shortModel(m string) string {
+func ShortModel(m string) string {
 	if i := strings.LastIndex(m, "/"); i >= 0 {
 		return m[i+1:]
 	}
@@ -48,7 +48,7 @@ func newRankers(c feature.Core, listed func()) *rankers {
 	r.endpoints = newEndpoints(c, endpointSpec{
 		noun: "ranker", verb: "ranker", list: "ranker.list", ranker: true,
 		kinds:     rankerKinds,
-		blank:     endpointRow{kind: "tei", base: defaultTEIURL},
+		blank:     EndpointRow{kind: "tei", base: defaultTEIURL},
 		addTitle:  "add a ranker",
 		checkHint: "Check asks the ranker what it serves",
 		columns:   []string{"use", "name", "kind", "model", "apiKey"},
@@ -108,15 +108,15 @@ func rankersStatus(t feature.Wording, active, supplied, why string, window int64
 // use makes ranker i the one search's second stage uses; one that does not set up is refused, and
 // the one in use stays.
 func (r *rankers) use(i int) {
-	row, ok := r.at(i)
+	row, ok := r.At(i)
 	if !ok || r.supplied != "" {
 		return
 	}
-	r.c.Set("App.rankersStatus", r.c.Trf("autodoc.text.rankers.setting_up", row.name))
-	r.choose(row.name, func(err error) {
-		r.c.Set("App.rankersStatus", r.c.Trf("autodoc.text.rankers.not_used", row.name, feature.WireMessage(err)))
+	r.c.Set("App.rankersStatus", r.c.Trf("autodoc.text.rankers.setting_up", row.Name))
+	r.choose(row.Name, func(err error) {
+		r.c.Set("App.rankersStatus", r.c.Trf("autodoc.text.rankers.not_used", row.Name, feature.WireMessage(err)))
 	},
-		func() { r.c.Notify(r.c.Trf("autodoc.notice.rankers.search_is_re_ranked_with", row.name)) })
+		func() { r.c.Notify(r.c.Trf("autodoc.notice.rankers.search_is_re_ranked_with", row.Name)) })
 }
 
 // stop uses no ranker: the hits stay in recall order.
@@ -171,13 +171,13 @@ func (r *rankers) saveWindow(text string) {
 }
 
 // removal asks before removing ranker row.
-func (r *rankers) removal(row endpointRow, remove func()) {
-	r.c.Ask(feature.Question{Title: r.c.Tr("autodoc.question.rankers.remove_the_ranker"), Text: r.c.Trf("autodoc.question.rankers.remove_the_ranker_its_key_its_usage_and_its_log", row.name), OnYes: remove})
+func (r *rankers) removal(row EndpointRow, remove func()) {
+	r.c.Ask(feature.Question{Title: r.c.Tr("autodoc.question.rankers.remove_the_ranker"), Text: r.c.Trf("autodoc.question.rankers.remove_the_ranker_its_key_its_usage_and_its_log", row.Name), OnYes: remove})
 }
 
 // formOpened is the form's title on Add… and what Check does, in the UI's language: the spec's
 // are English, set as the form opens (endpoints.fill).
-func (r *rankers) formOpened(endpointRow) {
+func (r *rankers) formOpened(EndpointRow) {
 	if r.editing == "" {
 		r.c.Set("App.rankerFormTitle", r.c.Tr("autodoc.text.rankers.add_a_ranker"))
 	}
@@ -211,10 +211,10 @@ func (r *rankers) checked(models []string, err error) {
 }
 
 // rankedTitle is what the hits' title says of their order: the ranker's, or why it is recall's.
-func rankedTitle(t feature.Wording, rk map[string]any) string {
+func RankedTitle(t feature.Wording, rk map[string]any) string {
 	switch feature.Str(rk, "state") {
 	case "ready":
-		return " · " + t.Trf("autodoc.text.rankers.re_ranked_by", shortModel(feature.Str(rk, "model")))
+		return " · " + t.Trf("autodoc.text.rankers.re_ranked_by", ShortModel(feature.Str(rk, "model")))
 	case "error":
 		return " · " + t.Trf("autodoc.text.rankers.not_re_ranked", feature.Str(rk, "error"))
 	}

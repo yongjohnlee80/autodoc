@@ -264,13 +264,13 @@ func TestListModelsOfAnEditAsksItsServer(t *testing.T) {
 	}
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
-	r.h.p.Post(r.h.ai.reloadProviders)
-	r.s.WaitFor(t, "the providers listed", func(string) bool { return onLoop(r, func() int { return len(r.h.ai.providers.rows.All()) }) == 1 })
+	r.h.p.Post(r.h.ai.ReloadProviders)
+	r.s.WaitFor(t, "the providers listed", func(string) bool { return onLoop(r, func() int { return len(r.h.ai.Providers.Rows.All()) }) == 1 })
 	r.app(t, "App.startEditProvider", num(0))
 	r.s.WaitForText(t, "edit local")
 	r.app(t, "App.listProviderModels", str(other.URL), str(""))
 	r.s.WaitForText(t, "1 models")
-	if got := onLoop(r, func() []string { return r.h.ai.providers.modelList }); len(got) != 1 || got[0] != "other-embedder" {
+	if got := onLoop(r, func() []string { return r.h.ai.Providers.ModelList }); len(got) != 1 || got[0] != "other-embedder" {
 		t.Errorf("listed %v, want the edited server's other-embedder", got)
 	}
 }

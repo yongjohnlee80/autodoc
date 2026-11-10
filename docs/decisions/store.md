@@ -140,7 +140,7 @@ A removal with no provider in use takes the same path, so a model kept active fo
 is retired with the last one. While another provider is in use, its model is left: it may still be
 answering until a switch's flip. The confirmation says what the removal deletes.
 
-In the code: `internal/daemon/embedding.go`, `core/store/providers.go`, `tui/providers.go`
+In the code: `internal/daemon/embedding.go`, `core/store/providers.go`, `tui/searchsetup/providers.go`
 
 ## Purging refuses the active model and the target
 

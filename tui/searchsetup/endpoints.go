@@ -1,4 +1,4 @@
-package tui
+package searchsetup
 
 import (
 	"context"
@@ -29,10 +29,10 @@ type endpointKind struct {
 
 // endpointRow is an entry as the list and the form know it; context, the window in tokens, is a
 // provider's alone.
-type endpointRow struct {
-	name, kind, base, model string
+type EndpointRow struct {
+	Name, kind, base, model string
 	context                 int64
-	hasKey                  bool
+	HasKey                  bool
 }
 
 // endpointSpec is one list: its verbs and sources, its kinds, and what it does differently.
@@ -44,7 +44,7 @@ type endpointSpec struct {
 	// ranker: a change of the list is a change of search's second stage (Core.SearchModelsChanged)
 	ranker              bool
 	kinds               []endpointKind
-	blank               endpointRow // what Add… starts from
+	blank               EndpointRow // what Add… starts from
 	addTitle, checkHint string      // the form's title on Add…, and what Check does, before it is asked
 	columns             []string    // the list's columns after its key
 
@@ -52,11 +52,11 @@ type endpointSpec struct {
 	// one chosen was refused
 	listed func(m map[string]any, active, why string) string
 	// removal asks before removing r; remove removes it
-	removal func(r endpointRow, remove func())
+	removal func(r EndpointRow, remove func())
 	// the optional hooks: the form's own fields as it opens on r; the fields a kind shows or hides;
 	// what the form says of Check's answer; and the form's own fields put into spec before a save,
 	// answering why it is not saved ("" when it is)
-	formOpened func(r endpointRow)
+	formOpened func(r EndpointRow)
 	kindShown  func(k endpointKind)
 	checked    func(models []string, err error)
 	saveSpec   func(spec map[string]any, k endpointKind, extra string) string
@@ -66,8 +66,8 @@ type endpointSpec struct {
 type endpoints struct {
 	c      feature.Core
 	spec   endpointSpec
-	rows   *feature.Rows[endpointRow]
-	active string // the one in use
+	Rows   *feature.Rows[EndpointRow]
+	Active string // the one in use
 	cursor int    // the row under the list's cursor: the one the dialog's shared buttons act on
 	seq    uint64 // numbers the detail's reads
 	// the form: the entry it edits ("" a new one), the kind chosen, and whether the entry it edits
@@ -79,7 +79,7 @@ type endpoints struct {
 
 func newEndpoints(c feature.Core, spec endpointSpec) *endpoints {
 	e := &endpoints{c: c, spec: spec}
-	e.rows = feature.NewRows(tuidecl.NewListModel(append([]string{"key"}, spec.columns...)...), e.rowOf)
+	e.Rows = feature.NewRows(tuidecl.NewListModel(append([]string{"key"}, spec.columns...)...), e.rowOf)
 	return e
 }
 
@@ -92,7 +92,7 @@ func (e *endpoints) State() map[string]any {
 	for i, k := range e.spec.kinds {
 		labels[i] = k.label
 	}
-	state := map[string]any{e.src("s"): e.rows.Model(), e.src("Kinds"): feature.Choices(labels...), e.src("KindIndex"): 0}
+	state := map[string]any{e.src("s"): e.Rows.Model(), e.src("Kinds"): feature.Choices(labels...), e.src("KindIndex"): 0}
 	for _, name := range []string{"sStatus", "Detail", "FormTitle", "FormError", "Name", "Base", "Model", "Key", "KeyLabel", "ModelsStatus"} {
 		state[e.src(name)] = ""
 	}
@@ -108,13 +108,13 @@ func (e *endpoints) kindIndex(kind string) int {
 	return 0
 }
 
-func (e *endpoints) at(i int) (endpointRow, bool) { return e.rows.At(i) }
+func (e *endpoints) At(i int) (EndpointRow, bool) { return e.Rows.At(i) }
 
 // load lists the entries, the one in use, and why the one chosen is not in use, if it is not.
 func (e *endpoints) load() {
 	tk := e.c.Ticket(nil, feature.TicketSession)
 	type answer struct {
-		rows []endpointRow
+		rows []EndpointRow
 		m    map[string]any
 		err  error
 	}
@@ -124,11 +124,11 @@ func (e *endpoints) load() {
 			return answer{err: err}
 		}
 		m := feature.AsMap(res)
-		var rows []endpointRow
+		var rows []EndpointRow
 		for _, x := range feature.AsList(m[e.spec.noun+"s"]) {
 			p := feature.AsMap(x)
 			has, _ := p["has_key"].(bool)
-			rows = append(rows, endpointRow{name: feature.Str(p, "name"), kind: feature.Str(p, "kind"), base: feature.Str(p, "base_url"), model: feature.Str(p, "model"), context: feature.Num(p, "context"), hasKey: has})
+			rows = append(rows, EndpointRow{Name: feature.Str(p, "name"), kind: feature.Str(p, "kind"), base: feature.Str(p, "base_url"), model: feature.Str(p, "model"), context: feature.Num(p, "context"), HasKey: has})
 		}
 		return answer{rows: rows, m: m}
 	}, func(v any) {
@@ -140,9 +140,9 @@ func (e *endpoints) load() {
 			e.c.Set(e.src("sStatus"), e.spec.noun+"s: "+feature.WireMessage(a.err))
 			return
 		}
-		e.active = feature.Str(a.m, "active")
-		e.rows.Reset(a.rows)
-		e.c.Set(e.src("sStatus"), e.spec.listed(a.m, e.active, feature.Str(a.m, "error")))
+		e.Active = feature.Str(a.m, "active")
+		e.Rows.Reset(a.rows)
+		e.c.Set(e.src("sStatus"), e.spec.listed(a.m, e.Active, feature.Str(a.m, "error")))
 		if len(a.rows) > 0 {
 			e.detail(min(max(e.cursor, 0), len(a.rows)-1))
 		} else {
@@ -152,13 +152,13 @@ func (e *endpoints) load() {
 }
 
 // rowOf is an entry as the list shows it, the one in use marked.
-func (e *endpoints) rowOf(_ int, r endpointRow) feature.RowOf {
+func (e *endpoints) rowOf(_ int, r EndpointRow) feature.RowOf {
 	use := ""
-	if r.name == e.active {
+	if r.Name == e.Active {
 		use = "●"
 	}
 	key := "—"
-	if r.hasKey {
+	if r.HasKey {
 		key = "sealed"
 	}
 	model := r.model
@@ -166,7 +166,7 @@ func (e *endpoints) rowOf(_ int, r endpointRow) feature.RowOf {
 		model = "—" // a TEI server's own, named by Check
 	}
 	k := e.spec.kinds[e.kindIndex(r.kind)]
-	row := feature.RowOf{"key": r.name, "use": use, "name": r.name, "kind": k.label, "model": model, "apiKey": key}
+	row := feature.RowOf{"key": r.Name, "use": use, "name": r.Name, "kind": k.label, "model": model, "apiKey": key}
 	if slices.Contains(e.spec.columns, "context") {
 		window := "—"
 		if k.window {
@@ -180,29 +180,29 @@ func (e *endpoints) rowOf(_ int, r endpointRow) feature.RowOf {
 // detail shows entry i's usage over the last week and its latest calls, and keeps it as the row
 // the dialog's shared buttons act on.
 func (e *endpoints) detail(i int) {
-	r, ok := e.at(i)
+	r, ok := e.At(i)
 	if !ok {
 		return
 	}
 	e.cursor = i
 	tk := e.c.Ticket(&e.seq, feature.TicketSession)
 	e.c.Go(func(ctx context.Context) any {
-		us, err := e.c.Call(ctx, e.spec.verb+".usage", r.name, int64(7))
+		us, err := e.c.Call(ctx, e.spec.verb+".usage", r.Name, int64(7))
 		if err != nil {
 			return feature.AnswerFailed[string](err)
 		}
-		log, err := e.c.Call(ctx, e.spec.verb+".log", r.name, int64(30))
+		log, err := e.c.Call(ctx, e.spec.verb+".log", r.Name, int64(30))
 		if err != nil {
 			return feature.AnswerFailed[string](err)
 		}
-		return feature.AnswerOf[string]{Value: usageText(r.name, feature.AsList(us), feature.AsList(log))}
+		return feature.AnswerOf[string]{Value: usageText(r.Name, feature.AsList(us), feature.AsList(log))}
 	}, func(v any) {
 		a := v.(feature.AnswerOf[string])
 		if !tk.Current() {
 			return
 		}
 		if a.Err() != nil {
-			e.c.Set(e.src("Detail"), r.name+": "+feature.WireMessage(a.Err()))
+			e.c.Set(e.src("Detail"), r.Name+": "+feature.WireMessage(a.Err()))
 			return
 		}
 		e.c.Set(e.src("Detail"), a.Value)
@@ -256,11 +256,11 @@ func (e *endpoints) choose(name string, refused func(error), used func()) {
 
 // startRemove asks before removing entry i.
 func (e *endpoints) startRemove(i int) {
-	r, ok := e.at(i)
+	r, ok := e.At(i)
 	if !ok {
 		return
 	}
-	e.spec.removal(r, func() { e.removeConfirmed(r.name) })
+	e.spec.removal(r, func() { e.removeConfirmed(r.Name) })
 }
 
 func (e *endpoints) removeConfirmed(name string) {
@@ -288,20 +288,20 @@ func (e *endpoints) startAdd() {
 
 // startEdit opens the form on entry i; its key is kept unless one is typed.
 func (e *endpoints) startEdit(i int) {
-	r, ok := e.at(i)
+	r, ok := e.At(i)
 	if !ok {
 		return
 	}
-	e.editing = r.name
-	e.fill("edit "+r.name, r)
+	e.editing = r.Name
+	e.fill("edit "+r.Name, r)
 }
 
-func (e *endpoints) fill(title string, r endpointRow) {
-	e.kind, e.hasKey = e.kindIndex(r.kind), r.hasKey
+func (e *endpoints) fill(title string, r EndpointRow) {
+	e.kind, e.hasKey = e.kindIndex(r.kind), r.HasKey
 	e.c.Set(e.src("FormTitle"), title)
 	e.c.Set(e.src("FormError"), "")
 	e.c.Set(e.src("KindIndex"), e.kind)
-	feature.SetField(e.c, e.src("Name"), r.name)
+	feature.SetField(e.c, e.src("Name"), r.Name)
 	feature.SetField(e.c, e.src("Base"), r.base)
 	feature.SetField(e.c, e.src("Model"), r.model)
 	feature.SetField(e.c, e.src("Key"), "")
