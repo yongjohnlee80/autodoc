@@ -115,6 +115,9 @@ func TestCloseWaitsForTheStoresUseAndAdmitsNoSecondOne(t *testing.T) {
 	if n := overlaps.Load(); n != 0 {
 		t.Errorf("%d disk operations while another operation held the store", n)
 	}
+	if n := disk.UsedClosed(); n != 0 {
+		t.Errorf("%d operations through a store's directory after it was released", n)
+	}
 	m.Close()
 	if held := disk.Held(); len(held) != 0 {
 		t.Errorf("after Close, still held: %v", held)
@@ -199,7 +202,79 @@ func TestAMoveAdmitsNoOperationUntilItEnds(t *testing.T) {
 	if n := overlaps.Load(); n != 0 {
 		t.Errorf("%d disk operations while the move held the store", n)
 	}
+	if n := disk.UsedClosed(); n != 0 {
+		t.Errorf("%d operations through a store's directory after it was released", n)
+	}
 	if held := disk.Held(); held["/ws/.todo-list"] != 0 || held["/ws/tasks"] != 1 {
 		t.Errorf("held %v: want the store open at its new path only", held)
+	}
+}
+
+// A store moved by another Manager while this one is inside it: an operation asked for meanwhile
+// gets this Manager's object for the store, which still names the old path, and waits for its
+// lock. When the first operation ends, that object is released under its lock (the store has left
+// its path), and the waiting operation opens the store at its new path: it never works through the
+// old object, and no two operations of this Manager overlap.
+func TestAnOperationWaitingOnAStoreThatMovedOpensItAtItsNewPath(t *testing.T) {
+	disk := todotest.NewDisk()
+	disk.MkdirAll("/ws")
+	j := todotest.NewJournal()
+	roots := todotest.Roots{"ws": "/ws"}
+	m := todo.New(roots, disk, j)
+	other := todo.New(roots, disk, j) // another Manager over the same journal and disk
+	t.Cleanup(func() { m.Close(); other.Close() })
+	ws := todo.At{Workspace: "ws"}
+	if err := m.Claim(ctx, ws); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Add(ctx, ws, todo.Spec{Title: "a", ID: "a"}, ""); err != nil {
+		t.Fatal(err)
+	}
+	parked, release := make(chan struct{}), make(chan struct{})
+	var holding, elsewhere atomic.Bool
+	var overlaps atomic.Int32
+	disk.SetFault(func(op, name string) error {
+		if op == "readdir" && name == "/ws/.todo-list/open" && !holding.Load() && !elsewhere.Load() {
+			holding.Store(true)
+			close(parked)
+			<-release // the operation A, inside this Manager's store
+			holding.Store(false)
+			return nil
+		}
+		if holding.Load() && !elsewhere.Load() {
+			overlaps.Add(1) // this Manager reached the disk while A held the store
+		}
+		return nil
+	})
+	aDone := make(chan struct{})
+	var aListed []string
+	go listing(m, ws, &aListed, aDone)
+	<-parked
+	elsewhere.Store(true)
+	if r, err := other.MoveStore(ctx, ws, "/ws/tasks"); err != nil || r.Store != "/ws/tasks" {
+		t.Fatalf("the other Manager's move: %+v, %v", r, err)
+	}
+	elsewhere.Store(false)
+	var listed []string
+	bDone := make(chan struct{})
+	go listing(m, ws, &listed, bDone)
+	if !blockedOnTheStore(t, "listing", bDone) {
+		t.Fatal("an operation asked for while another held the store ran beside it")
+	}
+	close(release)
+	<-aDone
+	<-bDone
+	disk.SetFault(nil)
+	if !slices.Contains(listed, "a") {
+		t.Errorf("the waiting operation listed %v: it did not open the store at its new path", listed)
+	}
+	if n := overlaps.Load(); n != 0 {
+		t.Errorf("%d disk operations of this Manager while another of its operations held the store", n)
+	}
+	if n := disk.UsedClosed(); n != 0 {
+		t.Errorf("%d operations through a store's directory after it was released", n)
+	}
+	if held := disk.Held(); held["/ws/.todo-list"] != 0 || held["/ws/tasks"] == 0 {
+		t.Errorf("held %v: want the store open at its new path, its old object released", held)
 	}
 }
