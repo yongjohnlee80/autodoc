@@ -26,6 +26,13 @@ type Wording interface {
 	Trf(id string, args ...any) string
 }
 
+// SetField writes a form field bound to name, moving it away first so the same text written twice
+// still reaches a field the user has typed in.
+func SetField(c Core, name, text string) {
+	c.Set(name, "\x00")
+	c.Set(name, text)
+}
+
 // argRef is a %1 … %99 in a message, which Fill fills.
 var argRef = regexp.MustCompile(`%[1-9][0-9]?`)
 

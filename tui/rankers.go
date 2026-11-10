@@ -136,7 +136,7 @@ func (r *rankers) startWindow() {
 		return
 	}
 	r.c.Set("App.rankerWindowError", r.c.Trf("autodoc.text.rankers.to_more_ranks_deeper_and_takes_longer_a_cpu_rank", rank.MinWindow, rank.MaxWindow))
-	setField(r.c, "App.rankerWindow", "")
+	feature.SetField(r.c, "App.rankerWindow", "")
 	r.c.Open("rankerWindow")
 	r.c.Go(func(ctx context.Context) any {
 		res, err := r.c.Call(ctx, "ranker.list")
@@ -144,7 +144,7 @@ func (r *rankers) startWindow() {
 			return int64(rank.DefaultWindow)
 		}
 		return feature.Num(feature.AsMap(res), "window")
-	}, func(v any) { setField(r.c, "App.rankerWindow", strconv.FormatInt(v.(int64), 10)) })
+	}, func(v any) { feature.SetField(r.c, "App.rankerWindow", strconv.FormatInt(v.(int64), 10)) })
 }
 
 // saveWindow sets the window; one outside the bounds opens the field again, saying why.
