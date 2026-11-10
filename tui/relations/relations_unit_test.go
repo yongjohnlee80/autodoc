@@ -61,7 +61,7 @@ func TestTheRelationsFollowThePageShown(t *testing.T) {
 		t.Fatalf("the draft: rows %q, title %q", r.labels(), c.Sets["App.relationsTitle"])
 	}
 	r.Shown(feature.Page{Ref: feature.FileRef{WS: "", Path: "/tmp/x.md"}, Outside: true})
-	if c.Sets["App.relationsTitle"] != "links · "+outsideBadge {
+	if c.Sets["App.relationsTitle"] != "links · "+feature.OutsideBadge {
 		t.Fatalf("a file in no workspace: title %q", c.Sets["App.relationsTitle"])
 	}
 }

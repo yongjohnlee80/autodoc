@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	graphlayout "github.com/yongjohnlee80/golib/graph/layout"
 	"github.com/yongjohnlee80/golib/gui"
 	pm "github.com/yongjohnlee80/golib/parse/mermaid"
@@ -84,8 +85,7 @@ func TestTheGlobeMapsThemeIsTheTerminalsUnlessChosen(t *testing.T) {
 		{"term", "gone", "#000001"}, // one that does not read: the page's
 		{"gone", "terminal", "#000001"},
 	} {
-		p := mapPrefs(map[string]string{prefGlobeTheme: c.globe})
-		p.termTheme = c.term
+		p := mapPrefs{prefGlobeTheme: c.globe, feature.PrefTermTheme: c.term}
 		v, ok := globeThemeValues(p, ts)
 		if !ok || v["document.base"] != c.want {
 			t.Errorf("terminals %q, GlobeMap %q: %v %v; want %s", c.term, c.globe, v, ok, c.want)
