@@ -71,9 +71,8 @@ func TestTheShellsOnWindows(t *testing.T) {
 }
 
 // An agent CLI is often a batch file (npm's .cmd shim), which cmd.exe runs, reading its caller's
-// arguments again through %*: Args still carries a setup's arguments whole to the program behind
-// it, through each shell. (cmd.exe's own reading of %VAR% and of a bare & | < > ^ in an unquoted
-// word is the batch file's, and a setup gives neither.)
+// arguments again through %*: every argument Args accepts (a setup's, and each hostile one Carries
+// accepts) reaches the program behind it whole, through each shell.
 func TestArgsCarryASetupsArgumentsThroughABatchFile(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "o'brien dir")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -85,8 +84,9 @@ func TestArgsCarryASetupsArgumentsThroughABatchFile(t *testing.T) {
 	}
 	for _, s := range shellsHere(t) {
 		t.Run(s.Program, func(t *testing.T) {
-			if got := throughArgs(t, s, shim, setupShaped); !reflect.DeepEqual(got, setupShaped) {
-				t.Errorf("through %s the program was given %q\nwant %q", shim, got, setupShaped)
+			args, _ := carried(s)
+			if got := throughArgs(t, s, shim, args); !reflect.DeepEqual(got, args) {
+				t.Errorf("through %s the program was given %q\nwant %q", shim, got, args)
 			}
 		})
 	}

@@ -2,21 +2,24 @@ package tui
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/internal/usershell"
 )
 
 // agentSetupArgs are arguments as an agent's setup gives them (crew.Setup's Argv): a JSON config
 // with a space inside a value, a quote followed by a space, an apostrophe, a last backslash, none
-// at all, and shell characters inside a quoted word.
+// at all, and characters PowerShell would read outside a quoted word.
 var agentSetupArgs = []string{`{"mcpServers":{"autodoc":{"command":"C:\\Program Files\\autodoc.exe","args":["mcp serve"]}}}`,
-	`say "hi" now`, "it's", `ends\`, "", "a & b"}
+	`say "hi" now`, "it's", `ends\`, "", "!x (a)"}
 
 // agentCommandCase is one way an agent's command reaches its CLI: the environment its shell is
 // chosen in, and the profile command's call of the CLI.
@@ -66,8 +69,14 @@ func TestAnAgentsCommandReachesItsCLIWhole(t *testing.T) {
 		t.Run(c.label, func(t *testing.T) {
 			root := filepath.Join(t.TempDir(), "it's a root")
 			ws := wsInfo{id: 1, name: "kb it's", root: root}
-			prog, args := agentArgv(c.env, fillAgentCommand(c.env, c.call+" {root} {workspace}", ws))
-			args = withCommandArgs(c.env, args, agentSetupArgs)
+			filled, err := fillAgentCommand(c.env, c.call+" {root} {workspace}", ws)
+			if err != nil {
+				t.Fatal(err)
+			}
+			prog, args := agentArgv(c.env, filled)
+			if args, err = withCommandArgs(c.env, args, agentSetupArgs); err != nil {
+				t.Fatal(err)
+			}
 			cmd := exec.Command(prog, args...)
 			cmd.Env = c.env.With(argvPrinterEnv + "=1")
 			out, err := cmd.Output()
@@ -80,6 +89,51 @@ func TestAnAgentsCommandReachesItsCLIWhole(t *testing.T) {
 			}
 			if want := append([]string{root, ws.name}, agentSetupArgs...); !reflect.DeepEqual(got, want) {
 				t.Errorf("the CLI was given %q\nwant %q\n(the line %q)", got, want, args[len(args)-1])
+			}
+		})
+	}
+}
+
+// A value an agent's command can't carry as itself on this OS's shell (usershell.Shell.Carries: on
+// Windows what cmd.exe reads again in a batch file's %*) refuses the command instead of changing
+// it: a {root} holding one fails the fill, a setup's argument holding one fails the arguments. On
+// Unix both reach the CLI.
+func TestAnAgentsCommandRefusesAValueItCannotCarry(t *testing.T) {
+	for _, c := range agentCommandCases(t) {
+		t.Run(c.label, func(t *testing.T) {
+			refused := runtime.GOOS == "windows" // stated here, not asked of Carries, so a Carries that refuses nothing fails
+			ws := wsInfo{id: 1, name: "kb", root: filepath.Join(t.TempDir(), "50% & more")}
+			_, err := fillAgentCommand(c.env, c.call+" {root}", ws)
+			if refused != (err != nil) || (err != nil && !errors.Is(err, usershell.ErrNotCarried)) {
+				t.Errorf("a root holding %% and &: %v; want refused %v", err, refused)
+			}
+			// a setup's argument naming a path with a variable's name in it, the variable set, and one
+			// across two lines: each is refused before anything runs, not expanded or cut at the break
+			env := c.env.With("AUTODOC_CELL_VAR=expanded")
+			prog, args := agentArgv(env, c.call)
+			for _, arg := range []string{
+				`{"mcpServers":{"autodoc":{"command":"C:\\tools\\%AUTODOC_CELL_VAR%\\autodoc.exe"}}}`,
+				"two\nlines",
+				`{"k":"50% & more"}`,
+			} {
+				_, err = withCommandArgs(env, args, []string{"--settings", arg})
+				if refused != (err != nil) || (err != nil && !errors.Is(err, usershell.ErrNotCarried)) {
+					t.Errorf("%s: the setup argument %q: %v; want refused %v", prog, arg, err, refused)
+				}
+			}
+			if !refused { // where nothing is refused, each reaches the CLI as itself
+				carried := []string{`{"command":"C:\\tools\\%AUTODOC_CELL_VAR%\\autodoc.exe"}`, "two\nlines"}
+				full, err := withCommandArgs(env, args, carried)
+				if err != nil {
+					t.Fatal(err)
+				}
+				cmd := exec.Command(prog, full...)
+				cmd.Env = env.With(argvPrinterEnv + "=1")
+				out, err := cmd.Output()
+				var got []string
+				if err != nil || json.Unmarshal(out, &got) != nil || !reflect.DeepEqual(got, carried) {
+					t.Errorf("the CLI was given %q (%v, %s); want %q", got, err, out, carried)
+				}
 			}
 		})
 	}
