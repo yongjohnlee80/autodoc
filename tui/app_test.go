@@ -31,6 +31,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/follow"
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/module"
+	"github.com/yongjohnlee80/autodoc/core/paths"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/todo"
@@ -73,6 +74,17 @@ type daemon struct {
 func fakeRoot(ws string) string {
 	return filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), ws)
 }
+
+// taskFile is a slash path from a root (/kb/.todo-list/open/t1.md) as an absolute path on this OS:
+// itself on Unix; on Windows from the temporary folder's drive (C:\kb\.todo-list\open\t1.md), as a
+// task's file is, where /kb/... is not absolute.
+func taskFile(p string) string {
+	return filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), filepath.FromSlash(p))
+}
+
+// slashFile is taskFile's path in the slash form, the daemon's for a store or a root, its volume
+// kept: itself on Unix, C:/kb/.todo-list on Windows.
+func slashFile(p string) string { return paths.Slash(taskFile(p)) }
 
 // startDaemon serves the workspaces named (each with its files, path then content). A name ending
 // in "!" is served on a filesystem whose writes land and then fail (Committed).
@@ -313,9 +325,9 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	}
 	d.todoDisk = todotest.NewDisk()
 	roots := todotest.Roots{}
-	for _, w := range served {
-		roots[w.Name()] = w.Root()
-		d.todoDisk.MkdirAll(w.Root())
+	for _, w := range served { // the store's root as core/todo opens it: the slash form, its volume kept
+		roots[w.Name()] = paths.Slash(w.Root())
+		d.todoDisk.MkdirAll(paths.Slash(w.Root()))
 	}
 	d.todos = todo.New(roots, d.todoDisk, todotest.NewJournal())
 	opts = append(opts, rpc.WithModules(d.todos))

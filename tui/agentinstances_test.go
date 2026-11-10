@@ -288,7 +288,7 @@ func TestAgentInstancesRunTogetherAndRefsDoNotFollowRestarts(t *testing.T) {
 		t.Fatal(err)
 	}
 	callbacks := 0
-	err = a.HandTask(old, feature.TaskRef{Title: "task", Path: "/tasks/task.md"}, "work", func(error) { callbacks++ })
+	err = a.HandTask(old, feature.TaskRef{Title: "task", Path: taskFile("/tasks/task.md")}, "work", func(error) { callbacks++ })
 	if !errors.Is(err, ErrAgentStale) || callbacks != 0 || len(c.posts) != 0 {
 		t.Fatal("stale ref was accepted or completed")
 	}
@@ -304,7 +304,7 @@ func TestHandTaskAcceptedDeliverySnapshotsAndCompletesOnce(t *testing.T) {
 	c.opened = nil                                              // the start opened the panel: what the delivery opens is counted from here
 	a.promptsReported = func(string, bool) bool { return true } // a CLI that reports its prompts: the base sends
 	done := 0
-	task := feature.TaskRef{Title: "original", Path: "/tasks/one.md", ID: "one"}
+	task := feature.TaskRef{Title: "original", Path: taskFile("/tasks/one.md"), ID: "one"}
 	if err := a.HandTask(feature.AgentRef{Codename: "one"}, task, "inspect", func(err error) {
 		if err != nil {
 			t.Error(err)
@@ -319,7 +319,7 @@ func TestHandTaskAcceptedDeliverySnapshotsAndCompletesOnce(t *testing.T) {
 	}
 	c.drainPosts()
 	tab := string(instance.tab)
-	if done != 0 || !slices.Equal(c.panel.pastes, []string{tab + ":[bracketed]Task: original\nFile: /tasks/one.md\nID: one\nInstruction: inspect"}) {
+	if done != 0 || !slices.Equal(c.panel.pastes, []string{tab + ":[bracketed]Task: original\nFile: " + taskFile("/tasks/one.md") + "\nID: one\nInstruction: inspect"}) {
 		t.Fatalf("the task goes as one bracketed paste, done waiting for its Enter: done=%d pastes=%q", done, c.panel.pastes)
 	}
 	// the Enter that sends it follows the paste after submitDelay (agentmessaging.go), never with it,
@@ -348,7 +348,7 @@ func TestHandTaskStoppedConsentRevalidatesAndNeverSendsAfterCancellation(t *test
 			a.promptsReported = func(string, bool) bool { return true } // delivered is sent: the base presses Enter
 			done := 0
 			var outcome error
-			if err := a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "task", Path: "/tasks/task.md"}, "work", func(err error) { done++; outcome = err }); err != nil {
+			if err := a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "task", Path: taskFile("/tasks/task.md")}, "work", func(err error) { done++; outcome = err }); err != nil {
 				t.Fatal(err)
 			}
 			if len(c.questions) != 1 || len(a.instances) != 0 {
@@ -399,7 +399,7 @@ func TestHandTaskQueuedTargetReplacementAndSendFailureAreCompletionErrors(t *tes
 			}
 			var outcome error
 			calls := 0
-			if err := a.HandTask(feature.AgentRef{Codename: "one", Instance: instance.token}, feature.TaskRef{Title: "task", Path: "/task.md"}, "work", func(err error) { outcome = err; calls++ }); err != nil {
+			if err := a.HandTask(feature.AgentRef{Codename: "one", Instance: instance.token}, feature.TaskRef{Title: "task", Path: taskFile("/task.md")}, "work", func(err error) { outcome = err; calls++ }); err != nil {
 				t.Fatal(err)
 			}
 			if failure == "replacement" {
@@ -426,7 +426,7 @@ func TestHandTaskWaitsForAStartedAgentToTakeBracketedPastes(t *testing.T) {
 	c.panel = &modelPanel{owner: c, unbracketed: 3}
 	calls := 0
 	var outcome error
-	if err := a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "task", Path: "/task.md"}, "work", func(err error) { calls++; outcome = err }); err != nil {
+	if err := a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "task", Path: taskFile("/task.md")}, "work", func(err error) { calls++; outcome = err }); err != nil {
 		t.Fatal(err)
 	}
 	c.questions[0].OnYes()
@@ -463,7 +463,7 @@ func TestHandTaskToAnUnbracketedProgramSendsNothing(t *testing.T) {
 			}
 			calls := 0
 			var outcome error
-			if err := a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "task", Path: "/task.md"}, "work", func(err error) { calls++; outcome = err }); err != nil {
+			if err := a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "task", Path: taskFile("/task.md")}, "work", func(err error) { calls++; outcome = err }); err != nil {
 				t.Fatal(err)
 			}
 			if target == "started" {
@@ -496,7 +496,7 @@ func TestHandTaskIsCheckedAgainInTheWait(t *testing.T) {
 			c.panel = &modelPanel{owner: c, unbracketed: -1}
 			calls := 0
 			var outcome error
-			if err := a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "task", Path: "/task.md"}, "work", func(err error) { calls++; outcome = err }); err != nil {
+			if err := a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "task", Path: taskFile("/task.md")}, "work", func(err error) { calls++; outcome = err }); err != nil {
 				t.Fatal(err)
 			}
 			c.questions[0].OnYes()
@@ -577,7 +577,7 @@ func TestStoppedAgentDoesNotRelabelItsOldWorkspaceConfiguration(t *testing.T) {
 	c.epoch++
 	done := 0
 	var outcome error
-	if err := a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "other task", Path: "/other/task.md"}, "work", func(err error) { done++; outcome = err }); err != nil {
+	if err := a.HandTask(feature.AgentRef{Codename: "one"}, feature.TaskRef{Title: "other task", Path: taskFile("/other/task.md")}, "work", func(err error) { done++; outcome = err }); err != nil {
 		t.Fatal(err)
 	}
 	c.questions[len(c.questions)-1].OnYes()
@@ -600,7 +600,7 @@ func TestParentRebuildRetiresOldRefsAndCreatesCurrentOwnerInstances(t *testing.T
 	oldOwner := c.panel
 	done := 0
 	var outcome error
-	if err := a.HandTask(oldRef, feature.TaskRef{Title: "queued", Path: "/task.md"}, "work", func(err error) { done++; outcome = err }); err != nil {
+	if err := a.HandTask(oldRef, feature.TaskRef{Title: "queued", Path: taskFile("/task.md")}, "work", func(err error) { done++; outcome = err }); err != nil {
 		t.Fatal(err)
 	}
 	c.panel = &modelPanel{owner: c, next: 100}
@@ -609,7 +609,7 @@ func TestParentRebuildRetiresOldRefsAndCreatesCurrentOwnerInstances(t *testing.T
 		t.Fatal("queued old-parent request sent or lost completion")
 	}
 	callbacks := 0
-	if err := a.HandTask(oldRef, feature.TaskRef{Title: "stale", Path: "/task.md"}, "work", func(error) { callbacks++ }); !errors.Is(err, ErrAgentStale) || callbacks != 0 {
+	if err := a.HandTask(oldRef, feature.TaskRef{Title: "stale", Path: taskFile("/task.md")}, "work", func(error) { callbacks++ }); !errors.Is(err, ErrAgentStale) || callbacks != 0 {
 		t.Fatal("old ref survived parent retirement")
 	}
 	fresh, err := a.startInstance(p)

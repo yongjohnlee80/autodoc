@@ -158,8 +158,8 @@ func TestTodosAReadOnlyStoreTakesNoKeyAsAnError(t *testing.T) {
 
 	n := len(s.Calls)
 	v.folderAs = "new"
-	v.folderChosen("/n")
-	if s.Called("todos.scaffold") || len(s.Notes) != 1 || s.Notes[0] != "todos: /n is loaded, read-only: its store was released (todos.release)" ||
+	v.folderChosen(taskFile("/n"))
+	if s.Called("todos.scaffold") || len(s.Notes) != 1 || s.Notes[0] != "todos: "+taskFile("/n")+" is loaded, read-only: its store was released (todos.release)" ||
 		!slices.Contains(s.Calls[n:], "todos.stores[]") {
 		t.Errorf("New… on a folder whose store was released: calls %v, notes %q", s.Calls[n:], s.Notes)
 	}
@@ -175,7 +175,7 @@ func TestTodosEnterOnTheCardOfKeysOpensTheRow(t *testing.T) {
 	if err := v.Commands()["App.todoEnter"].Handler("App.todoEnter")(nil); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(s.OpenedFiles, []string{"/kb/.todo-list/open/t1.md"}) {
+	if !slices.Equal(s.OpenedFiles, []string{taskFile("/kb/.todo-list/open/t1.md")}) {
 		t.Errorf("Enter on a task: files %v", s.OpenedFiles)
 	}
 	s.ViewErr = errors.New("the panel is gone")
