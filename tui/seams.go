@@ -5,9 +5,13 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/core/crew"
 	regindex "github.com/yongjohnlee80/autodoc/core/registry"
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/internal/usershell"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/golib/tui/pty"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // seams are the program's waits, addresses, limits and test hooks: the values a test sets for its
@@ -55,6 +59,14 @@ type seams struct {
 	// lookAgentCLI, when a test sets it, is how the agent setup's card finds the CLIs; nil is on the
 	// program's PATH (env).
 	lookAgentCLI func(string) (string, error)
+	// The agents' hooks a test sets (agentSeams: SetupRun, Spawn, CommandCheck, CodexHere,
+	// PromptsReported, AgentBin), each nil or "" for the program's own.
+	agentSetupRun        func(kind, dir string, environ []string) (crew.Setup, error)
+	agentSpawn           func(pty.Cmd) (terminal.TerminalProcess, error)
+	agentCommandCheck    func(shell usershell.Shell, command string, env []string) error
+	agentCodexHere       func(environ []string, args ...string) error
+	agentPromptsReported func(kind string, reported bool) bool
+	agentBin             string
 
 	// installFS is swapIn's renames and removal; a test makes each fail in turn. Read off the loop.
 	installFS installFS
@@ -129,7 +141,8 @@ var defaultSeams = seams{
 	resultsCopyCap:   16 << 20,
 }
 
-// Env, ServerReady, OfferAgentSetup, LookAgentCLI and VimQuestionPending are the agents' seams
+// Env, ServerReady, OfferAgentSetup, LookAgentCLI, VimQuestionPending and the agents' hooks
+// (SetupRun, Spawn, CommandCheck, CodexHere, PromptsReported, AgentBin) are the agents' seams
 // (agent.go agentSeams), read when used.
 func (s *seams) Env() procenv.Env                           { return s.env }
 func (s *seams) ServerReady() time.Duration                 { return s.serverReady }
@@ -138,3 +151,16 @@ func (s *seams) LookAgentCLI() func(string) (string, error) { return s.lookAgent
 func (s *seams) VimQuestionPending(p feature.PrefsView) bool {
 	return vimQuestionPending(s, p)
 }
+
+func (s *seams) SetupRun() func(kind, dir string, environ []string) (crew.Setup, error) {
+	return s.agentSetupRun
+}
+func (s *seams) Spawn() func(pty.Cmd) (terminal.TerminalProcess, error) { return s.agentSpawn }
+func (s *seams) CommandCheck() func(shell usershell.Shell, command string, env []string) error {
+	return s.agentCommandCheck
+}
+func (s *seams) CodexHere() func(environ []string, args ...string) error { return s.agentCodexHere }
+func (s *seams) PromptsReported() func(kind string, reported bool) bool {
+	return s.agentPromptsReported
+}
+func (s *seams) AgentBin() string { return s.agentBin }

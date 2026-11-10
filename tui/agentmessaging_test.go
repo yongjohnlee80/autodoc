@@ -21,10 +21,10 @@ func messagingRig(t *testing.T) (*agents, *identityHostCopy, *crewWindow) {
 	t.Helper()
 	a, c, w := crewAgents(t, oneTwoCopy)
 	p, _ := a.profile("one")
-	if instance, err := a.startInstance(p); err != nil || !instance.running {
+	if instance, err := a.startInstance(p); err != nil || !instance.State().Running {
 		t.Fatalf("start: %v", err)
 	}
-	a.promptsReported = func(string, bool) bool { return true }
+	seamsOf(a).agentPromptsReported = func(string, bool) bool { return true }
 	return a, c, w
 }
 
@@ -76,7 +76,7 @@ func TestAMessageRingsTheAgentsDoorbell(t *testing.T) {
 // doorbell yet, so it is never rung (S1: the doorbell runs inside the one delivery).
 func TestAStartedAgentIsNotRung(t *testing.T) {
 	a, c, w := crewAgents(t, oneTwoCopy)
-	a.promptsReported = func(string, bool) bool { return true }
+	seamsOf(a).agentPromptsReported = func(string, bool) bool { return true }
 	rang := false
 	w.inboxSend = func([]any) (any, error) { rang = true; return map[string]any{"message": "m"}, nil }
 	if err := a.SendText(feature.AgentRef{Codename: "two"}, "hi", func(error) {}); err != nil {
@@ -118,7 +118,7 @@ func TestTheEnterAsksTheCrewWhetherPromptsAreReported(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			a, cw, w := messagingRig(t)
-			a.promptsReported = nil // the crew's answer decides
+			seamsOf(a).agentPromptsReported = nil // the crew's answer decides
 			scope := scopeOf(a)
 			w.crewList = func() (any, error) { return c.list(scope), nil }
 			w.inboxSend = func([]any) (any, error) { return nil, &golibrpc.Error{Code: inbox.CodeUnreachable, Message: "x"} }
@@ -242,7 +242,7 @@ func TestAnUnknownDoorbellIsAskedAgainNeverTyped(t *testing.T) {
 // done hears ErrAgentTypedNotSent, with a notice.
 func TestACLIThatDoesntReportPromptsIsTypedNotSent(t *testing.T) {
 	a, c, w := messagingRig(t)
-	a.promptsReported = nil // promptsSeen: one's command is no kind with an adapter
+	seamsOf(a).agentPromptsReported = nil // promptsSeen: one's command is no kind with an adapter
 	w.inboxSend = func([]any) (any, error) { return nil, &golibrpc.Error{Code: inbox.CodeUnreachable, Message: "x"} }
 	var heard []error
 	if err := a.SendText(feature.AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
@@ -282,15 +282,19 @@ func TestNoEnterIsPressedIntoAPrompt(t *testing.T) {
 func TestNoEnterIsPressedIntoADeliveryThatWentStale(t *testing.T) {
 	for _, c := range []struct {
 		name  string
-		stale func(a *agents)
+		stale func(t *testing.T, a *agents)
 	}{
-		{"shut down", func(a *agents) { a.Stopping() }},
-		{"the agent closing", func(a *agents) { a.instances["one"].closing = true }},
+		{"shut down", func(_ *testing.T, a *agents) { a.Stopping() }},
+		{"the agent closing", func(t *testing.T, a *agents) { // its tab removed: closing while the tab retires
+			if err := a.removeInstance("one"); err != nil {
+				t.Error(err)
+			}
+		}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			a, cw, w := messagingRig(t)
 			w.inboxSend = func([]any) (any, error) { return nil, &golibrpc.Error{Code: inbox.CodeUnreachable, Message: "x"} }
-			w.crewList = func() (any, error) { c.stale(a); return []any{}, nil } // stale while the crew answers
+			w.crewList = func() (any, error) { c.stale(t, a); return []any{}, nil } // stale while the crew answers
 			var heard []error
 			if err := a.SendText(feature.AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
 				t.Fatal(err)

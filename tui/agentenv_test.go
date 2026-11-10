@@ -20,11 +20,11 @@ func TestAnAgentStartsWithoutItsSpawnersIdentity(t *testing.T) {
 	polluted, kept := pollute(t)
 	dir := t.TempDir()
 	agent, report := filepath.Join(dir, "env-agent"), filepath.Join(dir, "env")
-	script := "#!/bin/sh\nenv > " + shellQuoteCopy(report) + ".part && mv " + shellQuoteCopy(report) + ".part " + shellQuoteCopy(report) + "\nwhile read line; do :; done\n"
+	script := "#!/bin/sh\nenv > " + shellQuote(report) + ".part && mv " + shellQuote(report) + ".part " + shellQuote(report) + "\nwhile read line; do :; done\n"
 	if err := os.WriteFile(agent, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuoteCopy(agent), Codename: "heron"}}, "heron")
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	env := envReported(t, r, report)
 	wantOwnEnv(t, "the agent", env, polluted, kept)
@@ -41,11 +41,11 @@ func TestAProfileKeepsWhatItSetsItself(t *testing.T) {
 	pollute(t)
 	dir := t.TempDir()
 	agent, report := filepath.Join(dir, "env-agent"), filepath.Join(dir, "env")
-	script := "#!/bin/sh\nenv > " + shellQuoteCopy(report) + ".part && mv " + shellQuoteCopy(report) + ".part " + shellQuoteCopy(report) + "\nwhile read line; do :; done\n"
+	script := "#!/bin/sh\nenv > " + shellQuote(report) + ".part && mv " + shellQuote(report) + ".part " + shellQuote(report) + "\nwhile read line; do :; done\n"
 	if err := os.WriteFile(agent, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	command := "ENABLE_IDE_INTEGRATION=false " + shellQuoteCopy(agent)
+	command := "ENABLE_IDE_INTEGRATION=false " + shellQuote(agent)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: command, Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	env := envReported(t, r, report)
@@ -63,7 +63,7 @@ func TestAProfilesEnvReachesItsAgent(t *testing.T) {
 	pollute(t)
 	dir := t.TempDir()
 	agent, report := filepath.Join(dir, "env-agent"), filepath.Join(dir, "env")
-	script := "#!/bin/sh\nenv > " + shellQuoteCopy(report) + ".part && mv " + shellQuoteCopy(report) + ".part " + shellQuoteCopy(report) + "\nwhile read line; do :; done\n"
+	script := "#!/bin/sh\nenv > " + shellQuote(report) + ".part && mv " + shellQuote(report) + ".part " + shellQuote(report) + "\nwhile read line; do :; done\n"
 	if err := os.WriteFile(agent, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestAProfilesEnvReachesItsAgent(t *testing.T) {
 		"AUTODOC_ROOT":      "/not/autodocs", // AutoDoc's own, which a profile never sets
 		"PATH":              extra + ":$PATH",
 	}
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuoteCopy(agent), Codename: "heron", Env: env}}, "heron")
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron", Env: env}}, "heron")
 	own := onLoop(r, func() procenv.Env { return r.h.seams.env })
 	home, path := own.Get("HOME"), own.Get("PATH") // the program's own (runAgentTUI's), which the spawn expands from
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
@@ -128,7 +128,7 @@ func envReported(t *testing.T, r *running, report string) map[string]string {
 func TestAPluginsBuildRunsWithoutItsSpawnersIdentity(t *testing.T) {
 	polluted, kept := pollute(t)
 	report := filepath.Join(t.TempDir(), "env")
-	repo := pluginRepo(t, "Echo", "env > "+shellQuoteCopy(report)+".part && mv "+shellQuoteCopy(report)+".part "+shellQuoteCopy(report))
+	repo := pluginRepo(t, "Echo", "env > "+shellQuote(report)+".part && mv "+shellQuote(report)+".part "+shellQuote(report))
 	r, _ := pluginTUI(t, t.TempDir())
 	r.h.p.Post(func() { r.h.plugins.addPlugin("file://" + repo) })
 	r.question(t)
@@ -150,7 +150,7 @@ func TestAPluginsCloneRunsWithoutItsSpawnersIdentity(t *testing.T) {
 	repo := pluginRepo(t, "Echo", "true") // made with the real git, before the wrapper is on PATH
 	polluted, kept := pollute(t)
 	bin, report := t.TempDir(), filepath.Join(t.TempDir(), "env")
-	wrapper := "#!/bin/sh\ncase \"$*\" in *clone*) env > " + shellQuoteCopy(report) + ".part && mv " + shellQuoteCopy(report) + ".part " + shellQuoteCopy(report) + " ;; esac\nexec " + shellQuoteCopy(realGit) + " \"$@\"\n"
+	wrapper := "#!/bin/sh\ncase \"$*\" in *clone*) env > " + shellQuote(report) + ".part && mv " + shellQuote(report) + ".part " + shellQuote(report) + " ;; esac\nexec " + shellQuote(realGit) + " \"$@\"\n"
 	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(wrapper), 0o755); err != nil {
 		t.Fatal(err)
 	}
