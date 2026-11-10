@@ -1,6 +1,10 @@
 package tui
 
-import "github.com/yongjohnlee80/autodoc/core/crew"
+import (
+	"context"
+
+	"github.com/yongjohnlee80/autodoc/core/crew"
+)
 
 // THE AGENTS' CREW SCOPE: the crew host and the inbox are what the agents ask of the window's crew
 // (agent.go CrewScope, CrewAttention), through these, each the crew host's or the inbox's own.
@@ -47,3 +51,6 @@ func (h *crewHost) UserSend(codename, kind, subject, body string, then func(erro
 
 // AwaitsUser is whether an agent waits on the user (awaitsUser).
 func (x *crewInbox) AwaitsUser(codename string) bool { return x.awaitsUser(codename) }
+
+// Go runs work off the loop through the crew host's core.
+func (h *crewHost) Go(work func(context.Context) any, then func(any)) { h.c.Go(work, then) }
