@@ -247,6 +247,14 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: scratch (not for merge) the agent identity cells on Windows
+        if: ${{ !inputs.discover }}
+        run: |
+          go test -count=3 -v -run '^(TestDuplicateLabelsEditEachExactProfileAndResolveTargetsByCodename|TestGoneProfileActionsLeaveOtherRunningInstancesAlone)$' ./tui/ > "$RUNNER_TEMP/t.txt" 2>&1 && rt=0 || rt=$?
+          echo "== PASS $(grep -cE '^--- PASS' "$RUNNER_TEMP/t.txt" || true) FAIL $(grep -cE '^--- FAIL' "$RUNNER_TEMP/t.txt" || true)"
+          grep -E '^--- FAIL|_test\.go:[0-9]+:' "$RUNNER_TEMP/t.txt" | cut -c1-300 | head -10 || true
+          echo "== rc=$rt"
+          [ $rt = 0 ]
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
         run: |
