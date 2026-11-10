@@ -198,9 +198,8 @@ func TestServesAndCleansUp(t *testing.T) {
 	dir := short(t)
 	sock := ipc.ScratchAddr(dir, "a.sock")
 	d := start(t, writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+t.TempDir()), sock)
-	fi, err := os.Stat(sock)
-	if err != nil || fi.Mode().Perm() != 0o600 {
-		t.Fatalf("socket %v, %v", fi.Mode(), err)
+	if err := socketIsPrivate(t, sock); err != nil {
+		t.Fatalf("the daemon's endpoint is not private to this user: %v", err)
 	}
 	if got := call(t, dial(t, sock), "workspace.list").([]any); len(got) != 1 || got[0].(map[string]any)["state"] != "ready" {
 		t.Errorf("workspaces %v", got)

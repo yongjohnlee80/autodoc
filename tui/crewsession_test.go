@@ -17,6 +17,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/internal/userperm"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -138,7 +139,7 @@ func startedCmd(a *agents, c *identityHost, instance *agentInstance) (started pt
 
 // TestAnAgentIsRegisteredBeforeItStarts (docs/decisions/crew.md#sessions-and-the-guard,
 // docs/decisions/crew.md#the-session-context): an agent of a window holding a scope starts only
-// once its crew session is registered and its context written (0600) in its folder, which its
+// once its crew session is registered and its context written, private to this user, in its folder, which its
 // process is told; its exit ends the session and removes the context, so no later process reads a
 // dead session's credential, and the codename is free for its next session.
 func TestAnAgentIsRegisteredBeforeItStarts(t *testing.T) {
@@ -154,8 +155,13 @@ func TestAnAgentIsRegisteredBeforeItStarts(t *testing.T) {
 	}
 	dir := c.panel.configs[instance.tab].Dir
 	ctx, fi, ok := readContext(t, dir)
-	if !ok || fi.Mode().Perm() != 0o600 {
-		t.Fatalf("the context: present %v, mode %v; want 0600", ok, fi)
+	if !ok {
+		t.Fatal("the context was not written")
+	}
+	if f, err := userperm.OpenPrivate(crew.ContextPath(dir, fi.Name())); err != nil { // as this OS keeps a file private
+		t.Fatalf("the context is not private to this user: %v", err)
+	} else {
+		_ = f.Close()
 	}
 	if ctx.Session != instance.session.ID || ctx.Scope != scope || ctx.Kind != "one" || ctx.Store != "store-1" ||
 		ctx.Socket != "/run/test/d.sock" || !strings.HasPrefix(ctx.Credential, ctx.Session+".") || ctx.Profile == "" {

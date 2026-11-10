@@ -159,7 +159,7 @@ func (h *crewHost) writeFallbackRecord(id, state string) error {
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return err
 	}
-	return writeAtomic(p, []byte(state), 0o600)
+	return writePrivate(p, []byte(state))
 }
 
 // tookJob is whether this run took job, and so told the user of its outcome itself.

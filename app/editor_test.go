@@ -3,6 +3,8 @@ package app
 import (
 	"bytes"
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +14,8 @@ import (
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
 	"github.com/yongjohnlee80/autodoc/internal/ipc"
+	"github.com/yongjohnlee80/autodoc/internal/userperm"
+	"github.com/yongjohnlee80/autodoc/internal/userperm/userpermtest"
 	"github.com/yongjohnlee80/autodoc/tui"
 )
 
@@ -68,17 +72,22 @@ func TestEditorReadsTheTokenFromItsFileWhenTheVariableIsDropped(t *testing.T) {
 	defer cancel()
 	go func() { _ = srv.Run(ctx) }()
 	dir := t.TempDir()
-	write := func(name, body string, mode os.FileMode) string {
+	// write makes a token file private to this user, as this OS makes one (internal/userperm)
+	write := func(name, body string) string {
 		p := filepath.Join(dir, name)
-		if err := os.WriteFile(p, []byte(body), mode); err != nil {
+		f, err := userperm.CreatePrivate(p)
+		if err != nil {
 			t.Fatal(err)
 		}
-		if err := os.Chmod(p, mode); err != nil {
+		if _, err := f.WriteString(body); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.Close(); err != nil {
 			t.Fatal(err)
 		}
 		return p
 	}
-	good := write("good", "tok-from-file\n", 0o600)
+	good := write("good", "tok-from-file\n")
 	envOf := func(vars map[string]string) func(string) string { return func(k string) string { return vars[k] } }
 	var out bytes.Buffer
 	if err := runEditor(ctx, "editor.echo", `[1]`, envOf(map[string]string{"AUTODOC_EDITOR": sock, tui.EnvEditorCredentialFile: good}), &out); err != nil {
@@ -96,16 +105,23 @@ func TestEditorReadsTheTokenFromItsFileWhenTheVariableIsDropped(t *testing.T) {
 	if err := os.Symlink(good, link); err != nil {
 		t.Fatal(err)
 	}
-	for _, c := range []struct{ path, why string }{
-		{write("open", "tok", 0o644), "make it 0600"},
-		{link, "symbolic link"},
-		{write("empty", "", 0o600), "not a token"},
-		{filepath.Join(dir, "missing"), "no such file"},
+	exposed := write("open", "tok")
+	userpermtest.Expose(t, exposed) // readable by others, as this OS says it
+	for _, c := range []struct {
+		path string
+		is   error  // the refusal's error, when it has one
+		why  string // else what it says
+	}{
+		{exposed, userperm.ErrExposed, ""},
+		{link, userperm.ErrExposed, ""},
+		{write("empty", ""), nil, "not a token"},
+		{filepath.Join(dir, "missing"), fs.ErrNotExist, ""},
 	} {
 		out.Reset()
 		err := runEditor(ctx, "editor.echo", "", envOf(map[string]string{"AUTODOC_EDITOR": sock, tui.EnvEditorCredentialFile: c.path}), &out)
-		if err == nil || !strings.Contains(err.Error(), c.why) || out.Len() != 0 {
-			t.Errorf("the token file %s: %v (sent %q), want refused: %s", filepath.Base(c.path), err, out.String(), c.why)
+		refused := err != nil && (c.is != nil && errors.Is(err, c.is) || c.is == nil && strings.Contains(err.Error(), c.why))
+		if !refused || out.Len() != 0 {
+			t.Errorf("the token file %s: %v (sent %q), want refused: %v%s", filepath.Base(c.path), err, out.String(), c.is, c.why)
 		}
 	}
 }
