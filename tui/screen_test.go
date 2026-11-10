@@ -617,7 +617,7 @@ func TestTheProviderForm(t *testing.T) {
 		return strings.Contains(sc, "nomic-embed-text") && !strings.Contains(sc, "nomic-embed-text, say")
 	})
 	r.s.WaitForText(t, "model max 4096")
-	r.h.p.Post(func() { r.h.ai.providers.save("cloud", ollama.URL, "nomic-embed-text", "", "8192") })
+	r.app(t, "App.saveProvider", str("cloud"), str(ollama.URL), str("nomic-embed-text"), str(""), str("8192"))
 	r.s.WaitForText(t, "exceeds this model's maximum of 4096")
 	r.keys(t, key('s'))
 	r.s.WaitForText(t, "saved the provider cloud")
@@ -635,7 +635,7 @@ func TestTheProviderForm(t *testing.T) {
 	r.s.WaitFor(t, "cloud listed, its key sealed", func(string) bool {
 		return onLoop(r, func() bool { p, ok := r.h.ai.providers.at(0); return ok && p.name == "cloud" && p.hasKey })
 	})
-	r.h.p.Post(func() { r.h.ai.providers.startEdit(0) })
+	r.app(t, "App.startEditProvider", num(0))
 	r.s.WaitForText(t, "API key (sealed; leave empty to keep it)")
 	r.keys(t, tab(), enter()) // the kind
 	r.s.WaitForText(t, "OpenAI-compatible")
@@ -648,7 +648,7 @@ func TestTheProviderForm(t *testing.T) {
 	r.s.WaitFor(t, "Ollama Cloud again", func(sc string) bool {
 		return strings.Contains(sc, "Ollama Cloud") && !strings.Contains(sc, "OpenAI-compatible")
 	})
-	r.h.p.Post(func() { r.h.ai.providers.listModels(ollama.URL, "") })
+	r.app(t, "App.listProviderModels", str(ollama.URL), str(""))
 	r.s.WaitForText(t, "2 models")
 	mu.Lock()
 	last := auth[len(auth)-1]
@@ -657,7 +657,7 @@ func TestTheProviderForm(t *testing.T) {
 		t.Errorf("an edited provider's models were asked for with %q, not its stored key", last)
 	}
 	// a context window that is not a number is refused in the form, the store unchanged
-	r.h.p.Post(func() { r.h.ai.providers.save("cloud", ollama.URL, "nomic-embed-text", "", "lots") })
+	r.app(t, "App.saveProvider", str("cloud"), str(ollama.URL), str("nomic-embed-text"), str(""), str("lots"))
 	r.s.WaitForText(t, "the context window is a number of tokens")
 	if info, _, err := d.db.ProviderWithKey(context.Background(), "cloud"); err != nil || info.Context != 4096 {
 		t.Errorf("after the refused window: %+v, %v", info, err)
@@ -1038,7 +1038,7 @@ func TestAProviderInUse(t *testing.T) {
 	// its calls, metered and written every flushEvery (2s) by the daemon, under the list: the
 	// daemon's clock, not a frame's
 	r.waitWithin(t, "local's usage", daemonWait, func() bool {
-		r.h.p.Post(func() { r.h.ai.providers.detail(0) })
+		r.h.p.Post(func() { _ = r.h.reg.Handlers["App.showProvider"]([]qml.SpecValue{num(0)}) })
 		sc := r.s.String()
 		return strings.Contains(sc, "requests ·") && strings.Contains(sc, "latest calls") && strings.Contains(sc, "· ok")
 	})
@@ -1051,7 +1051,7 @@ func TestAProviderInUse(t *testing.T) {
 	}
 	// the file followed, its embedding refused, the call written at the next flush: the daemon's clock
 	r.waitWithin(t, "the refused call", daemonWait, func() bool {
-		r.h.p.Post(func() { r.h.ai.providers.detail(0) })
+		r.h.p.Post(func() { _ = r.h.reg.Handlers["App.showProvider"]([]qml.SpecValue{num(0)}) })
 		text := strings.Join(strings.Fields(strings.ReplaceAll(r.s.String(), "│", " ")), " ") // wrapped: running text
 		return strings.Contains(text, "at the usage limit") && strings.Contains(text, "rate limited")
 	})
@@ -1063,7 +1063,7 @@ func TestAProviderInUse(t *testing.T) {
 	}
 
 	// a provider that does not set up: refused, and local stays in use
-	r.h.p.Post(func() { r.h.ai.providers.use(1) })
+	r.app(t, "App.useProvider", num(1))
 	r.s.WaitFor(t, "missing refused", func(sc string) bool {
 		// the reason, not the model's name in the list, wrapped: read as running text
 		text := strings.Join(strings.Fields(strings.ReplaceAll(sc, "│", " ")), " ")
@@ -1774,16 +1774,18 @@ func TestRemovingAProviderSaysWhatItDeletes(t *testing.T) {
 	// ask opens the removal's question for name, once the list holds listed too
 	ask := func(name, listed string) {
 		t.Helper()
-		onLoop(r, func() bool { r.h.ai.providers.load(); return true })
+		onLoop(r, func() bool { r.h.ai.reloadProviders(); return true })
 		r.s.WaitFor(t, "the providers listed", func(string) bool {
 			return onLoop(r, func() bool {
 				return slices.ContainsFunc(r.h.ai.providers.rows.All(), func(p endpointRow) bool { return p.name == listed })
 			})
 		})
-		onLoop(r, func() bool {
-			r.h.ai.providers.startRemove(slices.IndexFunc(r.h.ai.providers.rows.All(), func(p endpointRow) bool { return p.name == name }))
-			return true
-		})
+		if err := onLoop(r, func() error { // the row and its removal in one turn, as a click is
+			i := slices.IndexFunc(r.h.ai.providers.rows.All(), func(p endpointRow) bool { return p.name == name })
+			return r.h.reg.Handlers["App.startRemoveProvider"]([]qml.SpecValue{num(i)})
+		}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	question := func() string {
 		return onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.askText"); return v.Raw })

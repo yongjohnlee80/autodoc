@@ -148,3 +148,7 @@ func (a *aiModels) reranked() {
 		a.rankers.load()
 	}
 }
+
+// reloadProviders lists the embedding providers again: the one in use changed outside the dialog
+// (a switch cancelled, the embedding stopped).
+func (a *aiModels) reloadProviders() { a.providers.load() }
