@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -117,20 +118,24 @@ func tildePath(env procenv.Env, path string) string {
 	if err != nil || home == "" {
 		return path
 	}
-	// compared in the slash form, the daemon's for a store's path, whichever form either is in
-	p, h := paths.Slash(path), paths.Slash(home)
-	if p == h || strings.HasPrefix(p, strings.TrimSuffix(h, "/")+"/") {
-		return "~" + strings.TrimPrefix(p, h)
+	// compared in the slash form, the daemon's for a store's path, whichever form either is in, and
+	// by whole segments under a volume's root too (a home at / or C:/)
+	switch rel, ok := paths.Rel(paths.Slash(home), paths.Slash(path)); {
+	case !ok:
+		return path
+	case rel == ".":
+		return "~"
+	default:
+		return "~/" + rel
 	}
-	return path
 }
 
 // storeRoot is the project root of a store directory: the folder holding its .todo-list.
-func storeRoot(path string) string {
-	if dir, ok := strings.CutSuffix(path, "/.todo-list"); ok { // the daemon's slash form, its volume kept
-		return dir
+func storeRoot(p string) string {
+	if path.Base(p) == ".todo-list" { // the daemon's slash form: a volume's root stays one (/, C:/)
+		return paths.Dir(p)
 	}
-	return path
+	return p
 }
 
 // todos is the feature.
@@ -1191,18 +1196,33 @@ func (t *todos) folderChosen(dir string) {
 	if filepath.Base(dir) == ".todo-list" {
 		dir = filepath.Dir(dir) // the store itself was chosen: its project is the root
 	}
-	// the daemon's form, the slash form with its volume kept: a store's id from todos.stores is
-	// "root:" and its root in that form, so the folder just chosen is found among them
-	root := paths.Slash(dir)
+	root := paths.Slash(dir) // the daemon's form, the slash form with its volume kept
 	at := map[string]any{"root": root}
+	// the store the daemon resolves for the folder: its canonical root (another spelling of the same
+	// folder, a link, a short name or another case, is the one store), which todos.stores lists the
+	// store under, so it is found among them and shown; resolving it also records a store never
+	// listed before
+	resolved := func(v any) (string, map[string]any) {
+		if r := feature.Str(feature.AsMap(v), "root"); r != "" {
+			return r, map[string]any{"root": r}
+		}
+		return root, at
+	}
 	switch t.folderAs {
 	case "load":
-		t.call("todos.register", []any{root}, nil, func(any) { t.want = "root:" + root; t.list() })
+		t.call("todos.register", []any{root}, nil, func(any) {
+			t.call("todos.resolve", []any{at}, nil, func(v any) {
+				canon, _ := resolved(v)
+				t.want = "root:" + canon
+				t.list()
+			})
+		})
 	case "new":
 		t.call("todos.register", []any{root}, nil, func(any) {
 			t.call("todos.resolve", []any{at}, nil, func(v any) {
-				t.want = "root:" + root
-				s := &todoStore{id: "root:" + root, at: at, name: storeName(dir), released: feature.AsMap(v)["released"] == true}
+				canon, at := resolved(v)
+				t.want = "root:" + canon
+				s := &todoStore{id: "root:" + canon, at: at, name: storeName(dir), released: feature.AsMap(v)["released"] == true}
 				if t.readOnly(s) { // the folder is loaded; a store released there takes no new buckets
 					t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_is_loaded_read_only_its_store_was_released", tildePath(t.c.Env(), dir)))
 					t.list()
