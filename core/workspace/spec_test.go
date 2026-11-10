@@ -45,3 +45,31 @@ func TestNormalize(t *testing.T) {
 		}
 	}
 }
+
+// ValidName is Normalize's name rule alone: for every name it accepts or refuses exactly what
+// Normalize does with a root this OS calls absolute, with the same error, and it needs no root,
+// so a rename's check answers the same on every OS.
+func TestValidNameIsNormalizesNameRule(t *testing.T) {
+	root := t.TempDir()
+	for _, c := range []struct {
+		name string
+		ok   bool
+	}{
+		{"kb", true}, {"my notes", true}, {"a.b", true}, {"...", true}, {"C:", true}, {"ü", true},
+		{"", false}, {".", false}, {"..", false},
+		{"a/b", false}, {`a\b`, false}, {"/", false}, {`\`, false}, {"/kb", false}, {`C:\kb`, false},
+		{" kb", false}, {"kb ", false}, {"\tkb", false}, {"kb\n", false},
+	} {
+		got := workspace.ValidName(c.name)
+		if (got == nil) != c.ok {
+			t.Errorf("ValidName(%q) = %v, want ok=%v", c.name, got, c.ok)
+		}
+		if got != nil && !errors.Is(got, workspace.ErrInvalidSpec) {
+			t.Errorf("ValidName(%q) = %v, want ErrInvalidSpec", c.name, got)
+		}
+		_, norm := workspace.Normalize(workspace.Spec{Name: c.name, Root: root})
+		if (got == nil) != (norm == nil) || got != nil && got.Error() != norm.Error() {
+			t.Errorf("name %q: ValidName says %v, Normalize says %v", c.name, got, norm)
+		}
+	}
+}
