@@ -570,7 +570,7 @@ func TestTheChartNoticeIsInTheUIsLanguage(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s is not in the Korean catalog", id)
 		}
-		return fill(text, args...)
+		return feature.Fill(text, args...)
 	}
 	why := errors.New("unsupported: vegalite: a spec outside the subset drawn: a rule coloured by a field")
 	for _, c := range []struct {
