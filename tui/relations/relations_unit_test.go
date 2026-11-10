@@ -3,11 +3,13 @@ package relations
 import (
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/autodoc/tui/feature/featuretest"
+	"github.com/yongjohnlee80/golib/parse/qml"
 )
 
 // scriptedGraph answers the graph verbs: a.md links to b.md, c.md links back to it, and at depth 2
@@ -282,5 +284,30 @@ func TestReadingTheLinksAgainKeepsTheCursorsRow(t *testing.T) {
 	}()
 	if got != [4]int{1, 2, 1, 1} {
 		t.Fatalf("the cursor's rows: first %d, read again %d, x.md moved up %d, another document's %d; want 1, 2, 1, 1", got[0], got[1], got[2], got[3])
+	}
+}
+
+// The drawer's cursor is the row its view says it moved to (App.relationsMoved): find starts from
+// it, and the drawer reports it. A row the view moves back to is the cursor's again.
+func TestTheLinksDrawersCursorIsTheRowTheViewMovedTo(t *testing.T) {
+	c := newScripted("kb")
+	scriptedGraph(c)
+	r := NewRelated(c)
+	r.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}})
+	rows := r.Snapshot().Rows
+	if len(rows) < 4 || r.Snapshot().At != 1 {
+		t.Fatalf("fixture: rows %q, the cursor on %d; want 4 rows or more, the cursor on the first document (1)", rows, r.Snapshot().At)
+	}
+	moved := r.Commands()["App.relationsMoved"]
+	for _, row := range []int{3, 0} {
+		if err := moved.Run([]qml.SpecValue{{Kind: qml.SpecValueNumber, Raw: strconv.Itoa(row)}}); err != nil {
+			t.Fatal(err)
+		}
+		if at := r.Snapshot().At; at != row {
+			t.Fatalf("the view moved to row %d; the drawer's cursor is on %d", row, at)
+		}
+		if _, from, _ := r.FindPane().Rows(); from != row {
+			t.Fatalf("the view moved to row %d; find starts from row %d", row, from)
+		}
 	}
 }
