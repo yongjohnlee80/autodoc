@@ -21,7 +21,7 @@ func startedEnvCopy(a *agents, c *identityHostCopy, instance *agentInstance) (en
 // is a fake terminal, never nil: a Codex agent's server is bound to it, and closes it when it
 // ends (as the cell's cleanup ends it).
 func startedCmdCopy(a *agents, c *identityHostCopy, instance *agentInstance) (started pty.Cmd, spawned bool, err error) {
-	cfg := c.panel.configs[instance.tab]
+	cfg := c.panel.configs[instance.State().Tab]
 	spawn := seamsOf(a).agentSpawn
 	defer func() { seamsOf(a).agentSpawn = spawn }()
 	seamsOf(a).agentSpawn = func(cmd pty.Cmd) (terminal.TerminalProcess, error) {

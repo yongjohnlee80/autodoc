@@ -55,14 +55,15 @@ func runAgentTUIIn(t *testing.T, dir string, profiles []agentProfile, def string
 	maps.Copy(prefs, more)
 	d = startDaemonWith(t, "", files, daemonOpts{prefs: prefs})
 	opt.AgentDir, opt.ConfigPath = dir, agentConfig
+	// the program's seams, set as it is made: its agents call the build bin, and the test agents'
+	// CLIs stand for ones whose adapter reports permission prompts, so the messaging base sends what
+	// it types (agentmessaging.go); a kind without one is agentmessaging_test.go's
+	if opt.seams == nil {
+		opt.seams = seamsWithEnv(t, nil)
+	}
+	opt.seams.agentBin = bin
+	opt.seams.agentPromptsReported = func(string, bool) bool { return true }
 	r = runTUI(t, NewSession(d.sock, nil), opt)
-	onLoop(r, func() bool { seamsOf(r.h.agents).agentBin = bin; return true })
-	// the test agents' CLIs stand for ones whose adapter reports permission prompts, so the messaging
-	// base sends what it types (agentmessaging.go); a kind without one is agentmessaging_test.go's
-	onLoop(r, func() bool {
-		seamsOf(r.h.agents).agentPromptsReported = func(string, bool) bool { return true }
-		return true
-	})
 	r.connected(t)
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
 	// The stored preferences carry the profiles and the default, and their answer is not ordered

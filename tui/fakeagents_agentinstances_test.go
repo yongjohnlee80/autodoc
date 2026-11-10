@@ -125,10 +125,17 @@ func testAgentsCopy(c agentHost, dir, config string) *agents {
 
 // testAgentsWith is testAgents with the seams s (a test's tune, its environment's included).
 func testAgentsWithCopy(c agentHost, s agentSeams, dir, config string) *agents {
-	if hs, ok := s.(*seams); ok && hs.agentCommandCheck == nil {
+	hs, ok := s.(*seams)
+	if ok && hs.agentCommandCheck == nil {
 		hs.agentCommandCheck = noCommandCheckCopy // as the agents' own testAgents: no command looked up
 	}
-	return newAgents(c, s, dir, config)
+	a := newAgents(c, s, dir, config)
+	if ok {
+		agentsSeams.Lock()
+		agentsSeams.m[a] = hs // seamsOf: the cell sets its hooks there
+		agentsSeams.Unlock()
+	}
+	return a
 }
 
 func (p *modelPanelCopy) SameOwner(other feature.TerminalPanel) bool {
