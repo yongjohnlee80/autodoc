@@ -15,9 +15,10 @@ import (
 // writes the terminal's (relationviews_cells.go).
 const relationMenuQML, relationViewsQML = "", ""
 
+// relationViewFeatures are the terminal's GlobeMap and Mindmap, in cells, made once.
 func (h *Host) relationViewFeatures() []feature.Feature {
 	if h.relationViews == nil {
-		h.relationViews = cellRelationViews(h)
+		h.relationViews = cellViews(core{h}, core{h}, h.graphUserFile, h.seams.globeMapPage)
 	}
 	return h.relationViews
 }
@@ -25,25 +26,10 @@ func (h *Host) relationViewFeatures() []feature.Feature {
 // openGlobeSettings is App.openGlobeSettings, which Preferences.qml names in every build: the
 // GlobeMap's settings, the terminal's.
 func (h *Host) openGlobeSettings() {
-	for _, f := range h.relationViewFeatures() {
-		if g, ok := f.(*cellGlobeMap); ok {
-			g.openSettings()
-			return
-		}
+	if !openGlobeSettings(h.relationViewFeatures()) {
+		h.notify(h.globeSettingsElsewhereNotice())
 	}
-	h.notify(h.globeSettingsElsewhereNotice())
 }
 
 // relationViewTypes are their views' QML types: the Mindmap's view joins its feature.
-func (h *Host) relationViewTypes() []tuidecl.Type {
-	var out []tuidecl.Type
-	for _, f := range h.relationViewFeatures() {
-		switch f := f.(type) {
-		case *cellGlobeMap:
-			out = append(out, f.viewType())
-		case *cellMindmap:
-			out = append(out, f.viewType())
-		}
-	}
-	return out
-}
+func (h *Host) relationViewTypes() []tuidecl.Type { return viewTypes(h.relationViewFeatures()) }
