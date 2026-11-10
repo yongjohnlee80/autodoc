@@ -66,14 +66,25 @@ func IsRoot(p string) bool {
 // is not under dir (another volume included).
 func Rel(dir, p string) (rel string, ok bool) { return relOf(dir, p, win) }
 
+// Windows is whether this OS's paths follow Windows' rule: drives, shares and backslashes. A caller
+// that applies the rule to data of its own (and tests it under either rule) passes it to SlashFor
+// and IsAbsFor.
+var Windows = win
+
+// SlashFor is Slash under Windows' rule when windows is set, Unix' otherwise.
+func SlashFor(p string, windows bool) string { return slash(p, windows) }
+
+// IsAbsFor is IsAbs under Windows' rule when windows is set, Unix' otherwise.
+func IsAbsFor(p string, windows bool) bool {
+	root, _ := rootOf(slash(p, windows), windows)
+	return root != ""
+}
+
 // IsAbs reports whether p, in either form (the OS's own or the slash form), is an absolute path:
 // rooted ("/srv/kb"), or a drive's or a share's on Windows ("C:/Users/u", `C:\Users\u`,
 // "//server/share/kb"); "C:u", a drive's current directory, is not. The disk that opens p has the
 // last word: a rooted path with no drive is refused there on Windows.
-func IsAbs(p string) bool {
-	root, _ := rootOf(slash(p, win), win)
-	return root != ""
-}
+func IsAbs(p string) bool { return IsAbsFor(p, win) }
 
 func slash(p string, win bool) string {
 	if p == "" {

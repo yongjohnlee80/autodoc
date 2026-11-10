@@ -30,7 +30,7 @@ var mainBranches = []string{"main", "master"}
 // in a removed worktree of one of the two layouts. ok is false otherwise, or when the main worktree has
 // no file at that path.
 func (s scope) movedFromWorktree(abs string) (string, bool) {
-	if s.exists == nil || s.read == nil || s.list == nil || !paths.IsAbs(abs) {
+	if s.exists == nil || s.read == nil || s.list == nil || !s.isAbs(abs) {
 		return "", false
 	}
 	abs = paths.Clean(abs)
@@ -128,7 +128,7 @@ func (s scope) mainWorktreeOfBare(gitDir string) string {
 			continue
 		}
 		dir := paths.Dir(paths.Slash(strings.TrimSpace(string(dotGit)))) // gitdir names <worktree>/.git, in the OS's own form
-		if paths.IsAbs(dir) && s.exists(dir) {
+		if s.isAbs(dir) && s.exists(dir) {
 			byBranch[ref] = dir
 		}
 	}
@@ -150,7 +150,7 @@ func (s scope) worktreeRefs(t Task, file string) []RefCandidate {
 	}{{"adr", t.ADR}, {"review", t.Review}} {
 		for i, p := range f.list {
 			r := s.resolve(p)
-			if r.unresolved || !paths.IsAbs(r.path) {
+			if r.unresolved || !s.isAbs(r.path) {
 				continue
 			}
 			to, ok := s.movedFromWorktree(r.path)

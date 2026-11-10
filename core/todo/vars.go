@@ -49,7 +49,23 @@ type scope struct {
 	// withExists gives them with exists. ok is false for what cannot be read.
 	read func(string) ([]byte, bool)
 	list func(string) []string
+	// windows is the path rule refs are read under: this OS's (paths.Windows), Windows' in a test
+	windows bool
 }
+
+// osAbs is an absolute path given as a ref, a variable's value or what ~ or a variable expanded
+// to, in the slash form every other path in core/todo has: under Windows' rule `C:\kb\a.md` is
+// "C:/kb/a.md" and `\\server\share\a.md` "//server/share/a.md". Under Unix' rule it is as written: a
+// backslash is a name's own character there. A path that is not absolute is as written too.
+func (s scope) osAbs(p string) string {
+	if !s.windows || !paths.IsAbsFor(p, true) {
+		return p
+	}
+	return paths.SlashFor(p, true)
+}
+
+// isAbs reports whether p is absolute under the scope's rule.
+func (s scope) isAbs(p string) bool { return paths.IsAbsFor(p, s.windows) }
 
 // get is name's value, as layers.value answers it: $WORKSPACE and $PROJECT_ROOT are ordinary names,
 // in user when set.
@@ -96,12 +112,12 @@ func (s scope) resolve(input string) resolved {
 			return resolved{path: input, varName: name, unresolved: true}
 		}
 		if rest == "" {
-			return resolved{path: val, varName: name}
+			return resolved{path: s.osAbs(val), varName: name}
 		}
-		return resolved{path: trailSlashe.ReplaceAllString(val, "") + "/" + leadSlashes.ReplaceAllString(rest, ""), varName: name}
+		return resolved{path: s.osAbs(trailSlashe.ReplaceAllString(val, "") + "/" + leadSlashes.ReplaceAllString(rest, "")), varName: name}
 	}
-	if paths.IsAbs(input) || strings.HasPrefix(input, "~") {
-		return resolved{path: s.expandHome(input)}
+	if s.isAbs(input) || strings.HasPrefix(input, "~") {
+		return resolved{path: s.osAbs(s.expandHome(input))}
 	}
 	return resolved{path: input}
 }
@@ -129,7 +145,7 @@ func (s scope) symbolize(p string) string {
 	type root struct{ name, value string }
 	var roots []root
 	add := func(name, value string) {
-		if value = trailSlashe.ReplaceAllString(value, ""); value != "" {
+		if value = trailSlashe.ReplaceAllString(s.osAbs(value), ""); value != "" {
 			roots = append(roots, root{name, value})
 		}
 	}
@@ -146,8 +162,8 @@ func (s scope) symbolize(p string) string {
 	}
 	add(VarHome, s.home)
 
-	if paths.IsAbs(p) || strings.HasPrefix(p, "~") {
-		abs := s.expandHome(p)
+	if s.isAbs(p) || strings.HasPrefix(p, "~") {
+		abs := s.osAbs(s.expandHome(p))
 		var best *root
 		for i, r := range roots {
 			if paths.Under(abs, r.value) {
@@ -156,8 +172,11 @@ func (s scope) symbolize(p string) string {
 				}
 			}
 		}
+		if best == nil && strings.HasPrefix(p, "~") {
+			return p // ~ is itself portable
+		}
 		if best == nil {
-			return p
+			return abs // an absolute path in the slash form: what every machine's reader compares
 		}
 		return "$" + best.name + abs[len(best.value):]
 	}
@@ -231,7 +250,7 @@ func (s scope) refErrors(t Task, now string, hasTask func(id string) bool) []Err
 			}
 			abs := ""
 			switch {
-			case paths.IsAbs(r.path):
+			case s.isAbs(r.path):
 				abs = r.path
 			case s.kbRoot != "":
 				abs = joinPath(s.kbRoot, p) // a relative ref is the KB's, and only the KB's
