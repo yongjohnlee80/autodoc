@@ -48,7 +48,37 @@ const testPluginArg = "autodoc-test-plugin"
 // CLI stand-in that says what it was given (agentargs_test.go).
 const argvPrinterEnv = "AUTODOC_TUI_ARGV_PRINTER"
 
+// setupRecorderEnv, set to a folder, makes this test binary a stand-in for an agent's own autodoc
+// asked its crew setup: it writes its arguments (one a line), its environment and its working
+// folder there (args, env, pwd) and answers a setup, or, with setupAnswerEnv "other", something
+// that is none (crewguide_test.go).
+const (
+	setupRecorderEnv = "AUTODOC_TUI_SETUP_RECORDER"
+	setupAnswerEnv   = "AUTODOC_TUI_SETUP_ANSWER"
+)
+
+// recordSetup is that stand-in.
+func recordSetup(dir string) int {
+	wd, _ := os.Getwd()
+	for name, text := range map[string]string{"args": strings.Join(os.Args[1:], "\n") + "\n",
+		"env": strings.Join(os.Environ(), "\n") + "\n", "pwd": wd + "\n"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o600); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+	}
+	if os.Getenv(setupAnswerEnv) == "other" {
+		fmt.Println("something else")
+		return 0
+	}
+	fmt.Println(`{"argv":[],"env":{},"mail_via":"mcp"}`)
+	return 0
+}
+
 func TestMain(m *testing.M) {
+	if dir := os.Getenv(setupRecorderEnv); dir != "" {
+		os.Exit(recordSetup(dir))
+	}
 	if os.Getenv(argvPrinterEnv) == "1" {
 		_ = json.NewEncoder(os.Stdout).Encode(os.Args[1:])
 		os.Exit(0)
