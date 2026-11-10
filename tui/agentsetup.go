@@ -42,8 +42,8 @@ const prefAgentSetup = "tui.agent.setup"
 
 // agentSetupPending is the first-run card's condition, read in one place: the setup never answered,
 // and no profile. A user with a profile is never asked.
-func agentSetupPending(s *seams, p feature.PrefsView) bool {
-	return s.offerAgentSetup && p.Value(prefAgentSetup) == "" && len(agentProfilesOf(p.Value(prefAgentProfiles))) == 0
+func agentSetupPending(s agentSeams, p feature.PrefsView) bool {
+	return s.OfferAgentSetup() && p.Value(prefAgentSetup) == "" && len(agentProfilesOf(p.Value(prefAgentProfiles))) == 0
 }
 
 // Started warms what each Claude profile's Claude Code knows (warmClaude), and offers the setup on a first run (startup's About waits for it, startup.go), once the
@@ -54,16 +54,16 @@ func (a *agents) Started() {
 			a.warmClaude(p) // and a Claude agent's on what its Claude Code knows
 		}
 	}
-	if p := a.c.Prefs(); agentSetupPending(a.seams, p) && !vimQuestionPending(a.seams, p) {
+	if p := a.c.Prefs(); agentSetupPending(a.seams, p) && !a.seams.VimQuestionPending(p) {
 		a.openAgentSetup()
 	}
 }
 
 // openAgentSetup fills and opens the card.
 func (a *agents) openAgentSetup() {
-	look := a.seams.lookAgentCLI
+	look := a.seams.LookAgentCLI()
 	if look == nil {
-		env := a.seams.env
+		env := a.seams.Env()
 		look = func(name string) (string, error) { return procenv.LookPath(env, name) }
 	}
 	found := detectAgentCLIs(look)
