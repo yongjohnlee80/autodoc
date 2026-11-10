@@ -19,8 +19,8 @@ const agentConfig = "/a config's dir/autodoc.toml"
 
 func (r *running) noticed(text string) bool {
 	return onLoop(r, func() bool {
-		for _, n := range r.h.noticeLog.items {
-			if strings.Contains(n.text, text) {
+		for _, n := range r.h.noticeLog.Items {
+			if strings.Contains(n.Text, text) {
 				return true
 			}
 		}
