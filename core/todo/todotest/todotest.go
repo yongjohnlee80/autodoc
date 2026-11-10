@@ -314,6 +314,9 @@ type Disk struct {
 	fault func(op, name string) error
 	reads map[string]int
 	held  map[string]int // the directories opened and not yet closed, by path: a real disk's handles
+	// usedClosed counts the operations tried through a directory after its Close: each one fails, as
+	// it does on a real disk
+	usedClosed int
 }
 
 // NewDisk is an empty disk.
@@ -468,7 +471,7 @@ func (s *sub) Stat(ctx context.Context, name string) (vfs.FileInfo, error) {
 	if err := vfs.CheckName("stat", name); err != nil {
 		return vfs.FileInfo{}, err
 	}
-	if err := s.d.check("stat", s.abs(name)); err != nil {
+	if err := s.check("stat", s.abs(name)); err != nil {
 		return vfs.FileInfo{}, err
 	}
 	fi, err := s.d.FS.Stat(ctx, s.full(name))
@@ -479,7 +482,7 @@ func (s *sub) ReadDir(ctx context.Context, name string) ([]vfs.FileInfo, error) 
 	if err := vfs.CheckName("readdir", name); err != nil {
 		return nil, err
 	}
-	if err := s.d.check("readdir", s.abs(name)); err != nil {
+	if err := s.check("readdir", s.abs(name)); err != nil {
 		return nil, err
 	}
 	out, err := s.d.FS.ReadDir(ctx, s.full(name))
@@ -493,14 +496,14 @@ func (s *sub) Open(ctx context.Context, name string, offset int64) (io.ReadClose
 	if err := vfs.CheckName("open", name); err != nil {
 		return nil, err
 	}
-	if err := s.d.check("read", s.abs(name)); err != nil {
+	if err := s.check("read", s.abs(name)); err != nil {
 		return nil, err
 	}
 	return s.d.FS.Open(ctx, s.full(name), offset)
 }
 
 func (s *sub) WriteFile(ctx context.Context, name string, r io.Reader, opts ...vfs.WriteOption) (vfs.FileInfo, error) {
-	if err := s.d.check("write", s.abs(name)); err != nil {
+	if err := s.check("write", s.abs(name)); err != nil {
 		return vfs.FileInfo{}, err
 	}
 	fi, err := s.d.FS.WriteFile(ctx, s.full(name), r, opts...)
@@ -508,7 +511,7 @@ func (s *sub) WriteFile(ctx context.Context, name string, r io.Reader, opts ...v
 }
 
 func (s *sub) WriteFileIf(ctx context.Context, name string, r io.Reader, want vfs.Version, opts ...vfs.WriteOption) (vfs.FileInfo, error) {
-	if err := s.d.check("write", s.abs(name)); err != nil {
+	if err := s.check("write", s.abs(name)); err != nil {
 		return vfs.FileInfo{}, err
 	}
 	fi, err := s.d.FS.WriteFileIf(ctx, s.full(name), r, want, opts...)
@@ -516,7 +519,7 @@ func (s *sub) WriteFileIf(ctx context.Context, name string, r io.Reader, want vf
 }
 
 func (s *sub) CreateExclusive(ctx context.Context, name string, r io.Reader, opts ...vfs.WriteOption) (vfs.FileInfo, error) {
-	if err := s.d.check("create", s.abs(name)); err != nil {
+	if err := s.check("create", s.abs(name)); err != nil {
 		return vfs.FileInfo{}, err
 	}
 	fi, err := s.d.FS.CreateExclusive(ctx, s.full(name), r, opts...)
@@ -527,45 +530,66 @@ func (s *sub) MkdirAll(ctx context.Context, name string) error {
 	if err := vfs.CheckName("mkdir", name); err != nil {
 		return err
 	}
-	if err := s.d.check("mkdir", s.abs(name)); err != nil {
+	if err := s.check("mkdir", s.abs(name)); err != nil {
 		return err
 	}
 	return s.d.FS.MkdirAll(ctx, s.full(name))
 }
 
 func (s *sub) Remove(ctx context.Context, name string) error {
-	if err := s.d.check("remove", s.abs(name)); err != nil {
+	if err := s.check("remove", s.abs(name)); err != nil {
 		return err
 	}
 	return s.d.FS.Remove(ctx, s.full(name))
 }
 
 func (s *sub) RemoveIf(ctx context.Context, name string, want vfs.Version) error {
-	if err := s.d.check("remove", s.abs(name)); err != nil {
+	if err := s.check("remove", s.abs(name)); err != nil {
 		return err
 	}
 	return s.d.FS.RemoveIf(ctx, s.full(name), want)
 }
 
 func (s *sub) RemoveAll(ctx context.Context, name string) error {
-	if err := s.d.check("remove", s.abs(name)); err != nil {
+	if err := s.check("remove", s.abs(name)); err != nil {
 		return err
 	}
 	return s.d.FS.RemoveAll(ctx, s.full(name))
 }
 
 func (s *sub) Rename(ctx context.Context, from, to string) error {
-	if err := s.d.check("rename", s.abs(from)); err != nil {
+	if err := s.check("rename", s.abs(from)); err != nil {
 		return err
 	}
 	return s.d.FS.Rename(ctx, s.full(from), s.full(to))
 }
 
 func (s *sub) RenameNoReplace(ctx context.Context, from, to string) error {
-	if err := s.d.check("rename", s.abs(from)); err != nil {
+	if err := s.check("rename", s.abs(from)); err != nil {
 		return err
 	}
 	return s.d.FS.RenameNoReplace(ctx, s.full(from), s.full(to))
+}
+
+// UsedClosed is how many operations were tried through a directory already closed: each failed.
+func (d *Disk) UsedClosed() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.usedClosed
+}
+
+// check refuses an operation through a closed directory, then runs the disk's fault hook.
+func (s *sub) check(op, name string) error {
+	s.d.mu.Lock()
+	closed := s.closed
+	if closed {
+		s.d.usedClosed++
+	}
+	s.d.mu.Unlock()
+	if closed {
+		return fmt.Errorf("todotest: %s %s: the directory was closed", op, name)
+	}
+	return s.d.check(op, name)
 }
 
 func (s *sub) Close() error {
