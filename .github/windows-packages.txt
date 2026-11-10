@@ -21,6 +21,7 @@
 ./enterprise/ops
 ./enterprise/search
 ./internal/luarefgen
+./internal/private/...
 ./internal/profiling
 ./internal/tuiaudit
 ./plugin/card

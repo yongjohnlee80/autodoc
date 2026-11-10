@@ -11,6 +11,8 @@ import (
 	"sync"
 
 	"github.com/yongjohnlee80/golib/errs"
+
+	"github.com/yongjohnlee80/autodoc/internal/private"
 )
 
 // THE KEYSLOT — the store's key, which seals the secrets it keeps (an embedding provider's API
@@ -28,7 +30,7 @@ import (
 const keySize = 32
 
 // ErrKeyslotExposed is a keyslot file others can read: the store will not use it.
-var ErrKeyslotExposed = errs.Sentinel(errs.ErrPrecondition, "store: the keyslot file is readable by others; make it 0600")
+var ErrKeyslotExposed = errs.Sentinel(errs.ErrPrecondition, "store: the keyslot file is not private to this user (on Unix: make it 0600)")
 
 // ErrSealed is a secret the store's key does not open: sealed under another key, or moved.
 var ErrSealed = errs.Sentinel(errs.ErrPrecondition, "store: the secret does not open with this store's key")
@@ -48,14 +50,13 @@ func (k *keyslot) get() ([]byte, error) {
 }
 
 func (k *keyslot) load() ([]byte, error) {
-	fi, err := os.Stat(k.path)
-	switch {
+	switch err := private.Check(k.path); {
 	case errors.Is(err, fs.ErrNotExist):
 		return k.make()
+	case errors.Is(err, private.ErrExposed):
+		return nil, fmt.Errorf("%w: %w", ErrKeyslotExposed, err)
 	case err != nil:
 		return nil, err
-	case fi.Mode().Perm()&0o077 != 0:
-		return nil, fmt.Errorf("%w: %s is %v", ErrKeyslotExposed, k.path, fi.Mode().Perm())
 	}
 	key, err := os.ReadFile(k.path)
 	if err != nil {
@@ -73,7 +74,7 @@ func (k *keyslot) make() ([]byte, error) {
 	if _, err := rand.Read(key); err != nil {
 		return nil, err
 	}
-	f, err := os.OpenFile(k.path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	f, err := private.Create(k.path)
 	if errors.Is(err, fs.ErrExist) {
 		return k.load() // another made it first
 	}
