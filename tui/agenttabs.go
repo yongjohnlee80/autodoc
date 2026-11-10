@@ -40,7 +40,7 @@ func (a *agents) tabRows(id terminal.TerminalTabID) []widgetcore.MenuItemModel {
 	if err != nil {
 		return nil
 	}
-	rows := append(layoutRows(a.c, "agent", feature.TabRowOf), feature.GoToRows(panel, func(tab terminal.TerminalTab) string { return tab.Label }, a.goToTab))
+	rows := append(feature.LayoutRows(a.c, "agent", feature.TabRowOf), feature.GoToRows(panel, func(tab terminal.TerminalTab) string { return tab.Label }, a.goToTab))
 	if instance := a.instanceOn(panel, id); instance != nil {
 		code := instance.profile.Codename
 		restart := feature.TabMenuRow("agents.restart", "Restart", func(terminal.TerminalTabID) { a.restartAgent(code) })
