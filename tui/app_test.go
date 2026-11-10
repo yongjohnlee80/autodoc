@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -36,6 +35,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/todo"
 	"github.com/yongjohnlee80/autodoc/core/todo/todotest"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -282,9 +282,9 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { _ = os.RemoveAll(dir) })
-		d.sock = filepath.Join(dir, "s.sock")
+		d.sock = ipc.ScratchAddr(dir, "s.sock")
 	}
-	ln, err := net.Listen("unix", d.sock)
+	ln, err := ipc.Listen(d.sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -805,7 +805,7 @@ func TestWorkspaces(t *testing.T) {
 // TestConnectFailedSaysSo: with nothing on the socket and no daemon to start, the TUI says so.
 func TestConnectFailedSaysSo(t *testing.T) {
 	t.Parallel()
-	sess := NewSession(filepath.Join(t.TempDir(), "none.sock"), nil)
+	sess := NewSession(ipc.ScratchAddr(t.TempDir(), "none.sock"), nil)
 	sess.SetProbeWindow(200 * time.Millisecond)
 	r := runTUI(t, sess, Options{})
 	r.s.WaitFor(t, "the failure", func(sc string) bool {
@@ -815,13 +815,16 @@ func TestConnectFailedSaysSo(t *testing.T) {
 
 // TestSpawnsTheDaemonOnce: nothing answering, the TUI starts the daemon once, and attaches.
 func TestSpawnsTheDaemonOnce(t *testing.T) {
+	if ipc.Network != "unix" {
+		t.Skip("the fake spawn links a socket's path to a running daemon: a named pipe has no path to link")
+	}
 	t.Parallel()
 	dir, err := os.MkdirTemp("", "ads")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir)
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	// the daemon "spawned" is one already running elsewhere: spawning links the socket path to it,
 	// after a while (as a real daemon takes time to come up), so the dial retries in between
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})

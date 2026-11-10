@@ -7,7 +7,6 @@ import (
 	"image"
 	"image/png"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -16,6 +15,7 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -286,7 +286,7 @@ func TestAFailedRecoveryRestartStaysActionable(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir)
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	old := otherDaemon(t, sock, rpc.Protocol-1)
 	var spawns atomic.Int32
 	sess := NewSession(sock, func() (string, error) {
@@ -410,7 +410,7 @@ func skipWithoutUsableBrowser(t *testing.T) {
 func TestTheMismatchDialogsEdges(t *testing.T) {
 	t.Parallel()
 	t.Run("no spawner, then Quit", func(t *testing.T) {
-		sock := filepath.Join(t.TempDir(), "s.sock")
+		sock := ipc.ScratchAddr(t.TempDir(), "s.sock")
 		otherDaemon(t, sock, rpc.Protocol-1)
 		r := runTUI(t, NewSession(sock, nil), Options{})
 		r.s.WaitFor(t, "the dialog", func(sc string) bool { return strings.Contains(sc, "backend version mismatch") })
@@ -437,7 +437,7 @@ func TestTheMismatchDialogsEdges(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer os.RemoveAll(dir)
-		sock := filepath.Join(dir, "s.sock")
+		sock := ipc.ScratchAddr(dir, "s.sock")
 		otherDaemon(t, sock, rpc.Protocol-1)
 		r := runTUI(t, NewSession(sock, func() (string, error) { return "", errors.New("unused") }), Options{})
 		r.s.WaitFor(t, "the dialog", func(sc string) bool { return strings.Contains(sc, "Restart Now") })

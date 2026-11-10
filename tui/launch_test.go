@@ -14,6 +14,7 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 
 	"github.com/yongjohnlee80/autodoc/core/config"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // TestLaunchRunsAnotherClientsLayoutAndDaemon: a program launching AutoDoc's TUI with a layout and
@@ -25,7 +26,7 @@ func TestLaunchRunsAnotherClientsLayoutAndDaemon(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	sock, state := filepath.Join(dir, "s.sock"), filepath.Join(dir, "state")
+	sock, state := ipc.ScratchAddr(dir, "s.sock"), filepath.Join(dir, "state")
 	conf := filepath.Join(dir, "config.toml")
 	// a data_dir of its own: without one the store is the user's, and resolving the endpoint by the
 	// store's lease-info would find the user's daemon serving it instead of spawning this test's

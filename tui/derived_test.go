@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"io"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -14,6 +13,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
 
 	"github.com/yongjohnlee80/autodoc/core/registrations"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // pdfAsText is a build's deriver for tests: a PDF's text is the file's own bytes.
@@ -187,7 +187,7 @@ func TestARegisteredPageReadsByTheRegistrationsWhenTheyCome(t *testing.T) {
 // .zig chunker reads as the last daemon's (plain text) until that build's registrations answer;
 // when they come, the page reads it as the new build does: Markdown, its "# " line a heading.
 func TestAReconnectReadsThePageByTheNewBuild(t *testing.T) {
-	sock := filepath.Join(shortDir(t), "s.sock")
+	sock := ipc.ScratchAddr(shortDir(t), "s.sock")
 	pro := startDaemonWith(t, sock, map[string][]string{"kb": {"a.zig", goWithAHashLine}}, daemonOpts{goChunker: wholeGo{}, chunked: ".zig", version: "v-pro"})
 	held := make(chan struct{})
 	release := sync.OnceFunc(func() { close(held) })

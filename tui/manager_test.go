@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"io/fs"
-	"net"
 	"os"
 	"path/filepath"
 	"sort"
@@ -21,6 +20,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -97,8 +97,8 @@ func startManagedIncludes(t *testing.T, roots map[string]string, include []strin
 	if err != nil {
 		t.Fatal(err)
 	}
-	sock := filepath.Join(dir, "s.sock")
-	ln, err := net.Listen("unix", sock)
+	sock := ipc.ScratchAddr(dir, "s.sock")
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -5,14 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/yongjohnlee80/autodoc/internal/procenv"
-	"github.com/yongjohnlee80/autodoc/rpc"
-	"github.com/yongjohnlee80/golib/dao/sqlite"
-	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
-	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 	"io"
 	"io/fs"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -24,6 +18,13 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/golib/dao/sqlite"
+	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
+	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
 	"github.com/yongjohnlee80/golib/highlight"
 	"github.com/yongjohnlee80/golib/parse/qml"
@@ -1614,7 +1615,7 @@ func TestRestartBringsUpTheInstalledBackend(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir)
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	notes := map[string][]string{"kb": {"a.md", "a\n"}}
 	old := startDaemonWith(t, sock, notes, daemonOpts{version: "v1"})
 	var spawns atomic.Int32
@@ -1841,7 +1842,7 @@ func seedUnusedModel(t *testing.T, db *store.Store, name, fp string, n int) {
 // answers a probe with its number; sys.shutdown, admitted, stops it.
 func otherDaemon(t *testing.T, sock string, proto int64) (stopped chan struct{}) {
 	t.Helper()
-	ln, err := net.Listen("unix", sock)
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1882,7 +1883,7 @@ func TestRestartReplacesAnOlderBackend(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir)
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	old := otherDaemon(t, sock, rpc.Protocol-1)
 	var spawns atomic.Int32
 	sess := NewSession(sock, func() (string, error) {
@@ -1974,7 +1975,7 @@ func TestANewerBackendSaysTheTUIIsOlder(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir)
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	newer := otherDaemon(t, sock, rpc.Protocol+1)
 	r := runTUI(t, NewSession(sock, func() (string, error) { return "", errors.New("not in this test") }), Options{})
 	r.s.WaitForText(t, fmt.Sprintf("this TUI (protocol %d) is older than the backend", rpc.Protocol))
@@ -1993,7 +1994,7 @@ func TestANewerBackendSaysTheTUIIsOlder(t *testing.T) {
 func TestOlderBackendWithoutSpawnOnlyOffersQuit(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	otherDaemon(t, sock, rpc.Protocol-1)
 	running := runTUI(t, NewSession(sock, nil), Options{})
 	running.s.WaitFor(t, "restart unavailable", func(screen string) bool {

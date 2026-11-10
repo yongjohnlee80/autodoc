@@ -3,15 +3,14 @@ package tui
 import (
 	"context"
 	"errors"
-	"net"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -19,7 +18,7 @@ import (
 // protocol to a probe (no protocol declared).
 func helloDaemon(t *testing.T, sock string, own int64, hello func(declared int64) map[string]any) {
 	t.Helper()
-	ln, err := net.Listen("unix", sock)
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +41,7 @@ func helloDaemon(t *testing.T, sock string, own int64, hello func(declared int64
 // protocol is a mismatch to the TUI all the same: Connect takes the mismatch path, never a session
 // that half works.
 func TestTheTUIRefusesADaemonOfAnotherProtocol(t *testing.T) {
-	sock := filepath.Join(shortDir(t), "s.sock")
+	sock := ipc.ScratchAddr(shortDir(t), "s.sock")
 	newer := rpc.Protocol + 1
 	helloDaemon(t, sock, newer, func(declared int64) map[string]any {
 		return map[string]any{"protocol": declared, "server_protocol": newer, "version": "v-fake", "pid": int64(os.Getpid())}
@@ -60,7 +59,7 @@ func TestTheTUIRefusesADaemonOfAnotherProtocol(t *testing.T) {
 // connects there.
 func TestAResolvedDaemonGoneByTheDialCostsOneSpawn(t *testing.T) {
 	dir := shortDir(t)
-	configured, gone := filepath.Join(dir, "c.sock"), filepath.Join(dir, "gone.sock")
+	configured, gone := ipc.ScratchAddr(dir, "c.sock"), ipc.ScratchAddr(dir, "gone.sock")
 	spawns := 0
 	s := NewSession(configured, func() (string, error) {
 		spawns++

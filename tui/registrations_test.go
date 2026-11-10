@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/internal/client"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -95,7 +95,7 @@ func TestNoOfferUnlessTheDaemonIsBehind(t *testing.T) {
 // the requester's daemon starts, so the end state is the registered daemon, the community TUI
 // spawned nothing, and it is offered nothing.
 func TestTheRequestersBuildServesNext(t *testing.T) {
-	sock := filepath.Join(shortDir(t), "s.sock")
+	sock := ipc.ScratchAddr(shortDir(t), "s.sock")
 	state := t.TempDir()
 	old := startDaemonWith(t, sock, kbNotes, daemonOpts{})
 	var proSpawns, communitySpawns atomic.Int32
@@ -149,7 +149,7 @@ func TestTheRequestersBuildServesNext(t *testing.T) {
 // lacks the registrations (another build serves this store: a supervisor's) names who answered,
 // and offers nothing again.
 func TestARestartAnsweredByTheSameBuildIsNamed(t *testing.T) {
-	sock := filepath.Join(shortDir(t), "s.sock")
+	sock := ipc.ScratchAddr(shortDir(t), "s.sock")
 	old := startDaemonWith(t, sock, kbNotes, daemonOpts{})
 	var spawns atomic.Int32
 	started := make(chan struct{}) // the supervisor's daemon serves the store
@@ -204,7 +204,7 @@ func TestAnOlderBackendAnsweringAgainIsNamed(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir)
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	old := otherDaemon(t, sock, rpc.Protocol-1)
 	var spawns atomic.Int32
 	sess := NewSession(sock, func() (string, error) {
@@ -250,7 +250,7 @@ func TestHeldHitsAreMarked(t *testing.T) {
 // fails, and says so.
 func refusingDaemon(t *testing.T, sock string) {
 	t.Helper()
-	ln, err := net.Listen("unix", sock)
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +276,7 @@ func refusingDaemon(t *testing.T, sock string) {
 func TestARefusedRestartTakesItsHandoffBack(t *testing.T) {
 	for _, writable := range []bool{true, false} {
 		t.Run(fmt.Sprint("writable ", writable), func(t *testing.T) {
-			sock := filepath.Join(shortDir(t), "s.sock")
+			sock := ipc.ScratchAddr(shortDir(t), "s.sock")
 			refusingDaemon(t, sock)
 			state := t.TempDir()
 			dir := state
