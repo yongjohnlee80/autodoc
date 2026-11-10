@@ -258,12 +258,12 @@ jobs:
       - name: scratch (not for merge) app's serve cells, then the new cell with the fix taken out
         if: ${{ !inputs.discover }}
         run: |
-          go test -count=1 -timeout 10m -v ./app/ -run 'TestARefusedStartLetsGoOfItsAddress|TestCheckStore|TestAStoreWhoseSecretsDoNotOpenIsServed|Damage' > "$RUNNER_TEMP/a.txt" 2>&1; rc=$?
+          go test -count=1 -timeout 10m -v ./app/ -run 'TestARefusedStartLetsGoOfItsAddress|TestCheckStore|TestAStoreWhoseSecretsDoNotOpenIsServed|Damage' > "$RUNNER_TEMP/a.txt" 2>&1 && rc=0 || rc=$?
           grep -E '^(--- (PASS|FAIL|SKIP)|ok |FAIL|panic: )|_test\.go:[0-9]+:' "$RUNNER_TEMP/a.txt" | cut -c1-240 || true
           echo "== fixed rc=$rc"
           sed -i 's|^\td.stops.push(func() { _ = ln.Close() })$|\t// mutant: the listener left open|' app/serve.go
           grep -c 'mutant: the listener left open' app/serve.go || true
-          go test -count=1 -timeout 3m -v ./app/ -run '^TestARefusedStartLetsGoOfItsAddress$' > "$RUNNER_TEMP/m.txt" 2>&1; mrc=$?
+          go test -count=1 -timeout 3m -v ./app/ -run '^TestARefusedStartLetsGoOfItsAddress$' > "$RUNNER_TEMP/m.txt" 2>&1 && mrc=0 || mrc=$?
           grep -E '^(--- (PASS|FAIL)|ok |FAIL|panic: )|_test\.go:[0-9]+:' "$RUNNER_TEMP/m.txt" | cut -c1-240 || true
           echo "== mutant rc=$mrc (want 1: killed)"
           git checkout app/serve.go
