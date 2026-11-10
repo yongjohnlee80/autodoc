@@ -20,18 +20,13 @@ import (
 // loads AutoDoc's OpenCode plugin, which registers it. Without them only a Claude agent, whose
 // SessionStart hook registers it, was ever reachable.
 
-const crewKinds = `[{"name":"Codex","command":"codex","codename":"codex-one"},` +
-	`{"name":"Agy","command":"agy","codename":"agy-one"},` +
-	`{"name":"OpenCode","command":"opencode","codename":"opencode-one"},` +
-	`{"name":"Claude","command":"claude","codename":"claude-one"}]`
-
 // TestACrewAgentIsToldItsCLIsCrewProcedure: each CLI's agent's AGENTS.md and CLAUDE.md hold the crew
 // guide for its own kind (crew.GuideOf), its wake step included, as their first section, at most 25
 // lines; an agent outside a crew scope is told none of it.
 func TestACrewAgentIsToldItsCLIsCrewProcedure(t *testing.T) {
 	for codename, kind := range map[string]string{"codex-one": "codex", "agy-one": "agy", "opencode-one": "opencode", "claude-one": "claude"} {
 		t.Run(kind, func(t *testing.T) {
-			a, c, _ := crewAgents(t, crewKinds)
+			a, c, _ := crewAgents(t, crewKindsCopy)
 			p, _ := a.profile(codename)
 			instance, err := a.startInstance(p)
 			if err == nil {
@@ -94,7 +89,7 @@ func TestACrewOpenCodeAgentLoadsTheAutoDocPlugin(t *testing.T) {
 		"a setup that fails": {err: errors.New("crew setup: exit status 1")},
 	} {
 		t.Run(name, func(t *testing.T) {
-			a, c, _ := crewAgents(t, crewKinds)
+			a, c, _ := crewAgents(t, crewKindsCopy)
 			a.setupRun = func(string, string, []string) (crew.Setup, error) { return tc.setup, tc.err }
 			p, _ := a.profile("opencode-one")
 			instance, err := a.startInstance(p)
@@ -106,7 +101,7 @@ func TestACrewOpenCodeAgentLoadsTheAutoDocPlugin(t *testing.T) {
 				t.Fatalf("running %v, want %v (notes %v)", instance.running, tc.runs, c.notes)
 			}
 			if tc.runs {
-				if args, _, err := startedEnv(a, c, instance); err != nil || !slices.Contains(args, "OPENCODE_CONFIG_CONTENT="+v) {
+				if args, _, err := startedEnvCopy(a, c, instance); err != nil || !slices.Contains(args, "OPENCODE_CONFIG_CONTENT="+v) {
 					t.Fatalf("the spawn: %v, args %v; want the setup's env", err, args)
 				}
 			}
@@ -171,7 +166,7 @@ func TestTwoAgentsOfOneKindAskTheirOwnSetup(t *testing.T) {
 			t.Fatal(err)
 		}
 		awaitStart(t, c, instance)
-		args, _, err := startedEnv(a, c, instance)
+		args, _, err := startedEnvCopy(a, c, instance)
 		want := `OPENCODE_CONFIG_CONTENT={"for":"` + filepath.Base(instance.dir) + `"}`
 		if err != nil || !slices.Contains(args, want) {
 			t.Fatalf("%s's spawn: %v, args %v; want its own setup's %s", codename, err, args, want)
@@ -190,7 +185,7 @@ func TestTwoAgentsOfOneKindAskTheirOwnSetup(t *testing.T) {
 // crew MCP tools, never a guide shell command (least privilege); its guide is the MCP form; and its
 // session is registered as reading its mail via MCP, which crew.list says.
 func TestACrewClaudeAgentOnMCPMailStartsWithItsServer(t *testing.T) {
-	a, c, w := crewAgents(t, crewKinds)
+	a, c, w := crewAgents(t, crewKindsCopy)
 	data := t.TempDir()
 	a.setupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
 		// an earlier run's file, readable by others: the start replaces it whole, private
@@ -207,7 +202,7 @@ func TestACrewClaudeAgentOnMCPMailStartsWithItsServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	awaitStart(t, c, instance)
-	cmd, _, err := startedCmd(a, c, instance)
+	cmd, _, err := startedCmdCopy(a, c, instance)
 	args := cmd.Args
 	if err != nil || len(args) == 0 {
 		t.Fatalf("the spawn: %v, args %v", err, args)
