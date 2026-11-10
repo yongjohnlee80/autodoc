@@ -5,8 +5,8 @@
 //
 // The OS-specific part, how a process is detached and how a pid is asked after, is in this package's
 // per-OS files (a new session on Unix; a new process group with no console on Windows); what they
-// share is here. unsupported.go fails the build on any other OS, naming the seam. The crew's and the
-// plugins' process trees extend it later.
+// share is here. unsupported.go fails the build on any other OS, naming the seam. A plugin runs as
+// a Tree, so its stop ends what it started too.
 package proctree
 
 import (
@@ -45,3 +45,47 @@ func SetStderr(f *os.File) {
 
 // Alive is whether a process with pid exists now. It sends nothing to the process.
 func Alive(pid int) bool { return pid > 0 && alive(pid) }
+
+// Tree is a process started as the root of a tree of its own (StartTree), and every process it
+// starts in turn: one Stop ends them all.
+type Tree struct {
+	cmd *exec.Cmd
+	// alone is why the tree is the root alone, nil while it holds the whole tree: Windows refused
+	// the job (Contained)
+	alone error
+	os    osTree // the per-OS part: nothing on Unix, where the group is the root's pid; the job on Windows
+}
+
+// StartTree starts cmd as the root of a tree of its own: on Unix a process group, on Windows a job
+// object, which also ends what is left of the tree when it is closed, or when this process ends.
+// Every process cmd starts is in the tree from its start: on Windows cmd runs only once it is in
+// the job. A job Windows refuses (one that encloses this process may forbid it) leaves cmd running
+// on its own, as Contained says. The caller Waits on cmd, then Closes the tree.
+func StartTree(cmd *exec.Cmd) (*Tree, error) { return startTree(cmd) }
+
+// Stop ends the tree. On Unix it asks, SIGTERM to the group, and kill sends SIGKILL. Windows has no
+// ask a process without a console can be sent: either ends the tree (its job terminated, or the
+// root alone when it is not contained). It is for one goroutine at a time, as Close is.
+func (t *Tree) Stop(kill bool) {
+	if t != nil && t.cmd.Process != nil {
+		t.stop(kill)
+	}
+}
+
+// Contained is nil when the tree holds every process the root starts, or why it holds the root
+// alone.
+func (t *Tree) Contained() error {
+	if t == nil {
+		return nil
+	}
+	return t.alone
+}
+
+// Close lets the tree go once its root has been waited on. On Windows it closes the job, which ends
+// whatever of the tree is left; on Unix what is left lives on, as a process whose group was never
+// signalled does.
+func (t *Tree) Close() {
+	if t != nil {
+		t.close()
+	}
+}
