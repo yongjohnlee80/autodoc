@@ -25,7 +25,7 @@ func TestAnAgentWorksInItsOwnFolderUnderTheWindowsScope(t *testing.T) {
 	if got := a.agentFolder(ws, "one"); got != shared {
 		t.Fatalf("before a scope is held: %s, want the workspace's %s", got, shared)
 	}
-	a.crew.scope, a.crew.epoch = "autodoc:0123456789abcdef", 1
+	crewOf(a).scope, crewOf(a).epoch = "autodoc:0123456789abcdef", 1
 	p, _ := a.profile("one")
 	instance, err := a.startInstance(p)
 	if err != nil {
@@ -43,7 +43,7 @@ func TestAnAgentWorksInItsOwnFolderUnderTheWindowsScope(t *testing.T) {
 		t.Fatalf("a restart under the same scope: %v, want its tab started again", err)
 	}
 	c.panel.exit(instance.tab, 0)
-	a.crew.scope = "autodoc:fedcba9876543210"
+	crewOf(a).scope = "autodoc:fedcba9876543210"
 	if _, err := a.startInstance(p); !errors.Is(err, ErrAgentStale) {
 		t.Fatalf("a start after the scope moved: %v, want ErrAgentStale (its tab runs in the old folder)", err)
 	}
