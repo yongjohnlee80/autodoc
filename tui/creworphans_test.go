@@ -2,12 +2,13 @@ package tui
 
 import (
 	"errors"
-	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 func orphan(scope string, unread int, profiles ...any) map[string]any {

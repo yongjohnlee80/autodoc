@@ -61,7 +61,7 @@ func (c *identityHost) ConfigureTerminal(_, _, _ string, args ...string) error {
 func (c *identityHost) Notify(msg string) { c.notes = append(c.notes, msg) }
 func (*identityHost) Tr(id string) string { return englishText(id) }
 func (f *identityHost) Trf(id string, args ...any) string {
-	return (&Host{}).trf(id, args...)
+	return feature.Fill(englishText(id), args...)
 }
 func (c *identityHost) WidgetsChanged()                       {}
 func (c *identityHost) CallView(string, string, ...any) error { return c.stopErr }
