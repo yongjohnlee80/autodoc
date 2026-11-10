@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/yongjohnlee80/golib/paths"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 
@@ -187,7 +188,18 @@ func (h *Host) htmlLinkAs(a authority, href string) {
 	}
 	switch scheme {
 	case "file":
-		h.openAbsoluteAs(a, filepath.FromSlash(u.Path))
+		// golib's reader names the OS path: a drive's file:///C:/x and a share's file://server/x on
+		// Windows, where the URL's path alone is /C:/x. A fragment or query names a place in the file.
+		file := strings.TrimSpace(href)
+		if i := strings.IndexAny(file, "?#"); i >= 0 {
+			file = file[:i]
+		}
+		p, err := paths.FromURL(file)
+		if err != nil {
+			h.notify(fmt.Sprintf("%s names no file on this computer", href))
+			return
+		}
+		h.openAbsoluteAs(a, string(p))
 		return
 	case "":
 	default:

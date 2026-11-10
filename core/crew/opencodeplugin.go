@@ -6,11 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/yongjohnlee80/golib/paths"
 )
 
 // opencodePlugin is AutoDoc's OpenCode plugin
@@ -62,7 +63,7 @@ func pluginURL(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return (&url.URL{Scheme: "file", Path: filepath.ToSlash(abs)}).String(), nil
+	return paths.URL(paths.OS(abs)) // file:///C:/x on Windows: a bare C:/x path would read as a host
 }
 
 // OpenCodeWithAllow is content (an OPENCODE_CONFIG_CONTENT) with the guide's commands allowed
