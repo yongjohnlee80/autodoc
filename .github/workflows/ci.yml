@@ -255,6 +255,28 @@ jobs:
           go vet ./...
           mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
           go test -count=1 -timeout 20m "${pkgs[@]}"
+      - name: scratch (not for merge) the shell seam's argument cells and three mutants
+        if: ${{ !inputs.discover }}
+        run: |
+          C='^(TestAnAgentsCommandReachesItsCLIWhole|TestAnAgentsCommandRefusesAValueItCannotCarry)$'
+          U='^(TestAQuotedArgumentReachesTheProgramAsItself|TestArgsCarryEachArgumentWhole|TestCarriesRefusesWhatABatchFileReadsAgain|TestArgsAreWrittenEachShellsWay|TestArgsCarryASetupsArgumentsThroughABatchFile|TestEachShellRunsALineItsWay|TestTheShellsOnWindows)$'
+          go test -count=1 -timeout 10m -v -run "$U" ./internal/usershell/ > "$RUNNER_TEMP/u.txt" 2>&1 && ru=0 || ru=$?
+          go test -count=1 -timeout 10m -v -run "$C" ./tui/ > "$RUNNER_TEMP/t.txt" 2>&1 && rt=0 || rt=$?
+          grep -E '^(=== RUN|\s*--- (PASS|FAIL|SKIP)|ok |FAIL|panic: )|_test\.go:[0-9]+:' "$RUNNER_TEMP/u.txt" "$RUNNER_TEMP/t.txt" | grep -v '=== RUN' | cut -c1-400 || true
+          echo "== cells usershell rc=$ru tui rc=$rt"
+          cp internal/usershell/usershell.go "$RUNNER_TEMP/keep-u.go"; cp internal/usershell/quote.go "$RUNNER_TEMP/keep-q.go"
+          mut() { name=$1; shift; echo "== mutant $name applied: $(grep -c "mutant $name" internal/usershell/*.go | paste -sd' ')"
+            go test -count=1 -timeout 5m -run "$U" ./internal/usershell/ > "$RUNNER_TEMP/m-$name.txt" 2>&1 && mu=0 || mu=$?
+            go test -count=1 -timeout 5m -run "$C" ./tui/ >> "$RUNNER_TEMP/m-$name.txt" 2>&1 && mt=0 || mt=$?
+            grep -E '^\s*--- FAIL|_test\.go:[0-9]+:' "$RUNNER_TEMP/m-$name.txt" | head -6 | cut -c1-300 || true
+            echo "== mutant $name usershell rc=$mu tui rc=$mt (want a non-zero: killed)"
+            cp "$RUNNER_TEMP/keep-u.go" internal/usershell/usershell.go; cp "$RUNNER_TEMP/keep-q.go" internal/usershell/quote.go; }
+          sed -i 's|^\tif s.kind == winps \&\& len(args) > 0 {$|\tif false \&\& s.kind == winps \&\& len(args) > 0 { // mutant nodashdash|; s|^\t\tif s.kind == winps {$|\t\tif false \&\& s.kind == winps { // mutant nodashdash|' internal/usershell/usershell.go; mut nodashdash
+          sed -i "s|\"\$PSNativeCommandArgumentPassing = 'Standard'; \" + line}|line} // mutant nostandard|" internal/usershell/usershell.go; mut nostandard
+          sed -i 's|^\t\treturn `""` // 5.1 drops an empty argument; "" is one to the program$|\t\treturn "" // mutant noempty|' internal/usershell/quote.go; mut noempty
+          python -c "p='internal/usershell/usershell.go'; s=open(p,encoding='utf-8').read(); o='bad = \"%&|<>^\\\\r\\\\n\\\\x00\"'; assert o in s; open(p,'w',encoding='utf-8').write(s.replace(o,'bad = \"\\\\x00\" // mutant nocarry'))"; mut nocarry
+          python -c "p='internal/usershell/usershell.go'; s=open(p,encoding='utf-8').read(); o='bad = \"%&|<>^\\\\r\\\\n\\\\x00\"'; assert o in s; open(p,'w',encoding='utf-8').write(s.replace(o,'bad = \"&|<>^\\\\r\\\\n\\\\x00\" // mutant nopercent'))"; mut nopercent
+          [ $ru = 0 ] && [ $rt = 0 ]
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
