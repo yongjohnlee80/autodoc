@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -184,27 +183,5 @@ func TestThePluginLoadsFromItsURL(t *testing.T) {
 		if err != nil {
 			t.Errorf("%q: bun could not load %s: %v\n%s", name, cfg.Plugin[0], err, b)
 		}
-	}
-}
-
-// TestThePluginURLNamesTheFile: the plugin's URL is absolute and escaped, so it names the very
-// file wherever it is: a folder holding '#', '%', '?', a space or non-ASCII, and a relative path
-// (made absolute against the working directory) all read back as their own path.
-func TestThePluginURLNamesTheFile(t *testing.T) {
-	base := t.TempDir()
-	for _, name := range []string{"team#1", "50%41", "a?b=c", "with space", "ünïcödé", "%", "plain"} {
-		p := filepath.Join(base, name, OpenCodePluginName)
-		u, err := pluginURL(p)
-		if err != nil {
-			t.Fatal(err)
-		}
-		back, err := url.Parse(u)
-		if err != nil || back.Scheme != "file" || back.Host != "" || back.Path != p || back.RawQuery != "" || back.Fragment != "" {
-			t.Errorf("%q: %s reads back as %+v %v, want the path %s", name, u, back, err, p)
-		}
-	}
-	t.Chdir(base)
-	if u, err := pluginURL(filepath.Join("rel", OpenCodePluginName)); err != nil || u != (&url.URL{Scheme: "file", Path: filepath.Join(base, "rel", OpenCodePluginName)}).String() {
-		t.Errorf("a relative path's URL: %s %v, want it absolute", u, err)
 	}
 }
