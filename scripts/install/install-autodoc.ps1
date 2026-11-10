@@ -132,7 +132,11 @@ function Shortcut {
 	$shell = New-Object -ComObject WScript.Shell
 	if (Test-Path -LiteralPath $lnk) {
 		$old = $shell.CreateShortcut($lnk)
-		if ($old.TargetPath -eq $Bin) { return $lnk }
+		if ($old.TargetPath -eq $Bin) {
+			# ours already: bring one from an older install to the minimized start, nothing else changed
+			if ($old.WindowStyle -ne 7) { $old.WindowStyle = 7; $old.Save() }
+			return $lnk
+		}
 		if ($Yes -or -not [Environment]::UserInteractive) { Say "Kept the Start menu shortcut, which runs $($old.TargetPath)."; return $lnk }
 		$a = Read-Host "The Start menu shortcut runs $($old.TargetPath). Point it at $Bin? [y/N]"
 		if ($a -notmatch "^(y|yes)$") { return $lnk }

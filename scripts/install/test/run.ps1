@@ -106,6 +106,23 @@ try {
 	if ($code -eq 0 -and (Get-Content -Raw (Join-Path $h 'out.txt')) -match "installed already") { Ok "run again, it says AutoDoc is installed already" }
 	else { Bad "run again" "exit ${code}: $(Get-Content -Raw (Join-Path $h 'out.txt'))" }
 
+	# a shortcut from an older install, ours but not minimized, is brought up to date on reinstall, and
+	# nothing else about it changes; one that runs another program is left exactly as it is
+	$lnk = Join-Path $h "Roaming\Microsoft\Windows\Start Menu\Programs\AutoDoc.lnk"
+	$wsh = New-Object -ComObject WScript.Shell
+	$s = $wsh.CreateShortcut($lnk); $s.WindowStyle = 1; $s.Description = "kept by the reinstall"; $s.Save()
+	$code = Run $h $installer @("-BaseUrl", $base, "-Yes")
+	$s = $wsh.CreateShortcut($lnk)
+	if ($code -eq 0 -and $s.WindowStyle -eq 7 -and $s.Description -eq "kept by the reinstall" -and $s.TargetPath -eq $bin) { Ok "a reinstall minimizes our older shortcut and changes nothing else" }
+	else { Bad "a reinstall minimizes our older shortcut" "exit ${code}, style $($s.WindowStyle), description $($s.Description), target $($s.TargetPath)" }
+	$other = Join-Path $env:SystemRoot "System32\notepad.exe"
+	$s.TargetPath = $other; $s.WindowStyle = 1; $s.Save()
+	$code = Run $h $installer @("-BaseUrl", $base, "-Yes")
+	$s = $wsh.CreateShortcut($lnk)
+	if ($code -eq 0 -and $s.WindowStyle -eq 1 -and $s.TargetPath -eq $other) { Ok "a shortcut that runs another program is left as it is" }
+	else { Bad "a shortcut that runs another program is left as it is" "exit ${code}, style $($s.WindowStyle), target $($s.TargetPath)" }
+	$s.TargetPath = $bin; $s.WindowStyle = 7; $s.Save()
+
 	# a checksum that doesn't match installs nothing
 	$h2 = Join-Path $work "home2"
 	$zipsum = Join-Path $R "download\v1.0.0\autodoc-v1.0.0-windows-amd64.zip.sha256"
