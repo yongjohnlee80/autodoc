@@ -156,7 +156,9 @@ func TestAnAgentIsToldOfAWorkspaceSwitch(t *testing.T) {
 		t.Errorf("the agent's workspace after the switch: %v, want kb's", got)
 	}
 	settings, err := os.ReadFile(filepath.Join(dir, "kb", ".claude", "settings.json"))
-	if want := filepath.Join(dir, "kb", "bin", "autodoc") + "' --workspace-notice"; err != nil || !strings.Contains(string(settings), want) {
+	// the notice runs the build by its path, never the folder's wrapper or a bare autodoc
+	bin := onLoop(r, func() string { return r.h.agents.agentBin() })
+	if want := shellQuote(bin) + " --workspace-notice"; err != nil || !strings.Contains(string(settings), want) {
 		t.Errorf("the folder's Claude settings: %v, want the hook %q:\n%s", err, want, settings)
 	}
 }
