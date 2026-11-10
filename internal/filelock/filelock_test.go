@@ -142,3 +142,27 @@ func holdForTest() {
 	_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
 	os.Exit(0)
 }
+
+// NoFollow refuses a link at the lock's path, never creating or locking its target; a plain file
+// there is locked as without it.
+func TestNoFollowRefusesALink(t *testing.T) {
+	dir := t.TempDir()
+	target, link := filepath.Join(dir, "target"), filepath.Join(dir, "link")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("this system makes no link here: %v", err)
+	}
+	if _, err := TryLock(link, NoFollow()); err == nil || errors.Is(err, ErrHeld) {
+		t.Errorf("TryLock(NoFollow) on a link: %v, want it refused", err)
+	}
+	if _, err := os.Lstat(target); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the link's target was made: %v", err)
+	}
+	unlock, err := TryLock(filepath.Join(dir, "plain"), NoFollow())
+	if err != nil {
+		t.Fatalf("TryLock(NoFollow) on a plain path: %v", err)
+	}
+	if _, err := TryLock(filepath.Join(dir, "plain"), NoFollow()); !errors.Is(err, ErrHeld) {
+		t.Errorf("a second TryLock(NoFollow) while held: %v, want ErrHeld", err)
+	}
+	_ = unlock()
+}

@@ -387,9 +387,10 @@ In the code: `rpc/embedsetup.go`, `rpc/embeddings.go`, `internal/daemon/embedset
 ## Host probe
 
 The probe reads what the machine offers without a network or a provider: GPU vendor, VRAM and
-compute capability, RAM, free space under the data directory, and whether Ollama answers. It reads
-`/sys` and `/proc` first, and runs `nvidia-smi` only when it is on the path, under a short timeout.
-Nothing fails: what cannot be read is reported as unknown.
+compute capability, RAM, free space under the data directory, and whether Ollama answers. On Linux
+it reads `/sys` and `/proc` first; on Windows the RAM is `GlobalMemoryStatusEx`'s. On both it runs
+`nvidia-smi` only when it is on the path, under a short timeout. On Windows a GPU other than an
+NVIDIA one is unknown. Nothing fails: what cannot be read is reported as unknown.
 
 In the code: `core/hostprobe/hostprobe.go`
 

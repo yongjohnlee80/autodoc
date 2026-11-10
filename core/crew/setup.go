@@ -407,8 +407,8 @@ var codexNoDaemon sync.Map
 // find, run or read within codexProbeTimeout.
 func codexHasNoDaemon(program string, env map[string]string, dir string) (bool, error) {
 	bin := program
-	if !strings.Contains(program, "/") {
-		found := lookAll(program, env["PATH"], dir)
+	if !isPath(program) {
+		found := programsOn(program, env["PATH"], dir)
 		if len(found) == 0 {
 			return false, fmt.Errorf("no %s on PATH", program)
 		}

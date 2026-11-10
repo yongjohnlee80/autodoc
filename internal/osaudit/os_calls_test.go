@@ -42,6 +42,8 @@ var seamPackages = []string{
 	"internal/userdirs",  // the user's folders
 	"internal/usershell", // the default shell
 	"internal/procenv",   // the environment and the programs on its PATH
+	"core/procstat",      // what this process uses: CPU, resident memory
+	"core/hostprobe",     // what this machine offers: RAM, GPU
 }
 
 // osNames are the operating systems a file name or a build constraint may name, Go's GOOS values

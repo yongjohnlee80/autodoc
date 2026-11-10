@@ -5,6 +5,7 @@
 ./core/clock
 ./core/edition
 ./core/export/mermaid
+./core/hostprobe
 ./core/kbtype
 ./core/kind
 ./core/lab
@@ -20,10 +21,13 @@
 ./enterprise/opcode
 ./enterprise/ops
 ./enterprise/search
+./examples/card-go
+./examples/card-qml
 ./internal/luarefgen
 ./internal/profiling
 ./internal/tuiaudit
 ./internal/userperm/...
+./plugin/...
 ./plugin/card
 ./plugin/decl
 ./script

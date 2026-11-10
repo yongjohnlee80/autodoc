@@ -346,7 +346,7 @@ func ClaudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
 // be the one the launcher runs, and naming hooks the running one doesn't know can stall its start.
 // The error says first why mise didn't answer, if it didn't, then names every file tried.
 func claudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
-	if strings.Contains(program, "/") {
+	if isPath(program) {
 		bin := program
 		if !filepath.IsAbs(bin) {
 			bin = filepath.Join(dir, bin)
@@ -354,11 +354,11 @@ func claudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
 		k, err := ClaudeKnowsIn(bin, cache)
 		return bin, k, err
 	}
-	hits := lookAll(program, path, dir)
+	hits := programsOn(program, path, dir)
 	if len(hits) == 0 {
 		return "", nil, fmt.Errorf("crew: %s is not on the agent's PATH", program)
 	}
-	mise := lookAll("mise", path, dir)
+	mise := programsOn("mise", path, dir)
 	var tried []string
 	seen := map[string]bool{}
 	try := func(bin string) (ClaudeHooks, bool) {
@@ -388,7 +388,7 @@ func claudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
 			continue
 		}
 		bin := hit
-		if filepath.Base(real) == "mise" { // a shim: the tool mise runs for it
+		if isProgram(real, "mise") { // a shim: the tool mise runs for it
 			if bin = which(real); bin == "" {
 				continue
 			}
@@ -408,24 +408,6 @@ func claudeOf(program, path, dir, cache string) (string, ClaudeHooks, error) {
 		return "", nil, fmt.Errorf("crew: %s, and none of %s reads as a Claude Code", miseFailed, strings.Join(tried, ", "))
 	}
 	return "", nil, fmt.Errorf("crew: none of %s reads as a Claude Code", strings.Join(tried, ", "))
-}
-
-// lookAll is every executable file named name on path, in order, a relative folder taken from dir.
-func lookAll(name, path, dir string) []string {
-	var out []string
-	for _, d := range filepath.SplitList(path) {
-		if d == "" {
-			d = "."
-		}
-		if !filepath.IsAbs(d) {
-			d = filepath.Join(dir, d)
-		}
-		f := filepath.Join(d, name)
-		if fi, err := os.Stat(f); err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 && !slices.Contains(out, f) {
-			out = append(out, f)
-		}
-	}
-	return out
 }
 
 // miseWhich is the tool mise (at bin) runs for program in dir: `mise which`, bounded by

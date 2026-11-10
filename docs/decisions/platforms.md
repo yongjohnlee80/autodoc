@@ -30,6 +30,8 @@ The packages, the planned seams (their design is pending):
 | The user's folders: home, cache, temporary | `internal/userdirs` |
 | The default shell | `internal/usershell` |
 | The environment, and the programs on its PATH | `internal/procenv` |
+| What this process uses: CPU, resident memory | `core/procstat` |
+| What this machine offers: RAM, GPU | `core/hostprobe` |
 
 `internal/diskspace`, `internal/filelock`, `internal/userdirs` and `internal/procenv` exist; the others are made as their code moves behind
 them.

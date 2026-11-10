@@ -77,7 +77,9 @@ In the code: `tui/agentsetup.go`, `AGENTS.md`
 The agents a TUI starts reach the page open in that TUI, its unsaved text included, through a unix
 socket the TUI serves at `<state>/editor/<pid>.sock`, mode 0600, removed when it stops. A TUI that
 was killed never removes its own, so each TUI at its start removes the `<pid>.sock` files in that
-folder that refuse a connection. A socket that answers is another TUI's, and stays.
+folder that refuse a connection. A socket that answers is another TUI's, and stays. On Windows it is
+a named pipe instead (`ipc.AddrIn`, named for that folder and pid), whose access list lets in the
+user alone, as the daemon's does; a pipe goes with the TUI, so there is nothing to sweep.
 
 - An agent calls it as `autodoc --editor <verb> [params]`. Its environment names the socket
   (`AUTODOC_EDITOR`) and its token (`AUTODOC_EDITOR_TOKEN`). Codex's tool shells drop every variable
