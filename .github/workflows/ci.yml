@@ -247,6 +247,22 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: scratch (not for merge) core/todo whole on Windows, and the exact store-root cell with one mutant
+        if: ${{ !inputs.discover }}
+        continue-on-error: true
+        run: |
+          go test -count=1 -timeout 20m ./core/todo/ > "$RUNNER_TEMP/w.txt" 2>&1 && rw=0 || rw=$?
+          echo "== core/todo whole rc=$rw PASS-lines $(grep -cE '^ok' "$RUNNER_TEMP/w.txt" || true)"
+          grep -E '^(--- FAIL|ok|FAIL)|_test\.go:[0-9]+:' "$RUNNER_TEMP/w.txt" | cut -c1-240 | head -30 || true
+          go test -count=1 -v -run '^TestAStoresRootAtADrivesOrAShareRoot$' ./core/todo/ > "$RUNNER_TEMP/b.txt" 2>&1 && rb=0 || rb=$?
+          grep -E '^--- |_test\.go:[0-9]+:' "$RUNNER_TEMP/b.txt" | cut -c1-240 || true
+          echo "== storeroot cell rc=$rb"
+          python -c "p='core/todo/journal.go'; s=open(p,encoding='utf-8').read(); o='\tif root = paths.Dir(p); paths.Join(root, todoDir) != p {\n'; assert s.count(o)==1; open(p,'w',encoding='utf-8').write(s.replace(o,'\tif root = paths.Dir(p); false { // mutant inexact\n'))"
+          go test -count=1 -run '^TestAStoresRootAtADrivesOrAShareRoot$' ./core/todo/ > "$RUNNER_TEMP/m.txt" 2>&1 && rm=0 || rm=$?
+          echo "== mutant inexact applied: $(grep -c 'mutant inexact' core/todo/journal.go)"
+          grep -E '_test\.go:[0-9]+:' "$RUNNER_TEMP/m.txt" | head -4 | cut -c1-240 || true
+          echo "== mutant inexact rc=$rm (want a non-zero: killed)"
+          git checkout -q -- core/todo/journal.go
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
         run: |
