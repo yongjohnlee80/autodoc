@@ -93,8 +93,6 @@ func privateLog(path string) error {
 	switch {
 	case err == nil:
 		return r.Close()
-	case errors.Is(err, userperm.ErrInUse):
-		return nil
 	case !errors.Is(err, userperm.ErrExposed):
 		return err
 	}
