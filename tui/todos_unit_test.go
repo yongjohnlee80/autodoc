@@ -352,8 +352,18 @@ func TestTodosEventsAndFolders(t *testing.T) {
 		t.Errorf("folder dialog %v", s.Opened)
 	}
 	s.Answers["todos.stores"] = func([]any) (any, error) {
-		return []any{map[string]any{"path": slashFile("/p/.todo-list"), "roots": []any{slashFile("/p")}, "claimed": true},
-			map[string]any{"path": slashFile("/r/.todo-list"), "roots": []any{slashFile("/r")}}}, nil
+		return []any{map[string]any{"id": "S-p", "path": slashFile("/p/.todo-list"), "roots": []any{slashFile("/p")}, "claimed": true},
+			map[string]any{"id": "S-r", "path": slashFile("/r/.todo-list"), "roots": []any{slashFile("/r")}}}, nil
+	}
+	// a folder's store, as the daemon resolves it: its id is what the panel shows it by
+	resolveWS := s.Answers["todos.resolve"]
+	ids := map[string]string{slashFile("/r"): "S-r", slashFile("/n"): "S-n"}
+	s.Answers["todos.resolve"] = func(p []any) (any, error) {
+		if at, ok := p[0].(map[string]any); ok {
+			root, _ := at["root"].(string)
+			return map[string]any{"store_id": ids[root], "root": root, "store": root + "/.todo-list", "claimed": true}, nil
+		}
+		return resolveWS(p)
 	}
 	v.folderChosen(taskFile("/r/.todo-list"))
 	if !s.Called("todos.register["+slashFile("/r")+"]") || v.cur == nil || v.cur.id != "root:"+slashFile("/r") || s.Sets["App.todoStoreIndex"] != 2 {
