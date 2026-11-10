@@ -35,12 +35,11 @@ const (
 
 // tuiExact assigns a file by its whole stem (its name less .go and _test): the host's glue files,
 // which a feature's prefix would otherwise take. The kit is its own package, tui/feature, and so is
-// each feature moved so far (tui/searchsetup, tui/system, tui/explorer): tui imports them, and they
-// can import nothing of tui's. Their tests that drive a whole program stay in tui, the host's.
+// each feature moved so far (tui/searchsetup, tui/system, tui/explorer, tui/relations): tui imports
+// them, and they can import nothing of tui's. Their tests that drive a whole program stay in tui, the
+// host's.
 var tuiExact = map[string]string{
-	"todomove": "host", "scripts": "host", "relationmap": "host",
-	"relationviews_tui": "host", "relationviews_gui": "host", "relationviews_cells": "host",
-	"relations": "relations",
+	"todomove": "host", "scripts": "host",
 }
 
 // tuiPrefixes assign the other files by their stem's prefix, the first that matches winning; a
@@ -50,7 +49,6 @@ var tuiPrefixes = []struct{ prefix, group string }{
 	{"plugin", "plugins"}, {"candidate", "plugins"}, {"registrybrowse", "plugins"}, {"luapackages", "plugins"},
 	{"lua", "scripting"}, {"scripting", "scripting"}, {"modules", "scripting"},
 	{"todo", "todos"},
-	{"globe", "relations"}, {"mind", "relations"}, {"graph", "relations"}, {"groupeditor", "relations"}, {"groups", "relations"},
 	{"terminal", "terminals"},
 	{"notepage", "page"}, {"cardpage", "page"}, {"noteembeds", "page"}, {"embeds_gui", "page"}, {"embedretry", "page"},
 	{"chartnotice", "page"}, {"diagram", "page"}, {"mermaidjs", "page"}, {"htmlpane", "page"}, {"rendered_", "page"},
@@ -340,10 +338,10 @@ func TestTuiGroupsAssignAsTheMapSays(t *testing.T) {
 		"todomove.go": "host", "todos.go": "todos", "todos_assign_test.go": "todos",
 		"daemon_client.go": "host", "terminal.go": "terminals", "terminalkeymap.go": "terminals",
 		"luapackages.go": "plugins", "luacard.go": "scripting", "lua.go": "scripting",
-		"relationviews_gui.go": "host", "relations.go": "relations", "relationmap.go": "host",
+		"relationviews_gui.go": "host", "globemap_cells_test.go": "host", "relationmap.go": "host",
 		"agentserver.go": "crew", "pluginsurface_linux.go": "plugins", "notepage.go": "page",
-		"rendered_cells.go": "page", "embeds_gui.go": "page", "mindmap_gui.go": "relations",
-		"groups.go": "relations", "app.go": "host", "files.go": "host", "prefspec_test.go": "host",
+		"rendered_cells.go": "page", "embeds_gui.go": "page", "todos_assign.go": "todos",
+		"terminallook.go": "terminals", "app.go": "host", "files.go": "host", "prefspec_test.go": "host",
 	} {
 		if got := tuiGroupOf(base); got != want {
 			t.Errorf("tuiGroupOf(%q) = %s, want %s", base, got, want)

@@ -1,6 +1,6 @@
 //go:build gui
 
-package tui
+package relations
 
 import (
 	"github.com/yongjohnlee80/autodoc/tui/feature"
@@ -12,8 +12,8 @@ import (
 // windowViews are a window's relation views, native views drawn over their cells: the GlobeMap and
 // the Mindmap. backend is the host's backend when asked: the GlobeMap's pictures go to its window
 // (presenterOf).
-func windowViews(c feature.Core, files absoluteFiles, userFile string, page int, backend func() any) []feature.Feature {
-	store := newGraphStore(c, files, userFile)
+func WindowViews(c feature.Core, files AbsoluteFiles, userFile string, page int, backend func() any) []feature.Feature {
+	store := NewGraphStore(c, files, userFile)
 	g, m := newGlobeMap(c, func() globePublisher { return presenterOf(backend()) }, page), newMindmap(c)
 	g.store, g.editor.store, m.store = store, store, store
 	return []feature.Feature{g, m}
@@ -29,18 +29,18 @@ func presenterOf(backend any) globePublisher {
 }
 
 // globeOf is f as a GlobeMap: a window's, or one in cells (a GUI build run as a terminal, --ui).
-func globeOf(f feature.Feature) (interface{ openSettings() }, bool) {
+func globeOf(f feature.Feature) (interface{ OpenSettings() }, bool) {
 	switch g := f.(type) {
-	case *globeMap:
+	case *GlobeMap:
 		return g, true
-	case *cellGlobeMap:
+	case *CellGlobeMap:
 		return g, true
 	}
 	return nil, false
 }
 
 // viewType is the GlobeMap's QML type; a view dropped takes its gesture with it.
-func (g *globeMap) viewType() tuidecl.Type {
+func (g *GlobeMap) viewType() tuidecl.Type {
 	return relationViewType("GlobeMap", g.newView, func(c tuicore.Component) {
 		if g.view == c {
 			g.view, g.drag = nil, nil
@@ -49,7 +49,7 @@ func (g *globeMap) viewType() tuidecl.Type {
 }
 
 // viewType is the Mindmap's QML type.
-func (m *mindmap) viewType() tuidecl.Type {
+func (m *Mindmap) viewType() tuidecl.Type {
 	return relationViewType("Mindmap", m.newView, func(c tuicore.Component) {
 		if m.view == c {
 			m.view = nil

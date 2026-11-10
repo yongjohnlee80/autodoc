@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/relations"
+
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/gui"
 )
@@ -25,26 +27,26 @@ func rgb(v uint32) color.NRGBA {
 func TestTheGlobeMapsSettingsApplyAtOnce(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "[[b]]\n", "b.md", "bbb\n"}})
 	r := windowed(t, d)
-	var g *globeMap
+	var g *relations.GlobeMap
 	onLoop(r, func() bool {
-		g = r.h.relationViews[0].(*globeMap)
-		g.openSettings()
+		g = r.h.relationViews[0].(*relations.GlobeMap)
+		g.OpenSettings()
 		return true
 	})
 	r.s.WaitForText(t, "GlobeMap settings")
 	r.s.WaitForText(t, "settling speed")
 
-	onLoop(r, func() bool { g.setColour("other", "#12345"); return true })
-	if v, msg := onLoop(r, func() string { return r.h.prefs.Value(prefGlobeColour + "other") }), onLoop(r, func() string {
+	onLoop(r, func() bool { g.SetColour("other", "#12345"); return true })
+	if v, msg := onLoop(r, func() string { return r.h.prefs.Value(relations.PrefGlobeColour + "other") }), onLoop(r, func() string {
 		v, _ := r.h.p.Tree().Source("App.globeSettingsError")
 		return v.Raw
 	}); v != "" || !strings.Contains(msg, "#rrggbb") {
 		t.Fatalf("a colour that does not read: kept %q, said %q", v, msg)
 	}
 	before := onLoop(r, func() any { return g.Snapshot().Look })
-	onLoop(r, func() bool { g.setColour("other", " #123456 "); return true })
-	l := onLoop(r, func() GlobeState { return g.Snapshot() })
-	if kept := onLoop(r, func() string { return r.h.prefs.Value(prefGlobeColour + "other") }); l.Look == before ||
+	onLoop(r, func() bool { g.SetColour("other", " #123456 "); return true })
+	l := onLoop(r, func() relations.GlobeState { return g.Snapshot() })
+	if kept := onLoop(r, func() string { return r.h.prefs.Value(relations.PrefGlobeColour + "other") }); l.Look == before ||
 		l.Other != rgb(0x123456) || kept != "#123456" {
 		t.Fatalf("a colour that reads: look %v, kept %q", l.Other, kept)
 	}
@@ -52,28 +54,28 @@ func TestTheGlobeMapsSettingsApplyAtOnce(t *testing.T) {
 	// the dialog closed, as the user does, so the panel's heading shows
 	onLoop(r, func() bool { core{r.h}.Close("globeMapSettings"); return true })
 	r.s.WaitFor(t, "the settings closed", func(sc string) bool { return !strings.Contains(sc, "GlobeMap settings") })
-	onLoop(r, func() bool { core{r.h}.TogglePanel(globeMapPanelID); return true })
+	onLoop(r, func() bool { core{r.h}.TogglePanel(relations.GlobeMapPanelID); return true })
 	r.s.WaitForText(t, "kb · 2 documents, 0 links · relations") // the relations by default
 	// a text screen paints no native view, and a window's paint is what hands the load its view: the
 	// cell hands it one, and the load settles as it does in a window
-	onLoop(r, func() bool { g.sendView(gui.Size{W: 800, H: 600}, true); return true })
+	onLoop(r, func() bool { g.SendView(gui.Size{W: 800, H: 600}, true); return true })
 	r.s.WaitFor(t, "the settled notice", func(string) bool { // its progress toast ends saying so, kept
 		return onLoop(r, func() bool {
 			return slices.ContainsFunc(r.h.noticeLog.Items, func(n feature.Notice) bool { return n.Text == "GlobeMap: kb settled · 2 documents, 0 links" })
 		})
 	})
-	onLoop(r, func() bool { r.h.choosePrefNamed(prefGlobeFilter, 1); return true })
+	onLoop(r, func() bool { r.h.choosePrefNamed(relations.PrefGlobeFilter, 1); return true })
 	r.s.WaitForText(t, "kb · 2 documents, 1 links · every link") // the open map follows the choice
-	r.s.WaitFor(t, "the GlobeMap has the keyboard", func(string) bool { return r.focusedOn(globeMapViewID) })
+	r.s.WaitFor(t, "the GlobeMap has the keyboard", func(string) bool { return r.focusedOn(relations.GlobeMapViewID) })
 	r.keys(t, key('l')) // the legend hidden, and shown again
 	r.s.WaitFor(t, "l hid the legend", func(string) bool { return onLoop(r, func() bool { return g.Snapshot().LegendHidden }) })
 	r.keys(t, key('l'))
 	r.s.WaitFor(t, "l showed the legend", func(string) bool { return onLoop(r, func() bool { return !g.Snapshot().LegendHidden }) })
 	r.keys(t, key('f')) // this opening's own: body links
 	r.s.WaitForText(t, "kb · 2 documents, 1 links · body links")
-	onLoop(r, func() bool { core{r.h}.TogglePanel(globeMapPanelID); return true })
-	r.s.WaitFor(t, "the GlobeMap closed", func(string) bool { return !r.panelIsOpen(globeMapPanelID) })
-	onLoop(r, func() bool { core{r.h}.TogglePanel(globeMapPanelID); return true })
+	onLoop(r, func() bool { core{r.h}.TogglePanel(relations.GlobeMapPanelID); return true })
+	r.s.WaitFor(t, "the GlobeMap closed", func(string) bool { return !r.panelIsOpen(relations.GlobeMapPanelID) })
+	onLoop(r, func() bool { core{r.h}.TogglePanel(relations.GlobeMapPanelID); return true })
 	r.s.WaitForText(t, "kb · 2 documents, 1 links · every link") // opened again: the settings' choice
 
 	was := onLoop(r, func() color.NRGBA { return g.Snapshot().Background })
@@ -104,14 +106,14 @@ func TestTheViewsGroupsAreTheWorkspacesGraphFile(t *testing.T) {
 	if _, err := (core{r.h}).Call(context.Background(), "workspace.set_schema", "kb", "schema.yaml"); err != nil {
 		t.Fatal(err)
 	}
-	var g *globeMap
-	var m *mindmap
+	var g *relations.GlobeMap
+	var m *relations.Mindmap
 	onLoop(r, func() bool {
-		g, m = r.h.relationViews[0].(*globeMap), r.h.relationViews[1].(*mindmap)
-		core{r.h}.TogglePanel(globeMapPanelID)
+		g, m = r.h.relationViews[0].(*relations.GlobeMap), r.h.relationViews[1].(*relations.Mindmap)
+		core{r.h}.TogglePanel(relations.GlobeMapPanelID)
 		return true
 	})
-	queries := func(list []Group) []string {
+	queries := func(list []relations.Group) []string {
 		var out []string
 		for _, x := range list {
 			out = append(out, x.Query)
@@ -128,19 +130,19 @@ func TestTheViewsGroupsAreTheWorkspacesGraphFile(t *testing.T) {
 		t.Fatalf("the graph file:\n%s", f)
 	}
 	// an edit in the settings: written, and drawn
-	onLoop(r, func() bool { g.EditGroups().moved(1); g.EditGroups().setColour("#123456"); return true })
+	onLoop(r, func() bool { g.EditGroups().Moved(1); g.EditGroups().SetColour("#123456"); return true })
 	r.s.WaitFor(t, "the edit written", func(string) bool { return strings.Contains(file(), `colour = "#123456"`) })
 	if c := onLoop(r, func() color.NRGBA { return g.Snapshot().Groups[1].Colour }); c != rgb(0x123456) {
 		t.Errorf("type:adr's colour in the view: %v", c)
 	}
-	onLoop(r, func() bool { g.EditGroups().setQuery("nope"); return true })
+	onLoop(r, func() bool { g.EditGroups().SetQuery("nope"); return true })
 	if q := onLoop(r, func() string { return g.Snapshot().Groups[1].Query }); q != "type:adr" {
 		t.Errorf("a query that does not read was kept: %q", q)
 	}
 	// the Mindmap: its own list, with outlines, in the same file
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
-	onLoop(r, func() bool { core{r.h}.TogglePanel(mindmapPanelID); return true })
+	onLoop(r, func() bool { core{r.h}.TogglePanel(relations.MindmapPanelID); return true })
 	r.s.WaitFor(t, "the Mindmap's groups", func(string) bool { return strings.Contains(file(), "[[mindmap.groups]]") })
 	if f := file(); !strings.Contains(f, `shape = "hexagon"`) {
 		t.Errorf("the Mindmap's groups have no outlines:\n%s", f)

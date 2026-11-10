@@ -1,4 +1,4 @@
-package tui
+package relations
 
 import (
 	"fmt"
@@ -167,17 +167,16 @@ func TestAZoomedInGlobeMapDrawsQuickly(t *testing.T) {
 
 // builtGlobe is a terminal's GlobeMap with g installed, its view w×h cells, as a load installs a
 // build.
-func builtGlobe(t *testing.T, gl *cellGlobe, w, h int) (*cellGlobeMap, *cellGlobeView) {
+func builtGlobe(t *testing.T, gl *cellGlobe, w, h int) (*CellGlobeMap, *cellGlobeView) {
 	t.Helper()
-	host := newHost(NewSession("unused", nil), Options{})
-	var g *cellGlobeMap
-	for _, f := range host.relationViewFeatures() {
-		if c, ok := f.(*cellGlobeMap); ok {
+	var g *CellGlobeMap
+	for _, f := range CellViews(newScripted("kb"), nil, "", 0) {
+		if c, ok := f.(*CellGlobeMap); ok {
 			g = c
 		}
 	}
 	if g == nil {
-		t.Fatal("a terminal host has no cell GlobeMap")
+		t.Fatal("a terminal's relation views have no cell GlobeMap")
 	}
 	v := g.newView().(*cellGlobeView)
 	v.cells = tuicore.Size{W: w, H: h}

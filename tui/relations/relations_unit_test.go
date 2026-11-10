@@ -1,4 +1,4 @@
-package tui
+package relations
 
 import (
 	"errors"
@@ -31,7 +31,7 @@ func scriptedGraph(c *featuretest.ScriptedCore) {
 func TestTheRelationsFollowThePageShown(t *testing.T) {
 	c := newScripted("kb")
 	scriptedGraph(c)
-	r := newRelated(c)
+	r := NewRelated(c)
 	c.Deferred = true
 	a := feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}}
 	r.Shown(a)
@@ -61,7 +61,7 @@ func TestTheRelationsFollowThePageShown(t *testing.T) {
 		t.Fatalf("the draft: rows %q, title %q", r.labels(), c.Sets["App.relationsTitle"])
 	}
 	r.Shown(feature.Page{Ref: feature.FileRef{WS: "", Path: "/tmp/x.md"}, Outside: true})
-	if c.Sets["App.relationsTitle"] != "links · "+outsideBadge {
+	if c.Sets["App.relationsTitle"] != "links · "+feature.OutsideBadge {
 		t.Fatalf("a file in no workspace: title %q", c.Sets["App.relationsTitle"])
 	}
 }
@@ -70,7 +70,7 @@ func TestTheRelationsFollowThePageShown(t *testing.T) {
 func TestTheRelationsDepthAndOpen(t *testing.T) {
 	c := newScripted("kb")
 	scriptedGraph(c)
-	r := newRelated(c)
+	r := NewRelated(c)
 	r.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}})
 	r.depth() // the keyboard elsewhere: d is not the drawer's
 	if r.deep || slices.ContainsFunc(c.Calls, func(s string) bool { return strings.HasPrefix(s, "graph.neighborhood") }) {
@@ -82,12 +82,12 @@ func TestTheRelationsDepthAndOpen(t *testing.T) {
 		t.Fatalf("depth 2: deep %v, rows %q, title %q", r.deep, got, c.Sets["App.relationsTitle"])
 	}
 	c.Views = nil
-	r.open(0) // a heading: nothing opens, and the drawer stays
+	r.Open(0) // a heading: nothing opens, and the drawer stays
 	if len(c.Views) != 0 || len(c.OpenedFiles) != 0 || len(c.Hidden) != 0 {
 		t.Fatalf("a heading: views %v, files %v, hidden %v; want none", c.Views, c.OpenedFiles, c.Hidden)
 	}
 	// b.md, the drawer hidden, not closed (docs/decisions/editor.md#dock-clicks-hide-and-show)
-	r.open(1)
+	r.Open(1)
 	if !slices.Equal(c.OpenedFiles, []string{"kb:b.md"}) || !slices.Equal(c.Hidden, []string{"explorer"}) || len(c.Views) != 0 {
 		t.Fatalf("opened files %v, hidden %v, views %v; want b.md, the drawer hidden", c.OpenedFiles, c.Hidden, c.Views)
 	}
@@ -98,7 +98,7 @@ func TestTheRelationsDepthAndOpen(t *testing.T) {
 func TestTheRelationsDropAStaleAnswer(t *testing.T) {
 	c := newScripted("kb")
 	scriptedGraph(c)
-	r := newRelated(c)
+	r := NewRelated(c)
 	c.Deferred = true
 	r.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}}) // read 0, held
 	r.Shown(feature.Page{})                                             // the file kept as the draft
@@ -113,7 +113,7 @@ func TestTheRelationsDropAStaleAnswer(t *testing.T) {
 func TestTheLaterRelationsReadWins(t *testing.T) {
 	c := newScripted("kb")
 	scriptedGraph(c)
-	r := newRelated(c)
+	r := NewRelated(c)
 	c.Deferred = true
 	r.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}})
 	c.Deliver(0)
@@ -131,7 +131,7 @@ func TestTheLaterRelationsReadWins(t *testing.T) {
 func TestRelationsCallbackKeepsRowsForStaleOrFailedAnswers(t *testing.T) {
 	c := newScripted("kb")
 	scriptedGraph(c)
-	r := newRelated(c)
+	r := NewRelated(c)
 	r.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}})
 	c.Deferred = true
 	for _, scope := range []string{"document", "workspace", "graph.links", "graph.backlinks", "graph.unresolved", "graph.neighborhood"} {
@@ -143,7 +143,7 @@ func TestRelationsCallbackKeepsRowsForStaleOrFailedAnswers(t *testing.T) {
 				return nil, errors.New(scope + " refused")
 			}
 		}
-		r.load("kb", "a.md")
+		r.Load("kb", "a.md")
 		switch scope {
 		case "document":
 			c.File++
@@ -180,7 +180,7 @@ func TestATasksRelationsInTheDrawer(t *testing.T) {
 		return []any{map[string]any{"path": ".todo-list/open/w.md", "raw": "t", "kind": "blocked", "resolved": true}}, nil
 	}
 	c.Answers["graph.unresolved"] = func([]any) (any, error) { return []any{}, nil }
-	r := newRelated(c)
+	r := NewRelated(c)
 	r.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: ".todo-list/open/t.md"}})
 	want := []string{
 		"adr (1)", "  /src/p/docs/d.md  (outside the workspace)",
@@ -192,8 +192,8 @@ func TestATasksRelationsInTheDrawer(t *testing.T) {
 	if got := r.labels(); !slices.Equal(got, want) {
 		t.Fatalf("rows\n got %q\nwant %q", got, want)
 	}
-	r.open(1) // the external file: by its absolute path
-	r.open(3) // the review: as the workspace's file
+	r.Open(1) // the external file: by its absolute path
+	r.Open(3) // the review: as the workspace's file
 	if !slices.Equal(c.OpenedFiles, []string{":/src/p/docs/d.md", "kb:reviews/r.md"}) {
 		t.Fatalf("opened %v", c.OpenedFiles)
 	}
@@ -218,7 +218,7 @@ func TestTheRelationsReadEveryPageOfTheUnresolved(t *testing.T) {
 		return map[string]any{"unresolved": []any{map[string]any{"src": "a.md", "raw": "loop.md", "reason": "cycle"}},
 			"count": int64(2)}, nil
 	}
-	r := newRelated(c)
+	r := NewRelated(c)
 	r.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}})
 	if !slices.ContainsFunc(r.labels(), func(l string) bool { return strings.Contains(l, "loop.md") }) {
 		t.Fatalf("a.md's loop on the second page is not shown: %q", r.labels())
@@ -247,7 +247,7 @@ func TestTheRelationsReadAtMostAThousandPagesOfTheUnresolved(t *testing.T) {
 		return map[string]any{"unresolved": []any{map[string]any{"src": "a.md", "raw": "loop.md", "reason": "cycle"}},
 			"count": int64(1 << 40), "next": offset + 1}, nil
 	}
-	r := newRelated(c)
+	r := NewRelated(c)
 	r.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "a.md"}})
 	if calls != 1000 {
 		t.Errorf("graph.unresolved asked %d times, want 1000", calls)
@@ -261,7 +261,7 @@ func TestTheRelationsReadAtMostAThousandPagesOfTheUnresolved(t *testing.T) {
 // leave the cursor on the row it was on, moved there by find or a key; another document's rows
 // put it on their first document.
 func TestReadingTheLinksAgainKeepsTheCursorsRow(t *testing.T) {
-	rel := newRelated(newScripted("kb"))
+	rel := NewRelated(newScripted("kb"))
 	back := func(paths ...string) relations {
 		var rl relations
 		for _, p := range paths {

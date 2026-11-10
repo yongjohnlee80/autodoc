@@ -1,6 +1,6 @@
 //go:build gui
 
-package tui
+package relations
 
 import (
 	"cmp"
@@ -452,7 +452,7 @@ var closedChan = func() chan struct{} { c := make(chan struct{}); close(c); retu
 
 // globeMap is the GlobeMap feature: its loads, fenced and paced by what the window presents (load),
 // and the viewer's pan and zoom.
-type globeMap struct {
+type GlobeMap struct {
 	c         feature.Core
 	page      int                   // documents per page of the map (seams.go: globeMapPage); 0 is the daemon's
 	present   func() globePublisher // the publisher, made when the panel first opens
@@ -463,7 +463,7 @@ type globeMap struct {
 	cur       *globe     // the frame on screen: its picture was presented (hit testing, the names)
 	look      *globeLook // how it draws (globesettings_gui.go); nil until first used
 	groups    *relGroups // the workspace's groups (graphstore_gui.go); nil until read
-	store     *graphStore
+	store     *GraphStore
 	editor    *groupEditor // the settings' groups
 	counts    [2]int       // the load's documents and links, once its map is read
 	status    string       // what a load under way says, a catalog id statusArg fills; "" none
@@ -491,8 +491,8 @@ type globeDrag struct {
 	moved     bool
 }
 
-func newGlobeMap(c feature.Core, present func() globePublisher, page int) *globeMap {
-	g := &globeMap{c: c, page: page, present: present, hover: -1}
+func newGlobeMap(c feature.Core, present func() globePublisher, page int) *GlobeMap {
+	g := &GlobeMap{c: c, page: page, present: present, hover: -1}
 	g.editor = &groupEditor{c: c, view: viewGlobeMap, name: "globe", changed: g.groupsEdited,
 		ground: func() color.NRGBA { return g.currentLook().pal.background }}
 	return g
@@ -500,11 +500,11 @@ func newGlobeMap(c feature.Core, present func() globePublisher, page int) *globe
 
 // readGroups takes ws's groups from the store, as its map is read: its graph file's, or its first,
 // made of types and the workspace's folders. The frame on screen draws in them at once.
-func (g *globeMap) readGroups(ws string, types []string) {
+func (g *GlobeMap) readGroups(ws string, types []string) {
 	if g.store == nil {
 		return
 	}
-	g.store.groups(ws, viewGlobeMap, types, g.currentLook().pal.background, func(list []Group) {
+	g.store.Groups(ws, viewGlobeMap, types, g.currentLook().pal.background, func(list []Group) {
 		if ws == g.c.Workspace() {
 			g.editor.listed(ws, types, list)
 			g.groupsEdited(list)
@@ -513,23 +513,23 @@ func (g *globeMap) readGroups(ws string, types []string) {
 }
 
 // groupsEdited draws in list: the dots, and the legend.
-func (g *globeMap) groupsEdited(list []Group) {
+func (g *GlobeMap) groupsEdited(list []Group) {
 	gs := newRelGroups(list)
 	g.groups = &gs
 	if g.view != nil && g.view.ctx != nil {
-		g.sendView(g.view.pixels(), false)
+		g.SendView(g.view.pixels(), false)
 	}
 	g.dirty()
 }
 
-func (*globeMap) Name() string { return "globemap" }
+func (*GlobeMap) Name() string { return "globemap" }
 
-func (g *globeMap) Panels() []feature.PanelSpec {
-	return []feature.PanelSpec{{ID: globeMapPanelID, View: globeMapViewID, Priority: 70, Icon: "❂",
+func (g *GlobeMap) Panels() []feature.PanelSpec {
+	return []feature.PanelSpec{{ID: GlobeMapPanelID, View: GlobeMapViewID, Priority: 70, Icon: "❂",
 		Edge: func(feature.PrefsView) string { return "center" },
 		Opened: func(feature.PanelHost) {
 			g.open, g.filter = true, g.prefFilter() // it opens following the links its settings choose
-			g.load()
+			g.Load()
 		},
 		Closed: func(c feature.PanelHost) {
 			g.open, g.drag = false, nil // a gesture ends with its panel (its capture is lost as it hides)
@@ -539,38 +539,38 @@ func (g *globeMap) Panels() []feature.PanelSpec {
 		}}}
 }
 
-func (g *globeMap) State() map[string]any {
+func (g *GlobeMap) State() map[string]any {
 	st := g.settingsState()
 	st["App.globeMapTitle"] = "GlobeMap"
 	return st
 }
 
-func (g *globeMap) Commands() map[string]feature.Command {
+func (g *GlobeMap) Commands() map[string]feature.Command {
 	m := g.settingsCommands()
-	m["App.toggleGlobeMap"] = feature.None(g.toggle)
+	m["App.toggleGlobeMap"] = feature.None(g.Toggle)
 	return m
 }
 
-func (g *globeMap) Catalog() []feature.Entry {
-	return []feature.Entry{feature.Builtin("globemap.toggle", "the GlobeMap", "App.toggleGlobeMap()", g.toggle),
-		feature.Builtin("globemap.settings", "the GlobeMap's settings", "App.openGlobeSettings()", g.openSettings)}
+func (g *GlobeMap) Catalog() []feature.Entry {
+	return []feature.Entry{feature.Builtin("globemap.toggle", "the GlobeMap", "App.toggleGlobeMap()", g.Toggle),
+		feature.Builtin("globemap.settings", "the GlobeMap's settings", "App.openGlobeSettings()", g.OpenSettings)}
 }
 
-func (g *globeMap) toggle() { g.c.TogglePanel(globeMapPanelID) }
+func (g *GlobeMap) Toggle() { g.c.TogglePanel(GlobeMapPanelID) }
 
 // Entered: another workspace's map, when it shows; its settings' groups are that workspace's, read
 // with its map, and nothing is edited meanwhile.
-func (g *globeMap) Entered(ws string) {
+func (g *GlobeMap) Entered(ws string) {
 	if ws != g.editor.ws {
 		g.editor.loadingFor(ws)
 	}
 	if g.open {
-		g.load()
+		g.Load()
 	}
 }
 
 // Stopped closes the window's stream.
-func (g *globeMap) Stopped() {
+func (g *GlobeMap) Stopped() {
 	g.stop()
 	g.toast = false // the window is going: no toast to end
 	if g.pres != nil {
@@ -581,7 +581,7 @@ func (g *globeMap) Stopped() {
 // stop ends the load under way: a newer ticket drops what it still posts, a newer generation what it
 // still pushes, and its goroutine returns at its next wait (every wait and step is under its
 // context).
-func (g *globeMap) stop() {
+func (g *GlobeMap) stop() {
 	g.seq++
 	if g.pres != nil {
 		g.pres.begin()
@@ -593,7 +593,7 @@ func (g *globeMap) stop() {
 }
 
 // viewState is the view as the loop has it now, at size.
-func (g *globeMap) viewState(size gui.Size) globeViewState {
+func (g *GlobeMap) viewState(size gui.Size) globeViewState {
 	st := globeViewState{size: size, look: g.currentLook(), groups: g.groups, moved: g.moved, hover: g.hover}
 	if g.moved {
 		st.zoom, st.off = g.zoom, g.off
@@ -603,7 +603,7 @@ func (g *globeMap) viewState(size gui.Size) globeViewState {
 
 // sendView gives the load under way the view at size when it changed, or when force: newest only,
 // a view it has not taken yet replaced.
-func (g *globeMap) sendView(size gui.Size, force bool) {
+func (g *GlobeMap) SendView(size gui.Size, force bool) {
 	st := g.viewState(size)
 	if g.views == nil || !force && st.same(g.sent) {
 		return
@@ -622,7 +622,7 @@ func (g *globeMap) sendView(size gui.Size, force bool) {
 // at the display's pace. A hidden view (NotShown) holds it until the view is drawn again; a closed
 // stream ends it. A view change (size, pan, zoom, colours) pushes the same step again. The loop
 // takes each frame (hit testing, the names) only while the load is current and the panel open.
-func (g *globeMap) load() {
+func (g *GlobeMap) Load() {
 	g.stop()
 	ws, filter := g.c.Workspace(), g.filter
 	tk := g.c.Ticket(&g.seq, feature.TicketWorkspace)
@@ -640,7 +640,7 @@ func (g *globeMap) load() {
 	views := make(chan globeViewState, 1)
 	g.cancel, g.views, g.sent = cancel, views, globeViewState{}
 	if g.view != nil && g.view.ctx != nil {
-		g.sendView(g.view.pixels(), true)
+		g.SendView(g.view.pixels(), true)
 	}
 	g.status, g.statusArg, g.stepped = "autodoc.text.globemap_gui.reading", ws, 0
 	g.tell(g.c.Trf("autodoc.notice.globemap_gui.globemap_reading_s_map", ws))
@@ -812,7 +812,7 @@ func settle(ctx context.Context, sim *graphlayout.Simulation, ws string, m relMa
 // install takes the frame on screen and the transform its picture was drawn at. Until the user
 // pans or zooms, the view asked for follows it (each picture is fitted); a load's first frame fits
 // again, and drops the hover.
-func (g *globeMap) install(f *globe, zoom float32, off gui.Point) {
+func (g *GlobeMap) install(f *globe, zoom float32, off gui.Point) {
 	if g.cur == nil || g.cur.ws != f.ws || len(g.cur.m.Nodes) != len(f.m.Nodes) {
 		g.moved, g.hover = false, -1
 	}
@@ -833,7 +833,7 @@ type globeNotifier interface {
 }
 
 // tell puts msg in the load's progress toast, updated in place until told ends it.
-func (g *globeMap) tell(msg string) {
+func (g *GlobeMap) tell(msg string) {
 	if n, ok := g.c.(globeNotifier); ok {
 		n.NotifyOngoing(globeToast, msg)
 		g.toast = true
@@ -841,7 +841,7 @@ func (g *globeMap) tell(msg string) {
 }
 
 // told ends the load's progress toast with msg, when one is up.
-func (g *globeMap) told(msg string) {
+func (g *GlobeMap) told(msg string) {
 	if n, ok := g.c.(globeNotifier); ok && g.toast {
 		g.toast = false
 		n.NotifyDone(globeToast, msg)
@@ -849,7 +849,7 @@ func (g *globeMap) told(msg string) {
 }
 
 // progress shows how far the load has settled: in its toast, as a bar, and in the title.
-func (g *globeMap) progress() {
+func (g *GlobeMap) progress() {
 	if g.cur == nil || !g.cur.final {
 		g.tell(g.c.Trf("autodoc.notice.globemap_gui.globemap_laying_out_documents_links",
 			g.c.Workspace(), g.counts[0], g.counts[1], feature.Bar(int64(min(g.stepped, globeSteps)), globeSteps)))
@@ -858,7 +858,7 @@ func (g *globeMap) progress() {
 }
 
 // title says what the panel shows, in the UI's language, and redraws it.
-func (g *globeMap) title() {
+func (g *GlobeMap) title() {
 	t := "GlobeMap"
 	switch {
 	case g.status != "":
@@ -876,7 +876,7 @@ func (g *globeMap) title() {
 }
 
 // statusText is what a load under way says, in the UI's language; "" none.
-func (g *globeMap) statusText() string {
+func (g *GlobeMap) statusText() string {
 	if g.status == "" {
 		return ""
 	}
@@ -888,7 +888,7 @@ func (g *globeMap) statusText() string {
 
 // LanguageChanged composes again, in the UI's language, what the GlobeMap keeps on screen: its
 // heading (and the legend, as the view is drawn again), its choosers' rows and its groups' note.
-func (g *globeMap) LanguageChanged() {
+func (g *GlobeMap) LanguageChanged() {
 	names, labels := g.themeChoices()
 	g.c.Set("App.globeThemes", feature.KeyedChoices(names, labels))
 	for _, src := range []string{"App.globeFilters", "App.globeDotSizes", "App.globeSpeeds"} {
@@ -900,7 +900,7 @@ func (g *globeMap) LanguageChanged() {
 	g.title()
 }
 
-func (g *globeMap) dirty() {
+func (g *GlobeMap) dirty() {
 	if g.view != nil && g.view.ctx != nil {
 		g.view.ctx.MarkDirty()
 	}
@@ -920,7 +920,7 @@ func (shot *globeShot) at(p gui.Point) int {
 // since that is not retired) must find the same document under the pointer, at the view's size (a
 // resized slot shows its picture scaled); else the press is refused rather than open what may not
 // be under the pointer. One read of the screen: what is pressed is what was found.
-func (g *globeMap) target(p gui.Point, size gui.Size) (*globeShot, int, bool) {
+func (g *GlobeMap) target(p gui.Point, size gui.Size) (*globeShot, int, bool) {
 	if g.pres == nil {
 		return nil, -1, false
 	}
@@ -938,7 +938,7 @@ func (g *globeMap) target(p gui.Point, size gui.Size) (*globeShot, int, bool) {
 }
 
 // zoomBy zooms by f about the view point p.
-func (g *globeMap) zoomBy(f float32, p gui.Point) {
+func (g *GlobeMap) ZoomBy(f float32, p gui.Point) {
 	z := min(max(g.zoom*f, 1e-4), 1e3)
 	f = z / g.zoom
 	g.zoom, g.moved = z, true
@@ -948,21 +948,21 @@ func (g *globeMap) zoomBy(f float32, p gui.Point) {
 
 // press opens document i of the picture it was found in, the panel hidden first, not closed: the
 // dock shows it again as it was (docs/decisions/editor.md#dock-clicks-hide-and-show).
-func (g *globeMap) press(shot *globeShot, i int) {
+func (g *GlobeMap) press(shot *globeShot, i int) {
 	ws, p := shot.f.ws, shot.f.m.Nodes[i].Path
-	g.c.HidePanel(globeMapPanelID)
+	g.c.HidePanel(GlobeMapPanelID)
 	g.c.OpenRef(ws, p)
 }
 
 // globeView is the GlobeMap's native view, in its panel. Its colours are its look's, not the
 // document's: the panel takes no colour properties.
 type globeView struct {
-	g     *globeMap
+	g     *GlobeMap
 	ctx   *tuicore.Context
 	cells tuicore.Size
 }
 
-func (g *globeMap) newView(relPalette) tuicore.Component {
+func (g *GlobeMap) newView(relPalette) tuicore.Component {
 	v := &globeView{g: g}
 	g.view = v
 	return v
@@ -1010,7 +1010,7 @@ func (v *globeView) HandleEvent(ev tuicore.Event) bool {
 				}
 			} else if _, i, _ := g.target(p, v.pixels()); i != g.hover {
 				g.hover = i // none while the screen disagrees; the picture draws it
-				g.sendView(v.pixels(), false)
+				g.SendView(v.pixels(), false)
 			}
 		case tuicore.MouseRelease:
 			if d := g.drag; d != nil {
@@ -1023,9 +1023,9 @@ func (v *globeView) HandleEvent(ev tuicore.Event) bool {
 		case tuicore.MouseWheel:
 			switch e.Button {
 			case tuicore.WheelUp:
-				g.zoomBy(globeZoomStep, p)
+				g.ZoomBy(globeZoomStep, p)
 			case tuicore.WheelDown:
-				g.zoomBy(1/globeZoomStep, p)
+				g.ZoomBy(1/globeZoomStep, p)
 			}
 		}
 		return true
@@ -1040,15 +1040,15 @@ func (v *globeView) HandleEvent(ev tuicore.Event) bool {
 		centre := gui.Pt(view.W/2, view.H/2)
 		switch e.Text {
 		case "+", "=":
-			g.zoomBy(1.25, centre)
+			g.ZoomBy(1.25, centre)
 		case "-":
-			g.zoomBy(1/1.25, centre)
+			g.ZoomBy(1/1.25, centre)
 		case "0":
 			g.moved = false
 			g.dirty()
 		case "f":
 			g.filter = (g.filter + 1) % len(globeFilters)
-			g.load()
+			g.Load()
 		case "l":
 			g.noKey = !g.noKey
 			g.dirty()
@@ -1066,7 +1066,7 @@ func (v *globeView) HandleEvent(ev tuicore.Event) bool {
 func (v *globeView) NativeView() (any, bool) {
 	g := v.g
 	view := v.pixels()
-	g.sendView(view, g.resend)
+	g.SendView(view, g.resend)
 	g.resend = false
 	l := g.currentLook()
 	var key []legendRow
@@ -1079,7 +1079,7 @@ func (v *globeView) NativeView() (any, bool) {
 // legend is what the GlobeMap's marks stand for in look l: the colour of each group the map shows
 // (groupLegend), any other document's, the superseded ring, the links the filter follows, and the
 // dots' size. Its texts are English, until legendIn puts them in the UI's language.
-func (g *globeMap) legend(l *globeLook) []legendRow {
+func (g *GlobeMap) legend(l *globeLook) []legendRow {
 	var m relMap
 	if g.cur != nil {
 		m = g.cur.m
@@ -1135,7 +1135,7 @@ func (o globeOverlay) paint(c gui.Canvas) {
 // relationViewChoices are the GlobeMap's and the Mindmap's fixed choosers, by their App.* source:
 // relationChoice's rows (each key its English, its label in the UI's language), and the host's
 // featureChoiceLabels for a language switch.
-func relationViewChoices() map[string][]string {
+func RelationViewChoices() map[string][]string {
 	names := func(n int, name func(int) string) []string {
 		out := make([]string, n)
 		for i := range out {

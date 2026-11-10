@@ -1,9 +1,8 @@
 //go:build gui
 
-package tui
+package relations
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -18,37 +17,6 @@ import (
 	graphlayout "github.com/yongjohnlee80/golib/graph/layout"
 	"github.com/yongjohnlee80/golib/gui"
 )
-
-// Run as a window, the GUI writes its relation views into main.qml once each: the Relations menu's
-// items, a panel each whose view is its own type, and the GlobeMap's settings dialog. Run in a
-// terminal, the same build writes the terminal's: its GlobeMap and Mindmap in cells, never the
-// window's views.
-func TestTheGUIWritesTheRelationViews(t *testing.T) {
-	t.Parallel()
-	term := withRelationViews(layout, false)
-	if !bytes.Contains(term, []byte("CellGlobeMap {")) || !bytes.Contains(term, []byte("CellMindmap {")) ||
-		bytes.Contains(term, []byte("        GlobeMap {\n")) || bytes.Contains(term, []byte("        Mindmap {\n")) {
-		t.Fatal("a terminal run of the GUI build did not write the terminal's cell views alone")
-	}
-	doc := string(withRelationViews(layout, true))
-	for _, want := range []string{
-		`MenuItem { text: qsTrId("autodoc.gui.relations.globemap"); onTriggered: App.toggleGlobeMap() }`,
-		`MenuItem { text: qsTrId("autodoc.gui.relations.mindmap"); onTriggered: App.toggleMindmap() }`,
-		`MenuItem { text: qsTrId("autodoc.gui.relations.globemap_settings"); onTriggered: App.openGlobeSettings() }`,
-		"Dialog {\n        id: globeMapSettings\n", `title: qsTrId("autodoc.gui.globeMapSettings.globemap_settings")`,
-		"Dialog {\n        id: mindmapSettings\n", `title: qsTrId("autodoc.gui.mindmapSettings.mindmap_settings")`,
-		`MenuItem { text: qsTrId("autodoc.gui.relations.mindmap_settings"); onTriggered: App.openMindmapSettings() }`,
-		"id: globeMap\n", "GlobeMap {\n            id: globeMapView", `App.panelOpened("globeMap")`,
-		"id: mindmap\n", "Mindmap {\n            id: mindmapView", `App.panelOpened("mindmap")`,
-	} {
-		if n := strings.Count(doc, want); n != 1 {
-			t.Errorf("main.qml holds %q %d times, want once", want, n)
-		}
-	}
-	if !bytes.Equal(withRelationViews([]byte("Window {}"), true), []byte("Window {}")) {
-		t.Error("a layout without the markers was written to")
-	}
-}
 
 // relMapOf is a map of n documents, each linked to the next and every seventh superseded.
 func relMapOf(n int) relMap {
@@ -167,7 +135,7 @@ func TestTheGlobeMapsDotsKeepTheirSizeOnScreen(t *testing.T) {
 	if dotsAt(d1, gl, l, nil, 8, 1).fills[0].path == d1.fills[0].path {
 		t.Fatal("a zoom eight times in kept the dots made for the fit")
 	}
-	if dotsAt(d1, gl, newGlobeLook(prefs{}, defaultPalette()), nil, 1, 1).fills[0].path == d1.fills[0].path {
+	if dotsAt(d1, gl, newGlobeLook(mapPrefs(nil), defaultPalette()), nil, 1, 1).fills[0].path == d1.fills[0].path {
 		t.Fatal("another look kept the dots made for the first")
 	}
 	// the path itself: one document's dot, in layout units, shrinks with the zoom (a little less)
@@ -519,7 +487,7 @@ func TestTheGlobeMapsStreamPublishesTheNewestLoadOnly(t *testing.T) {
 }
 
 // onScreen is a GlobeMap whose stream has presented gl at view, fitted, steady.
-func onScreen(t *testing.T, gl *globe, view gui.Size) (*globeMap, uint64, *globeShot) {
+func onScreen(t *testing.T, gl *globe, view gui.Size) (*GlobeMap, uint64, *globeShot) {
 	t.Helper()
 	s := &globeStream{pub: &paintPresenter{}}
 	gen := s.begin()
@@ -527,7 +495,7 @@ func onScreen(t *testing.T, gl *globe, view gui.Size) (*globeMap, uint64, *globe
 	shot := &globeShot{f: gl, zoom: z, off: off, size: view}
 	s.push(gen, shot, func(gui.Canvas) {})
 	s.presented(gen, shot)
-	return &globeMap{c: newScripted("kb"), pres: s, hover: -1}, gen, shot
+	return &GlobeMap{c: newScripted("kb"), pres: s, hover: -1}, gen, shot
 }
 
 // shifted is gl's documents all moved by d, as a later frame of the settling might place them.
@@ -609,10 +577,10 @@ func TestTheGlobeMapShowsOnlyItsNewestLoad(t *testing.T) {
 	g := newGlobeMap(a, func() globePublisher { return &paintPresenter{} }, 0)
 	spec := g.Panels()[0]
 	spec.Opened(nil) // the load of 20
-	g.sendView(globeView800.size, true)
+	g.SendView(globeView800.size, true)
 	a.run(t, func() bool { return g.cur != nil })
-	g.load() // the load of 30: the load of 20 stops, and what it still hands over never shows
-	g.sendView(globeView800.size, true)
+	g.Load() // the load of 30: the load of 20 stops, and what it still hands over never shows
+	g.SendView(globeView800.size, true)
 	a.run(t, func() bool {
 		if g.cur != nil && len(g.cur.m.Nodes) == 20 && g.status == "" && g.views != nil {
 			return false // the older load's frame, shown before the newer began: wait on
@@ -620,8 +588,8 @@ func TestTheGlobeMapShowsOnlyItsNewestLoad(t *testing.T) {
 		return g.cur != nil && len(g.cur.m.Nodes) == 30 && g.cur.final
 	})
 	shown := g.cur
-	g.load() // the load of 40, closed before it shows anything
-	g.sendView(globeView800.size, true)
+	g.Load() // the load of 40, closed before it shows anything
+	g.SendView(globeView800.size, true)
 	h := &closeHost{}
 	spec.Closed(h)
 	for range 3 {
@@ -669,7 +637,7 @@ func TestTheMindmapRootsAtThePageShown(t *testing.T) {
 		t.Fatal("b.md is nowhere in the drawn map")
 	}
 	m.click(p, gui.Point{})
-	if want := []string{"kb:b.md"}; !equalStrings(c.OpenedFiles, want) || !equalStrings(c.Hidden, []string{mindmapPanelID}) || len(c.Calls) != 1 {
+	if want := []string{"kb:b.md"}; !equalStrings(c.OpenedFiles, want) || !equalStrings(c.Hidden, []string{MindmapPanelID}) || len(c.Calls) != 1 {
 		t.Fatalf("the click opened %v, hid %v and read %v; want b.md opened, the Mindmap hidden, and no read", c.OpenedFiles, c.Hidden, c.Calls)
 	}
 	m.Shown(feature.Page{Ref: feature.FileRef{WS: "kb", Path: "b.md"}}) // the page the click opened

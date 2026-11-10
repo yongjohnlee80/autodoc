@@ -1,4 +1,4 @@
-package tui
+package relations
 
 import (
 	"errors"
@@ -99,7 +99,7 @@ func TestInitialGroups(t *testing.T) {
 	}
 	// every colour reads on its ground, a light one as a dark one; no two groups alike while the
 	// palette lasts, and past it a turn further from the ground, still none alike
-	for _, ground := range []color.NRGBA{hexColour(0x1c1c1c), hexColour(0xe8dcc0)} {
+	for _, ground := range []color.NRGBA{HexColour(0x1c1c1c), HexColour(0xe8dcc0)} {
 		qs := make([]string, len(groupPalette)+6)
 		for i := range qs {
 			qs[i] = fmt.Sprint("q", i)
@@ -107,7 +107,7 @@ func TestInitialGroups(t *testing.T) {
 		got := initGroups(qs, nil, ground, rand.New(rand.NewPCG(1, 2)))
 		seen := map[color.NRGBA]int{}
 		for k, g := range got {
-			if c := contrast(g.Colour, ground); c < 2.95 {
+			if c := Contrast(g.Colour, ground); c < 2.95 {
 				t.Errorf("ground %v, group %d: %v, contrast %.2f; want 3", ground, k, g.Colour, c)
 			}
 			if j, dup := seen[g.Colour]; dup {
@@ -116,8 +116,8 @@ func TestInitialGroups(t *testing.T) {
 			seen[g.Colour] = k
 		}
 	}
-	pal := []color.NRGBA{hexColour(0xff0000), hexColour(0x00ff00)}
-	gs := initGroups([]string{"a", "b", "c", "d", "e", "f", "g"}, pal, hexColour(0x1c1c1c), rand.New(rand.NewPCG(1, 2)))
+	pal := []color.NRGBA{HexColour(0xff0000), HexColour(0x00ff00)}
+	gs := initGroups([]string{"a", "b", "c", "d", "e", "f", "g"}, pal, HexColour(0x1c1c1c), rand.New(rand.NewPCG(1, 2)))
 	if !slices.Contains(pal, gs[0].Colour) || !slices.Contains(pal, gs[1].Colour) || slices.Contains(pal, gs[2].Colour) {
 		t.Errorf("a palette of two: %v, %v, then %v; want both, then a turn of one", gs[0].Colour, gs[1].Colour, gs[2].Colour)
 	}
@@ -134,8 +134,8 @@ func TestInitialGroups(t *testing.T) {
 func TestGraphFile(t *testing.T) {
 	var c graphConf
 	c.Palette = []string{"#112233"}
-	c.setGroups(viewGlobeMap, []Group{{Query: "type:adr", Colour: hexColour(0x010203), Shape: pm.MindHexagon}})
-	c.setGroups(viewMindmap, []Group{{Query: "path:notes/", Colour: hexColour(0x040506), Shape: pm.MindCircle}})
+	c.setGroups(viewGlobeMap, []Group{{Query: "type:adr", Colour: HexColour(0x010203), Shape: pm.MindHexagon}})
+	c.setGroups(ViewMindmap, []Group{{Query: "path:notes/", Colour: HexColour(0x040506), Shape: pm.MindCircle}})
 	text := c.format()
 	if !strings.HasPrefix(text, "# AutoDoc's graph groups") || strings.Contains(text, `shape = "hexagon"`) {
 		t.Errorf("the file:\n%s", text)
@@ -144,38 +144,28 @@ func TestGraphFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if g := back.groups(viewGlobeMap); len(g) != 1 || g[0] != (Group{Query: "type:adr", Colour: hexColour(0x010203)}) {
+	if g := back.Groups(viewGlobeMap); len(g) != 1 || g[0] != (Group{Query: "type:adr", Colour: HexColour(0x010203)}) {
 		t.Errorf("the GlobeMap's back: %+v", g)
 	}
-	if g := back.groups(viewMindmap); len(g) != 1 || g[0] != (Group{Query: "path:notes/", Colour: hexColour(0x040506), Shape: pm.MindCircle}) {
+	if g := back.Groups(ViewMindmap); len(g) != 1 || g[0] != (Group{Query: "path:notes/", Colour: HexColour(0x040506), Shape: pm.MindCircle}) {
 		t.Errorf("the Mindmap's back: %+v", g)
 	}
-	if !slices.Equal(back.palette(), []color.NRGBA{hexColour(0x112233)}) {
+	if !slices.Equal(back.palette(), []color.NRGBA{HexColour(0x112233)}) {
 		t.Errorf("palette %v", back.palette())
 	}
 	if _, err := parseGraphConf([]byte("palette = [")); err == nil {
 		t.Error("a file that does not read read")
 	}
 	user := graphConf{Palette: []string{"#f0f0f0"}}
-	user.setGroups(viewGlobeMap, []Group{{Query: "#todo", Colour: hexColour(0xabcdef)}})
+	user.setGroups(viewGlobeMap, []Group{{Query: "#todo", Colour: HexColour(0xabcdef)}})
 	rnd := rand.New(rand.NewPCG(3, 4))
-	got := initialGroups(viewGlobeMap, graphConf{}, user, []string{"#todo", "type:adr"}, hexColour(0x101010), rnd)
-	if len(got) != 2 || got[0].Query != "#todo" || got[0].Colour != hexColour(0xabcdef) || got[1].Query != "type:adr" || got[1].Colour != hexColour(0xf0f0f0) {
+	got := initialGroups(viewGlobeMap, graphConf{}, user, []string{"#todo", "type:adr"}, HexColour(0x101010), rnd)
+	if len(got) != 2 || got[0].Query != "#todo" || got[0].Colour != HexColour(0xabcdef) || got[1].Query != "type:adr" || got[1].Colour != HexColour(0xf0f0f0) {
 		t.Errorf("first groups %+v; want the user's #todo, then type:adr in the user's palette", got)
 	}
 	ws := graphConf{Palette: []string{"#e0e0e0"}}
-	if got := initialGroups(viewGlobeMap, ws, user, []string{"type:adr"}, hexColour(0x101010), rnd); got[1].Colour != hexColour(0xe0e0e0) {
+	if got := initialGroups(viewGlobeMap, ws, user, []string{"type:adr"}, HexColour(0x101010), rnd); got[1].Colour != HexColour(0xe0e0e0) {
 		t.Errorf("the workspace's palette: %v; want its colour, over the user's", got[1].Colour)
-	}
-}
-
-// A feature reads the themes the window can wear through its core: golib's, with no catalog of the
-// user's.
-func TestCoreNamesTheThemes(t *testing.T) {
-	var h Host
-	c := core{&h}
-	if !reflect.DeepEqual(c.ThemeNames(), h.themeNames()) || !reflect.DeepEqual(c.ThemeLabels(), h.themeLabels()) || len(c.ThemeNames()) == 0 {
-		t.Errorf("themes %q, labels %q", c.ThemeNames(), c.ThemeLabels())
 	}
 }
 
@@ -194,7 +184,7 @@ func TestMindmapModel(t *testing.T) {
 		},
 		[][3]string{{"a.md", "b.md", "wikilink"}, {"c.md", "a.md", "related"}, {"b.md", "d/d.md", "wikilink"},
 			{"c.md", "d/d.md", "wikilink"}, {"d/d.md", "d/d.md", "embed"}}))
-	gs := newRelGroups(initGroups([]string{"type:adr", "type:review", "type:synthesis"}, nil, hexColour(0x101010), rand.New(rand.NewPCG(1, 1))))
+	gs := newRelGroups(initGroups([]string{"type:adr", "type:review", "type:synthesis"}, nil, HexColour(0x101010), rand.New(rand.NewPCG(1, 1))))
 	shape := func(n mapNode) pm.MindShape {
 		if i := gs.of(n); i >= 0 {
 			return gs.list[i].Shape
