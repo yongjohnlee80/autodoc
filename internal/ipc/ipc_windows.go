@@ -34,6 +34,14 @@ func DefaultAddr(runtimeDir string) string {
 	return pipePrefix + "autodoc-" + sid.String()
 }
 
+// AddrIn is an address of ipc's kind for a server of this user's other than the daemon, its own for
+// each folder and name: a pipe named for both, since a pipe lives in no folder. The folder and name
+// are hashed, never spelled into the pipe's name, so neither can make it another pipe's.
+func AddrIn(dir, name string) string {
+	h := sha256.Sum256([]byte(dir + "\x00" + name))
+	return pipePrefix + "autodoc-" + hex.EncodeToString(h[:12])
+}
+
 // IsLocal is whether a, a connection's peer address, is ipc's: a process of this machine.
 func IsLocal(a net.Addr) bool { return a != nil && a.Network() == Network }
 
@@ -75,13 +83,6 @@ func userOnlySDDL() (string, error) {
 		return "", err
 	}
 	return "D:P(A;;GA;;;" + sid.String() + ")", nil
-}
-
-// ScratchAddr is an address for a daemon a test or sandbox starts, named name, private to dir: a
-// pipe has no folder, so its name carries a hash of both. Each dir and name has its own.
-func ScratchAddr(dir, name string) string {
-	h := sha256.Sum256([]byte(dir + "\x00" + name))
-	return pipePrefix + "autodoc-scratch-" + hex.EncodeToString(h[:12])
 }
 
 // CheckAddr refuses addr as the daemon's address unless it is a named pipe's name. Who may open the

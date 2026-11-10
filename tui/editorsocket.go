@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,7 +16,6 @@ import (
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
-	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // THE EDITOR SOCKET (docs/decisions/crew.md#the-editor-socket): the page's functions as tools for
@@ -74,40 +72,26 @@ type editorSocket struct {
 // nothing.
 const editorRequestWait = 10 * time.Second
 
-// startEditorSocket listens on <dir>/<pid>.sock and serves editor.* until the host stops. A
-// failure is said and the TUI runs on without it.
+// startEditorSocket listens at <dir>/<pid>.sock (on Windows, a pipe named for it) and serves
+// editor.* until the host stops. A failure is said and the TUI runs on without it.
 func (h *Host) startEditorSocket(dir string) {
 	if dir == "" {
 		return
 	}
-	path := filepath.Join(dir, fmt.Sprintf("%d.sock", os.Getpid()))
-	// the folder is the user's alone before anything listens in it (editorsocket_unix.go): the
-	// socket's own chmod after Listen is a second lock, not the first
-	err := privateDir(dir)
-	if err == nil {
-		_ = os.Remove(path)     // a socket left by a crash of an earlier run with this pid
-		sweepEditorSockets(dir) // and those of the other runs that were killed (editorsocket_unix.go)
-	}
-	var ln net.Listener
-	if err == nil {
-		ln, err = net.Listen("unix", path)
-	}
-	if err == nil {
-		err = os.Chmod(path, 0o600)
-	}
+	// the socket is the user's alone, and another user's process is closed unanswered, as at the
+	// daemon's: per OS, in listenEditor (editorsocket_unix.go, editorsocket_other.go)
+	ln, path, err := listenEditor(dir, fmt.Sprintf("%d.sock", os.Getpid()))
 	if err != nil {
 		h.p.Post(func() { h.failed(h.tr("autodoc.notice.editorsocket.the_editor_socket_for_agents"), err) })
 		return
 	}
-	// another user's process is closed unanswered, as at the daemon's socket; the folder already
-	// keeps it out, so this is the second lock
-	srv := golibrpc.New(msgpackrpc.New(nil), golibrpc.WithListener(ipc.Guard(ln, nil)))
+	srv := golibrpc.New(msgpackrpc.New(nil), golibrpc.WithListener(ln))
 	for verb, handler := range h.editorVerbs() {
 		srv.Handle(verb, handler)
 	}
 	ctx, cancel := context.WithCancel(h.ctx)
 	go func() { _ = srv.Run(ctx) }()
-	h.editorSock = &editorSocket{path: path, stop: func() { cancel(); _ = os.Remove(path) }}
+	h.editorSock = &editorSocket{path: path, stop: func() { cancel(); unlistenEditor(path) }}
 	h.editorSock.wait.Store(int64(editorRequestWait))
 }
 
