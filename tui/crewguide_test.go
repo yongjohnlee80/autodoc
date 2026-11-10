@@ -185,13 +185,19 @@ func TestTwoAgentsOfOneKindAskTheirOwnSetup(t *testing.T) {
 }
 
 // TestACrewClaudeAgentOnMCPMailStartsWithItsServer: a Claude agent whose setup delivers the crew MCP
-// server starts with it on its command line (--mcp-config); its folder's settings allow exactly the
+// server starts with it named on its command line (--mcp-config and the path of its folder's
+// crew.ClaudeMCPConfig, never the JSON itself), that file written private to this user over an
+// earlier run's, holding the server's command; its folder's settings allow exactly the
 // crew MCP tools, never a guide shell command (least privilege); its guide is the MCP form; and its
 // session is registered as reading its mail via MCP, which crew.list says.
 func TestACrewClaudeAgentOnMCPMailStartsWithItsServer(t *testing.T) {
 	a, c, w := crewAgents(t, crewKinds)
 	data := t.TempDir()
 	a.setupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
+		// an earlier run's file, readable by others: the start replaces it whole, private
+		if err := os.WriteFile(filepath.Join(dir, crew.ClaudeMCPConfig), []byte(`{"stale": true}`), 0o644); err != nil {
+			return crew.Setup{}, err
+		}
 		return crew.SetupFor(crew.SetupInput{Kind: kind, Host: crew.HostWindow, Env: map[string]string{"PATH": "/nonexistent"},
 			DataDir: data, Dir: dir, AgentDir: dir, Servers: []crew.MCPServer{{Name: crew.MCPServerName,
 				Command: []string{filepath.Join(dir, "bin", "autodoc"), "crew", "mcp"}, Tools: crew.MCPToolNames()}}}, "")
@@ -204,8 +210,23 @@ func TestACrewClaudeAgentOnMCPMailStartsWithItsServer(t *testing.T) {
 	awaitStart(t, c, instance)
 	cmd, _, err := startedCmd(a, c, instance)
 	args := cmd.Args
-	if err != nil || len(args) == 0 || !strings.Contains(args[len(args)-1], "--mcp-config") || strings.Contains(args[len(args)-1], "--strict-mcp-config") {
-		t.Fatalf("the spawn: %v, args %v; want --mcp-config on its command line, never --strict-mcp-config", err, args)
+	config := filepath.Join(instance.dir, crew.ClaudeMCPConfig)
+	if err != nil || len(args) == 0 || !strings.Contains(args[len(args)-1], "--mcp-config") || strings.Contains(args[len(args)-1], "--strict-mcp-config") ||
+		!strings.Contains(args[len(args)-1], config) || strings.Contains(args[len(args)-1], "mcpServers") {
+		t.Fatalf("the spawn: %v, args %v; want --mcp-config naming %s on its command line, never the JSON, never --strict-mcp-config", err, args, config)
+	}
+	if err := privateFile(config); err != nil {
+		t.Errorf("the MCP config is not private to this user: %v", err)
+	}
+	var mcp struct {
+		Servers map[string]struct {
+			Command string   `json:"command"`
+			Args    []string `json:"args"`
+		} `json:"mcpServers"`
+	}
+	if b, err := os.ReadFile(config); err != nil || json.Unmarshal(b, &mcp) != nil || len(mcp.Servers) != 1 ||
+		mcp.Servers[crew.MCPServerName].Command != filepath.Join(instance.dir, "bin", "autodoc") || !slices.Equal(mcp.Servers[crew.MCPServerName].Args, []string{"crew", "mcp"}) {
+		t.Errorf("the MCP config: %s %v; want the crew server alone, by the agent's autodoc, the earlier run's replaced", b, err)
 	}
 	b, err := os.ReadFile(filepath.Join(instance.dir, ".claude", "settings.json"))
 	if err != nil {

@@ -87,8 +87,13 @@ func TestCrewSetupOffersTheMCPServerOnlyToAHostThatRegistersItsMode(t *testing.T
 	if s := setup("--kind", "claude", "--host", "nvim"); slices.Contains(s.Argv, "--mcp-config") || !slices.Equal(s.Allow, crew.ClaudeAllow()) || s.MailVia != crew.MailViaCLI {
 		t.Errorf("claude without --mail-via: argv %q, allow %q, mail via %v; want the CLI's setup", s.Argv, s.Allow, s.MailVia)
 	}
-	if s := setup("--kind", "claude", "--host", "nvim", "--mail-via", "mcp"); !slices.Contains(s.Argv, "--mcp-config") || !slices.Equal(s.Allow, crew.ClaudeMCPAllow()) || s.MailVia != crew.MailViaMCP {
-		t.Errorf("claude with --mail-via mcp: argv %q, allow %q, mail via %v; want the MCP server, its tools alone", s.Argv, s.Allow, s.MailVia)
+	if s := setup("--kind", "claude", "--host", "nvim", "--mail-via", "mcp", "--agent-dir", agent); !slices.Contains(s.Argv, filepath.Join(agent, crew.ClaudeMCPConfig)) ||
+		len(s.FolderFiles) != 1 || !slices.Equal(s.Allow, crew.ClaudeMCPAllow()) || s.MailVia != crew.MailViaMCP {
+		t.Errorf("claude with --mail-via mcp: argv %q, folder files %+v, allow %q, mail via %v; want the MCP server's file, its tools alone", s.Argv, s.FolderFiles, s.Allow, s.MailVia)
+	}
+	// its server is a file of the agent's own folder: a host that gives none keeps the CLI's mail
+	if s := setup("--kind", "claude", "--host", "nvim", "--mail-via", "mcp"); slices.Contains(s.Argv, "--mcp-config") || s.MailVia != crew.MailViaCLI {
+		t.Errorf("claude with --mail-via mcp and no --agent-dir: argv %q, mail via %v; want the CLI's setup", s.Argv, s.MailVia)
 	}
 	if s := setup("--kind", "claude", "--host", "nvim", "--mail-via", "cli"); slices.Contains(s.Argv, "--mcp-config") || s.MailVia != crew.MailViaCLI {
 		t.Errorf("claude with --mail-via cli: argv %q, mail via %v; want the CLI's setup", s.Argv, s.MailVia)

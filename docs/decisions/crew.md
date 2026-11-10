@@ -965,9 +965,16 @@ absolute, or with none for a kind that keeps such a file, is refused, so nothing
 that may be the user's project.
 
 Claude Code's and OpenCode's setups take the crew MCP server too, when `crew setup` offers it. Claude
-Code gets it on its command line on both hosts (`--mcp-config`; a folder's `.mcp.json` would have
-the user approve its servers first), each tool allowed by its exact `mcp__<server>__<tool>` rule, and
-never `--strict-mcp-config`, which would take the user's own MCP servers from their agent. OpenCode
+Code gets it on both hosts as a file of the agent's own folder (`.autodoc-crew-mcp.json`, a folder
+file), named by its absolute path on its command line (`--mcp-config <path>`). A path holds no quote
+that a shell, on any OS, could change, where the config's JSON would (its quotes, and on Windows the
+build's backslashes). The file holds the servers' commands and arguments, and an environment only
+for a server that has one of its own (the crew's server has none), never a credential. Like every
+folder file, the host writes it private to the user, over an earlier run's. It is never the folder's
+`.mcp.json`, whose servers the user would approve first. A host that gives no folder of the agent's
+own gets no MCP server, and the agent reads its mail through the CLI, with a notice. Each tool is
+allowed by its exact `mcp__<server>__<tool>` rule, and never `--strict-mcp-config`, which would take
+the user's own MCP servers from their agent. OpenCode
 gets it in `OPENCODE_CONFIG_CONTENT`'s `mcp` key, beside the user's own servers, and no allowance,
 since OpenCode gates no MCP tool. A setup answers how the session reads its mail (`mail_via`): `mcp`
 only when it delivered the server, else `cli`.
