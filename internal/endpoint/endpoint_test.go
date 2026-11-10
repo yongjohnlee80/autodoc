@@ -1,6 +1,7 @@
 package endpoint_test
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -75,15 +76,26 @@ func TestLoadResolvesAndMakesNothing(t *testing.T) {
 	}
 }
 
+// tomlString is s as a TOML basic string, whatever s holds: a backslash, a quote, an apostrophe.
+// It is JSON's string, whose escapes are all TOML's, with the one character JSON leaves raw and
+// TOML refuses (U+007F) escaped.
+func tomlString(t *testing.T, s string) string {
+	t.Helper()
+	b, err := json.Marshal(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.ReplaceAll(string(b), "\x7f", `\u007F`)
+}
+
 // TestMakeDirSaysWhichFailed: a directory that cannot be made is named.
 func TestMakeDirSaysWhichFailed(t *testing.T) {
-	file := filepath.Join(t.TempDir(), "file")
+	file := filepath.Join(t.TempDir(), "the user's file") // an apostrophe a user's path may hold
 	if err := os.WriteFile(file, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cfg := filepath.Join(t.TempDir(), "config.toml")
-	// TOML literal strings: a path is as written, its backslashes no escapes
-	if err := os.WriteFile(cfg, []byte("[server]\nstate_dir = '"+filepath.Join(file, "state")+"'\ndata_dir = '"+filepath.Join(file, "data")+"'\n"), 0o600); err != nil {
+	if err := os.WriteFile(cfg, []byte("[server]\nstate_dir = "+tomlString(t, filepath.Join(file, "state"))+"\ndata_dir = "+tomlString(t, filepath.Join(file, "data"))+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	e, err := endpoint.Load(cfg)
