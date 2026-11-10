@@ -59,6 +59,68 @@ func TestTheGUIOpensItsWindowThroughWindowFor(t *testing.T) {
 	}
 }
 
+// The window AutoDoc draws its own title bar for asks for no frame of the system's: windowFor appends
+// gui.WithDecorations(false), and only in the branch that sets o.TitleBar, and gui_on.go asks for
+// decorations nowhere else. golib/gui keeps the request in its unexported config and gives no way to
+// read it back before the window opens, so this reads the source. It is a static check: it proves
+// what windowFor asks for, not what a platform then draws (that is golib's, and its window
+// chrome's cells).
+func TestTheOwnTitleBarsWindowAsksForNoFrame(t *testing.T) {
+	f, err := parser.ParseFile(token.NewFileSet(), "gui_on.go", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	isDecorations := func(c *ast.CallExpr) bool {
+		s, ok := c.Fun.(*ast.SelectorExpr)
+		return ok && isIdent(s.X, "gui") && s.Sel.Name == "WithDecorations"
+	}
+	var calls []*ast.CallExpr
+	ast.Inspect(f, func(n ast.Node) bool {
+		if c, ok := n.(*ast.CallExpr); ok && isDecorations(c) {
+			calls = append(calls, c)
+		}
+		return true
+	})
+	if len(calls) != 1 {
+		t.Fatalf("gui_on.go asks for decorations %d times; want once, in windowFor's own-title-bar branch", len(calls))
+	}
+	if len(calls[0].Args) != 1 || !isIdent(calls[0].Args[0], "false") {
+		t.Fatal("gui_on.go asks for decorations with something other than false; the own title bar's window must have no frame of the system's")
+	}
+	var inBranch bool
+	for _, d := range f.Decls {
+		fn, ok := d.(*ast.FuncDecl)
+		if !ok || fn.Name.Name != "windowFor" {
+			continue
+		}
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			s, ok := n.(*ast.IfStmt)
+			if !ok {
+				return true
+			}
+			init, ok := s.Init.(*ast.AssignStmt) // o.TitleBar = ownsTitleBar(...)
+			if !ok || len(init.Lhs) != 1 || !isSelector(init.Lhs[0], "o", "TitleBar") || !isSelector(s.Cond, "o", "TitleBar") {
+				return true
+			}
+			ast.Inspect(s.Body, func(n ast.Node) bool {
+				if c, ok := n.(*ast.CallExpr); ok && c == calls[0] {
+					inBranch = true
+				}
+				return true
+			})
+			return true
+		})
+	}
+	if !inBranch {
+		t.Fatal("gui.WithDecorations(false) is not in windowFor's branch that sets o.TitleBar")
+	}
+}
+
+func isSelector(e ast.Expr, x, sel string) bool {
+	s, ok := e.(*ast.SelectorExpr)
+	return ok && isIdent(s.X, x) && s.Sel.Name == sel
+}
+
 func isIdent(e ast.Expr, name string) bool {
 	id, ok := e.(*ast.Ident)
 	return ok && id.Name == name
