@@ -34,7 +34,7 @@ func TestAClaudeProfileOnAnotherAccountIsAClaudeAgent(t *testing.T) {
 		t.Error("its prompts aren't reported: its Claude Code was not found on the profile's PATH")
 	}
 	home, _ := os.UserHomeDir()
-	args, _, err := startedEnv(a, c, instance)
+	args, _, err := startedEnvCopy(a, c, instance)
 	if err != nil || !slices.Contains(args, "CLAUDE_CONFIG_DIR="+filepath.Join(home, ".claude-work")) ||
 		!slices.Contains(args, "PATH="+a.agentPathDir(dir)+string(os.PathListSeparator)+bin+string(os.PathListSeparator)+"/usr/bin:/bin") {
 		t.Fatalf("its process starts with %v (%v), want CLAUDE_CONFIG_DIR expanded and its own bin, then the profile's PATH", args, err)

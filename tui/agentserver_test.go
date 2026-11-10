@@ -26,7 +26,7 @@ import (
 // /proc/<pid>/cmdline shows every user of the machine: the CLI is /bin/sh -c <command>.
 func TestTheServerIsStartedWithTheCLIsEnvironment(t *testing.T) {
 	tuneEnv(t, "AUTO_AGENTS_MAILBOX_ID=agent:the-window:1") // the window's spawner identity
-	a, c, _ := crewAgents(t, crewKinds)
+	a, c, _ := crewAgents(t, crewKindsCopy)
 	a.editorPath = func() string { return "/run/the-editor.sock" }
 	p, _ := a.profile("codex-one")
 	const secret = "tok-setup-9a1b"
@@ -44,7 +44,7 @@ func TestTheServerIsStartedWithTheCLIsEnvironment(t *testing.T) {
 	awaitStart(t, c, instance)
 	cfg := c.panel.configs[instance.tab]
 	var spawned pty.Cmd // the CLI, as runAgent gives it
-	a.spawn = func(c pty.Cmd) (terminal.TerminalProcess, error) { spawned = c; return newFakeTerminal(), nil }
+	a.spawn = func(c pty.Cmd) (terminal.TerminalProcess, error) { spawned = c; return newFakeTerminalCopy(), nil }
 	proc, err := cfg.Start(pty.Cmd{Path: cfg.Command, Args: cfg.Args, Dir: cfg.Dir})
 	if err != nil {
 		t.Fatal(err)
@@ -95,7 +95,7 @@ func TestTheServerIsStartedWithTheCLIsEnvironment(t *testing.T) {
 // agent whose setup has a server has it started before its CLI, and stopped when the CLI fails to
 // start, nothing of it left (the mutant: the server left running).
 func TestTheWindowStopsTheServerWhenItsCLIFailsToStart(t *testing.T) {
-	a, c, _ := crewAgents(t, crewKinds)
+	a, c, _ := crewAgents(t, crewKindsCopy)
 	p, _ := a.profile("codex-one")
 	var socket string
 	a.setupRun = func(_, dir string, _ []string) (crew.Setup, error) {
@@ -169,14 +169,14 @@ func TestACellsServersEndWithIt(t *testing.T) {
 
 	var socket string
 	t.Run("a crew Codex agent's server, its CLI never ending", func(t *testing.T) {
-		a, c, _ := crewAgents(t, crewKinds)
+		a, c, _ := crewAgents(t, crewKindsCopy)
 		p, _ := a.profile("codex-one")
 		instance, err := a.startInstance(p)
 		if err != nil {
 			t.Fatal(err)
 		}
 		awaitStart(t, c, instance)
-		if _, _, err := startedEnv(a, c, instance); err != nil { // a spawn that starts nothing: the server is never stopped
+		if _, _, err := startedEnvCopy(a, c, instance); err != nil { // a spawn that starts nothing: the server is never stopped
 			t.Fatal(err)
 		}
 		socket = instance.setup.ServerSocket

@@ -14,7 +14,7 @@ import (
 func TestACrewOpenCodeAgentWritesNothingIntoTheWorkingFolder(t *testing.T) {
 	cwd := t.TempDir()
 	t.Chdir(cwd)
-	a, c, _ := crewAgents(t, crewKinds)
+	a, c, _ := crewAgents(t, crewKindsCopy)
 	run := a.setupRun
 	var asked string
 	a.setupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
@@ -27,7 +27,7 @@ func TestACrewOpenCodeAgentWritesNothingIntoTheWorkingFolder(t *testing.T) {
 		t.Fatal(err)
 	}
 	awaitStart(t, c, instance)
-	if _, _, err := startedEnv(a, c, instance); err != nil {
+	if _, _, err := startedEnvCopy(a, c, instance); err != nil {
 		t.Fatal(err)
 	}
 	if asked != instance.dir {

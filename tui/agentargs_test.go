@@ -3,8 +3,6 @@ package tui
 import (
 	"encoding/json"
 	"errors"
-	"io"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
@@ -13,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
-	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/internal/usershell"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
@@ -23,45 +20,6 @@ import (
 // at all, and characters PowerShell would read outside a quoted word.
 var agentSetupArgs = []string{`{"mcpServers":{"autodoc":{"command":"C:\\Program Files\\autodoc.exe","args":["mcp serve"]}}}`,
 	`say "hi" now`, "it's", `ends\`, "", "!x (a)"}
-
-// agentCommandCase is one way an agent's command reaches its CLI: the environment its shell is
-// chosen in, and the profile command's call of the CLI.
-type agentCommandCase struct {
-	label string
-	env   procenv.Env
-	call  string
-}
-
-// printingCLI copies this test binary, as name, into a folder named with an apostrophe and a space,
-// and answers its path: a CLI that prints what it was given (argvPrinterEnv).
-func printingCLI(t *testing.T, folder, name string) string {
-	t.Helper()
-	self, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	dir := filepath.Join(t.TempDir(), folder)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(dir, name)
-	in, err := os.Open(self)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer in.Close()
-	out, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o700)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := io.Copy(out, in); err != nil {
-		t.Fatal(err)
-	}
-	if err := out.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return path
-}
 
 // An agent's command goes from its profile to its CLI through fillAgentCommand, agentArgv and
 // withCommandArgs: the workspace's root and name, and its setup's arguments, reach the CLI each as
@@ -174,12 +132,12 @@ func TestARefusedAgentCommandIsNeverSpawned(t *testing.T) {
 		if instance.refusal == nil || !errors.Is(instance.refusal, usershell.ErrNotCarried) || calledTimes(w, "crew.register") != 0 {
 			t.Fatalf("refusal %v, registered %d; want refused before anything registers", instance.refusal, calledTimes(w, "crew.register"))
 		}
-		if _, spawned, err := startedCmd(a, c, instance); spawned || !errors.Is(err, usershell.ErrNotCarried) {
+		if _, spawned, err := startedCmdCopy(a, c, instance); spawned || !errors.Is(err, usershell.ErrNotCarried) {
 			t.Fatalf("its tab's start: spawned %v, %v; want the refusal and no spawn", spawned, err)
 		}
 	})
 	t.Run("a setup's argument the command can't carry", func(t *testing.T) {
-		a, c, _ := crewAgents(t, crewKinds)
+		a, c, _ := crewAgents(t, crewKindsCopy)
 		setup := a.setupRun
 		a.setupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
 			s, err := setup(kind, dir, environ)
@@ -192,7 +150,7 @@ func TestARefusedAgentCommandIsNeverSpawned(t *testing.T) {
 			t.Fatal(err)
 		}
 		awaitStart(t, c, instance)
-		if _, spawned, err := startedCmd(a, c, instance); spawned || !errors.Is(err, usershell.ErrNotCarried) {
+		if _, spawned, err := startedCmdCopy(a, c, instance); spawned || !errors.Is(err, usershell.ErrNotCarried) {
 			t.Fatalf("its tab's start: spawned %v, %v; want the setup's refusal and no spawn", spawned, err)
 		}
 	})

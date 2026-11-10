@@ -29,7 +29,7 @@ func (r *codexRuns) run(environ []string, args ...string) error {
 // its setup's included, so a Codex agent given its own app-server (crew.EnvCodexServer) looks for its
 // thread there, not on the shared one (the mutant: the profile's environment alone, as before).
 func TestACodexAgentsStepLooksOnItsOwnServer(t *testing.T) {
-	a, c, _ := crewAgents(t, crewKinds)
+	a, c, _ := crewAgents(t, crewKindsCopy)
 	runs := &codexRuns{calls: make(chan []string, 4), environ: make(chan []string, 4)}
 	a.codexHere = runs.run
 	a.setupRun = func(string, string, []string) (crew.Setup, error) {
@@ -41,7 +41,7 @@ func TestACodexAgentsStepLooksOnItsOwnServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := startedEnv(a, c, instance); err != nil {
+	if _, _, err := startedEnvCopy(a, c, instance); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -61,7 +61,7 @@ func TestACodexAgentsStepLooksOnItsOwnServer(t *testing.T) {
 // The window sets no timer of its own. Another CLI's spawn runs none of it.
 func TestACrewCodexAgentIsRegisteredAsItStarts(t *testing.T) {
 	t.Run("one waiting registration", func(t *testing.T) {
-		a, c, _ := crewAgents(t, crewKinds)
+		a, c, _ := crewAgents(t, crewKindsCopy)
 		runs := &codexRuns{calls: make(chan []string, 4)}
 		a.codexHere = runs.run
 		p, _ := a.profile("codex-one")
@@ -70,7 +70,7 @@ func TestACrewCodexAgentIsRegisteredAsItStarts(t *testing.T) {
 			t.Fatal(err)
 		}
 		before := time.Now().Unix()
-		if _, _, err := startedEnv(a, c, instance); err != nil {
+		if _, _, err := startedEnvCopy(a, c, instance); err != nil {
 			t.Fatal(err)
 		}
 		var args []string
@@ -95,7 +95,7 @@ func TestACrewCodexAgentIsRegisteredAsItStarts(t *testing.T) {
 	})
 
 	t.Run("another CLI's spawn runs none", func(t *testing.T) {
-		a, c, _ := crewAgents(t, crewKinds)
+		a, c, _ := crewAgents(t, crewKindsCopy)
 		runs := &codexRuns{calls: make(chan []string, 4)}
 		a.codexHere = runs.run
 		p, _ := a.profile("claude-one")
@@ -103,7 +103,7 @@ func TestACrewCodexAgentIsRegisteredAsItStarts(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, _, err := startedEnv(a, c, instance); err != nil {
+		if _, _, err := startedEnvCopy(a, c, instance); err != nil {
 			t.Fatal(err)
 		}
 		select {
