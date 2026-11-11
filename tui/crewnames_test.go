@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -9,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/internal/localfs"
 	"github.com/yongjohnlee80/autodoc/tui/agents"
 )
 
@@ -202,4 +204,16 @@ func TestTwoWindowsRenameTheCrewNamesOnce(t *testing.T) {
 		}
 	}
 	renamedTo(t, base, scope)
+}
+
+// A crew folder that is a file is an error the rename says, on every OS: Windows reports reading a
+// file as a folder as "not found", which once passed for "nothing to rename".
+func TestACrewFolderThatIsAFileIsSaid(t *testing.T) {
+	base := t.TempDir()
+	if err := os.WriteFile(filepath.Join(base, ".crew-scopes"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := migrateCrewNames(base); !errors.Is(err, localfs.ErrNotAFolder) {
+		t.Fatalf("a .crew-scopes file: %v; want it said that it is not a folder", err)
+	}
 }

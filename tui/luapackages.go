@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/yongjohnlee80/autodoc/core/manifests"
+	"github.com/yongjohnlee80/autodoc/internal/localfs"
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 
 	regindex "github.com/yongjohnlee80/autodoc/core/registry"
@@ -66,11 +67,8 @@ func (h *Host) loadPackages() []error {
 	if h.luaDir == "" {
 		return nil
 	}
-	entries, err := os.ReadDir(h.luaDir)
+	entries, err := localfs.ReadDirIfAny(h.luaDir) // no folder: nothing to load; a file there: its one error, on every OS
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
 		return []error{err}
 	}
 	var errs []error
