@@ -5,26 +5,28 @@ import (
 	"time"
 )
 
-// TestScratchRealShellStartTimes (SCRATCH, never merged): opens the terminal panel on a real shell
-// and measures, until the shell runs, the loop's longest round trip (onLoop) meanwhile: what a
-// user's key would wait for while the shell starts.
+// TestScratchRealShellStartTimes (SCRATCH, never merged): opens ten real shells, one at a time, and
+// measures how long the UI loop itself spends in each open (newShell, on the loop): a start on the
+// loop waits there for the spawn, one off it doesn't. Then how long until each runs.
 func TestScratchRealShellStartTimes(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
-	start := time.Now()
-	r.leader(t, '`')
-	var longest time.Duration
-	for r.shellsRunning() == 0 {
-		if time.Since(start) > 60*time.Second {
-			t.Fatalf("LANDED-NEVER the shell within a minute")
+	for i := 1; i <= 10; i++ {
+		var held time.Duration
+		start := time.Now()
+		onLoop(r, func() bool {
+			at := time.Now()
+			r.h.terminals.newShell()
+			held = time.Since(at)
+			return true
+		})
+		for r.shellsRunning() < i {
+			if time.Since(start) > 60*time.Second {
+				t.Fatalf("LANDED-NEVER shell %d within a minute", i)
+			}
+			time.Sleep(2 * time.Millisecond)
 		}
-		at := time.Now()
-		onLoop(r, func() bool { return true })
-		if rt := time.Since(at); rt > longest {
-			longest = rt
-		}
-		time.Sleep(2 * time.Millisecond)
+		t.Logf("LANDED shell %d: the loop held %s in its open; running after %s", i, held, time.Since(start))
 	}
-	t.Logf("LANDED shell running after %s; the loop's longest round trip meanwhile %s", time.Since(start), longest)
 }
