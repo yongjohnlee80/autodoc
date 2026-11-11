@@ -2,8 +2,9 @@ package todos
 
 import "maps"
 
-// State is the todos panel as the host's cells read it (Snapshot): a copy, sharing nothing with
-// the panel, so a cell that changes it changes nothing of the panel's.
+// State is the todos panel as the host's cells read it (Snapshot): a copy, so a cell that changes
+// a field, or a key of Cursor, changes nothing of the panel's. Cursor is a shallow copy: a task's
+// list fields (tags, review) are the panel's own slices, to read, never to change.
 type State struct {
 	Tab      int            // the tab shown: one of Tabs, or VarsTab
 	Stale    [5]bool        // the task tabs whose rows a change has outdated, read again when shown
@@ -11,7 +12,7 @@ type State struct {
 	HasStore bool           // a store is shown
 	Store    string         // the store shown's name ("" when none is)
 	Released bool           // the store shown was released: the daemon only reads it
-	Cursor   map[string]any // the task under the cursor, a copy; nil on Variables or with none
+	Cursor   map[string]any // the task under the cursor, a shallow copy; nil on Variables or with none
 }
 
 // Snapshot is the panel's state as the host's cells read it, on the loop: a copy (State).
