@@ -247,6 +247,15 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: scratch (not for merge) the setup cells together on canary, x3
+        if: ${{ !inputs.discover }}
+        run: |
+          T='^(TestASetupWithATakenCodenameIsRefused|TestNoIsRemembered|TestNoneFoundSaysWhichAndRecordsNothing|TestSetUpSavesAndStartsTypingNothing|TestTheFormAndTheSetupRefuseAlike|TestTheSetupCardIsAFirstRunsOnly|TestTheSetupOpensFromTheCatalogAndTheMenu)$'
+          for n in 1 2; do
+            go test -count=3 -timeout 20m -v -run "$T" ./tui/ > "$RUNNER_TEMP/c$n.txt" 2>&1 && rc=0 || rc=$?
+            echo "== canary run $n rc=$rc PASS $(grep -c '^--- PASS' "$RUNNER_TEMP/c$n.txt" || true) FAIL $(grep -c '^--- FAIL' "$RUNNER_TEMP/c$n.txt" || true)"
+            grep -E '^--- FAIL|testing\.go:[0-9]+:|_test\.go:[0-9]+:' "$RUNNER_TEMP/c$n.txt" | cut -c1-400 | sort | uniq -c | head -20 || true
+          done
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
         run: |
