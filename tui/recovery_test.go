@@ -1,12 +1,13 @@
 package tui
 
 import (
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
+
+	"github.com/yongjohnlee80/autodoc/internal/userperm/userpermtest"
 )
 
 // attachedWith is attached with a recovery folder: unsaved work is kept there and offered back.
@@ -21,6 +22,7 @@ func attachedWith(t *testing.T, d *daemon, dir string) *running {
 func TestUnsavedWorkIsKeptWhenTheProgramEndsUnasked(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
+	userpermtest.ExposeNew(t, dir) // a file made there the ordinary way is others' too (Windows: an inherited access list)
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	r := attachedWith(t, d, dir)
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
@@ -41,8 +43,8 @@ func TestUnsavedWorkIsKeptWhenTheProgramEndsUnasked(t *testing.T) {
 	if len(got) != 1 || got[0].WS != "kb" || got[0].Path != "a.md" || got[0].Text != "Xaaa\n" {
 		t.Fatalf("kept %+v", got)
 	}
-	if fi, err := os.Stat(recoveryFile(dir, recoveryKey{"kb", "a.md", ""})); err != nil || fi.Mode().Perm() != 0o600 {
-		t.Fatalf("the copy: %v, %v; want it the user's alone", fi, err)
+	if err := privateFile(recoveryFile(dir, recoveryKey{"kb", "a.md", ""})); err != nil {
+		t.Fatalf("the copy: %v; want it the user's alone", err)
 	}
 }
 

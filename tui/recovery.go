@@ -13,6 +13,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/internal/userperm"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
@@ -79,7 +80,7 @@ func writeRecovery(dir string, r recovered) error {
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(dir, ".recovery-*")
+	tmp, err := userperm.CreatePrivateTemp(dir, ".recovery-*") // the user's alone on every OS: an access list on Windows
 	if err != nil {
 		return err
 	}
