@@ -257,7 +257,7 @@ jobs:
           go test -count=3 -v -timeout 60m -run '^TestAPluginsLuaPackageLeavesItsFolderToUpdateAndRemove$' ./tui/ > "$RUNNER_TEMP/cells.log" 2>&1 && rc=0 || rc=$?; echo "rc=$rc"
           echo "pass $(grep -c -- '--- PASS' "$RUNNER_TEMP/cells.log" || true) fail $(grep -c -- '--- FAIL' "$RUNNER_TEMP/cells.log" || true) skip $(grep -c -- '--- SKIP' "$RUNNER_TEMP/cells.log" || true)"
           grep -E -- '--- (PASS|FAIL|SKIP)|_test\.go:[0-9]+: |testing\.go:[0-9]+: |^(ok|FAIL|panic)' "$RUNNER_TEMP/cells.log" | head -300 || true
-          sed -n '/HANDLES for/,/END/p' "$RUNNER_TEMP/cells.log" | head -120 || true
+          sed -n '/DEBUG after/,/END/p' "$RUNNER_TEMP/cells.log" | head -400 || true
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true

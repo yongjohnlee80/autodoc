@@ -8,9 +8,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestAPackageFolderIsHeldByNoRead: a package's folder read through packageFS (its files whole,
@@ -186,17 +186,22 @@ func TestAPluginsLuaPackageLeavesItsFolderToUpdateAndRemove(t *testing.T) {
 	probe := func(step string) {
 		t.Helper()
 		a, b := filepath.Join(dir, "echo"), filepath.Join(dir, "echo-probe")
-		if err := os.Rename(a, b); err != nil {
-			tail := filepath.Join(filepath.Base(filepath.Dir(dir)), filepath.Base(dir), "echo") // handle.exe prints long names: no 8.3 prefix
-			out, herr := exec.Command(os.Getenv("HANDLE_EXE"), "-accepteula", "-nobanner", "-a", "-p", strconv.Itoa(os.Getpid()), tail).CombinedOutput()
-			all, _ := exec.Command(os.Getenv("HANDLE_EXE"), "-accepteula", "-nobanner", "-p", strconv.Itoa(os.Getpid())).CombinedOutput()
-			t.Logf("DEBUG after %s: held: %v\nHANDLES for %s (%v):\n%s\nALL FILE HANDLES:\n%s\nEND", step, err, tail, herr, out, all)
-			return
+		var err error
+		for _, wait := range []time.Duration{0, 300 * time.Millisecond, 3 * time.Second} {
+			time.Sleep(wait)
+			if err = os.Rename(a, b); err == nil {
+				if err := os.Rename(b, a); err != nil {
+					t.Fatalf("DEBUG back: %v", err)
+				}
+				t.Logf("DEBUG after %s: free after %s", step, wait)
+				return
+			}
 		}
-		if err := os.Rename(b, a); err != nil {
-			t.Fatalf("DEBUG back: %v", err)
-		}
-		t.Logf("DEBUG after %s: free", step)
+		tail := filepath.Join(filepath.Base(filepath.Dir(dir)), filepath.Base(dir), "echo")
+		sys, herr := exec.Command(os.Getenv("HANDLE_EXE"), "-accepteula", "-nobanner", "-a", tail).CombinedOutput()
+		ps, _ := exec.Command("powershell", "-NoProfile", "-Command",
+			"Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'git|tui.test|autodoc|echo' } | ForEach-Object { '{0} {1} {2} {3}' -f $_.ProcessId,$_.ParentProcessId,$_.Name,$_.CommandLine }").CombinedOutput()
+		t.Logf("DEBUG after %s: held after 3.3s: %v (test pid %d)\nHANDLES for %s system-wide (%v):\n%s\nPROCESSES:\n%s\nEND", step, err, os.Getpid(), tail, herr, sys, ps)
 	}
 	probe("the add")
 	runs := func(want string) {
@@ -227,6 +232,7 @@ func TestAPluginsLuaPackageLeavesItsFolderToUpdateAndRemove(t *testing.T) {
 	r.keys(t, key('y'))
 	r.waitNotice(t, "updated echo at")
 	runs("lua-two")
+	probe("the update")
 
 	i = echo()
 	r.h.p.Post(func() { r.h.plugins.startRemovePlugin(i) })
