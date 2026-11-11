@@ -247,6 +247,35 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: scratch (not for merge) the plugin cells on Windows x3 at the stop's r1 head, the fence's cells, and eight mutants
+        if: ${{ !inputs.discover }}
+        run: |
+          T='^(TestAPluginsMenuRows|TestAPluginsNotices|TestANoticeQueuedBeforeAStopPostsNothing|TestAPluginOpensAPathAndUpdatesItself|TestAPluginThatFailsClosesItsDialogAndSaysWhy|TestAPluginRedrawsTheRenderedView|TestAPluginOpensADraftWithBufferNew|TestAProtocolTwoPluginsCallIsDropped|TestPastSixtyFourWaitingCallsTheHostIsBusy|TestACallReusingAWaitingNumberIsNeverAnswered|TestARemovalWaitsForThePluginToExit|TestTheQuitWaitsForAPluginStillClosing|TestAnExitWaitIsBounded|TestARunThatEndedAsTheDeadlineCameEnded|TestAnExpiredDeadlineHoldsEveryRunAfter|TestNoRunStartsFromAFolderBeingRemoved|TestASecondRemovalOfAFolderIsRefused|TestNoRunStartsFromAFolderBeingUpdated)$'
+          go test -count=3 -timeout 25m -v -run "$T" ./tui/ > "$RUNNER_TEMP/t.txt" 2>&1 && rt=0 || rt=$?
+          echo "== PASS $(grep -cE '^--- PASS' "$RUNNER_TEMP/t.txt" || true) FAIL $(grep -cE '^--- FAIL' "$RUNNER_TEMP/t.txt" || true)"
+          grep -E '^--- FAIL|_test\.go:[0-9]+:' "$RUNNER_TEMP/t.txt" | sort -u | cut -c1-260 | head -12 || true
+          echo "== rc=$rt"
+          R=$rt
+          mut() { # name perl-expr cell: the cell must fail with the mutant in
+            f=${F:-tui/pluginrun.go}; cp $f "$RUNNER_TEMP/keep"; perl -0pi -e "$2" $f
+            if cmp -s "$RUNNER_TEMP/keep" $f; then echo "== mutant $1: NOT APPLIED"; R=1; return; fi
+            go test -count=1 -timeout 10m -v -run "^$3\$" ./tui/ > "$RUNNER_TEMP/m.txt" 2>&1 && m=0 || m=$?
+            cp "$RUNNER_TEMP/keep" $f
+            echo "== mutant $1 rc=$m FAIL $(grep -cE "^--- FAIL: $3" "$RUNNER_TEMP/m.txt" || true) buildfail $(grep -cE 'build failed|setup failed' "$RUNNER_TEMP/m.txt" || true)"
+            grep -E '_test\.go:[0-9]+:' "$RUNNER_TEMP/m.txt" | sort -u | cut -c1-260 | head -3 || true
+            [ $m = 1 ] || R=1
+          }
+          mut no-expiry 's/\t\t\t\texpired = true\n//' TestAnExpiredDeadlineHoldsEveryRunAfter
+          mut no-recheck 's/\t\tselect \{\n\t\tcase <-r\.shutDone:\n\t\tdefault:\n\t\t\treturn (fmt\.Errorf\([^\n]*\))\n\t\t\}\n/\t\treturn $1\n/' TestARunThatEndedAsTheDeadlineCameEnded
+          mut no-margin 's/r\.grace\+r\.termGrace\+pluginExitMargin/r.grace+r.termGrace/' TestAnExitWaitIsBounded
+          mut no-fence 's/if what, ok := pl\.owned\[e\.dir\]; ok \{/if what, ok := pl.owned[e.dir]; ok \&\& false {/' TestNoRunStartsFromAFolderBeingRemoved
+          mut not-exclusive 's/if other, ok := pl\.owned\[dir\]; ok \{/if other, ok := pl.owned[dir]; ok \&\& false {/' TestASecondRemovalOfAFolderIsRefused
+          F=tui/plugininstall.go
+          mut removal-unowned 's/pl\.own\(dir, "removed"\)/pl.own(dir+"~", "removed")/' TestNoRunStartsFromAFolderBeingRemoved
+          mut update-unowned 's/pl\.own\(plugDir, "updated"\)/pl.own(plugDir+"~", "updated")/' TestNoRunStartsFromAFolderBeingUpdated
+          mut never-disowned 's/\t\tpl\.disown\(dir\)\n//' TestNoRunStartsFromAFolderBeingRemoved
+          echo "== R=$R"
+          [ $R = 0 ]
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
         run: |
