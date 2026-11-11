@@ -252,9 +252,11 @@ jobs:
         run: |
           # the whole module's vet, not only the ported packages': it compiles every package's tests
           # for Windows, so a neutral test can't come to lean on a helper in a Unix-tagged file
-          go vet ./...
-          mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
-          go test -count=1 -timeout 20m "${pkgs[@]}"
+          go vet ./tui/ && echo "vet tui rc=0" || echo "vet tui rc=$?"
+          # SCRATCH (never merged): the recovery cells x3, then the mutant (os.CreateTemp back) x3
+          run() { go test -count=3 -v -timeout 30m -run "$2" ./tui/ > "$RUNNER_TEMP/$1.log" 2>&1 && rc=0 || rc=$?; echo "$1 rc=$rc pass $(grep -c -- '^--- PASS' "$RUNNER_TEMP/$1.log" || true) fail $(grep -c -- '^--- FAIL' "$RUNNER_TEMP/$1.log" || true) failed: $(grep -- '^--- FAIL' "$RUNNER_TEMP/$1.log" | awk '{print $3}' | sort | uniq -c | tr '\n' ' ' || true)"; grep -E -- '_test\.go:[0-9]+: |testing\.go:[0-9]+: |^panic' "$RUNNER_TEMP/$1.log" | cut -c1-230 | sort | uniq -c | head -6 || true; }
+          run base '^(TestUnsavedWorkIsKeptWhenTheProgramEndsUnasked|TestTheNextStartOffersAKeptCopyBack|TestDiscardDeletesTheCopyAndLaterKeepsIt)$'
+          perl -0pi -e 's/userperm\.CreatePrivateTemp\(dir, "\.recovery-\*"\)/os.CreateTemp(dir, ".recovery-*")/' tui/recovery.go && perl -0pi -e 's/\n\t"github.com\/yongjohnlee80\/autodoc\/internal\/userperm"//' tui/recovery.go && git diff --stat && run m-createtemp '^TestUnsavedWorkIsKeptWhenTheProgramEndsUnasked$'; git checkout -- tui/recovery.go
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
