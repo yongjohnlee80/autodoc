@@ -554,7 +554,19 @@ func (r *running) waitFile(t *testing.T, p string) {
 	t.Helper()
 	// the open is a read through the daemon, a round trip: on daemonWait, as waitOpened, not a frame's
 	// clock (a loaded runner under -race still showed "opening page.md…" at WaitTimeout)
-	r.waitWithin(t, "note "+p+" open", daemonWait, func() bool { n := r.file(); return n.open && n.path == p && !n.dirty })
+	for deadline := time.Now().Add(daemonWait); ; time.Sleep(5 * time.Millisecond) {
+		if n := r.file(); n.open && n.path == p && !n.dirty {
+			break
+		}
+		if time.Now().After(deadline) {
+			st := onLoop(r, func() string {
+				return fmt.Sprintf("host=%p active=%p file=%+v buffers=%d status=%q", r.h, r.h.active, *r.h.file, len(r.h.buffers), func() string { v, _ := r.h.p.Tree().Source("App.status"); return v.Raw }())
+			})
+			dbgOpen("DEBUGWAIT %s %s %s\n", t.Name(), p, st)
+			break
+		}
+	}
+	r.waitWithin(t, "note "+p+" open", time.Millisecond, func() bool { n := r.file(); return n.open && n.path == p && !n.dirty })
 	r.waitStatus(t, "opened "+p)
 }
 

@@ -427,7 +427,7 @@ func (h *Host) loadInto(b *openBuffer, ws, p string, prev *editor.JumpPos, raw b
 			dbgOpen("DEBUGOPEN STUCK %s after 20s; goroutines:\n%s\nDEBUGOPEN END-STACKS\n", p, buf[:n])
 		}
 	}()
-	dbgOpen("DEBUGOPEN start %s buf=%p gen=%d sess=%d\n", p, b, dbgGen, dbgSess)
+	dbgOpen("DEBUGOPEN start %s host=%p buf=%p active=%p gen=%d sess=%d\n", p, h, b, h.active, dbgGen, dbgSess)
 	do(h, func(ctx context.Context) answer {
 		res, err := h.readFile(ctx, ws, p, raw)
 		dbgOpen("DEBUGOPEN read %s buf=%p took=%s err=%v\n", p, b, time.Since(dbgStart), err)
@@ -439,7 +439,7 @@ func (h *Host) loadInto(b *openBuffer, ws, p string, prev *editor.JumpPos, raw b
 		return answer{content: string(b), version: feature.Str(m, "version")}
 	}, func(a answer) {
 		close(dbgDone)
-		dbgOpen("DEBUGOPEN answer %s buf=%p after=%s current=%v sessSame=%v genSame=%v(%d->%d) inBuffers=%v\n", p, b, time.Since(dbgStart), tk.Current(), h.session.Gen() == dbgSess, b.file.gen == dbgGen, dbgGen, b.file.gen, slices.Contains(h.buffers, b))
+		dbgOpen("DEBUGOPEN answer %s host=%p active=%p buf=%p after=%s current=%v sessSame=%v genSame=%v(%d->%d) inBuffers=%v\n", p, h, h.active, b, time.Since(dbgStart), tk.Current(), h.session.Gen() == dbgSess, b.file.gen == dbgGen, dbgGen, b.file.gen, slices.Contains(h.buffers, b))
 		if !tk.Current() {
 			return
 		}
@@ -466,6 +466,7 @@ func (h *Host) loadInto(b *openBuffer, ws, p string, prev *editor.JumpPos, raw b
 			h.land(land, feature.FileRef{WS: ws, Path: p}, a.content)
 		}
 		h.say(h.trf("autodoc.notice.files.opened", p))
+		dbgOpen("DEBUGOPEN shown %s host=%p buf=%p active=%p file=%+v\n", p, h, b, h.active, *h.file)
 		if ws == "" {
 			h.notify(h.trf("autodoc.notice.files.it_is_in_no_workspace_no_search_links_backlinks", p))
 		}
