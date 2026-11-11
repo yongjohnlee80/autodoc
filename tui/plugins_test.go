@@ -1129,7 +1129,17 @@ func TestAPluginOutlivesGarbageCollection(t *testing.T) {
 	installTestPlugin(t, dir, "gc", "gc", 30, 6)
 	r, _ := pluginTUI(t, dir)
 	run := r.openPlugin("gc")
-	r.waitShown(t, "tick 60") // dozens of collections in
+	// its count past 60, dozens of collections in. It draws a new count every 20 ms, faster than a
+	// loaded screen draws, so a frame showing exactly "tick 60" may never be drawn: the count is read
+	ticks := regexp.MustCompile(`tick (\d+)`)
+	r.waitWithin(t, "a count of 60 or more", 20*time.Second, func() bool {
+		m := ticks.FindStringSubmatch(r.s.String())
+		n := -1
+		if m != nil {
+			n, _ = strconv.Atoi(m[1])
+		}
+		return n >= 60
+	})
 	select {
 	case <-run.exited:
 		t.Fatalf("the plugin exited under garbage collection: %v", run.exitErr)
