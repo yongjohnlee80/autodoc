@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/yongjohnlee80/autodoc/tui/agents"
+	"github.com/yongjohnlee80/autodoc/tui/crew"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/autodoc/tui/system"
 )
@@ -166,7 +167,7 @@ func hostField(name string) (read func(feature.PrefsView) string, ok bool) {
 	hostFields.once.Do(func() {
 		hostFields.value = map[string]func(feature.PrefsView) string{}
 		for _, rows := range [][]feature.PrefSpec{legacyPrefRows(nil, false), legacyPrefRows(nil, true), terminalPrefRows(nil),
-			{panelKeysRow()}, agents.AgentPrefRows(nil), agentBellRows()} {
+			{panelKeysRow()}, agents.AgentPrefRows(nil), crew.BellRows()} {
 			for _, s := range rows {
 				if !s.ByName && s.Value != nil {
 					hostFields.value[s.Name] = s.Value

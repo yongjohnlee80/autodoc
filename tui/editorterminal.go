@@ -209,7 +209,7 @@ func (h *Host) terminalRunExited(agent, line string, code int, mailed bool) {
 		return
 	}
 	subject, body := terminalExitBody(line, code)
-	h.crew.userSend(agent, mail.KindMessage, subject, body, func(err error) {
+	h.crew.UserSend(agent, mail.KindMessage, subject, body, func(err error) {
 		if err != nil && !errors.Is(err, agents.ErrHandedOver) {
 			h.notify(h.trf("autodoc.notice.editorterminal.the_exit_mail_to_the_agent_was_not_sent", agent, err.Error()))
 		}
