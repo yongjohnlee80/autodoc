@@ -182,6 +182,26 @@ func TestAPluginsLuaPackageLeavesItsFolderToUpdateAndRemove(t *testing.T) {
 	r.question(t)
 	r.keys(t, key('y'))
 	r.waitNotice(t, "added echo at")
+	probe := func(step string) {
+		t.Helper()
+		ws := onLoop(r, func() []string {
+			var out []string
+			for d, w := range r.h.watches {
+				out = append(out, d+" (at "+w.at+")")
+			}
+			return out
+		})
+		a, b := filepath.Join(dir, "echo"), filepath.Join(dir, "echo-probe")
+		if err := os.Rename(a, b); err != nil {
+			t.Logf("DEBUG after %s: the folder held: %v; watches %v", step, err, ws)
+			return
+		}
+		if err := os.Rename(b, a); err != nil {
+			t.Fatalf("DEBUG back: %v", err)
+		}
+		t.Logf("DEBUG after %s: free; watches %v", step, ws)
+	}
+	probe("the add")
 	runs := func(want string) {
 		t.Helper()
 		r.s.WaitFor(t, "the package's command saying "+want, func(string) bool {
@@ -190,6 +210,7 @@ func TestAPluginsLuaPackageLeavesItsFolderToUpdateAndRemove(t *testing.T) {
 		})
 	}
 	runs("lua-one")
+	probe("the first command")
 
 	r.h.p.Post(r.h.plugins.managePlugins)
 	echo := func() int {
@@ -209,7 +230,9 @@ func TestAPluginsLuaPackageLeavesItsFolderToUpdateAndRemove(t *testing.T) {
 	r.question(t)
 	r.keys(t, key('y'))
 	r.waitNotice(t, "updated echo at")
+	probe("the update")
 	runs("lua-two")
+	probe("the second command")
 
 	i = echo()
 	r.h.p.Post(func() { r.h.plugins.startRemovePlugin(i) })
