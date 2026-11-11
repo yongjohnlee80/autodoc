@@ -14,6 +14,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/export"
+	"github.com/yongjohnlee80/autodoc/internal/localfs"
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
 	"github.com/yongjohnlee80/golib/tui/style"
 )
@@ -106,10 +107,7 @@ func Open(dir string) *Catalog {
 	if dir == "" {
 		return c
 	}
-	entries, err := os.ReadDir(dir)
-	if os.IsNotExist(err) {
-		return c
-	}
+	entries, err := localfs.ReadDirIfAny(dir) // no folder: no themes; a file there: a problem, on every OS
 	if err != nil {
 		c.Problems = append(c.Problems, err)
 		return c

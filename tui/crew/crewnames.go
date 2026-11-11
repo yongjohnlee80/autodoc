@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/yongjohnlee80/autodoc/internal/filelock"
+	"github.com/yongjohnlee80/autodoc/internal/localfs"
 	"github.com/yongjohnlee80/autodoc/tui/agents"
 )
 
@@ -47,11 +48,9 @@ func migrateCrewNames(base string) (kept []string, err error) {
 	defer func() { _ = unlock() }()
 	var errs []error
 	rename := func(dir string, dirs bool) {
-		entries, err := os.ReadDir(dir)
+		entries, err := localfs.ReadDirIfAny(dir) // no folder: nothing to rename; a file there: an error, on every OS
 		if err != nil {
-			if !errors.Is(err, fs.ErrNotExist) {
-				errs = append(errs, err)
-			}
+			errs = append(errs, err)
 			return
 		}
 		for _, e := range entries {
