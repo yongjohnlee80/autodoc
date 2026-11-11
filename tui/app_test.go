@@ -129,7 +129,7 @@ type daemonOpts struct {
 	// storeAt, when set, is where the daemon's store is: the path a config names, so a client bound
 	// to that config's store finds its daemon serving it (a real daemon's store_id). "" is a temp one.
 	storeAt string
-	// crew, when set, is served too: the crew.* verbs, on its own store (crewbridges_test.go)
+	// crew, when set, is served too: the crew.* verbs, on its own store (tui/crew/crewbridges_test.go)
 	crew *crew.Manager
 	// modules are served too: a cell's own verbs (crewinboxview_tui_test.go)
 	modules []module.Module
