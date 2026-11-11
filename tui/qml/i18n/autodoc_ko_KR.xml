@@ -7500,6 +7500,10 @@ The last connect failed:
         <source>vectors</source>
         <translation>벡터</translation>
     </message>
+    <message id="autodoc.text.terminal.starting">
+        <source>starting…</source>
+        <translation>시작하는 중…</translation>
+    </message>
     <message id="autodoc.text.terminal.the_page_s">
         <source>the page's</source>
         <translation>페이지 테마</translation>
