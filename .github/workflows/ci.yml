@@ -247,6 +247,18 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: scratch (not for merge) the agent and setup cells together, at this head and without its PATH change
+        if: ${{ !inputs.discover }}
+        run: |
+          T='^(TestAuditHandsAFreshCopyAndItsToastReopensTheCard|TestAnAgentOpensARelativePathInTheEditorsWorkspace|TestTodosAssignHandsTheTaskToAnAutoDocAgent|TestASetupWithATakenCodenameIsRefused|TestNoIsRemembered|TestNoneFoundSaysWhichAndRecordsNothing|TestSetUpSavesAndStartsTypingNothing|TestTheFormAndTheSetupRefuseAlike|TestTheSetupCardIsAFirstRunsOnly|TestTheSetupOpensFromTheCatalogAndTheMenu)$'
+          for at in head base; do
+            if [ $at = base ]; then git fetch -q --depth=1 origin 603340c0f37e89a6c4c52b140a99560d896d47e4 && git show FETCH_HEAD:tui/agentsetup_rig_test.go > tui/agentsetup_rig_test.go && git show FETCH_HEAD:tui/candidate_test.go > tui/candidate_test.go && git diff --stat; fi
+            go test -count=3 -timeout 20m -v -run "$T" ./tui/ > "$RUNNER_TEMP/$at.txt" 2>&1 && rc=0 || rc=$?
+            echo "== $at rc=$rc PASS $(grep -c '^--- PASS' "$RUNNER_TEMP/$at.txt" || true) FAIL $(grep -c '^--- FAIL' "$RUNNER_TEMP/$at.txt" || true) SKIP $(grep -c '^--- SKIP' "$RUNNER_TEMP/$at.txt" || true)"
+            grep -E '^--- (FAIL|SKIP)' "$RUNNER_TEMP/$at.txt" || true
+            awk '/^=== (CONT|RUN)   TestSetUpSavesAndStartsTypingNothing/{p=1} /^=== (CONT|RUN)   / && !/TestSetUpSavesAndStartsTypingNothing/{p=0} p' "$RUNNER_TEMP/$at.txt" | grep -vE '^\s*$|\[Info\]' | cut -c1-300 | head -60 || true
+          done
+          git checkout -- tui
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
         run: |
