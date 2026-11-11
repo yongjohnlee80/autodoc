@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -112,14 +113,20 @@ func startManagedIncludes(t *testing.T, roots map[string]string, include []strin
 	}
 	srv := rpc.New(ws, "v-test", opts...)
 	done := make(chan struct{})
-	go func() { _ = srv.Run(ctx); close(done) }()
+	var runErr error // said, not dropped, as startDaemonWith's (app_test.go)
+	go func() { runErr = srv.Run(ctx); close(done) }()
 	t.Cleanup(func() {
 		cancel()
 		<-done
+		if runErr != nil && !errors.Is(runErr, context.Canceled) {
+			t.Errorf("the managed test daemon's server did not shut down cleanly: %v", runErr)
+		}
 		emb.Wait()
 		ranking.Wait()
 		ws.StopAll()
-		_ = db.Close()
+		if err := db.Close(); err != nil {
+			t.Errorf("the managed test daemon's store did not close: %v", err)
+		}
 		_ = os.RemoveAll(dir)
 	})
 	return &managedDaemon{sock: sock, db: db}

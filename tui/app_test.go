@@ -336,9 +336,22 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	srv := rpc.New(set, version, opts...)
 	done := make(chan struct{})
 	d.stopped = done
-	go func() { _ = srv.Run(ctx); close(done) }()
-	d.stop = func() { cancel(); <-done; cores.Wait() }
-	t.Cleanup(func() { cancel(); <-done; cores.Wait() }) // before the store closes (its cleanup runs after)
+	// the server's own result is said, not dropped: a shutdown that returns nil has drained every
+	// request it took (golib's Run), and one that timed out draining names what it gave up on
+	var runErr error
+	go func() { runErr = srv.Run(ctx); close(done) }()
+	said := false // a cell's own stop and its cleanup's both come here: the result is said once
+	stopped := func() {
+		cancel()
+		<-done
+		cores.Wait()
+		if runErr != nil && !errors.Is(runErr, context.Canceled) && !said {
+			said = true
+			t.Errorf("the test daemon's server did not shut down cleanly: %v", runErr)
+		}
+	}
+	d.stop = stopped
+	t.Cleanup(stopped) // before the store closes (its cleanup runs after)
 	return d
 }
 
