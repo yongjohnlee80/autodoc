@@ -36,11 +36,7 @@ func liveCardTUI(t *testing.T, dir string, prefs map[string]string, gui bool) (*
 	logs := t.TempDir()
 	r := runTUI(t, NewSession(d.sock, nil), Options{GUI: gui, Plugins: Plugins{Dir: dir, LogDir: logs, Socket: d.sock}})
 	r.connected(t)
-	t.Cleanup(func() {
-		for _, p := range onLoop(r, func() []*pluginRun { return slices.Collect(maps.Values(r.h.plugins.running)) }) {
-			p.shutdown()
-		}
-	})
+	stopPluginRunsAtTheEnd(t, r)
 	return d, r, logs
 }
 
