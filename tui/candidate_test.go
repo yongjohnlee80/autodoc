@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -584,7 +583,7 @@ func TestAnAuditCopyAnsweredAfterItsCandidateEndedIsRemoved(t *testing.T) {
 func TestTheSessionsEndRemovesWhatWorkersMadeAnsweredOrNot(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	env := procenv.Env(nil).With("TMPDIR=" + root)
+	env := procenv.Env(nil).With("TMPDIR="+root, "TMP="+root) // the temporary folder on Unix and on Windows
 	_, cs, c, _ := scriptedCandidate(t)
 	c.env = env // the environment it was staged in
 	cs.auditing = c
@@ -612,25 +611,6 @@ func TestTheSessionsEndRemovesWhatWorkersMadeAnsweredOrNot(t *testing.T) {
 	}
 }
 
-// heldGit is env with a git first on its PATH whose clone waits, once it is running, until release
-// is called: a worker caught between holding its directory and finishing its work.
-func heldGit(t *testing.T, env procenv.Env) (held procenv.Env, running func() bool, release func()) {
-	t.Helper()
-	real, err := exec.LookPath("git")
-	if err != nil {
-		t.Fatal(err)
-	}
-	bin, controls := t.TempDir(), t.TempDir()
-	ready, go_ := filepath.Join(controls, "ready"), filepath.Join(controls, "release")
-	script := "#!/bin/sh\nif [ \"$1\" = clone ]; then\n touch " + agents.ShellQuote(ready) + "\n while [ ! -f " + agents.ShellQuote(go_) +
-		" ]; do sleep 0.01; done\nfi\nexec " + agents.ShellQuote(real) + " \"$@\"\n"
-	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	held = env.With("PATH=" + bin + string(os.PathListSeparator) + env.Get("PATH"))
-	return held, func() bool { return !gone(ready) }, func() { _ = os.WriteFile(go_, nil, 0o600) }
-}
-
 // The session ends while a worker still writes into the directory it already holds (a clone
 // running): the end removes it, the clone writes it again, and the worker's last word removes it
 // for good and answers that the session ended. A stage and an audit copy alike.
@@ -641,7 +621,7 @@ func TestTheSessionsEndWhileAWorkerStillWrites(t *testing.T) {
 	for _, kind := range []string{"a stage", "an audit copy"} {
 		t.Run(kind, func(t *testing.T) {
 			tmp, parent := t.TempDir(), filepath.Join(t.TempDir(), "plugins")
-			env, running, release := heldGit(t, procenv.Env(nil).With("TMPDIR="+tmp))
+			env, running, release := heldGit(t, procenv.Env(nil).With("TMPDIR="+tmp, "TMP="+tmp))
 			own := newAllocs()
 			answer := make(chan error, 1)
 			go func() {

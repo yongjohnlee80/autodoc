@@ -82,6 +82,9 @@ func TestMain(m *testing.M) {
 	if len(os.Args) >= 3 && os.Args[1] == testPluginArg {
 		os.Exit(runTestPlugin(os.Args[2]))
 	}
+	if os.Getenv(heldGitEnv) != "" {
+		os.Exit(heldGitMain()) // git, as heldGit's clone that waits (heldgit_test.go)
+	}
 	if os.Getenv(bridgeCellEnv) != "" {
 		bridgeCell() // a stand-in crew helper (crewbridges_test.go): it waits to be signalled
 	}
