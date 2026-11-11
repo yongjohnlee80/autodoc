@@ -41,9 +41,13 @@ type diskWatch struct {
 	cancel context.CancelFunc // a child of h.ctx: the TUI's stop ends every watch
 	refs   int                // the open buffers in dir, and the follows (followDir)
 	mode   string             // diskWatching or diskPolling; "" while no run is up
-	// at and rel are where the driver is opened and dir within it: dir's parent and its name, so the
-	// driver holds the parent open, not dir, and dir's own removal ends the watch (a directory held
-	// open is never reported deleted: Linux sends no IN_DELETE_SELF for it); "." in dir for a root
+	// at and rel are where the driver is opened and dir within it: dir's parent and its name, so
+	// dir's own removal ends the watch (a directory held open is never reported deleted: Linux sends
+	// no IN_DELETE_SELF for it); "." in dir for a root. The driver holds nothing on at between its
+	// operations (localDisk: local.RootPerOperation): the watch's own handle on dir is all it keeps,
+	// one Windows lets dir go with. Windows still refuses to rename a folder with a handle open
+	// beneath it, so a watched folder's parent, or any folder above it, can't be renamed there while
+	// the watch runs; AutoDoc's own removals end the watches under a folder before they remove it.
 	at, rel string
 	err     error         // why the last start failed; nil while a run is up
 	wait    time.Duration // the next restart's backoff
@@ -82,8 +86,9 @@ const (
 	diskReloadAsk   = "ask"
 )
 
-// localDisk is the folder's driver: golib's local FS, which watches natively.
-func localDisk(dir string) (vfs.FS, error) { return local.New(dir) }
+// localDisk is the folder's driver: golib's local FS, which watches natively, opening its root for
+// each operation rather than holding it, so nothing but the watch's own handle holds the folder.
+func localDisk(dir string) (vfs.FS, error) { return local.New(dir, local.RootPerOperation()) }
 
 // watchFile counts b in its folder's watch, starting the watch with the first buffer there. b's
 // file must be known (open); a file whose folder is not known yet (its workspace not listed) is
