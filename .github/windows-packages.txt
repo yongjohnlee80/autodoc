@@ -59,6 +59,7 @@
 ./internal/install/...
 ./core/crew/...
 ./core/crewmail/...
+./tui
 ./tui/agents
 ./tui/crew
 ./tui/explorer
@@ -67,4 +68,3 @@
 ./tui/searchsetup
 ./tui/system
 ./tui/todos
-./tui
