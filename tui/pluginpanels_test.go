@@ -459,7 +459,7 @@ func TestACardOnTheRightAndTheResultsAtTheBottom(t *testing.T) {
 	r.openPlugin("db")
 	_, left, right, _ := waitFrame(t, r, "Db")
 	onLoop(r, func() bool { r.h.plugins.runPluginCommand("db", "run"); return true })
-	r.s.WaitFor(t, "the results open", func(string) bool { return onLoop(r, func() bool { return r.h.panelOpen[resultsPanel] }) })
+	r.lands(t, "card: the results open", func() bool { return onLoop(r, func() bool { return r.h.panelOpen[resultsPanel] }) })
 	rTop, rLeft, rRight, rBottom := waitFrame(t, r, "results: Rows")
 	cTop, cLeft, cRight, _ := waitFrame(t, r, "Db")
 	if cRight != 99 || cLeft != left || cRight != right {

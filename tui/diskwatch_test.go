@@ -272,7 +272,7 @@ func folderGoesAndComesBack(t *testing.T, poll bool) {
 		t.Fatal(err)
 	}
 	rewrite(t, root, "sub/c.md", "c\n")
-	r.s.WaitFor(t, "sub/c.md listed", func(string) bool {
+	r.lands(t, "folder comes back: sub/c.md listed", func() bool {
 		return onLoop(r, func() bool { return slices.Contains(r.h.files.Paths, "sub/c.md") })
 	})
 	r.openOnDisk(t, "sub/c.md")
