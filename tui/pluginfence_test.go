@@ -139,3 +139,58 @@ func TestNoRunStartsFromAFolderBeingUpdated(t *testing.T) {
 		t.Fatalf("%d folders still owned after the update ended", n)
 	}
 }
+
+// TestAFailedRemovalReleasesItsFolder: a removal that fails (here a run that never exits within its
+// bound) releases the folder it owned: the plugin starts again after, as it would have before.
+func TestAFailedRemovalReleasesItsFolder(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	installTestPlugin(t, dir, "echo", "echo", 30, 6)
+	r, _ := pluginTUI(t, dir)
+	stuck := &pluginRun{shutDone: make(chan struct{}), grace: 10 * time.Millisecond, termGrace: 10 * time.Millisecond}
+	stuck.e.dir, stuck.e.m.Name = filepath.Join(dir, "echo"), "echo"
+	defer close(stuck.shutDone) // before the quit, which waits for every stopping run
+	onLoop(r, func() bool {
+		if r.h.plugins.stopping == nil {
+			r.h.plugins.stopping = map[*pluginRun]struct{}{}
+		}
+		r.h.plugins.stopping[stuck] = struct{}{} // a run of it still in its close, that never ends
+		r.h.plugins.removePluginConfirmed(filepath.Join(dir, "echo"))
+		return true
+	})
+	r.waitNotice(t, "echo did not exit within")
+	if n := onLoop(r, func() int { return len(r.h.plugins.owned) }); n != 0 {
+		t.Fatalf("%d folders still owned after the removal failed", n)
+	}
+	if again := r.openPlugin("echo"); again == nil {
+		t.Fatal("the plugin did not start again after its removal failed")
+	}
+	r.waitShown(t, "open 30x6")
+	onLoop(r, func() bool { delete(r.h.plugins.stopping, stuck); return true })
+}
+
+// TestAFailedUpdateReleasesItsFolder: an update whose swap fails (here the older folder can't be
+// removed) releases the folder it owned: the plugin, left as it was, starts again after.
+func TestAFailedUpdateReleasesItsFolder(t *testing.T) {
+	t.Parallel()
+	tune(t).installFS = installFS{rename: os.Rename, removeAll: func(string) error { return errors.New("busy") }}
+	repo := pluginRepo(t, "Echo", "true")
+	dir := t.TempDir()
+	r, _ := pluginTUI(t, dir)
+	r.h.p.Post(func() { r.h.plugins.addPlugin("file://" + repo) })
+	r.question(t)
+	r.keys(t, key('y'))
+	r.waitNotice(t, "added echo at")
+	commitPlugin(t, repo, "Echo two", "true")
+	r.h.p.Post(func() { _ = r.h.plugins.updatePlugin("echo") })
+	r.question(t)
+	r.keys(t, key('y'))
+	r.waitNotice(t, "the plugin was left as it was")
+	if n := onLoop(r, func() int { return len(r.h.plugins.owned) }); n != 0 {
+		t.Fatalf("%d folders still owned after the update failed", n)
+	}
+	if again := r.openPlugin("echo"); again == nil {
+		t.Fatal("the plugin did not start again after its update failed")
+	}
+	r.waitShown(t, "open 30x6")
+}
