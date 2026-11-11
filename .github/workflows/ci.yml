@@ -247,6 +247,15 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: scratch (not for merge) the audit cell on Windows with git's trace
+        if: ${{ !inputs.discover }}
+        run: |
+          export GIT_TRACE="$(cygpath -w "$RUNNER_TEMP")\\gittrace.txt"
+          echo "GIT_TRACE=$GIT_TRACE"
+          go test -count=1 -timeout 10m -v -run '^TestAuditHandsAFreshCopyAndItsToastReopensTheCard$' ./tui/ > "$RUNNER_TEMP/t.txt" 2>&1 && rt=0 || rt=$?
+          echo "== rc=$rt"; grep -E '^--- |_test\.go:[0-9]+: ' "$RUNNER_TEMP/t.txt" | cut -c1-600 || true
+          echo "== the trace"; cut -c1-400 "$RUNNER_TEMP/gittrace.txt" | head -120 || true
+          echo "== the program's env as git saw it: none printed (values may be private)"
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
         run: |
