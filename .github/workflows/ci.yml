@@ -252,9 +252,16 @@ jobs:
         run: |
           # the whole module's vet, not only the ported packages': it compiles every package's tests
           # for Windows, so a neutral test can't come to lean on a helper in a Unix-tagged file
-          go vet ./...
-          mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
-          go test -count=1 -timeout 20m "${pkgs[@]}"
+          go vet ./tui/
+          # SCRATCH (never merged): the stuck open under whole-./tui load on Windows, -parallel 16, a debug-only log with a 20 s goroutine dump
+          export AUTODOC_DEBUGOPEN="$RUNNER_TEMP/debugopen.log"
+          go test -count=1 -parallel 16 -timeout 120m ./tui/ > "$RUNNER_TEMP/tui.log" 2>&1 || true
+          echo "tui fails: $(grep -c -- '^--- FAIL' "$RUNNER_TEMP/tui.log" || true)"; grep -E -- '^--- FAIL' "$RUNNER_TEMP/tui.log" | head -20 || true
+          L="$AUTODOC_DEBUGOPEN"; echo "opens $(grep -c 'DEBUGOPEN start' "$L" || true) answers $(grep -c 'DEBUGOPEN answer' "$L" || true) stale $(grep 'DEBUGOPEN answer' "$L" | grep -c 'current=false' || true) stuck $(grep -c 'DEBUGOPEN STUCK' "$L" || true)"
+          grep 'DEBUGOPEN answer' "$L" | grep 'current=false' | head -5 || true
+          awk '/DEBUGOPEN STUCK/{f=1} f{print} /END-STACKS/{if(f){exit}}' "$L" > "$RUNNER_TEMP/first-stuck.txt" || true
+          echo "first stuck dump lines: $(wc -l < "$RUNNER_TEMP/first-stuck.txt")"
+          grep -n -B2 -A28 'loadInto\|readFile\|database/sql\|semacquire\|chan receive\|select' "$RUNNER_TEMP/first-stuck.txt" | head -400 || true
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true

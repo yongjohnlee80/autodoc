@@ -3,10 +3,13 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
+	"time"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -397,6 +400,14 @@ func (h *Host) loadAs(ws, p string, prev *editor.JumpPos, raw bool, land *landin
 
 // loadInto reads p into b off the loop; the answer lands in b, active or not, under b's own ticket:
 // a switch of buffer or workspace meanwhile does not drop it.
+// dbgOpen appends one debug line to $AUTODOC_DEBUGOPEN (debug-only, never committed).
+func dbgOpen(format string, args ...any) {
+	if f, err := os.OpenFile(os.Getenv("AUTODOC_DEBUGOPEN"), os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644); err == nil {
+		fmt.Fprintf(f, format, args...)
+		f.Close()
+	}
+}
+
 func (h *Host) loadInto(b *openBuffer, ws, p string, prev *editor.JumpPos, raw bool, land *landing) {
 	tk := h.bufferTicket(b, true)
 	again, read := b.file.open && b.file.ws == ws && b.file.path == p, b.file.version
@@ -405,8 +416,21 @@ func (h *Host) loadInto(b *openBuffer, ws, p string, prev *editor.JumpPos, raw b
 		err              error
 	}
 	h.say(h.trf("autodoc.notice.files.opening", p))
+	dbgGen, dbgSess, dbgStart := b.file.gen, h.session.Gen(), time.Now()
+	dbgDone := make(chan struct{})
+	go func() { // watchdog (debug-only): an open unanswered for 20 s dumps every goroutine
+		select {
+		case <-dbgDone:
+		case <-time.After(20 * time.Second):
+			buf := make([]byte, 16<<20)
+			n := runtime.Stack(buf, true)
+			dbgOpen("DEBUGOPEN STUCK %s after 20s; goroutines:\n%s\nDEBUGOPEN END-STACKS\n", p, buf[:n])
+		}
+	}()
+	dbgOpen("DEBUGOPEN start %s buf=%p gen=%d sess=%d\n", p, b, dbgGen, dbgSess)
 	do(h, func(ctx context.Context) answer {
 		res, err := h.readFile(ctx, ws, p, raw)
+		dbgOpen("DEBUGOPEN read %s buf=%p took=%s err=%v\n", p, b, time.Since(dbgStart), err)
 		if err != nil {
 			return answer{err: err}
 		}
@@ -414,6 +438,8 @@ func (h *Host) loadInto(b *openBuffer, ws, p string, prev *editor.JumpPos, raw b
 		b, _ := m["content"].([]byte)
 		return answer{content: string(b), version: feature.Str(m, "version")}
 	}, func(a answer) {
+		close(dbgDone)
+		dbgOpen("DEBUGOPEN answer %s buf=%p after=%s current=%v sessSame=%v genSame=%v(%d->%d) inBuffers=%v\n", p, b, time.Since(dbgStart), tk.Current(), h.session.Gen() == dbgSess, b.file.gen == dbgGen, dbgGen, b.file.gen, slices.Contains(h.buffers, b))
 		if !tk.Current() {
 			return
 		}
