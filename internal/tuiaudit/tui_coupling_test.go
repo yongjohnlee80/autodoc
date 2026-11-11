@@ -260,7 +260,10 @@ const tuiCouplingHeader = `# tui's feature map: each name (not each use) a group
 // ledger doesn't hold, or one it holds that is gone.
 func TestTuiFeaturesReachOnlyDown(t *testing.T) {
 	found, nfiles := tuiCrossings(t)
-	if nfiles < 150 {
+	// NOTE: a floor that says the guard reads tui at all, not a count tui keeps: tui loses files as
+	// its features become packages and as per-OS files go into seams (the Windows build read 149
+	// once tui/plugins_other.go went), so it sits well below either build's count.
+	if nfiles < 100 {
 		t.Fatalf("read %d files: the guard is not looking at tui", nfiles)
 	}
 	ledger := filepath.Join(repoRoot(t), "internal", "tuiaudit", tuiCouplingPath)
