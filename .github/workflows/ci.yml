@@ -269,6 +269,15 @@ jobs:
           grep -E 'DEBUGOPEN read .* took=([0-9]+m)?[0-9.]+s ' "$L" | head -20 | sed 's/^/SLOW READ: /' || true
           echo "reads logged: $(grep -c 'DEBUGOPEN read' "$L" || true)"
           grep -n -B2 -A28 'loadInto\|readFile\|database/sql\|semacquire\|chan receive\|select' "$RUNNER_TEMP/first-stuck.txt" | head -400 || true
+      - name: SCRATCH upload the stuck-open logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: stuckopen-logs
+          path: |
+            ${{ runner.temp }}/debugopen.log
+            ${{ runner.temp }}/tui.log
+          retention-days: 3
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
