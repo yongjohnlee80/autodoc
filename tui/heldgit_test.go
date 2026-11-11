@@ -79,9 +79,9 @@ func heldGitWith(t *testing.T, env procenv.Env, copied func(git string) (busy fu
 	if copied != nil {
 		busy = copied(git)
 	}
-	startsOnceFree(t, git, real, busy)
 	held = env.With("PATH="+bin+string(os.PathListSeparator)+env.Get("PATH"),
 		heldGitEnv+"="+real, heldGitEnv+"_READY="+ready, heldGitEnv+"_RELEASE="+go_, heldGitEnv+"_SEEN="+seen)
+	startsOnceFree(t, git, held.Environ(), busy)
 	release = func() { _ = os.WriteFile(go_, nil, 0o600) } // idempotent: a second release writes it again
 	t.Cleanup(release)
 	return held, func() bool { return !gone(ready) }, release
@@ -93,11 +93,11 @@ func heldGitWith(t *testing.T, env procenv.Env, copied func(git string) (busy fu
 // no writer is left (heldGit's is closed, and no later fork can inherit it), so the test's own
 // clone cannot fail so. Bounded: a copy that never starts fails its test. busy, when not nil, is
 // called after each start the system refused as busy, before the next try.
-func startsOnceFree(t *testing.T, git, real string, busy func()) {
+func startsOnceFree(t *testing.T, git string, env []string, busy func()) {
 	t.Helper()
 	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
 		cmd := exec.Command(git, "version")
-		cmd.Env = append(os.Environ(), heldGitEnv+"="+real)
+		cmd.Env = env
 		err := cmd.Run()
 		if err == nil {
 			return
@@ -115,6 +115,12 @@ func startsOnceFree(t *testing.T, git, real string, busy func()) {
 // released; then, as every other git command, it runs the real git with the same arguments, its
 // standard streams and its exit status.
 func heldGitMain() int {
+	if started := os.Getenv(heldGitEnv + "_STARTED"); started != "" { // a cell's witness that this git ran
+		if f, err := os.OpenFile(started, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600); err == nil {
+			_, _ = f.WriteString("started\n")
+			_ = f.Close()
+		}
+	}
 	args := os.Args[1:]
 	if len(args) > 0 && args[0] == "clone" {
 		if err := os.WriteFile(os.Getenv(heldGitEnv+"_READY"), nil, 0o600); err != nil {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"syscall"
 	"testing"
 
@@ -15,15 +16,17 @@ import (
 // TestAHeldGitStartsOnceItsCopyIsFree: while a writer still holds heldGit's copied git (a parallel
 // test's fork that has not reached its exec yet), an exec of it fails with "text file busy"; heldGit
 // tries again until the copy starts. The writer lets go at the second refused start, so heldGit
-// returns only after it has tried again past a refusal and been refused, and its git then runs.
+// returns only after it has tried again past a refusal and been refused; and only once its git has
+// started, as the git's own witness (heldGitMain writes it as it starts) says.
 func TestAHeldGitStartsOnceItsCopyIsFree(t *testing.T) {
 	t.Parallel()
 	real, err := exec.LookPath("git")
 	if err != nil {
 		t.Fatal(err)
 	}
+	started := filepath.Join(t.TempDir(), "started")
 	refused := 0 // the starts heldGit saw refused as busy: the second lets the writer go
-	held, _, _ := heldGitWith(t, procenv.Env(nil), func(git string) func() {
+	heldGitWith(t, procenv.Env(nil).With(heldGitEnv+"_STARTED="+started), func(git string) func() {
 		writer, err := os.OpenFile(git, os.O_WRONLY, 0)
 		if err != nil {
 			t.Fatal(err)
@@ -46,9 +49,7 @@ func TestAHeldGitStartsOnceItsCopyIsFree(t *testing.T) {
 	if refused < 2 {
 		t.Fatalf("heldGit returned after %d refused starts, while the writer still held its git; want it to try until the git starts", refused)
 	}
-	git := exec.Command(procenv.Resolve(held, "git"), "version")
-	git.Env = held.Environ()
-	if out, err := git.CombinedOutput(); err != nil {
-		t.Fatalf("the held git's git version: %v\n%s", err, out)
+	if witness, err := os.ReadFile(started); err != nil || len(witness) == 0 {
+		t.Fatalf("heldGit returned before its git ever started (the git's witness: %q, %v)", witness, err)
 	}
 }
