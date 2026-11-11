@@ -13,6 +13,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/decl"
+	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/panelgeometry"
 )
 
@@ -130,9 +131,44 @@ func TestAnOpenCardSurvivesAnotherCardsAddAndRemoval(t *testing.T) {
 	steady("another card removed", 'y')
 }
 
-// Removing a card stops its plugin and closes its open panel before the reload, while its Drawer is
-// there: its Closed hook gives the keys back to the page. Then its panel, its dock icon and its
-// Plugins menu row go, and its panel can no longer be opened.
+// removeRunningPluginFolder removes a plugin's folder while its run is up, as a user deleting it
+// does. Where the OS refuses to remove a running process's working folder (Windows: the plugin's
+// process works in it), the case can't arise, and the cell is skipped, saying so.
+func removeRunningPluginFolder(t *testing.T, dir string) {
+	t.Helper()
+	err := os.RemoveAll(dir)
+	if folderInUse(err) {
+		t.Skipf("a running process's working folder can't be removed on this system, so the case can't arise: %v", err)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// stopPluginRun closes the plugin name's run and waits for it to end: its process exited, the run
+// gone from the running plugins. Its folder can then be removed on every OS.
+func stopPluginRun(t *testing.T, r *running, name string) {
+	t.Helper()
+	run := onLoop(r, func() *pluginRun { return r.h.plugins.running[name] })
+	if run == nil {
+		t.Fatalf("%s has no run to stop", name)
+	}
+	onLoop(r, func() bool { run.close(""); return true })
+	select {
+	case <-run.shutDone:
+	case <-time.After(decltest.WaitTimeout):
+		t.Fatalf("%s's run never ended after its close", name)
+	}
+	r.s.WaitFor(t, name+"'s run gone", func(string) bool {
+		return onLoop(r, func() bool { return r.h.plugins.running[name] == nil })
+	})
+}
+
+// Removing a running card's folder (a user deleting it) stops its plugin and closes its open panel
+// before the reload, while its Drawer is there: its Closed hook gives the keys back to the page.
+// Then its panel, its dock icon and its Plugins menu row go, and its panel can no longer be opened.
+// Where a running process's working folder can't be removed (Windows), the case can't arise and the
+// cell is skipped; TestRemovingAStoppedCardTakesItsPanelAway is the removal there.
 func TestRemovingACardTakesItsPanelAway(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -142,9 +178,7 @@ func TestRemovingACardTakesItsPanelAway(t *testing.T) {
 	waitSaid(t, logs, "card", "focus true")
 	run := onLoop(r, func() *pluginRun { return r.h.plugins.running["card"] })
 	id := cardPanelID("card")
-	if err := os.RemoveAll(filepath.Join(dir, "card")); err != nil {
-		t.Fatal(err)
-	}
+	removeRunningPluginFolder(t, filepath.Join(dir, "card")) // skipped where a running card's folder can't go
 	// loadPlugins runs here on the loop; the reload it asks for is only posted, so what follows is
 	// the moment before it
 	type moment struct{ open, drawer, running, editor bool }
@@ -164,6 +198,36 @@ func TestRemovingACardTakesItsPanelAway(t *testing.T) {
 	case <-time.After(defaultSeams.pluginGrace + defaultSeams.pluginTermGrace + 5*time.Second):
 		t.Fatal("the removed card's plugin did not exit")
 	}
+	if r.listsPanel(id) {
+		t.Fatal("the dock still lists the removed card")
+	}
+	if label, _ := r.pluginRowLabel("card"); label != "" {
+		t.Fatalf("the Plugins menu still has the removed card: %q", label)
+	}
+	if err := onLoop(r, func() error { return r.h.p.Call(id, "open") }); err == nil {
+		t.Fatal("the removed card's panel still opens")
+	}
+}
+
+// A card's folder removed once its plugin has stopped, on every OS: its panel goes at the reload, as
+// do its dock icon and its Plugins menu row, and its panel can no longer be opened. Nothing runs from
+// the folder when it goes, so there is no run for the reload to stop.
+func TestRemovingAStoppedCardTakesItsPanelAway(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	installPlugin2(t, dir, "card", "dialog", "echo", rightCard+toggleCmd)
+	_, r, logs := liveCardTUI(t, dir, nil, false)
+	r.h.p.Post(func() { r.h.plugins.runPluginCommand("card", "toggle") })
+	waitSaid(t, logs, "card", "focus true")
+	id := cardPanelID("card")
+	stopPluginRun(t, r, "card")
+	if err := os.RemoveAll(filepath.Join(dir, "card")); err != nil {
+		t.Fatal(err)
+	}
+	if running := onLoop(r, func() bool { r.h.plugins.loadPlugins(); return r.h.plugins.running["card"] != nil }); running {
+		t.Fatal("the stopped card runs again at the reload")
+	}
+	r.s.WaitFor(t, "the panel gone", func(string) bool { return onLoop(r, func() bool { return r.h.panelSpec(id) == nil }) })
 	if r.listsPanel(id) {
 		t.Fatal("the dock still lists the removed card")
 	}
@@ -196,6 +260,7 @@ func TestACardAddedAgainKeepsItsGeometry(t *testing.T) {
 		if n := r.noticesSaying("already"); n != 0 {
 			t.Fatalf("round %d: %d notices of a source declared twice", round, n)
 		}
+		stopPluginRun(t, r, "card") // its process works in its folder: on Windows the folder goes only once it has exited
 		if err := os.RemoveAll(filepath.Join(dir, "card")); err != nil {
 			t.Fatal(err)
 		}
