@@ -24,7 +24,7 @@ func varsStore(claimed bool) *featuretest.ScriptedCore {
 }
 
 // varRows are the Variables tab's rows: "<name> <from> <value>".
-func varRows(v *todos) []string {
+func varRows(v *Todos) []string {
 	m := v.vars.Model()
 	var out []string
 	for i := 0; i < m.Len(); i++ {
@@ -41,7 +41,7 @@ func varRows(v *todos) []string {
 // a adds NAME=value to the file, d clears a value set here (asked first). [ ] reach it round.
 func TestTheVariablesTab(t *testing.T) {
 	s := varsStore(true)
-	v := newTodos(s)
+	v := New(s)
 	v.Panels()[0].Opened(nil)
 	v.showTab(varsTab)
 	if !s.Called("todos.vars[") {
@@ -120,7 +120,7 @@ func TestTheVariablesTab(t *testing.T) {
 	}
 
 	ro := varsStore(false)
-	w := newTodos(ro)
+	w := New(ro)
 	w.Panels()[0].Opened(nil)
 	w.showTab(varsTab)
 	w.varEdit()

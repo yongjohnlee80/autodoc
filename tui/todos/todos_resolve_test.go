@@ -115,7 +115,7 @@ func TestALoadedFolderIsShownByTheStoreTheDaemonResolves(t *testing.T) {
 	if _, err := m.Resolve(context.Background(), todo.At{Root: slashFile("/before")}); err != nil {
 		t.Fatal(err)
 	}
-	v := newTodos(managerCore(t, m))
+	v := New(managerCore(t, m))
 	v.list()
 	if want := "root:" + slashFile("/before"); v.cur == nil || v.cur.id != want {
 		t.Fatalf("the store listed first: shown %+v; want %s", v.cur, want)
@@ -170,7 +170,7 @@ func TestAStoreMovedIntoTheFolderLoadedIsShown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	v := newTodos(managerCore(t, m))
+	v := New(managerCore(t, m))
 	v.list()
 	if v.cur == nil || v.cur.sid == moved.StoreID {
 		t.Fatalf("the store shown first: %+v; want another than the moved one (the cell's premise)", v.cur)
@@ -208,7 +208,7 @@ func TestAStoreNotListedIsSaidAndNoOtherIsShownInItsPlace(t *testing.T) {
 		}
 		return v, err
 	}
-	v := newTodos(core)
+	v := New(core)
 	v.list()
 	v.folderAs = "load"
 	v.folderChosen(taskFile("/fresh"))
@@ -244,7 +244,7 @@ func TestAStoreNotListedWithNoneShownShowsNone(t *testing.T) {
 		}
 		return v, err
 	}
-	v := newTodos(core)
+	v := New(core)
 	v.list()
 	if v.cur != nil {
 		t.Fatalf("shown before: %+v; want none (the cell's premise)", v.cur)
@@ -283,7 +283,7 @@ func TestAMovedStoreStaysShown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	v := newTodos(managerCore(t, m))
+	v := New(managerCore(t, m))
 	v.list()
 	v.folderAs = "load"
 	v.folderChosen(taskFile("/x"))
@@ -300,7 +300,7 @@ func TestAMovedStoreStaysShown(t *testing.T) {
 
 // movedRig is a store shown at /x, with a store at /0before listed first and a folder /a0 registered
 // that sorts before /x: moving /x's store into /a0 changes the root it is listed by.
-func movedRig(t *testing.T) (m *todo.Manager, core *featuretest.ScriptedCore, v *todos, x todo.Opened) {
+func movedRig(t *testing.T) (m *todo.Manager, core *featuretest.ScriptedCore, v *Todos, x todo.Opened) {
 	t.Helper()
 	ctx := context.Background()
 	disk := todotest.NewDisk()
@@ -322,7 +322,7 @@ func movedRig(t *testing.T) (m *todo.Manager, core *featuretest.ScriptedCore, v 
 		t.Fatal(err)
 	}
 	core = managerCore(t, m)
-	v = newTodos(core)
+	v = New(core)
 	v.list()
 	v.folderAs = "load"
 	v.folderChosen(taskFile("/x"))
@@ -389,7 +389,7 @@ func TestAFailedNewAsksForNothing(t *testing.T) {
 	}
 	core := managerCore(t, m)
 	core.Answers["todos.scaffold"] = func([]any) (any, error) { return nil, errors.New("the disk is full") }
-	v := newTodos(core)
+	v := New(core)
 	v.list()
 	shown := v.cur
 	if shown == nil {

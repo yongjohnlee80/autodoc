@@ -26,7 +26,7 @@ type todoStatusing struct {
 }
 
 // newStatusPick is the picker of the statuses that s opens.
-func newStatusPick(t *todos) *feature.Pick[todoStatusChoice] {
+func newStatusPick(t *Todos) *feature.Pick[todoStatusChoice] {
 	return &feature.Pick[todoStatusChoice]{Core: t.c, Dialog: "todoStatusPicker", Name: "todoStatus",
 		List:   feature.NewRows(tuidecl.NewListModel("key", "status"), statusRowOf),
 		Field:  "App.todoStatusField",
@@ -51,7 +51,7 @@ func statusRowOf(_ int, c todoStatusChoice) feature.RowOf {
 
 // statusPane is what choosing c does to the task the picker is for, under the task's title: short
 // lines, as the preview does not wrap.
-func (t *todos) statusPane(c todoStatusChoice) feature.Pane {
+func (t *Todos) statusPane(c todoStatusChoice) feature.Pane {
 	if t.statusing == nil {
 		return feature.Pane{}
 	}
@@ -65,7 +65,7 @@ func (t *todos) statusPane(c todoStatusChoice) feature.Pane {
 // chooseStatus is s: the task under the cursor, in a store taking writes here, offered every
 // status. Off a task, or on a released store, it does nothing: the action row offers it only
 // where it applies.
-func (t *todos) chooseStatus() {
+func (t *Todos) chooseStatus() {
 	s, x := t.cursor()
 	if x == nil || t.readOnly(s) {
 		return
@@ -81,7 +81,7 @@ func (t *todos) chooseStatus() {
 }
 
 // statusChosen is a status chosen: the task moves there, unless it is there already.
-func (t *todos) statusChosen(c todoStatusChoice) {
+func (t *Todos) statusChosen(c todoStatusChoice) {
 	st := t.statusing
 	t.statusing = nil
 	if st == nil || c.current {

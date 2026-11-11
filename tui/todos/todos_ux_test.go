@@ -15,43 +15,6 @@ import (
 // user's size kept; its status line says only what needs the user; and a released store takes
 // no key as an error.
 
-// TestTodosPanelOpensLargeAndKeepsTheUsersSize: before the user sizes it the panel is about 65% of
-// the window wide and 80% tall, at any edge, the left one unless chosen; a size the user leaves it
-// at is kept, per edge, and wins, and so do an edge they chose and a place they float it to.
-func TestTodosPanelOpensLargeAndKeepsTheUsersSize(t *testing.T) {
-	p := prefs{panelDefs: []feature.PanelSpec{todosPanelSpec()}}
-	for edge, want := range map[string][2]int{"right": {65, 80}, "left": {65, 80}, "top": {80, 65}, "bottom": {80, 65}} {
-		if s, l := p.panelGeometry("todos", edge); s != want[0] || l != want[1] {
-			t.Errorf("at the %s edge, before it is sized: %d × %d, want %d × %d", edge, s, l, want[0], want[1])
-		}
-	}
-	p.todosEdge = "right"
-	if st := panelState(p); st["App.todosSize"] != 65 || st["App.todosLength"] != 80 {
-		t.Errorf("the document reads %v × %v", st["App.todosSize"], st["App.todosLength"])
-	}
-	readPanelPrefs(&p, map[string]any{"tui.todos.right.size": "40", "tui.todos.right.length": "50", "tui.todos.top.size": "99"})
-	if s, l := p.panelGeometry("todos", "right"); s != 40 || l != 50 {
-		t.Errorf("the user's size at the right edge: %d × %d, want 40 × 50", s, l)
-	}
-	if s, l := p.panelGeometry("todos", "top"); s != 80 || l != 65 {
-		t.Errorf("an out-of-bounds size kept: %d × %d, want the default", s, l)
-	}
-	// the edge: the left by default, a kept one (the right) winning
-	if p := defaultPrefs(); p.todosEdge != "left" {
-		t.Errorf("a fresh state's todos edge: %q, want left", p.todosEdge)
-	}
-	var kept prefs
-	feature.ReadRows(&kept, map[string]any{prefTodosEdge: "right"}, legacyPrefRows(nil, false))
-	if kept.todosEdge != "right" || todosPanelSpec().Edge(kept) != "right" {
-		t.Errorf("a kept right edge read as %q, the panel's %q", kept.todosEdge, todosPanelSpec().Edge(kept))
-	}
-	r := [4]float64{5, 6, 30, 40}
-	st := floatState(map[string][4]float64{"todos": r}, p.panelDefs)
-	if st["App.todosFloating"] != true || st["App.todosX"] != 5.0 || st["App.todosW"] != 30.0 || st["App.todosH"] != 40.0 {
-		t.Errorf("a place the user floated it to: %v", st)
-	}
-}
-
 // TestTodosStatusLineSaysOnlyWhatNeedsTheUser: listing the stores, showing tabs and months, choosing
 // another store and moving the cursor put nothing in the status line, which stays hidden: no count
 // of stores, months or tasks, no guidance. A file a tab could not list is said, where it is, until
@@ -67,7 +30,7 @@ func TestTodosStatusLineSaysOnlyWhatNeedsTheUser(t *testing.T) {
 		}
 		return map[string]any{"tasks": []any{map[string]any{"id": "t1", "rev": "r1", "title": "Ship", "status": "open"}}}, nil
 	}
-	v := newTodos(s)
+	v := New(s)
 	quiet := func(when string) {
 		t.Helper()
 		if s.Sets["App.todosStatus"] != "" || s.Sets["App.todosStatusShown"] != false || len(s.Notes) != 0 {
@@ -113,7 +76,7 @@ func TestTodosStatusLineSaysOnlyWhatNeedsTheUser(t *testing.T) {
 func TestTodosAReadOnlyStoreTakesNoKeyAsAnError(t *testing.T) {
 	writes := []string{"todos.add", "todos.remove", "todos.status", "todos.assign", "todos.move_store", "todos.scaffold", "todos.refresh"}
 	s := &agentCore{ScriptedCore: scriptedStore(false), entries: []feature.AgentEntry{{Ref: feature.AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true}}}
-	v := newTodos(s)
+	v := New(s)
 	v.list()
 	cmds := v.Commands()
 	for _, where := range []struct {
@@ -170,7 +133,7 @@ func TestTodosAReadOnlyStoreTakesNoKeyAsAnError(t *testing.T) {
 // nothing. A write asked of a released store is never sent.
 func TestTodosEnterOnTheCardOfKeysOpensTheRow(t *testing.T) {
 	s := scriptedStore(true)
-	v := newTodos(s)
+	v := New(s)
 	v.list()
 	if err := v.Commands()["App.todoEnter"].Handler("App.todoEnter")(nil); err != nil {
 		t.Fatal(err)
@@ -198,7 +161,7 @@ func TestTodosEnterOnTheCardOfKeysOpensTheRow(t *testing.T) {
 	}
 
 	ro := scriptedStore(false)
-	w := newTodos(ro)
+	w := New(ro)
 	w.list()
 	n = len(ro.Calls)
 	w.write(w.stores[0], "todos.add", []any{"kb", map[string]any{"title": "x"}}, nil)

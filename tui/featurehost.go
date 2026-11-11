@@ -17,6 +17,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/tui/crew"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/autodoc/tui/system"
+	"github.com/yongjohnlee80/autodoc/tui/todos"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/i18n"
@@ -44,7 +45,7 @@ func (h *Host) assembleFeatures(fs ...feature.Feature) error {
 func (h *Host) features() []feature.Feature {
 	h.asker = feature.NewAsker(core{h})
 	h.asker.OnIdle = func() { h.p.Post(h.askLuaGrants) } // a Lua grant waiting for the card (luagate.go)
-	fs := []feature.Feature{pageFind{h}, legacy{h}, h.terminals, h.agents, h.crew, h.crewInbox, h.asker, h.noticeLog, h.recent, h.tiles, h.explorer, h.outline, h.rel, h.ai, h.plugins, system.NewStartup(core{h}, h.startupSeams(), h.aboutInfo.Version, h.canUpdate), newTodos(core{h}), h.luaFeature()}
+	fs := []feature.Feature{pageFind{h}, legacy{h}, h.terminals, h.agents, h.crew, h.crewInbox, h.asker, h.noticeLog, h.recent, h.tiles, h.explorer, h.outline, h.rel, h.ai, h.plugins, system.NewStartup(core{h}, h.startupSeams(), h.aboutInfo.Version, h.canUpdate), todos.New(core{h}), h.luaFeature()}
 	fs = append(fs, newRegistryBrowse(h))                                                                                             // Plugins › Browse the registry… (registrybrowse.go)
 	fs = append(fs, h.cands)                                                                                                          // the installs' candidates, and Audit… (candidate.go)
 	fs = append(fs, newCellNotePage(h))                                                                                               // a note's Rendered view on a terminal (notepage.go)

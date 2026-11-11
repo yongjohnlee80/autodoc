@@ -55,7 +55,7 @@ func TestTodosAssignListsEveryConnectedAgent(t *testing.T) {
 		peer("jarvis", "autovim:plugins", "plugins", true, ""),
 		peer("zen", "autovim:plugins", "plugins", false, "no_endpoint"),
 		peer("zen", "autovim:mcat", "mcat", true, ""))
-	v := newTodos(c)
+	v := New(c)
 	v.list()
 	onTask(t, v, "open")
 	v.assign()
@@ -77,7 +77,7 @@ func TestTodosAssignListsEveryConnectedAgent(t *testing.T) {
 	}
 
 	none, _ := newPeerCore("", peer("jarvis", "autovim:plugins", "plugins", true, ""))
-	w := newTodos(none)
+	w := New(none)
 	w.list()
 	onTask(t, w, "open")
 	w.assign()
@@ -93,7 +93,7 @@ func TestTodosAssignListsEveryConnectedAgent(t *testing.T) {
 // the same send). Nothing is handed to the window's own agents, and the notice says it was sent.
 func TestTodosAssignHandsAnotherHostsAgentATaskAsTheUser(t *testing.T) {
 	c, assigned := newPeerCore("autodoc:0123456789abcdef", peer("jarvis", "autovim:plugins", "plugins", true, ""))
-	v := newTodos(c)
+	v := New(c)
 	v.list()
 	onTask(t, v, "open")
 	v.assign()
@@ -129,13 +129,13 @@ func TestTodosAssignHandsAnotherHostsAgentATaskAsTheUser(t *testing.T) {
 // A send refused leaves the task assigned and says why.
 func TestTodosAssignQueuesForAnAgentNoWakeReaches(t *testing.T) {
 	c, _ := newPeerCore("autodoc:0123456789abcdef", peer("lector", "autovim:plugins", "plugins", false, "no_endpoint"))
-	v := newTodos(c)
+	v := New(c)
 	v.list()
 	onTask(t, v, "open")
 	v.assign()
 	v.assignPick.Accept(1, "")
 	v.assignSet("")
-	if len(c.sent) != 1 || !strings.Contains(c.sent[0].body, "Instruction: "+assignDefault) {
+	if len(c.sent) != 1 || !strings.Contains(c.sent[0].body, "Instruction: "+AssignDefault) {
 		t.Fatalf("sent %+v, want the task, with the default instruction", c.sent)
 	}
 	if !slices.ContainsFunc(c.Notes, func(n string) bool {
@@ -146,7 +146,7 @@ func TestTodosAssignQueuesForAnAgentNoWakeReaches(t *testing.T) {
 
 	r, _ := newPeerCore("autodoc:0123456789abcdef", peer("jarvis", "autovim:plugins", "plugins", true, ""))
 	r.sendErr = errors.New("mail.no_recipient")
-	w := newTodos(r)
+	w := New(r)
 	w.list()
 	onTask(t, w, "open")
 	w.assign()
@@ -175,7 +175,7 @@ func (c *slowPeerCore) peerAgents(then func([]feature.AgentEntry)) {
 func TestTodosAssignAnsweredAfterAWorkspaceSwitchOpensNothing(t *testing.T) {
 	pc, assigned := newPeerCore("autodoc:0123456789abcdef", peer("jarvis", "autovim:plugins", "plugins", true, ""))
 	c := &slowPeerCore{peerCore: pc}
-	v := newTodos(c)
+	v := New(c)
 	v.list()
 	onTask(t, v, "open")
 	v.assign()
@@ -198,7 +198,7 @@ func TestTodosAssignAnsweredAfterAWorkspaceSwitchOpensNothing(t *testing.T) {
 // codename@project and names its scope and whether a wake reaches it.
 func TestTodosAssignPreviewsAnotherHostsAgent(t *testing.T) {
 	c, _ := newPeerCore("autodoc:0123456789abcdef", peer("zen", "autovim:mcat", "mcat", false, "no_endpoint"))
-	v := newTodos(c)
+	v := New(c)
 	e := c.peers[0]
 	pn := v.assignPick.Preview(e)(context.Background()).Value
 	if pn.Title != "zen@mcat" || !strings.Contains(pn.Text, "autovim:mcat") || !strings.Contains(pn.Text, runState(c, e)) {
@@ -210,7 +210,7 @@ func TestTodosAssignPreviewsAnotherHostsAgent(t *testing.T) {
 // window that can't reach the crew sends nothing and says nothing.
 func TestTodosAssignSendsNoPeerTaskFromAWindowWithoutACrew(t *testing.T) {
 	ac, _ := assigningStore(feature.AgentEntry{Ref: feature.AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
-	v := newTodos(ac)
+	v := New(ac)
 	v.list()
 	s, _ := v.cursor()
 	before := len(ac.Notes)

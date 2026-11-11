@@ -44,13 +44,13 @@ func newVarRows(c feature.Core) *feature.Rows[map[string]any] {
 
 // pointVarsAt moves the Variables tab's list to row at: away first, so the same row twice still
 // moves it, as a reset of the rows puts it back at the top.
-func (t *todos) pointVarsAt(at int) {
+func (t *Todos) pointVarsAt(at int) {
 	t.c.Set("App.todoVarsIndex", -1)
 	t.c.Set("App.todoVarsIndex", at)
 }
 
 // readVars reads the store shown's variables into the tab.
-func (t *todos) readVars() {
+func (t *Todos) readVars() {
 	s, gen := t.cur, t.gen
 	if s == nil {
 		return
@@ -83,13 +83,13 @@ func (t *todos) readVars() {
 }
 
 // varAt is the tab's row i; nil for none.
-func (t *todos) varAt(i int) map[string]any {
+func (t *Todos) varAt(i int) map[string]any {
 	x, _ := t.vars.At(i)
 	return x
 }
 
 // varMoved is the tab's cursor moving.
-func (t *todos) varMoved(i int) {
+func (t *Todos) varMoved(i int) {
 	if i < 0 && t.vars.Len() > 0 {
 		return // selectRow's move away for a moment, as in moved
 	}
@@ -125,7 +125,7 @@ func varDetail(c feature.Core, v map[string]any) string {
 
 // syncVarActions sets the action row on the Variables tab: set (the KB's file, or this machine for a
 // machine-only name), set for this machine, add, and clear a value set here.
-func (t *todos) syncVarActions() {
+func (t *Todos) syncVarActions() {
 	s := t.cur
 	writable := !t.readOnly(s)
 	v := t.varAt(t.varCursor)
@@ -143,13 +143,13 @@ func clearable(src string) bool {
 
 // varEdit is e (and Enter) on the tab: a value for the variable under the cursor asked for, its
 // value filled in; kept in the KB's file, or for this machine when the name is machine-only.
-func (t *todos) varEdit() { t.askVar("store") }
+func (t *Todos) varEdit() { t.askVar("store") }
 
 // varMachine is m: a value for the variable under the cursor, for this machine only.
-func (t *todos) varMachine() { t.askVar("machine") }
+func (t *Todos) varMachine() { t.askVar("machine") }
 
 // askVar opens the prompt for the variable under the cursor, its value to be kept in scope.
-func (t *todos) askVar(scope string) {
+func (t *Todos) askVar(scope string) {
 	s, v := t.cur, t.varAt(t.varCursor)
 	if t.readOnly(s) || v == nil || t.tab != varsTab {
 		return
@@ -168,7 +168,7 @@ func (t *todos) askVar(scope string) {
 }
 
 // varAdd is a on the tab: NAME=value asked for, kept in the KB's file.
-func (t *todos) varAdd() {
+func (t *Todos) varAdd() {
 	s := t.cur
 	if t.readOnly(s) || t.tab != varsTab {
 		return
@@ -187,7 +187,7 @@ type todoVarEdit struct {
 
 // varSet keeps the value typed for the variable asked about (NAME=value while adding); an empty value
 // clears it.
-func (t *todos) varSet(text string) {
+func (t *Todos) varSet(text string) {
 	t.c.Close("todoVar")
 	e := t.varEditing
 	t.varEditing = nil
@@ -208,7 +208,7 @@ func (t *todos) varSet(text string) {
 
 // varClear is d on the tab: the value set here for the variable under the cursor removed (asked
 // first), where it was set: the KB's file, this machine, or the global vars.
-func (t *todos) varClear() {
+func (t *Todos) varClear() {
 	s, v := t.cur, t.varAt(t.varCursor)
 	if t.readOnly(s) || v == nil {
 		return
@@ -225,7 +225,7 @@ func (t *todos) varClear() {
 }
 
 // setVar is todos.set_var for store s, then the tab read again.
-func (t *todos) setVar(s *todoStore, name, value, scope string) {
+func (t *Todos) setVar(s *todoStore, name, value, scope string) {
 	opts := map[string]any{"scope": scope}
 	if scope != "global" {
 		opts["at"] = s.at

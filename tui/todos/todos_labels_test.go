@@ -61,7 +61,7 @@ func labelledStores(prefs map[string]any) *featuretest.ScriptedCore {
 func TestTodosLabelAStoreAndClearIt(t *testing.T) {
 	prefs := map[string]any{"tui.other": "x"}
 	s := labelledStores(prefs)
-	v := newTodos(s)
+	v := New(s)
 	v.list()
 	if got, want := storeLabels(v), []string{"WebShop", "nvim", "html-archives"}; !slices.Equal(got, want) {
 		t.Fatalf("the dropdown %q, want %q", got, want)
@@ -93,7 +93,7 @@ func TestTodosLabelAStoreAndClearIt(t *testing.T) {
 		t.Errorf("both headings %v", h1)
 	}
 	// a restart: a new panel on the same daemon reads the labels again
-	again := newTodos(s)
+	again := New(s)
 	again.list()
 	if got := storeLabels(again)[1]; got != "Config" {
 		t.Errorf("after a restart: %q", got)
@@ -130,7 +130,7 @@ func TestTodosLabelAStoreAndClearIt(t *testing.T) {
 func TestTodosListWithoutPreferences(t *testing.T) {
 	s := labelledStores(nil)
 	s.Answers["preference.list"] = func([]any) (any, error) { return nil, fmt.Errorf("-32004 no preferences") }
-	v := newTodos(s)
+	v := New(s)
 	v.list()
 	if got := storeLabels(v); len(got) != 3 || got[0] != "WebShop" || len(s.Failures) != 0 {
 		t.Errorf("stores %q, failed %v", got, s.Failures)
@@ -168,7 +168,7 @@ func movingStore(status string) (*featuretest.ScriptedCore, *string) {
 }
 
 // onTask shows the tab of status and puts the cursor on its task: for archived, in its month.
-func onTask(t *testing.T, v *todos, status string) {
+func onTask(t *testing.T, v *Todos, status string) {
 	t.Helper()
 	v.showTab(tabOf(status))
 	if status == "archived" {
@@ -180,7 +180,7 @@ func onTask(t *testing.T, v *todos, status string) {
 }
 
 // statusRows are the rows s's picker lists.
-func statusRows(v *todos) []string {
+func statusRows(v *Todos) []string {
 	m := v.statusPick.List.Model()
 	var out []string
 	for i := 0; i < m.Len(); i++ {
@@ -190,7 +190,7 @@ func statusRows(v *todos) []string {
 }
 
 // pickStatus is s on the task under the cursor, then the row of status chosen in its picker.
-func pickStatus(t *testing.T, v *todos, status string) {
+func pickStatus(t *testing.T, v *Todos, status string) {
 	t.Helper()
 	v.chooseStatus()
 	i := slices.Index(todoStatuses, status)
@@ -212,7 +212,7 @@ func TestTodosStatusPickerSetsEveryStatus(t *testing.T) {
 				continue
 			}
 			s, cur := movingStore(from)
-			v := newTodos(s)
+			v := New(s)
 			v.list()
 			onTask(t, v, from)
 			v.chooseStatus()
@@ -244,7 +244,7 @@ func TestTodosStatusPickerSetsEveryStatus(t *testing.T) {
 	// its own status, or the picker dismissed: nothing asked
 	for _, way := range []string{"its own", "dismissed"} {
 		s, _ := movingStore("deferred")
-		v := newTodos(s)
+		v := New(s)
 		v.list()
 		onTask(t, v, "deferred")
 		v.chooseStatus()
@@ -264,7 +264,7 @@ func TestTodosStatusPickerSetsEveryStatus(t *testing.T) {
 // task, and that its own status changes nothing.
 func TestTodosStatusPickerPreviewsTheMove(t *testing.T) {
 	s, _ := movingStore("open")
-	v := newTodos(s)
+	v := New(s)
 	v.list()
 	onTask(t, v, "open")
 	v.chooseStatus()
@@ -310,7 +310,7 @@ func actions(s *featuretest.ScriptedCore) string {
 func TestTodosActionRowFollowsTheCursor(t *testing.T) {
 	for _, claimed := range []bool{true, false} {
 		s := scriptedStore(claimed)
-		v := newTodos(s)
+		v := New(s)
 		v.list()
 		task, empty := "Status Assign Remove Add", "Add"
 		if !claimed {
@@ -334,7 +334,7 @@ func TestTodosActionRowFollowsTheCursor(t *testing.T) {
 	}
 	for _, status := range []string{"in-progress", "deferred", "completed"} {
 		s, _ := movingStore(status)
-		v := newTodos(s)
+		v := New(s)
 		v.list()
 		onTask(t, v, status)
 		if got := actions(s); got != "Status Assign Remove Add" {
@@ -342,7 +342,7 @@ func TestTodosActionRowFollowsTheCursor(t *testing.T) {
 		}
 	}
 	none := newScripted("")
-	newTodos(none).syncActions()
+	New(none).syncActions()
 	if got := actions(none); got != "" {
 		t.Errorf("no store listed: %q", got)
 	}
@@ -350,7 +350,7 @@ func TestTodosActionRowFollowsTheCursor(t *testing.T) {
 	// Status… chosen on an in-progress task: its button stays until the move's answer lands, and the
 	// cursor, following the task, keeps it shown
 	s, _ := movingStore("in-progress")
-	w := newTodos(s)
+	w := New(s)
 	w.list()
 	onTask(t, w, "in-progress")
 	w.chooseStatus()
@@ -388,7 +388,7 @@ func TestTodoDetailsAreMarkdown(t *testing.T) {
 // moves nothing.
 func TestTodosTheCursorFollowsWhenTheTabLands(t *testing.T) {
 	s, _ := movingStore("in-progress")
-	v := newTodos(s)
+	v := New(s)
 	v.list()
 	onTask(t, v, "in-progress")
 	v.chooseStatus()
@@ -434,7 +434,7 @@ func TestTodosLabelsAndMovesAtTheEdges(t *testing.T) {
 	// the workspace's store not placed yet: named for the workspace
 	s := scriptedStore(true)
 	s.Answers["todos.resolve"] = func([]any) (any, error) { return map[string]any{"claimed": false}, nil }
-	v := newTodos(s)
+	v := New(s)
 	v.list()
 	if got := storeLabels(v)[0]; got != "kb" {
 		t.Errorf("an unplaced workspace store: %q", got)
@@ -443,7 +443,7 @@ func TestTodosLabelsAndMovesAtTheEdges(t *testing.T) {
 	// a labels answer for a listing since replaced is dropped
 	d := labelledStores(map[string]any{"tui.todos.label.S1": "Old"})
 	d.Deferred = true
-	w := newTodos(d)
+	w := New(d)
 	w.list()
 	d.Deliver(0) // the stores: the labels asked for, held
 	w.list()     // listed again before they answer
@@ -461,7 +461,7 @@ func TestTodosLabelsAndMovesAtTheEdges(t *testing.T) {
 
 	// s by its command, and L, with nothing to act on
 	m, _ := movingStore("in-progress")
-	x := newTodos(m)
+	x := New(m)
 	x.list() // Open: empty
 	n := len(m.Calls)
 	if err := x.Commands()["App.todoChooseStatus"].Handler("App.todoChooseStatus")(nil); err != nil {
@@ -470,7 +470,7 @@ func TestTodosLabelsAndMovesAtTheEdges(t *testing.T) {
 	if len(m.Calls) != n || slices.Contains(m.Opened, "todoStatusPicker") {
 		t.Errorf("s with no task asked %v, opened %v", m.Calls[n:], m.Opened)
 	}
-	none := newTodos(newScripted(""))
+	none := New(newScripted(""))
 	none.label()
 	if len(none.c.(*featuretest.ScriptedCore).Opened) != 0 {
 		t.Error("L with no store opened the prompt")
@@ -480,7 +480,7 @@ func TestTodosLabelsAndMovesAtTheEdges(t *testing.T) {
 	// the read gives
 	g, _ := movingStore("open")
 	g.Answers["todos.status"] = func([]any) (any, error) { return nil, nil } // the read still finds it nowhere new
-	y := newTodos(g)
+	y := New(g)
 	y.list()
 	onTask(t, y, "open")
 	pickStatus(t, y, "in-progress")

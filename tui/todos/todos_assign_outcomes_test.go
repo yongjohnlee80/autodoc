@@ -33,7 +33,7 @@ func TestTheHandOverSaysHowItWent(t *testing.T) {
 		{&agents.AgentElsewhere{Workspace: "Finance", Why: agents.ErrNoDoorbell}, "todos: assigned to Scribe, but not delivered: it runs in workspace Finance, and its crew mail didn't reach it (no doorbell to ring); switch to Finance, then A on the task to deliver it again"},
 	} {
 		s := newScripted("kb")
-		newTodos(s).handedOver("Scribe", "autodoc:scribe", c.err)
+		New(s).handedOver("Scribe", "autodoc:scribe", c.err)
 		if !slices.Equal(s.Notes, []string{c.want}) {
 			t.Errorf("%v: notices %q, want %q", c.err, s.Notes, c.want)
 		}
@@ -44,7 +44,7 @@ func TestTheHandOverSaysHowItWent(t *testing.T) {
 // picker answer) asks for no Instructions: line and sets nothing.
 func TestAnAgentChosenWithNoAssignOpenIsNothing(t *testing.T) {
 	s := newScripted("kb")
-	newTodos(s).assignTo(feature.AgentEntry{Ref: feature.AgentRef{Codename: "scribe"}, Name: "Scribe"})
+	New(s).assignTo(feature.AgentEntry{Ref: feature.AgentRef{Codename: "scribe"}, Name: "Scribe"})
 	if len(s.Opened) != 0 || s.Sets["App.todoAssignTitle"] != nil {
 		t.Errorf("opened %v, title %v: want nothing asked, nothing set", s.Opened, s.Sets["App.todoAssignTitle"])
 	}
