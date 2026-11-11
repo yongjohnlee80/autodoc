@@ -893,7 +893,9 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 				after()
 			}
 		case feature.Code(a.err) == rpc.CodeCommitted && a.readErr != nil:
-			h.notify(h.trf("autodoc.notice.files.saved_but_it_could_not_be_read_back_reload_befor", p, feature.WireMessage(a.readErr)))
+			msg := h.trf("autodoc.notice.files.saved_but_it_could_not_be_read_back_reload_befor", p, feature.WireMessage(a.readErr))
+			h.notify(msg)
+			h.say(msg) // the status line said "saving p…"
 		case feature.Code(a.err) == rpc.CodeConflict, feature.Code(a.err) == rpc.CodeCommitted:
 			h.activate(b) // the conflict is b's: its answers act on the buffer shown
 			b.file.saveAuth = who
@@ -901,8 +903,12 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 			h.open("fileConflict")
 		case feature.Code(a.err) == rpc.CodeNotFound:
 			h.markDisk(b, diskDeleted, "") // the next save creates it again
+			h.say(h.trf("autodoc.notice.session.text", h.trf("autodoc.notice.files.save", p), feature.WireMessage(a.err)))
 		default:
 			h.failed(h.trf("autodoc.notice.files.save", p), a.err)
+			// the status line said "saving p…": it says the save failed now, as a failed open does, or
+			// it would read as a save still under way, the reason only in a toast
+			h.say(h.trf("autodoc.notice.session.text", h.trf("autodoc.notice.files.save", p), feature.WireMessage(a.err)))
 		}
 	})
 }

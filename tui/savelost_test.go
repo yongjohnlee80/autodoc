@@ -138,3 +138,18 @@ func TestASaveLostToAReadAgainSaysSo(t *testing.T) {
 	w.free()
 	r.waitStatus(t, "save a.md: it was read again from disk meanwhile; save it again")
 }
+
+// TestAFailedSaveSaysSoOnTheStatusLine: a save the daemon refuses says so on the status line, its
+// reason with it, not only in a toast: before, the status kept "saving a.md…" for good, as after
+// every refused gated save.
+func TestAFailedSaveSaysSoOnTheStatusLine(t *testing.T) {
+	t.Parallel()
+	w := newHeldWrite("a.md")
+	r := editedNote(t, w)
+	w.refuse.Store(true)
+	r.h.p.Post(r.h.save)
+	r.waitStatus(t, "save a.md: refused by the cell")
+	if !onLoop(r, func() bool { return r.h.file.dirty }) {
+		t.Fatal("the note lost its unsaved marker though its save failed")
+	}
+}
