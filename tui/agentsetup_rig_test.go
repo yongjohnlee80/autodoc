@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -122,11 +124,11 @@ func hearingAgentMain() int {
 
 // agentCall is the command line, as a profile's, that runs program with args (bare words): on
 // Windows an agent's command runs in PowerShell, which runs a quoted program only after &, and the
-// PowerShell is the one runSetupTUI's PATH finds.
+// PowerShell is the one runSetupTUI's PATH (programsPath) finds.
 func agentCall(program string, args ...string) string {
 	call := agents.ShellQuote(program)
 	if runtime.GOOS == "windows" {
-		call = "& " + usershell.Commands(procenv.Env(nil).With("PATH="+systemPath())).Quote(program)
+		call = "& " + usershell.Commands(procenv.Env(nil).With("PATH="+programsPath())).Quote(program)
 	}
 	return strings.Join(append([]string{call}, args...), " ")
 }
@@ -156,6 +158,21 @@ func systemPath() string {
 	}
 	sys := filepath.Join(root, "System32")
 	return strings.Join([]string{sys, root, filepath.Join(sys, "WindowsPowerShell", "v1.0")}, string(os.PathListSeparator))
+}
+
+// programsPath is runSetupTUI's PATH: systemPath, and the folders of git and of the sh it runs its
+// transports through, where the system's own don't hold them (on Unix they are /usr/bin's and
+// /bin's): a plugin the program adds is cloned with git. On Windows Git's sh is in its usr\bin,
+// which its launcher puts on the PATH only outside its own shell's environment (MSYSTEM unset),
+// and the hosted runner's steps run inside it.
+func programsPath() string {
+	path := systemPath()
+	for _, prog := range []string{"git", "sh"} {
+		if p, err := exec.LookPath(prog); err == nil && !slices.Contains(filepath.SplitList(path), filepath.Dir(p)) {
+			path += string(os.PathListSeparator) + filepath.Dir(p)
+		}
+	}
+	return path
 }
 
 // agentStartWait bounds an agent's start: programs started (on Windows PowerShell, then the agent's,
@@ -188,7 +205,7 @@ func runSetupTUI(t *testing.T, dir string, profiles []agents.AgentProfile, def s
 func runSetupTUIIn(t *testing.T, dir string, profiles []agents.AgentProfile, def string, more map[string]string, opt Options, files map[string][]string) (d *daemon, r *running, calls string) {
 	t.Helper()
 	home := t.TempDir()
-	opt.seams = seamsWithEnv(t, opt.seams, "HOME="+home, "USERPROFILE="+home, "PATH="+systemPath())
+	opt.seams = seamsWithEnv(t, opt.seams, "HOME="+home, "USERPROFILE="+home, "PATH="+programsPath())
 	bins := filepath.Join(t.TempDir(), "a build's dir") // a path the shell must have quoted
 	if err := os.Mkdir(bins, 0o700); err != nil {
 		t.Fatal(err)
