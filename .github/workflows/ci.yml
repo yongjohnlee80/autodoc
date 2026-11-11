@@ -264,8 +264,11 @@ jobs:
           # every failing test's own lines, and the last status lines of its screens
           grep -E -- '_test\.go:[0-9]+: |^--- FAIL|^    --- FAIL' "$RUNNER_TEMP/tui.log" | head -60 || true
           grep -E -- 'NORMAL  autodoc' "$RUNNER_TEMP/tui.log" | sort | uniq -c | sort -rn | head -10 || true
-          # the opens of page.md / a.md / history.md with their answers, in order
-          grep -E 'DEBUGOPEN (start|answer) (page|a|history)\.md' "$L" | head -80 || true
+          # every open whose read or answer took over 2 s: read time (daemon side) vs answer time (until the loop ran it)
+          awk 'function sec(v){ if (v ~ /ms$/) return substr(v,1,length(v)-2)/1000; if (v ~ /µs$/) return substr(v,1,length(v)-3)/1000000; if (v ~ /ns$/) return substr(v,1,length(v)-2)/1e9; if (v ~ /m[0-9]/) { split(v,a,"m"); return a[1]*60+substr(a[2],1,length(a[2])-1) } return substr(v,1,length(v)-1) }
+            /DEBUGOPEN read/ { for(i=1;i<=NF;i++) if ($i ~ /^took=/) { t=substr($i,6); if (sec(t)>2) print "SLOW READ", $0 } }
+            /DEBUGOPEN answer/ { for(i=1;i<=NF;i++) if ($i ~ /^after=/) { t=substr($i,7); if (sec(t)>2) print "SLOW ANSWER", $0 } }' "$L" | head -40 || true
+          echo "reads logged: $(grep -c 'DEBUGOPEN read' "$L" || true)"
           grep -n -B2 -A28 'loadInto\|readFile\|database/sql\|semacquire\|chan receive\|select' "$RUNNER_TEMP/first-stuck.txt" | head -400 || true
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
