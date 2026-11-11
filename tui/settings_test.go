@@ -287,6 +287,7 @@ func TestARefusedSaveChangesNothing(t *testing.T) {
 		t.Errorf("the dialog reopened on tab %d, want Advanced", got)
 	}
 
+	onLoop(r, func() bool { debugHandles(t, "before RemoveAll(root)", root, r.h); return true })
 	if err := os.RemoveAll(root); err != nil { // the rules check the root
 		t.Fatal(err)
 	}
