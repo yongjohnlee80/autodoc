@@ -4583,6 +4583,10 @@ WHAT A KEY NEEDS
         <source>kept your changes; the disk's version is newer</source>
         <translation>kept your changes; the disk's version is newer</translation>
     </message>
+    <message id="autodoc.notice.files.no_workspace_is_in_use_so_a_relative_path_names">
+        <source>no workspace is in use, so a relative path names no file; give its full path</source>
+        <translation>no workspace is in use, so a relative path names no file; give its full path</translation>
+    </message>
     <message id="autodoc.notice.files.open">
         <source>open %1</source>
         <translation>open %1</translation>

@@ -4333,6 +4333,10 @@ LO QUE NECESITA UNA TECLA
         <source>kept your changes; the disk's version is newer</source>
         <translation>se conservaron tus cambios; la versión del disco es más reciente</translation>
     </message>
+    <message id="autodoc.notice.files.no_workspace_is_in_use_so_a_relative_path_names">
+        <source>no workspace is in use, so a relative path names no file; give its full path</source>
+        <translation>no hay ningún espacio de trabajo en uso, así que una ruta relativa no nombra ningún archivo; indica su ruta completa</translation>
+    </message>
     <message id="autodoc.notice.files.open">
         <source>open %1</source>
         <translation>abrir %1</translation>
