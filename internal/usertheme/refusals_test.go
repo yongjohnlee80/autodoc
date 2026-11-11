@@ -180,8 +180,9 @@ func TestDirectoryIsBesideTheConfig(t *testing.T) {
 	}
 }
 
-// A themes folder that is a file is a problem Open says, on every OS: Windows reports reading a
-// file as a folder as "not found", which once passed for "no themes".
+// A themes folder that is a file is a problem Open says, on every OS: on Windows, reading a file
+// as a folder gives an error errors.Is takes for fs.ErrNotExist, which once passed for "no themes"
+// (localfs.ReadDirIfAny).
 func TestOpenSaysAThemesFolderThatIsAFile(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "themes")
 	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {

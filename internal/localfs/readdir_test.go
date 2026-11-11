@@ -9,7 +9,7 @@ import (
 
 // TestReadDirIfAnyAnswersAlikeOnEveryOS: nothing there is no entries and no error; a folder is its
 // entries; a file is an error wrapping ErrNotAFolder, on Windows too, where reading a file as a
-// folder reports "not found".
+// folder gives an error errors.Is takes for fs.ErrNotExist.
 func TestReadDirIfAnyAnswersAlikeOnEveryOS(t *testing.T) {
 	dir := t.TempDir()
 	if es, err := ReadDirIfAny(filepath.Join(dir, "absent")); es != nil || err != nil {

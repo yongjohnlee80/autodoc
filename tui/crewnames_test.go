@@ -206,8 +206,9 @@ func TestTwoWindowsRenameTheCrewNamesOnce(t *testing.T) {
 	renamedTo(t, base, scope)
 }
 
-// A crew folder that is a file is an error the rename says, on every OS: Windows reports reading a
-// file as a folder as "not found", which once passed for "nothing to rename".
+// A crew folder that is a file is an error the rename says, on every OS: on Windows, reading a
+// file as a folder gives an error errors.Is takes for fs.ErrNotExist, which once passed for
+// "nothing to rename" (localfs.ReadDirIfAny).
 func TestACrewFolderThatIsAFileIsSaid(t *testing.T) {
 	base := t.TempDir()
 	if err := os.WriteFile(filepath.Join(base, ".crew-scopes"), []byte("x"), 0o644); err != nil {
