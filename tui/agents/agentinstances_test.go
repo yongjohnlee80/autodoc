@@ -742,6 +742,9 @@ func TestUseAfterAParentRebuildNeverSelectsTheOldTab(t *testing.T) {
 func TestAStartOvertakenByARestartSetsNothingOfTheNewOne(t *testing.T) {
 	a, c := modelAgents(t)
 	one, _ := a.Profile("one")
+	if _, err := c.Terminals("agentView"); err != nil { // the model panel, made when first asked for
+		t.Fatal(err)
+	}
 	c.panel.hold = true
 	first, err := a.StartInstance(one)
 	if err != nil {
