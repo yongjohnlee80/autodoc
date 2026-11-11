@@ -247,6 +247,24 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: scratch (not for merge) the setup cell beside each agent cell, its own output
+        if: ${{ !inputs.discover }}
+        run: |
+          for other in TestAnAgentOpensARelativePathInTheEditorsWorkspace TestTodosAssignHandsTheTaskToAnAutoDocAgent TestAuditHandsAFreshCopyAndItsToastReopensTheCard; do
+            go test -json -count=2 -timeout 20m -run "^(TestSetUpSavesAndStartsTypingNothing|$other)\$" ./tui/ > "$RUNNER_TEMP/j.json" 2>&1 && rc=0 || rc=$?
+            echo "== beside $other: rc=$rc"
+            python - "$RUNNER_TEMP/j.json" <<'PY'
+          import json, sys
+          for line in open(sys.argv[1], encoding='utf-8', errors='replace'):
+              try: e = json.loads(line)
+              except Exception: continue
+              if e.get('Test') == 'TestSetUpSavesAndStartsTypingNothing' or (e.get('Test') or '').startswith('TestSetUpSavesAndStartsTypingNothing/'):
+                  if e.get('Action') == 'output':
+                      o = e['Output'].rstrip()
+                      if o and '[Info]' not in o: print('   ', o[:300])
+                  elif e.get('Action') in ('pass', 'fail'): print('   ->', e['Action'])
+          PY
+          done
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
         run: |
