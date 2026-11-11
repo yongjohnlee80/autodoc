@@ -255,6 +255,17 @@ jobs:
           go vet ./...
           mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
           go test -count=1 -timeout 20m "${pkgs[@]}"
+          # SCRATCH (never merged): the folder-that-is-a-file cells x3 on Windows, then mutant m1 (the old reading: not-found is no folder)
+          cells() { go test -count=3 -v -timeout 20m -run '^TestReadDirIfAnyAnswersAlikeOnEveryOS$' ./internal/localfs/ > "$RUNNER_TEMP/$1-a.log" 2>&1; ra=$?
+            go test -count=3 -v -timeout 20m -run '^TestOpenSaysAThemesFolderThatIsAFile$' ./internal/usertheme/ > "$RUNNER_TEMP/$1-b.log" 2>&1; rb=$?
+            go test -count=3 -v -timeout 20m -run '^TestPluginAndPackageFolderEdges$|^TestACrewFolderThatIsAFileIsSaid$' ./tui/ > "$RUNNER_TEMP/$1-c.log" 2>&1; rc=$?
+            for x in a b c; do echo "$1 $x pass $(grep -c -- '^--- PASS' "$RUNNER_TEMP/$1-$x.log" || true) fail $(grep -c -- '^--- FAIL' "$RUNNER_TEMP/$1-$x.log" || true)"; grep -E -- '^--- FAIL|_test\.go:[0-9]+: ' "$RUNNER_TEMP/$1-$x.log" | head -6 || true; done
+            echo "$1 rc a=$ra b=$rb c=$rc"; }
+          cells head
+          perl -0pi -e 's/\tif err == nil \{\n\t\treturn entries, nil\n\t\}/\tif err == nil || !errors.Is(err, fs.ErrNotExist) {\n\t\treturn entries, err\n\t}\n\treturn nil, nil \/\/ MUTANT m1/' internal/localfs/readdir.go
+          grep -c 'MUTANT m1' internal/localfs/readdir.go || true
+          go vet ./internal/localfs/ && echo "m1 vet ok" || echo "m1 vet rc=$?"
+          cells m1
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
