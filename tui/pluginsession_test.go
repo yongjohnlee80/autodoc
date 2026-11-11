@@ -540,6 +540,7 @@ func TestAPluginOpensAPathAndUpdatesItself(t *testing.T) {
 		"calls = [\"file.open_path\", \"plugins.update\"]\n[[commands]]\nid = \"callwith\"\ntitle = \"Call\"\n[[commands]]\nid = \"ping\"\ntitle = \"Ping\"\n")
 	installPlugin7(t, dir, "other", "service", "session", sessionCommands)
 	r, logs := pluginTUI(t, dir)
+	r.ready(t) // the workspace entered: an open asked before it is dropped by the entry's new workspace ticket
 	r.pluginCommand("opener", "ping")
 	waitSaid(t, logs, "opener", "pong")
 	r.s.WaitFor(t, "opener ready", func(string) bool { return onLoop(r, func() bool { return r.h.plugins.running["opener"].ready }) })
