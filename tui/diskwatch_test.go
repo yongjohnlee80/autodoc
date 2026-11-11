@@ -272,18 +272,20 @@ func folderGoesAndComesBack(t *testing.T, poll bool) {
 		t.Fatal(err)
 	}
 	rewrite(t, root, "sub/c.md", "c\n")
-	r.s.WaitFor(t, "sub/c.md listed", func(string) bool {
+	landed(t, "sub/c.md listed", func() bool {
 		return onLoop(r, func() bool { return slices.Contains(r.h.files.Paths, "sub/c.md") })
 	})
 	r.openOnDisk(t, "sub/c.md")
 	if err := os.RemoveAll(sub); err != nil {
 		t.Fatal(err)
 	}
-	r.s.WaitFor(t, "sub/c.md badged deleted", func(string) bool { return diskOf(r, "sub/c.md") == diskDeleted })
+	landed(t, "sub/c.md badged deleted", func() bool { return diskOf(r, "sub/c.md") == diskDeleted })
 	if err := os.MkdirAll(sub, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	rewrite(t, root, "sub/c.md", "c again\n")
+	back := time.Now()
+	defer func() { t.Logf("LANDED sub/c.md back after %s", time.Since(back)) }()
 	deadline := time.Now().Add(8 * time.Second) // the watch starts again after its backoff
 	for r.editorText() != "c again\n" || diskOf(r, "sub/c.md") != diskSame {
 		if time.Now().After(deadline) {
@@ -315,14 +317,14 @@ func TestAWatchedFoldersParentIsHeldByNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	rewrite(t, root, "x/sub/c.md", "c\n")
-	r.s.WaitFor(t, "x/sub/c.md listed", func(string) bool {
+	landed(t, "x/sub/c.md listed", func() bool {
 		return onLoop(r, func() bool { return slices.Contains(r.h.files.Paths, "x/sub/c.md") })
 	})
 	r.openOnDisk(t, "x/sub/c.md")
-	r.s.WaitFor(t, "x/sub watched", func(string) bool {
+	landed(t, "x/sub watched", func() bool {
 		return onLoop(r, func() bool { w := r.h.watches[sub]; return w != nil && w.mode != "" })
 	})
-	r.s.WaitFor(t, "the watched folder's parent held by nothing", func(string) bool { // the daemon's scan may hold it a moment
+	landed(t, "the watched folder's parent held by nothing", func() bool { // the daemon's scan may hold it a moment
 		held, err := dirHeld(parent)
 		if err != nil {
 			t.Error(err)
@@ -333,8 +335,8 @@ func TestAWatchedFoldersParentIsHeldByNothing(t *testing.T) {
 	if err := os.RemoveAll(sub); err != nil {
 		t.Fatalf("the watched folder, removed while its watch runs: %v", err)
 	}
-	r.s.WaitFor(t, "x/sub/c.md badged deleted", func(string) bool { return diskOf(r, "x/sub/c.md") == diskDeleted })
-	r.s.WaitFor(t, "the parent removed", func(string) bool { // a restart of the watch may open it a moment
+	landed(t, "x/sub/c.md badged deleted", func() bool { return diskOf(r, "x/sub/c.md") == diskDeleted })
+	landed(t, "the parent removed", func() bool { // a restart of the watch may open it a moment
 		err := os.Remove(parent)
 		return err == nil || errors.Is(err, os.ErrNotExist)
 	})
@@ -535,4 +537,17 @@ func TestAFileOutsideEveryWorkspaceFollowsTheDisk(t *testing.T) {
 	if got := r.editorText(); got == "SELECT 3;\n" || !strings.Contains(got, "X") {
 		t.Fatalf("the edited buffer was reloaded: %q", got) // the X goes where the reload left the cursor
 	}
+}
+
+// landed (SCRATCH, never merged) waits up to a minute for cond and logs how long it took.
+func landed(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	start := time.Now()
+	for !cond() {
+		if time.Since(start) > time.Minute {
+			t.Fatalf("LANDED-NEVER %s within a minute", what)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Logf("LANDED %s after %s", what, time.Since(start))
 }
