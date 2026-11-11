@@ -387,10 +387,12 @@ func claudeSetup(in SetupInput, cache string, s *Setup) error {
 // None of it is written to ~/.codex, and the shared app-server, where `-c` overrides can't go (a
 // TUI given any runs embedded, off every app-server: codex-cli 0.163.0), is left alone.
 // AUTODOC_CODEX_SERVER names the agent's server to its autodoc, for codex-here and the waker's
-// locator. With no folder of its own, a Codex that takes --no-daemon is given it
-// (codexHasNoDaemon), and has no step: there is no server to find its thread on, so it isn't woken,
-// and the setup says so. One whose Codex can't be read (not found, failing, or slow) is refused:
-// either way of starting it could be wrong.
+// locator. With no folder of its own, or on a host that can't run the agent's server
+// (NoAgentServer), there is no server of its own: a Codex that takes --no-daemon is given it
+// (codexHasNoDaemon), and has no step, since no server holds its thread to find, so it isn't woken,
+// and the setup says so; a Codex before the flag keeps the registration step, as it always had (it
+// has no shared daemon to keep off). One whose Codex can't be read (not found, failing, or slow) is
+// refused: either way of starting it could be wrong.
 func codexSetup(in SetupInput, _ string, s *Setup) error {
 	program := in.Program
 	if program == "" {
@@ -401,9 +403,9 @@ func codexSetup(in SetupInput, _ string, s *Setup) error {
 		// its own server's socket lives in the agent's own folder: with none, the TUI runs its own,
 		// never Codex's shared daemon, which keeps the environment of whichever agent started it. A
 		// host that can't run the server (NoAgentServer) is the same: there is no server of its own
-		needs, why := "the agent's own folder", "Codex has no folder of its own for its app-server"
+		needs, why, remedy := "the agent's own folder", "Codex has no folder of its own for its app-server", "give the agent a folder of its own, or start it again"
 		if in.AgentDir != "" {
-			needs, why = "the agent's own app-server, which this system can't run", "this system can't run an app-server of the agent's own for Codex"
+			needs, why, remedy = "the agent's own app-server, which this system can't run", "this system can't run an app-server of the agent's own for Codex", "start it again once Codex answers"
 		}
 		if len(in.Servers) > 0 {
 			s.Notices = append(s.Notices, "Codex's crew MCP server needs "+needs+": its mail stays the CLI's")
@@ -412,7 +414,7 @@ func codexSetup(in SetupInput, _ string, s *Setup) error {
 		if err != nil {
 			// unknown is neither: a start without the flag would run in the shared daemon, and one
 			// with it would fail on a Codex before it
-			return fmt.Errorf("crew: can't tell whether Codex takes --no-daemon, which keeps an agent with no folder of its own off Codex's shared daemon (%w): give the agent a folder of its own, or start it again", err)
+			return fmt.Errorf("crew: can't tell whether Codex takes --no-daemon, which keeps an agent with no server of its own off Codex's shared daemon (%w): %s", err, remedy)
 		}
 		if has {
 			s.Argv = append(s.Argv, "--no-daemon")
