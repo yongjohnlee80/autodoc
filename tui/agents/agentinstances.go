@@ -275,8 +275,9 @@ func (a *Agents) StartInstance(p AgentProfile) (*AgentInstance, error) {
 	if instance == nil {
 		instance = &AgentInstance{profile: p, workspace: ws, owner: panel, dir: dir}
 		id, err := panel.Add(p.Codename, feature.TerminalConfig{Command: path, Args: args, Dir: dir,
-			Exited: func(code int) { a.instanceExited(instance, code) },
-			Start:  func(c pty.Cmd) (terminal.TerminalProcess, error) { return a.runAgent(instance, c) }})
+			Exited:       func(code int) { a.instanceExited(instance, code) },
+			Start:        func(c pty.Cmd) (terminal.TerminalProcess, error) { return a.runAgent(instance, c) },
+			StartingText: a.c.Tr("autodoc.text.terminal.starting")})
 		if err != nil {
 			return nil, err
 		}
@@ -337,10 +338,22 @@ func (a *Agents) StartInstance(p AgentProfile) (*AgentInstance, error) {
 		return instance, nil
 	}
 	instance.token = fmt.Sprintf("agent-%d", agentIncarnation.Add(1))
-	if err := a.start(panel, instance); err != nil {
-		return nil, err
-	}
-	if err := a.showStarted(instance); err != nil {
+	// started off the loop: its tab is shown at once, saying it is starting, and a start that fails
+	// says so when it lands, as a start answered at once did
+	a.start(panel, instance, func(err error) {
+		switch {
+		case errors.Is(err, ErrAgentStale): // overtaken: what overtook it says its own
+		case err != nil:
+			a.c.Notify(a.c.Trf("autodoc.notice.agent.the_agent_could_not_start", err.Error()))
+		default:
+			if err := a.showStarted(instance); err != nil {
+				a.c.Notify(a.c.Trf("autodoc.crew.tab_not_shown", p.Name, err.Error()))
+			}
+			return
+		}
+		a.listAgents()
+	})
+	if err := a.showStarted(instance); err != nil { // its tab, starting
 		return nil, err
 	}
 	return instance, nil
@@ -412,17 +425,26 @@ func (a *Agents) registerCrew(panel feature.TerminalPanel, instance *AgentInstan
 			a.refuse(panel, instance, fmt.Errorf("its crew session was not registered: %s", feature.WireMessage(err)))
 			return
 		}
-		if err := a.start(panel, instance); err != nil {
-			instance.context = ""
-			a.Crew.Exit(s, crew.EndedStartFailed)
-			a.c.Notify(a.c.Trf("autodoc.crew.did_not_start", p.Name, err.Error()))
-			a.listAgents()
-			return
-		}
-		instance.session = s // it runs: its exit ends the session, whatever showing it does
-		if err := a.showStarted(instance); err != nil {
-			a.c.Notify(a.c.Trf("autodoc.crew.tab_not_shown", p.Name, err.Error()))
-		}
+		a.start(panel, instance, func(err error) {
+			switch {
+			case errors.Is(err, ErrAgentStale):
+				// overtaken while it spawned (its tab closed, or the agent started again): nobody runs
+				// this session now, and the close found none to end (endSession), so it ends here
+				a.Crew.Exit(s, crew.EndedStartFailed)
+				a.listAgents()
+				return
+			case err != nil:
+				instance.context = ""
+				a.Crew.Exit(s, crew.EndedStartFailed)
+				a.c.Notify(a.c.Trf("autodoc.crew.did_not_start", p.Name, err.Error()))
+				a.listAgents()
+				return
+			}
+			instance.session = s // it runs: its exit ends the session, whatever showing it does
+			if err := a.showStarted(instance); err != nil {
+				a.c.Notify(a.c.Trf("autodoc.crew.tab_not_shown", p.Name, err.Error()))
+			}
+		})
 	})
 }
 
@@ -588,18 +610,32 @@ func agentAutodocBound(args []string) time.Duration {
 	return bound
 }
 
-// start starts instance's process in its tab: whether it started is this, never whether it is shown.
-func (a *Agents) start(panel feature.TerminalPanel, instance *AgentInstance) error {
-	if err := panel.Start(instance.tab); err != nil {
-		return err
-	}
-	instance.running = true
-	for _, tab := range panel.Tabs() {
-		if tab.ID == instance.tab {
-			instance.generation = tab.Generation
+// start starts instance's process in its tab off the UI loop (panel.StartAsync): its spawn, a good
+// part of a second on Windows, never holds the window. instance is starting until it lands; then
+// runs on the loop with whether it started, never whether it is shown. A start overtaken meanwhile
+// (the window stopping, the tab closed, or the instance started again: its token moved) sets
+// nothing of the instance's, whose newer start owns it, and then gets ErrAgentStale.
+func (a *Agents) start(panel feature.TerminalPanel, instance *AgentInstance, then func(error)) {
+	token := instance.token
+	instance.starting = true
+	panel.StartAsync(instance.tab, func(err error) {
+		if a.stopping || a.instances[instance.profile.Codename] != instance || instance.closing || instance.token != token {
+			then(ErrAgentStale)
+			return
 		}
-	}
-	return nil
+		instance.starting = false
+		if err != nil {
+			then(err)
+			return
+		}
+		instance.running = true
+		for _, tab := range panel.Tabs() {
+			if tab.ID == instance.tab {
+				instance.generation = tab.Generation
+			}
+		}
+		then(nil)
+	})
 }
 
 // showStarted shows a started instance running and selected; failing to select it stops nothing.

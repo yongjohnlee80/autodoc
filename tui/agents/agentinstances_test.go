@@ -49,6 +49,9 @@ type modelPanel struct {
 	// said on its screen (reported, tab: error); unset, Start only marks the tab running
 	starts   bool
 	reported []string
+	// hold keeps each StartAsync until the test releases it (release): a start in flight
+	hold bool
+	held []heldStart
 }
 
 // fakeSeams are the program's seams as the agents' cells set them (agentSeams): its environment
@@ -149,11 +152,31 @@ func (p *modelPanel) Select(id terminal.TerminalTabID) error {
 	return nil
 }
 
-// StartAsync is Start, answered at once: the model spawns nothing.
+// heldStart is a StartAsync the model holds (hold): its tab and its done.
+type heldStart struct {
+	id   terminal.TerminalTabID
+	done func(error)
+}
+
+// StartAsync is Start, answered at once, unless the model holds its starts: then it waits for
+// release, as a start in flight does.
 func (p *modelPanel) StartAsync(id terminal.TerminalTabID, done func(error)) {
+	if p.hold {
+		p.held = append(p.held, heldStart{id, done})
+		return
+	}
 	err := p.Start(id)
 	if done != nil {
 		done(err)
+	}
+}
+
+// release lands held start i: the tab starts, and its done is answered.
+func (p *modelPanel) release(i int) {
+	h := p.held[i]
+	err := p.Start(h.id)
+	if h.done != nil {
+		h.done(err)
 	}
 }
 
@@ -709,5 +732,52 @@ func TestUseAfterAParentRebuildNeverSelectsTheOldTab(t *testing.T) {
 	fresh := a.instances["one"]
 	if fresh == nil || fresh == old || !fresh.running || !fresh.owner.SameOwner(c.panel) || c.panel.active != fresh.tab {
 		t.Fatalf("after retirement Use did not start a current-owner instance: %+v", fresh)
+	}
+}
+
+// TestAStartOvertakenByARestartSetsNothingOfTheNewOne: an agent started, closed while its start is
+// in flight, and started again: the first start, landing late, sets nothing of the new instance's
+// (not running, not its generation), nor of the closed one's; the second's landing does. Each was
+// starting meanwhile, so a delivery waits for it rather than finding it stopped.
+func TestAStartOvertakenByARestartSetsNothingOfTheNewOne(t *testing.T) {
+	a, c := modelAgents(t)
+	one, _ := a.Profile("one")
+	if _, err := c.Terminals("agentView"); err != nil { // the model panel, made when first asked for
+		t.Fatal(err)
+	}
+	c.panel.hold = true
+	first, err := a.StartInstance(one)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !first.starting || first.running {
+		t.Fatalf("a start in flight: starting %v running %v, want starting", first.starting, first.running)
+	}
+	if err := a.RemoveInstance("one"); err != nil {
+		t.Fatal(err)
+	}
+	second, err := a.StartInstance(one)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second == first || !second.starting {
+		t.Fatal("the restart did not make a new instance, starting")
+	}
+	c.panel.release(0) // the first start lands late
+	if second.running || second.generation != 0 || !second.starting {
+		t.Fatalf("the first start's landing set the new instance's: running %v generation %d starting %v",
+			second.running, second.generation, second.starting)
+	}
+	if first.running {
+		t.Fatal("the closed instance's late start made it running")
+	}
+	c.panel.release(1)
+	if !second.running || second.starting {
+		t.Fatalf("the second start landed: running %v starting %v", second.running, second.starting)
+	}
+	for _, tab := range c.panel.Tabs() {
+		if tab.ID == second.tab && second.generation != tab.Generation {
+			t.Fatalf("the new instance's generation %d, its tab's %d", second.generation, tab.Generation)
+		}
 	}
 }
