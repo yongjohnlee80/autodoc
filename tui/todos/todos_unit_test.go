@@ -65,6 +65,8 @@ func storeLabels(v *Todos) []string {
 // with a root of its own, by label or name; only the store shown is read, its Open tab. Choosing
 // another in the dropdown empties the tabs and reads its own; a read of the store before, answered
 // late, is dropped.
+//
+// Moved from tui/todos_unit_test.go with its name and asserts unchanged.
 func TestTodosShowsOneStoreChosenInADropdown(t *testing.T) {
 	none := newScripted("")
 	New(none).toggle()
@@ -129,6 +131,8 @@ func TestTodosShowsOneStoreChosenInADropdown(t *testing.T) {
 // ones first and marked, every row numbered; the details are the task under the cursor's; 1–5 and
 // [ ] change the tab, round, the keyboard in its table; a tab read already is not read again until
 // a change; Enter opens the task's file and closes the panel.
+//
+// Moved from tui/todos_unit_test.go with its name and asserts unchanged.
 func TestTodosTabsAreNumberedTablesReadWhenShown(t *testing.T) {
 	s := scriptedStore(true)
 	s.Answers["todos.list"] = func(p []any) (any, error) {
@@ -210,6 +214,8 @@ func TestTodosTabsAreNumberedTablesReadWhenShown(t *testing.T) {
 // TestTodosArchivedTabListsItsMonths: Archived lists its months with their counts, and a month's
 // tasks are read only when it opens; Backspace puts the keyboard back in the months; a read again
 // keeps the month open, or closes it when it is gone.
+//
+// Moved from tui/todos_unit_test.go with its name and asserts unchanged.
 func TestTodosArchivedTabListsItsMonths(t *testing.T) {
 	s := scriptedStore(true)
 	v := New(s)
@@ -258,6 +264,8 @@ func TestTodosArchivedTabListsItsMonths(t *testing.T) {
 // TestTodosWritesAClaimedStoreAndNotAReadOnlyOne: on the claimed store a, s, d, R and M write to the
 // store shown, an added task shown in Open under the cursor; on one the daemon has not claimed each
 // writes nothing and says nothing (the action row says it is read-only), and R reads it again.
+//
+// Moved from tui/todos_unit_test.go with its name and asserts unchanged.
 func TestTodosWritesAClaimedStoreAndNotAReadOnlyOne(t *testing.T) {
 	s := scriptedStore(true)
 	s.Answers["todos.add"] = func([]any) (any, error) { return map[string]any{"id": "t1", "status": "open"}, nil }
@@ -323,6 +331,8 @@ func TestTodosWritesAClaimedStoreAndNotAReadOnlyOne(t *testing.T) {
 // TestTodosEventsAndFolders: an event for the store shown reads its tab again, another's nothing;
 // Load registers the folder and shows its store; New registers and scaffolds it; M moves the store
 // shown.
+//
+// Moved from tui/todos_unit_test.go with its name and asserts unchanged.
 func TestTodosEventsAndFolders(t *testing.T) {
 	s := scriptedStore(true)
 	v := New(s)
@@ -377,6 +387,8 @@ func TestTodosEventsAndFolders(t *testing.T) {
 
 // TestTodosAnswersDoNotCancelEachOther: a newer listing of the stores drops an older one's answer
 // and its error; a write is never dropped.
+//
+// Moved from tui/todos_unit_test.go with its name and asserts unchanged.
 func TestTodosAnswersDoNotCancelEachOther(t *testing.T) {
 	s := scriptedStore(true)
 	s.Deferred = true
@@ -413,6 +425,8 @@ func TestTodosAnswersDoNotCancelEachOther(t *testing.T) {
 
 // TestTodosAtTheEdges: with no workspace the stores alone are listed; with no store the keys do
 // nothing; a refused focus or close is said.
+//
+// Moved from tui/todos_unit_test.go with its name and asserts unchanged.
 func TestTodosAtTheEdges(t *testing.T) {
 	s := scriptedStore(true)
 	s.WS = ""

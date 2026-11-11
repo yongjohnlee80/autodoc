@@ -18,6 +18,8 @@ import (
 // that takes no bracketed paste; not delivered to a running agent in another workspace, naming it;
 // or not delivered, saying why (the user not starting the agent in the catalog's words, any other
 // refusal as it is).
+//
+// Moved from tui/todos_assign_outcomes_test.go with its name and asserts unchanged.
 func TestTheHandOverSaysHowItWent(t *testing.T) {
 	for _, c := range []struct {
 		err  error
@@ -42,6 +44,8 @@ func TestTheHandOverSaysHowItWent(t *testing.T) {
 
 // TestAnAgentChosenWithNoAssignOpenIsNothing: an agent chosen when no assign is open (a late
 // picker answer) asks for no Instructions: line and sets nothing.
+//
+// Moved from tui/todos_assign_outcomes_test.go with its name and asserts unchanged.
 func TestAnAgentChosenWithNoAssignOpenIsNothing(t *testing.T) {
 	s := newScripted("kb")
 	New(s).assignTo(feature.AgentEntry{Ref: feature.AgentRef{Codename: "scribe"}, Name: "Scribe"})
@@ -52,6 +56,8 @@ func TestAnAgentChosenWithNoAssignOpenIsNothing(t *testing.T) {
 
 // TestAnOrphansPaneSaysItsProfileIsGone: the picker's preview of an agent whose profile is gone (a
 // running orphan) says it takes the task only while it runs; one with a profile never says so.
+//
+// Moved from tui/todos_assign_outcomes_test.go with its name and asserts unchanged.
 func TestAnOrphansPaneSaysItsProfileIsGone(t *testing.T) {
 	const gone = "Its profile is gone; it takes the task while it runs."
 	s := newScripted("kb")

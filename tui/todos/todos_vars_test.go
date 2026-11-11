@@ -39,6 +39,8 @@ func varRows(v *Todos) []string {
 // e sets the value under the cursor in the KB's file (a machine-only name: for this machine), m for
 // this machine,
 // a adds NAME=value to the file, d clears a value set here (asked first). [ ] reach it round.
+//
+// Moved from tui/todos_vars_test.go with its name and asserts unchanged.
 func TestTheVariablesTab(t *testing.T) {
 	s := varsStore(true)
 	v := New(s)

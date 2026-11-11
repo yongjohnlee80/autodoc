@@ -50,6 +50,8 @@ func newPeerCore(scope string, peers ...feature.AgentEntry) (*peerCore, *[][]any
 // other host's live crew agent, labelled codename@project; two scopes' agents of one codename are
 // two rows, each its own key. A window holding no crew scope can't send to another host: it lists
 // its own agents alone.
+//
+// Moved from tui/todos_assign_peers_test.go with its name and asserts unchanged.
 func TestTodosAssignListsEveryConnectedAgent(t *testing.T) {
 	c, _ := newPeerCore("autodoc:0123456789abcdef",
 		peer("jarvis", "autovim:plugins", "plugins", true, ""),
@@ -91,6 +93,8 @@ func TestTodosAssignListsEveryConnectedAgent(t *testing.T) {
 // host's notifier leaves it to the window, and the window sends it, as the user, one Task: request
 // to codename@scope: the task's file, id and the instruction, keyed by the assignment (a retry is
 // the same send). Nothing is handed to the window's own agents, and the notice says it was sent.
+//
+// Moved from tui/todos_assign_peers_test.go with its name and asserts unchanged.
 func TestTodosAssignHandsAnotherHostsAgentATaskAsTheUser(t *testing.T) {
 	c, assigned := newPeerCore("autodoc:0123456789abcdef", peer("jarvis", "autovim:plugins", "plugins", true, ""))
 	v := New(c)
@@ -127,6 +131,8 @@ func TestTodosAssignHandsAnotherHostsAgentATaskAsTheUser(t *testing.T) {
 // TestTodosAssignQueuesForAnAgentNoWakeReaches (item 17): another host's agent no wake reaches now
 // (no_endpoint) is still choosable; its task is sent, queued, and the notice says why it isn't woken.
 // A send refused leaves the task assigned and says why.
+//
+// Moved from tui/todos_assign_peers_test.go with its name and asserts unchanged.
 func TestTodosAssignQueuesForAnAgentNoWakeReaches(t *testing.T) {
 	c, _ := newPeerCore("autodoc:0123456789abcdef", peer("lector", "autovim:plugins", "plugins", false, "no_endpoint"))
 	v := New(c)
@@ -172,6 +178,8 @@ func (c *slowPeerCore) peerAgents(then func([]feature.AgentEntry)) {
 // TestTodosAssignAnsweredAfterAWorkspaceSwitchOpensNothing (item 17): A asks the crew for the other
 // hosts' agents before it opens its picker; a workspace switched while that is in flight makes the
 // answer stale: no picker opens, nothing is assigned, and no Task: request is sent.
+//
+// Moved from tui/todos_assign_peers_test.go with its name and asserts unchanged.
 func TestTodosAssignAnsweredAfterAWorkspaceSwitchOpensNothing(t *testing.T) {
 	pc, assigned := newPeerCore("autodoc:0123456789abcdef", peer("jarvis", "autovim:plugins", "plugins", true, ""))
 	c := &slowPeerCore{peerCore: pc}
@@ -196,6 +204,8 @@ func TestTodosAssignAnsweredAfterAWorkspaceSwitchOpensNothing(t *testing.T) {
 
 // TestTodosAssignPreviewsAnotherHostsAgent (item 17): another host's agent's preview is titled by
 // codename@project and names its scope and whether a wake reaches it.
+//
+// Moved from tui/todos_assign_peers_test.go with its name and asserts unchanged.
 func TestTodosAssignPreviewsAnotherHostsAgent(t *testing.T) {
 	c, _ := newPeerCore("autodoc:0123456789abcdef", peer("zen", "autovim:mcat", "mcat", false, "no_endpoint"))
 	v := New(c)
@@ -208,6 +218,8 @@ func TestTodosAssignPreviewsAnotherHostsAgent(t *testing.T) {
 
 // TestTodosAssignSendsNoPeerTaskFromAWindowWithoutACrew: a hand-over to another host's agent on a
 // window that can't reach the crew sends nothing and says nothing.
+//
+// Moved from tui/todos_assign_peers_test.go with its name and asserts unchanged.
 func TestTodosAssignSendsNoPeerTaskFromAWindowWithoutACrew(t *testing.T) {
 	ac, _ := assigningStore(feature.AgentEntry{Ref: feature.AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
 	v := New(ac)

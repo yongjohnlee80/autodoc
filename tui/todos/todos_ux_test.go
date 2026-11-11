@@ -19,6 +19,8 @@ import (
 // another store and moving the cursor put nothing in the status line, which stays hidden: no count
 // of stores, months or tasks, no guidance. A file a tab could not list is said, where it is, until
 // another store shows.
+//
+// Moved from tui/todos_ux_test.go with its name and asserts unchanged.
 func TestTodosStatusLineSaysOnlyWhatNeedsTheUser(t *testing.T) {
 	s := scriptedStore(true)
 	s.Answers["todos.list"] = func(p []any) (any, error) {
@@ -73,6 +75,8 @@ func TestTodosStatusLineSaysOnlyWhatNeedsTheUser(t *testing.T) {
 // panel, on a task, on an empty tab and on Archived's months, writes nothing, says nothing and fails
 // nothing: the action row says it is read-only. R reads it again, and L labels it (AutoDoc's own
 // name for it). New… on a folder whose store was released loads it and says so.
+//
+// Moved from tui/todos_ux_test.go with its name and asserts unchanged.
 func TestTodosAReadOnlyStoreTakesNoKeyAsAnError(t *testing.T) {
 	writes := []string{"todos.add", "todos.remove", "todos.status", "todos.assign", "todos.move_store", "todos.scaffold", "todos.refresh"}
 	s := &agentCore{ScriptedCore: scriptedStore(false), entries: []feature.AgentEntry{{Ref: feature.AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true}}}
@@ -131,6 +135,8 @@ func TestTodosAReadOnlyStoreTakesNoKeyAsAnError(t *testing.T) {
 // TestTodosEnterOnTheCardOfKeysOpensTheRow: Enter on ?'s card is Enter in the tab shown: the task
 // under the cursor's file opens; on Archived's months, the month under their cursor; with no task,
 // nothing. A write asked of a released store is never sent.
+//
+// Moved from tui/todos_ux_test.go with its name and asserts unchanged.
 func TestTodosEnterOnTheCardOfKeysOpensTheRow(t *testing.T) {
 	s := scriptedStore(true)
 	v := New(s)

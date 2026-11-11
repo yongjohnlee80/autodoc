@@ -15,6 +15,8 @@ import (
 
 // TestAssignableAgents: the picker leaves out a closing instance (HandTask refuses one) and a stopped
 // orphan (its profile gone, it cannot be started), and keeps the order AgentEntries gives.
+//
+// Moved from tui/todos_assign_test.go with its name and asserts unchanged.
 func TestAssignableAgents(t *testing.T) {
 	entries := []feature.AgentEntry{
 		{Ref: feature.AgentRef{Codename: "stopped"}},
@@ -85,6 +87,8 @@ func assigningStore(entries ...feature.AgentEntry) (*agentCore, *[][]any) {
 // <codename>, the instruction its reason, an empty one "Task assigned to you."), then the task is
 // handed over at the path the assign returned, the store's root joined: in-progress/, where D1 left
 // the file, not open/, where the row had it. The current incarnation is HandTask's to resolve.
+//
+// Moved from tui/todos_assign_test.go with its name and asserts unchanged.
 func TestTodosAssignWritesThenHandsOverAtTheReturnedPath(t *testing.T) {
 	c, assigned := assigningStore(feature.AgentEntry{Ref: feature.AgentRef{Codename: "scribe", Instance: "7"}, Name: "Scribe", Running: true})
 	v := New(c)
@@ -144,6 +148,8 @@ func TestTodosAssignWritesThenHandsOverAtTheReturnedPath(t *testing.T) {
 // does nothing and says nothing (the action row offers it on neither); with no AutoDoc agent to list
 // it says how to add one. None opens the picker. A dismissed picker has chosen no agent: nothing is
 // written.
+//
+// Moved from tui/todos_assign_test.go with its name and asserts unchanged.
 func TestTodosAssignIsRefusedWithoutATaskAnAgentOrWrites(t *testing.T) {
 	c, assigned := assigningStore(feature.AgentEntry{Ref: feature.AgentRef{Codename: "scribe"}, Name: "Scribe"})
 	v := New(c)
@@ -185,6 +191,8 @@ func TestTodosAssignIsRefusedWithoutATaskAnAgentOrWrites(t *testing.T) {
 // use, so an assign whose answer lands after a switch is not handed over: the assignment stands,
 // and the notice says to deliver it from the task's own workspace. Answered late in the same
 // workspace, it is handed over as ever.
+//
+// Moved from tui/todos_assign_test.go with its name and asserts unchanged.
 func TestTodosAssignAnsweredAfterAWorkspaceSwitchIsHandedToNoOne(t *testing.T) {
 	for _, switched := range []bool{false, true} {
 		c, assigned := assigningStore(feature.AgentEntry{Ref: feature.AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
@@ -216,6 +224,8 @@ func TestTodosAssignAnsweredAfterAWorkspaceSwitchIsHandedToNoOne(t *testing.T) {
 // store registered) is still the shown store's: the task is followed to In progress, which is read
 // again, and Open no longer shows it. Listing made the store shown a new value, and the answer,
 // compared by value, was dropped: no follow, no read.
+//
+// Moved from tui/todos_assign_test.go with its name and asserts unchanged.
 func TestTodosAssignAnsweredAfterTheStoresAreListedAgainFollowsTheTask(t *testing.T) {
 	c, assigned := assigningStore(feature.AgentEntry{Ref: feature.AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
 	v := New(c)
@@ -269,6 +279,8 @@ func (c *scopedAgentCore) windowScope() string { return c.scope }
 // TestTodosAssignCarriesTheWindowsScope: A assigns with the window's crew scope, so the window's
 // assignment feed (crewtodos.go) leaves this assignment to the hand-over A makes itself; a window
 // holding no scope assigns with none, as before.
+//
+// Moved from tui/todos_assign_test.go with its name and asserts unchanged.
 func TestTodosAssignCarriesTheWindowsScope(t *testing.T) {
 	for _, scope := range []string{"autodoc:0123456789abcdef", ""} {
 		ac, assigned := assigningStore(feature.AgentEntry{Ref: feature.AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
