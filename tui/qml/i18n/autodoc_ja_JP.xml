@@ -4328,6 +4328,10 @@ WHAT A KEY NEEDS
         <source>kept your changes; the disk's version is newer</source>
         <translation>変更を保持しました。ディスク上のバージョンの方が新しくなっています</translation>
     </message>
+    <message id="autodoc.notice.files.no_workspace_is_in_use_so_a_relative_path_names">
+        <source>no workspace is in use, so a relative path names no file; give its full path</source>
+        <translation>使用中のワークスペースがないため、相対パスはどのファイルも指しません: フルパスを指定してください</translation>
+    </message>
     <message id="autodoc.notice.files.open">
         <source>open %1</source>
         <translation>%1 を開く</translation>
