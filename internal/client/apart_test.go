@@ -174,10 +174,13 @@ func TestAPollingConnectionThatFailsItsHelloIsNeverUsed(t *testing.T) {
 	s := apartSession(t, sock)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	if _, err := s.Call(ctx, "w"); err == nil {
+	// bounded: a hello that is wrongly accepted holds the call on the daemon
+	failed, done := context.WithTimeout(ctx, 5*time.Second)
+	defer done()
+	if _, err := s.Call(failed, "w"); err == nil {
 		t.Fatal("a call kept apart, its connection's hello failed: answered")
 	}
-	if _, err := s.Call(ctx, "w"); !errors.Is(err, errAnotherDaemon) {
+	if _, err := s.Call(failed, "w"); !errors.Is(err, errAnotherDaemon) {
 		t.Fatalf("a call kept apart, its connection's hello another daemon's: %v; want errAnotherDaemon", err)
 	}
 	s.mu.Lock()
@@ -239,7 +242,7 @@ func TestAPollingDialEndsWithItsPrimary(t *testing.T) {
 			s.mu.Lock()
 			kept, flight := s.poll, s.pollDialing
 			s.mu.Unlock()
-			if kept != nil || flight != nil {
+			if kept != nil || flight != nil { // nil: no dial left in flight either
 				t.Fatalf("after the dial for a gone primary: polling connection %v, dial in flight %v; want neither", kept, flight)
 			}
 			if how == "reconnect" {
@@ -266,12 +269,21 @@ func TestThePollingConnectionEndsWithThePrimary(t *testing.T) {
 			answered := make(chan error, 1)
 			go func() { _, err := s.Call(ctx, "w"); answered <- err }()
 			held := d.nextHeld(t)
+			s.mu.Lock()
+			poll := s.poll
+			s.mu.Unlock()
 			switch how {
 			case "close":
 				s.Close()
+				if !isDone(poll) {
+					t.Fatal("Close returned with the polling connection still open")
+				}
 			case "reconnect":
 				if err := s.Connect(ctx); err != nil {
 					t.Fatal(err)
+				}
+				if !isDone(poll) {
+					t.Fatal("a reconnect returned with the old polling connection still open")
 				}
 			case "primary ends":
 				s.mu.Lock()
