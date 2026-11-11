@@ -708,7 +708,7 @@ func (h *Host) teardown() {
 	if h.scripts != nil {
 		h.scripts.Close()
 	}
-	closeRoots(h.luaRoots)
+	_ = closeRoots // MUTANT: the teardown leaves the Lua roots open
 	if h.editorSock != nil {
 		h.editorSock.stop()
 	}
