@@ -4320,6 +4320,10 @@ WHAT A KEY NEEDS
         <source>%1: it is in no workspace: no search, links, backlinks, frontmatter check or embeddings</source>
         <translation>%1: どのワークスペースにも属していません: 検索、リンク、バックリンク、フロントマター検査、埋め込みはありません</translation>
     </message>
+    <message id="autodoc.notice.files.it_was_read_again_from_disk_meanwhile_save_it_ag">
+        <source>it was read again from disk meanwhile; save it again</source>
+        <translation>その間にディスクから読み込み直されました: もう一度保存してください</translation>
+    </message>
     <message id="autodoc.notice.files.kept_as_it_was_saved_while_it_was_read">
         <source>kept %1 as it was saved while it was read</source>
         <translation>読み込み中に保存された状態のまま %1 を保持しました</translation>
@@ -4379,6 +4383,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.files.saving">
         <source>saving %1…</source>
         <translation>%1 を保存中…</translation>
+    </message>
+    <message id="autodoc.notice.files.the_connection_to_the_backend_was_renewed_save_it">
+        <source>the connection to the backend was renewed meanwhile; save it again</source>
+        <translation>その間にバックエンドとの接続が更新されました: もう一度保存してください</translation>
     </message>
     <message id="autodoc.notice.find.find_cleared">
         <source>find cleared</source>
