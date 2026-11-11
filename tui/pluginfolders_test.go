@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -111,12 +112,23 @@ func heldManagerRead(t *testing.T, repo string) (*running, string, *heldRead) {
 	return r, dir, h
 }
 
-// waitHeldByTheRead waits until the operation on folder waits for the held read, or did not and
-// changed the folder (gone, or swapped out to .previous): the cell's defect, which fails at once.
+// waitHeldByTheRead waits until the operation on folder waits for the held read, or did not: it
+// changed the folder (gone, or swapped out to .previous), or failed, which on Windows it may when a
+// read's git has only just exited. Either is the cell's defect, which fails at once.
 func waitHeldByTheRead(t *testing.T, r *running, folder, op string) {
 	t.Helper()
 	deadline := time.Now().Add(20 * time.Second)
 	for r.h.plugins.folders.waitingOn(folder) == 0 {
+		if failed := onLoop(r, func() string {
+			for _, n := range r.h.noticeLog.Items {
+				if strings.Contains(n.Text, "not removed") || strings.Contains(n.Text, "not installed") {
+					return n.Text
+				}
+			}
+			return ""
+		}); failed != "" {
+			t.Fatalf("the %s did not wait for the read of its folder, and failed: %q", op, failed)
+		}
 		if _, err := os.Stat(folder); err != nil {
 			t.Fatalf("the %s changed the plugin's folder while a read of it ran: %v", op, err)
 		}
