@@ -36,8 +36,28 @@ func heldGit(t *testing.T, env procenv.Env) (held procenv.Env, running func() bo
 	if err != nil {
 		t.Fatal(err)
 	}
-	bin, controls := t.TempDir(), t.TempDir()
-	ready, go_ := filepath.Join(controls, "ready"), filepath.Join(controls, "release")
+	// Its own folders, not t.TempDir's: a test's cleanups run newest first, so t.TempDir's removal would
+	// come right after the release below and take the release file with it before the clone saw it.
+	// Removed once the clone acknowledged its release (or it never started), the binary retried while
+	// Windows still holds the running copy.
+	bin, err := os.MkdirTemp("", "autodoc-heldgit-bin-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	controls, err := os.MkdirTemp("", "autodoc-heldgit-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ready, go_, seen := filepath.Join(controls, "ready"), filepath.Join(controls, "release"), filepath.Join(controls, "released")
+	t.Cleanup(func() {
+		if !gone(ready) { // the clone ran: wait for it to take its release
+			for deadline := time.Now().Add(5 * time.Second); gone(seen) && time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+			}
+		}
+		for deadline := time.Now().Add(5 * time.Second); os.RemoveAll(bin) != nil && time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		}
+		_ = os.RemoveAll(controls)
+	})
 	name := "git"
 	if runtime.GOOS == "windows" {
 		name = "git.exe"
@@ -46,7 +66,7 @@ func heldGit(t *testing.T, env procenv.Env) (held procenv.Env, running func() bo
 		t.Fatal(err)
 	}
 	held = env.With("PATH="+bin+string(os.PathListSeparator)+env.Get("PATH"),
-		heldGitEnv+"="+real, heldGitEnv+"_READY="+ready, heldGitEnv+"_RELEASE="+go_)
+		heldGitEnv+"="+real, heldGitEnv+"_READY="+ready, heldGitEnv+"_RELEASE="+go_, heldGitEnv+"_SEEN="+seen)
 	release = func() { _ = os.WriteFile(go_, nil, 0o600) } // idempotent: a second release writes it again
 	t.Cleanup(release)
 	return held, func() bool { return !gone(ready) }, release
@@ -69,6 +89,7 @@ func heldGitMain() int {
 				return 1
 			}
 		}
+		_ = os.WriteFile(os.Getenv(heldGitEnv+"_SEEN"), nil, 0o600) // heldGit's cleanup waits for this
 	}
 	cmd := exec.Command(os.Getenv(heldGitEnv), args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
@@ -106,10 +127,11 @@ func copyFile(from, to string) error {
 func TestAHeldGitEndsWithItsTest(t *testing.T) {
 	t.Parallel()
 	repo := pluginRepo(t, "Echo", "true")
+	dest := filepath.Join(t.TempDir(), "clone") // the outer test's: it outlives the subtest's cleanups
 	var cmd *exec.Cmd
 	t.Run("held, never released", func(t *testing.T) {
 		env, running, _ := heldGit(t, procenv.Env(nil))
-		cmd = exec.Command(procenv.Resolve(env, "git"), "clone", "-q", "file://"+repo, filepath.Join(t.TempDir(), "clone"))
+		cmd = exec.Command(procenv.Resolve(env, "git"), "clone", "-q", "file://"+repo, dest)
 		cmd.Env = env.Environ()
 		if err := cmd.Start(); err != nil {
 			t.Fatal(err)
