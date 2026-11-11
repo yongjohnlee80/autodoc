@@ -61,7 +61,7 @@ func TestNoRunStartsFromAFolderBeingRemoved(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "deaf")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("the plugin's directory is still there: %v", err)
 	}
-	if n := onLoop(r, func() int { return len(r.h.plugins.owned) }); n != 0 {
+	if n := onLoop(r, func() int { return r.h.plugins.folders.ownedLen() }); n != 0 {
 		t.Fatalf("%d folders still owned after the removal ended", n)
 	}
 }
@@ -88,7 +88,7 @@ func TestASecondRemovalOfAFolderIsRefused(t *testing.T) {
 	r.waitNotice(t, "its folder is being removed")
 	r.waitNotice(t, "removed deaf")
 	exitedBy(t, old, "its folder was removed")
-	if n := onLoop(r, func() int { return len(r.h.plugins.owned) }); n != 0 {
+	if n := onLoop(r, func() int { return r.h.plugins.folders.ownedLen() }); n != 0 {
 		t.Fatalf("%d folders still owned after the removal ended", n)
 	}
 }
@@ -135,7 +135,7 @@ func TestNoRunStartsFromAFolderBeingUpdated(t *testing.T) {
 	r.waitNotice(t, "its folder is being updated")
 	r.waitNotice(t, "updated echo at")
 	exitedBy(t, old, "its folder was swapped")
-	if n := onLoop(r, func() int { return len(r.h.plugins.owned) }); n != 0 {
+	if n := onLoop(r, func() int { return r.h.plugins.folders.ownedLen() }); n != 0 {
 		t.Fatalf("%d folders still owned after the update ended", n)
 	}
 }
@@ -159,7 +159,7 @@ func TestAFailedRemovalReleasesItsFolder(t *testing.T) {
 		return true
 	})
 	r.waitNotice(t, "echo did not exit within")
-	if n := onLoop(r, func() int { return len(r.h.plugins.owned) }); n != 0 {
+	if n := onLoop(r, func() int { return r.h.plugins.folders.ownedLen() }); n != 0 {
 		t.Fatalf("%d folders still owned after the removal failed", n)
 	}
 	if again := r.openPlugin("echo"); again == nil {
@@ -186,7 +186,7 @@ func TestAFailedUpdateReleasesItsFolder(t *testing.T) {
 	r.question(t)
 	r.keys(t, key('y'))
 	r.waitNotice(t, "the plugin was left as it was")
-	if n := onLoop(r, func() int { return len(r.h.plugins.owned) }); n != 0 {
+	if n := onLoop(r, func() int { return r.h.plugins.folders.ownedLen() }); n != 0 {
 		t.Fatalf("%d folders still owned after the update failed", n)
 	}
 	if again := r.openPlugin("echo"); again == nil {
