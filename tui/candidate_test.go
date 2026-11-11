@@ -121,7 +121,8 @@ func TestAuditHandsAFreshCopyAndItsToastReopensTheCard(t *testing.T) {
 	r.s.WaitForText(t, "audit with an agent")
 	r.s.WaitForText(t, "Scribe  (scribe)")
 	r.keys(t, enter())
-	r.s.WaitForText(t, "start the agent?")
+	// asked once the audit's copy is cloned: a git process, on daemonWait, as B's card below
+	r.waitWithin(t, `"start the agent?"`, daemonWait, func() bool { return strings.Contains(r.s.String(), "start the agent?") })
 	r.keys(t, key('y'))
 	root1, copy1 := task(1)
 	settled(1, false) // the agent was started for it: not rung
@@ -188,7 +189,10 @@ func TestEachCandidateOwnsItsCard(t *testing.T) {
 	}
 
 	add(beta)
-	r.s.WaitFor(t, "B's card", func(string) bool { c := r.card(); return c != nil && c.name == "beta" })
+	// B's card comes once its clone answers: a git process, on daemonWait, not a frame's clock. In
+	// four Windows CI runs it landed in 0.27-0.32 s (0.3-1.47 s with -parallel 16); in a fifth it was
+	// still cloning when a frame's 3 s ran out
+	r.waitWithin(t, "B's card", daemonWait, func() bool { c := r.card(); return c != nil && c.name == "beta" })
 	r.s.WaitForText(t, "the plugin alpha waits")
 	r.keys(t, key('y'))
 	r.waitNotice(t, "added beta at")
