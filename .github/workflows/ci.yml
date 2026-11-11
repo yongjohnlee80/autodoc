@@ -247,6 +247,30 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: scratch (not for merge) the agent setup cells on Windows x3, and four mutants
+        if: ${{ !inputs.discover }}
+        run: |
+          R=0
+          T='^(TestSetUpSavesAndStartsTypingNothing|TestNoIsRemembered|TestNoneFoundSaysWhichAndRecordsNothing|TestTheFormAndTheSetupRefuseAlike|TestTheSetupOpensFromTheCatalogAndTheMenu|TestASetupWithATakenCodenameIsRefused|TestTheSetupCardIsAFirstRunsOnly)$'
+          go test -count=3 -timeout 30m -v -run "$T" ./tui/ > "$RUNNER_TEMP/t.txt" 2>&1 && rt=0 || rt=$?
+          echo "== tui rc=$rt PASS $(grep -cE '^--- PASS' "$RUNNER_TEMP/t.txt" || true) FAIL $(grep -cE '^--- FAIL' "$RUNNER_TEMP/t.txt" || true) SKIP $(grep -cE '^--- SKIP' "$RUNNER_TEMP/t.txt" || true)"
+          grep -E '^--- (FAIL|SKIP)|_test\.go:[0-9]+:' "$RUNNER_TEMP/t.txt" | sort -u | cut -c1-260 | head -20 || true
+          [ $rt = 0 ] || R=1
+          mut() { # name file perl-expr cell: the cell must fail with the mutant in
+            f=$2; cp $f "$RUNNER_TEMP/keep"; perl -0pi -e "$3" $f
+            if cmp -s "$RUNNER_TEMP/keep" $f; then echo "== mutant $1: NOT APPLIED"; R=1; return; fi
+            go test -count=1 -timeout 10m -v -run "^$4\$" ./tui/ > "$RUNNER_TEMP/m.txt" 2>&1 && m=0 || m=$?
+            cp "$RUNNER_TEMP/keep" $f
+            echo "== mutant $1 rc=$m FAIL $(grep -cE "^--- FAIL: $4" "$RUNNER_TEMP/m.txt" || true) SKIP $(grep -cE "^--- SKIP: $4" "$RUNNER_TEMP/m.txt" || true) buildfail $(grep -cE '\[build failed\]' "$RUNNER_TEMP/m.txt" || true)"
+            grep -E '_test\.go:[0-9]+:' "$RUNNER_TEMP/m.txt" | sort -u | cut -c1-260 | head -3 || true
+            [ $m = 1 ] || R=1
+          }
+          mut no-start tui/agents/agentsetup.go 's/\ta\.c\.Close\("agentSetup"\)\n\ta\.useProfile\(p\)\n/\ta.c.Close("agentSetup")\n\t_ = p\n/' TestSetUpSavesAndStartsTypingNothing
+          mut done-not-recorded tui/agents/agentsetup.go 's/\ta\.c\.SetPref\(PrefAgentSetup, "done"\)\n//' TestSetUpSavesAndStartsTypingNothing
+          mut decline-not-recorded tui/agents/agentsetup.go 's/\t\ta\.c\.SetPref\(PrefAgentSetup, "declined"\)\n//' TestNoIsRemembered
+          mut claude-not-on-path tui/agentsetup_test.go 's/"PATH=" \+ bin \+ string/"PATH=" + bin + "-gone" + string/' TestSetUpSavesAndStartsTypingNothing
+          echo "== R=$R"
+          [ $R = 0 ]
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
         run: |
