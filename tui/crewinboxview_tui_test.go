@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -120,8 +121,15 @@ func TestEveryInboxLetterWorksFromTheList(t *testing.T) {
 	onLoop(r, func() bool { r.h.closeDialog(crew.ReplyDialog); return true })
 	r.s.WaitFor(t, "the reply closed", func(sc string) bool { return !replyOpen(sc, "gold asks: subject m060") })
 	press('s')
-	if got := <-f.focus; got != "s-gold" { // gold's session is no agent of this window's: the daemon is asked to raise it
-		t.Fatalf("s on the request: asked to raise %q, want s-gold", got)
+	// gold's session is no agent of this window's: the daemon is asked to raise it, a round trip, so
+	// on daemonWait; a raise never asked for fails here rather than at the package's timeout
+	select {
+	case got := <-f.focus:
+		if got != "s-gold" {
+			t.Fatalf("s on the request: asked to raise %q, want s-gold", got)
+		}
+	case <-time.After(daemonWait):
+		t.Fatalf("s on the request: the daemon was never asked to raise gold's session within %s", daemonWait)
 	}
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyDown})
 	press('m')
