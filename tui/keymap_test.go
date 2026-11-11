@@ -105,10 +105,11 @@ func TestTheKeymapFileIsFollowed(t *testing.T) {
 	}
 }
 
-// runShellWithKeymap is runShellTUI with a key file: /bin/sh as the shell, the file as the user's.
+// runShellWithKeymap is runLineShellTUI with a key file: the line shell as the shell on every OS, the
+// file as the user's.
 func runShellWithKeymap(t *testing.T, file string) *running {
 	t.Helper()
-	tuneEnv(t, "SHELL=/bin/sh", "HOME="+t.TempDir(), "PS1=$ ")
+	useLineShell(t)
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{KeymapFile: file})
 	r.connected(t)
@@ -121,8 +122,8 @@ func (r *running) openShell(t *testing.T) {
 	r.leader(t, '`')
 	r.s.WaitForText(t, "┌ terminal")
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
-	r.keys(t, decltest.Type("echo up\r")...)
-	r.s.WaitForText(t, "up")
+	r.keys(t, decltest.Type("shout up\r")...)
+	r.s.WaitForText(t, "UP")
 }
 
 // leavesInput presses k in the shell, then Esc: k is the mode key when it left input mode, so the
@@ -167,8 +168,8 @@ func TestTheTerminalsKeysFollowTheMapWhole(t *testing.T) {
 		// The barrier: a line the shell runs after Ctrl+T and Esc, and prints only if they reached
 		// it. Had Ctrl+T left input mode, Esc would hide the pane and the line would never run. The
 		// first Enter runs the line Ctrl+T and Esc typed.
-		r.keys(t, append([]tuicore.Event{ctrlKey('t'), esc()}, decltest.Type("\recho $((40+2))unbound\r")...)...)
-		r.s.WaitForText(t, "42unbound")
+		r.keys(t, append([]tuicore.Event{ctrlKey('t'), esc()}, decltest.Type("\rshout unbound\r")...)...)
+		r.s.WaitForText(t, "UNBOUND")
 		if !r.termShown() {
 			t.Fatal("the unbound mode key still left input mode")
 		}
