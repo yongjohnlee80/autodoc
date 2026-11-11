@@ -247,6 +247,15 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: scratch (not for merge) the setup cell's whole output, at this head and without its PATH change
+        if: ${{ !inputs.discover }}
+        run: |
+          for at in head base; do
+            if [ $at = base ]; then git fetch -q --depth=1 origin 603340c0 && git show 603340c0:tui/agentsetup_rig_test.go > tui/agentsetup_rig_test.go; git show 603340c0:tui/candidate_test.go > tui/candidate_test.go; fi
+            go test -count=1 -timeout 10m -v -run '^TestSetUpSavesAndStartsTypingNothing$' ./tui/ > "$RUNNER_TEMP/$at.txt" 2>&1 && rc=0 || rc=$?
+            echo "== $at rc=$rc"; grep -vE '^\s*$|\[Info\]' "$RUNNER_TEMP/$at.txt" | cut -c1-300 | head -90 || true
+          done
+          git checkout -- tui
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
         run: |
