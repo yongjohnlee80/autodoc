@@ -158,6 +158,7 @@ func TestAStoredLanguageReachesTheStart(t *testing.T) {
 	if logs := crashLogs(t, dir); len(logs) != 0 {
 		t.Fatalf("a start with a stored language crashed %d times:\n%s", len(logs), logs[0])
 	}
+	r.ready(t) // the workspace entered: an open before it is no note of a workspace in use
 	onLoop(r, func() bool { r.h.openPath("history.md"); return true })
 	// its toast is Korean now: the file is waited for, not its English "opened"
 	r.s.WaitFor(t, "history.md shown", func(string) bool { return onLoop(r, func() string { return r.h.file.path }) == "history.md" })

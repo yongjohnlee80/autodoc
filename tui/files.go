@@ -423,6 +423,9 @@ func (h *Host) loadInto(b *openBuffer, ws, p string, prev *editor.JumpPos, raw b
 		}
 		if a.err != nil {
 			h.failed(h.trf("autodoc.notice.files.open", p), a.err)
+			// the status line said "opening p…": it says the open failed now, or it would read as an
+			// open still under way, the page left untitled with nothing to say why
+			h.say(h.trf("autodoc.notice.session.text", h.trf("autodoc.notice.files.open", p), feature.WireMessage(a.err)))
 			h.missedLanding(land, a.err)
 			if h.restoreOpenFailed(b, ws, p) { // a kept copy's file gone: its text becomes a draft
 				return

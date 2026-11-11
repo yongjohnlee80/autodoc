@@ -93,6 +93,7 @@ func themeStartedIn(t *testing.T, d *managedDaemon, name, keyword string) *runni
 	t.Helper()
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.connected(t)
+	r.ready(t) // the workspace entered, for the caller's open of a note in it
 	for deadline := time.Now().Add(20 * time.Second); ; {
 		if keywordFG(r) == keyword {
 			return r
@@ -197,6 +198,7 @@ func TestThePagesTextCarriesItsThemesBase(t *testing.T) {
 			d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "page.md", pageSource)}, tableInclude)
 			first := runTUI(t, NewSession(d.sock, nil), Options{})
 			first.connected(t)
+			first.ready(t) // the workspace entered: an open before it is no note of a workspace in use
 			onLoop(first, func() bool { first.h.openPath("page.md"); return true })
 			first.waitFile(t, "page.md")
 			kw := storeTheme(t, first, theme)
@@ -261,6 +263,7 @@ func TestTheMindmapPanesBoxesCarryItsThemesBase(t *testing.T) {
 			d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")}, tableInclude)
 			first := runTUI(t, NewSession(d.sock, nil), Options{})
 			first.connected(t)
+			first.ready(t) // the workspace entered: an open before it is no note of a workspace in use
 			onLoop(first, func() bool { first.h.openPath("a.md"); return true })
 			first.waitFile(t, "a.md")
 			m := openMindmap(t, first)
