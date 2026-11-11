@@ -270,10 +270,16 @@ func TestTheSettingsDialogSavesEveryField(t *testing.T) {
 
 // A refused save changes nothing, and opens the dialog again as it was typed, on the tab it was
 // on, the reason on its help line: a section out of range is refused before it is sent, and a
-// root gone from disk by the daemon, the text types with the rules (one save, not two).
+// root gone from disk by the daemon, the text types with the rules (one save, not two). The
+// workspace is served through a link to its folder, and the link is what goes: the daemon holds
+// a served root open while it serves it, which on Windows no removal gets past, so the folder
+// itself stays and only the root's path stops leading to it.
 func TestARefusedSaveChangesNothing(t *testing.T) {
 	t.Parallel()
-	root := fileDir(t, "n.md", "# Notes\n")
+	root := filepath.Join(t.TempDir(), "kb")
+	if err := os.Symlink(fileDir(t, "n.md", "# Notes\n"), root); err != nil {
+		t.Fatal(err)
+	}
 	d := startManaged(t, map[string]string{"kb": root})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
@@ -287,11 +293,14 @@ func TestARefusedSaveChangesNothing(t *testing.T) {
 		t.Errorf("the dialog reopened on tab %d, want Advanced", got)
 	}
 
-	if err := os.RemoveAll(root); err != nil { // the rules check the root
+	if err := os.Remove(root); err != nil { // the link: the rules check the root
 		t.Fatal(err)
 	}
 	r.saveForm(func(f *settingsForm) { f.texts = ".log" })
 	r.s.WaitForText(t, "not saved:")
+	if help := onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.settingsHelp"); return v.Raw }); !strings.Contains(help, "the root is not a directory") {
+		t.Errorf("the refusal says %q, want the root rule's", help)
+	}
 	if w := storedOnly(t, d); w.TextExtensions != nil || slices.Contains(w.Include, "**/*.log") || w.Name != "kb" {
 		t.Fatalf("a refused save changed the store: %+v", w)
 	}
