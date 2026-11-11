@@ -252,9 +252,10 @@ jobs:
         run: |
           # the whole module's vet, not only the ported packages': it compiles every package's tests
           # for Windows, so a neutral test can't come to lean on a helper in a Unix-tagged file
-          go vet ./...
-          mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
-          go test -count=1 -timeout 20m "${pkgs[@]}"
+          go vet ./tui/
+          # SCRATCH (never merged): the crew setup cells on Windows x3
+          go test -count=3 -v -timeout 30m -run '^TestTheWindowAsksTheAgentsOwnCrewSetup$|^TestACrewAgentIsToldItsCLIsCrewProcedure$|^TestACrewCodexAgentIsRegisteredAsItStarts$|^TestTheCommandsAutoDocWritesNameTheBuildByItsPath$' ./tui/ > "$RUNNER_TEMP/c.log" 2>&1 || true
+          echo "csc pass $(grep -c -- '--- PASS' "$RUNNER_TEMP/c.log" || true) fail $(grep -c -- '--- FAIL' "$RUNNER_TEMP/c.log" || true) skip $(grep -c -- '--- SKIP' "$RUNNER_TEMP/c.log" || true)"; grep -E -- '--- FAIL|_test\.go:[0-9]+: ' "$RUNNER_TEMP/c.log" | head -10 || true
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
