@@ -38,7 +38,7 @@ func (r *running) menuAutoHides() bool {
 // click on the hidden terminal's icon opens it, the keyboard in its shell; the editor's gives the
 // keyboard back to the page.
 func TestTheDockListsTheTerminalWhileItsShellRuns(t *testing.T) {
-	_, r := runShellTUI(t, nil)
+	_, r := runLineShellTUI(t, nil)
 	r.waitDock(t, "the editor alone", "editor")
 	if !r.menuAutoHides() {
 		t.Fatal("with the editor alone the bar does not auto-hide")
