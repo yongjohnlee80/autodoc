@@ -51,6 +51,10 @@ type SetupInput struct {
 	// Servers are the MCP servers the daemon offers the session (none from a daemon without them): a
 	// kind that takes MCP servers delivers each its own way.
 	Servers []MCPServer
+	// NoAgentServer says the host can't run an agent's own server (a Codex agent's app-server, which
+	// a host runs in a process group of its own, which some systems lack): the agent then starts as
+	// one with no folder of its own for a server does, and the setup says so.
+	NoAgentServer bool
 }
 
 // MCPServer is an MCP server a crew session's CLI is given (its tools the crew's own, such as
@@ -393,11 +397,16 @@ func codexSetup(in SetupInput, _ string, s *Setup) error {
 		program = "codex"
 	}
 	register := []string{"crew", "endpoint", "--codex-here", "--since", SetupSince, "--wait", codexRegisterWait}
-	if in.AgentDir == "" {
+	if in.AgentDir == "" || in.NoAgentServer {
 		// its own server's socket lives in the agent's own folder: with none, the TUI runs its own,
-		// never Codex's shared daemon, which keeps the environment of whichever agent started it
+		// never Codex's shared daemon, which keeps the environment of whichever agent started it. A
+		// host that can't run the server (NoAgentServer) is the same: there is no server of its own
+		needs, why := "the agent's own folder", "Codex has no folder of its own for its app-server"
+		if in.AgentDir != "" {
+			needs, why = "the agent's own app-server, which this system can't run", "this system can't run an app-server of the agent's own for Codex"
+		}
 		if len(in.Servers) > 0 {
-			s.Notices = append(s.Notices, "Codex's crew MCP server needs the agent's own folder: its mail stays the CLI's")
+			s.Notices = append(s.Notices, "Codex's crew MCP server needs "+needs+": its mail stays the CLI's")
 		}
 		has, err := codexHasNoDaemon(program, in.Env, in.Dir)
 		if err != nil {
@@ -407,7 +416,7 @@ func codexSetup(in SetupInput, _ string, s *Setup) error {
 		}
 		if has {
 			s.Argv = append(s.Argv, "--no-daemon")
-			s.Notices = append(s.Notices, "Codex has no folder of its own for its app-server, so crew mail can't wake it: it reads its mail when asked")
+			s.Notices = append(s.Notices, why+", so crew mail can't wake it: it reads its mail when asked")
 			return nil
 		}
 		s.After = append(s.After, register) // a Codex before --no-daemon has no shared daemon to keep off

@@ -84,14 +84,19 @@ const crewSetupTimeout = 10 * time.Second
 // by its absolute path (bin) as the command its hooks and its MCP server run, never a bare autodoc
 // a PATH could make another (its config reaches it through $AUTODOC_CONFIG in the agent's
 // environment), its folder, and --mail-via mcp (the window registers the session with the mail_via
-// it is answered). Never an environment value of the profile's.
+// it is answered), and --no-agent-server where the window can't run an agent's own server
+// (CanRunAgentServers). Never an environment value of the profile's.
 func CrewSetupArgs(config, kind, dir, bin string) []string {
 	args := []string{}
 	if config != "" {
 		args = append(args, "--config", config)
 	}
-	return append(args, "crew", "setup", "--kind", kind, "--host", crew.HostWindow,
-		"--autodoc", ShellQuote(bin), "--agent-dir", dir, "--mail-via", "mcp")
+	args = append(args, "crew", "setup", "--kind", kind, "--host", crew.HostWindow,
+		"--autodoc", ShellQuote(bin), "--agent-dir", dir)
+	if !CanRunAgentServers {
+		args = append(args, "--no-agent-server")
+	}
+	return append(args, "--mail-via", "mcp")
 }
 
 // askSetup runs kind's setup for the agent folder dir under environ off the loop, as the crew
