@@ -611,8 +611,20 @@ func pluginTUIOn(t *testing.T, d *daemon, dir, luaDir string) (*running, string)
 	logs := t.TempDir()
 	r := runTUI(t, NewSession(d.sock, nil), Options{Plugins: Plugins{Dir: dir, LogDir: logs, Socket: d.sock}, LuaDir: luaDir})
 	r.connected(t)
+	stopPluginRunsAtTheEnd(t, r)
+	return r, logs
+}
+
+// stopPluginRunsAtTheEnd shuts down, at the test's end, every plugin run r's program still has
+// (running, or stopped and still closing), and waits for each: a run's process works in its
+// plugin's folder, which Windows won't remove while it does, so the folder's TempDir cleanup, run
+// after this one, can. Linux would let the folder go and the process run on, unseen.
+// A cell that quit its program has no loop to read on: its runs are read there and then, the loop's
+// state this goroutine's once the program has stopped (Quit closes after Run returns).
+func stopPluginRunsAtTheEnd(t *testing.T, r *running) {
+	t.Helper()
 	t.Cleanup(func() {
-		runs := onLoop(r, func() []*pluginRun {
+		collect := func() []*pluginRun {
 			var out []*pluginRun
 			for _, p := range r.h.plugins.running {
 				out = append(out, p)
@@ -621,12 +633,22 @@ func pluginTUIOn(t *testing.T, d *daemon, dir, luaDir string) (*running, string)
 				out = append(out, p)
 			}
 			return out
-		})
+		}
+		got := make(chan []*pluginRun, 1)
+		r.h.p.Post(func() { got <- collect() })
+		var runs []*pluginRun
+		select {
+		case runs = <-got:
+		case <-r.s.Quit(): // the program has stopped: nothing posted runs now
+			runs = collect()
+		case <-time.After(decltest.WaitTimeout): // a loop held: the cell's failure, not a hang of the run
+			t.Errorf("the program's loop never answered within %s: its plugin runs were not shut down", decltest.WaitTimeout)
+			return
+		}
 		for _, p := range runs {
 			p.shutdown()
 		}
 	})
-	return r, logs
 }
 
 func (r *running) openPlugin(key string) *pluginRun {

@@ -868,6 +868,7 @@ func resultsTUI(t *testing.T, dir string, workspaces map[string][]string, o daem
 	d := startDaemonWith(t, "", workspaces, o)
 	r := runTUI(t, NewSession(d.sock, nil), Options{Plugins: Plugins{Dir: dir, LogDir: logs, Socket: d.sock}})
 	r.connected(t)
+	stopPluginRunsAtTheEnd(t, r) // its service plugin runs in the plugin's folder until shut down
 	return r, logs
 }
 
