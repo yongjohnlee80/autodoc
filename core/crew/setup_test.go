@@ -726,6 +726,12 @@ func TestSetupForCodexOnAHostWithNoAgentServer(t *testing.T) {
 	if err != nil || len(s.Argv) != 0 || len(s.Server) != 0 || len(s.After) != 1 || s.After[0][2] != "--codex-here" {
 		t.Fatalf("no agent server, a Codex without --no-daemon: %+v %v; want no flag, no server, the registration step", s, err)
 	}
+	// a Codex that can't be read is refused with this host's remedy: a folder of its own changes nothing here
+	_, err = crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostWindow, Env: map[string]string{"PATH": t.TempDir()}, Dir: t.TempDir(),
+		AgentDir: t.TempDir(), NoAgentServer: true}, "")
+	if err == nil || !strings.Contains(err.Error(), "start it again once Codex answers") || strings.Contains(err.Error(), "folder of its own, or") {
+		t.Fatalf("no agent server, no Codex to read: %v; want it refused, the remedy this host's (start it again), not a folder of its own", err)
+	}
 }
 
 // The --help lines of a Codex that takes --no-daemon, and of one before it.
