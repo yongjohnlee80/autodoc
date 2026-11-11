@@ -19,7 +19,7 @@ func (c core) windowScope() string {
 	if c.h.crew == nil {
 		return ""
 	}
-	scope, _, _ := c.h.crew.held()
+	scope, _, _ := c.h.crew.Held()
 	return scope
 }
 
@@ -30,7 +30,7 @@ func (c core) peerAgents(then func([]feature.AgentEntry)) {
 		then(nil)
 		return
 	}
-	c.h.crew.peerAgents(then)
+	c.h.crew.PeerAgents(then)
 }
 
 // sendTask sends another host's agent a task as the user's request (todos_assign.go).
@@ -39,7 +39,7 @@ func (c core) sendTask(codename, scope, subject, body, key string, then func(err
 		then(fmt.Errorf("%w: the window holds no crew scope", agents.ErrDoorbellNotSent))
 		return
 	}
-	c.h.crew.sendTask(codename, scope, subject, body, key, then)
+	c.h.crew.SendTask(codename, scope, subject, body, key, then)
 }
 
 // HandTask hands an agent a task.

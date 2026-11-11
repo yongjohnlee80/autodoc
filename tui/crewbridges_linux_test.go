@@ -59,7 +59,7 @@ func TestCrewBridgesListsAndKillsARealOrphanOnScreen(t *testing.T) {
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.connected(t)
 	r.s.WaitFor(t, "the window holds its scope", func(string) bool {
-		return onLoop(r, func() bool { _, _, ok := r.h.crew.held(); return ok })
+		return onLoop(r, func() bool { _, _, ok := r.h.crew.Held(); return ok })
 	})
 	onLoop(r, func() bool { r.h.runEntry("crew.bridges"); return true })
 	r.s.WaitFor(t, "the orphaned bridge listed", func(sc string) bool {
