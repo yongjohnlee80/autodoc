@@ -2,6 +2,7 @@ package tui
 
 import (
 	"bufio"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"os/exec"
@@ -36,9 +37,9 @@ const lineShellEnv = "AUTODOC_TEST_LINE_SHELL"
 // lineShellMain prints the prompt, then a prompt after each line it reads, until exit or its input ends.
 // A line "shout <words>" prints the words in capitals first: what the terminal echoes as it is typed
 // never reads so, so seeing them says the shell ran the line. Two more, for the environment cell
-// (hostenv_test.go): "ishome PATH MARK" prints home-MARK when its home folder (userdirs.Home, as the
-// program reads it) is PATH, and "run PROGRAM MARK" runs PROGRAM, found on its PATH, with MARK, its
-// output the shell's.
+// (hostenv_test.go): "ishome MARK HEX" prints home-MARK when its home folder (userdirs.Home, as the
+// program reads it) is the path HEX encodes (hex, so a path with spaces in it is one word), and
+// "run PROGRAM MARK" runs PROGRAM, found on its PATH, with MARK, its output the shell's.
 func lineShellMain() int {
 	fmt.Print("$ ")
 	in := bufio.NewScanner(os.Stdin)
@@ -52,8 +53,9 @@ func lineShellMain() int {
 		}
 		switch f := strings.Fields(line); {
 		case len(f) == 3 && f[0] == "ishome":
-			if home, err := userdirs.Home(nil); err == nil && home == f[1] {
-				fmt.Printf("home-%s\n", f[2])
+			want, err := hex.DecodeString(f[2])
+			if home, herr := userdirs.Home(nil); err == nil && herr == nil && home == string(want) {
+				fmt.Printf("home-%s\n", f[1])
 			}
 		case len(f) == 3 && f[0] == "run":
 			if path, err := procenv.LookPath(nil, f[1]); err == nil {
