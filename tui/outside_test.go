@@ -58,7 +58,7 @@ func (r *running) waitOpen(t *testing.T, ws, p string) {
 
 func waitDisk(t *testing.T, r *running, abs, want string) {
 	t.Helper()
-	r.s.WaitFor(t, abs+" holding "+want, func(string) bool { b, _ := os.ReadFile(abs); return string(b) == want })
+	r.lands(t, "outside: the save on disk", func() bool { b, _ := os.ReadFile(abs); return string(b) == want })
 }
 
 // TestAFileOutsideEveryWorkspaceOpensEditsAndSaves: it opens in no workspace, the status line
