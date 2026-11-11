@@ -1003,6 +1003,15 @@ func newFakeOllama(t *testing.T, models ...string) *fakeOllama {
 	return f
 }
 
+// refusedCallWait bounds TestAProviderInUse's wait for a refused embedding in the provider's log.
+// That is daemon work on the daemon's own schedule, which daemonWait (sized for CPU-bound work)
+// doesn't cover: the new file is followed and indexed, the embedder tries it (at once when woken,
+// at its next poll, 30 s, when the wake came while it was busy; after a failure it waits 1 s,
+// doubling), and the call meter writes the call at its next flush, every 2 s. On a loaded Windows
+// runner the call landed after 2.0 s and after 15.8 s. The clock only turns a call that never comes
+// into a failure rather than a hang.
+var refusedCallWait = 45 * time.Second * raceFactor
+
 // TestAProviderInUse: Use sets a provider up and semantic search runs with it, its usage and
 // calls shown under the list; one that does not set up is refused, the one in use staying; Words
 // only turns it off; Remove asks, then removes it.
@@ -1052,8 +1061,9 @@ func TestAProviderInUse(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "c.md"), []byte("# C\n\ngamma\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// the file followed, its embedding refused, the call written at the next flush: the daemon's clock
-	r.waitWithin(t, "the refused call", daemonWait, func() bool {
+	// the file followed, its embedding refused, the call written at the next flush: the embedder's
+	// schedule, not a CPU-bound wait (refusedCallWait)
+	r.waitWithin(t, "the refused call", refusedCallWait, func() bool {
 		r.h.p.Post(func() { _ = r.h.reg.Handlers["App.showProvider"]([]qml.SpecValue{num(0)}) })
 		text := strings.Join(strings.Fields(strings.ReplaceAll(r.s.String(), "│", " ")), " ") // wrapped: running text
 		return strings.Contains(text, "at the usage limit") && strings.Contains(text, "rate limited")
