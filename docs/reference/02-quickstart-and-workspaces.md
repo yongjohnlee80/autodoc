@@ -22,7 +22,7 @@ New to AutoDoc? The [tutorials](../tutorials/README.md) start here, a few minute
 | Linux, a server or container | mise, the TUI build: `mise use -g 'github:yongjohnlee80/autodoc[asset_pattern=autodoc-*-linux-amd64-tui.tar.gz]'` (`autodoc-*-linux-arm64-tui.tar.gz` on arm64) |
 | macOS, Linux | [Homebrew](https://brew.sh): `brew install yongjohnlee80/tap/autodoc` (on Linux, the TUI build) |
 | Linux, macOS | A [release archive](https://github.com/yongjohnlee80/autodoc/releases/latest) (`amd64` and `arm64`, with SHA-256 checksums) |
-| Windows | Use [WSL2](https://learn.microsoft.com/windows/wsl/install) and any Linux method. A native Windows build is not published yet. |
+| **Windows (amd64)** | **The PowerShell install script**: `irm https://github.com/yongjohnlee80/autodoc/releases/latest/download/install-autodoc.ps1 \| iex` (the GUI build, for you alone, no administrator rights; **Help › About › Update** keeps it current). Or [WSL2](https://learn.microsoft.com/windows/wsl/install) and any Linux method. |
 
 Use `autodoc --gui` to open the native GUI. It shares the same daemon and store as `autodoc --ui`
 and `autodoc --call`. `--gui` is the flag you run it with; `-tags gui` is the build tag that builds the

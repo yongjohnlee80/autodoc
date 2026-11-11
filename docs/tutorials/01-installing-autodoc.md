@@ -23,13 +23,30 @@ Run it again at any time: it upgrades or repairs the install and never adds a se
 
 **Updating.** Installed by the script, AutoDoc can update itself: **Help › About**, then **Update**. The update runs in AutoDoc's terminal panel, and when the new version is in place AutoDoc offers **Restart Now**. From a shell, `~/.local/state/autodoc/update.sh` does the same.
 
+## On Windows
+
+In PowerShell, one line installs AutoDoc with its window:
+
+```powershell
+irm https://github.com/yongjohnlee80/autodoc/releases/latest/download/install-autodoc.ps1 | iex
+```
+
+The script:
+
+- downloads the newest Windows build and checks it against the release's checksum;
+- installs it as `%LOCALAPPDATA%\Programs\AutoDoc\autodoc.exe`, for you alone: it never asks for administrator rights;
+- adds AutoDoc to the Start menu;
+- installs `update.ps1` in `%LOCALAPPDATA%\autodoc`, so **Help › About › Update** works as on Linux and macOS.
+
+It changes your `PATH` only when asked (`-AddToPath`); otherwise it prints the command that would. The build is unsigned, so Windows may say the publisher is unknown the first time AutoDoc runs. Windows on arm64 has no build yet. Under WSL2, the Linux line above works too.
+
 ## Other ways
 
 - Homebrew: `brew install yongjohnlee80/tap/autodoc` (on Linux, the terminal UI only)
 - mise: `mise use -g github:yongjohnlee80/autodoc`
 - Go: `go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` (without `-tags gui`, the terminal UI only)
 - A release archive from the project's Releases page
-- Windows: WSL2, then the install script
+- Windows: WSL2, then the Linux install script
 
 These are updated the way they were installed (`brew upgrade`, `mise upgrade`, `go install` again), so **Help › About** offers no Update for them. Servers, containers and building from source: [Reference, Chapter 2](../reference/02-quickstart-and-workspaces.md).
 
