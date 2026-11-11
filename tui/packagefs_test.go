@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -182,6 +183,20 @@ func TestAPluginsLuaPackageLeavesItsFolderToUpdateAndRemove(t *testing.T) {
 	r.question(t)
 	r.keys(t, key('y'))
 	r.waitNotice(t, "added echo at")
+	probe := func(step string) {
+		t.Helper()
+		a, b := filepath.Join(dir, "echo"), filepath.Join(dir, "echo-probe")
+		if err := os.Rename(a, b); err != nil {
+			out, herr := exec.Command(os.Getenv("HANDLE_EXE"), "-accepteula", "-nobanner", "-a", "-p", strconv.Itoa(os.Getpid()), a).CombinedOutput()
+			t.Logf("DEBUG after %s: held: %v\nHANDLES (%v):\n%s\nEND", step, err, herr, out)
+			return
+		}
+		if err := os.Rename(b, a); err != nil {
+			t.Fatalf("DEBUG back: %v", err)
+		}
+		t.Logf("DEBUG after %s: free", step)
+	}
+	probe("the add")
 	runs := func(want string) {
 		t.Helper()
 		r.s.WaitFor(t, "the package's command saying "+want, func(string) bool {
