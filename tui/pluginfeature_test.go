@@ -50,6 +50,10 @@ func TestEveryPageShownRaisesTheFeedsVersionOnce(t *testing.T) {
 // A plugin started mid-typing, before the pause, is sent the text as it is, with its version.
 func TestAPluginStartedMidTypingHasTheTextAsItIs(t *testing.T) {
 	t.Parallel()
+	// the pause never comes in the cell: a plugin's start (its process, then its handshake) can take
+	// longer than the pause's 300 ms on a loaded runner, and the pause then moves the page to the
+	// next version first; set before the TUI starts, whose loop reads its own copy from then on
+	tune(t).pluginFeed = time.Hour
 	dir := t.TempDir()
 	installPlugin2(t, dir, "stats", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 60\nheight = 6\n[feed]\ndocument = true\n")
 	r, logs := pluginTUI(t, dir)
