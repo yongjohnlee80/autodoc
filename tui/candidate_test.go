@@ -191,6 +191,9 @@ func TestEachCandidateOwnsItsCard(t *testing.T) {
 	r.s.WaitForText(t, "the plugin alpha waits")
 	r.keys(t, key('y'))
 	r.waitNotice(t, "added beta at")
+	// the click finds A's toast on the screen drawn: waitNotice reads the notices, which are ahead of
+	// it, and B's toast arriving moves A's, so a click aimed before it is drawn can miss
+	r.s.WaitForText(t, "added beta at")
 
 	r.clickText(t, "the plugin alpha waits")
 	if q := r.question(t); !strings.Contains(q, "(alpha)") || r.card() != a {
