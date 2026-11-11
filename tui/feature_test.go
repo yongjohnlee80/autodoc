@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/tui/crew"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/parse/qml"
 )
@@ -286,7 +287,7 @@ func TestCoreSetTextSaysALayoutWithoutTheTextArea(t *testing.T) {
 
 	h := newHost(NewSession("unused", nil), Options{})
 	t.Cleanup(h.cancel)
-	core{h}.SetText(crewReplyText, "text") // no layout yet: must neither panic nor keep an error
+	core{h}.SetText(crew.ReplyTextID, "text") // no layout yet: must neither panic nor keep an error
 	if len(h.errs) != 0 {
 		t.Fatalf("SetText before a layout kept %v", h.errs)
 	}

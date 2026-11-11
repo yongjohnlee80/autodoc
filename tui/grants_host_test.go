@@ -3,12 +3,12 @@ package tui
 import (
 	"context"
 	"errors"
-	"slices"
 	"strings"
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/tui/agents"
+	"github.com/yongjohnlee80/autodoc/tui/crew"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
@@ -65,14 +65,9 @@ func TestARevokedCapabilityIsRefusedAndAskedForAgain(t *testing.T) {
 	r.s.WaitFor(t, "Agent permissions drawn", func(sc string) bool {
 		return strings.Contains(sc, "Agent permissions") && strings.Contains(sc, "CAPABILITY") && strings.Contains(sc, "editor.read")
 	})
-	onLoop(r, func() bool {
-		i := slices.IndexFunc(r.h.grantsView.rows.All(), func(g grantRow) bool { return g.holder == "agent:zen" && g.capability == "editor.read" })
-		if i < 0 {
-			t.Error("the dialog lists no editor.read of zen's")
-		}
-		r.h.grantsView.revoke(i)
-		return true
-	})
+	r.s.WaitFor(t, "the list holding the keys", func(string) bool { return r.focused(crew.GrantsListID) })
+	r.s.WaitForText(t, "zen (agent) holds editor.read") // the row under the cursor: the dialog lists zen's editor.read
+	r.keys(t, key('r'))                                 // its Revoke, as the user presses it
 	r.s.WaitForText(t, "revoke editor.read from zen?")
 	onLoop(r, func() bool { r.h.asker.Accepted(); r.h.closeDialog("confirm"); return true }) // as Allow does: the card closes
 	r.s.WaitFor(t, "the read revoked", func(string) bool { return !granted() })
@@ -106,7 +101,7 @@ func TestAgentPermissionsAnswersItsKeysFromTheList(t *testing.T) {
 		return strings.Contains(sc, "Agent permissions") && strings.Contains(sc, "zen (agent) holds editor.read")
 	})
 	r.s.WaitFor(t, "the list holding the keys", func(string) bool {
-		return r.focused(grantsListID)
+		return r.focused(crew.GrantsListID)
 	})
 
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyDown})

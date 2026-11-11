@@ -260,7 +260,7 @@ const tuiCouplingHeader = `# tui's feature map: each name (not each use) a group
 // ledger doesn't hold, or one it holds that is gone.
 func TestTuiFeaturesReachOnlyDown(t *testing.T) {
 	found, nfiles := tuiCrossings(t)
-	if nfiles < 150 {
+	if nfiles < 100 { // tui's own files: fewer at each step of the split, as its features move out
 		t.Fatalf("read %d files: the guard is not looking at tui", nfiles)
 	}
 	ledger := filepath.Join(repoRoot(t), "internal", "tuiaudit", tuiCouplingPath)
