@@ -170,8 +170,6 @@ gui	plugins	host	stagePanels	func
 gui	plugins	host	themeImport	var
 gui	plugins	host	toastPlugin	const
 gui	plugins	page	Host.native	method
-gui	plugins	todos	assignable	func
-gui	plugins	todos	newAgentPick	func
 gui	scripting	host	Host	type
 gui	scripting	host	Host.active	field
 gui	scripting	host	Host.after	method
@@ -258,7 +256,6 @@ gui	terminals	host	prefs.termFont	field
 gui	terminals	host	prefs.termPanelKeys	field
 gui	terminals	host	prefs.termTheme	field
 gui	terminals	host	themeNames	var
-gui	todos	host	prefTodosEdge	const
 term	page	host	Host	type
 term	page	host	Host.authorityNow	method
 term	page	host	Host.browser	field
@@ -412,8 +409,6 @@ term	plugins	host	stagePanels	func
 term	plugins	host	themeImport	var
 term	plugins	host	toastPlugin	const
 term	plugins	page	Host.native	method
-term	plugins	todos	assignable	func
-term	plugins	todos	newAgentPick	func
 term	scripting	host	Host	type
 term	scripting	host	Host.active	field
 term	scripting	host	Host.after	method
@@ -500,4 +495,3 @@ term	terminals	host	prefs.termFont	field
 term	terminals	host	prefs.termPanelKeys	field
 term	terminals	host	prefs.termTheme	field
 term	terminals	host	themeNames	var
-term	todos	host	prefTodosEdge	const

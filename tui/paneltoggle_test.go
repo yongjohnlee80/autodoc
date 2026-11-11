@@ -3,7 +3,12 @@
 package tui
 
 import (
+	"strconv"
 	"testing"
+
+	"github.com/yongjohnlee80/golib/parse/qml"
+
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // paneltoggle_test.go: a panel's toggle decides by whether the panel is seen whole, never by where
@@ -47,7 +52,11 @@ func TestATogglePressedOnCoveredTodosRaisesThemOnEveryTab(t *testing.T) {
 	r.s.WaitFor(t, "the todos open with the keyboard", func(string) bool { return r.focusedOn("todoOpenTable") })
 	views := []string{"todoOpenTable", "todoInProgressTable", "todoDeferredTable", "todoCompletedTable", "todoMonths", "todoVarsTable"}
 	for tab, view := range views {
-		onLoop(r, func() bool { todosOf(r).showTab(tab); return true })
+		if err := onLoop(r, func() error { // the tab's key (1–6) and a click on its title run it
+			return r.h.reg.Handlers["App.todosTab"]([]qml.SpecValue{{Kind: feature.ArgNum, Raw: strconv.Itoa(tab)}})
+		}); err != nil {
+			t.Fatal(err)
+		}
 		r.s.WaitFor(t, view+" with the keyboard", func(string) bool { return r.focusedOn(view) })
 		onLoop(r, func() bool { r.h.focusEditor(); return true })
 		r.s.WaitFor(t, "the page over the todos, on "+view, func(string) bool {

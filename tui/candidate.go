@@ -18,6 +18,7 @@ import (
 	regindex "github.com/yongjohnlee80/autodoc/core/registry"
 	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/todos"
 )
 
 // ONE CANDIDATE PER INSTALL OR UPDATE
@@ -80,7 +81,7 @@ type candidates struct {
 
 func newCandidates(c feature.Core) *candidates {
 	cs := &candidates{c: c, ops: map[string]*candidate{}, allocs: newAllocs()}
-	cs.pick = newAgentPick(c, "auditAgentPicker", "auditAgent", cs.auditWith)
+	cs.pick = todos.NewAgentPick(c, "auditAgentPicker", "auditAgent", cs.auditWith)
 	cs.pick.Scope = feature.TicketLocal
 	cs.pick.Cancel = cs.auditCancelled
 	return cs
@@ -301,7 +302,7 @@ func (cs *candidates) audit(c *candidate) {
 		if cs.auditing != c || c.state != opConfirming {
 			return
 		}
-		agents := defaultFirst(assignable(cs.c.AgentEntries()), cs.c.Prefs().Value(agents.PrefAgentDefaultCodename))
+		agents := defaultFirst(todos.Assignable(cs.c.AgentEntries()), cs.c.Prefs().Value(agents.PrefAgentDefaultCodename))
 		if len(agents) == 0 {
 			cs.auditing = nil
 			cs.c.Notify(cs.c.Tr("autodoc.notice.candidate.no_autodoc_agent_to_audit_with_add_one_in_system"))
