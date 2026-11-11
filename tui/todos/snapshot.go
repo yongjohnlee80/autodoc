@@ -46,16 +46,20 @@ func Tabs() []Tab {
 // VarsTab is the Variables tab's index, after the task tabs.
 func VarsTab() int { return varsTab }
 
-// HideStoreForTest puts the panel as it is before its store list answers, no store shown, and
-// answers what shows the store again: the host's TestTabReadWaitsForTheStore, whose helper
-// (tabRead) must wait for the store, holds the panel there. Both run on the loop.
+// HideStoreForTest is for the host's cells only; no production code calls it. It puts the panel
+// as it is before its store list answers, no store shown, and answers what shows the store
+// again: the host's TestTabReadWaitsForTheStore, whose helper (tabRead) must wait for the
+// store, holds the panel there. It replaces that cell's direct set of the panel's unexported
+// cur field, which a host cell can no longer reach. Both run on the loop.
 func (t *Todos) HideStoreForTest() (restore func()) {
 	cur := t.cur
 	t.cur = nil
 	return func() { t.cur = cur }
 }
 
-// SetVarsForTest shows rows as the Variables tab's, as the daemon's answer would: the host's
+// SetVarsForTest is for the host's cells only; no production code calls it. It shows rows as
+// the Variables tab's, as the daemon's answer would: the host's
 // TestASwitchLeavesNoEnglishOnScreen reads a row a model composes in Go (a variable set per
-// machine) in another language. On the loop.
+// machine) in another language. It replaces that cell's direct Reset of the panel's unexported
+// vars model, which a host cell can no longer reach. On the loop.
 func (t *Todos) SetVarsForTest(rows []map[string]any) { t.vars.Reset(rows) }
