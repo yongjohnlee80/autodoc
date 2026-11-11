@@ -71,7 +71,9 @@ func recoveryFile(dir string, k recoveryKey) string {
 }
 
 // writeRecovery keeps r, replacing an older copy of the same document: a temporary file renamed
-// over it, so a reader never sees half a copy. The folder and the copy are the user's alone.
+// over it, so a reader never sees half a copy. The copy is the user's alone on every OS, from the
+// moment it exists (userperm). The folder is made 0700 where modes apply, and otherwise is the
+// caller's to choose, as userperm trusts the folder a private file lives in.
 func writeRecovery(dir string, r recovered) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
