@@ -67,7 +67,7 @@ func heldGit(t *testing.T, env procenv.Env) (held procenv.Env, running func() bo
 	if err := copyFile(exe, git); err != nil {
 		t.Fatal(err)
 	}
-	startsOnceFree(t, git, real)
+	startsOnceFree(t, git, real, nil)
 	held = env.With("PATH="+bin+string(os.PathListSeparator)+env.Get("PATH"),
 		heldGitEnv+"="+real, heldGitEnv+"_READY="+ready, heldGitEnv+"_RELEASE="+go_, heldGitEnv+"_SEEN="+seen)
 	release = func() { _ = os.WriteFile(go_, nil, 0o600) } // idempotent: a second release writes it again
@@ -79,8 +79,9 @@ func heldGit(t *testing.T, env procenv.Env) (held procenv.Env, running func() bo
 // forked while the copy was still open for writing holds that descriptor until its child's exec
 // closes it, and until then an exec of the copy fails with "text file busy". Once one exec starts,
 // no writer is left (heldGit's is closed, and no later fork can inherit it), so the test's own
-// clone cannot fail so. Bounded: a copy that never starts fails its test.
-func startsOnceFree(t *testing.T, git, real string) {
+// clone cannot fail so. Bounded: a copy that never starts fails its test. busy, when not nil, is
+// called after each start the system refused as busy, before the next try.
+func startsOnceFree(t *testing.T, git, real string, busy func()) {
 	t.Helper()
 	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
 		cmd := exec.Command(git, "version")
@@ -91,6 +92,9 @@ func startsOnceFree(t *testing.T, git, real string) {
 		}
 		if !errors.Is(err, syscall.ETXTBSY) || time.Now().After(deadline) {
 			t.Fatalf("the held git does not start: %v", err)
+		}
+		if busy != nil {
+			busy()
 		}
 	}
 }
