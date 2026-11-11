@@ -1003,14 +1003,15 @@ func newFakeOllama(t *testing.T, models ...string) *fakeOllama {
 	return f
 }
 
-// refusedCallWait bounds TestAProviderInUse's wait for a refused embedding in the provider's log.
-// That is daemon work on the daemon's own schedule, which daemonWait (sized for CPU-bound work)
-// doesn't cover: the new file is followed and indexed, the embedder tries it (at once when woken,
-// at its next poll, 30 s, when the wake came while it was busy; after a failure it waits 1 s,
-// doubling), and the call meter writes the call at its next flush, every 2 s. On a loaded Windows
-// runner the call landed after 2.0 s and after 15.8 s. The clock only turns a call that never comes
-// into a failure rather than a hang.
-var refusedCallWait = 45 * time.Second * raceFactor
+// embedderWait bounds TestAProviderInUse's waits for what reaches the provider's log: its calls,
+// and a refused embedding's. That is daemon work on the daemon's own schedule, which daemonWait
+// (sized for CPU-bound work) doesn't cover: a file is followed and indexed, the embedder embeds it
+// (at once when woken, at its next poll, 30 s, when the wake came while it was busy; after a failure
+// it waits 1 s, doubling), and the call meter writes the calls at its next flush, every 2 s. On a
+// loaded Windows runner the refused call landed after 2.0 s and after 15.8 s, and the first usage
+// after more than 6 s. The clock only turns a call that never comes into a failure rather than a
+// hang.
+var embedderWait = 45 * time.Second * raceFactor
 
 // TestAProviderInUse: Use sets a provider up and semantic search runs with it, its usage and
 // calls shown under the list; one that does not set up is refused, the one in use staying; Words
@@ -1048,8 +1049,8 @@ func TestAProviderInUse(t *testing.T) {
 	})
 	r.s.WaitFor(t, "the dialog's green mark", func(string) bool { return r.markAbove(1) == "green semantic search · embedder" })
 	// its calls, metered and written every flushEvery (2s) by the daemon, under the list: the
-	// daemon's clock, not a frame's
-	r.waitWithin(t, "local's usage", daemonWait, func() bool {
+	// embedder's schedule, not a frame's (embedderWait)
+	r.waitWithin(t, "local's usage", embedderWait, func() bool {
 		r.h.p.Post(func() { _ = r.h.reg.Handlers["App.showProvider"]([]qml.SpecValue{num(0)}) })
 		sc := r.s.String()
 		return strings.Contains(sc, "requests ·") && strings.Contains(sc, "latest calls") && strings.Contains(sc, "· ok")
@@ -1062,8 +1063,8 @@ func TestAProviderInUse(t *testing.T) {
 		t.Fatal(err)
 	}
 	// the file followed, its embedding refused, the call written at the next flush: the embedder's
-	// schedule, not a CPU-bound wait (refusedCallWait)
-	r.waitWithin(t, "the refused call", refusedCallWait, func() bool {
+	// schedule, not a CPU-bound wait (embedderWait)
+	r.waitWithin(t, "the refused call", embedderWait, func() bool {
 		r.h.p.Post(func() { _ = r.h.reg.Handlers["App.showProvider"]([]qml.SpecValue{num(0)}) })
 		text := strings.Join(strings.Fields(strings.ReplaceAll(r.s.String(), "│", " ")), " ") // wrapped: running text
 		return strings.Contains(text, "at the usage limit") && strings.Contains(text, "rate limited")
