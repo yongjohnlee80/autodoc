@@ -300,6 +300,66 @@ func folderGoesAndComesBack(t *testing.T, poll bool) {
 	}
 }
 
+// TestAWatchedFoldersParentIsHeldByNothing: while a folder's watch runs, nothing of this process
+// holds its parent (Linux: no descriptor names it; Windows: it opens with no sharing at all), since
+// the watch's driver opens its root for each operation and keeps only the watch's own handle on the
+// folder. The folder removed under its watch, its buffer is badged deleted, and the parent, still
+// held by nothing, is removed too. (On Windows the parent's rename or removal while the watch runs
+// stays refused: a handle open beneath a folder holds it there.)
+func TestAWatchedFoldersParentIsHeldByNothing(t *testing.T) {
+	t.Parallel()
+	r, root := onDisk(t, Options{})
+	parent := filepath.Join(root, "x") // not the workspace's root, which the daemon holds while it serves it
+	sub := filepath.Join(parent, "sub")
+	if err := os.MkdirAll(sub, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	rewrite(t, root, "x/sub/c.md", "c\n")
+	r.s.WaitFor(t, "x/sub/c.md listed", func(string) bool {
+		return onLoop(r, func() bool { return slices.Contains(r.h.files.Paths, "x/sub/c.md") })
+	})
+	r.openOnDisk(t, "x/sub/c.md")
+	r.s.WaitFor(t, "x/sub watched", func(string) bool {
+		return onLoop(r, func() bool { w := r.h.watches[sub]; return w != nil && w.mode != "" })
+	})
+	r.s.WaitFor(t, "the watched folder's parent held by nothing", func(string) bool { // the daemon's scan may hold it a moment
+		held, err := dirHeld(parent)
+		if err != nil {
+			t.Error(err)
+			return true
+		}
+		return !held
+	})
+	if err := os.RemoveAll(sub); err != nil {
+		t.Fatalf("the watched folder, removed while its watch runs: %v", err)
+	}
+	r.s.WaitFor(t, "x/sub/c.md badged deleted", func(string) bool { return diskOf(r, "x/sub/c.md") == diskDeleted })
+	r.s.WaitFor(t, "the parent removed", func(string) bool { // a restart of the watch may open it a moment
+		err := os.Remove(parent)
+		return err == nil || errors.Is(err, os.ErrNotExist)
+	})
+}
+
+// TestAWatchedFolderThatIsALinkOutIsNotFollowed: a folder to watch that is a link leading out of its
+// parent is not watched through the link: the driver is opened at the parent, whose root refuses a
+// name that leads outside it, so no run starts (neither the native watch nor the poll) and the
+// watch says why.
+func TestAWatchedFolderThatIsALinkOutIsNotFollowed(t *testing.T) {
+	t.Parallel()
+	r, _ := onDisk(t, Options{})
+	out, at := t.TempDir(), t.TempDir()
+	rewrite(t, out, "c.md", "c\n")
+	link := filepath.Join(at, "link")
+	if err := os.Symlink(out, link); err != nil {
+		t.Fatal(err)
+	}
+	w := onLoop(r, func() *diskWatch { return r.h.holdWatch(link) })
+	t.Cleanup(func() { onLoop(r, func() bool { r.h.releaseWatch(w); return true }) })
+	if mode, err := onLoop(r, func() string { return w.mode }), onLoop(r, func() error { return w.err }); mode != "" || err == nil {
+		t.Fatalf("a link out of its folder's parent: watched (mode %q, err %v), want refused", mode, err)
+	}
+}
+
 // TestACheckOverlappingASaveIsStale: a check whose read is out while a save starts and lands is
 // stale when it answers: it changes nothing, and one fresh check runs.
 func TestACheckOverlappingASaveIsStale(t *testing.T) {
