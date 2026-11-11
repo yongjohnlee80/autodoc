@@ -12,7 +12,11 @@ func TestScratchRealShellStartTimes(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
-	for i := 1; i <= 10; i++ {
+	r.leader(t, '`') // the panel, and its first shell: the others open in it
+	for r.shellsRunning() < 1 {
+		time.Sleep(2 * time.Millisecond)
+	}
+	for i := 2; i <= 11; i++ {
 		var held time.Duration
 		start := time.Now()
 		onLoop(r, func() bool {
