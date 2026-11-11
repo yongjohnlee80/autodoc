@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"time"
@@ -220,6 +222,9 @@ func (h *Host) keepDraftOnLeave() {
 		h.unwatchFile(b) // a draft now: no file to follow
 		b.file.open, b.file.path, b.file.version = false, "", ""
 		b.file.disk, b.file.diskVersion, b.file.diskAsked = diskSame, "", ""
+		if b.saving {
+			fmt.Fprintf(os.Stderr, "SAVETRACE %s: gen %d→%d while saving (to a draft), by:\n%s\n", b.file.path, b.file.gen, b.file.gen+1, debug.Stack())
+		} // SCRATCH
 		b.file.gen++
 		b.buf.SetName("")
 		kept = true

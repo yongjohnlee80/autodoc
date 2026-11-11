@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"time"
@@ -671,6 +672,9 @@ func (h *Host) recheckBuffer(b *openBuffer) {
 // closeFile empties the active buffer: no file is open in it, and it is a new draft.
 func (h *Host) closeFile() {
 	h.unwatchFile(h.active)
+	if h.active.saving {
+		fmt.Fprintf(os.Stderr, "SAVETRACE %s: gen %d→%d while saving (closeFile), by:\n%s\n", h.active.file.path, h.active.file.gen, h.active.file.gen+1, debug.Stack())
+	} // SCRATCH
 	h.file.gen++
 	h.documentFor("", "", false)
 	h.editor.SetValue("")

@@ -2,6 +2,8 @@ package tui
 
 import (
 	"fmt"
+	"os"
+	"runtime/debug"
 	"slices"
 	"strings"
 
@@ -147,6 +149,9 @@ func (h *Host) activate(b *openBuffer) {
 // generation (a load); otherwise it only reads the current one (a save, a check).
 func (h *Host) bufferTicket(b *openBuffer, load bool) feature.Ticket {
 	if load {
+		if b.saving { // SCRATCH: a load while b's save is out moves its ticket
+			fmt.Fprintf(os.Stderr, "SAVETRACE %s: gen %d→%d while saving, by:\n%s\n", b.file.path, b.file.gen, b.file.gen+1, debug.Stack())
+		}
 		b.file.gen++
 	}
 	gen, sess := b.file.gen, h.session.Gen()
@@ -200,6 +205,9 @@ func (h *Host) dropBuffer(b *openBuffer) {
 		b.ed.Detach()
 		b.ed = nil
 	}
+	if b.saving {
+		fmt.Fprintf(os.Stderr, "SAVETRACE %s: gen %d→%d while saving (dropBuffer), by:\n%s\n", b.file.path, b.file.gen, b.file.gen+1, debug.Stack())
+	} // SCRATCH
 	b.file.gen++ // an answer still coming for b finds it gone
 	h.buffers = slices.DeleteFunc(h.buffers, func(o *openBuffer) bool { return o == b })
 	h.bufRecent = slices.DeleteFunc(h.bufRecent, func(o *openBuffer) bool { return o == b })
