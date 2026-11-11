@@ -344,15 +344,58 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	stopped := func() {
 		cancel()
 		<-done
-		cores.Wait()
-		if runErr != nil && !errors.Is(runErr, context.Canceled) && !said {
+		// said before any other wait, which could hang and bury it
+		if serverFailed(runErr) && !said {
 			said = true
 			t.Errorf("the test daemon's server did not shut down cleanly: %v", runErr)
 		}
+		cores.Wait()
 	}
 	d.stop = stopped
 	t.Cleanup(stopped) // before the store closes (its cleanup runs after)
 	return d
+}
+
+// serverFailed is whether a test daemon's server.Run result is a failure: anything but nil or
+// nothing but cancellation (a stop before it listened). A joined error is a failure when any part of
+// it is: a drain that timed out, joined with a cancellation, is still said.
+func serverFailed(err error) bool {
+	if err == nil {
+		return false
+	}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		for _, e := range joined.Unwrap() {
+			if serverFailed(e) {
+				return true
+			}
+		}
+		return false
+	}
+	return !errors.Is(err, context.Canceled)
+}
+
+// TestATestDaemonsServerFailureIsSaid: a cancellation alone is a clean stop; a drain failure is a
+// failure, joined with a cancellation or not.
+func TestATestDaemonsServerFailureIsSaid(t *testing.T) {
+	t.Parallel()
+	drain := errors.New("drain: timed out with a request still running")
+	for _, c := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"cancelled", context.Canceled, false},
+		{"cancelled, wrapped", fmt.Errorf("listen: %w", context.Canceled), false},
+		{"cancelled twice, joined", errors.Join(context.Canceled, context.Canceled), false},
+		{"a drain failure", drain, true},
+		{"a drain failure joined with a cancellation", errors.Join(context.Canceled, drain), true},
+		{"nested", errors.Join(context.Canceled, errors.Join(nil, drain)), true},
+	} {
+		if got := serverFailed(c.err); got != c.want {
+			t.Errorf("%s: serverFailed(%v) = %v, want %v", c.name, c.err, got, c.want)
+		}
+	}
 }
 
 func sortedKeys(m map[string][]string) []string {
