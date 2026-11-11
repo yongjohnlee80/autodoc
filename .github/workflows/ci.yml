@@ -252,9 +252,11 @@ jobs:
         run: |
           # the whole module's vet, not only the ported packages': it compiles every package's tests
           # for Windows, so a neutral test can't come to lean on a helper in a Unix-tagged file
-          go vet ./...
-          mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
-          go test -count=1 -timeout 20m "${pkgs[@]}"
+          # SCRATCH (never merged): the shell's start, natively (base 78f70028)
+          go test -count=5 -v -run '^TestScratchRealShellStartTimes$' ./tui/ > "$RUNNER_TEMP/real.log" 2>&1 || true
+          echo "== a real shell's start x5:"; grep -E 'LANDED|--- FAIL' "$RUNNER_TEMP/real.log" | cut -c1-200 || true
+          go test -count=1 -v -timeout 170m ./tui/ > "$RUNNER_TEMP/tui.log" 2>&1 || true
+          echo "== ./tui at the default parallelism: pass $(grep -c -- '^--- PASS' "$RUNNER_TEMP/tui.log" || true) fail $(grep -c -- '^--- FAIL' "$RUNNER_TEMP/tui.log" || true)"; grep -E -- '^--- FAIL|^    --- FAIL' "$RUNNER_TEMP/tui.log" || true
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
