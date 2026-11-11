@@ -398,6 +398,7 @@ func TestATestDaemonsServerFailureIsSaid(t *testing.T) {
 		{"nested", errors.Join(context.Canceled, errors.Join(nil, drain)), true},
 		{"a joined drain failure, wrapped", fmt.Errorf("shutdown: %w", errors.Join(context.Canceled, drain)), true},
 		{"a joined cancellation, wrapped", fmt.Errorf("shutdown: %w", errors.Join(context.Canceled, context.Canceled)), false},
+		{"a wrapped joined drain failure, joined again", errors.Join(fmt.Errorf("serve: %w", errors.Join(context.Canceled, drain)), context.Canceled), true},
 	} {
 		if got := serverFailed(c.err); got != c.want {
 			t.Errorf("%s: serverFailed(%v) = %v, want %v", c.name, c.err, got, c.want)
