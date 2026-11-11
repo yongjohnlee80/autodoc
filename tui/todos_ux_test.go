@@ -1,15 +1,10 @@
 package tui
 
 import (
-	"errors"
-	"fmt"
-	"slices"
-	"strings"
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/autodoc/tui/todos"
-	"github.com/yongjohnlee80/golib/parse/qml"
 )
 
 // TestTodosPanelOpensLargeAndKeepsTheUsersSize: before the user sizes it the panel is about 65% of

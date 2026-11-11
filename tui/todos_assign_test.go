@@ -2,21 +2,16 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 
 	"github.com/yongjohnlee80/autodoc/core/todo"
 	"github.com/yongjohnlee80/autodoc/tui/agents"
-	"github.com/yongjohnlee80/autodoc/tui/feature"
-	"github.com/yongjohnlee80/autodoc/tui/feature/featuretest"
 	"github.com/yongjohnlee80/autodoc/tui/todos"
 )
 
