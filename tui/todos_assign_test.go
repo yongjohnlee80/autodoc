@@ -118,7 +118,9 @@ func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 	r.keys(t, enter())
 	r.s.WaitForText(t, "start the agent?")
 	r.keys(t, key('y'))
-	r.s.WaitFor(t, "Scribe told", func(string) bool { return len(heard(heardDir, "scribe")) >= 4 })
+	// Yes starts Scribe, then hands it the task: an agent's start (its programs started), on
+	// agentStartWait, not a frame's clock, which a loaded runner's start outran
+	r.waitWithin(t, "Scribe told", agentStartWait, func() bool { return len(heard(heardDir, "scribe")) >= 4 })
 	x, ok := taskIn(t, d, "in-progress", "Draft the guide")
 	if !ok || x.Assignee != "autodoc:scribe" {
 		t.Fatalf("after A the task is %+v (in progress %v), want in progress for autodoc:scribe", x, ok)

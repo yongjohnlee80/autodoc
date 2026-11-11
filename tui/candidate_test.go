@@ -68,7 +68,8 @@ func TestAuditHandsAFreshCopyAndItsToastReopensTheCard(t *testing.T) {
 	c := r.card()
 	task := func(n int) (root, copy string) {
 		t.Helper()
-		r.s.WaitFor(t, "the audit handed over", func(string) bool { return len(heard(heardDir, "scribe")) >= 4*n })
+		// the first hand-over starts Scribe: an agent's start, on agentStartWait, not a frame's clock
+		r.waitWithin(t, "the audit handed over", agentStartWait, func() bool { return len(heard(heardDir, "scribe")) >= 4*n })
 		got := heard(heardDir, "scribe")[4*(n-1):]
 		if got[0] != "Task: Audit echo at "+full[:7] || !strings.HasPrefix(got[3], "Instruction: Audit the repository") {
 			t.Fatalf("Scribe heard %q", got)
