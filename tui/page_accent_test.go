@@ -61,6 +61,7 @@ func TestThePagesAccentIsTheThemesDocumentAccent(t *testing.T) {
 				daemonOpts{prefs: map[string]string{"tui.theme": theme}})
 			r := runTUISized(t, NewSession(d.sock, nil), Options{}, 80, 20)
 			r.connected(t)
+			r.ready(t) // the workspace entered: an open before it is no note of a workspace in use
 			r.h.p.Post(func() { r.h.openPath("a.md") })
 			r.s.WaitFor(t, "a.md Rendered by the editor, its flowchart drawn", func(sc string) bool {
 				_, drawn := outlineFG(r)
