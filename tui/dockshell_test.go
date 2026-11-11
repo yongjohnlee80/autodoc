@@ -45,28 +45,35 @@ func lineShellMain() int {
 // runLineShellTUI is runShellTUI on every OS, its shell the line shell.
 func runLineShellTUI(t *testing.T, prefs map[string]string) (*daemon, *running) {
 	t.Helper()
-	// Its own folder, not t.TempDir's: on Windows a running program's file can't be removed, and the
-	// shell may still be exiting as the test ends. Registered before the program starts, so it runs
-	// after the program's own cleanup has stopped its shells (cleanups run newest first); retried
-	// while Windows still holds the exiting shell's file.
-	bin, err := os.MkdirTemp("", "autodoc-line-shell-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		for deadline := time.Now().Add(10 * time.Second); os.RemoveAll(bin) != nil && time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
-		}
-	})
+	bin := shellTempDir(t, "autodoc-line-shell-")
 	name := "line-shell"
 	if runtime.GOOS == "windows" {
 		name = "pwsh" // the interactive shell the terminal looks for first (internal/usershell)
 	}
 	sh := standIn(t, bin, name)
-	home := t.TempDir()
+	home := shellTempDir(t, "autodoc-line-home-") // the shell's working folder on Windows
 	tuneEnv(t, "SHELL="+sh, "HOME="+home, "USERPROFILE="+home, "PS1=$ ", lineShellEnv+"=1",
 		"PATH="+bin+string(os.PathListSeparator)+systemPath())
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: prefs})
 	return d, attached(t, d)
+}
+
+// shellTempDir is a folder of the line shell's (its program, its home), not t.TempDir's: on Windows
+// a running program's file, or the working folder of a process, can't be removed, and the shell may
+// still be exiting as the test ends. Its removal is registered before the program starts, so it runs
+// after the program's own cleanup has stopped its shells (cleanups run newest first), and is retried
+// while Windows still holds the exiting shell.
+func shellTempDir(t *testing.T, pattern string) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", pattern)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		for deadline := time.Now().Add(10 * time.Second); os.RemoveAll(dir) != nil && time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		}
+	})
+	return dir
 }
 
 // shellInTheTerminal opens the terminal and waits for its shell's prompt, the keyboard in it.
