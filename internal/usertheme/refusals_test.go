@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
+
+	"github.com/yongjohnlee80/autodoc/internal/localfs"
 )
 
 // A theme's name is a QML module segment, [a-z][a-z0-9_]*, and never a built-in's: anything else
@@ -175,5 +177,17 @@ func TestDirectoryIsBesideTheConfig(t *testing.T) {
 	got, err = Directory("")
 	if err != nil || filepath.Base(got) != "themes" || !strings.HasPrefix(got, os.Getenv("XDG_CONFIG_HOME")) {
 		t.Errorf("Directory of the default config: %q, %v", got, err)
+	}
+}
+
+// A themes folder that is a file is a problem Open says, on every OS: Windows reports reading a
+// file as a folder as "not found", which once passed for "no themes".
+func TestOpenSaysAThemesFolderThatIsAFile(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "themes")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if c := Open(file); len(c.Problems) != 1 || !errors.Is(c.Problems[0], localfs.ErrNotAFolder) {
+		t.Fatalf("a themes file: %v; want its one problem, that it is not a folder", c.Problems)
 	}
 }

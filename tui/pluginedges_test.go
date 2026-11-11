@@ -2,10 +2,13 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/internal/localfs"
 )
 
 // noticed is a pluginHost that only records its notices.
@@ -53,8 +56,8 @@ func TestPluginAndPackageFolderEdges(t *testing.T) {
 	if errs := h.loadPackages(); errs != nil || len(h.userPackages) != 0 {
 		t.Fatalf("a file and a stage: %v, packages %v; want both skipped", errs, h.userPackages)
 	}
-	if errs := (&Host{luaDir: filepath.Join(lua, "notes.lua")}).loadPackages(); len(errs) != 1 {
-		t.Fatalf("a lua folder that is a file: %v; want its one error", errs)
+	if errs := (&Host{luaDir: filepath.Join(lua, "notes.lua")}).loadPackages(); len(errs) != 1 || !errors.Is(errs[0], localfs.ErrNotAFolder) {
+		t.Fatalf("a lua folder that is a file: %v; want its one error, that it is not a folder", errs)
 	}
 
 	if errs := (&Host{}).loadPluginPackages(); errs != nil {
