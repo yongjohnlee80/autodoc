@@ -155,7 +155,7 @@ func (h *Host) grantAnswered(requester string, caps []string, allowed bool) {
 	}
 	if codename, ok := strings.CutPrefix(requester, "agent:"); ok {
 		if h.crew != nil {
-			h.crew.grantAnswered(codename, caps, allowed)
+			h.crew.GrantAnswered(codename, caps, allowed)
 		}
 		return
 	}
@@ -167,5 +167,5 @@ func (h *Host) crewHeld() (scope string, epoch int64, ok bool) {
 	if h.crew == nil {
 		return "", 0, false
 	}
-	return h.crew.held()
+	return h.crew.Held()
 }

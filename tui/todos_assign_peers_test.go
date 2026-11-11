@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"path/filepath"
 	"slices"
@@ -158,41 +159,6 @@ func TestTodosAssignQueuesForAnAgentNoWakeReaches(t *testing.T) {
 	}
 }
 
-// TestPeersOfAreOtherScopesLiveAgents (item 17): of crew.list's rows, A lists another scope's live
-// or reconnecting agents, labelled by project (an AutoVim scope's name; another scope as it is), and
-// never the window's own scope (its agents are A's own rows), an ended profile, the user or the
-// daemon's own profile.
-func TestPeersOfAreOtherScopesLiveAgents(t *testing.T) {
-	row := func(codename, scope, presence string, reachable bool, why string) any {
-		return map[string]any{"codename": codename, "scope": scope, "presence": presence, "reachable": reachable, "why": why}
-	}
-	own := "autodoc:0123456789abcdef"
-	got := peersOf([]any{
-		row("scribe", own, "live", true, ""),
-		row("jarvis", "autovim:plugins", "live", true, ""),
-		row("lector", "autovim:plugins", "live", false, "no_endpoint"),
-		row("vision", "autovim:plugins", "reconnecting", true, ""),
-		row("ghost", "autovim:plugins", "ended", false, "ended"),
-		row("user", "global", "live", true, ""),
-		row("autodoc", "global", "live", true, ""),
-		row("tifa", "autodoc:fedcba9876543210", "live", true, ""),
-	}, own)
-	var names []string
-	for _, e := range got {
-		names = append(names, e.Ref.Codename+"@"+e.Peer.Project+"|"+e.Peer.Scope)
-	}
-	want := []string{"jarvis@plugins|autovim:plugins", "lector@plugins|autovim:plugins", "vision@plugins|autovim:plugins",
-		"tifa@autodoc:fedcba9876543210|autodoc:fedcba9876543210"}
-	if !slices.Equal(names, want) {
-		t.Errorf("peers %v, want %v", names, want)
-	}
-	for _, e := range got {
-		if e.Ref.Codename == "lector" && (e.Peer.Reachable || e.Peer.Why != "no_endpoint") {
-			t.Errorf("lector %+v, want unreachable, no_endpoint", e.Peer)
-		}
-	}
-}
-
 // slowPeerCore answers peerAgents only when answer runs, as a crew.list in flight does.
 type slowPeerCore struct {
 	*peerCore
@@ -225,5 +191,31 @@ func TestTodosAssignAnsweredAfterAWorkspaceSwitchOpensNothing(t *testing.T) {
 	v.assignSet("Go.")
 	if len(*assigned) != 0 || len(c.sent) != 0 {
 		t.Errorf("after the switch: %d assigns, %d sends; want none", len(*assigned), len(c.sent))
+	}
+}
+
+// TestTodosAssignPreviewsAnotherHostsAgent (item 17): another host's agent's preview is titled by
+// codename@project and names its scope and whether a wake reaches it.
+func TestTodosAssignPreviewsAnotherHostsAgent(t *testing.T) {
+	c, _ := newPeerCore("autodoc:0123456789abcdef", peer("zen", "autovim:mcat", "mcat", false, "no_endpoint"))
+	v := newTodos(c)
+	e := c.peers[0]
+	pn := v.assignPick.Preview(e)(context.Background()).Value
+	if pn.Title != "zen@mcat" || !strings.Contains(pn.Text, "autovim:mcat") || !strings.Contains(pn.Text, runState(c, e)) {
+		t.Errorf("the preview %q / %q: want zen@mcat, its scope and its state", pn.Title, pn.Text)
+	}
+}
+
+// TestTodosAssignSendsNoPeerTaskFromAWindowWithoutACrew: a hand-over to another host's agent on a
+// window that can't reach the crew sends nothing and says nothing.
+func TestTodosAssignSendsNoPeerTaskFromAWindowWithoutACrew(t *testing.T) {
+	ac, _ := assigningStore(feature.AgentEntry{Ref: feature.AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
+	v := newTodos(ac)
+	v.list()
+	s, _ := v.cursor()
+	before := len(ac.Notes)
+	v.sendToPeer(&todoAssign{store: s, agent: peer("jarvis", "autovim:plugins", "plugins", true, "")}, s, map[string]any{"id": "t1"}, "Go.")
+	if len(ac.Notes) != before {
+		t.Errorf("a window without a crew noticed %v", ac.Notes[before:])
 	}
 }

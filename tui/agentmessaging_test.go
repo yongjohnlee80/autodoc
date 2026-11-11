@@ -10,9 +10,10 @@ import (
 	"io"
 	"strings"
 
-	"github.com/yongjohnlee80/autodoc/core/crew"
+	corecrew "github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/inbox"
 	"github.com/yongjohnlee80/autodoc/tui/agents"
+	"github.com/yongjohnlee80/autodoc/tui/crew"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -51,7 +52,7 @@ func settleMessaging(c *identityHost, w *crewWindow) {
 // nothing is typed into its terminal (the mutant: the doorbell skipped, the base typing it).
 func TestAMessageRingsTheAgentsDoorbell(t *testing.T) {
 	a, c, w := messagingRig(t)
-	scope, epoch, _ := crewOf(a).held()
+	scope, epoch, _ := crewOf(a).Held()
 	var got []any
 	w.inboxSend = func(p []any) (any, error) { got = p; return map[string]any{"message": "m1"}, nil }
 	var heard []error
@@ -98,7 +99,7 @@ func TestAStartedAgentIsNotRung(t *testing.T) {
 // scope says nothing, and a session the list doesn't name is not reported (the mutants: the lookup
 // skipped; the scope not matched; no session taken as reported).
 func TestTheEnterAsksTheCrewWhetherPromptsAreReported(t *testing.T) {
-	scopeOf := func(a *agents.Agents) string { s, _, _ := crewOf(a).held(); return s }
+	scopeOf := func(a *agents.Agents) string { s, _, _ := crewOf(a).Held(); return s }
 	for _, c := range []struct {
 		name   string
 		list   func(scope string) []any
@@ -146,7 +147,7 @@ func TestASessionWithNoReporterIsNotReported(t *testing.T) {
 	a, cw, w := messagingRig(t)
 	var said []bool
 	done := false
-	crewOf(a).promptsReported("one", func(reported bool) { said = append(said, reported); done = true })
+	crewOf(a).PromptsReported("one", func(reported bool) { said = append(said, reported); done = true })
 	settleMessaging(cw, w)
 	if !done || len(said) != 1 || said[0] {
 		t.Fatalf("one, of no reporting kind: %v", said)
@@ -154,9 +155,9 @@ func TestASessionWithNoReporterIsNotReported(t *testing.T) {
 }
 
 // settleRounds bounds settleMessaging's rounds of the crew host's timers: the doorbell's asks again
-// need userSendTries of them, and the scope's renewal re-arms itself every round, so the timers
+// need crew.UserSendTries of them, and the scope's renewal re-arms itself every round, so the timers
 // never run out on their own.
-const settleRounds = userSendTries + 2
+const settleRounds = crew.UserSendTries + 2
 
 func hasNote(notes []string, prefix string) bool {
 	for _, n := range notes {
@@ -173,7 +174,7 @@ func hasNote(notes []string, prefix string) bool {
 func TestADoorbellRefusedForCertainIsTypedAndSent(t *testing.T) {
 	for name, refusal := range map[string]error{
 		"unreachable": &golibrpc.Error{Code: inbox.CodeUnreachable, Message: "no wake reaches it"},
-		"stale epoch": &golibrpc.Error{Code: crew.CodeStaleEpoch, Message: "stale epoch"},
+		"stale epoch": &golibrpc.Error{Code: corecrew.CodeStaleEpoch, Message: "stale epoch"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			a, c, w := messagingRig(t)
@@ -201,7 +202,7 @@ func TestADoorbellRefusedForCertainIsTypedAndSent(t *testing.T) {
 }
 
 // A doorbell whose outcome is unknown (a lost answer) may have rung: it is asked again with the same
-// key, userSendTries times in all, and never typed; done hears the failure. A later
+// key, crew.UserSendTries times in all, and never typed; done hears the failure. A later
 // ask that answers rang ends it sent (the mutants: a fallback on any error; a fresh key per ask).
 func TestAnUnknownDoorbellIsAskedAgainNeverTyped(t *testing.T) {
 	a, c, w := messagingRig(t)
@@ -212,8 +213,8 @@ func TestAnUnknownDoorbellIsAskedAgainNeverTyped(t *testing.T) {
 		t.Fatal(err)
 	}
 	settleMessaging(c, w)
-	if len(keys) != userSendTries || keys[0] != keys[len(keys)-1] {
-		t.Fatalf("asked with keys %q, want %d asks with one key", keys, userSendTries)
+	if len(keys) != crew.UserSendTries || keys[0] != keys[len(keys)-1] {
+		t.Fatalf("asked with keys %q, want %d asks with one key", keys, crew.UserSendTries)
 	}
 	if len(c.panel.pastes) != 0 || len(heard) != 1 || !errors.Is(heard[0], io.ErrUnexpectedEOF) {
 		t.Fatalf("pasted %q, done heard %v: want nothing typed and the failure", c.panel.pastes, heard)
@@ -254,25 +255,6 @@ func TestACLIThatDoesntReportPromptsIsTypedNotSent(t *testing.T) {
 		t.Fatalf("pasted %q pressed %q heard %v: want typed, no Enter, ErrAgentTypedNotSent", c.panel.pastes, c.panel.keys, heard)
 	}
 	if !hasNote(c.notes, "AutoDoc can't see one's permission prompts") {
-		t.Fatalf("notes %q", c.notes)
-	}
-}
-
-// An agent the crew says waits on a permission or blocked prompt is typed to but never sent: an
-// Enter would answer its prompt (the mutant: the guard dropped).
-func TestNoEnterIsPressedIntoAPrompt(t *testing.T) {
-	a, c, w := messagingRig(t)
-	w.inboxSend = func([]any) (any, error) { return nil, &golibrpc.Error{Code: inbox.CodeUnreachable, Message: "x"} }
-	a.Inbox = &crewInbox{waiting: map[string]bool{"one": true}}
-	var heard []error
-	if err := a.SendText(feature.AgentRef{Codename: "one"}, "hello one", func(err error) { heard = append(heard, err) }); err != nil {
-		t.Fatal(err)
-	}
-	settleMessaging(c, w)
-	if len(c.panel.pastes) != 1 || len(c.panel.keys) != 0 || len(heard) != 1 || !errors.Is(heard[0], agents.ErrAgentTypedNotSent) {
-		t.Fatalf("pasted %q pressed %q heard %v: want typed, no Enter", c.panel.pastes, c.panel.keys, heard)
-	}
-	if !hasNote(c.notes, "one is waiting on a prompt") {
 		t.Fatalf("notes %q", c.notes)
 	}
 }

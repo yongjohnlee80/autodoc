@@ -57,6 +57,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/internal/usertheme"
 	"github.com/yongjohnlee80/autodoc/script"
 	"github.com/yongjohnlee80/autodoc/tui/agents"
+	"github.com/yongjohnlee80/autodoc/tui/crew"
 	"github.com/yongjohnlee80/autodoc/tui/explorer"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/autodoc/tui/relations"
@@ -162,10 +163,10 @@ type Host struct {
 	// Stateful terminal and agent behavior is owned by these Features.
 	terminals  *terminals
 	agents     *agents.Agents
-	crew       *crewHost   // the window's crew scope (crewhost.go)
-	crewInbox  *crewInbox  // the human's crew inbox in this window (crewinbox.go)
-	inboxView  *inboxView  // the inbox dialog: the user's mail, SPC a i (crewinboxview.go)
-	grantsView *grantsView // Agent permissions: the grants given, and Revoke (grants.go)
+	crew       *crew.CrewHost   // the window's crew scope (crewhost.go)
+	crewInbox  *crew.Inbox      // the human's crew inbox in this window (crewinbox.go)
+	inboxView  *crew.InboxView  // the inbox dialog: the user's mail, SPC a i (crewinboxview.go)
+	grantsView *crew.GrantsView // Agent permissions: the grants given, and Revoke (grants.go)
 	// The recent-files Feature owns its rows and persisted list.
 	recent *explorer.Recent
 	tiles  *tiles // the base's Layout: each window's tiling preferences (tilelayout.go)
@@ -289,7 +290,7 @@ type Host struct {
 	diskFS  func(dir string) (vfs.FS, error)
 	// todoMoves are the latest task moves the todo feed read, oldest first, to name where a gone
 	// file went (todomove.go)
-	todoMoves []todoFileChange
+	todoMoves []crew.TodoFileChange
 	// openNewBuffer: File › Open's next choice opens in a buffer of its own (openPickerNewBuffer),
 	// passed to that open alone (openRefWith)
 	openNewBuffer bool
@@ -550,17 +551,15 @@ func newHost(session *Session, opt Options) *Host {
 	h.terminals = newTerminals(unboundPanelHost(core{h}))
 	h.terminals.startLua = h.startLuaShell
 	h.agents = agents.NewAgents(unboundPanelHost(core{h}), &h.seams, opt.AgentDir, opt.ConfigPath)
-	h.crew = newCrewHost(core{h}, h.seams.env, opt.AgentDir)
+	h.crew = crew.NewHost(core{h}, h.seams.env, opt.AgentDir, crew.HostHooks{
+		DeliverJob:  h.agents.DeliverFallback,
+		OnClaim:     func() { h.crewInbox.RecheckFallbacks() }, // the scope changed hands: what waited for a host may not
+		OnTodoFiles: h.todoFilesChanged,
+	})
 	h.agents.Crew = h.crew
-	h.crew.deliverJob = h.agents.DeliverFallback
-	h.crew.onTodoFiles = h.todoFilesChanged
-	h.crewInbox = newCrewInbox(core{h}, h.agents.RaiseSession)
-	h.crewInbox.took = h.crew.tookJob
-	h.crew.onClaim = h.crewInbox.recheckFallbacks // the scope changed hands: what waited for a host may not
+	h.crewInbox, h.inboxView = crew.NewInbox(core{h}, h.agents.RaiseSession, h.crew.TookJob)
 	h.agents.Inbox = h.crewInbox
-	h.inboxView = newInboxView(core{h}, h.crewInbox)
-	h.crewInbox.view = h.inboxView
-	h.grantsView = newGrantsView(core{h}) // one for the program: the registry is built again, the dialog is not
+	h.grantsView = crew.NewGrantsView(core{h}) // one for the program: the registry is built again, the dialog is not
 	if opt.ConfigPath != "" {
 		h.graphUserFile = filepath.Join(filepath.Dir(opt.ConfigPath), "graph.toml")
 		// absolute: the daemon refuses a gated call whose protect is relative, rather than protect nothing
