@@ -254,7 +254,11 @@ jobs:
           # for Windows, so a neutral test can't come to lean on a helper in a Unix-tagged file
           go vet ./...
           mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
-          go test -count=1 -timeout 20m "${pkgs[@]}"
+          # SCRATCH (never merged): the same go test, -v only so the passing cells' landings print
+          go test -count=1 -v -timeout 20m "${pkgs[@]}" > "$RUNNER_TEMP/all.log" 2>&1 && rc=0 || rc=$?
+          echo "== rc=$rc"; grep -E -- '^(ok|FAIL)\s+github.com/yongjohnlee80/autodoc/tui\s|^--- FAIL' "$RUNNER_TEMP/all.log" || true
+          grep -E -- 'LANDING (candidates|audit)' "$RUNNER_TEMP/all.log" | grep -v 'every goroutine' | sed -E 's/^ +[a-z_]+_test\.go:[0-9]+: //' | cut -c1-200 || true
+          [ $rc = 0 ]
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
