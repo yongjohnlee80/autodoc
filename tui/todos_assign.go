@@ -11,6 +11,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 
 	"github.com/yongjohnlee80/autodoc/tui/agents"
+	"github.com/yongjohnlee80/autodoc/tui/crew"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -91,7 +92,7 @@ func agentPane(c feature.Core, e feature.AgentEntry) feature.Pane {
 		return feature.Pane{Title: peerLabel(e), Text: b.String()}
 	}
 	fmt.Fprintf(&b, "## %s\n\n%s\n", e.Name, c.Trf("autodoc.text.todos_assign.codename_assignee_command",
-		e.Ref.Codename, assigneePrefix+e.Ref.Codename, e.Command, runState(c, e)))
+		e.Ref.Codename, crew.AssigneePrefix+e.Ref.Codename, e.Command, runState(c, e)))
 	if !e.Running {
 		b.WriteString("\n" + c.Tr("autodoc.text.todos_assign.not_running_you_ll_be_asked_to_start_it_and_the") + "\n")
 	}
@@ -173,7 +174,7 @@ func (t *todos) assignSet(text string) {
 	if instruction == "" {
 		instruction = assignDefault
 	}
-	assignee := assigneePrefix + a.agent.Ref.Codename
+	assignee := crew.AssigneePrefix + a.agent.Ref.Codename
 	if a.agent.Peer != nil {
 		// another host's agent: its host's own form, the bare codename, so its panel shows it as its
 		// agent's; the window's scope below makes every Neovim's notifier leave it to the window

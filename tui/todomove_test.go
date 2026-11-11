@@ -15,6 +15,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/todo"
 	"github.com/yongjohnlee80/autodoc/core/todo/todotest"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
+	"github.com/yongjohnlee80/autodoc/tui/crew"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -259,7 +260,7 @@ func TestAMoveTheFeedReadIsFollowedWithoutTheDiskWatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := filepath.Join(root, ".todo-list")
-	r.h.p.Post(func() { r.h.todoFilesChanged([]todoFileChange{{store: store, from: task.Path, to: moved.Path}}) })
+	r.h.p.Post(func() { r.h.todoFilesChanged([]crew.TodoFileChange{{Store: store, From: task.Path, To: moved.Path}}) })
 	r.s.WaitFor(t, "the buffer on "+to, func(string) bool { return r.file().path == to })
 	if f := r.file(); f.dirty || !strings.Contains(r.editorText(), "status: completed") {
 		t.Fatalf("after the feed's move: dirty %v, text %q; want the completed task, clean", f.dirty, r.editorText())
@@ -288,8 +289,8 @@ func TestAnotherStoresMoveIsNotFollowed(t *testing.T) {
 	}
 	store, other := filepath.Join(root, ".todo-list"), filepath.Join(t.TempDir(), ".todo-list")
 	r.h.p.Post(func() {
-		r.h.todoFilesChanged([]todoFileChange{{store: store, from: task.Path, to: moved.Path},
-			{store: other, from: task.Path, to: "deferred/" + task.ID + ".md"}})
+		r.h.todoFilesChanged([]crew.TodoFileChange{{Store: store, From: task.Path, To: moved.Path},
+			{Store: other, From: task.Path, To: "deferred/" + task.ID + ".md"}})
 	})
 	r.s.WaitFor(t, "the buffer to leave "+from, func(string) bool { return r.file().path != from })
 	if got := r.file().path; got != to {
@@ -314,7 +315,7 @@ func TestAMoveToAnotherTasksFileIsNotFollowed(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := filepath.Join(root, ".todo-list")
-	r.h.p.Post(func() { r.h.todoFilesChanged([]todoFileChange{{store: store, from: task.Path, to: y.Path}}) })
+	r.h.p.Post(func() { r.h.todoFilesChanged([]crew.TodoFileChange{{Store: store, From: task.Path, To: y.Path}}) })
 	r.s.WaitFor(t, "the buffer to leave "+from, func(string) bool { return r.file().path != from })
 	if got := r.file().path; got != to {
 		t.Fatalf("the buffer followed to %s, want the task's own file, %s", got, to)

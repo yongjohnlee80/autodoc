@@ -14,6 +14,7 @@ import (
 	"github.com/yongjohnlee80/golib/vfs/local"
 
 	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/autodoc/tui/crew"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -331,7 +332,7 @@ type diskSnap struct {
 	raw           bool
 	version       string
 	saves         uint64
-	hint          *todoFileChange
+	hint          *crew.TodoFileChange
 }
 
 // diskRead is a check's read of the file through the daemon; missing, fate is what became of its
