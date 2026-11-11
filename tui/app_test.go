@@ -552,7 +552,9 @@ func (r *running) editorText() string { return onLoop(r, r.h.core.Value) }
 
 func (r *running) waitFile(t *testing.T, p string) {
 	t.Helper()
-	r.s.WaitFor(t, "note "+p+" open", func(string) bool { n := r.file(); return n.open && n.path == p && !n.dirty })
+	// the open is a read through the daemon, a round trip: on daemonWait, as waitOpened, not a frame's
+	// clock (a loaded runner under -race still showed "opening page.md…" at WaitTimeout)
+	r.waitWithin(t, "note "+p+" open", daemonWait, func() bool { n := r.file(); return n.open && n.path == p && !n.dirty })
 	r.waitStatus(t, "opened "+p)
 }
 
