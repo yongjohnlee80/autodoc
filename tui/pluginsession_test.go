@@ -550,7 +550,7 @@ func TestAPluginOpensAPathAndUpdatesItself(t *testing.T) {
 	}
 	r.pluginCommand("opener", "callwith", "1", "file.open_path", abs)
 	waitSaid(t, logs, "opener", "result 1 ")
-	r.waitOpen(t, "", abs)
+	r.lands(t, "plugin open: the file open", func() bool { f := r.file(); return f.open && f.ws == "" && f.path == abs && !f.dirty })
 	r.pluginCommand("opener", "callwith", "2", "file.open_path", "note.sql")
 	waitSaid(t, logs, "opener", "result 2 ")
 	r.pluginCommand("opener", "callwith", "3", "plugins.update", "other")

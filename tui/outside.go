@@ -3,8 +3,10 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/tui/widget/files"
@@ -134,9 +136,13 @@ func (h *Host) openAbsoluteAs(a authority, abs string) {
 	}
 	abs = filepath.Clean(abs)
 	tk := h.ticket(nil, feature.TicketWorkspace)
+	t0 := time.Now() // SCRATCH: the open's phases, to stderr
+	fmt.Fprintf(os.Stderr, "OPENTRACE %s: asked, gated %v\n", abs, a.gated())
 	do(h, func(ctx context.Context) located {
 		if a.gated() {
+			fmt.Fprintf(os.Stderr, "OPENTRACE %s: file.locate sent at +%s\n", abs, time.Since(t0).Round(time.Millisecond))
 			res, err := h.call(withAuthority(ctx, a), "file.locate", abs)
+			fmt.Fprintf(os.Stderr, "OPENTRACE %s: file.locate returned at +%s: %v %v\n", abs, time.Since(t0).Round(time.Millisecond), res != nil, err)
 			if err != nil {
 				return located{err: localOnly(err)}
 			}
@@ -144,8 +150,11 @@ func (h *Host) openAbsoluteAs(a authority, abs string) {
 				return located{err: fmt.Errorf("%s is outside the workspace: a script may not open it", abs)}
 			}
 		}
-		return h.locate(ctx, abs)
+		l := h.locate(ctx, abs)
+		fmt.Fprintf(os.Stderr, "OPENTRACE %s: locate returned at +%s: ws %q path %q err %v\n", abs, time.Since(t0).Round(time.Millisecond), l.ws, l.path, l.err)
+		return l
 	}, func(l located) {
+		fmt.Fprintf(os.Stderr, "OPENTRACE %s: back on the loop at +%s, ticket current %v\n", abs, time.Since(t0).Round(time.Millisecond), tk.Current())
 		if !tk.Current() {
 			return
 		}
