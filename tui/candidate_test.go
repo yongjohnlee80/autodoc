@@ -120,7 +120,7 @@ func TestAuditHandsAFreshCopyAndItsToastReopensTheCard(t *testing.T) {
 	r.s.WaitForText(t, "audit with an agent")
 	r.s.WaitForText(t, "Scribe  (scribe)")
 	r.keys(t, enter())
-	r.s.WaitForText(t, "start the agent?")
+	r.landsText(t, "audit: start the agent?", "start the agent?")
 	r.keys(t, key('y'))
 	root1, copy1 := task(1)
 	settled(1, false) // the agent was started for it: not rung
@@ -187,7 +187,7 @@ func TestEachCandidateOwnsItsCard(t *testing.T) {
 	}
 
 	add(beta)
-	r.s.WaitFor(t, "B's card", func(string) bool { c := r.card(); return c != nil && c.name == "beta" })
+	r.lands(t, "candidates: B's card", func() bool { c := r.card(); return c != nil && c.name == "beta" })
 	r.s.WaitForText(t, "the plugin alpha waits")
 	r.keys(t, key('y'))
 	r.waitNotice(t, "added beta at")
