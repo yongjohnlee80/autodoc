@@ -383,6 +383,10 @@ func runTUI(t *testing.T, sess *Session, opt Options) *running {
 		opt.seams = seamsFor(t) // the test's own, if it tuned any (seams_test.go)
 	}
 	h := newHost(sess, opt)
+	// Run's end, once decltest has stopped the program (registered first, it runs after): what each
+	// feature started is stopped and waited for, a plugin's process among them, before the test's
+	// folders go (on Windows a folder a process runs in can't be removed)
+	t.Cleanup(func() { h.reg.Stopped() })
 	s := decltest.RunWith(t, 100, 30, h.attach, h.options(opt)...)
 	t.Cleanup(h.cancel)
 	return &running{h: h, s: s}
