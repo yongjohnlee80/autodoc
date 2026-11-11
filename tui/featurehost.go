@@ -14,6 +14,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/tui/agents"
+	"github.com/yongjohnlee80/autodoc/tui/crew"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/autodoc/tui/system"
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -51,7 +52,7 @@ func (h *Host) features() []feature.Feature {
 	fs = append(fs, &htmlPaneCells{h: h})                                                                                             // the HTML preview pane on a terminal (htmlpane_cells.go)
 	fs = append(fs, h.relationViewFeatures()...)                                                                                      // the GUI's GlobeMap and Mindmap (relationmap.go)
 	fs = append(fs, system.NewProfiling(core{h}, h.profiler, func(ctx context.Context, p string) error { return h.browser(ctx, p) })) // System › Profiling (profiling.go)
-	fs = append(fs, newCrewBridges(core{h}, h.crew))                                                                                  // System › Crew Bridges (crewbridges.go)
+	fs = append(fs, crew.NewBridges(core{h}, h.crew))                                                                                 // System › Crew Bridges (crewbridges.go)
 	fs = append(fs, h.inboxView)                                                                                                      // SPC a i, :inbox (crewinboxview.go)
 	fs = append(fs, h.grantsView)                                                                                                     // Go › Agent permissions, :permissions (grants.go)
 	fs = append(fs, h.moreFeatures...)
@@ -161,7 +162,7 @@ func (c core) Go(fn func(context.Context) any, then func(any)) { do(c.h, fn, the
 func (c core) Bell() { c.h.ringBell() }
 
 // SetText sets the text of the layout's text area id (an id inside a component's instance is
-// scoped: crewreply.go's crewReplyText). A layout without it is said, never passed over.
+// scoped: tui/crew's ReplyTextID). A layout without it is said, never passed over.
 func (c core) SetText(id, text string) {
 	if c.h.p == nil {
 		return
