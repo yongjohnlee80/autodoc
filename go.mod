@@ -12,6 +12,7 @@ require (
 	github.com/yuin/gopher-lua v1.1.2
 	golang.org/x/image v0.45.0
 	golang.org/x/sys v0.49.0
+	golang.org/x/term v0.46.0
 	golang.org/x/text v0.42.0
 )
 
@@ -36,7 +37,6 @@ require (
 	golang.org/x/exp/shiny v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
-	golang.org/x/term v0.46.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	modernc.org/libc v1.79.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect

@@ -20,19 +20,20 @@ import (
 )
 
 // hearingAgent is an agent that takes bracketed pastes (mode 2004), as agent CLIs do, and writes
-// every byte it is sent, its tty raw, into heard-<its first argument> in dir. It says "started"
-// only once it takes bracketed pastes, so a test that waits for that line may hand a running
-// instance a task: a running agent that doesn't take them yet refuses a delivery at once, and a
-// "started" written first left a window where it did (seen under coverage on CI).
+// every byte it is sent, its terminal raw, into heard-<its first argument> in dir: this test binary
+// (hearingAgentMain), on every OS. It says "started" only once it takes bracketed pastes, so a test
+// that waits for that line may hand a running instance a task: a running agent that doesn't take
+// them yet refuses a delivery at once, and a "started" written first left a window where it did
+// (seen under coverage on CI). Its program's folder is shellTempDir's, as a running program's file
+// can't be removed on Windows; its profile's command is agentCall's.
 func hearingAgent(t *testing.T, dir string) string {
 	t.Helper()
-	p := filepath.Join(t.TempDir(), "hearing-agent")
-	script := "#!/bin/sh\nstty raw -echo\nprintf '\\033[?2004hstarted %s\\r\\n' \"$1\"\nexec cat >> " +
-		agents.ShellQuote(dir) + "/heard-\"$1\"\n"
-	if err := os.WriteFile(p, []byte(script), 0o755); err != nil {
+	bin := shellTempDir(t, "autodoc-hearing-agent-")
+	agent := standIn(t, bin, "hearing-agent")
+	if err := os.WriteFile(filepath.Join(bin, "heard-dir"), []byte(dir), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	return p
+	return agent
 }
 
 // heardRaw is every byte agent name has been sent.
@@ -75,10 +76,10 @@ func taskIn(t *testing.T, d *daemon, bucket, title string) (todo.Task, bool) {
 func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 	heardDir := t.TempDir()
 	agent := hearingAgent(t, heardDir)
-	d, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{
-		{Name: "Scribe", Codename: "scribe", Command: agents.ShellQuote(agent) + " scribe"},
-		{Name: "Critic", Codename: "critic", Command: agents.ShellQuote(agent) + " critic"},
-	}, "")
+	d, r, _ := runSetupTUI(t, shellTempDir(t, "autodoc-agents-"), []agents.AgentProfile{
+		{Name: "Scribe", Codename: "scribe", Command: agentCall(agent, "scribe")},
+		{Name: "Critic", Codename: "critic", Command: agentCall(agent, "critic")},
+	}, "", nil, Options{})
 	tasks := seedTodos(t, d, true, todo.Spec{Title: "Draft the guide"}, todo.Spec{Title: "Edit the links"},
 		todo.Spec{Title: "Fix the typos"})
 	openTodos(t, r, "kb", '1')
