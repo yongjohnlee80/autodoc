@@ -58,7 +58,8 @@ func (r *running) waitOpen(t *testing.T, ws, p string) {
 
 func waitDisk(t *testing.T, r *running, abs, want string) {
 	t.Helper()
-	r.s.WaitFor(t, abs+" holding "+want, func(string) bool { b, _ := os.ReadFile(abs); return string(b) == want })
+	// a save is a write through the daemon, a round trip: on daemonWait, not a frame's clock
+	r.waitWithin(t, abs+" holding "+want, daemonWait, func() bool { b, _ := os.ReadFile(abs); return string(b) == want })
 }
 
 // TestAFileOutsideEveryWorkspaceOpensEditsAndSaves: it opens in no workspace, the status line

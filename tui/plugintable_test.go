@@ -257,7 +257,8 @@ func TestAFetchWaitsForItsAnswer(t *testing.T) {
 	// the cursor at the top of the first page is within a page of its end: the table asks once, and
 	// the answer lands
 	r.waitResults(t, "q1", tablePage+resultsPage)
-	if got := saidLines(t, logs, "rows", "fetch "); len(got) != 1 {
+	// the plugin's log reaches its file after its answer: waited for, then counted
+	if got := waitSaidN(t, logs, "rows", "fetch ", 1); len(got) != 1 {
 		t.Fatalf("the first page asked %d times: %q", len(got), got)
 	}
 	onLoop(r, func() bool {
