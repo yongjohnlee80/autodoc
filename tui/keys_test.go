@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/todos"
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
@@ -461,13 +462,13 @@ func TestTodosQuestionMarkOpensItsCardOfKeys(t *testing.T) {
 	if err := k.Check(feature.MainIDs, nil); err != nil {
 		t.Fatal(err)
 	}
-	c, ok := k.Card(todoKeysCard)
+	c, ok := k.Card(todos.KeysCard)
 	if !ok {
 		t.Fatal("no todos card of keys")
 	}
 	opens := false
 	for _, key := range k.In("todos") {
-		if key.Seq == "?" && key.Opens == todoKeysCard {
+		if key.Seq == "?" && key.Opens == todos.KeysCard {
 			opens = true
 		}
 		if key.Seq == "<" || key.Seq == ">" {
@@ -477,7 +478,7 @@ func TestTodosQuestionMarkOpensItsCardOfKeys(t *testing.T) {
 	if !opens {
 		t.Error("? in the todos panel does not open its card")
 	}
-	text := k.CardText(c.Groups, k.On(todoKeysCard))
+	text := k.CardText(c.Groups, k.On(todos.KeysCard))
 	for _, want := range []string{"MOVE", "TABS", "TASK", "STATUS", "STORE", "Enter  open the task's file, or a month", "1–6  a tab",
 		"[ ]  the tab before, after", "s  status…: move the task", "a  add a task", "A  assign it to an agent", "S  choose the store",
 		"N  a new store", "O  load a store", "L  rename it (its label)", "R  refresh", "M  move the store"} {
@@ -490,7 +491,7 @@ func TestTodosQuestionMarkOpensItsCardOfKeys(t *testing.T) {
 			t.Errorf("a line of %d cells: wider than the 80 × 20 screen's card\n%s", n, text)
 		}
 	}
-	q := feature.CardQML(c, k.On(todoKeysCard))
+	q := feature.CardQML(c, k.On(todos.KeysCard))
 	for _, want := range []string{
 		`Shortcut { sequence: "?"; onActivated: todoKeys.close() }`,
 		`Shortcut { sequence: keyId("autodoc.todoKeys.todoChooseStatus"); onActivated: { todoKeys.close(); App.todoChooseStatus() } }`,
@@ -514,7 +515,7 @@ func TestTodosQuestionMarkOpensItsCardOfKeys(t *testing.T) {
 		t.Error("SPC's card, which has no Toggle, closes on a key of its own")
 	}
 	bad := k
-	bad.Keys = append(slices.Clone(k.Keys), feature.Key{Card: todoKeysCard, Seq: "?", Show: "?", Run: "App.x()"})
+	bad.Keys = append(slices.Clone(k.Keys), feature.Key{Card: todos.KeysCard, Seq: "?", Show: "?", Run: "App.x()"})
 	if err := bad.Check(feature.MainIDs, nil); err == nil || !strings.Contains(err.Error(), "the card todoKeys's ? is taken twice") {
 		t.Errorf("a card key on its Toggle: %v", err)
 	}

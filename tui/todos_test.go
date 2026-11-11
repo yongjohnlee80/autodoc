@@ -15,6 +15,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/todo"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/todos"
 )
 
 var kbTodos = todo.At{Workspace: "kb"}
@@ -57,7 +58,7 @@ func openTodos(t *testing.T, r *running, label string, n rune) {
 	r.keys(t, key(n))
 	tabRead(t, r, int(n-'1'))
 	// the key's own focus landed: a later focus the test gives is not taken back by it
-	table := todoTabs[n-'1'].table
+	table := todos.Tabs()[n-'1'].Table
 	if n == '5' {
 		table = "todoMonths"
 	}
@@ -73,14 +74,14 @@ func openTodos(t *testing.T, r *running, label string, n rune) {
 // coming, and a key of the store's (a) did nothing, under load (TestTabReadWaitsForTheStore).
 func tabRead(t testing.TB, r *running, tab int) {
 	t.Helper()
-	if tab == varsTab {
+	if tab == todos.VarsTab() {
 		r.s.WaitFor(t, "Variables read", func(string) bool {
-			return onLoop(r, func() bool { v := todosOf(r); return v.tab == tab && v.vars.Len() > 0 })
+			return onLoop(r, func() bool { v := todosOf(r).Snapshot(); return v.Tab == tab && v.Vars > 0 })
 		})
 		return
 	}
-	r.s.WaitFor(t, todoBuckets[tab].title+" read", func(string) bool {
-		return onLoop(r, func() bool { v := todosOf(r); return v.cur != nil && v.tab == tab && !v.stale[tab] })
+	r.s.WaitFor(t, todos.Tabs()[tab].Title+" read", func(string) bool {
+		return onLoop(r, func() bool { v := todosOf(r).Snapshot(); return v.HasStore && v.Tab == tab && !v.Stale[tab] })
 	})
 }
 
@@ -216,7 +217,7 @@ func TestTodosAddsChoosesAStatusAndRemoves(t *testing.T) {
 		chooseStatusOf(t, r, status)
 		r.s.WaitFor(t, status, func(string) bool { return len(listedIn(t, d, status)) == 1 })
 		r.s.WaitForText(t, "status: "+status) // the cursor followed the task to its tab
-		if got := onLoop(r, func() int { return todosOf(r).tab }); got != tabOf(status) {
+		if got := onLoop(r, func() int { return todosOf(r).Snapshot().Tab }); got != tabOfStatus(status) {
 			t.Fatalf("after %s the tab shown is %d", status, got)
 		}
 	}
@@ -449,7 +450,7 @@ func TestTodosPanelOpensLargeWithOneActionRow(t *testing.T) {
 	r.s.WaitFor(t, "moved on", func(string) bool { return len(listedIn(t, d, "in-progress")) == 1 })
 	r.s.WaitFor(t, "the cursor on the moved task", func(string) bool {
 		return onLoop(r, func() bool {
-			_, x := todosOf(r).cursor()
+			x := todosOf(r).Snapshot().Cursor
 			return feature.Str(x, "title") == "Ship it" && feature.Str(x, "status") == "in-progress"
 		})
 	})
@@ -499,9 +500,19 @@ func hoveredWithin(_ *running, c tuicore.Component) bool {
 }
 
 // todosOf is the running TUI's todos feature.
-func todosOf(r *running) *todos {
+// tabOfStatus is the task tab whose tasks have status (todos.Tabs' Bucket).
+func tabOfStatus(status string) int {
+	for i, tab := range todos.Tabs() {
+		if tab.Bucket == status {
+			return i
+		}
+	}
+	return -1
+}
+
+func todosOf(r *running) *todos.Todos {
 	for _, f := range r.h.reg.Features {
-		if v, ok := f.(*todos); ok {
+		if v, ok := f.(*todos.Todos); ok {
 			return v
 		}
 	}
@@ -558,10 +569,10 @@ func waitSaying(t testing.TB, r *running, text string) {
 // of the panel's views (or the editor) holds the keyboard.
 func todosState(r *running) string {
 	return onLoop(r, func() string {
-		v := todosOf(r)
+		v := todosOf(r).Snapshot()
 		store := "no store"
-		if v.cur != nil {
-			store = fmt.Sprintf("store %q released %v", v.cur.name, v.cur.released)
+		if v.HasStore {
+			store = fmt.Sprintf("store %q released %v", v.Store, v.Released)
 		}
 		dialog := "no dialog open"
 		if host, ok := r.h.p.Overlay(); ok {
@@ -570,8 +581,8 @@ func todosState(r *running) string {
 			}
 		}
 		ids := []string{"editor", "todoStore", "todoDetails", "todoMonths", "todoVarsTable"} // the tab view holds the tables: not it
-		for _, tab := range todoTabs {
-			ids = append(ids, tab.table)
+		for _, tab := range todos.Tabs() {
+			ids = append(ids, tab.Table)
 		}
 		var in []string
 		for _, id := range ids {
@@ -583,7 +594,7 @@ func todosState(r *running) string {
 		if len(in) > 0 {
 			keyboard = "the keyboard in " + strings.Join(in, ", ")
 		}
-		return fmt.Sprintf("tab %d; %s; %s; %s", v.tab, store, dialog, keyboard)
+		return fmt.Sprintf("tab %d; %s; %s; %s", v.Tab, store, dialog, keyboard)
 	})
 }
 
@@ -604,8 +615,12 @@ func TestTodosStateSaysWhatTheKeysRead(t *testing.T) {
 	if got, want := todosState(r), `^tab 1; store "[^"]+" released false; a dialog open, the keyboard in it true; `; !regexp.MustCompile(want).MatchString(got) {
 		t.Fatalf("the card open: %q, want %s", got, want)
 	}
-	onLoop(r, func() bool { todosOf(r).cur.released = true; return true }) // as todos.release leaves it
-	if got := todosState(r); !regexp.MustCompile(`; store "[^"]+" released true; `).MatchString(got) {
+	// a released store, as todos.release leaves it: the daemon gave the store back (seedTodos unclaimed)
+	released := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	seedTodos(t, released, false)
+	rr := attached(t, released)
+	openTodos(t, rr, "kb", '1')
+	if got := todosState(rr); !regexp.MustCompile(`; store "[^"]+" released true; `).MatchString(got) {
 		t.Fatalf("a released store: %q, want it said", got)
 	}
 
@@ -638,11 +653,11 @@ func TestTabReadWaitsForTheStore(t *testing.T) {
 	seedTodos(t, d, true)
 	r := attached(t, d)
 	openTodos(t, r, "kb", '1')
-	var cur *todoStore
-	onLoop(r, func() bool { v := todosOf(r); cur, v.cur = v.cur, nil; return true }) // as the panel is before its store list answers
-	if onLoop(r, func() bool { return todosOf(r).stale[0] }) || cur == nil {
+	if onLoop(r, func() bool { v := todosOf(r).Snapshot(); return v.Stale[0] || !v.HasStore }) {
 		t.Fatal("fixture: the Open tab outdated, or no store was shown")
 	}
+	var restore func()
+	onLoop(r, func() bool { restore = todosOf(r).HideStoreForTest(); return true }) // as the panel is before its store list answers
 	rec := &fatalRecorder{TB: t, msg: make(chan string, 1)}
 	returned := make(chan struct{})
 	go func() { tabRead(rec, r, 0); close(returned) }()
@@ -653,7 +668,7 @@ func TestTabReadWaitsForTheStore(t *testing.T) {
 		t.Fatalf("tabRead failed before its wait was over: %s", msg)
 	case <-time.After(300 * time.Millisecond):
 	}
-	onLoop(r, func() bool { todosOf(r).cur = cur; return true }) // the store list's answer
+	onLoop(r, func() bool { restore(); return true }) // the store list's answer
 	select {
 	case <-returned:
 	case msg := <-rec.msg:
