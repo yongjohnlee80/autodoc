@@ -66,3 +66,4 @@
 ./tui/relations
 ./tui/searchsetup
 ./tui/system
+./tui
