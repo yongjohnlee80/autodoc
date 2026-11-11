@@ -611,6 +611,16 @@ func pluginTUIOn(t *testing.T, d *daemon, dir, luaDir string) (*running, string)
 	logs := t.TempDir()
 	r := runTUI(t, NewSession(d.sock, nil), Options{Plugins: Plugins{Dir: dir, LogDir: logs, Socket: d.sock}, LuaDir: luaDir})
 	r.connected(t)
+	stopPluginRunsAtTheEnd(t, r)
+	return r, logs
+}
+
+// stopPluginRunsAtTheEnd shuts down, at the test's end, every plugin run r's program still has
+// (running, or stopped and still closing), and waits for each: a run's process works in its
+// plugin's folder, which Windows won't remove while it does, so the folder's TempDir cleanup, run
+// after this one, can. Linux would let the folder go and the process run on, unseen.
+func stopPluginRunsAtTheEnd(t *testing.T, r *running) {
+	t.Helper()
 	t.Cleanup(func() {
 		runs := onLoop(r, func() []*pluginRun {
 			var out []*pluginRun
@@ -626,7 +636,6 @@ func pluginTUIOn(t *testing.T, d *daemon, dir, luaDir string) (*running, string)
 			p.shutdown()
 		}
 	})
-	return r, logs
 }
 
 func (r *running) openPlugin(key string) *pluginRun {
