@@ -17,6 +17,8 @@ import (
 
 // TestStoreNamesDeriveFromTheirFolders: a KB folder is named for the project holding it; any other
 // store for its own folder.
+//
+// Moved from tui/todos_labels_test.go with its name and asserts unchanged.
 func TestStoreNamesDeriveFromTheirFolders(t *testing.T) {
 	for root, want := range map[string]string{
 		"/home/j/Source/WebShop/.auto-agents/kb":      "WebShop",
@@ -58,6 +60,8 @@ func labelledStores(prefs map[string]any) *featuretest.ScriptedCore {
 // preference by the store's id, so a new panel (a restart) shows it, and the store stays shown; an
 // empty label is the derived name again. Two stores may share a label: the heading, the store's
 // folder, tells them apart. The store's files are never written.
+//
+// Moved from tui/todos_labels_test.go with its name and asserts unchanged.
 func TestTodosLabelAStoreAndClearIt(t *testing.T) {
 	prefs := map[string]any{"tui.other": "x"}
 	s := labelledStores(prefs)
@@ -127,6 +131,8 @@ func TestTodosLabelAStoreAndClearIt(t *testing.T) {
 
 // TestTodosListWithoutPreferences: a daemon keeping no preferences still lists the stores, by their
 // derived names.
+//
+// Moved from tui/todos_labels_test.go with its name and asserts unchanged.
 func TestTodosListWithoutPreferences(t *testing.T) {
 	s := labelledStores(nil)
 	s.Answers["preference.list"] = func([]any) (any, error) { return nil, fmt.Errorf("-32004 no preferences") }
@@ -205,6 +211,8 @@ func pickStatus(t *testing.T, v *Todos, status string) {
 // of that status shows, the cursor on the task (in Archived, in the month its file went to). An
 // archived task comes back the same way. Choosing the status the task has, or dismissing the
 // picker, asks nothing of the daemon.
+//
+// Moved from tui/todos_labels_test.go with its name and asserts unchanged.
 func TestTodosStatusPickerSetsEveryStatus(t *testing.T) {
 	for _, from := range []string{"open", "archived"} {
 		for _, want := range todoStatuses {
@@ -262,6 +270,8 @@ func TestTodosStatusPickerSetsEveryStatus(t *testing.T) {
 
 // TestTodosStatusPickerPreviewsTheMove: the picker's preview says what choosing a status does to the
 // task, and that its own status changes nothing.
+//
+// Moved from tui/todos_labels_test.go with its name and asserts unchanged.
 func TestTodosStatusPickerPreviewsTheMove(t *testing.T) {
 	s, _ := movingStore("open")
 	v := New(s)
@@ -307,6 +317,8 @@ func actions(s *featuretest.ScriptedCore) string {
 // task under the cursor (an empty tab, Archived's months), Add alone. A store the daemon has not
 // claimed shows none, anywhere, only its note. A button's own click changes nothing at once, only
 // the answer that lands later (a golib Button must never hide itself from its click).
+//
+// Moved from tui/todos_labels_test.go with its name and asserts unchanged.
 func TestTodosActionRowFollowsTheCursor(t *testing.T) {
 	for _, claimed := range []bool{true, false} {
 		s := scriptedStore(claimed)
@@ -373,6 +385,8 @@ func TestTodosActionRowFollowsTheCursor(t *testing.T) {
 
 // TestTodoDetailsAreMarkdown: a task's details are Markdown, rendered as the pickers' previews:
 // its title a heading, its fields a list, its description as written.
+//
+// Moved from tui/todos_labels_test.go with its name and asserts unchanged.
 func TestTodoDetailsAreMarkdown(t *testing.T) {
 	d := todoDetail(map[string]any{"title": "Ship", "status": "open", "tags": []any{"x"}, "description": "**bold** notes",
 		"errors": []any{map[string]any{"field": "adr[0]", "code": "not-found", "message": "gone"}}})
@@ -386,6 +400,8 @@ func TestTodoDetailsAreMarkdown(t *testing.T) {
 // TestTodosTheCursorFollowsWhenTheTabLands: after a move the destination tab is read, and the
 // cursor goes to the task only when that read lands; a read of the tab before, answered after,
 // moves nothing.
+//
+// Moved from tui/todos_labels_test.go with its name and asserts unchanged.
 func TestTodosTheCursorFollowsWhenTheTabLands(t *testing.T) {
 	s, _ := movingStore("in-progress")
 	v := New(s)
@@ -412,6 +428,8 @@ func TestTodosTheCursorFollowsWhenTheTabLands(t *testing.T) {
 // labels answer for an older listing is dropped; s with no task under the cursor, and L with no
 // store, do nothing; a moved task that is not where its tab's read says leaves the cursor where the
 // read put it; an answer with no task in it still follows the task by its id.
+//
+// Moved from tui/todos_labels_test.go with its name and asserts unchanged.
 func TestTodosLabelsAndMovesAtTheEdges(t *testing.T) {
 	home := t.TempDir()
 	env := procenv.Env(nil).With("HOME="+home, "USERPROFILE="+home) // the home folder by each OS's name

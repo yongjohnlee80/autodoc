@@ -98,6 +98,8 @@ func managerCore(t *testing.T, m *todo.Manager) *featuretest.ScriptedCore {
 // A folder loaded, or made a store with New…, is shown as the store the daemon resolves for it: a
 // folder never resolved before (its store recorded as it is resolved), and one reached by another
 // spelling, shown as the store at its canonical place; New… makes that store's buckets there.
+//
+// Moved from tui/todos_resolve_test.go with its name and asserts unchanged.
 func TestALoadedFolderIsShownByTheStoreTheDaemonResolves(t *testing.T) {
 	disk := todotest.NewDisk()
 	for _, d := range []string{"/before", "/fresh", "/canon", "/made", "/madecanon"} {
@@ -147,6 +149,8 @@ func TestALoadedFolderIsShownByTheStoreTheDaemonResolves(t *testing.T) {
 // A store moved into the folder loaded is shown, by its identity: todos.stores lists it by its first
 // root (/a, the one it was made under), not by the folder chosen (/moved), so a match by a root's
 // spelling would miss it and leave another store shown in its place.
+//
+// Moved from tui/todos_resolve_test.go with its name and asserts unchanged.
 func TestAStoreMovedIntoTheFolderLoadedIsShown(t *testing.T) {
 	ctx := context.Background()
 	disk := todotest.NewDisk()
@@ -185,6 +189,8 @@ func TestAStoreMovedIntoTheFolderLoadedIsShown(t *testing.T) {
 
 // A folder whose store the daemon resolves but doesn't list is said so, and no other store is shown
 // in its place: the one shown before stays, even when it isn't the first listed.
+//
+// Moved from tui/todos_resolve_test.go with its name and asserts unchanged.
 func TestAStoreNotListedIsSaidAndNoOtherIsShownInItsPlace(t *testing.T) {
 	ctx := context.Background()
 	disk := todotest.NewDisk()
@@ -230,6 +236,8 @@ func TestAStoreNotListedIsSaidAndNoOtherIsShownInItsPlace(t *testing.T) {
 
 // A store asked for and not listed, with none shown before, is said, and none is shown: never the
 // first listed in its place.
+//
+// Moved from tui/todos_resolve_test.go with its name and asserts unchanged.
 func TestAStoreNotListedWithNoneShownShowsNone(t *testing.T) {
 	disk := todotest.NewDisk()
 	disk.MkdirAll(slashFile("/gone"))
@@ -263,6 +271,8 @@ func TestAStoreNotListedWithNoneShownShowsNone(t *testing.T) {
 
 // The store shown, moved into a folder already registered that sorts first, stays shown, by its id:
 // its listed root becomes that folder, so its place no longer matches the one shown before.
+//
+// Moved from tui/todos_resolve_test.go with its name and asserts unchanged.
 func TestAMovedStoreStaysShown(t *testing.T) {
 	ctx := context.Background()
 	disk := todotest.NewDisk()
@@ -334,6 +344,8 @@ func movedRig(t *testing.T) (m *todo.Manager, core *featuretest.ScriptedCore, v 
 
 // The store shown, moved by another client so it is listed by another root, stays shown when the
 // stores are listed again: it is found by its id, nothing having been asked for.
+//
+// Moved from tui/todos_resolve_test.go with its name and asserts unchanged.
 func TestAStoreMovedByAnotherClientStaysShown(t *testing.T) {
 	m, _, v, x := movedRig(t)
 	if _, err := m.MoveStore(context.Background(), todo.At{Root: slashFile("/x")}, slashFile("/a0")+"/.todo-list"); err != nil {
@@ -346,6 +358,8 @@ func TestAStoreMovedByAnotherClientStaysShown(t *testing.T) {
 }
 
 // The store shown, moved here and then not listed, is said so, and none is shown in its place.
+//
+// Moved from tui/todos_resolve_test.go with its name and asserts unchanged.
 func TestAMovedStoreNotListedIsSaid(t *testing.T) {
 	_, core, v, x := movedRig(t)
 	stores := core.Answers["todos.stores"]
@@ -373,6 +387,8 @@ func TestAMovedStoreNotListedIsSaid(t *testing.T) {
 
 // A New whose scaffold fails asks for nothing: the next listing keeps the store shown, and says
 // nothing of a store not listed.
+//
+// Moved from tui/todos_resolve_test.go with its name and asserts unchanged.
 func TestAFailedNewAsksForNothing(t *testing.T) {
 	ctx := context.Background()
 	disk := todotest.NewDisk()
@@ -410,6 +426,8 @@ func TestAFailedNewAsksForNothing(t *testing.T) {
 
 // A store's root and the home folder as ~ by whole segments, a volume's root included: the root of
 // /.todo-list is /, and under a home at / a folder is ~/notes.
+//
+// Moved from tui/todos_resolve_test.go with its name and asserts unchanged.
 func TestTheRootsAndHomeOfAStoreAtAVolumesRoot(t *testing.T) {
 	for p, want := range map[string]string{"/.todo-list": "/", "/p/.todo-list": "/p", "/p": "/p"} {
 		if got := storeRoot(p); got != want {
