@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/yongjohnlee80/golib/gui"
+
 	"github.com/yongjohnlee80/autodoc/tui"
 )
 
@@ -59,78 +61,18 @@ func TestTheGUIOpensItsWindowThroughWindowFor(t *testing.T) {
 	}
 }
 
-// The window AutoDoc draws its own title bar for asks for no frame of the system's: windowFor appends
-// gui.WithDecorations(false), and only in the branch that sets o.TitleBar, and gui_on.go asks for
-// decorations nowhere else. golib/gui keeps the request in its unexported config and gives no way to
-// read it back before the window opens, so this reads the source. It is a static check: it proves
-// what windowFor asks for, not what a platform then draws (that is golib's, and its window
-// chrome's cells).
-func TestTheOwnTitleBarsWindowAsksForNoFrame(t *testing.T) {
-	f, err := parser.ParseFile(token.NewFileSet(), "gui_on.go", nil, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	isDecorations := func(c *ast.CallExpr) bool {
-		s, ok := c.Fun.(*ast.SelectorExpr)
-		return ok && isIdent(s.X, "gui") && s.Sel.Name == "WithDecorations"
-	}
-	var calls []*ast.CallExpr
-	ast.Inspect(f, func(n ast.Node) bool {
-		if c, ok := n.(*ast.CallExpr); ok && isDecorations(c) {
-			calls = append(calls, c)
-		}
-		return true
-	})
-	if len(calls) != 1 {
-		t.Fatalf("gui_on.go asks for decorations %d times; want once, in windowFor's own-title-bar branch", len(calls))
-	}
-	if len(calls[0].Args) != 1 || !isIdent(calls[0].Args[0], "false") {
-		t.Fatal("gui_on.go asks for decorations with something other than false; the own title bar's window must have no frame of the system's")
-	}
-	var inBranch bool
-	for _, d := range f.Decls {
-		fn, ok := d.(*ast.FuncDecl)
-		if !ok || fn.Name.Name != "windowFor" {
-			continue
-		}
-		ast.Inspect(fn.Body, func(n ast.Node) bool {
-			s, ok := n.(*ast.IfStmt)
-			if !ok {
-				return true
-			}
-			init, ok := s.Init.(*ast.AssignStmt) // o.TitleBar = ownsTitleBar(...)
-			if !ok || len(init.Lhs) != 1 || !isSelector(init.Lhs[0], "o", "TitleBar") || !isSelector(s.Cond, "o", "TitleBar") {
-				return true
-			}
-			ast.Inspect(s.Body, func(n ast.Node) bool {
-				if c, ok := n.(*ast.CallExpr); ok && c == calls[0] {
-					inBranch = true
-				}
-				return true
-			})
-			return true
-		})
-	}
-	if !inBranch {
-		t.Fatal("gui.WithDecorations(false) is not in windowFor's branch that sets o.TitleBar")
-	}
-}
-
-func isSelector(e ast.Expr, x, sel string) bool {
-	s, ok := e.(*ast.SelectorExpr)
-	return ok && isIdent(s.X, x) && s.Sel.Name == sel
-}
-
 func isIdent(e ast.Expr, name string) bool {
 	id, ok := e.(*ast.Ident)
 	return ok && id.Name == name
 }
 
 // The window opens as tui.gui.titlebar's mirror says, and both halves go together: with AutoDoc's
-// own bar the window gets one option more (no frame of the system's) and the launch asks for the
-// bar in the layout; with the system's, or no mirror, neither. A window without the system's frame
-// and without AutoDoc's bar would have no title bar at all, and the system's frame over AutoDoc's
-// bar would draw two.
+// own bar the window asks for no frame of the system's (WithDecorations(false), read back as a value
+// through gui.ResolveOptions, the options the backend is made with) and the launch asks for the bar
+// in the layout; with the system's, or no mirror, the window leaves decorations to the platform and
+// the launch asks for no bar. A window without the system's frame and without AutoDoc's bar would
+// have no title bar at all, and the system's frame over AutoDoc's bar would draw two. It proves what
+// windowFor asks for, not what a platform then draws (that is golib's, and its window chrome's cells).
 func TestTheWindowOpensAsTheTitleBarMirrorSays(t *testing.T) {
 	dir := t.TempDir()
 	state := filepath.Join(dir, "state")
@@ -147,27 +89,32 @@ func TestTheWindowOpensAsTheTitleBarMirrorSays(t *testing.T) {
 	if mirror == "" {
 		t.Fatal("the config's state directory was not read")
 	}
-	open := func(name string) (bool, int) {
+	// open answers whether the launch asks for AutoDoc's bar, and what the window asks for: its
+	// decorations (on, and whether an option chose them) and its title.
+	open := func() (bar, on, set bool, title string) {
 		t.Helper()
 		o, opts := windowFor(tui.LaunchOptions{ConfigPath: conf})
-		return o.TitleBar, len(opts)
+		w := gui.ResolveOptions(opts...)
+		on, set = w.Decorations()
+		return o.TitleBar, on, set, w.Title()
 	}
-	bar, base := open("no mirror")
-	if bar {
-		t.Fatal("no mirror: the launch asks for AutoDoc's bar; want the system's title bar")
+	systems := func(what string) {
+		t.Helper()
+		if bar, _, set, title := open(); bar || set || title != "AutoDoc" {
+			t.Fatalf("%s: the launch asks for AutoDoc's bar %v, the window chooses its decorations %v, title %q; want the system's title bar: no bar, decorations left to the platform, titled AutoDoc", what, bar, set, title)
+		}
 	}
+	systems("no mirror")
 	for _, v := range []string{tui.TitleBarSystem, "something else"} {
 		if err := os.WriteFile(mirror, []byte(v+"\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if bar, n := open(v); bar || n != base {
-			t.Fatalf("mirror %q: bar %v, %d options; want the system's title bar, %d options", v, bar, n, base)
-		}
+		systems("mirror " + v)
 	}
 	if err := os.WriteFile(mirror, []byte(tui.TitleBarOwn+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if bar, n := open(tui.TitleBarOwn); !bar || n != base+1 {
-		t.Fatalf("mirror %q: bar %v, %d options; want AutoDoc's bar asked for and %d options (no frame of the system's)", tui.TitleBarOwn, bar, n, base+1)
+	if bar, on, set, title := open(); !bar || on || !set || title != "AutoDoc" {
+		t.Fatalf("mirror %q: the launch asks for AutoDoc's bar %v, decorations on %v (chosen %v), title %q; want the bar, and a window titled AutoDoc that asks for no frame of the system's", tui.TitleBarOwn, bar, on, set, title)
 	}
 }
