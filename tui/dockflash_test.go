@@ -103,8 +103,8 @@ func (r *running) dockFlashRow(key string) bool {
 // The terminal's x with no shell running closes it at once, asking nothing, every tab already closing
 // left to close.
 func TestTheTerminalsXWithNoShellRunningClosesAtOnce(t *testing.T) {
-	_, r := runShellTUI(t, nil)
-	catInTheTerminal(t, r)
+	_, r := runLineShellTUI(t, nil)
+	shellInTheTerminal(t, r)
 	onLoop(r, func() bool {
 		panel, err := r.h.terminals.panel()
 		if err != nil {
