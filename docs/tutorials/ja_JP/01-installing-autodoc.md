@@ -23,13 +23,30 @@ curl -fsSL https://github.com/yongjohnlee80/autodoc/releases/latest/download/ins
 
 **アップデート。** スクリプトでインストールした AutoDoc は自分で更新できます。**ヘルプ › バージョン情報** を開き、**更新** を押します。更新は AutoDoc のターミナルパネルで実行され、新しいバージョンの準備ができると **今すぐ再起動** を提案します。シェルからは `~/.local/state/autodoc/update.sh` で同じことができます。
 
+## Windows では
+
+PowerShell で、次の 1 行がウィンドウ付きの AutoDoc をインストールします。
+
+```powershell
+irm https://github.com/yongjohnlee80/autodoc/releases/latest/download/install-autodoc.ps1 | iex
+```
+
+このスクリプトは:
+
+- 最新の Windows ビルドをダウンロードし、リリースのチェックサムで確認します。
+- `%LOCALAPPDATA%\Programs\AutoDoc\autodoc.exe` として、あなた専用にインストールします。管理者権限は求めません。
+- スタートメニューに AutoDoc を追加します。
+- `%LOCALAPPDATA%\autodoc` に `update.ps1` をインストールするので、**ヘルプ › バージョン情報 › 更新** が Linux や macOS と同じように使えます。
+
+`PATH` は頼まれたとき (`-AddToPath`) だけ変更し、それ以外は変更するコマンドを表示します。ビルドは署名されていないため、AutoDoc を初めて実行するとき、Windows が発行元不明と表示することがあります。arm64 の Windows 向けビルドはまだありません。WSL2 では、上の Linux 向けの 1 行も使えます。
+
 ## ほかの方法
 
 - Homebrew: `brew install yongjohnlee80/tap/autodoc` (Linux ではターミナル版のみ)
 - mise: `mise use -g github:yongjohnlee80/autodoc`
 - Go: `go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` (`-tags gui` なしではターミナル版のみ)
 - プロジェクトの Releases ページのリリースアーカイブ
-- Windows: WSL2 を入れてから、インストールスクリプト
+- Windows: WSL2 を入れてから、Linux のインストールスクリプト
 
 これらはインストールしたときと同じ方法で更新します (`brew upgrade`、`mise upgrade`、もう一度 `go install`)。そのため **ヘルプ › バージョン情報** に更新ボタンは出ません。サーバー、コンテナ、ソースからのビルドについては [リファレンス 第 2 章](../../reference/02-quickstart-and-workspaces.md) を参照してください。
 
