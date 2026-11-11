@@ -3,10 +3,12 @@ package tui
 import (
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 )
 
 // codexRuns is a stand-in for the agent's autodoc in runAfterSteps: each run's args are sent on
@@ -61,6 +63,9 @@ func TestACodexAgentsStepLooksOnItsOwnServer(t *testing.T) {
 // The window sets no timer of its own. Another CLI's spawn runs none of it.
 func TestACrewCodexAgentIsRegisteredAsItStarts(t *testing.T) {
 	t.Run("one waiting registration", func(t *testing.T) {
+		if !agents.CanRunAgentServers {
+			t.Skip("this system can't run an agent's own server: a Codex agent starts without one (the next subtest)")
+		}
 		a, c, _ := crewAgents(t, crewKinds)
 		runs := &codexRuns{calls: make(chan []string, 4)}
 		seamsOf(a).agentCodexHere = runs.run
@@ -91,6 +96,42 @@ func TestACrewCodexAgentIsRegisteredAsItStarts(t *testing.T) {
 		}
 		if len(c.afters) != 0 {
 			t.Fatalf("the window set %d timers, want none: the step waits itself", len(c.afters))
+		}
+	})
+
+	// a host that can't run an agent's own server (the window where there are no process groups):
+	// the agent starts with no server of its own, off Codex's shared daemon (--no-daemon), and
+	// with no registration step, since no server holds its thread; the user is told, once, that
+	// crew mail can't wake it. Forced here on every OS: it is what Windows does.
+	t.Run("on a host that can't run its server", func(t *testing.T) {
+		a, c, _ := crewAgentsOn(t, crewKinds, true)
+		runs := &codexRuns{calls: make(chan []string, 4)}
+		seamsOf(a).agentCodexHere = runs.run
+		p, _ := a.Profile("codex-one")
+		instance, err := a.StartInstance(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cmd, spawned, err := startedCmd(a, c, instance)
+		if err != nil || !spawned {
+			t.Fatalf("the start: spawned %v, %v; want Codex started without a server of its own", spawned, err)
+		}
+		if !slices.Contains(cmd.Args, "--no-daemon") || slices.Contains(cmd.Args, "--remote") {
+			t.Fatalf("its command %q: want --no-daemon, and no --remote to a server of its own", cmd.Args)
+		}
+		select {
+		case args := <-runs.calls:
+			t.Fatalf("a run %q: want no registration step, with no server to find its thread on", args)
+		case <-time.After(50 * time.Millisecond):
+		}
+		said := 0
+		for _, n := range c.notes {
+			if strings.Contains(n, "crew mail can't wake it") {
+				said++
+			}
+		}
+		if said != 1 {
+			t.Fatalf("the notices %q: want it said once that crew mail can't wake it", c.notes)
 		}
 	})
 
