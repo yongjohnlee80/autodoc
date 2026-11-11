@@ -4288,6 +4288,10 @@ WHAT A KEY NEEDS
         <source>workspace %1 was renamed %2 %3</source>
         <translation>ワークスペース %1 が%3 %2 に名前変更されました</translation>
     </message>
+    <message id="autodoc.notice.files.another_workspace_was_entered_meanwhile_open_it">
+        <source>another workspace was entered meanwhile; open it again</source>
+        <translation>その間に別のワークスペースに入りました: もう一度開いてください</translation>
+    </message>
     <message id="autodoc.notice.files.changed_on_disk_while_the_backend_was_away_a_sav">
         <source>%1 changed on disk while the backend was away: a save asks before it overwrites it</source>
         <translation>バックエンドの停止中に %1 がディスク上で変更されました: 保存時、上書き前に確認します</translation>
@@ -4379,6 +4383,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.files.saving">
         <source>saving %1…</source>
         <translation>%1 を保存中…</translation>
+    </message>
+    <message id="autodoc.notice.files.the_connection_to_the_backend_was_renewed_meanwh">
+        <source>the connection to the backend was renewed meanwhile; open it again</source>
+        <translation>その間にバックエンドとの接続が更新されました: もう一度開いてください</translation>
     </message>
     <message id="autodoc.notice.find.find_cleared">
         <source>find cleared</source>

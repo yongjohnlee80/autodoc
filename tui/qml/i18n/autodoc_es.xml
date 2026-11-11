@@ -4293,6 +4293,10 @@ LO QUE NECESITA UNA TECLA
         <source>workspace %1 was renamed %2 %3</source>
         <translation>el espacio de trabajo %1 se renombró a %2 %3</translation>
     </message>
+    <message id="autodoc.notice.files.another_workspace_was_entered_meanwhile_open_it">
+        <source>another workspace was entered meanwhile; open it again</source>
+        <translation>se entró en otro espacio de trabajo entretanto; vuelve a abrirlo</translation>
+    </message>
     <message id="autodoc.notice.files.changed_on_disk_while_the_backend_was_away_a_sav">
         <source>%1 changed on disk while the backend was away: a save asks before it overwrites it</source>
         <translation>%1 cambió en el disco mientras el backend no estaba: al guardar se preguntará antes de sobrescribirlo</translation>
@@ -4384,6 +4388,10 @@ LO QUE NECESITA UNA TECLA
     <message id="autodoc.notice.files.saving">
         <source>saving %1…</source>
         <translation>guardando %1…</translation>
+    </message>
+    <message id="autodoc.notice.files.the_connection_to_the_backend_was_renewed_meanwh">
+        <source>the connection to the backend was renewed meanwhile; open it again</source>
+        <translation>la conexión con el backend se renovó entretanto; vuelve a abrirlo</translation>
     </message>
     <message id="autodoc.notice.find.find_cleared">
         <source>find cleared</source>
