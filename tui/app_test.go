@@ -9,6 +9,7 @@ import (
 	"io"
 	"maps"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -260,7 +261,7 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 		d.fs[wsName] = mem
 		notes := workspaces[name]
 		for i := 0; i < len(notes) && !kept; i += 2 {
-			if dir := filepath.Dir(notes[i]); dir != "." {
+			if dir := path.Dir(notes[i]); dir != "." { // a workspace's own path: slashes on every OS
 				_ = mem.MkdirAll(ctx, dir)
 			}
 			if _, err := mem.WriteFile(ctx, notes[i], strings.NewReader(notes[i+1])); err != nil {
