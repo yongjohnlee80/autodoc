@@ -83,14 +83,10 @@ func (h *Host) loadPackages() []error {
 		h.userPackages[en.Name()] = true
 		dir := filepath.Join(h.luaDir, en.Name())
 		// the package reads its own folder only, links included: os.Root refuses a path, or a
-		// link, that leads outside it. It stays open while the engine may require from it.
-		root, err := os.OpenRoot(dir)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("the Lua package %s: %w", en.Name(), err))
-			continue
-		}
-		h.luaRoots = append(h.luaRoots, root)
-		m, err := readPackageIn(root.FS(), dir)
+		// link, that leads outside it. Each read opens the folder and closes it again (packageFS):
+		// nothing holds it while the engine runs, so it can be moved or removed meanwhile.
+		pkg := packageFS(dir)
+		m, err := readPackageIn(pkg, dir)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("the Lua package %s: %w", en.Name(), err))
 			continue
@@ -99,7 +95,7 @@ func (h *Host) loadPackages() []error {
 		if len(m.Requires) > 0 {
 			grants.Request(m.Name, m.Requires)
 		}
-		if err := h.scripts.LoadPackage(m.Name, root.FS(), grants); err != nil {
+		if err := h.scripts.LoadPackage(m.Name, pkg, grants); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -250,16 +246,11 @@ func (h *Host) loadPluginPackages() []error {
 			continue
 		}
 		dir := filepath.Join(e.dir, "lua")
-		root, err := os.OpenRoot(dir)
-		if err != nil {
-			continue // no lua/: the plugin has no package
+		pkg := packageFS(dir) // read as a user's package is: nothing holds the folder
+		if _, err := pkg.Stat("package.toml"); err != nil {
+			continue // no lua/, or no package in it: the plugin has none
 		}
-		if _, err := fs.Stat(root.FS(), "package.toml"); err != nil {
-			root.Close()
-			continue
-		}
-		h.luaRoots = append(h.luaRoots, root)
-		m, err := readPluginPackage(root.FS(), e.m.Name)
+		m, err := readPluginPackage(pkg, e.m.Name)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("the plugin %s's Lua package: %w", e.m.Name, err))
 			continue
@@ -274,7 +265,7 @@ func (h *Host) loadPluginPackages() []error {
 		if len(m.Requires) > 0 {
 			grants.Request(script, m.Requires)
 		}
-		if err := h.scripts.LoadPackage(script, root.FS(), grants); err != nil {
+		if err := h.scripts.LoadPackage(script, pkg, grants); err != nil {
 			delete(h.pluginPackages, script)
 			errs = append(errs, err)
 		}
