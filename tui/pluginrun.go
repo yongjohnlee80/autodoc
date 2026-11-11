@@ -635,7 +635,7 @@ func (pl *plugins) own(dir, what string) *folderHold {
 		return &folderHold{other: other}
 	}
 	h := &folderHold{ok: true, fence: &pl.folders, dir: dir}
-	bound := pl.seams.folderReadWait
+	bound := pl.folderReadWait
 	h.waits = append(h.waits, func(ctx context.Context) error { return pl.folders.awaitReads(ctx, dir, bound) })
 	return h
 }
