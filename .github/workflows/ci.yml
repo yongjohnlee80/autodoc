@@ -254,13 +254,14 @@ jobs:
           # for Windows, so a neutral test can't come to lean on a helper in a Unix-tagged file
           # SCRATCH (never merged): the save traced, all of ./tui three times at -parallel 16; the whole log uploaded
           : > tui-windows.log
-          for n in 1 2 3; do
+          for n in 1 2 3 4 5 6; do
             go test -count=1 -v -parallel 16 -timeout 60m ./tui/ > "$RUNNER_TEMP/p16-$n.log" 2>&1 || true
             cat "$RUNNER_TEMP/p16-$n.log" >> tui-windows.log
             echo "== run $n: fail $(grep -c -- '^--- FAIL' "$RUNNER_TEMP/p16-$n.log" || true)"; grep -E -- '^--- FAIL' "$RUNNER_TEMP/p16-$n.log" || true
             grep -E -- 'LANDING gated save' "$RUNNER_TEMP/p16-$n.log" | grep -v 'every goroutine' | sed -E 's/^ +[a-z_]+_test\.go:[0-9]+: //' | cut -c1-200 || true
             echo "== run $n: the saves of the gated and outside cells"
-            grep -E -- 'SAVETRACE .*(TestAGatedSaveIsHeldToTheWorkspace|TestAFileOutsideEveryWorkspaceOpensEditsAndSaves)' "$RUNNER_TEMP/p16-$n.log" | sed -E 's/SAVETRACE [^:]*\\(Test[A-Za-z]+)[0-9]*\\[^:]*/SAVETRACE \1/' | cut -c1-260 || true
+            grep -E -- 'SAVETRACE .*(TestAGatedSaveIsHeldToTheWorkspace|the cell:)' "$RUNNER_TEMP/p16-$n.log" | sed -E 's/SAVETRACE [^:]*\\(Test[A-Za-z]+)[0-9]*\\[^:]*/SAVETRACE \1/' | cut -c1-260 || true
+            if grep -q -- '--- FAIL: TestAGatedSaveIsHeldToTheWorkspace' "$RUNNER_TEMP/p16-$n.log"; then echo "== the gated cell went red in run $n: stopping"; break; fi
           done
       - name: the census log
         if: ${{ always() && !inputs.discover }}

@@ -837,7 +837,7 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 	h.say(h.trf("autodoc.notice.files.saving", p))
 	onDisk := withEndings(content, b.file.crlf)                             // the file's own line breaks, CRLF where it had them
 	traceGen, traceSess, traceT0 := b.file.gen, h.session.Gen(), time.Now() // SCRATCH
-	fmt.Fprintf(os.Stderr, "SAVETRACE %s: asked, gated %v, gen %d, session %d, want %q\n", p, who.gated(), traceGen, traceSess, want)
+	fmt.Fprintf(os.Stderr, "SAVETRACE %s: asked at %s, gated %v, gen %d, session %d, want %q\n", p, time.Now().Format("15:04:05.000"), who.gated(), traceGen, traceSess, want)
 	do(h, func(ctx context.Context) answer {
 		ctx = withAuthority(ctx, who)
 		res, err := h.writeFile(ctx, ws, p, []byte(onDisk), want, raw)

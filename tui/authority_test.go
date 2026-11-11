@@ -246,7 +246,9 @@ func TestAGatedSaveIsHeldToTheWorkspace(t *testing.T) {
 	g.saved(t, func() { onLoop(g.running, func() bool { g.h.luaFeature().luaMenu(strconv.Itoa(serial)); return true }) })
 	g.probeIs(t, "orig\n")
 
+	t.Logf("SAVETRACE the cell: the user's :w dispatched at %s", time.Now().Format("15:04:05.000")) // SCRATCH
 	g.mustRun(t, "w") // the user's own
+	t.Logf("SAVETRACE the cell: the user's :w returned at %s", time.Now().Format("15:04:05.000")) // SCRATCH
 	g.lands(t, "gated save: the user's save", func() bool {
 		b, _ := os.ReadFile(g.probe)
 		return strings.Contains(string(b), "EVIL")
