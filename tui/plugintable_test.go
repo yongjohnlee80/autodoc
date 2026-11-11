@@ -889,8 +889,11 @@ func (r *running) app(t *testing.T, name string, args ...qml.SpecValue) {
 func TestTheResultsCommandsRunFromTheCatalogAndThePanel(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
+	var rh *Host
+	t.Cleanup(func() { debugHandles(t, "at the cleanup", filepath.Join(dir, "rows"), rh) })
 	installPlugin4(t, dir, "rows", "service", "tablestall", tableManifest)
 	r, logs := resultsTUI(t, dir, map[string][]string{"kb": {"a.md", "# A\n", "manual.pdf", manualPDF}}, daemonOpts{deriver: pdfAsText{}})
+	rh = r.h
 	onLoop(r, func() bool { r.h.plugins.runPluginCommand("rows", "run"); return true })
 	r.waitResults(t, "q1", tablePage+resultsPage)
 
