@@ -3,8 +3,11 @@ package follow
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
+	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -212,6 +215,9 @@ func (f *Follower) watch(ctx context.Context) (<-chan vfs.Event, string, error) 
 	if w, ok := f.fsys.(vfs.Watcher); ok {
 		events, err := w.Watch(ctx, ".", opts...)
 		if err == nil {
+			if scratchFollow {
+				fmt.Fprintf(os.Stderr, "FOLLOW-START %p watching at=%s\n", f, time.Now().Format("15:04:05.000"))
+			}
 			return events, Watching, nil
 		}
 		werr = err
@@ -286,6 +292,9 @@ func (f *Follower) degraded(ctx context.Context, wait time.Duration) {
 }
 
 func (f *Follower) handle(ctx context.Context, ev vfs.Event) {
+	if scratchFollow && (strings.Contains(ev.Path, "sub") || ev.Path == "" || ev.Path == "x") { // SCRATCH (never merged)
+		fmt.Fprintf(os.Stderr, "FOLLOW-EV %p op=%v path=%q match=%v at=%s\n", f, ev.Op, ev.Path, f.match(ev.Path), time.Now().Format("15:04:05.000"))
+	}
 	switch {
 	case ev.Op == vfs.OpOverflow && ev.Path == "":
 		// events were lost for everything watched: the kernel's queue overflowed on a watch that goes
@@ -448,3 +457,6 @@ func (f *Follower) rescanDue(ctx context.Context) {
 		}
 	}
 }
+
+// scratchFollow (SCRATCH, never merged) logs the follower's events for paths under a sub folder.
+var scratchFollow = os.Getenv("AUTODOC_SCRATCH_FOLLOW") != ""
