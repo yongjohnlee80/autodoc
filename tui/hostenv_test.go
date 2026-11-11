@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -49,7 +50,8 @@ func TestATestsEnvironmentReachesOnlyItsOwnProgram(t *testing.T) {
 	for i, name := range []string{"one", "two"} {
 		// the shell's folders, not t.TempDir's: on Windows a running program's file, or a process's
 		// working folder, can't be removed while the shell may still be exiting (shellTempDir)
-		p := &program{name: name, home: shellTempDir(t, "autodoc-env-home-"), bin: shellTempDir(t, "autodoc-env-bin-"), mark: 41 + i}
+		// its home has a space in its name: a path with whitespace reaches its shell whole
+		p := &program{name: name, home: shellTempDir(t, "autodoc-env home-"), bin: shellTempDir(t, "autodoc-env-bin-"), mark: 41 + i}
 		standIn(t, p.bin, envCellProgram)
 		sh := lineShellIn(t, p.bin)
 		s := seamsWithEnv(t, nil, "SHELL="+sh, "PS1=$ ", lineShellEnv+"=1", envCellEnv+"="+name,
@@ -69,7 +71,7 @@ func TestATestsEnvironmentReachesOnlyItsOwnProgram(t *testing.T) {
 		}
 		shellInTheTerminal(t, r)
 		// the output alone holds what the shell prints: the line typed holds neither home-N nor ran-NAME-N
-		r.keys(t, decltest.Type(fmt.Sprintf("ishome %s %d\r", p.home, p.mark))...)
+		r.keys(t, decltest.Type(fmt.Sprintf("ishome %d %s\r", p.mark, hex.EncodeToString([]byte(p.home))))...)
 		r.s.WaitForText(t, fmt.Sprintf("home-%d", p.mark))
 		r.keys(t, decltest.Type(fmt.Sprintf("run %s %d\r", envCellProgram, p.mark))...)
 		r.s.WaitForText(t, fmt.Sprintf("ran-%s-%d", p.name, p.mark))
