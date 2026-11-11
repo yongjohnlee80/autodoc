@@ -329,8 +329,6 @@ type Host struct {
 	// Lua events (luaevents.go): the change debounce's generation, the revision the last change emit
 	// (or open) saw, and the mode last emitted
 	luaChangeGen uint64
-	// luaRoots are the running engine's package folders, open while it may require from them
-	luaRoots []*os.Root
 	// userPackages are the user's package names (lua/<name>/), loaded or failed: each reserves its
 	// name against a plugin's package (luapackages.go). pluginPackages are the plugin packages
 	// loaded, by script name ("plugin:<name>") → the plugin's key: autodoc.plugin.run's only
@@ -711,7 +709,6 @@ func (h *Host) Run(ctx context.Context) error {
 	if h.scripts != nil {
 		h.scripts.Close()
 	}
-	closeRoots(h.luaRoots)
 	if h.editorSock != nil {
 		h.editorSock.stop()
 	}
