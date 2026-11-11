@@ -24,6 +24,8 @@ func listCalls(s *featuretest.ScriptedCore) int {
 // TestAFailedTodoWriteReadsThePanelAgain: a write the daemon refuses (a remove of a task that
 // changed since its row was read: a conflict) is told, and the store shown is read again, so the
 // row it was refused for shows the task as it is now, its rev with it.
+//
+// Moved from tui/todos_failed_test.go with its name and asserts unchanged.
 func TestAFailedTodoWriteReadsThePanelAgain(t *testing.T) {
 	s := scriptedStore(true)
 	v := New(s)
