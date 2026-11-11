@@ -252,17 +252,17 @@ jobs:
         run: |
           # the whole module's vet, not only the ported packages': it compiles every package's tests
           # for Windows, so a neutral test can't come to lean on a helper in a Unix-tagged file
-          # SCRATCH (never merged): tui's whole Windows census, -v, a long timeout
-          go test -count=1 -v -timeout 170m ./tui/ > "$RUNNER_TEMP/tui.log" 2>&1 || true
-          cp "$RUNNER_TEMP/tui.log" tui-windows.log || true
-          echo "== totals"
-          echo "pass $(grep -c -- '^--- PASS' tui-windows.log || true) fail $(grep -c -- '^--- FAIL' tui-windows.log || true) skip $(grep -c -- '^--- SKIP' tui-windows.log || true)"
-          echo "== FAIL, panic and build lines"
-          grep -E -- '^(--- FAIL|FAIL|panic:|# )|\.go:[0-9]+:[0-9]+: ' tui-windows.log | head -400 || true
-          echo "== the failing cells' assertion lines"
-          grep -E -- '^\s+[a-z_0-9]+_test\.go:[0-9]+: ' tui-windows.log | head -800 || true
-          echo "== the tail"
-          tail -60 tui-windows.log || true
+          # SCRATCH (never merged): W1's cleanup cells alone, then what still runs after them
+          R='^(TestLuaPackagesLoadGatedAndInstall|TestAPackageReadsOnlyItsOwnFolder|TestABrokenPluginPackageIsSaidAndNotRecorded|TestAPluginsPackageIsGated|TestAPluginsPackageRunsItsOwnPluginOnly|TestTheResultsCommandsRunFromTheCatalogAndThePanel|TestARefusedSaveChangesNothing)$'
+          go test -c -o "$RUNNER_TEMP/tui.test.exe" ./tui/ || true
+          for i in 1 2; do
+            echo "== run $i"
+            ( cd tui && "$RUNNER_TEMP/tui.test.exe" -test.count=1 -test.v -test.timeout 20m -test.run "$R" > "$RUNNER_TEMP/w1-$i.log" 2>&1 ) || true
+            grep -E -- '^(--- |=== RUN)|_test\.go:[0-9]+: |testing\.go:[0-9]+: ' "$RUNNER_TEMP/w1-$i.log" | head -120 || true
+            echo "== processes alive after run $i"
+            powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \$_.CommandLine -match 'tui.test|autodoc|lua|git' } | Select-Object ProcessId,ParentProcessId,CommandLine | Format-List" || true
+          done
+          cp "$RUNNER_TEMP/w1-1.log" tui-windows.log || true
       - name: the census log
         if: ${{ always() && !inputs.discover }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
