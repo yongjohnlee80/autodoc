@@ -247,6 +247,13 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: scratch (not for merge) tui's subpackages x3
+        if: ${{ !inputs.discover }}
+        run: |
+          go test -count=3 -v -timeout 30m ./tui/agents/ ./tui/crew/ ./tui/explorer/ ./tui/feature/ ./tui/relations/ ./tui/searchsetup/ ./tui/system/ > "$RUNNER_TEMP/x3.log" 2>&1 && rc=0 || rc=$?
+          echo "== x3 rc=$rc pass $(grep -c -- '^--- PASS' "$RUNNER_TEMP/x3.log" || true) fail $(grep -c -- '^--- FAIL' "$RUNNER_TEMP/x3.log" || true) skip $(grep -c -- '^--- SKIP' "$RUNNER_TEMP/x3.log" || true)"
+          grep -E -- '^(ok|FAIL|--- FAIL)|testing\.go:[0-9]+:|_test\.go:[0-9]+: ' "$RUNNER_TEMP/x3.log" | grep -v 'colon, which Windows' | cut -c1-250 | head -30 || true
+          [ $rc = 0 ]
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
         run: |
