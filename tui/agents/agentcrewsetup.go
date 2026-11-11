@@ -93,9 +93,7 @@ func CrewSetupArgs(config, kind, dir, bin string) []string {
 	}
 	args = append(args, "crew", "setup", "--kind", kind, "--host", crew.HostWindow,
 		"--autodoc", ShellQuote(bin), "--agent-dir", dir)
-	if !CanRunAgentServers {
-		args = append(args, "--no-agent-server")
-	}
+	_ = CanRunAgentServers // MUTANT m2: the flag never passed
 	return append(args, "--mail-via", "mcp")
 }
 
