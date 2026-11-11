@@ -4,9 +4,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"testing"
+
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 )
 
 // testStep runs script, a test plugin's install build, as `sh -c script` would, on every OS: the
@@ -155,4 +159,35 @@ func runStepCommand(words []string) int {
 	}
 	fmt.Fprintf(os.Stderr, "step: not a command the test step knows: %q\n", words)
 	return 127
+}
+
+// TestTheTestStepRunsWhatShWould: the install fixtures' step reads words as agents.ShellQuote
+// quotes them, runs && only after a success and ; regardless, and refuses a command it does not
+// know (exit status 127) rather than doing something else.
+func TestTheTestStepRunsWhatShWould(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	out := filepath.Join(dir, "it's here.txt")
+	read := func() string {
+		b, err := os.ReadFile(out)
+		if err != nil {
+			return "(none)"
+		}
+		return string(b)
+	}
+	if got := testStep("echo 'a  b' c > " + agents.ShellQuote(out)); got != 0 || read() != "a  b c\n" {
+		t.Fatalf("echo with quoted words: status %d, %q", got, read())
+	}
+	if got := testStep("false && echo no > " + agents.ShellQuote(out)); got != 1 || read() != "a  b c\n" {
+		t.Fatalf("&& after a failure: status %d, %q", got, read())
+	}
+	if got := testStep("false; echo yes > " + agents.ShellQuote(out)); got != 0 || read() != "yes\n" {
+		t.Fatalf("; after a failure: status %d, %q", got, read())
+	}
+	if got := testStep("true && exit 4; echo after > " + agents.ShellQuote(out)); got != 4 || read() != "yes\n" {
+		t.Fatalf("exit ends the step: status %d, %q", got, read())
+	}
+	if got := testStep("curl example.com"); got != 127 {
+		t.Fatalf("a command the step does not know: status %d, want 127", got)
+	}
 }
