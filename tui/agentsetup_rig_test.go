@@ -169,6 +169,13 @@ func (r *running) waitAgentStarted(t *testing.T, name string) {
 	r.waitWithin(t, "the agent's \"started "+name+"\"", agentStartWait, func() bool { return strings.Contains(r.s.String(), "started "+name) })
 }
 
+// agentsFolder is the agent folder for runSetupTUI: an agent runs in its workspace's folder there,
+// and on Windows a process's working folder can't be removed while it exits (shellTempDir).
+func agentsFolder(t *testing.T) string {
+	t.Helper()
+	return shellTempDir(t, "autodoc-agents-")
+}
+
 // runSetupTUI is runAgentTUIWith for the cells that run on every OS (the setup's, an agent's): the
 // program has a home and a PATH of its own (the system's programs only), and its agents call a
 // stand-in build that records each call in calls.

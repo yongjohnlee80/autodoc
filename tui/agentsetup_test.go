@@ -41,7 +41,7 @@ func TestSetUpSavesAndStartsTypingNothing(t *testing.T) {
 	t.Parallel()
 	offeringSetup(t)
 	heard, onPath := fakeClaude(t)
-	d, r, _ := runSetupTUI(t, t.TempDir(), nil, "", nil, Options{})
+	d, r, _ := runSetupTUI(t, agentsFolder(t), nil, "", nil, Options{})
 	onPath(r)
 	r.s.WaitForText(t, "Set up an AI agent?")
 	r.s.WaitForText(t, "Claude (claude)")
@@ -78,7 +78,7 @@ func TestASetupWithATakenCodenameIsRefused(t *testing.T) {
 	offeringSetup(t)
 	heard, onPath := fakeClaude(t)
 	old := agents.AgentProfile{Name: "Old", Command: "claude", Codename: "claude"}
-	d, r, _ := runSetupTUI(t, t.TempDir(), []agents.AgentProfile{old}, "", nil, Options{})
+	d, r, _ := runSetupTUI(t, agentsFolder(t), []agents.AgentProfile{old}, "", nil, Options{})
 	onPath(r)
 	onLoop(r, func() bool { r.h.agents.OpenAgentSetup(); return true })
 	r.s.WaitForText(t, "Set up an AI agent?")
@@ -101,7 +101,7 @@ func TestASetupWithATakenCodenameIsRefused(t *testing.T) {
 // The form's Save and storeAgentProfile refuse alike: the form is unchanged.
 func TestTheFormAndTheSetupRefuseAlike(t *testing.T) {
 	t.Parallel()
-	_, r, _ := runSetupTUI(t, t.TempDir(), nil, "", nil, Options{})
+	_, r, _ := runSetupTUI(t, agentsFolder(t), nil, "", nil, Options{})
 	onLoop(r, func() bool { r.h.agents.SaveAgentProfile("", "claude", ""); return true })
 	r.s.WaitForText(t, "not saved: a profile is a name and the command that starts the agent")
 	if onLoop(r, func() bool { _, ok := r.h.agents.StoreAgentProfile("x", "", "", "", ""); return ok }) {
@@ -114,7 +114,7 @@ func TestNoIsRemembered(t *testing.T) {
 	t.Parallel()
 	offeringSetup(t)
 	fakeClaude(t)
-	d, r, _ := runSetupTUI(t, t.TempDir(), nil, "", nil, Options{})
+	d, r, _ := runSetupTUI(t, agentsFolder(t), nil, "", nil, Options{})
 	r.s.WaitForText(t, "Set up an AI agent?")
 	r.keys(t, key('n')) // &No
 	storedPref(t, d, r, agents.PrefAgentSetup, "declined")
@@ -131,7 +131,7 @@ func TestNoIsRemembered(t *testing.T) {
 func TestTheSetupOpensFromTheCatalogAndTheMenu(t *testing.T) {
 	t.Parallel()
 	fakeClaude(t)
-	_, r, _ := runSetupTUI(t, t.TempDir(), nil, "", nil, Options{})
+	_, r, _ := runSetupTUI(t, agentsFolder(t), nil, "", nil, Options{})
 	r.s.WaitFor(t, "started", func(string) bool { return onLoop(r, func() bool { return r.h.started }) })
 	if err := onLoop(r, func() error { return r.h.cat.Run("agent.setup", nil) }); err != nil {
 		t.Fatalf("agent.setup: %v", err)
@@ -152,7 +152,7 @@ func TestNoneFoundSaysWhichAndRecordsNothing(t *testing.T) {
 	t.Parallel()
 	offeringSetup(t)
 	tune(t).lookAgentCLI = func(string) (string, error) { return "", errors.New("not found") }
-	d, r, _ := runSetupTUI(t, t.TempDir(), nil, "", nil, Options{})
+	d, r, _ := runSetupTUI(t, agentsFolder(t), nil, "", nil, Options{})
 	r.s.WaitForText(t, "No agent CLI was found on your PATH")
 	if n := onLoop(r, func() int { return r.h.agents.Snapshot().Found }); n != 0 {
 		t.Errorf("the none-found card lists %d CLIs to set up", n)

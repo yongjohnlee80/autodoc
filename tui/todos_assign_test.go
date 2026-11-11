@@ -76,7 +76,7 @@ func taskIn(t *testing.T, d *daemon, bucket, title string) (todo.Task, bool) {
 func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 	heardDir := t.TempDir()
 	agent := hearingAgent(t, heardDir)
-	d, r, _ := runSetupTUI(t, shellTempDir(t, "autodoc-agents-"), []agents.AgentProfile{
+	d, r, _ := runSetupTUI(t, agentsFolder(t), []agents.AgentProfile{
 		{Name: "Scribe", Codename: "scribe", Command: agentCall(agent, "scribe")},
 		{Name: "Critic", Codename: "critic", Command: agentCall(agent, "critic")},
 	}, "", nil, Options{})
