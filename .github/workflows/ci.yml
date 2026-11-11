@@ -252,9 +252,22 @@ jobs:
         run: |
           # the whole module's vet, not only the ported packages': it compiles every package's tests
           # for Windows, so a neutral test can't come to lean on a helper in a Unix-tagged file
-          go vet ./...
-          mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
-          go test -count=1 -timeout 20m "${pkgs[@]}"
+          # SCRATCH (never merged): the save traced, all of ./tui three times at -parallel 16; the whole log uploaded
+          : > tui-windows.log
+          for n in 1 2 3; do
+            go test -count=1 -v -parallel 16 -timeout 60m ./tui/ > "$RUNNER_TEMP/p16-$n.log" 2>&1 || true
+            cat "$RUNNER_TEMP/p16-$n.log" >> tui-windows.log
+            echo "== run $n: fail $(grep -c -- '^--- FAIL' "$RUNNER_TEMP/p16-$n.log" || true)"; grep -E -- '^--- FAIL' "$RUNNER_TEMP/p16-$n.log" || true
+            grep -E -- 'LANDING gated save' "$RUNNER_TEMP/p16-$n.log" | grep -v 'every goroutine' | sed -E 's/^ +[a-z_]+_test\.go:[0-9]+: //' | cut -c1-200 || true
+            echo "== run $n: the saves of the gated and outside cells"
+            grep -E -- 'SAVETRACE .*(TestAGatedSaveIsHeldToTheWorkspace|TestAFileOutsideEveryWorkspaceOpensEditsAndSaves)' "$RUNNER_TEMP/p16-$n.log" | sed -E 's/SAVETRACE [^:]*\\(Test[A-Za-z]+)[0-9]*\\[^:]*/SAVETRACE \1/' | cut -c1-260 || true
+          done
+      - name: the census log
+        if: ${{ always() && !inputs.discover }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: tui-windows-log
+          path: tui-windows.log
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true

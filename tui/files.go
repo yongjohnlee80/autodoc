@@ -3,10 +3,12 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
 	"path"
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -829,10 +831,13 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 		same    bool  // the read-back holds what was written
 	}
 	h.say(h.trf("autodoc.notice.files.saving", p))
-	onDisk := withEndings(content, b.file.crlf) // the file's own line breaks, CRLF where it had them
+	onDisk := withEndings(content, b.file.crlf)                             // the file's own line breaks, CRLF where it had them
+	traceGen, traceSess, traceT0 := b.file.gen, h.session.Gen(), time.Now() // SCRATCH
+	fmt.Fprintf(os.Stderr, "SAVETRACE %s: asked, gated %v, gen %d, session %d, want %q\n", p, who.gated(), traceGen, traceSess, want)
 	do(h, func(ctx context.Context) answer {
 		ctx = withAuthority(ctx, who)
 		res, err := h.writeFile(ctx, ws, p, []byte(onDisk), want, raw)
+		fmt.Fprintf(os.Stderr, "SAVETRACE %s: write returned at +%s, code %d, err %v\n", p, time.Since(traceT0).Round(time.Millisecond), feature.Code(err), err)
 		if err == nil {
 			return answer{version: feature.Str(feature.AsMap(res), "version")}
 		}
@@ -848,6 +853,7 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 		return answer{err: err, version: feature.Str(m, "version"), same: string(b) == onDisk}
 	}, func(a answer) {
 		defer settled()
+		fmt.Fprintf(os.Stderr, "SAVETRACE %s: back on the loop at +%s, ticket current %v (gen %d→%d, session %d→%d, buffer open %v), err %v\n", p, time.Since(traceT0).Round(time.Millisecond), tk.Current(), traceGen, b.file.gen, traceSess, h.session.Gen(), slices.Contains(h.buffers, b), a.err)
 		if !tk.Current() {
 			return
 		}
