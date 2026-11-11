@@ -24,7 +24,23 @@ func init() {
 		os.Exit(fakeClaudeMain())
 	case "autodoc-build":
 		os.Exit(fakeBuildMain())
+	case "codex":
+		os.Exit(fakeCodexMain())
 	}
+}
+
+// fakeCodexMain is the stand-in codex a Codex agent's setup asks (crew.SetupFor): a version, and a
+// --help that offers --no-daemon.
+func fakeCodexMain() int {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "--version":
+			fmt.Println("codex-cli 0.0.0-test")
+		case "--help":
+			fmt.Println("      --no-daemon   Run without the shared background server")
+		}
+	}
+	return 0
 }
 
 // exeName is name as a program file on this OS.

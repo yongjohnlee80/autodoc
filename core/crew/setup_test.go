@@ -699,6 +699,35 @@ func TestSetupForCodexWithNoFolderStaysOffTheSharedDaemon(t *testing.T) {
 	}
 }
 
+// TestSetupForCodexOnAHostWithNoAgentServer: a host that can't run an agent's own server
+// (NoAgentServer: the window on a system without process groups) gets no server for a Codex agent
+// even with a folder of its own: it starts as one with no folder for its server does (--no-daemon
+// where Codex takes it, then no step; before the flag, the step), on the CLI's mail, and the setup
+// says, once, why crew mail can't wake it and that the crew MCP server needs the app-server.
+func TestSetupForCodexOnAHostWithNoAgentServer(t *testing.T) {
+	newer := codexOnPath(t, codexNewerHelp)
+	server := []crew.MCPServer{{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"}}}
+	s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostWindow, Env: map[string]string{"PATH": newer}, Dir: t.TempDir(),
+		AgentDir: t.TempDir(), Servers: server, NoAgentServer: true}, "")
+	if err != nil || !slices.Equal(s.Argv, []string{"--no-daemon"}) || len(s.Server) != 0 || s.ServerSocket != "" || len(s.After) != 0 ||
+		s.MailVia != crew.MailViaCLI || s.Env[crew.EnvCodexServer] != "" {
+		t.Fatalf("no agent server: %+v %v; want --no-daemon, no server, no step, the CLI's mail", s, err)
+	}
+	said := func(text string) int {
+		return len(slices.DeleteFunc(slices.Clone(s.Notices), func(n string) bool { return !strings.Contains(n, text) }))
+	}
+	if said("this system can't run an app-server of the agent's own for Codex, so crew mail can't wake it") != 1 ||
+		said("needs the agent's own app-server, which this system can't run") != 1 {
+		t.Fatalf("no agent server: notices %q; want why it can't be woken and why its MCP server isn't given, each once", s.Notices)
+	}
+	older := codexOnPath(t, codexOlderHelp)
+	s, err = crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostWindow, Env: map[string]string{"PATH": older}, Dir: t.TempDir(),
+		AgentDir: t.TempDir(), NoAgentServer: true}, "")
+	if err != nil || len(s.Argv) != 0 || len(s.Server) != 0 || len(s.After) != 1 || s.After[0][2] != "--codex-here" {
+		t.Fatalf("no agent server, a Codex without --no-daemon: %+v %v; want no flag, no server, the registration step", s, err)
+	}
+}
+
 // The --help lines of a Codex that takes --no-daemon, and of one before it.
 const (
 	codexNewerHelp = "      --no-daemon   Run without the shared background server"

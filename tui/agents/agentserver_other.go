@@ -9,8 +9,13 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
+// CanRunAgentServers is false here: with no process groups to run an agent's own server in, the
+// window asks for setups that need none (crew setup --no-agent-server), so a Codex agent starts as
+// one with no folder of its own for a server does.
+const CanRunAgentServers = false
+
 // agentServer is a crew agent's server where there are no process groups to run one in: none is
-// started, so a setup that needs one refuses the agent's start (agentserver.go).
+// started, so a setup that still names one refuses the agent's start (agentserver.go).
 type agentServer struct{}
 
 func StartAgentServer(argv []string, socket, dir string, environ []string, ready time.Duration) (*agentServer, error) {

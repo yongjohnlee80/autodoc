@@ -25,6 +25,10 @@ import (
 // server: the next start in that folder stops it first, by its pid file, when that process's
 // command line still names the folder's socket.
 
+// CanRunAgentServers says the window can run a crew agent's own server (a Codex agent's
+// app-server): here, in a process group of its own (StartAgentServer).
+const CanRunAgentServers = true
+
 // serverPidFile is the agent server's pid, in the agent folder (0700). Never in its crew folder
 // (crew.ContextDir): that holds the session contexts alone, one file per session, and a file of
 // anything else there is read as one more context, so `autodoc crew` and `mail` in the folder

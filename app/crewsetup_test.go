@@ -112,3 +112,35 @@ func TestCrewSetupOffersTheMCPServerOnlyToAHostThatRegistersItsMode(t *testing.T
 		t.Errorf("--mail-via smtp: exit %d, want usage", code)
 	}
 }
+
+// TestCrewSetupGivesNoAgentServerToAHostThatCantRunOne: `crew setup --kind codex --agent-dir D
+// --no-agent-server` (the window where it can't run an agent's own server) answers no server, the
+// Codex taking --no-daemon instead; without the flag, the agent's folder gives it its own server.
+func TestCrewSetupGivesNoAgentServerToAHostThatCantRunOne(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	bin := t.TempDir()
+	script := "#!/bin/sh\ncase \"$1\" in --version) echo 'codex-cli 0.0.0-test';; --help) echo '      --no-daemon   Run without the shared background server';; esac\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(bin, "codex"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	setup := func(args ...string) crew.Setup {
+		t.Helper()
+		var out, errOut bytes.Buffer
+		if code := run(t.Context(), append([]string{"crew", "setup", "--kind", "codex", "--host", "window", "--agent-dir", t.TempDir()}, args...), Options{Version: "v1.2.3"}, &out, &errOut); code != 0 {
+			t.Fatalf("crew setup %v: exit %d, %s", args, code, errOut.String())
+		}
+		var s crew.Setup
+		if err := json.Unmarshal(out.Bytes(), &s); err != nil {
+			t.Fatalf("%q: %v", out.String(), err)
+		}
+		return s
+	}
+	if s := setup("--no-agent-server"); len(s.Server) != 0 || !slices.Contains(s.Argv, "--no-daemon") || slices.Contains(s.Argv, "--remote") {
+		t.Fatalf("--no-agent-server: server %q, argv %q; want no server, and --no-daemon", s.Server, s.Argv)
+	}
+	if s := setup(); len(s.Server) == 0 || !slices.Contains(s.Argv, "--remote") {
+		t.Fatalf("an agent folder, no flag: server %q, argv %q; want its own server, the TUI on it", s.Server, s.Argv)
+	}
+}

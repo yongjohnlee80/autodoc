@@ -30,12 +30,13 @@ func crewSetupMain(configPath string, args []string, environ []string, stdout, s
 	program := fs.String("program", "", "the CLI the agent's command runs (default the kind's own name)")
 	autodoc := fs.String("autodoc", "autodoc", "the command the agent's hooks run AutoDoc with, as a shell reads it")
 	agentDir := fs.String("agent-dir", "", "the folder the host owns for the agent, where a kind's folder files go (never the user's project)")
+	noAgentServer := fs.Bool("no-agent-server", false, "the host can't run an agent's own server (a Codex agent's app-server): the agent starts as one with no folder of its own for it does")
 	mailVia := fs.String("mail-via", "", "mcp: the host registers the session with the mail_via this setup answers (crew.register's), so a kind that can read its mail through the crew MCP server is given it; absent or cli: the CLI's setup. agy, whose mail is MCP alone, is given the server either way")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if *kind == "" || fs.NArg() != 0 || (*host != crew.HostNvim && *host != crew.HostWindow) || (*mailVia != "" && *mailVia != "cli" && *mailVia != "mcp") {
-		fmt.Fprintln(stderr, "usage: autodoc crew setup --kind K [--host window|nvim] [--program P] [--autodoc CMD] [--agent-dir DIR] [--mail-via mcp|cli]")
+		fmt.Fprintln(stderr, "usage: autodoc crew setup --kind K [--host window|nvim] [--program P] [--autodoc CMD] [--agent-dir DIR] [--no-agent-server] [--mail-via mcp|cli]")
 		return 2
 	}
 	// the crew MCP server only for a host that registers the mail mode it is answered (--mail-via
@@ -68,7 +69,7 @@ func crewSetupMain(configPath string, args []string, environ []string, stdout, s
 		return 1
 	}
 	s, err := crew.SetupFor(crew.SetupInput{Kind: *kind, Program: *program, Host: *host, Autodoc: *autodoc, Env: env,
-		DataDir: data, Dir: dir, AgentDir: *agentDir, Servers: servers}, filepath.Join(data, "claude-hooks.json"))
+		DataDir: data, Dir: dir, AgentDir: *agentDir, Servers: servers, NoAgentServer: *noAgentServer}, filepath.Join(data, "claude-hooks.json"))
 	if err != nil {
 		fmt.Fprintln(stderr, "autodoc:", err)
 		return 1

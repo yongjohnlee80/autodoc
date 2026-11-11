@@ -25,6 +25,15 @@ import (
 // with an id, so its agents start as crew sessions.
 func crewAgents(t *testing.T, profiles string) (*agents.Agents, *identityHost, *crewWindow) {
 	t.Helper()
+	return crewAgentsOn(t, profiles, !agents.CanRunAgentServers)
+}
+
+// crewAgentsOn is crewAgents on a host that can run an agent's own server or, noServer, one that
+// can't (as the window on a system without process groups: its setups are asked with
+// NoAgentServer). A Codex agent's setup there asks Codex whether it takes --no-daemon: a stand-in
+// codex is on the setup's PATH, which says it does.
+func crewAgentsOn(t *testing.T, profiles string, noServer bool) (*agents.Agents, *identityHost, *crewWindow) {
+	t.Helper()
 	c := newIdentityHost(profiles)
 	c.ws = wsInfo{id: 7, name: "kb", root: t.TempDir()}
 	s := seamsFor(t)
@@ -39,10 +48,14 @@ func crewAgents(t *testing.T, profiles string) (*agents.Agents, *identityHost, *
 	// MCP server (a cell that wants one sets its own): every kind as it is without one, on CLI mail.
 	// A Codex agent still gets its own app-server (an agent folder gives one in every mail mode),
 	// played by a stand-in that makes its socket: no Codex is installed where the cells run.
-	data := t.TempDir()
+	data, path := t.TempDir(), "/nonexistent"
+	if noServer {
+		path = t.TempDir()
+		standIn(t, path, "codex")
+	}
 	seamsOf(a).agentSetupRun = func(kind, dir string, environ []string) (corecrew.Setup, error) {
-		s, err := corecrew.SetupFor(corecrew.SetupInput{Kind: kind, Host: corecrew.HostWindow, Env: map[string]string{"PATH": "/nonexistent"},
-			DataDir: data, Dir: dir, AgentDir: dir}, "")
+		s, err := corecrew.SetupFor(corecrew.SetupInput{Kind: kind, Host: corecrew.HostWindow, Env: map[string]string{"PATH": path},
+			DataDir: data, Dir: dir, AgentDir: dir, NoAgentServer: noServer}, "")
 		if err == nil && len(s.Server) > 0 {
 			s.Server = fakeServer(t, s.ServerSocket, true)
 		}
