@@ -4320,6 +4320,10 @@ WHAT A KEY NEEDS
         <source>%1: it is in no workspace: no search, links, backlinks, frontmatter check or embeddings</source>
         <translation>%1: 어느 워크스페이스에도 속하지 않습니다: 검색, 링크, 백링크, frontmatter 검사, 임베딩 없음</translation>
     </message>
+    <message id="autodoc.notice.files.it_was_read_again_from_disk_meanwhile_save_it_ag">
+        <source>it was read again from disk meanwhile; save it again</source>
+        <translation>그 사이 디스크에서 다시 읽었습니다: 다시 저장하세요</translation>
+    </message>
     <message id="autodoc.notice.files.kept_as_it_was_saved_while_it_was_read">
         <source>kept %1 as it was saved while it was read</source>
         <translation>%1을(를) 읽는 동안 저장된 상태 그대로 유지했습니다</translation>
@@ -4387,6 +4391,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.files.the_connection_to_the_backend_was_renewed_meanwh">
         <source>the connection to the backend was renewed meanwhile; open it again</source>
         <translation>그 사이 백엔드와의 연결이 새로 맺어졌습니다: 다시 여세요</translation>
+    </message>
+    <message id="autodoc.notice.files.the_connection_to_the_backend_was_renewed_save_it">
+        <source>the connection to the backend was renewed meanwhile; save it again</source>
+        <translation>그 사이 백엔드와의 연결이 새로 맺어졌습니다: 다시 저장하세요</translation>
     </message>
     <message id="autodoc.notice.find.find_cleared">
         <source>find cleared</source>
