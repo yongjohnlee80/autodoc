@@ -91,10 +91,10 @@ type Session struct {
 	instance string
 	proto    int64
 	// poll is the polling connection (apart.go), dialed under primary generation pollGen;
-	// pollDialing is the dial of one in flight, nil when none is
+	// pollDialing closes when the dial of one in flight ends, nil when none is
 	poll        *golibrpc.Client
 	pollGen     uint64
-	pollDialing *pollFlight
+	pollDialing chan struct{}
 }
 
 // OlderServer is a daemon of an older protocol than this build's, as its probe said: a restart

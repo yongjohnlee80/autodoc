@@ -34,8 +34,9 @@ func (s *Session) Apart(verbs ...string) *Session {
 
 // pollClient is the polling connection for the primary there is now, dialed if there is none:
 // one dial at a time, a caller arriving during it waiting for its end (or for ctx). The dial and
-// its hello end with the primary they are for: a Connect, a Close or the primary's own end cancels
-// them, and a connection dialed for a primary that has since gone is closed, never published.
+// its hello end with the primary they are for: the primary's end cancels them (a Connect and a
+// Close end it first), and a connection dialed for a primary that has since gone is closed, never
+// published.
 func (s *Session) pollClient(ctx context.Context) (*golibrpc.Client, error) {
 	for {
 		s.mu.Lock()
@@ -49,21 +50,21 @@ func (s *Session) pollClient(ctx context.Context) (*golibrpc.Client, error) {
 			s.mu.Unlock()
 			return cli, nil
 		}
-		if f := s.pollDialing; f != nil {
+		if dialing := s.pollDialing; dialing != nil {
 			s.mu.Unlock()
 			select {
-			case <-f.done:
+			case <-dialing:
 				continue
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			}
 		}
 		dctx, cancel := context.WithCancel(ctx)
-		flight := &pollFlight{done: make(chan struct{}), cancel: cancel}
-		s.pollDialing = flight
+		dialing := make(chan struct{})
+		s.pollDialing = dialing
 		want := pollHello{instance: s.instance, pid: s.pid, storeID: s.storeID, protocol: s.proto}
 		s.mu.Unlock()
-		go func() { // the primary ending ends the dial for it
+		go func() { // the primary ending ends the dial for it: the one way a dial in flight is ended
 			select {
 			case <-primary.Done():
 				cancel()
@@ -75,10 +76,10 @@ func (s *Session) pollClient(ctx context.Context) (*golibrpc.Client, error) {
 		cancel() // the dial and hello are over: the connection, if any, outlives their ctx
 
 		s.mu.Lock()
-		if s.pollDialing == flight {
+		if s.pollDialing == dialing {
 			s.pollDialing = nil
 		}
-		close(flight.done)
+		close(dialing)
 		if s.gen != gen || s.client != primary || isDone(primary) {
 			err = errNotConnected // the primary it was dialed for is gone: a newer one dials its own
 		}
@@ -94,13 +95,6 @@ func (s *Session) pollClient(ctx context.Context) (*golibrpc.Client, error) {
 		go s.endPollWith(primary, cli)
 		return cli, nil
 	}
-}
-
-// pollFlight is a polling connection's dial in flight: done closes when it ends, and cancel ends
-// its dial and hello.
-type pollFlight struct {
-	done   chan struct{}
-	cancel context.CancelFunc
 }
 
 // pollHello is what the polling connection's hello must answer: the primary's.
@@ -156,13 +150,10 @@ func (s *Session) dropPoll(cli *golibrpc.Client) {
 	_ = cli.Close()
 }
 
-// takePoll forgets the polling connection, answering it for its caller to close, and cancels a
-// dial of one in flight: a Connect or a Close ends both with the primary. Called with s.mu held.
+// takePoll forgets the polling connection, answering it for its caller to close at once with the
+// primary: a Connect or a Close ends it then, not when the primary's end is noticed. A dial of one
+// in flight ends with the primary (pollClient). Called with s.mu held.
 func (s *Session) takePoll() *golibrpc.Client {
-	if f := s.pollDialing; f != nil {
-		f.cancel()
-		s.pollDialing = nil
-	}
 	cli := s.poll
 	s.poll = nil
 	return cli
