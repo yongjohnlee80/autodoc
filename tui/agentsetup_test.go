@@ -18,7 +18,7 @@ import (
 // which sets a PATH of its own.
 func fakeClaude(t *testing.T) (heard string, onPath func(*running)) {
 	t.Helper()
-	bin := t.TempDir()
+	bin := shellTempDir(t, "autodoc-fake-claude-") // on Windows a running program's file can't be removed while it exits
 	claude := standIn(t, bin, "claude")
 	heard = filepath.Join(bin, "heard")
 	tune(t).lookAgentCLI = func(c string) (string, error) {
