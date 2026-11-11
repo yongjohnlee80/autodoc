@@ -29,6 +29,14 @@ const heldGitBound = 2 * time.Minute
 // its release leaves no clone waiting.
 func heldGit(t *testing.T, env procenv.Env) (held procenv.Env, running func() bool, release func()) {
 	t.Helper()
+	return heldGitWith(t, env, nil)
+}
+
+// heldGitWith is heldGit, with copied (when not nil) called once the test binary is copied in as
+// git, before heldGit first starts it; what copied returns is startsOnceFree's busy hook. The cell
+// that holds a writer on the copy opens it there.
+func heldGitWith(t *testing.T, env procenv.Env, copied func(git string) (busy func())) (held procenv.Env, running func() bool, release func()) {
+	t.Helper()
 	real, err := exec.LookPath("git")
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +75,11 @@ func heldGit(t *testing.T, env procenv.Env) (held procenv.Env, running func() bo
 	if err := copyFile(exe, git); err != nil {
 		t.Fatal(err)
 	}
-	startsOnceFree(t, git, real, nil)
+	var busy func()
+	if copied != nil {
+		busy = copied(git)
+	}
+	startsOnceFree(t, git, real, busy)
 	held = env.With("PATH="+bin+string(os.PathListSeparator)+env.Get("PATH"),
 		heldGitEnv+"="+real, heldGitEnv+"_READY="+ready, heldGitEnv+"_RELEASE="+go_, heldGitEnv+"_SEEN="+seen)
 	release = func() { _ = os.WriteFile(go_, nil, 0o600) } // idempotent: a second release writes it again
