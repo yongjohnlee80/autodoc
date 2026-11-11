@@ -12,25 +12,26 @@ import (
 )
 
 // fakeClaude is a claude that writes every line typed to it into heard, a line only once its Enter
-// arrives: a prompt submitted is a whole line there, a prompt pasted without Enter none. The card
-// finds it (the seams' lookAgentCLI); onPath puts it on r's program's PATH for the agent's start, after
-// runAgentTUIWith, which sets a PATH of its own.
+// arrives: a prompt submitted is a whole line there, a prompt pasted without Enter none. It is this
+// test binary as claude (fakeClaudeMain), so it runs on every OS. The card finds it (the seams'
+// lookAgentCLI); onPath puts it on r's program's PATH for the agent's start, after runSetupTUI,
+// which sets a PATH of its own.
 func fakeClaude(t *testing.T) (heard string, onPath func(*running)) {
 	t.Helper()
 	bin := t.TempDir()
-	heard = filepath.Join(t.TempDir(), "heard")
-	script := "#!/bin/sh\necho ready\nwhile IFS= read -r line; do printf '%s\\n' \"$line\" >> " + agents.ShellQuote(heard) + "; done\n"
-	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	claude := standIn(t, bin, "claude")
+	heard = filepath.Join(bin, "heard")
 	tune(t).lookAgentCLI = func(c string) (string, error) {
 		if c == "claude" {
-			return filepath.Join(bin, c), nil
+			return claude, nil
 		}
 		return "", errors.New("not found")
 	}
 	return heard, func(r *running) {
-		onLoop(r, func() bool { r.h.seams.env = r.h.seams.env.With("PATH=" + bin + ":/usr/bin:/bin"); return true })
+		onLoop(r, func() bool {
+			r.h.seams.env = r.h.seams.env.With("PATH=" + bin + string(os.PathListSeparator) + systemPath())
+			return true
+		})
 	}
 }
 
@@ -40,7 +41,7 @@ func TestSetUpSavesAndStartsTypingNothing(t *testing.T) {
 	t.Parallel()
 	offeringSetup(t)
 	heard, onPath := fakeClaude(t)
-	d, r, _ := runAgentTUIWith(t, t.TempDir(), nil, "", nil, Options{})
+	d, r, _ := runSetupTUI(t, t.TempDir(), nil, "", nil, Options{})
 	onPath(r)
 	r.s.WaitForText(t, "Set up an AI agent?")
 	r.s.WaitForText(t, "Claude (claude)")
@@ -77,7 +78,7 @@ func TestASetupWithATakenCodenameIsRefused(t *testing.T) {
 	offeringSetup(t)
 	heard, onPath := fakeClaude(t)
 	old := agents.AgentProfile{Name: "Old", Command: "claude", Codename: "claude"}
-	d, r, _ := runAgentTUIWith(t, t.TempDir(), []agents.AgentProfile{old}, "", nil, Options{})
+	d, r, _ := runSetupTUI(t, t.TempDir(), []agents.AgentProfile{old}, "", nil, Options{})
 	onPath(r)
 	onLoop(r, func() bool { r.h.agents.OpenAgentSetup(); return true })
 	r.s.WaitForText(t, "Set up an AI agent?")
@@ -100,7 +101,7 @@ func TestASetupWithATakenCodenameIsRefused(t *testing.T) {
 // The form's Save and storeAgentProfile refuse alike: the form is unchanged.
 func TestTheFormAndTheSetupRefuseAlike(t *testing.T) {
 	t.Parallel()
-	_, r, _ := runAgentTUI(t, t.TempDir(), nil, "")
+	_, r, _ := runSetupTUI(t, t.TempDir(), nil, "", nil, Options{})
 	onLoop(r, func() bool { r.h.agents.SaveAgentProfile("", "claude", ""); return true })
 	r.s.WaitForText(t, "not saved: a profile is a name and the command that starts the agent")
 	if onLoop(r, func() bool { _, ok := r.h.agents.StoreAgentProfile("x", "", "", "", ""); return ok }) {
@@ -113,7 +114,7 @@ func TestNoIsRemembered(t *testing.T) {
 	t.Parallel()
 	offeringSetup(t)
 	fakeClaude(t)
-	d, r, _ := runAgentTUIWith(t, t.TempDir(), nil, "", nil, Options{})
+	d, r, _ := runSetupTUI(t, t.TempDir(), nil, "", nil, Options{})
 	r.s.WaitForText(t, "Set up an AI agent?")
 	r.keys(t, key('n')) // &No
 	storedPref(t, d, r, agents.PrefAgentSetup, "declined")
@@ -130,7 +131,7 @@ func TestNoIsRemembered(t *testing.T) {
 func TestTheSetupOpensFromTheCatalogAndTheMenu(t *testing.T) {
 	t.Parallel()
 	fakeClaude(t)
-	_, r, _ := runAgentTUIWith(t, t.TempDir(), nil, "", nil, Options{})
+	_, r, _ := runSetupTUI(t, t.TempDir(), nil, "", nil, Options{})
 	r.s.WaitFor(t, "started", func(string) bool { return onLoop(r, func() bool { return r.h.started }) })
 	if err := onLoop(r, func() error { return r.h.cat.Run("agent.setup", nil) }); err != nil {
 		t.Fatalf("agent.setup: %v", err)
@@ -151,7 +152,7 @@ func TestNoneFoundSaysWhichAndRecordsNothing(t *testing.T) {
 	t.Parallel()
 	offeringSetup(t)
 	tune(t).lookAgentCLI = func(string) (string, error) { return "", errors.New("not found") }
-	d, r, _ := runAgentTUIWith(t, t.TempDir(), nil, "", nil, Options{})
+	d, r, _ := runSetupTUI(t, t.TempDir(), nil, "", nil, Options{})
 	r.s.WaitForText(t, "No agent CLI was found on your PATH")
 	if n := onLoop(r, func() int { return r.h.agents.Snapshot().Found }); n != 0 {
 		t.Errorf("the none-found card lists %d CLIs to set up", n)
