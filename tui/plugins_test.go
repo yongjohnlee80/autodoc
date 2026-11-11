@@ -106,6 +106,12 @@ func runTestPlugin(mode string) int {
 	switch mode {
 	case "true": // a build step that succeeds, on every OS (no true program on Windows)
 		return 0
+	case "step": // an install build, as sh -c would run it, on every OS (teststep_test.go)
+		if len(os.Args) < 4 {
+			fmt.Fprintln(os.Stderr, "step: no script")
+			return 2
+		}
+		return testStep(os.Args[3])
 	case "silent": // never answers: asleep, never a bare select{}, which a process with no other
 		// goroutine ends as a deadlock (exit status 2), as Windows' test binary is
 		for {
@@ -1084,8 +1090,9 @@ func commitPluginAs(t *testing.T, repo, name, mode, title, build string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	toml := fmt.Sprintf("name = %q\ntitle = %q\nkind = \"dialog\"\nprotocol = 1\ncommand = [%q, %q, %q]\n[dialog]\nwidth = 30\nheight = 6\n[install]\nbuild = [\"sh\", \"-c\", %q]\n",
-		name, title, exe, testPluginArg, mode, build)
+	// the build runs through the test binary's step mode, as sh -c would run it: on every OS
+	toml := fmt.Sprintf("name = %q\ntitle = %q\nkind = \"dialog\"\nprotocol = 1\ncommand = [%q, %q, %q]\n[dialog]\nwidth = 30\nheight = 6\n[install]\nbuild = [%q, %q, \"step\", %q]\n",
+		name, title, exe, testPluginArg, mode, exe, testPluginArg, build)
 	if err := os.WriteFile(filepath.Join(repo, "plugin.toml"), []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1154,8 +1161,12 @@ func TestAddingAPluginFromAGitURLAsksFirst(t *testing.T) {
 	r.keys(t, decltest.Type(url)...)
 	r.keys(t, enter())
 	q := r.question(t)
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, want := range []string{"Echo (echo)", "from  " + url, "at    " + commit,
-		"Its build runs:  sh -c echo built > built.txt", "It then starts:  ", "at your own risk"} {
+		"Its build runs:  " + exe + " " + testPluginArg + " step echo built > built.txt", "It then starts:  ", "at your own risk"} {
 		if !strings.Contains(q, want) {
 			t.Errorf("the question lacks %q:\n%s", want, q)
 		}
