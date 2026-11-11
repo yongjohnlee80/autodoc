@@ -532,8 +532,20 @@ func TestArrangingACardPanelNamesItAndMovesIt(t *testing.T) {
 // where it began. The keyboard goes home, as when a window closes (here the page, nothing else
 // being open); nothing panics, nothing is reported, and no preference is kept for the panel that
 // is gone.
+//
+// Two ways the plugin goes: stopped, then its folder removed (every OS); and its folder removed while
+// it runs (a user deleting it), skipped where a running process's working folder can't be removed
+// (Windows), the case not arising there.
 func TestArrangeEndsCleanlyWhenItsCardIsRemoved(t *testing.T) {
 	t.Parallel()
+	for _, stopFirst := range []bool{true, false} {
+		t.Run(map[bool]string{true: "stopped first", false: "removed while it runs"}[stopFirst], func(t *testing.T) {
+			arrangeEndsCleanlyWhenItsCardIsRemoved(t, stopFirst) // one after the other: each counts the process's crashes
+		})
+	}
+}
+
+func arrangeEndsCleanlyWhenItsCardIsRemoved(t *testing.T, stopFirst bool) {
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "echo", rightCard)
 	d, r, _ := liveCardTUI(t, dir, nil, false)
@@ -550,8 +562,13 @@ func TestArrangeEndsCleanlyWhenItsCardIsRemoved(t *testing.T) {
 	errs := func() []error { r.h.mu.Lock(); defer r.h.mu.Unlock(); return slices.Clone(r.h.errs) }
 	before := onLoop(r, func() tally { r.h.crashDir = crashes; return tally{uint64(len(errs())), crashSeq.Load()} })
 	kept, _ := d.db.Preferences(context.Background())
-	if err := os.RemoveAll(filepath.Join(dir, "card")); err != nil {
-		t.Fatal(err)
+	if stopFirst {
+		stopPluginRun(t, r, "card")
+		if err := os.RemoveAll(filepath.Join(dir, "card")); err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		removeRunningPluginFolder(t, filepath.Join(dir, "card"))
 	}
 	r.readFolder()
 	panel := cardPanelID("card")
