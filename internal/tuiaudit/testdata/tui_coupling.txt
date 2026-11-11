@@ -84,7 +84,6 @@ gui	plugins	host	Host.layoutSrc	field
 gui	plugins	host	Host.loadPrefs	method
 gui	plugins	host	Host.luaDir	field
 gui	plugins	host	Host.luaPrefsRead	field
-gui	plugins	host	Host.luaRoots	field
 gui	plugins	host	Host.notify	method
 gui	plugins	host	Host.notifyAs	method
 gui	plugins	host	Host.notifyDone	method
@@ -327,7 +326,6 @@ term	plugins	host	Host.layoutSrc	field
 term	plugins	host	Host.loadPrefs	method
 term	plugins	host	Host.luaDir	field
 term	plugins	host	Host.luaPrefsRead	field
-term	plugins	host	Host.luaRoots	field
 term	plugins	host	Host.notify	method
 term	plugins	host	Host.notifyAs	method
 term	plugins	host	Host.notifyDone	method
