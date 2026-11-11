@@ -4543,6 +4543,10 @@ WHAT A KEY NEEDS
         <source>workspace %1 was renamed %2 %3</source>
         <translation>workspace %1 was renamed %2 %3</translation>
     </message>
+    <message id="autodoc.notice.files.another_workspace_was_entered_meanwhile_open_it">
+        <source>another workspace was entered meanwhile; open it again</source>
+        <translation>another workspace was entered meanwhile; open it again</translation>
+    </message>
     <message id="autodoc.notice.files.changed_on_disk_while_the_backend_was_away_a_sav">
         <source>%1 changed on disk while the backend was away: a save asks before it overwrites it</source>
         <translation>%1 changed on disk while the backend was away: a save asks before it overwrites it</translation>
@@ -4638,6 +4642,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.files.saving">
         <source>saving %1…</source>
         <translation>saving %1…</translation>
+    </message>
+    <message id="autodoc.notice.files.the_connection_to_the_backend_was_renewed_meanwh">
+        <source>the connection to the backend was renewed meanwhile; open it again</source>
+        <translation>the connection to the backend was renewed meanwhile; open it again</translation>
     </message>
     <message id="autodoc.notice.find.find_cleared">
         <source>find cleared</source>

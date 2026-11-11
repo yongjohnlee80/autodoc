@@ -4277,6 +4277,10 @@ WHAT A KEY NEEDS
         <source>workspace %1 was renamed %2 %3</source>
         <translation>工作区 %1 已%3重命名为 %2</translation>
     </message>
+    <message id="autodoc.notice.files.another_workspace_was_entered_meanwhile_open_it">
+        <source>another workspace was entered meanwhile; open it again</source>
+        <translation>期间已进入另一个工作区：请重新打开</translation>
+    </message>
     <message id="autodoc.notice.files.changed_on_disk_while_the_backend_was_away_a_sav">
         <source>%1 changed on disk while the backend was away: a save asks before it overwrites it</source>
         <translation>后端离线期间 %1 在磁盘上发生了更改：保存前会先询问是否覆盖</translation>
@@ -4372,6 +4376,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.files.saving">
         <source>saving %1…</source>
         <translation>正在保存 %1…</translation>
+    </message>
+    <message id="autodoc.notice.files.the_connection_to_the_backend_was_renewed_meanwh">
+        <source>the connection to the backend was renewed meanwhile; open it again</source>
+        <translation>期间与后端的连接已重新建立：请重新打开</translation>
     </message>
     <message id="autodoc.notice.find.find_cleared">
         <source>find cleared</source>

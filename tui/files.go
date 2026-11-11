@@ -409,6 +409,7 @@ func (h *Host) loadAs(ws, p string, prev *editor.JumpPos, raw bool, land *landin
 // a switch of buffer or workspace meanwhile does not drop it.
 func (h *Host) loadInto(b *openBuffer, ws, p string, prev *editor.JumpPos, raw bool, land *landing) {
 	tk := h.bufferTicket(b, true)
+	sess, gen := h.session.Gen(), b.file.gen
 	again, read := b.file.open && b.file.ws == ws && b.file.path == p, b.file.version
 	type answer struct {
 		content, version string
@@ -425,6 +426,12 @@ func (h *Host) loadInto(b *openBuffer, ws, p string, prev *editor.JumpPos, raw b
 		return answer{content: string(b), version: feature.Str(m, "version")}
 	}, func(a answer) {
 		if !tk.Current() {
+			// a later open of b, or b closed, says its own; a reconnect alone drops this one, which
+			// the status line must say: it said "opening p…", and nothing else would
+			if h.session.Gen() != sess && b.file.gen == gen && slices.Contains(h.buffers, b) {
+				h.openLost(p, sess)
+				h.dropUnloaded(b)
+			}
 			return
 		}
 		if again && b.file.version != read {
@@ -440,9 +447,7 @@ func (h *Host) loadInto(b *openBuffer, ws, p string, prev *editor.JumpPos, raw b
 			if h.restoreOpenFailed(b, ws, p) { // a kept copy's file gone: its text becomes a draft
 				return
 			}
-			if !b.file.open && !b.file.dirty && b.buf != nil && b.buf.Value() == "" && len(h.buffers) > 1 {
-				h.dropBuffer(b) // the buffer made for this file, never loaded: the page goes back
-			}
+			h.dropUnloaded(b)
 			return
 		}
 		if prev != nil && prev.Doc != docKey(feature.FileRef{WS: ws, Path: p}) {
@@ -458,6 +463,24 @@ func (h *Host) loadInto(b *openBuffer, ws, p string, prev *editor.JumpPos, raw b
 		}
 		h.focusEditor()
 	})
+}
+
+// dropUnloaded drops b when it was made for a file that never loaded: empty, unsaved, and not the
+// only buffer. The page goes back to the one before it.
+func (h *Host) dropUnloaded(b *openBuffer) {
+	if !b.file.open && !b.file.dirty && b.buf != nil && b.buf.Value() == "" && len(h.buffers) > 1 {
+		h.dropBuffer(b)
+	}
+}
+
+// openLost says on the status line that the open of p, asked under connection generation sess,
+// was dropped by a stale answer: a reconnect since, or else another workspace entered meanwhile.
+func (h *Host) openLost(p string, sess uint64) {
+	why := h.tr("autodoc.notice.files.another_workspace_was_entered_meanwhile_open_it")
+	if h.session.Gen() != sess {
+		why = h.tr("autodoc.notice.files.the_connection_to_the_backend_was_renewed_meanwh")
+	}
+	h.say(h.trf("autodoc.notice.session.text", h.trf("autodoc.notice.files.open", p), why))
 }
 
 // show puts a file's text in buffer b, clean: p of workspace ws, or outside every one (""). b shown,
@@ -1142,12 +1165,15 @@ func (h *Host) refuseName(name, reason string) {
 
 // createEmpty is File › New file: an empty file at name, opened in a buffer of its own.
 func (h *Host) createEmpty(name string) {
-	ws, tk := h.ws, h.ticket(nil, feature.TicketWorkspace)
+	ws, tk, sess := h.ws, h.ticket(nil, feature.TicketWorkspace), h.session.Gen()
 	root, raw := h.rootOf(ws), kind.RawText(name)
 	do(h, func(ctx context.Context) created {
 		return h.writeNew(ctx, ws, name, root, []byte{})
 	}, func(a created) {
 		if !tk.Current() {
+			if a.err == nil {
+				h.openLost(name, sess) // created, but not opened: said, or it would seem not made
+			}
 			return
 		}
 		if a.err != nil {
