@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -288,6 +289,7 @@ func TestARefusedSaveChangesNothing(t *testing.T) {
 	}
 
 	if err := os.RemoveAll(root); err != nil { // the rules check the root
+		t.Logf("%s", handlesFor(t, root))
 		t.Fatal(err)
 	}
 	r.saveForm(func(f *settingsForm) { f.texts = ".log" })
@@ -756,4 +758,11 @@ func TestTheManagerBadgesARootHoldingAutoDocsFolders(t *testing.T) {
 			t.Errorf("the pane lacks %q:\n%s", s, d)
 		}
 	}
+}
+
+// handlesFor (SCRATCH) is every process's handles whose names hold path's last three parts.
+func handlesFor(t *testing.T, path string) string {
+	tail := filepath.Join(filepath.Base(filepath.Dir(filepath.Dir(path))), filepath.Base(filepath.Dir(path)), filepath.Base(path))
+	out, err := exec.Command(os.Getenv("HANDLE_EXE"), "-accepteula", "-nobanner", "-a", tail).CombinedOutput()
+	return fmt.Sprintf("HANDLES (every process) for %s (%v):\n%s\nEND", tail, err, out)
 }
