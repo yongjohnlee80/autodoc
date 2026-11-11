@@ -6,4 +6,6 @@ package tui
 const (
 	exeSuffix, scriptSuffix = ".exe", ".cmd"
 	wrapperScript           = "@echo off\r\nmise x claude -- claude %*\r\n"
+	// claudeWorkWrapper is a wrapper that runs claude on another account's settings
+	claudeWorkWrapper = "@echo off\r\nset CLAUDE_CONFIG_DIR=%USERPROFILE%\\.claude-work\r\nclaude %*\r\n"
 )
