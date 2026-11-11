@@ -309,3 +309,36 @@ func TestThePollingConnectionEndsWithThePrimary(t *testing.T) {
 		})
 	}
 }
+
+// TestAnEndedPrimaryHandsOutNoPollingConnection: once the primary has ended, a call kept apart is
+// not connected, even while its polling connection is still the session's: between the primary's
+// end and the watcher closing that connection (endPollWith), the session must not hand it out.
+// That moment is held still here: the session's primary is swapped for one already ended, while
+// the watcher waits on the live one.
+func TestAnEndedPrimaryHandsOutNoPollingConnection(t *testing.T) {
+	d, sock := startPollDaemon(t, nil)
+	s := apartSession(t, sock)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	go func() { _, _ = s.Call(ctx, "w") }()
+	d.nextHeld(t) // the polling connection is the session's
+	ended, err := s.dial(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = ended.Close()
+	s.mu.Lock()
+	live, poll := s.client, s.poll
+	s.client = ended
+	s.mu.Unlock()
+	t.Cleanup(func() { _ = live.Close() })
+	if poll == nil {
+		t.Fatal("no polling connection to hand out: the cell holds nothing still")
+	}
+	if cli, err := s.pollClient(ctx); !errors.Is(err, errNotConnected) {
+		t.Fatalf("an ended primary's polling connection: %v, %v; want not connected", cli, err)
+	}
+	if _, err := s.Call(ctx, "w"); !errors.Is(err, errNotConnected) {
+		t.Fatalf("a call kept apart under an ended primary: %v; want not connected", err)
+	}
+}

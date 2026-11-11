@@ -41,7 +41,9 @@ func (s *Session) pollClient(ctx context.Context) (*golibrpc.Client, error) {
 	for {
 		s.mu.Lock()
 		primary, gen := s.client, s.gen
-		if primary == nil {
+		if primary == nil || isDone(primary) {
+			// an ended primary hands out nothing, its polling connection included: that one ends
+			// with it (endPollWith), though maybe not yet
 			s.mu.Unlock()
 			return nil, errNotConnected
 		}
