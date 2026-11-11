@@ -247,7 +247,7 @@ func TestAGatedSaveIsHeldToTheWorkspace(t *testing.T) {
 	g.probeIs(t, "orig\n")
 
 	g.mustRun(t, "w") // the user's own
-	g.waitWithin(t, "the user's save", daemonWait, func() bool {
+	g.lands(t, "gated save: the user's save", func() bool {
 		b, _ := os.ReadFile(g.probe)
 		return strings.Contains(string(b), "EVIL")
 	})

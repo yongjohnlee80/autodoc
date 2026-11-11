@@ -160,7 +160,7 @@ func TestAStoredLanguageReachesTheStart(t *testing.T) {
 	}
 	onLoop(r, func() bool { r.h.openPath("history.md"); return true })
 	// its toast is Korean now: the file is waited for, not its English "opened"
-	r.s.WaitFor(t, "history.md shown", func(string) bool { return onLoop(r, func() string { return r.h.file.path }) == "history.md" })
+	r.lands(t, "stored language: history.md shown", func() bool { return onLoop(r, func() string { return r.h.file.path }) == "history.md" })
 	r.s.WaitFor(t, "the note Rendered by the editor", func(string) bool { return renderedByTheEditor(r) })
 	r.s.WaitForText(t, "Write the docs") // the kanban's source, in any language
 	onLoop(r, func() bool { r.h.useLanguage("en"); return true })

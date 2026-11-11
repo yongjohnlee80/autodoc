@@ -189,7 +189,11 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = db.Close() })
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Logf("LANDING store close: %v", err)
+		}
+	})
 	// a daemon says the store it serves (store_id), as a real one does: a client bound to a config's
 	// store refuses one from protocol 13 on that says none (endpoint.CheckStore)
 	storeID, err := store.Identity(storePath)

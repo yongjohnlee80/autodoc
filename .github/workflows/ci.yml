@@ -252,7 +252,7 @@ jobs:
         run: |
           # the whole module's vet, not only the ported packages': it compiles every package's tests
           # for Windows, so a neutral test can't come to lean on a helper in a Unix-tagged file
-          # SCRATCH (never merged): all of ./tui twice, -v -parallel 16, logging when four cells' awaited work lands
+          # SCRATCH (never merged): all of ./tui twice, -v -parallel 16, logging when eight cells' awaited work lands, and the store close
           for n in 1 2; do
             go test -count=1 -v -parallel 16 -timeout 170m ./tui/ > "$RUNNER_TEMP/tui-$n.log" 2>&1 || true
             echo "== run $n: pass $(grep -c -- '^--- PASS' "$RUNNER_TEMP/tui-$n.log" || true) fail $(grep -c -- '^--- FAIL' "$RUNNER_TEMP/tui-$n.log" || true) skip $(grep -c -- '^--- SKIP' "$RUNNER_TEMP/tui-$n.log" || true)"

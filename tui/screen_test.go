@@ -1040,7 +1040,7 @@ func TestAProviderInUse(t *testing.T) {
 	r.s.WaitFor(t, "the dialog's green mark", func(string) bool { return r.markAbove(1) == "green semantic search · embedder" })
 	// its calls, metered and written every flushEvery (2s) by the daemon, under the list: the
 	// daemon's clock, not a frame's
-	r.waitWithin(t, "local's usage", daemonWait, func() bool {
+	r.lands(t, "provider: "+"local's usage", func() bool {
 		r.h.p.Post(func() { _ = r.h.reg.Handlers["App.showProvider"]([]qml.SpecValue{num(0)}) })
 		sc := r.s.String()
 		return strings.Contains(sc, "requests ·") && strings.Contains(sc, "latest calls") && strings.Contains(sc, "· ok")
@@ -1053,7 +1053,7 @@ func TestAProviderInUse(t *testing.T) {
 		t.Fatal(err)
 	}
 	// the file followed, its embedding refused, the call written at the next flush: the daemon's clock
-	r.waitWithin(t, "the refused call", daemonWait, func() bool {
+	r.lands(t, "provider: "+"the refused call", func() bool {
 		r.h.p.Post(func() { _ = r.h.reg.Handlers["App.showProvider"]([]qml.SpecValue{num(0)}) })
 		text := strings.Join(strings.Fields(strings.ReplaceAll(r.s.String(), "│", " ")), " ") // wrapped: running text
 		return strings.Contains(text, "at the usage limit") && strings.Contains(text, "rate limited")
