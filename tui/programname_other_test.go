@@ -8,4 +8,6 @@ package tui
 const (
 	exeSuffix, scriptSuffix = "", ""
 	wrapperScript           = "#!/bin/bash\nexec mise x claude -- claude \"$@\"\n"
+	// claudeWorkWrapper is a wrapper that runs claude on another account's settings
+	claudeWorkWrapper = "#!/bin/sh\nCLAUDE_CONFIG_DIR=\"$HOME/.claude-work\" exec claude \"$@\"\n"
 )

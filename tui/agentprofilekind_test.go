@@ -15,12 +15,12 @@ import (
 func TestAProfileSetToClaudeUnderAnotherCommandIsAClaudeAgent(t *testing.T) {
 	bin := t.TempDir()
 	fakeClaudeBin(t, bin, append(claudeHookEvents, "crossSessionInbound")...)
-	wrapper := "#!/bin/sh\nCLAUDE_CONFIG_DIR=\"$HOME/.claude-work\" exec claude \"$@\"\n"
-	if err := os.WriteFile(filepath.Join(bin, "claude-work"), []byte(wrapper), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(bin, "claude-work"+scriptSuffix), []byte(claudeWorkWrapper), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	tuneEnv(t, "PATH=/usr/bin:/bin") // the wrapper and its Claude Code are on the profile's PATH alone
-	a, c, w := crewAgents(t, `[{"name":"Sephiroth","command":"claude-work","codename":"sephiroth","kind":"claude","env":{"PATH":"`+bin+`:$PATH"}}]`)
+	tuneEnv(t, "PATH="+pathList("/usr/bin", "/bin")) // the wrapper and its Claude Code are on the profile's PATH alone
+	a, c, w := crewAgents(t, profilesJSON(t, map[string]any{"name": "Sephiroth", "command": "claude-work", "codename": "sephiroth", "kind": "claude",
+		"env": map[string]string{"PATH": pathList(bin, "$PATH")}}))
 	p, _ := a.Profile("sephiroth")
 	instance, err := a.StartInstance(p)
 	if err != nil {
