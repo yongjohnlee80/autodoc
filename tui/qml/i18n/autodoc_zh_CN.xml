@@ -4317,6 +4317,10 @@ WHAT A KEY NEEDS
         <source>kept your changes; the disk's version is newer</source>
         <translation>已保留你的更改；磁盘上的版本更新</translation>
     </message>
+    <message id="autodoc.notice.files.no_workspace_is_in_use_so_a_relative_path_names">
+        <source>no workspace is in use, so a relative path names no file; give its full path</source>
+        <translation>没有正在使用的工作区，相对路径无法指向任何文件：请给出完整路径</translation>
+    </message>
     <message id="autodoc.notice.files.open">
         <source>open %1</source>
         <translation>打开 %1</translation>

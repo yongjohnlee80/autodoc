@@ -237,6 +237,16 @@ func (h *Host) openRefTo(ref feature.FileRef, remember bool, proceed func(), lan
 // (File › Open in a new buffer). Like land, it goes with this open, through the HTML question, and
 // with nothing else: a question cancelled takes it away with the open.
 func (h *Host) openRefWith(ref feature.FileRef, remember bool, proceed func(), land *landing, newBuffer bool) {
+	// a file outside every workspace is named by its absolute path: a relative one with no
+	// workspace (none in use yet, say) names no file, and is refused here with why, not sent to
+	// the daemon as an outside file it refuses as a bad path
+	if ref.WS == "" && !filepath.IsAbs(ref.Path) {
+		msg := h.trf("autodoc.notice.session.text", h.trf("autodoc.notice.files.open", ref.Path),
+			h.tr("autodoc.notice.files.no_workspace_is_in_use_so_a_relative_path_names"))
+		h.notify(msg)
+		h.say(msg)
+		return
+	}
 	// a file a plugin opens (its manifest's [open],
 	// docs/decisions/plugins.md#plugins-that-open-file-types) goes to that plugin's command, by its
 	// absolute path, in place of being opened: an .ipynb becomes a lab file, which it opens
