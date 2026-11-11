@@ -186,22 +186,37 @@ func TestAPluginsLuaPackageLeavesItsFolderToUpdateAndRemove(t *testing.T) {
 	probe := func(step string) {
 		t.Helper()
 		a, b := filepath.Join(dir, "echo"), filepath.Join(dir, "echo-probe")
-		var err error
-		for _, wait := range []time.Duration{0, 300 * time.Millisecond, 3 * time.Second} {
-			time.Sleep(wait)
-			if err = os.Rename(a, b); err == nil {
+		tail := filepath.Join(filepath.Base(filepath.Dir(dir)), filepath.Base(dir), "echo")
+		start := time.Now()
+		var first error
+		var sys []byte
+		done := make(chan struct{})
+		for {
+			err := os.Rename(a, b)
+			if err == nil {
 				if err := os.Rename(b, a); err != nil {
 					t.Fatalf("DEBUG back: %v", err)
 				}
-				t.Logf("DEBUG after %s: free after %s", step, wait)
-				return
+				break
 			}
+			if first == nil {
+				first = err
+				go func() { // at once, while it is held
+					sys, _ = exec.Command(os.Getenv("HANDLE_EXE"), "-accepteula", "-nobanner", "-a", tail).CombinedOutput()
+					close(done)
+				}()
+			}
+			if time.Since(start) > 5*time.Second {
+				break
+			}
+			time.Sleep(5 * time.Millisecond)
 		}
-		tail := filepath.Join(filepath.Base(filepath.Dir(dir)), filepath.Base(dir), "echo")
-		sys, herr := exec.Command(os.Getenv("HANDLE_EXE"), "-accepteula", "-nobanner", "-a", tail).CombinedOutput()
-		ps, _ := exec.Command("powershell", "-NoProfile", "-Command",
-			"Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'git|tui.test|autodoc|echo' } | ForEach-Object { '{0} {1} {2} {3}' -f $_.ProcessId,$_.ParentProcessId,$_.Name,$_.CommandLine }").CombinedOutput()
-		t.Logf("DEBUG after %s: held after 3.3s: %v (test pid %d)\nHANDLES for %s system-wide (%v):\n%s\nPROCESSES:\n%s\nEND", step, err, os.Getpid(), tail, herr, sys, ps)
+		if first == nil {
+			t.Logf("DEBUG after %s: free at once", step)
+			return
+		}
+		<-done
+		t.Logf("DEBUG after %s: held for %s (%v)\nHANDLES system-wide for %s:\n%s\nEND", step, time.Since(start).Round(time.Millisecond), first, tail, sys)
 	}
 	probe("the add")
 	runs := func(want string) {
