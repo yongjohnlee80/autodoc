@@ -5,7 +5,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -334,7 +333,19 @@ func TestConfigure_TheAbstractChunkRebuildsTheMarkdown(t *testing.T) {
 func TestConfigure_SaysWhatItCouldNotDo(t *testing.T) {
 	log := &lockedLog{}
 	m, db := openWith(t, Options{Databases: true, Log: logger.New(logger.WithWriter(log))})
-	kbWith(t, m, map[string]string{"a.md": "# A\n"}, "**/*.md")
+	// served through a link to its folder: the link is what goes below. The daemon holds a served
+	// root open while it serves it, which on Windows no removal gets past, so the folder stays and
+	// only the root's path stops leading to it
+	folder, root := t.TempDir(), filepath.Join(t.TempDir(), "kb")
+	if err := os.WriteFile(filepath.Join(folder, "a.md"), []byte("# A\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(folder, root); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Add(context.Background(), workspace.Spec{Name: "kb", Root: root, Include: []string{"**/*.md"}}); err != nil {
+		t.Fatal(err)
+	}
 	indexed(t, m, "kb", 1)
 	w, _ := m.Get("kb")
 
@@ -359,23 +370,7 @@ func TestConfigure_SaysWhatItCouldNotDo(t *testing.T) {
 		t.Errorf("the failed reindex is not in the log:\n%s", log.String())
 	}
 
-	if runtime.GOOS == "windows" {
-		// Windows refuses to remove a served root: the daemon holds it open while it serves it (the
-		// local driver's root, which Go opens without FILE_SHARE_DELETE), so it can't be gone under
-		// the daemon there. Once the workspace is removed, it can go. The refusal of a gone root is
-		// checked on Unix, below.
-		if err := os.RemoveAll(w.Root()); !heldOpen(err) {
-			t.Fatalf("removing a served root on Windows: %v; want a sharing violation", err)
-		}
-		if err := m.Remove(context.Background(), "kb"); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.RemoveAll(w.Root()); err != nil {
-			t.Fatalf("removing the root of a workspace no longer served: %v", err)
-		}
-		return
-	}
-	if err := os.RemoveAll(w.Root()); err != nil {
+	if err := os.Remove(root); err != nil { // the link
 		t.Fatal(err)
 	}
 	if err := m.Configure(context.Background(), "kb", store.Changes{Include: ptr([]string{"**/*.txt"}), Exclude: ptr([]string{})}); !errors.Is(err, workspace.ErrNotADirectory) {
