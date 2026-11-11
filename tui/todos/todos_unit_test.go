@@ -1,4 +1,4 @@
-package tui
+package todos
 
 import (
 	"errors"
@@ -41,7 +41,7 @@ func scriptedStore(claimed bool) *featuretest.ScriptedCore {
 }
 
 // tabRows are tab's rows as its table shows them: "<#>  <title>".
-func tabRows(v *todos, tab int) []string {
+func tabRows(v *Todos, tab int) []string {
 	m := v.tasks[tab].Model()
 	var out []string
 	for i := 0; i < m.Len(); i++ {
@@ -51,7 +51,7 @@ func tabRows(v *todos, tab int) []string {
 }
 
 // storeLabels are the dropdown's rows.
-func storeLabels(v *todos) []string {
+func storeLabels(v *Todos) []string {
 	m := v.storeRows.Model()
 	var out []string
 	for i := 0; i < m.Len(); i++ {
@@ -67,12 +67,12 @@ func storeLabels(v *todos) []string {
 // late, is dropped.
 func TestTodosShowsOneStoreChosenInADropdown(t *testing.T) {
 	none := newScripted("")
-	newTodos(none).toggle()
+	New(none).toggle()
 	if len(none.Notes) != 1 || len(none.Views) != 0 {
 		t.Errorf("no workspace: notes %v, views %v", none.Notes, none.Views)
 	}
 	s := scriptedStore(false)
-	v := newTodos(s)
+	v := New(s)
 	v.toggle()
 	if len(s.Views) != 1 || s.Views[0] != "todos.toggle" {
 		t.Errorf("SPC x: views %v", s.Views)
@@ -96,7 +96,7 @@ func TestTodosShowsOneStoreChosenInADropdown(t *testing.T) {
 	if got := tabRows(v, 0); !slices.Equal(got, []string{"1  ⚠ Ship"}) {
 		t.Errorf("Open: %q", got)
 	}
-	if spec := v.Panels()[0]; spec.ID != "todos" || spec.Edge(prefs{todosEdge: "left"}) != "left" {
+	if spec := v.Panels()[0]; spec.ID != "todos" || spec.Edge(edgePrefs{PrefEdge: "left"}) != "left" {
 		t.Errorf("the panel %+v", spec)
 	}
 
@@ -141,7 +141,7 @@ func TestTodosTabsAreNumberedTablesReadWhenShown(t *testing.T) {
 			map[string]any{"id": b + "2", "rev": "r2", "title": "Ship " + b, "status": b, "priority": "high", "path": b + "/2.md",
 				"tags": []any{"x"}, "description": "the notes", "errors": []any{map[string]any{"field": "adr[0]", "code": "not-found", "message": "gone"}}}}}, nil
 	}
-	v := newTodos(s)
+	v := New(s)
 	v.list()
 	if got, want := tabRows(v, 0), []string{"1  ⚠ Ship open", "2  Clean open"}; !slices.Equal(got, want) {
 		t.Fatalf("Open %q, want %q", got, want)
@@ -212,7 +212,7 @@ func TestTodosTabsAreNumberedTablesReadWhenShown(t *testing.T) {
 // keeps the month open, or closes it when it is gone.
 func TestTodosArchivedTabListsItsMonths(t *testing.T) {
 	s := scriptedStore(true)
-	v := newTodos(s)
+	v := New(s)
 	v.list()
 	s.Views = nil
 	v.showTab(archivedTab)
@@ -262,7 +262,7 @@ func TestTodosWritesAClaimedStoreAndNotAReadOnlyOne(t *testing.T) {
 	s := scriptedStore(true)
 	s.Answers["todos.add"] = func([]any) (any, error) { return map[string]any{"id": "t1", "status": "open"}, nil }
 	s.Answers["todos.refresh"] = func([]any) (any, error) { return map[string]any{"moved": int64(1)}, nil }
-	v := newTodos(s)
+	v := New(s)
 	v.list()
 	v.showTab(2)
 	v.add()
@@ -304,7 +304,7 @@ func TestTodosWritesAClaimedStoreAndNotAReadOnlyOne(t *testing.T) {
 	}
 
 	ro := scriptedStore(false)
-	w := newTodos(ro)
+	w := New(ro)
 	w.list()
 	n := len(ro.Calls)
 	w.add()
@@ -325,7 +325,7 @@ func TestTodosWritesAClaimedStoreAndNotAReadOnlyOne(t *testing.T) {
 // shown.
 func TestTodosEventsAndFolders(t *testing.T) {
 	s := scriptedStore(true)
-	v := newTodos(s)
+	v := New(s)
 	v.list()
 	n := len(s.Calls)
 	v.Event("todos.changed", "kb", "")
@@ -380,7 +380,7 @@ func TestTodosEventsAndFolders(t *testing.T) {
 func TestTodosAnswersDoNotCancelEachOther(t *testing.T) {
 	s := scriptedStore(true)
 	s.Deferred = true
-	v := newTodos(s)
+	v := New(s)
 	failing := true
 	s.Answers["todos.stores"] = func([]any) (any, error) {
 		if failing {
@@ -416,7 +416,7 @@ func TestTodosAnswersDoNotCancelEachOther(t *testing.T) {
 func TestTodosAtTheEdges(t *testing.T) {
 	s := scriptedStore(true)
 	s.WS = ""
-	v := newTodos(s)
+	v := New(s)
 	v.list()
 	if got := storeLabels(v); !slices.Equal(got, []string{"p"}) || v.cur.id != "root:"+slashFile("/p") {
 		t.Errorf("no workspace: stores %q", got)
@@ -424,7 +424,7 @@ func TestTodosAtTheEdges(t *testing.T) {
 
 	idle := newScripted("")
 	idle.Answers["todos.stores"] = func([]any) (any, error) { return []any{}, nil }
-	w := newTodos(idle)
+	w := New(idle)
 	w.list()
 	if w.cur != nil || idle.Sets["App.todoHasStore"] != false || idle.Sets["App.todoStoreIndex"] != -1 {
 		t.Errorf("no store: %+v, index %v", w.cur, idle.Sets["App.todoStoreIndex"])
@@ -457,7 +457,7 @@ func TestTodosAtTheEdges(t *testing.T) {
 
 	sc := newScripted("kb")
 	sc.ViewErr = errors.New("no such view")
-	x := newTodos(sc)
+	x := New(sc)
 	x.focus("todoMonths")
 	if len(sc.Failures) != 1 || !strings.Contains(sc.Failures[0], "todos: the keyboard") {
 		t.Errorf("a refused focus: %v", sc.Failures)

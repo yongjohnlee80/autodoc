@@ -1,4 +1,4 @@
-package tui
+package todos
 
 import (
 	"cmp"
@@ -146,8 +146,8 @@ func storeRoot(p string) string {
 	return p
 }
 
-// todos is the feature.
-type todos struct {
+// Todos is the todos feature: the panel of a KB's tasks, its stores, tabs and details (New).
+type Todos struct {
 	c feature.Core
 	// stores are the dropdown's, in its order; cur is the one shown
 	stores    []*todoStore
@@ -199,8 +199,10 @@ type todos struct {
 	varEditing *todoVarEdit
 }
 
-func newTodos(c feature.Core) *todos {
-	t := &todos{c: c, detail: true, malformed: map[string]int{}, storeIndex: -2,
+// New is the todos feature, the panel of a KB's tasks (the todos.* verbs): the host registers it
+// with its other features (featurehost.go).
+func New(c feature.Core) *Todos {
+	t := &Todos{c: c, detail: true, malformed: map[string]int{}, storeIndex: -2,
 		storeRows: feature.NewRows(tuidecl.NewListModel("key", "label"), func(_ int, s *todoStore) feature.RowOf {
 			return feature.RowOf{"key": s.id, "label": s.title()}
 		}),
@@ -226,9 +228,9 @@ func taskRowOf(i int, x map[string]any) feature.RowOf {
 	return feature.RowOf{"key": feature.Str(x, "id"), "n": strconv.Itoa(i + 1), "title": title}
 }
 
-func (*todos) Name() string { return "todos" }
+func (*Todos) Name() string { return "todos" }
 
-func (t *todos) State() map[string]any {
+func (t *Todos) State() map[string]any {
 	st := map[string]any{
 		"App.todosTitle": "todos", "App.todosStatus": "", "App.todosStatusShown": false, "App.todoDetail": "",
 		"App.todoDetailShown": true, "App.todoTab": 0,
@@ -266,7 +268,7 @@ func twoNumbers(what string, fn func(int, int)) feature.Command {
 	}}
 }
 
-func (t *todos) Commands() map[string]feature.Command {
+func (t *Todos) Commands() map[string]feature.Command {
 	return map[string]feature.Command{
 		"App.openTodos":        feature.None(t.toggle),
 		"App.todosTab":         feature.OneNumber("a tab", t.showTab),
@@ -303,7 +305,7 @@ func (t *todos) Commands() map[string]feature.Command {
 }
 
 // Catalog is the todos' user commands (feature/catalog.go): each runs what its App.* twin runs.
-func (t *todos) Catalog() []feature.Entry {
+func (t *Todos) Catalog() []feature.Entry {
 	return []feature.Entry{
 		{ID: "todos.open", Title: "todos", Verb: "todos", Help: "the todos panel, open or closed (SPC x)", Twin: "App.openTodos()",
 			Run: func(feature.Invocation) error { t.toggle(); return nil }},
@@ -313,15 +315,17 @@ func (t *todos) Catalog() []feature.Entry {
 	}
 }
 
-// prefTodosEdge is the todos panel's edge, the todos' own preference, which the host's table
+// PrefEdge is the todos panel's edge, the todos' own preference, which the host's table
 // declares (prefs.go).
-const prefTodosEdge = "tui.todos.edge"
+const PrefEdge = "tui.todos.edge"
 
-// todosPanelSpec is the todos panel: at the left edge by default, its geometry kept per edge like
+// PanelSpec is the todos panel: at the left edge by default, its geometry kept per edge like
 // the side panels', and large until the user sizes it (todosDefault). It shares the left edge with
-// the explorer as two drawers do: each opens over the page, the later on top.
-func todosPanelSpec() feature.PanelSpec {
-	s := feature.SidePanelSpec("todos", "todoOpenTable", 60, func(p feature.PrefsView) string { return p.Value(prefTodosEdge) })
+// the explorer as two drawers do: each opens over the page, the later on top. The host's
+// preferences (prefs.go: the edge's choice, and docking it) and its panel sizes (panelsize.go) read
+// it too.
+func PanelSpec() feature.PanelSpec {
+	s := feature.SidePanelSpec("todos", "todoOpenTable", 60, func(p feature.PrefsView) string { return p.Value(PrefEdge) })
 	s.Icon = "✓"
 	s.Default = todosDefault
 	return s
@@ -339,16 +343,17 @@ func todosDefault(edge string) (size, length int) {
 }
 
 // Panels: the panel, its stores listed afresh each time it opens, the keyboard in the tab shown.
-func (t *todos) Panels() []feature.PanelSpec {
-	s := todosPanelSpec()
+func (t *Todos) Panels() []feature.PanelSpec {
+	s := PanelSpec()
 	s.Focus = t.tabView
 	s.Opened = func(feature.PanelHost) { t.list(); t.focusTab() }
 	return []feature.PanelSpec{s}
 }
 
-// todoKeysCard is ? in the todos panel: its keys by purpose, on the floating card of keys SPC's is
-// (feature/keys.go). A key on it runs, the card closing first; ? again, q or Esc closes it.
-const todoKeysCard = "todoKeys"
+// KeysCard is ? in the todos panel: its keys by purpose, on the floating card of keys SPC's is
+// (feature/keys.go). A key on it runs, the card closing first; ? again, q or Esc closes it. The
+// host's keys cells (keys_test.go) open it by this id.
+const KeysCard = "todoKeys"
 
 // The headings of the todos' card of keys, by purpose.
 const (
@@ -363,7 +368,7 @@ const (
 // Keys are the panel's, live while the keyboard is in the store's dropdown, the tabs or the action
 // row, not in the details pane (a read-only Editor that lets the edit keys it refuses bubble): Enter
 // is a table's own (activated). 1–5 and [ ] change the tab. ? opens their card, by purpose.
-func (*todos) Keys() []feature.Key {
+func (*Todos) Keys() []feature.Key {
 	keys := []feature.Key{
 		{Scope: "todos", Seq: "a", Show: "a", Run: "App.todoAdd()"},
 		{Scope: "todos", Seq: "d", Show: "d", Run: "App.todoRemove()"},
@@ -380,7 +385,7 @@ func (*todos) Keys() []feature.Key {
 		{Scope: "todos", Seq: "Shift+L", Show: "L", Run: "App.todoLabel()"},
 		{Scope: "todos", Seq: "Shift+R", Show: "R", Run: "App.todoRefresh()"},
 		{Scope: "todos", Seq: "Shift+M", Show: "M", Run: "App.todoMove()"},
-		{Scope: "todos", Seq: "?", Show: "?", Opens: todoKeysCard},
+		{Scope: "todos", Seq: "?", Show: "?", Opens: KeysCard},
 	}
 	for i := range varsTab + 1 {
 		keys = append(keys, feature.Key{Scope: "todos", Seq: fmt.Sprint(i + 1), Show: "1–6", Run: fmt.Sprintf("App.todosTab(%d)", i)})
@@ -422,33 +427,33 @@ func (*todos) Keys() []feature.Key {
 			{Seq: "Shift+M", Show: "M", Does: "move the store", Run: "App.todoMove()"},
 		}),
 	)
-	return append(keys, feature.OnCard(todoKeysCard, card)...)
+	return append(keys, feature.OnCard(KeysCard, card)...)
 }
 
 // Picks: A's picker of AutoDoc's agents (todos_assign.go), and s's of the statuses.
-func (t *todos) Picks() map[string]feature.Picker {
+func (t *Todos) Picks() map[string]feature.Picker {
 	return map[string]feature.Picker{"agentAssign": t.assignPick, "todoStatus": t.statusPick}
 }
 
 // Cards: ?'s card of the panel's keys.
-func (*todos) Cards() []feature.Card {
-	return []feature.Card{{ID: todoKeysCard, View: "TodoKeys", Title: "todos — keys", Toggle: "?",
+func (*Todos) Cards() []feature.Card {
+	return []feature.Card{{ID: KeysCard, View: "TodoKeys", Title: "todos — keys", Toggle: "?",
 		Note:   "↑ ↓ or j k move · q closes the panel",
 		Help:   "THE TODOS PANEL'S KEYS (? in the todos panel)",
 		Groups: [][]string{{todoGroupMove, todoGroupTabs, todoGroupStatus}, {todoGroupTask, todoGroupVars, todoGroupStore}}}}
 }
 
-func (t *todos) chooseLoad() { t.chooseFolder("load") }
-func (t *todos) chooseNew()  { t.chooseFolder("new") }
+func (t *Todos) chooseLoad() { t.chooseFolder("load") }
+func (t *Todos) chooseNew()  { t.chooseFolder("new") }
 
 // todoFolderDialogs are the folder dialog for each of Load, New and M, by what the folder is for:
 // each says it in its title, set when it is built (a FolderDialog's title cannot be bound).
 var todoFolderDialogs = map[string]string{"load": "todoFolder", "new": "todoFolderNew", "move": "todoFolderMove"}
 
 // Kinds: another client's change to the store shown reads its tabs again.
-func (t *todos) Kinds() []string { return []string{"todos.changed"} }
+func (t *Todos) Kinds() []string { return []string{"todos.changed"} }
 
-func (t *todos) Event(_, workspace, detail string) {
+func (t *Todos) Event(_, workspace, detail string) {
 	s := t.cur
 	if s == nil {
 		return
@@ -461,7 +466,7 @@ func (t *todos) Event(_, workspace, detail string) {
 }
 
 // Entered: the workspace entered is the first store listed, the next time the stores are.
-func (t *todos) Entered(string) {}
+func (t *Todos) Entered(string) {}
 
 func rootOf(at any) string {
 	if m, ok := at.(map[string]any); ok {
@@ -472,23 +477,23 @@ func rootOf(at any) string {
 }
 
 // toggle is Todos › Open todos… (SPC x): the panel, open or closed.
-func (t *todos) toggle() {
+func (t *Todos) toggle() {
 	if t.c.Workspace() == "" && len(t.stores) == 0 {
 		t.c.Notify(t.c.Tr("autodoc.notice.todos.todos_enter_a_workspace_first_or_load_a_store"))
 		return
 	}
-	t.c.TogglePanel(todosPanelSpec().ID)
+	t.c.TogglePanel(PanelSpec().ID)
 }
 
 // call runs a todos verb off the loop and hands its answer to then on the loop. With a sequence,
 // only the latest call of that sequence is answered, its error as well as its result; without
 // one (a write), every call is.
-func (t *todos) call(verb string, params []any, seq *uint64, then func(any)) {
+func (t *Todos) call(verb string, params []any, seq *uint64, then func(any)) {
 	t.callOr(verb, params, seq, then, nil)
 }
 
 // callOr is call whose failure, once told, runs failed (nil for nothing more).
-func (t *todos) callOr(verb string, params []any, seq *uint64, then func(any), failed func()) {
+func (t *Todos) callOr(verb string, params []any, seq *uint64, then func(any), failed func()) {
 	tk := feature.Ticket{}
 	if seq != nil {
 		tk = t.c.Ticket(seq, feature.TicketSession)
@@ -519,7 +524,7 @@ type answer struct{ v any }
 
 // list reads the stores: the workspace's first, as todos.resolve finds it, then every other the
 // daemon knows by a root of its own, each called by its label or its derived name.
-func (t *todos) list() {
+func (t *Todos) list() {
 	t.call("todos.stores", nil, &t.rootsSeq, func(v any) {
 		var stores []*todoStore
 		ids := map[string]string{} // store path → the daemon's id
@@ -562,7 +567,7 @@ func (t *todos) list() {
 
 // labels reads the stores' labels, by their preference: none when the daemon keeps no
 // preferences, so the stores still list, by their derived names.
-func (t *todos) labels(then func(map[string]string)) {
+func (t *Todos) labels(then func(map[string]string)) {
 	tk := t.c.Ticket(&t.rootsSeq, feature.TicketSession)
 	t.c.Go(func(ctx context.Context) any {
 		v, err := t.c.Call(ctx, "preference.list")
@@ -587,7 +592,7 @@ func (t *todos) labels(then func(map[string]string)) {
 // show puts stores in the dropdown and shows one: the one asked for (want), else the one shown
 // before when it is still listed, else the first. Another store than before is read afresh; the
 // same one, its tab read again.
-func (t *todos) show(stores []*todoStore) {
+func (t *Todos) show(stores []*todoStore) {
 	t.stores = stores
 	t.storeRows.Reset(stores)
 	i := -1
@@ -628,11 +633,11 @@ func (t *todos) show(stores []*todoStore) {
 // shows is whether s is the store shown, by its id: listing the stores again (the panel opened, a
 // label set, a store registered) makes the same store a new value while a write is out, and its
 // answer is still the shown store's.
-func (t *todos) shows(s *todoStore) bool { return s != nil && t.cur != nil && t.cur.id == s.id }
+func (t *Todos) shows(s *todoStore) bool { return s != nil && t.cur != nil && t.cur.id == s.id }
 
 // selectStore puts the dropdown on row i, -1 for none: only when it is not there already, as a
 // dropdown set again under the user could take the keyboard from where it is.
-func (t *todos) selectStore(i int) {
+func (t *Todos) selectStore(i int) {
 	if i != t.storeIndex {
 		t.storeIndex = i
 		t.c.Set("App.todoStoreIndex", i)
@@ -640,7 +645,7 @@ func (t *todos) selectStore(i int) {
 }
 
 // storeChosen is a store chosen in the dropdown: its tabs, read afresh.
-func (t *todos) storeChosen(i int) {
+func (t *Todos) storeChosen(i int) {
 	if i < 0 || i >= len(t.stores) {
 		return
 	}
@@ -654,7 +659,7 @@ func (t *todos) storeChosen(i int) {
 
 // showStore empties the tabs for the store now shown and reads the tab shown: a read asked of the
 // store before is dropped, its rows not this one's.
-func (t *todos) showStore() {
+func (t *Todos) showStore() {
 	t.gen++
 	t.month, t.follow = "", todoFollow{}
 	t.months.Reset(nil)
@@ -672,7 +677,7 @@ func (t *todos) showStore() {
 }
 
 // reload marks every tab outdated and reads the one shown again: after a write, an event, R.
-func (t *todos) reload() {
+func (t *Todos) reload() {
 	for i := range t.stale {
 		t.stale[i] = true
 	}
@@ -681,7 +686,7 @@ func (t *todos) reload() {
 
 // read reads the tab shown of the store shown: a status's tasks; for Archived its months, and the
 // open month's tasks once they are listed.
-func (t *todos) read() {
+func (t *Todos) read() {
 	s, tab, gen := t.cur, t.tab, t.gen
 	if s == nil {
 		return
@@ -723,7 +728,7 @@ func (t *todos) read() {
 }
 
 // readMonth reads the open archived month's tasks.
-func (t *todos) readMonth() {
+func (t *Todos) readMonth() {
 	s, month, gen := t.cur, t.month, t.gen
 	t.call("todos.list", []any{s.at, map[string]any{"buckets": []any{"archived/" + month}}}, &t.monthSeq, func(v any) {
 		if gen == t.gen && month == t.month {
@@ -734,7 +739,7 @@ func (t *todos) readMonth() {
 
 // applyTasks puts a read's tasks in tab's table, errored ones first, and keeps the cursor on the
 // task it was on, or on the task the cursor follows.
-func (t *todos) applyTasks(tab int, name string, v any) {
+func (t *Todos) applyTasks(tab int, name string, v any) {
 	l := feature.AsMap(v)
 	var errored, clean []map[string]any
 	for _, x := range feature.AsList(l["tasks"]) {
@@ -764,7 +769,7 @@ func (t *todos) applyTasks(tab int, name string, v any) {
 }
 
 // selectRow puts tab's cursor on row i, -1 for none: its table's, and the details.
-func (t *todos) selectRow(tab, i int) {
+func (t *Todos) selectRow(tab, i int) {
 	t.cursors[tab] = i
 	src := "App.todo" + todoTabs[tab].stem + "Index"
 	t.c.Set(src, -1) // moved away first, so the same row twice still moves the table's cursor
@@ -775,7 +780,7 @@ func (t *todos) selectRow(tab, i int) {
 }
 
 // selectMonth puts the months' cursor on the month open.
-func (t *todos) selectMonth() {
+func (t *Todos) selectMonth() {
 	i := slices.IndexFunc(t.months.All(), func(m map[string]any) bool { return feature.Str(m, "month") == t.month })
 	t.c.Set("App.todoMonthIndex", -1)
 	t.c.Set("App.todoMonthIndex", i)
@@ -783,7 +788,7 @@ func (t *todos) selectMonth() {
 
 // LanguageChanged composes the panel's variable rows, status line and details again, in the UI's
 // language.
-func (t *todos) LanguageChanged() {
+func (t *Todos) LanguageChanged() {
 	t.vars.Reset(t.vars.All()) // the variables' rows: "(unset)", "(set per machine: none here)"
 	t.pointVarsAt(t.varCursor) // where the cursor was: a panel stays open through a switch
 	t.status()
@@ -792,7 +797,7 @@ func (t *todos) LanguageChanged() {
 
 // status is the panel's status line: the one thing it says is a file a tab could not list, which
 // needs fixing by hand; nothing else, so it is hidden while none is.
-func (t *todos) status() {
+func (t *Todos) status() {
 	var where []string
 	n := 0
 	for name, bad := range t.malformed {
@@ -812,7 +817,7 @@ func (t *todos) status() {
 
 // listName is a read list's name (a tab's title, or "Archived <month>", malformed's keys) in the UI's
 // language.
-func (t *todos) listName(name string) string {
+func (t *Todos) listName(name string) string {
 	if month, ok := strings.CutPrefix(name, "Archived "); ok {
 		return t.c.Trf("autodoc.text.todos.archived_month", month)
 	}
@@ -833,7 +838,7 @@ func (t *todos) listName(name string) string {
 
 // showTab is a tab shown (a click on its title, 1–6, [ ]): read when its rows are outdated (the
 // Variables tab: every time), the keyboard in its table.
-func (t *todos) showTab(i int) {
+func (t *Todos) showTab(i int) {
 	if i < 0 || i > varsTab {
 		return
 	}
@@ -851,14 +856,14 @@ func (t *todos) showTab(i int) {
 // tabShown is the tab bar's own change (a click on a title, Ctrl+PageUp/Down), and its echo of a
 // change made here: only a change shows the tab, so an echo arriving late never takes the keyboard
 // from where it went since.
-func (t *todos) tabShown(i int) {
+func (t *Todos) tabShown(i int) {
 	if i != t.tab {
 		t.showTab(i)
 	}
 }
 
 // stepTab is [ and ]: the tab before or after, round.
-func (t *todos) stepTab(step int) {
+func (t *Todos) stepTab(step int) {
 	n := varsTab + 1
 	t.showTab(((t.tab+step)%n + n) % n)
 }
@@ -866,7 +871,7 @@ func (t *todos) stepTab(step int) {
 // tabView is what in the tab shown takes the keyboard: its table, or the Archived tab's months while
 // no month is open. The panel's toggle reaches for it: a table on a tab not shown takes no focus, so
 // the keyboard would never enter the panel, and a covered panel comes forward as the keyboard enters.
-func (t *todos) tabView() string {
+func (t *Todos) tabView() string {
 	switch {
 	case t.tab == varsTab:
 		return "todoVarsTable"
@@ -877,27 +882,27 @@ func (t *todos) tabView() string {
 }
 
 // focusTab gives the tab shown's table the keyboard, once the tab is laid out.
-func (t *todos) focusTab() {
+func (t *Todos) focusTab() {
 	id := t.tabView()
 	t.c.Post(func() { t.focus(id) })
 }
 
 // focus gives view id the keyboard.
-func (t *todos) focus(id string) {
+func (t *Todos) focus(id string) {
 	if err := t.c.View(id, "forceActiveFocus"); err != nil {
 		t.c.Failed("todos: the keyboard", err)
 	}
 }
 
 // taskAt is row i of tab's table; nil for none.
-func (t *todos) taskAt(tab, i int) map[string]any {
+func (t *Todos) taskAt(tab, i int) map[string]any {
 	x, _ := t.tasks[tab].At(i)
 	return x
 }
 
 // cursor is the store shown, and the task under the cursor in the tab shown, nil for none (and on
 // the Variables tab).
-func (t *todos) cursor() (*todoStore, map[string]any) {
+func (t *Todos) cursor() (*todoStore, map[string]any) {
 	if t.tab == varsTab {
 		return t.cur, nil
 	}
@@ -907,7 +912,7 @@ func (t *todos) cursor() (*todoStore, map[string]any) {
 // moved is a table's cursor moving: tab's row under it kept, the details its task's. A table not
 // shown (its rows read again) moves only its own cursor. A table with rows is never on no row: its
 // -1 is selectRow moving it away for a moment, and the actions must not hide under a click then.
-func (t *todos) moved(tab, i int) {
+func (t *Todos) moved(tab, i int) {
 	if tab < 0 || tab >= len(t.cursors) || i < 0 && t.tasks[tab].Len() > 0 {
 		return
 	}
@@ -920,7 +925,7 @@ func (t *todos) moved(tab, i int) {
 // showDetail shows the details of the task under the cursor, the store's place as the heading, and
 // the actions that apply. It runs when the cursor moves and when an answer lands, never inside a
 // button's own click, so no button hides itself (a golib Button's handler must not).
-func (t *todos) showDetail() {
+func (t *Todos) showDetail() {
 	s, x := t.cursor()
 	heading := "todos"
 	if s != nil && s.path != "" {
@@ -944,7 +949,7 @@ func (t *todos) showDetail() {
 // hidden, never shown greyed. On a store taking writes here, Status…, Assign and Remove on a task,
 // and Add always. A released store shows no action at all, only that it is read-only, and its
 // writes' keys do nothing.
-func (t *todos) syncActions() {
+func (t *Todos) syncActions() {
 	s, x := t.cursor()
 	writable := !t.readOnly(s)
 	task := writable && x != nil
@@ -992,12 +997,12 @@ func todoDetail(x map[string]any) string {
 }
 
 // activated is Enter on tab's row i: the task's file opens in the editor, the panel closing.
-func (t *todos) activated(tab, i int) {
+func (t *Todos) activated(tab, i int) {
 	s, x := t.cur, t.taskAt(tab, i)
 	if s == nil || x == nil || s.path == "" {
 		return
 	}
-	if err := t.c.View(todosPanelSpec().ID, "close"); err != nil {
+	if err := t.c.View(PanelSpec().ID, "close"); err != nil {
 		t.c.Failed("todos: open", err)
 	}
 	t.c.OpenFile(filepath.Join(s.path, filepath.FromSlash(feature.Str(x, "path"))))
@@ -1005,7 +1010,7 @@ func (t *todos) activated(tab, i int) {
 
 // enter is Enter on the card of keys: the task under the cursor opens, as Enter in its table; on
 // the Archived tab with no month open, the month under the months' cursor opens.
-func (t *todos) enter() {
+func (t *Todos) enter() {
 	if t.tab == varsTab {
 		t.varEdit()
 		return
@@ -1018,7 +1023,7 @@ func (t *todos) enter() {
 }
 
 // monthChosen is Enter on an archived month: its tasks read, the keyboard in them.
-func (t *todos) monthChosen(i int) {
+func (t *Todos) monthChosen(i int) {
 	m, ok := t.months.At(i)
 	if !ok {
 		return
@@ -1031,10 +1036,10 @@ func (t *todos) monthChosen(i int) {
 }
 
 // monthMoved is the months' cursor moving.
-func (t *todos) monthMoved(i int) { t.monthCursor = i }
+func (t *Todos) monthMoved(i int) { t.monthCursor = i }
 
 // monthsBack is Backspace: on the Archived tab, the keyboard back in its months.
-func (t *todos) monthsBack() {
+func (t *Todos) monthsBack() {
 	if t.tab == archivedTab {
 		t.c.Post(func() { t.focus("todoMonths") })
 	}
@@ -1043,11 +1048,11 @@ func (t *todos) monthsBack() {
 // readOnly reports that store s takes no writes here: todos.release gave it back. It says nothing:
 // the action row says the store is read-only, and offers no write (syncActions), so a write's key
 // there does nothing rather than answer with an error.
-func (t *todos) readOnly(s *todoStore) bool { return s == nil || s.released }
+func (t *Todos) readOnly(s *todoStore) bool { return s == nil || s.released }
 
 // write runs a todos verb that changes store s, once s takes writes here, and reads its tabs again:
 // after a refused write too, whose row may be of the task as it was (its rev stale).
-func (t *todos) write(s *todoStore, verb string, params []any, done func(any)) {
+func (t *Todos) write(s *todoStore, verb string, params []any, done func(any)) {
 	if t.readOnly(s) {
 		return
 	}
@@ -1065,7 +1070,7 @@ func (t *todos) write(s *todoStore, verb string, params []any, done func(any)) {
 }
 
 // add is a: the title of a new task in the store shown asked for (todoNew).
-func (t *todos) add() {
+func (t *Todos) add() {
 	if t.tab == varsTab {
 		t.varAdd()
 		return
@@ -1076,7 +1081,7 @@ func (t *todos) add() {
 }
 
 // addTitle adds the task titled: it is open, so the Open tab shows, the cursor on it.
-func (t *todos) addTitle(title string) {
+func (t *Todos) addTitle(title string) {
 	t.c.Close("todoNew")
 	s := t.cur
 	if s == nil || strings.TrimSpace(title) == "" {
@@ -1089,7 +1094,7 @@ func (t *todos) addTitle(title string) {
 	})
 }
 
-func (t *todos) remove() {
+func (t *Todos) remove() {
 	if t.tab == varsTab {
 		t.varClear()
 		return
@@ -1103,13 +1108,13 @@ func (t *todos) remove() {
 }
 
 // removeConfirmed removes the task asked about, whatever row the cursor is on by then.
-func (t *todos) removeConfirmed(s *todoStore, x map[string]any) {
+func (t *Todos) removeConfirmed(s *todoStore, x map[string]any) {
 	t.write(s, "todos.remove", []any{s.at, feature.Str(x, "id"), feature.Str(x, "rev")}, func(any) { t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_removed", feature.Str(x, "id"))) })
 }
 
 // moveTo gives task x of store s its next status, through todos.status so its events fire; the
 // tab of that status shows once the daemon has moved it, the cursor on the task.
-func (t *todos) moveTo(s *todoStore, x map[string]any, next string) {
+func (t *Todos) moveTo(s *todoStore, x map[string]any, next string) {
 	t.write(s, "todos.status", []any{s.at, feature.Str(x, "id"), feature.Str(x, "rev"), next}, func(v any) {
 		task := feature.AsMap(v)
 		if feature.Str(task, "id") == "" {
@@ -1121,7 +1126,7 @@ func (t *todos) moveTo(s *todoStore, x map[string]any, next string) {
 
 // followTask shows the tab of status, the cursor to follow task there once the write's read
 // lands: into Archived, the month its file went to.
-func (t *todos) followTask(task map[string]any, status string) {
+func (t *Todos) followTask(task map[string]any, status string) {
 	tab := tabOf(status)
 	if tab < 0 || feature.Str(task, "id") == "" {
 		return
@@ -1141,7 +1146,7 @@ func (t *todos) followTask(task map[string]any, status string) {
 
 // label is L, and the store bar's Edit: the store shown's label asked for (todoLabel), its own filled
 // in. A label is AutoDoc's alone, so a read-only store takes one too.
-func (t *todos) label() {
+func (t *Todos) label() {
 	s := t.cur
 	if s == nil {
 		return
@@ -1152,7 +1157,7 @@ func (t *todos) label() {
 }
 
 // labelSet keeps the label typed for the store L asked about; an empty one is the derived name.
-func (t *todos) labelSet(text string) {
+func (t *Todos) labelSet(text string) {
 	t.c.Close("todoLabel")
 	s := t.labelling
 	t.labelling = nil
@@ -1172,7 +1177,7 @@ func (t *todos) labelSet(text string) {
 
 // refresh is R, and the store bar's Refresh: the daemon reconciles the store's active buckets, then the
 // tab shown is read again.
-func (t *todos) refresh() {
+func (t *Todos) refresh() {
 	s := t.cur
 	if s == nil {
 		return
@@ -1187,10 +1192,10 @@ func (t *todos) refresh() {
 	})
 }
 
-func (t *todos) toggleDetail() { t.detail = !t.detail; t.c.Set("App.todoDetailShown", t.detail) }
+func (t *Todos) toggleDetail() { t.detail = !t.detail; t.c.Set("App.todoDetailShown", t.detail) }
 
 // chooseFolder opens the folder dialog for Load, New or M (move).
-func (t *todos) chooseFolder(as string) {
+func (t *Todos) chooseFolder(as string) {
 	s := t.cur
 	if as == "move" && t.readOnly(s) {
 		return
@@ -1209,7 +1214,7 @@ func (t *todos) chooseFolder(as string) {
 
 // folderChosen acts on the folder: Load registers the project and shows its store; New registers it
 // and creates its store (a write, which claims it); M moves the store shown there.
-func (t *todos) folderChosen(dir string) {
+func (t *Todos) folderChosen(dir string) {
 	t.c.Close(todoFolderDialogs[t.folderAs])
 	if dir == "" {
 		return
