@@ -10,6 +10,10 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/term"
+
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/internal/usershell"
 	"github.com/yongjohnlee80/autodoc/tui/agents"
 )
 
@@ -24,6 +28,8 @@ func init() {
 		os.Exit(fakeClaudeMain())
 	case "autodoc-build":
 		os.Exit(fakeBuildMain())
+	case "hearing-agent":
+		os.Exit(hearingAgentMain())
 	}
 }
 
@@ -75,6 +81,55 @@ func fakeClaudeMain() int {
 	return 0
 }
 
+// hearingAgentMain is the test binary as hearingAgent's agent, named by its first argument: its
+// terminal raw (on Windows the console's, its input as VT sequences, as an agent CLI reads it), it
+// asks for bracketed paste (mode 2004), says it started, then adds every byte it is sent to
+// heard-<name> in the folder that "heard-dir" beside itself names.
+func hearingAgentMain() int {
+	name := "agent"
+	if len(os.Args) > 1 {
+		name = os.Args[1]
+	}
+	dir, err := os.ReadFile(besideMe("heard-dir"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "hearing agent:", err)
+		return 1
+	}
+	if _, err := term.MakeRaw(int(os.Stdin.Fd())); err != nil {
+		fmt.Fprintln(os.Stderr, "hearing agent: raw input:", err)
+		return 1
+	}
+	fmt.Printf("\x1b[?2004hstarted %s\r\n", name)
+	heard := filepath.Join(string(dir), "heard-"+name)
+	buf := make([]byte, 4096)
+	for {
+		n, err := os.Stdin.Read(buf)
+		if n > 0 { // the file is open only while it is written: nothing holds it between reads
+			f, ferr := os.OpenFile(heard, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
+			if ferr != nil {
+				fmt.Fprintln(os.Stderr, "hearing agent:", ferr)
+				return 1
+			}
+			_, _ = f.Write(buf[:n])
+			f.Close()
+		}
+		if err != nil {
+			return 0
+		}
+	}
+}
+
+// agentCall is the command line, as a profile's, that runs program with args (bare words): on
+// Windows an agent's command runs in PowerShell, which runs a quoted program only after &, and the
+// PowerShell is the one runSetupTUI's PATH finds.
+func agentCall(program string, args ...string) string {
+	call := agents.ShellQuote(program)
+	if runtime.GOOS == "windows" {
+		call = "& " + usershell.Commands(procenv.Env(nil).With("PATH="+systemPath())).Quote(program)
+	}
+	return strings.Join(append([]string{call}, args...), " ")
+}
+
 // fakeBuildMain is the test binary as the build an agent's hooks call: it adds its arguments, one
 // line a call, to "calls" beside itself.
 func fakeBuildMain() int {
@@ -102,10 +157,16 @@ func systemPath() string {
 	return strings.Join([]string{sys, root, filepath.Join(sys, "WindowsPowerShell", "v1.0")}, string(os.PathListSeparator))
 }
 
-// runSetupTUI is runAgentTUIWith for the setup cells, on every OS: the program has a home and a
-// PATH of its own (the system's programs only), and its agents call a stand-in build that records
-// each call in calls.
+// runSetupTUI is runAgentTUIWith for the cells that run on every OS (the setup's, an agent's): the
+// program has a home and a PATH of its own (the system's programs only), and its agents call a
+// stand-in build that records each call in calls.
 func runSetupTUI(t *testing.T, dir string, profiles []agents.AgentProfile, def string, more map[string]string, opt Options) (d *daemon, r *running, calls string) {
+	t.Helper()
+	return runSetupTUIIn(t, dir, profiles, def, more, opt, map[string][]string{"kb": {"a.md", "a\n"}}) // runAgentTUIWith's workspace
+}
+
+// runSetupTUIIn is runSetupTUI over the daemon's workspaces files, kb's entered first.
+func runSetupTUIIn(t *testing.T, dir string, profiles []agents.AgentProfile, def string, more map[string]string, opt Options, files map[string][]string) (d *daemon, r *running, calls string) {
 	t.Helper()
 	home := t.TempDir()
 	opt.seams = seamsWithEnv(t, opt.seams, "HOME="+home, "USERPROFILE="+home, "PATH="+systemPath())
@@ -120,7 +181,7 @@ func runSetupTUI(t *testing.T, dir string, profiles []agents.AgentProfile, def s
 		prefs[prefAgentDefault] = def
 	}
 	maps.Copy(prefs, more)
-	d = startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: prefs}) // runAgentTUIWith's workspace
+	d = startDaemonWith(t, "", files, daemonOpts{prefs: prefs})
 	opt.AgentDir, opt.ConfigPath = dir, agentConfig
 	opt.seams.agentBin = bin
 	opt.seams.agentPromptsReported = func(string, bool) bool { return true }
