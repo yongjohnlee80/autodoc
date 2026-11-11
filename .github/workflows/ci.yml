@@ -252,9 +252,13 @@ jobs:
         run: |
           # the whole module's vet, not only the ported packages': it compiles every package's tests
           # for Windows, so a neutral test can't come to lean on a helper in a Unix-tagged file
-          go vet ./...
-          mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
-          go test -count=1 -timeout 20m "${pkgs[@]}"
+          go vet ./tui/ && echo "vet tui rc=0" || echo "vet tui rc=$?"
+          # SCRATCH (never merged): the card cells x3 (pass, or skip where the running case can't arise), then m-nostop and m-noskip x3
+          C='^(TestRemovingACardTakesItsPanelAway|TestRemovingAStoppedCardTakesItsPanelAway|TestACardAddedAgainKeepsItsGeometry|TestArrangeEndsCleanlyWhenItsCardIsRemoved)$'
+          run() { go test -count=3 -v -timeout 30m -run "$2" ./tui/ > "$RUNNER_TEMP/$1.log" 2>&1 && rc=0 || rc=$?; echo "$1 rc=$rc pass $(grep -c -- '--- PASS' "$RUNNER_TEMP/$1.log" || true) fail $(grep -c -- '--- FAIL' "$RUNNER_TEMP/$1.log" || true) skip $(grep -c -- '--- SKIP' "$RUNNER_TEMP/$1.log" || true)"; grep -E -- '--- (FAIL|SKIP|PASS)' "$RUNNER_TEMP/$1.log" | sed 's/ (.*//' | sort | uniq -c || true; grep -E -- '_test\.go:[0-9]+: |testing\.go:[0-9]+: ' "$RUNNER_TEMP/$1.log" | cut -c1-200 | sort | uniq -c | head -6 || true; }
+          run base "$C"
+          perl -0pi -e 's/\tonLoop\(r, func\(\) bool \{ run\.close\(""\); return true \}\)\n\tselect \{\n\tcase <-run\.shutDone:\n\tcase <-time\.After\(decltest\.WaitTimeout\):\n\t\tt\.Fatalf\("%s.s run never ended after its close", name\)\n\t\}\n\tr\.s\.WaitFor\(t, name\+"\x27s run gone", func\(string\) bool \{\n\t\treturn onLoop\(r, func\(\) bool \{ return r\.h\.plugins\.running\[name\] == nil \}\)\n\t\}\)\n/\t_ = time.After\n\t_ = decltest.WaitTimeout\n/' tui/cardruntime_test.go && git diff --stat && run m-nostop '^(TestRemovingAStoppedCardTakesItsPanelAway|TestACardAddedAgainKeepsItsGeometry|TestArrangeEndsCleanlyWhenItsCardIsRemoved)$'; git checkout -- tui/cardruntime_test.go
+          perl -0pi -e 's/func folderInUse\(err error\) bool \{ return errors\.Is\(err, windows\.ERROR_SHARING_VIOLATION\) \}/func folderInUse(err error) bool { _ = windows.ERROR_SHARING_VIOLATION; return errors.Is(err, nil) \&\& false }/' tui/folderinuse_windows_test.go && git diff --stat && run m-noskip '^(TestRemovingACardTakesItsPanelAway|TestArrangeEndsCleanlyWhenItsCardIsRemoved)$'; git checkout -- tui/folderinuse_windows_test.go
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
