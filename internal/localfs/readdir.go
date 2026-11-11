@@ -18,9 +18,10 @@ var ErrNotAFolder = errors.New("not a folder")
 // fs.ErrNotExist).
 func ReadDirIfAny(dir string) ([]fs.DirEntry, error) {
 	entries, err := os.ReadDir(dir)
-	if err == nil {
-		return entries, nil
+	if err == nil || !errors.Is(err, fs.ErrNotExist) {
+		return entries, err
 	}
+	return nil, nil // MUTANT m1: the old reading, not-found is no folder
 	switch fi, serr := os.Stat(dir); {
 	case serr != nil && errors.Is(serr, fs.ErrNotExist):
 		return nil, nil // nothing there
