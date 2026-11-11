@@ -261,6 +261,11 @@ jobs:
           grep 'DEBUGOPEN answer' "$L" | grep 'current=false' | head -5 || true
           awk '/DEBUGOPEN STUCK/{f=1} f{print} /END-STACKS/{if(f){exit}}' "$L" > "$RUNNER_TEMP/first-stuck.txt" || true
           echo "first stuck dump lines: $(wc -l < "$RUNNER_TEMP/first-stuck.txt")"
+          # every failing test's own lines, and the last status lines of its screens
+          grep -E -- '_test\.go:[0-9]+: |^--- FAIL|^    --- FAIL' "$RUNNER_TEMP/tui.log" | head -60 || true
+          grep -E -- 'NORMAL  autodoc' "$RUNNER_TEMP/tui.log" | sort | uniq -c | sort -rn | head -10 || true
+          # the opens of page.md / a.md / history.md with their answers, in order
+          grep -E 'DEBUGOPEN (start|answer) (page|a|history)\.md' "$L" | head -80 || true
           grep -n -B2 -A28 'loadInto\|readFile\|database/sql\|semacquire\|chan receive\|select' "$RUNNER_TEMP/first-stuck.txt" | head -400 || true
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
