@@ -120,7 +120,7 @@ func runSetupTUI(t *testing.T, dir string, profiles []agents.AgentProfile, def s
 		prefs[prefAgentDefault] = def
 	}
 	maps.Copy(prefs, more)
-	d = startDaemonWith(t, "", nil, daemonOpts{prefs: prefs})
+	d = startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: prefs}) // runAgentTUIWith's workspace
 	opt.AgentDir, opt.ConfigPath = dir, agentConfig
 	opt.seams.agentBin = bin
 	opt.seams.agentPromptsReported = func(string, bool) bool { return true }
