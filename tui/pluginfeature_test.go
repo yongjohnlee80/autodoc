@@ -53,6 +53,7 @@ func TestAPluginStartedMidTypingHasTheTextAsItIs(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin2(t, dir, "stats", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 60\nheight = 6\n[feed]\ndocument = true\n")
 	r, logs := pluginTUI(t, dir)
+	r.ready(t) // the workspace entered first: entering it shows the draft as the page, the next version (enter → showPage)
 	want := onLoop(r, func() int {
 		r.h.editor.SetValue("typed just now\n")
 		r.h.edited() // typing: the pause has not come, the page's snapshot is the text before
