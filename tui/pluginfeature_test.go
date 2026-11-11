@@ -53,12 +53,19 @@ func TestAPluginStartedMidTypingHasTheTextAsItIs(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin2(t, dir, "stats", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 60\nheight = 6\n[feed]\ndocument = true\n")
 	r, logs := pluginTUI(t, dir)
+	var enteredAtEdit bool
+	var wsAtEdit string
 	want := onLoop(r, func() int {
+		enteredAtEdit, wsAtEdit = r.h.entered, r.h.ws
 		r.h.editor.SetValue("typed just now\n")
 		r.h.edited() // typing: the pause has not come, the page's snapshot is the text before
 		r.h.plugins.openPlugin("stats")
 		return r.h.pageVersion
 	})
+	defer func() {
+		entered, ws, v := onLoop(r, func() bool { return r.h.entered }), onLoop(r, func() string { return r.h.ws }), onLoop(r, func() int { return r.h.pageVersion })
+		t.Logf("MIDTYPE at the edit: entered %v ws %q, version %d; at the end: entered %v ws %q, version %d; failed %v", enteredAtEdit, wsAtEdit, want, entered, ws, v, t.Failed())
+	}()
 	got := docsIn(waitSaid(t, logs, "stats", "doc "))[0]
 	if version(t, got) != want || !strings.Contains(got, `"typed just now\n"`) {
 		t.Fatalf("the document at start: %q, want the typed text at version %d", got, want)
