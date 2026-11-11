@@ -308,6 +308,14 @@ func (p *modelPanel) Select(id terminal.TerminalTabID) error {
 	return nil
 }
 
+// StartAsync is Start, answered at once: the model spawns nothing.
+func (p *modelPanel) StartAsync(id terminal.TerminalTabID, done func(error)) {
+	err := p.Start(id)
+	if done != nil {
+		done(err)
+	}
+}
+
 func (p *modelPanel) Start(id terminal.TerminalTabID) error {
 	if p.startErr != nil {
 		return p.startErr

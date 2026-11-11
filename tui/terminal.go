@@ -2,6 +2,7 @@ package tui
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -27,12 +28,20 @@ type terminals struct {
 	restore bool
 	// startLua is a Lua shell's program (Host.startLuaShell, luashell.go); nil: no Lua shells
 	startLua func(pty.Cmd) (terminal.TerminalProcess, error)
+	// shellSpawn is a test's stand-in for a shell tab's program (seams.shellSpawn); nil, or one
+	// answering nil, is the user's shell
+	shellSpawn func() func(pty.Cmd) (terminal.TerminalProcess, error)
 }
 
 // terminalRuntimeHost is the PanelHost with the terminal panel's tabs (feature/terminalpanel.go).
 type terminalRuntimeHost interface {
 	feature.PanelHost
 	Terminals(string) (feature.TerminalPanel, error)
+}
+
+// shellSpawnSeam is the test's shell stand-in (seams.shellSpawn), nil for the user's shell.
+func (h *Host) shellSpawnSeam() func(pty.Cmd) (terminal.TerminalProcess, error) {
+	return h.seams.shellSpawn
 }
 
 func newTerminals(c feature.PanelHost) *terminals {
@@ -409,7 +418,11 @@ func (t *terminals) newShell() {
 	if ws, ok := t.c.ActiveWorkspace(); ok {
 		root = ws.Root
 	}
-	t.startTab(shellLabel, t.inOwnEnv(feature.TerminalConfig{Dir: termDir(t.c.Env(), root)}),
+	config := t.inOwnEnv(feature.TerminalConfig{Dir: termDir(t.c.Env(), root)})
+	if t.shellSpawn != nil {
+		config.Start = t.shellSpawn()
+	}
+	t.startTab(shellLabel, config,
 		func(err error) string {
 			return t.c.Trf("autodoc.notice.terminal.the_terminal_could_not_add_a_shell", err.Error())
 		},
@@ -430,14 +443,20 @@ func (t *terminals) startTab(label func(feature.TerminalPanel) string, config fe
 	}
 	var id terminal.TerminalTabID
 	config.Exited = func(code int) { t.shellExited(id, code) }
+	config.StartingText = t.c.Tr("autodoc.text.terminal.starting")
 	id, err = panel.Add(label(panel), config)
 	if err != nil {
 		t.c.Notify(addFail(err))
 		return
 	}
-	if err := panel.Start(id); err != nil {
-		t.c.Notify(startFail(err))
-	}
+	// started off the loop: the tab opens at once, saying it is starting, and the window goes on
+	// drawing and taking keys while the shell spawns (a good part of a second on Windows). A start
+	// the tab's close overtook says nothing: the tab is gone.
+	panel.StartAsync(id, func(err error) {
+		if err != nil && !errors.Is(err, terminal.ErrTerminalStartCancelled) {
+			t.c.Notify(startFail(err))
+		}
+	})
 	t.c.Keep(panel.Select(id))
 }
 
