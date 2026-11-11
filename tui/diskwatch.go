@@ -198,15 +198,15 @@ func (h *Host) startWatch(w *diskWatch) {
 		for ev := range events {
 			h.p.Post(func() { h.diskEvent(dir, gen, ev) })
 		}
-		closeFS()                                   // the run is over: its driver's handle on the folder goes with it
+		closeFS()                                   // the run is over: its driver's resources go with it
 		h.p.Post(func() { h.watchEnded(dir, gen) }) // cancelled, or the folder went
 	}()
 }
 
 // openWatch is a run's events: the native watch of rel in the driver opened at at, or a poll of it
 // where the driver has none (or its watch would not start). Events name paths under at. closeFS
-// releases the driver (its os.Root on the folder): the caller runs it once the events end; a run
-// that does not start has released it already.
+// releases the driver's resources: the caller runs it once the events end; a run that does not
+// start has released it already.
 func openWatch(ctx context.Context, open func(string) (vfs.FS, error), at, rel string, poll time.Duration) (events <-chan vfs.Event, mode string, closeFS func(), err error) {
 	fsys, err := open(at)
 	if err != nil {
