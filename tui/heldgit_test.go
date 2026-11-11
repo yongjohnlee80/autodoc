@@ -17,10 +17,15 @@ import (
 // heldGitEnv names the real git when the test binary runs as heldGit's git (TestMain).
 const heldGitEnv = "AUTODOC_TEST_HELD_GIT"
 
+// heldGitBound is how long a held clone waits to be released before it gives up: a test that ends
+// without releasing it (heldGit's cleanup releases it) leaves no git waiting for ever.
+const heldGitBound = 2 * time.Minute
+
 // heldGit is env with a git first on its PATH whose clone waits, once it is running, until release
 // is called: a worker caught between holding its directory and finishing its work. That git is the
 // test binary itself, copied in as git (git.exe on Windows), so it needs no shell: run with
-// heldGitEnv set, it is heldGitMain.
+// heldGitEnv set, it is heldGitMain. The test's end releases it too, so a test that fails before
+// its release leaves no clone waiting.
 func heldGit(t *testing.T, env procenv.Env) (held procenv.Env, running func() bool, release func()) {
 	t.Helper()
 	real, err := exec.LookPath("git")
@@ -42,7 +47,9 @@ func heldGit(t *testing.T, env procenv.Env) (held procenv.Env, running func() bo
 	}
 	held = env.With("PATH="+bin+string(os.PathListSeparator)+env.Get("PATH"),
 		heldGitEnv+"="+real, heldGitEnv+"_READY="+ready, heldGitEnv+"_RELEASE="+go_)
-	return held, func() bool { return !gone(ready) }, func() { _ = os.WriteFile(go_, nil, 0o600) }
+	release = func() { _ = os.WriteFile(go_, nil, 0o600) } // idempotent: a second release writes it again
+	t.Cleanup(release)
+	return held, func() bool { return !gone(ready) }, release
 }
 
 // heldGitMain is the test binary as heldGit's git: a clone marks itself running and waits to be
@@ -55,8 +62,12 @@ func heldGitMain() int {
 			fmt.Fprintln(os.Stderr, "held git:", err)
 			return 1
 		}
-		for gone(os.Getenv(heldGitEnv + "_RELEASE")) {
-			time.Sleep(10 * time.Millisecond)
+		// NOTE: bounded, so a clone nobody releases ends on its own rather than outliving its test
+		for deadline := time.Now().Add(heldGitBound); gone(os.Getenv(heldGitEnv + "_RELEASE")); time.Sleep(10 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				fmt.Fprintln(os.Stderr, "held git: never released")
+				return 1
+			}
 		}
 	}
 	cmd := exec.Command(os.Getenv(heldGitEnv), args...)
@@ -88,4 +99,36 @@ func copyFile(from, to string) error {
 		return err
 	}
 	return out.Close()
+}
+
+// TestAHeldGitEndsWithItsTest: a held clone that its test never released (here a subtest that ends
+// with it still waiting, as a failed one would) is released by the test's end, and exits.
+func TestAHeldGitEndsWithItsTest(t *testing.T) {
+	t.Parallel()
+	repo := pluginRepo(t, "Echo", "true")
+	var cmd *exec.Cmd
+	t.Run("held, never released", func(t *testing.T) {
+		env, running, _ := heldGit(t, procenv.Env(nil))
+		cmd = exec.Command(procenv.Resolve(env, "git"), "clone", "-q", "file://"+repo, filepath.Join(t.TempDir(), "clone"))
+		cmd.Env = env.Environ()
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		for deadline := time.Now().Add(10 * time.Second); !running(); time.Sleep(10 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatal("the held clone never started")
+			}
+		}
+	}) // ends without its release: the subtest's cleanup releases the clone
+	if cmd == nil || cmd.Process == nil {
+		t.Fatal("the held clone did not start")
+	}
+	exited := make(chan error, 1)
+	go func() { exited <- cmd.Wait() }()
+	select {
+	case <-exited:
+	case <-time.After(30 * time.Second):
+		_ = cmd.Process.Kill()
+		t.Fatal("the held clone still waits after its test ended")
+	}
 }
