@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The dock's shell cells run on every OS. Their shell is this test binary as a minimal line shell
@@ -44,7 +45,18 @@ func lineShellMain() int {
 // runLineShellTUI is runShellTUI on every OS, its shell the line shell.
 func runLineShellTUI(t *testing.T, prefs map[string]string) (*daemon, *running) {
 	t.Helper()
-	bin := t.TempDir()
+	// Its own folder, not t.TempDir's: on Windows a running program's file can't be removed, and the
+	// shell may still be exiting as the test ends. Registered before the program starts, so it runs
+	// after the program's own cleanup has stopped its shells (cleanups run newest first); retried
+	// while Windows still holds the exiting shell's file.
+	bin, err := os.MkdirTemp("", "autodoc-line-shell-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		for deadline := time.Now().Add(10 * time.Second); os.RemoveAll(bin) != nil && time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		}
+	})
 	name := "line-shell"
 	if runtime.GOOS == "windows" {
 		name = "pwsh" // the interactive shell the terminal looks for first (internal/usershell)
