@@ -4,11 +4,15 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/internal/userdirs"
 )
 
 // The dock's shell cells, and the terminal keymap's, run on every OS. Their shell is this test binary
@@ -31,7 +35,10 @@ const lineShellEnv = "AUTODOC_TEST_LINE_SHELL"
 
 // lineShellMain prints the prompt, then a prompt after each line it reads, until exit or its input ends.
 // A line "shout <words>" prints the words in capitals first: what the terminal echoes as it is typed
-// never reads so, so seeing them says the shell ran the line.
+// never reads so, so seeing them says the shell ran the line. Two more, for the environment cell
+// (hostenv_test.go): "ishome PATH MARK" prints home-MARK when its home folder (userdirs.Home, as the
+// program reads it) is PATH, and "run PROGRAM MARK" runs PROGRAM, found on its PATH, with MARK, its
+// output the shell's.
 func lineShellMain() int {
 	fmt.Print("$ ")
 	in := bufio.NewScanner(os.Stdin)
@@ -42,6 +49,18 @@ func lineShellMain() int {
 		}
 		if words, ok := strings.CutPrefix(line, "shout "); ok {
 			fmt.Println(strings.ToUpper(words))
+		}
+		switch f := strings.Fields(line); {
+		case len(f) == 3 && f[0] == "ishome":
+			if home, err := userdirs.Home(nil); err == nil && home == f[1] {
+				fmt.Printf("home-%s\n", f[2])
+			}
+		case len(f) == 3 && f[0] == "run":
+			if path, err := procenv.LookPath(nil, f[1]); err == nil {
+				cmd := exec.Command(path, f[2])
+				cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+				_ = cmd.Run()
+			}
 		}
 		fmt.Print("$ ")
 	}
@@ -61,14 +80,22 @@ func runLineShellTUI(t *testing.T, prefs map[string]string) (*daemon, *running) 
 func useLineShell(t *testing.T) {
 	t.Helper()
 	bin := shellTempDir(t, "autodoc-line-shell-")
+	sh := lineShellIn(t, bin)
+	home := shellTempDir(t, "autodoc-line-home-") // the shell's working folder on Windows
+	tuneEnv(t, "SHELL="+sh, "HOME="+home, "USERPROFILE="+home, "PS1=$ ", lineShellEnv+"=1",
+		"PATH="+bin+string(os.PathListSeparator)+systemPath())
+}
+
+// lineShellIn puts the line shell in bin under the name the terminal starts it by, and answers its
+// path: SHELL on Unix; on Windows the terminal starts pwsh first on PATH (internal/usershell), so it
+// is pwsh.exe there, bin put first on the program's PATH.
+func lineShellIn(t *testing.T, bin string) string {
+	t.Helper()
 	name := "line-shell"
 	if runtime.GOOS == "windows" {
 		name = "pwsh" // the interactive shell the terminal looks for first (internal/usershell)
 	}
-	sh := standIn(t, bin, name)
-	home := shellTempDir(t, "autodoc-line-home-") // the shell's working folder on Windows
-	tuneEnv(t, "SHELL="+sh, "HOME="+home, "USERPROFILE="+home, "PS1=$ ", lineShellEnv+"=1",
-		"PATH="+bin+string(os.PathListSeparator)+systemPath())
+	return standIn(t, bin, name)
 }
 
 // shellTempDir is a folder of a program the TUI starts (the line shell's program and home, an agent's
