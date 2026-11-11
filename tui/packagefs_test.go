@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -182,6 +183,22 @@ func TestAPluginsLuaPackageLeavesItsFolderToUpdateAndRemove(t *testing.T) {
 	r.question(t)
 	r.keys(t, key('y'))
 	r.waitNotice(t, "added echo at")
+	probe := func(step string) {
+		t.Helper()
+		a, b := filepath.Join(dir, "echo"), filepath.Join(dir, "echo-probe")
+		if err := os.Rename(a, b); err != nil {
+			tail := filepath.Join(filepath.Base(filepath.Dir(dir)), filepath.Base(dir), "echo") // handle.exe prints long names: no 8.3 prefix
+			out, herr := exec.Command(os.Getenv("HANDLE_EXE"), "-accepteula", "-nobanner", "-a", "-p", strconv.Itoa(os.Getpid()), tail).CombinedOutput()
+			all, _ := exec.Command(os.Getenv("HANDLE_EXE"), "-accepteula", "-nobanner", "-p", strconv.Itoa(os.Getpid())).CombinedOutput()
+			t.Logf("DEBUG after %s: held: %v\nHANDLES for %s (%v):\n%s\nALL FILE HANDLES:\n%s\nEND", step, err, tail, herr, out, all)
+			return
+		}
+		if err := os.Rename(b, a); err != nil {
+			t.Fatalf("DEBUG back: %v", err)
+		}
+		t.Logf("DEBUG after %s: free", step)
+	}
+	probe("the add")
 	runs := func(want string) {
 		t.Helper()
 		r.s.WaitFor(t, "the package's command saying "+want, func(string) bool {
