@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/explorer"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
@@ -272,7 +274,7 @@ func folderGoesAndComesBack(t *testing.T, poll bool) {
 		t.Fatal(err)
 	}
 	rewrite(t, root, "sub/c.md", "c\n")
-	landed(t, "sub/c.md listed", func() bool {
+	landedOr(t, "sub/c.md listed", listDiag(r, root, "sub/c.md"), func() bool {
 		return onLoop(r, func() bool { return slices.Contains(r.h.files.Paths, "sub/c.md") })
 	})
 	r.openOnDisk(t, "sub/c.md")
@@ -317,7 +319,7 @@ func TestAWatchedFoldersParentIsHeldByNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	rewrite(t, root, "x/sub/c.md", "c\n")
-	landed(t, "x/sub/c.md listed", func() bool {
+	landedOr(t, "x/sub/c.md listed", listDiag(r, root, "x/sub/c.md"), func() bool {
 		return onLoop(r, func() bool { return slices.Contains(r.h.files.Paths, "x/sub/c.md") })
 	})
 	r.openOnDisk(t, "x/sub/c.md")
@@ -540,12 +542,40 @@ func TestAFileOutsideEveryWorkspaceFollowsTheDisk(t *testing.T) {
 }
 
 // landed (SCRATCH, never merged) waits up to a minute for cond and logs how long it took.
-func landed(t *testing.T, what string, cond func() bool) {
+func landed(t *testing.T, what string, cond func() bool) { t.Helper(); landedOr(t, what, nil, cond) }
+
+// listDiag (SCRATCH) says where a file never listed is: on disk, in the daemon's listing now, in
+// its index.status, in the TUI's progress; then lists again and says whether that shows it.
+func listDiag(r *running, root, p string) func() string {
+	return func() string {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_, statErr := os.Stat(filepath.Join(root, filepath.FromSlash(p)))
+		ws := onLoop(r, func() string { return r.h.ws })
+		paths, lerr := explorer.ListAll(ctx, r.h.call, ws)
+		st, serr := r.h.call(ctx, "index.status", ws)
+		prog := onLoop(r, func() string { return fmt.Sprintf("%+v", r.h.prog) })
+		doc, derr := r.h.call(ctx, "doc.read", ws, p)
+		onLoop(r, func() bool { r.h.listFiles(); return true })
+		time.Sleep(3 * time.Second)
+		relisted := onLoop(r, func() bool { return slices.Contains(r.h.files.Paths, p) })
+		_ = doc
+		return fmt.Sprintf("on disk: stat err %v; the daemon lists it now: %v (err %v, %d paths); doc.read err %v; index.status %v (err %v); the TUI's progress %s; listed after a relist: %v",
+			statErr, slices.Contains(paths, p), lerr, len(paths), derr, st, serr, prog, relisted)
+	}
+}
+
+// landedOr is landed, saying diag's answer when cond never holds.
+func landedOr(t *testing.T, what string, diag func() string, cond func() bool) {
 	t.Helper()
 	start := time.Now()
 	for !cond() {
 		if time.Since(start) > time.Minute {
-			t.Fatalf("LANDED-NEVER %s within a minute", what)
+			d := ""
+			if diag != nil {
+				d = diag()
+			}
+			t.Fatalf("LANDED-NEVER %s within a minute: %s", what, d)
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
