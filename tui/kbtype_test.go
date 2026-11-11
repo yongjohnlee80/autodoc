@@ -328,6 +328,9 @@ func TestNewFolderMakesTheRoot(t *testing.T) {
 	r.h.p.Post(func() { r.h.newRootFolder("relative/path") })
 	r.s.WaitFor(t, "a notice", func(string) bool { return r.noticed("type the folder's full path") })
 	home := t.TempDir()
-	r.h.p.Post(func() { r.h.seams.env = r.h.seams.env.With("HOME=" + home); r.h.newRootFolder("~/from-home") })
+	r.h.p.Post(func() {
+		r.h.seams.env = r.h.seams.env.With("HOME="+home, "USERPROFILE="+home)
+		r.h.newRootFolder("~/from-home")
+	})
 	r.s.WaitFor(t, "~ made under home", func(string) bool { _, err := os.Stat(filepath.Join(home, "from-home")); return err == nil })
 }

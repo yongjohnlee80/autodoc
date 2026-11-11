@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // mirrored is what tui.gui.renderer's mirror at path holds; "" while there is none.
@@ -48,7 +50,7 @@ func TestTheRendererMirrorIsInTheConfigsStateDirectory(t *testing.T) {
 	dir := t.TempDir()
 	state := filepath.Join(dir, "state")
 	conf := filepath.Join(dir, "config.toml")
-	body := "[server]\nsocket = \"" + filepath.Join(dir, "s.sock") + "\"\nstate_dir = \"" + state + "\"\ndata_dir = \"" + filepath.Join(dir, "data") + "\"\n"
+	body := "[server]\nsocket = " + tomlString(t, ipc.ScratchAddr(dir, "s.sock")) + "\nstate_dir = " + tomlString(t, state) + "\ndata_dir = " + tomlString(t, filepath.Join(dir, "data")) + "\n"
 	if err := os.WriteFile(conf, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}

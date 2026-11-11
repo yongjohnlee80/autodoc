@@ -156,7 +156,10 @@ func TestAnAgentOpensARelativePathInTheEditorsWorkspace(t *testing.T) {
 // of the workspace in use, refused when none is listed; empty refused.
 func TestOpenPathsResolve(t *testing.T) {
 	h := newHost(NewSession("unused", nil), Options{})
-	if got, err := h.resolveOpenPath("/x/../y/z.md"); err != nil || got != "/y/z.md" {
+	// an absolute path on this OS: "/x/../y/z.md" on Unix, on a drive on Windows
+	sep := string(filepath.Separator)
+	vol := filepath.VolumeName(t.TempDir()) + sep
+	if got, err := h.resolveOpenPath(vol + "x" + sep + ".." + sep + "y" + sep + "z.md"); err != nil || got != filepath.Join(vol, "y", "z.md") {
 		t.Errorf("an absolute path: %q %v", got, err)
 	}
 	if got, err := h.resolveOpenPath("~/notes/a b.md"); err != nil || got != filepath.Join(homeDir(nil), "notes", "a b.md") {

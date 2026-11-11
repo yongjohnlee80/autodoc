@@ -13,7 +13,7 @@ import (
 // the theme's colours; the page reads the file's relative links from the file's own folder.
 func TestOpenInBrowserOpensTheThemedPage(t *testing.T) {
 	cache := t.TempDir()
-	tuneEnv(t, "XDG_CACHE_HOME="+cache)
+	tuneEnv(t, "XDG_CACHE_HOME="+cache, "LocalAppData="+cache) // the cache folder on Unix; on Windows LocalAppData
 	root := fileDir(t, "n.md", "# On disk\n")
 	d := startManaged(t, map[string]string{"kb": root})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
@@ -36,7 +36,12 @@ func TestOpenInBrowserOpensTheThemedPage(t *testing.T) {
 		if err != nil || !strings.Contains(string(content), `<h1 id="unsaved-heading">Unsaved heading</h1>`) || !strings.Contains(string(content), "color-scheme:dark") {
 			t.Fatalf("preview = %q, %v", content, err)
 		}
-		if want := `href="file://` + filepath.ToSlash(root) + `/other.md#s"`; !strings.Contains(string(content), want) {
+		// a file URL's path starts with a slash: file:///home/…, and on Windows file:///C:/…
+		slashed := filepath.ToSlash(root)
+		if !strings.HasPrefix(slashed, "/") {
+			slashed = "/" + slashed
+		}
+		if want := `href="file://` + slashed + `/other.md#s"`; !strings.Contains(string(content), want) {
 			t.Fatalf("the preview lacks %s", want)
 		}
 	case <-time.After(3 * time.Second):

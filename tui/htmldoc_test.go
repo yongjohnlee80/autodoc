@@ -242,8 +242,10 @@ func TestAPagesResourcesComeFromItsWorkspace(t *testing.T) {
 	if got := at("kb", "top.html"); got != [2]string{kb, ""} {
 		t.Errorf("a file at the workspace's root: %q", got)
 	}
-	if got := at("", "/elsewhere/site/page.html"); got != [2]string{"/elsewhere/site", ""} {
-		t.Errorf("an outside file's: %q, want its own folder and no base", got)
+	// a file outside every workspace, at its absolute path on this OS (on a drive on Windows)
+	outside := filepath.Join(filepath.VolumeName(t.TempDir())+string(filepath.Separator), "elsewhere", "site")
+	if got := at("", filepath.Join(outside, "page.html")); got != [2]string{outside, ""} {
+		t.Errorf("an outside file's: %q, want its own folder %q and no base", got, outside)
 	}
 	said := func(part string) int {
 		return onLoop(r, func() int {
