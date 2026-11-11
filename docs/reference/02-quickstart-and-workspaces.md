@@ -16,8 +16,8 @@ New to AutoDoc? The [tutorials](../tutorials/README.md) start here, a few minute
 | Platform | Install |
 | --- | --- |
 | **Linux, macOS (recommended)** | **The install script**: `curl -fsSL https://github.com/yongjohnlee80/autodoc/releases/latest/download/install-autodoc.sh \| sh` (the GUI build; see [The Install Script](#the-install-script-recommended)) |
-| Linux, macOS, with Go 1.26.11+, the GUI | `GOBIN=~/.local/bin go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
-| Any, with Go 1.26.11+, the TUI | `go install github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
+| Linux, macOS, with Go 1.26.11+ or 1.27.4+, the GUI | `GOBIN=~/.local/bin go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
+| Any, with Go 1.26.11+ or 1.27.4+, the TUI | `go install github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
 | macOS, Linux | [mise](https://mise.jdx.dev): `mise use -g github:yongjohnlee80/autodoc` (the GUI build) |
 | Linux, a server or container | mise, the TUI build: `mise use -g 'github:yongjohnlee80/autodoc[asset_pattern=autodoc-*-linux-amd64-tui.tar.gz]'` (`autodoc-*-linux-arm64-tui.tar.gz` on arm64) |
 | macOS, Linux | [Homebrew](https://brew.sh): `brew install yongjohnlee80/tap/autodoc` (on Linux, the TUI build) |
@@ -88,7 +88,7 @@ Xcode. Start it with `autodoc --ui`: the TUI starts the daemon when nothing answ
 
 ### Building from Source (`go install`)
 
-If you have Go 1.26.11 or newer installed, you can compile AutoDoc directly from source. `go install` builds from the tagged source, and `autodoc --version` then reports the module's
+If you have Go 1.26.11 or newer (1.27.4 or newer on the 1.27 line) installed, you can compile AutoDoc directly from source. `go install` builds from the tagged source, and `autodoc --version` then reports the module's
 version, as a release binary does.
 
 ```bash
