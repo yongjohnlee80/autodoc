@@ -261,10 +261,6 @@ jobs:
           (cd tui && "$RUNNER_TEMP/tui.test.exe" -test.count=3 -test.v -test.timeout 30m -test.run '^TestAPluginsLuaPackageLeavesItsFolderToUpdateAndRemove$') > "$RUNNER_TEMP/cells.log" 2>&1 && rc=0 || rc=$?; echo "rc=$rc (scanning on)"
           grep -E -- '--- (PASS|FAIL)|DEBUG after' "$RUNNER_TEMP/cells.log" | head -40 || true
           sed -n '/HANDLES system-wide/,/END/p' "$RUNNER_TEMP/cells.log" | head -120 || true
-          powershell -NoProfile -Command "Add-MpPreference -ExclusionPath '$(cygpath -w "$TEMP")','$(cygpath -w "$RUNNER_TEMP")'; (Get-MpPreference).ExclusionPath" || true
-          (cd tui && "$RUNNER_TEMP/tui.test.exe" -test.count=3 -test.v -test.timeout 30m -test.run '^TestAPluginsLuaPackageLeavesItsFolderToUpdateAndRemove$') > "$RUNNER_TEMP/cells2.log" 2>&1 && rc=0 || rc=$?; echo "rc=$rc (temp excluded from scanning)"
-          grep -E -- '--- (PASS|FAIL)|DEBUG after' "$RUNNER_TEMP/cells2.log" | head -40 || true
-          sed -n '/HANDLES system-wide/,/END/p' "$RUNNER_TEMP/cells2.log" | head -60 || true
           cp "$RUNNER_TEMP/cells.log" "$RUNNER_TEMP/cells.keep"
           echo "pass $(grep -c -- '--- PASS' "$RUNNER_TEMP/cells.log" || true) fail $(grep -c -- '--- FAIL' "$RUNNER_TEMP/cells.log" || true) skip $(grep -c -- '--- SKIP' "$RUNNER_TEMP/cells.log" || true)"
           grep -E -- '--- (PASS|FAIL|SKIP)|_test\.go:[0-9]+: |testing\.go:[0-9]+: |^(ok|FAIL|panic)' "$RUNNER_TEMP/cells.log" | head -300 || true

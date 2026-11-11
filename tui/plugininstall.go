@@ -307,7 +307,7 @@ func (pl *plugins) installed(c *candidate, err error) {
 		return
 	}
 	pl.loadPlugins()
-	pl.loadManaged()
+	// SCRATCH: no manager reload after an install (its git reads run in the folder)
 	if pl.scriptsChanged != nil {
 		pl.scriptsChanged()
 	}
