@@ -194,7 +194,11 @@ func (h *Host) showProgress(docs, pending int64, emb embedProgress, cursor int64
 	was := h.prog.busy
 	prev := h.prog.emb
 	polled := h.prog.polled
-	moved := h.prog.polled && cursor != h.prog.cursor
+	// moved: the index changed since the files were last listed. The first poll after entering a
+	// workspace counts as moved: the entry's listing and this poll are two reads, and a note
+	// indexed between them is in this poll's cursor but not in that listing, so taking the cursor
+	// as the baseline unlisted would keep it unlisted until the index next changed.
+	moved := !h.prog.polled || cursor != h.prog.cursor
 	h.prog.ws, h.prog.docs, h.prog.pending, h.prog.emb = h.ws, docs, pending, emb
 	h.prog.cursor, h.prog.polled = cursor, true
 	// a new embedding model (a switch starting, the new one taking over, or words only) makes the
