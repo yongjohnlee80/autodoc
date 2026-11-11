@@ -23,11 +23,7 @@ func guiResultsTUI(t *testing.T) *running {
 	r := runTUI(t, NewSession(d.sock, nil), Options{Plugins: Plugins{Dir: dir, LogDir: logs, Socket: d.sock},
 		ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
 	r.connected(t)
-	t.Cleanup(func() {
-		if p := onLoop(r, func() *pluginRun { return r.h.plugins.running["kinds"] }); p != nil {
-			p.shutdown()
-		}
-	})
+	stopPluginRunsAtTheEnd(t, r)
 	onLoop(r, func() bool { r.h.plugins.runPluginCommand("kinds", "run"); return true })
 	r.waitResults(t, "k1", len(kindsRows))
 	if bound := onLoop(r, func() bool {
