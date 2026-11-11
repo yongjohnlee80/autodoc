@@ -4328,6 +4328,10 @@ O QUE UMA TECLA PRECISA
         <source>%1: it is in no workspace: no search, links, backlinks, frontmatter check or embeddings</source>
         <translation>%1: não está em nenhum espaço de trabalho: sem busca, links, backlinks, checagem de frontmatter ou embeddings</translation>
     </message>
+    <message id="autodoc.notice.files.it_was_read_again_from_disk_meanwhile_save_it_ag">
+        <source>it was read again from disk meanwhile; save it again</source>
+        <translation>ele foi lido de novo do disco nesse meio-tempo; salve de novo</translation>
+    </message>
     <message id="autodoc.notice.files.kept_as_it_was_saved_while_it_was_read">
         <source>kept %1 as it was saved while it was read</source>
         <translation>%1 mantido como foi salvo durante a leitura</translation>
@@ -4395,6 +4399,10 @@ O QUE UMA TECLA PRECISA
     <message id="autodoc.notice.files.the_connection_to_the_backend_was_renewed_meanwh">
         <source>the connection to the backend was renewed meanwhile; open it again</source>
         <translation>a conexão com o backend foi renovada nesse meio-tempo; abra de novo</translation>
+    </message>
+    <message id="autodoc.notice.files.the_connection_to_the_backend_was_renewed_save_it">
+        <source>the connection to the backend was renewed meanwhile; save it again</source>
+        <translation>a conexão com o backend foi renovada nesse meio-tempo; salve de novo</translation>
     </message>
     <message id="autodoc.notice.find.find_cleared">
         <source>find cleared</source>
