@@ -1002,17 +1002,7 @@ func TestADialogSitsWhereItsManifestSaysAndTheUserMovesIt(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{Plugins: Plugins{Dir: dir, LogDir: logs, Socket: d.sock}})
 	r.connected(t)
-	t.Cleanup(func() {
-		for _, p := range onLoop(r, func() []*pluginRun {
-			var out []*pluginRun
-			for _, p := range r.h.plugins.running {
-				out = append(out, p)
-			}
-			return out
-		}) {
-			p.shutdown()
-		}
-	})
+	stopPluginRunsAtTheEnd(t, r)
 
 	r.openPlugin("side")
 	r.waitShown(t, "╭ Side")
@@ -1061,17 +1051,7 @@ func TestAStoredPlacementIsReadAtStart(t *testing.T) {
 	r.s.WaitFor(t, "the stored placement read", func(string) bool {
 		return onLoop(r, func() bool { return r.h.prefs.pluginPlace["side"] == "left" })
 	})
-	t.Cleanup(func() {
-		for _, p := range onLoop(r, func() []*pluginRun {
-			var out []*pluginRun
-			for _, p := range r.h.plugins.running {
-				out = append(out, p)
-			}
-			return out
-		}) {
-			p.shutdown()
-		}
-	})
+	stopPluginRunsAtTheEnd(t, r)
 	r.openPlugin("side")
 	r.waitShown(t, "╭ Side")
 	if l, _ := r.dialogEdges("Side"); l != 0 {
@@ -2109,7 +2089,12 @@ func TestPluginCommandsAreCatalogEntries(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.waitShown(t, "command hello")
-	onLoop(r, func() bool { r.h.plugins.running["alpha"].close(""); return true })
+	run := onLoop(r, func() *pluginRun { p := r.h.plugins.running["alpha"]; p.close(""); return p })
+	select { // its process works in its folder until it exits: Windows won't remove the folder before
+	case <-run.shutDone:
+	case <-time.After(decltest.WaitTimeout):
+		t.Fatal("alpha's run never ended after its close")
+	}
 	if err := os.RemoveAll(filepath.Join(dir, "alpha")); err != nil {
 		t.Fatal(err)
 	}
