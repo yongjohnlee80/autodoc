@@ -134,8 +134,12 @@ func TestTheWindowAsksTheAgentsOwnCrewSetup(t *testing.T) {
 		}
 		return string(b)
 	}
-	want := strings.Join([]string{"--config", "/c/autodoc.toml", "crew", "setup", "--kind", "claude", "--host", "window",
-		"--autodoc", agents.ShellQuote(bin), "--agent-dir", agentDir, "--mail-via", "mcp"}, "\n") + "\n" // the build by its path
+	args := []string{"--config", "/c/autodoc.toml", "crew", "setup", "--kind", "claude", "--host", "window",
+		"--autodoc", agents.ShellQuote(bin), "--agent-dir", agentDir} // the build by its path
+	if !agents.CanRunAgentServers {
+		args = append(args, "--no-agent-server") // where the window can't run an agent's own server (agents.CrewSetupArgs)
+	}
+	want := strings.Join(append(args, "--mail-via", "mcp"), "\n") + "\n"
 	if got := read("args"); got != want {
 		t.Errorf("its command line:\n%s\nwant\n%s", got, want)
 	}
