@@ -47,6 +47,10 @@ type plugins struct {
 	// close (shutDown). Loop-owned. A quit, a removal and an update wait for them: on Windows a
 	// running program's folder can be neither removed nor renamed.
 	stopping map[*pluginRun]struct{}
+	// owned are the plugin folders a removal or an update owns, from the stop of their runs until
+	// the folder is gone or swapped: no run starts from one meanwhile (startPlugin), since it would
+	// run from a folder about to be deleted or moved. The value says which, for the refusal.
+	owned map[string]string
 	// sessions are the plugins' session slots, by plugin name (protocol 7,
 	// docs/decisions/plugins.md#plugin-sessions): memory only, until AutoDoc quits or the plugin is
 	// removed. Loop-owned; acceptSession is their one writer, and a run gets a copy at its open,

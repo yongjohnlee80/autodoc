@@ -271,16 +271,25 @@ func (pl *plugins) installCandidate(c *candidate) {
 			pl.installed(c, err)
 			return
 		}
+		plugDir := filepath.Join(dir, c.name)
+		// owned before its run stops: none starts again from the folder until it is swapped
+		if ok, other := pl.own(plugDir, "updated"); !ok {
+			pl.installed(c, fmt.Errorf("its folder is being %s", other))
+			return
+		}
 		if r := pl.running[c.name]; r != nil {
 			r.stopFor(plugin.CloseUpdate, "") // it is replaced under itself otherwise; its slot stays
 		}
-		runs := pl.stoppingIn(filepath.Join(dir, c.name))
+		runs := pl.stoppingIn(plugDir)
 		feature.CoreDo(pl.c, func(context.Context) error {
 			if err := awaitShutdown(runs); err != nil { // its folder is moved once nothing runs from it
 				return err
 			}
 			return swapIn(fsys, dir, c.stage, c.name)
-		}, func(err error) { pl.installed(c, err) })
+		}, func(err error) {
+			pl.disown(plugDir)
+			pl.installed(c, err)
+		})
 	})
 }
 
@@ -568,6 +577,11 @@ func (pl *plugins) removePluginConfirmed(dir string) {
 	if dir == "" || filepath.Dir(dir) != filepath.Clean(pl.pluginOpt.Dir) {
 		return
 	}
+	// owned before its runs stop: none starts again from the folder until it is gone, or kept
+	if ok, other := pl.own(dir, "removed"); !ok {
+		pl.c.Failed(pl.c.Tr("autodoc.notice.plugininstall.not_removed"), fmt.Errorf("its folder is being %s", other))
+		return
+	}
 	for key, r := range pl.running {
 		if r.e.dir == dir {
 			r.stopFor(plugin.CloseRemove, "")
@@ -599,6 +613,7 @@ func (pl *plugins) removePluginConfirmed(dir string) {
 		_ = os.Remove(filepath.Dir(prev)) // .previous itself, once nothing else is kept there
 		return nil
 	}, func(err error) {
+		pl.disown(dir)
 		if err != nil {
 			pl.c.Failed(pl.c.Tr("autodoc.notice.plugininstall.not_removed"), err)
 			return

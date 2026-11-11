@@ -84,6 +84,11 @@ type pluginRun struct {
 // startPlugin starts e's process, its link and its surface, and sends plugin.open: a dialog's at
 // its first layout, a service's at once.
 func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
+	if what, ok := pl.owned[e.dir]; ok {
+		// NOTE: every start comes here (the menu, a feed, a command, a script): a run started now
+		// would run from a folder its removal or update is about to delete or move
+		return nil, fmt.Errorf("its folder is being %s; open it again once that is done", what)
+	}
 	host, ok := pl.c.Overlay()
 	if !ok && !e.m.Service() {
 		return nil, errors.New("the screen is not ready")
@@ -590,20 +595,46 @@ func awaitShutdown(runs []*pluginRun) error {
 
 // awaitShutdownBy is awaitShutdown's wait, until deadline fires. A run whose shutdown ended as the
 // deadline came is one that ended: select picks either of two ready cases.
+//
+// The deadline fires once: a channel of time.After holds one value, which the first select to take
+// it consumes. So its expiry is kept: once it has fired, every later run is only asked whether it
+// is done, never waited for (a wait on the drained channel would never end).
 func awaitShutdownBy(runs []*pluginRun, deadline <-chan time.Time, bound time.Duration) error {
+	expired := false
 	for _, r := range runs {
-		select {
-		case <-r.shutDone:
-		case <-deadline:
+		if !expired {
 			select {
 			case <-r.shutDone:
-			default:
-				return fmt.Errorf("%s did not exit within %s: its folder was left as it is", r.e.m.Name, bound)
+				continue
+			case <-deadline:
+				expired = true
 			}
+		}
+		select {
+		case <-r.shutDone:
+		default:
+			return fmt.Errorf("%s did not exit within %s: its folder was left as it is", r.e.m.Name, bound)
 		}
 	}
 	return nil
 }
+
+// own marks dir as owned by a removal or an update ("removed", "updated") until disown: no run
+// starts from it meanwhile. It is exclusive: when another removal or update owns dir already, it
+// answers false and what that one is doing, and the caller does nothing (its disown would release
+// the other's fence).
+func (pl *plugins) own(dir, what string) (bool, string) {
+	if other, ok := pl.owned[dir]; ok {
+		return false, other
+	}
+	if pl.owned == nil {
+		pl.owned = map[string]string{}
+	}
+	pl.owned[dir] = what
+	return true, ""
+}
+
+func (pl *plugins) disown(dir string) { delete(pl.owned, dir) }
 
 // stopPlugins stops every open plugin and waits for them, as the TUI quits: bounded by the close's
 // deadlines, since they run at once. A run stopped before, still in its close, is waited for too.
