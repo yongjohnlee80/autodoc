@@ -10,6 +10,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 
 	"github.com/yongjohnlee80/autodoc/core/module"
+	"github.com/yongjohnlee80/autodoc/tui/crew"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
@@ -52,8 +53,8 @@ func TestTheInboxShowsTheMailOnScreen(t *testing.T) {
 	})
 }
 
-// inboxTUI is a window on a daemon serving f, its Inbox open on screen with the first message listed.
-func inboxTUI(t *testing.T, f *fakeInbox, first string) *running {
+// inboxTUI is a window on a daemon serving the inbox module f, its Inbox open on screen with the first message listed.
+func inboxTUI(t *testing.T, f module.Module, first string) *running {
 	t.Helper()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{modules: []module.Module{f}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
@@ -76,16 +77,15 @@ func TestEveryInboxLetterWorksFromTheList(t *testing.T) {
 	for seq := int64(57); seq > 0; seq-- {
 		items = append(items, mailItem(seq, "message", "read"))
 	}
-	f := &fakeInbox{items: items, acks: make(chan string, 8)}
+	f := newWatchingInbox(&fakeInbox{items: items, acks: make(chan string, 8)}, items[0]) // m060: an open request
 	r := inboxTUI(t, f, "m060")
-	if !r.focused(inboxListID) {
+	if !r.focused(crew.InboxListID) {
 		t.Fatal("the Inbox opened with the keyboard elsewhere than its list")
 	}
-	rec := &inboxReplyRec{}
-	onLoop(r, func() bool { r.h.inboxView.replies = rec; return true })
+	r.s.WaitForText(t, "gold asks: subject m060") // its toast: the window's crew inbox holds the request open
 	press := func(ch rune) {
 		t.Helper()
-		if err := onLoop(r, func() error { return r.h.p.Call(inboxListID, "forceActiveFocus") }); err != nil {
+		if err := onLoop(r, func() error { return r.h.p.Call(crew.InboxListID, "forceActiveFocus") }); err != nil {
 			t.Fatal(err)
 		}
 		r.keys(t, decltest.Rune(ch))
@@ -93,13 +93,20 @@ func TestEveryInboxLetterWorksFromTheList(t *testing.T) {
 	for _, c := range []struct {
 		key rune
 		tab int
-	}{{'u', inboxUnread}, {'t', inboxRequests}, {'v', inboxUndeliverable}, {'a', inboxAll}} {
+	}{{'u', crew.InboxUnread}, {'t', crew.InboxRequests}, {'v', crew.InboxUndeliverable}, {'a', crew.InboxAll}} {
 		press(c.key)
 		r.s.WaitFor(t, fmt.Sprintf("%c switching to tab %d", c.key, c.tab), func(string) bool {
-			return onLoop(r, func() int { return r.h.inboxView.tabOf }) == c.tab
+			return onLoop(r, func() int { return r.h.inboxView.Snapshot().Tab }) == c.tab
 		})
 	}
-	r.s.WaitFor(t, "All listed again", func(sc string) bool { return strings.Contains(sc, "subject m060") })
+	r.s.WaitFor(t, "All listed again", func(sc string) bool { // its row, not the request's toast
+		for _, line := range strings.Split(sc, "\n") {
+			if strings.Contains(line, "subject m060") && strings.Contains(line, "request") {
+				return true
+			}
+		}
+		return false
+	})
 	press('d') // the request, under the cursor
 	r.s.WaitFor(t, "d asking to dismiss", func(string) bool {
 		return onLoop(r, func() bool {
@@ -109,10 +116,13 @@ func TestEveryInboxLetterWorksFromTheList(t *testing.T) {
 	r.keys(t, decltest.Rune('n')) // No, as the user answers it
 	r.s.WaitFor(t, "the question answered No", func(string) bool { return !onLoop(r, func() bool { return r.h.asker.Pending }) })
 	press('r')
+	r.s.WaitFor(t, "r opening the request's reply", func(sc string) bool { return replyOpen(sc, "gold asks: subject m060") })
+	onLoop(r, func() bool { r.h.closeDialog(crew.ReplyDialog); return true })
+	r.s.WaitFor(t, "the reply closed", func(sc string) bool { return !replyOpen(sc, "gold asks: subject m060") })
 	press('s')
-	r.s.WaitFor(t, "r opening the request's reply and s showing its sender", func(string) bool {
-		return onLoop(r, func() string { return fmt.Sprint(rec.replied, rec.raised) }) == "[m060] [s-gold/gold]"
-	})
+	if got := <-f.focus; got != "s-gold" { // gold's session is no agent of this window's: the daemon is asked to raise it
+		t.Fatalf("s on the request: asked to raise %q, want s-gold", got)
+	}
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyDown})
 	press('m')
 	if got := <-f.acks; got != "m059" {
@@ -125,7 +135,7 @@ func TestEveryInboxLetterWorksFromTheList(t *testing.T) {
 		t.Fatalf("o on the report: acked %q, want m058", got)
 	}
 	r.keys(t, decltest.Rune('q'))
-	r.s.WaitFor(t, "back on the list", func(string) bool { return r.focused(inboxListID) })
+	r.s.WaitFor(t, "back on the list", func(string) bool { return r.focused(crew.InboxListID) })
 	press('e')
 	r.s.WaitFor(t, "e reading the page below", func(string) bool { return f.olderPages() == 1 })
 }
@@ -138,14 +148,14 @@ func TestTheInboxCursorStaysOnItsMessage(t *testing.T) {
 	for seq := int64(60); seq > 0; seq-- {
 		items = append(items, mailItem(seq, "message", "open"))
 	}
-	f := &fakeInbox{items: items, acks: make(chan string, 8)}
+	f := newWatchingInbox(&fakeInbox{items: items, acks: make(chan string, 8)})
 	r := inboxTUI(t, f, "m060")
 	down := tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyDown}
 	r.keys(t, down, down)
 	on := func(when string) {
 		t.Helper()
 		r.s.WaitFor(t, when+": the cursor on m058", func(sc string) bool {
-			return strings.Contains(sc, "body of m058") && onLoop(r, func() string { return r.h.inboxView.key }) == "m058"
+			return strings.Contains(sc, "body of m058") && onLoop(r, func() string { return r.h.inboxView.Snapshot().Key }) == "m058"
 		})
 	}
 	on("moved")
@@ -156,7 +166,7 @@ func TestTheInboxCursorStaysOnItsMessage(t *testing.T) {
 	r.s.WaitFor(t, "the page below read", func(string) bool { return f.olderPages() == 1 })
 	on("after More")
 	f.setItems(append([]any{mailItem(62, "message", "open"), mailItem(61, "message", "open")}, items...)...)
-	onLoop(r, func() bool { r.h.inboxView.changed(); return true })
+	f.newMail() // the feed says so: the window reads its inbox again
 	r.s.WaitForText(t, "subject m062")
 	on("after new mail")
 	r.keys(t, decltest.Rune('o'))
