@@ -71,11 +71,12 @@ func useLineShell(t *testing.T) {
 		"PATH="+bin+string(os.PathListSeparator)+systemPath())
 }
 
-// shellTempDir is a folder of the line shell's (its program, its home), not t.TempDir's: on Windows
-// a running program's file, or the working folder of a process, can't be removed, and the shell may
-// still be exiting as the test ends. Its removal is registered before the program starts, so it runs
-// after the program's own cleanup has stopped its shells (cleanups run newest first), and is retried
-// while Windows still holds the exiting shell.
+// shellTempDir is a folder of a program the TUI starts (the line shell's program and home, an agent's
+// program and folder), not t.TempDir's: on Windows a running program's file, or the working folder of
+// a process, can't be removed, and the program may still be exiting as the test ends (under load,
+// for longer). Its removal is registered before the program starts, so it runs after the TUI's own
+// cleanup has stopped its programs (cleanups run newest first), and is retried while Windows still
+// holds the exiting one.
 func shellTempDir(t *testing.T, pattern string) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("", pattern)
@@ -87,8 +88,8 @@ func shellTempDir(t *testing.T, pattern string) string {
 		for deadline := time.Now().Add(10 * time.Second); err != nil && time.Now().Before(deadline); err = os.RemoveAll(dir) {
 			time.Sleep(50 * time.Millisecond)
 		}
-		if err != nil { // left in the temp folder: a shell still held it, which the log should say
-			t.Logf("the line shell's folder was left: %v", err)
+		if err != nil { // left in the temp folder: a program still held it, which the log should say
+			t.Logf("a program's folder was left: %v", err)
 		}
 	})
 	return dir
