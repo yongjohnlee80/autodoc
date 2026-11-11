@@ -252,9 +252,25 @@ jobs:
         run: |
           # the whole module's vet, not only the ported packages': it compiles every package's tests
           # for Windows, so a neutral test can't come to lean on a helper in a Unix-tagged file
-          go vet ./...
-          mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
-          go test -count=1 -timeout 20m "${pkgs[@]}"
+          # SCRATCH (never merged): the mid-typing plugin cell x20 at -parallel 16, on canary (the file restored) and on the fix
+          C='^TestAPluginStartedMidTypingHasTheTextAsItIs$'
+          cp tui/pluginfeature_test.go "$RUNNER_TEMP/fix.go"
+          perl -0pi -e 's/\t\/\/ the pause never comes in the cell:[^\n]*\n(\t\/\/[^\n]*\n){2}\ttune\(t\)\.pluginFeed = time\.Hour\n//' tui/pluginfeature_test.go
+          if cmp -s "$RUNNER_TEMP/fix.go" tui/pluginfeature_test.go; then echo "== base NOT restored"; exit 1; fi
+          grep -c 'pluginFeed = time.Hour' tui/pluginfeature_test.go || true
+          for v in base fix; do
+            [ $v = fix ] && cp "$RUNNER_TEMP/fix.go" tui/pluginfeature_test.go
+            go test -count=20 -parallel 16 -v -timeout 20m -run "$C" ./tui/ > "$RUNNER_TEMP/$v.log" 2>&1 || true
+            echo "== $v: pass $(grep -c -- '^--- PASS' "$RUNNER_TEMP/$v.log" || true) fail $(grep -c -- '^--- FAIL' "$RUNNER_TEMP/$v.log" || true)"
+            grep -E -- 'pluginfeature_test\.go:[0-9]+:' "$RUNNER_TEMP/$v.log" | cut -c1-200 | sort | uniq -c | head -5 || true
+          done
+          cat "$RUNNER_TEMP/base.log" "$RUNNER_TEMP/fix.log" > tui-windows.log || true
+      - name: the census log
+        if: ${{ always() && !inputs.discover }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: tui-windows-log
+          path: tui-windows.log
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
