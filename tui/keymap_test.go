@@ -116,12 +116,15 @@ func runShellWithKeymap(t *testing.T, file string) *running {
 	return r
 }
 
-// openShell opens the terminal pane, its shell with the keyboard.
+// openShell opens the terminal pane and waits for its shell's prompt, the keyboard in it, before
+// anything is typed: the keys these cells are about are the terminal's own. The pane opens on the
+// loop (shellInTheTerminal), not from SPC `: the shell's start runs on the loop, inside the open
+// (golib's TerminalTabs.Start; on Windows its ConPTY and its process, measured at 0.15-0.56 s on a
+// hosted runner against 0-4 ms on Linux), so under load a key sent behind it could outrun
+// decltest's dispatch deadline. A start off the loop is golib's, a later release's.
 func (r *running) openShell(t *testing.T) {
 	t.Helper()
-	r.leader(t, '`')
-	r.s.WaitForText(t, "┌ terminal")
-	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	shellInTheTerminal(t, r)
 	r.keys(t, decltest.Type("shout up\r")...)
 	r.s.WaitForText(t, "UP")
 }
