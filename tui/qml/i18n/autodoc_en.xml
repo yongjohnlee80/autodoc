@@ -8159,6 +8159,10 @@ The last connect failed:
         <source>vectors</source>
         <translation>vectors</translation>
     </message>
+    <message id="autodoc.text.terminal.starting">
+        <source>starting…</source>
+        <translation>starting…</translation>
+    </message>
     <message id="autodoc.text.terminal.the_page_s">
         <source>the page's</source>
         <translation>the page's</translation>

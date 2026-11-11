@@ -62,8 +62,11 @@ type seams struct {
 	lookAgentCLI func(string) (string, error)
 	// The agents' hooks a test sets (agentSeams: SetupRun, Spawn, CommandCheck, CodexHere,
 	// PromptsReported, AgentBin), each nil or "" for the program's own.
-	agentSetupRun        func(kind, dir string, environ []string) (crew.Setup, error)
-	agentSpawn           func(pty.Cmd) (terminal.TerminalProcess, error)
+	agentSetupRun func(kind, dir string, environ []string) (crew.Setup, error)
+	agentSpawn    func(pty.Cmd) (terminal.TerminalProcess, error)
+	// shellSpawn, when a test sets it, is a shell tab's program in place of the user's shell on a
+	// pseudo-terminal: a spawn the test holds, say (newShell).
+	shellSpawn           func(pty.Cmd) (terminal.TerminalProcess, error)
 	agentCommandCheck    func(shell usershell.Shell, command string, env []string) error
 	agentCodexHere       func(environ []string, args ...string) error
 	agentPromptsReported func(kind string, reported bool) bool
