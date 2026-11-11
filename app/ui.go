@@ -44,7 +44,7 @@ func runUI(ctx context.Context, configPath, dev, workspace string, window bool, 
 	o.Profiler = prof.p
 	owned := []owner{dbg, prof}
 	if window {
-		return runGUI(ctx, o, owned)
+		return runGUI(ctx, o, b.guiDrawn, owned)
 	}
 	return afterRun(finishRun(tui.Launch(ctx, o), owned...))
 }

@@ -5,8 +5,10 @@ package app
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"github.com/yongjohnlee80/golib/gui"
+	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
 	"github.com/yongjohnlee80/autodoc/internal/proctree"
@@ -17,8 +19,9 @@ import (
 // The document's Editor is gui's Editor there (guidecl.Native): proportional text, and a Rendered
 // view of Markdown beside the Raw one. The terminal keeps tui's Editor for the same main.qml.
 // Gio needs the process's main thread for windows (macOS requires it), so gui.Main takes it and
-// ends the process when the UI quits: it never returns.
-func runGUI(ctx context.Context, o tui.LaunchOptions, owned []owner) error {
+// ends the process when the UI quits: it never returns. drawn, when set (a test's), is told once the
+// window has its first frame, with quit, which ends the UI as a quit does.
+func runGUI(ctx context.Context, o tui.LaunchOptions, drawn func(quit func()), owned []owner) error {
 	if proctree.ReleaseConsoleIfAlone() { // on Windows, a Start menu launch's console window goes
 		keepStartupErrors()
 	}
@@ -35,6 +38,12 @@ func runGUI(ctx context.Context, o tui.LaunchOptions, owned []owner) error {
 		b := gui.NewBackend(opts...)
 		o.Backend, o.Fonts, o.FontFamilies, o.DefaultCellFont = b, b, gui.Families, gui.MonospaceFamily()
 		o.GUI = true
+		if drawn != nil {
+			var quit context.CancelFunc
+			ctx, quit = context.WithCancel(ctx)
+			defer quit()
+			o.Backend = &firstFrame{Backend: b, drawn: func() { drawn(quit) }}
+		}
 		// the note editor's Rendered view draws the open note's embeds (tui/embeds_gui.go): the
 		// host tells it which note is open, and its diagrams draw through one chain, as golib's
 		// renderer's do. Every other Editor keeps golib's MarkdownRenderer.
@@ -51,6 +60,31 @@ func runGUI(ctx context.Context, o tui.LaunchOptions, owned []owner) error {
 		return nil
 	})
 	return nil // not reached: gui.Main exits the process
+}
+
+// firstFrame is the window's backend, telling drawn once the UI has handed it its first frame (a
+// test's: runGUI wraps the window only when one asks). Every other method is the window's own.
+type firstFrame struct {
+	*gui.Backend
+	once  sync.Once
+	drawn func()
+}
+
+// Flush and FlushSized are the window's, telling drawn after the first frame either delivers (the
+// App hands a backend with FlushSized its frames there alone, as gui's has).
+func (f *firstFrame) Flush(diff []tuicore.CellUpdate) error {
+	return f.told(f.Backend.Flush(diff), diff)
+}
+
+func (f *firstFrame) FlushSized(size tuicore.Size, diff []tuicore.CellUpdate) error {
+	return f.told(f.Backend.FlushSized(size, diff), diff)
+}
+
+func (f *firstFrame) told(err error, diff []tuicore.CellUpdate) error {
+	if err == nil && len(diff) > 0 {
+		f.once.Do(f.drawn)
+	}
+	return err
 }
 
 // windowFor is how the window opens, read from the state directory's mirrors before the store can

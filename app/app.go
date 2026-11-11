@@ -80,6 +80,9 @@ type Options struct {
 	// ranker, the texts the ranker reads, and whether a search answers ranked or not at all. The zero
 	// value: the stored ranker models, over the chunks' texts, falling back to recall order.
 	Rank Rank
+	// guiDrawn, a test's, is told once --gui's window has its first frame, with quit, which ends the
+	// UI as a quit does (runGUI). nil: nothing is told, and the window is the backend itself.
+	guiDrawn func(quit func())
 }
 
 // Rank is a build's search ranking.
@@ -123,6 +126,7 @@ type build struct {
 	buildDate string
 	reg       *registrations.Table
 	rank      Rank
+	guiDrawn  func(quit func()) // Options.guiDrawn
 }
 
 // Main runs autodoc as its CLI does and returns the process's exit code: 2 for usage, 1 for an
@@ -147,7 +151,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 		fmt.Fprintln(stderr, "autodoc:", err)
 		return 1
 	}
-	b := build{version: o.Version, buildDate: o.BuildDate, reg: reg, rank: o.Rank}
+	b := build{version: o.Version, buildDate: o.BuildDate, reg: reg, rank: o.Rank, guiDrawn: o.guiDrawn}
 	fs := flag.NewFlagSet("autodoc", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Bool("serve", false, "run the daemon")
