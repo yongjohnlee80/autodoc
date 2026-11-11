@@ -4309,6 +4309,10 @@ WHAT A KEY NEEDS
         <source>%1: it is in no workspace: no search, links, backlinks, frontmatter check or embeddings</source>
         <translation>%1：不属于任何工作区：没有搜索、链接、反向链接、frontmatter 检查和嵌入</translation>
     </message>
+    <message id="autodoc.notice.files.it_was_read_again_from_disk_meanwhile_save_it_ag">
+        <source>it was read again from disk meanwhile; save it again</source>
+        <translation>期间已从磁盘重新读取：请重新保存</translation>
+    </message>
     <message id="autodoc.notice.files.kept_as_it_was_saved_while_it_was_read">
         <source>kept %1 as it was saved while it was read</source>
         <translation>%1 在读取时被保存，已按保存后的版本保留</translation>
@@ -4368,6 +4372,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.files.saving">
         <source>saving %1…</source>
         <translation>正在保存 %1…</translation>
+    </message>
+    <message id="autodoc.notice.files.the_connection_to_the_backend_was_renewed_save_it">
+        <source>the connection to the backend was renewed meanwhile; save it again</source>
+        <translation>期间与后端的连接已重新建立：请重新保存</translation>
     </message>
     <message id="autodoc.notice.find.find_cleared">
         <source>find cleared</source>

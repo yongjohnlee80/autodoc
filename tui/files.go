@@ -792,6 +792,7 @@ func (h *Host) write(b *openBuffer, content, want string, after func()) {
 // dropped, never re-aimed at the new one.
 func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after func()) {
 	tk, ws, p, raw := h.bufferTicket(b, false), b.file.ws, b.file.path, b.file.raw
+	sess, gen := h.session.Gen(), b.file.gen
 	if err := who.check("save " + p); err != nil {
 		h.failed(h.trf("autodoc.notice.files.save", p), err)
 		return
@@ -848,11 +849,17 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 		return answer{err: err, version: feature.Str(m, "version"), same: string(b) == onDisk}
 	}, func(a answer) {
 		defer settled()
+		landed := a.err == nil || feature.Code(a.err) == rpc.CodeCommitted && a.readErr == nil && a.same
 		if !tk.Current() {
+			// a stale answer is not applied to b, which keeps its unsaved marker, but the status line,
+			// which said "saving p…", says what became of the save, or it would seem under way for ever
+			if slices.Contains(h.buffers, b) { // b closed: nothing left to say it of
+				h.saveLost(p, landed, h.session.Gen() != sess, b.file.gen != gen)
+			}
 			return
 		}
 		switch {
-		case a.err == nil, feature.Code(a.err) == rpc.CodeCommitted && a.readErr == nil && a.same:
+		case landed:
 			b.file.version = a.version
 			b.file.disk, b.file.diskVersion, b.file.diskAsked = diskSame, "", "" // what is on disk is what was written
 			// typing during the save leaves the file unsaved: what is on disk is what was written
@@ -898,6 +905,25 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 			h.failed(h.trf("autodoc.notice.files.save", p), a.err)
 		}
 	})
+}
+
+// saveLost says what became of a save of p whose answer came stale: written, when it landed
+// (never "save it again" for a file already written); else why it was dropped, the connection
+// renewed (renewed) or the buffer read again from disk (reread), and to save it again.
+func (h *Host) saveLost(p string, landed, renewed, reread bool) {
+	if landed {
+		msg := h.trf("autodoc.notice.files.saved", p)
+		h.say(msg)
+		h.notify(msg)
+		return
+	}
+	why := h.tr("autodoc.notice.files.it_was_read_again_from_disk_meanwhile_save_it_ag")
+	if renewed || !reread {
+		why = h.tr("autodoc.notice.files.the_connection_to_the_backend_was_renewed_save_it")
+	}
+	msg := h.trf("autodoc.notice.session.text", h.trf("autodoc.notice.files.save", p), why)
+	h.say(msg)
+	h.notify(msg)
 }
 
 // conflict answers the conflict dialog.
