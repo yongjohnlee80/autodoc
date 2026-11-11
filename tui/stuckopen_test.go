@@ -58,20 +58,22 @@ func TestAnOpenIsAnsweredWhileTheConnectionsOtherCallsWait(t *testing.T) {
 		t.Run(fmt.Sprintf("%d parked", n), func(t *testing.T) {
 			t.Parallel()
 			p := newParkedVerbs()
-			t.Cleanup(p.free) // before the daemon stops (cleanups run last first)
 			d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "the note's body\n"}}, daemonOpts{modules: []module.Module{p}})
 			r := runTUI(t, NewSession(d.sock, nil), Options{})
+			t.Cleanup(p.free) // registered last, so it runs first: before the TUI and the daemon stop
 			r.ready(t)
 			calls := make(chan error, n)
 			for i := range n { // from workers, as the TUI's own background work calls
 				go func() {
-					_, err := r.h.call(context.Background(), "park.wait", map[string]any{"tag": fmt.Sprint(i)})
+					_, err := r.h.call(context.Background(), "park.wait", fmt.Sprint(i))
 					calls <- err
 				}()
 			}
 			for i := range n { // every one is in its handler: the connection holds n unanswered calls
 				select {
 				case <-p.entered:
+				case err := <-calls: // answered before its handler parked: the call itself failed
+					t.Fatalf("a park.wait call was answered before it parked: %v", err)
 				case <-time.After(daemonWait):
 					t.Fatalf("only %d of the %d calls reached the daemon's handlers within %s", i, n, daemonWait)
 				}
