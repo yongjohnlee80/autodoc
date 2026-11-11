@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"time"
@@ -70,6 +71,13 @@ type seams struct {
 
 	// installFS is swapIn's renames and removal; a test makes each fail in turn. Read off the loop.
 	installFS installFS
+	// folderReadWait is how long a plugin's removal or update waits for a read of its folder already
+	// running (the manager's listing, an update's fetch) before it fails, the folder left as it is.
+	// NOTE: deadline: a read is a git process, which only its own minutes-long timeout ends.
+	folderReadWait time.Duration
+	// pluginGit is the git a read of an installed plugin's folder runs (the manager's listing, an
+	// update's fetch); nil is git itself. A test holds a read here. Handed to the worker on the loop.
+	pluginGit func(ctx context.Context, env procenv.Env, dir string, args ...string) (string, error)
 
 	// resultsResident is the most rows the results panel holds: rows past it are not loaded, and the
 	// table says the result has more. resultsCopyCap is the most text a copy puts on the clipboard:
@@ -137,6 +145,7 @@ var defaultSeams = seams{
 	offerAgentSetup:  true,
 	offerVimQuestion: true,
 	installFS:        installFS{rename: os.Rename, removeAll: os.RemoveAll},
+	folderReadWait:   5 * time.Second,
 	resultsResident:  100_000,
 	resultsCopyCap:   16 << 20,
 }
