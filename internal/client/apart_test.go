@@ -243,7 +243,7 @@ func TestAPollingDialEndsWithItsPrimary(t *testing.T) {
 			kept, flight := s.poll, s.pollDialing
 			s.mu.Unlock()
 			if kept != nil || flight != nil { // nil: no dial left in flight either
-				t.Fatalf("after the dial for a gone primary: polling connection %v, dial in flight %v; want neither", kept, flight)
+				t.Fatalf("after the dial for a gone primary: a polling connection kept %v, a dial in flight %v; want neither", kept != nil, flight != nil)
 			}
 			if how == "reconnect" {
 				go func() { _, _ = s.Call(ctx, "w") }()
@@ -336,7 +336,7 @@ func TestAnEndedPrimaryHandsOutNoPollingConnection(t *testing.T) {
 		t.Fatal("no polling connection to hand out: the cell holds nothing still")
 	}
 	if cli, err := s.pollClient(ctx); !errors.Is(err, errNotConnected) {
-		t.Fatalf("an ended primary's polling connection: %v, %v; want not connected", cli, err)
+		t.Fatalf("an ended primary's polling connection: handed out %v (%p), err %v; want not connected", cli != nil, cli, err)
 	}
 	if _, err := s.Call(ctx, "w"); !errors.Is(err, errNotConnected) {
 		t.Fatalf("a call kept apart under an ended primary: %v; want not connected", err)
