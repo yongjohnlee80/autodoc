@@ -7480,6 +7480,10 @@ The last connect failed:
         <source>vectors</source>
         <translation>ベクトル</translation>
     </message>
+    <message id="autodoc.text.terminal.starting">
+        <source>starting…</source>
+        <translation>起動中…</translation>
+    </message>
     <message id="autodoc.text.terminal.the_page_s">
         <source>the page's</source>
         <translation>ページと同じ</translation>

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -430,14 +431,20 @@ func (t *terminals) startTab(label func(feature.TerminalPanel) string, config fe
 	}
 	var id terminal.TerminalTabID
 	config.Exited = func(code int) { t.shellExited(id, code) }
+	config.StartingText = t.c.Tr("autodoc.text.terminal.starting")
 	id, err = panel.Add(label(panel), config)
 	if err != nil {
 		t.c.Notify(addFail(err))
 		return
 	}
-	if err := panel.Start(id); err != nil {
-		t.c.Notify(startFail(err))
-	}
+	// started off the loop: the tab opens at once, saying it is starting, and the window goes on
+	// drawing and taking keys while the shell spawns (a good part of a second on Windows). A start
+	// the tab's close overtook says nothing: the tab is gone.
+	panel.StartAsync(id, func(err error) {
+		if err != nil && !errors.Is(err, terminal.ErrTerminalStartCancelled) {
+			t.c.Notify(startFail(err))
+		}
+	})
 	t.c.Keep(panel.Select(id))
 }
 
