@@ -610,14 +610,22 @@ var (
 	testBuild   = build{version: testOptions.Version}
 )
 
+// windowQuitsEnv, set to 1 in this binary run as autodoc (TestMain), has --gui's window quit once it
+// has its first frame (Options.guiDrawn).
+const windowQuitsEnv = "AUTODOC_TEST_WINDOW_QUITS"
+
 // TestMain lets a test run this binary as autodoc: client.SpawnServe starts os.Executable(), which in a
 // test is the test binary, so it runs Main when asked to.
 func TestMain(m *testing.M) {
 	// no late waker probes the host's tools (mise, codex) in a test; a test that wants one sets it
 	lateWakers = nil
 	if os.Getenv("AUTODOC_TEST_MAIN") == "1" {
-		// with the arguments the spawn gave: --serve --config <file>
-		os.Exit(Main(context.Background(), os.Args[1:], testOptions))
+		// with the arguments the spawn gave: --serve --config <file>; or a cell's (runWindow)
+		o := testOptions
+		if os.Getenv(windowQuitsEnv) == "1" {
+			o.guiDrawn = func(quit func()) { quit() } // the window quits once drawn
+		}
+		os.Exit(Main(context.Background(), os.Args[1:], o))
 	}
 	os.Exit(m.Run())
 }
