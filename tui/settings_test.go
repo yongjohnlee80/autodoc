@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -288,6 +289,9 @@ func TestARefusedSaveChangesNothing(t *testing.T) {
 	}
 
 	if err := os.RemoveAll(root); err != nil { // the rules check the root
+		tail := filepath.Join(filepath.Base(filepath.Dir(root)), filepath.Base(root))
+		out, herr := exec.Command(os.Getenv("HANDLE_EXE"), "-accepteula", "-nobanner", "-a", tail).CombinedOutput()
+		t.Logf("HANDLES (every process) for %s (%v):\n%s\nEND", tail, herr, out)
 		t.Fatal(err)
 	}
 	r.saveForm(func(f *settingsForm) { f.texts = ".log" })

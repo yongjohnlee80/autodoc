@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -889,6 +890,15 @@ func (r *running) app(t *testing.T, name string, args ...qml.SpecValue) {
 func TestTheResultsCommandsRunFromTheCatalogAndThePanel(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
+	t.Cleanup(func() { // SCRATCH: after the program's stop, before the folder's removal
+		if err := os.Rename(filepath.Join(dir, "rows"), filepath.Join(dir, "rows-probe")); err != nil {
+			tail := filepath.Join(filepath.Base(filepath.Dir(dir)), filepath.Base(dir), "rows")
+			out, herr := exec.Command(os.Getenv("HANDLE_EXE"), "-accepteula", "-nobanner", "-a", tail).CombinedOutput()
+			t.Logf("rows held: %v\nHANDLES (every process) for %s (%v):\n%s\nEND", err, tail, herr, out)
+		} else {
+			_ = os.Rename(filepath.Join(dir, "rows-probe"), filepath.Join(dir, "rows"))
+		}
+	})
 	installPlugin4(t, dir, "rows", "service", "tablestall", tableManifest)
 	r, logs := resultsTUI(t, dir, map[string][]string{"kb": {"a.md", "# A\n", "manual.pdf", manualPDF}}, daemonOpts{deriver: pdfAsText{}})
 	onLoop(r, func() bool { r.h.plugins.runPluginCommand("rows", "run"); return true })
