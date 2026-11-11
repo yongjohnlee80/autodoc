@@ -181,3 +181,9 @@ func (s *seams) PromptsReported() func(kind string, reported bool) bool {
 	return s.agentPromptsReported
 }
 func (s *seams) AgentBin() string { return s.agentBin }
+
+// shellSpawnSeam is the test's shell stand-in (seams.shellSpawn), nil for the user's shell: what
+// the terminals ask for each new shell (terminals.shellSpawn).
+func (h *Host) shellSpawnSeam() func(pty.Cmd) (terminal.TerminalProcess, error) {
+	return h.seams.shellSpawn
+}
