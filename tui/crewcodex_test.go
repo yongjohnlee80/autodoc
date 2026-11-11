@@ -112,12 +112,12 @@ func TestACrewCodexAgentIsRegisteredAsItStarts(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		cmd, spawned, err := startedCmd(a, c, instance)
-		if err != nil || !spawned {
+		if _, spawned, err := startedCmd(a, c, instance); err != nil || !spawned {
 			t.Fatalf("the start: spawned %v, %v; want Codex started without a server of its own", spawned, err)
 		}
-		if !slices.Contains(cmd.Args, "--no-daemon") || slices.Contains(cmd.Args, "--remote") {
-			t.Fatalf("its command %q: want --no-daemon, and no --remote to a server of its own", cmd.Args)
+		// the setup it started with (the command line is the shell's on Windows: pwsh -Command …)
+		if s := instance.State().Setup; !slices.Contains(s.Argv, "--no-daemon") || slices.Contains(s.Argv, "--remote") || len(s.Server) != 0 {
+			t.Fatalf("its setup: argv %q, server %q; want --no-daemon, and no server of its own nor --remote to one", s.Argv, s.Server)
 		}
 		select {
 		case args := <-runs.calls:
