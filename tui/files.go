@@ -896,7 +896,8 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 			h.open("fileConflict")
 		case feature.Code(a.err) == rpc.CodeNotFound:
 			h.markDisk(b, diskDeleted, "") // the next save creates it again
-			h.say(h.trf("autodoc.notice.session.text", h.trf("autodoc.notice.files.save", p), feature.WireMessage(a.err)))
+			// the status line said "saving p…": it says the file is gone and the next save makes it
+			h.say(h.trf("autodoc.notice.diskwatch.was_deleted_on_disk_its_text_is_kept_saving_crea", p))
 		default:
 			h.failed(h.trf("autodoc.notice.files.save", p), a.err)
 			// the status line said "saving p…": it says the save failed now, as a failed open does, or
