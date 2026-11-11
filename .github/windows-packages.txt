@@ -67,3 +67,4 @@
 ./tui/searchsetup
 ./tui/system
 ./tui/todos
+./tui
