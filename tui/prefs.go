@@ -13,6 +13,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/tui/crew"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/autodoc/tui/system"
+	"github.com/yongjohnlee80/autodoc/tui/todos"
 )
 
 // PREFERENCES — what the TUI keeps between runs, in the daemon's store (preference.list and
@@ -271,13 +272,13 @@ func legacyPrefRows(h *Host, gui bool) []feature.PrefSpec {
 				return map[string]any{"App.explorerEdge": p.explorerEdge}
 			}).
 			Then(func(feature.PrefsView) { h.dockPanel("explorer") }), // a new edge is seen at once
-		choicePref(prefTodosEdge, "left", feature.Edges, func(p *prefs) *string { return &p.todosEdge }).
+		choicePref(todos.PrefEdge, "left", feature.Edges, func(p *prefs) *string { return &p.todosEdge }).
 			Chooser("App.todosEdgeIndex", "App.setTodosEdge").
 			Shows(func(v feature.PrefsView) map[string]any {
 				p := asPrefs(v)
 				return map[string]any{"App.todosEdge": p.todosEdge}
 			}).
-			Then(func(feature.PrefsView) { h.dockPanel(todosPanelSpec().ID) }),
+			Then(func(feature.PrefsView) { h.dockPanel(todos.PanelSpec().ID) }),
 		choicePref(prefKeymap, "vim", keymaps, func(p *prefs) *string { return &p.keymap }).
 			Chooser("App.keymapIndex", "App.setKeymapIndex").
 			Shows(func(v feature.PrefsView) map[string]any {

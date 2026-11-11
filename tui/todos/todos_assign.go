@@ -1,4 +1,4 @@
-package tui
+package todos
 
 import (
 	"context"
@@ -23,8 +23,9 @@ import (
 // agent left stopped, an agent gone) stays assigned, and the notice says how to deliver it again.
 // AutoDoc's agents only: it holds no AutoVim agent list and makes no AutoVim call.
 
-// assignDefault is the instruction an empty Instructions: line gives, as AutoVim's A does.
-const assignDefault = "Task assigned to you."
+// AssignDefault is the instruction an empty Instructions: line gives, as AutoVim's A does. The
+// host's assign cell (todos_assign_test.go) reads it from the instruction handed over.
+const AssignDefault = "Task assigned to you."
 
 // todoAssign is one A in progress: the task, the agent once the picker has chosen it, and the
 // workspace it began in: HandTask delivers to the workspace in use, so an assign answered after a
@@ -37,16 +38,16 @@ type todoAssign struct {
 }
 
 // newAssignPick is the picker of AutoDoc's agents that A opens.
-func newAssignPick(t *todos) *feature.Pick[feature.AgentEntry] {
-	p := newAgentPick(t.c, "agentAssignPicker", "agentAssign", t.assignTo)
+func newAssignPick(t *Todos) *feature.Pick[feature.AgentEntry] {
+	p := NewAgentPick(t.c, "agentAssignPicker", "agentAssign", t.assignTo)
 	p.Scope = feature.TicketWorkspace
 	return p
 }
 
-// newAgentPick is a picker of AutoDoc's agents, by name and codename, each previewed with what it
+// NewAgentPick is a picker of AutoDoc's agents, by name and codename, each previewed with what it
 // runs: A's (todos_assign.go) and Audit…'s (candidate.go). Its sources are App.<name>Rows, Field,
 // Status and Preview*.
-func newAgentPick(c feature.Core, dialog, name string, choose func(feature.AgentEntry)) *feature.Pick[feature.AgentEntry] {
+func NewAgentPick(c feature.Core, dialog, name string, choose func(feature.AgentEntry)) *feature.Pick[feature.AgentEntry] {
 	return &feature.Pick[feature.AgentEntry]{Core: c, Dialog: dialog, Name: name,
 		List:   feature.NewRows(tuidecl.NewListModel("key", "agent", "state"), func(_ int, e feature.AgentEntry) feature.RowOf { return agentRowOf(c, e) }),
 		Field:  "App." + name + "Field",
@@ -102,9 +103,10 @@ func agentPane(c feature.Core, e feature.AgentEntry) feature.Pane {
 	return feature.Pane{Title: e.Name, Text: b.String()}
 }
 
-// assignable are the agents A lists: none closing (HandTask refuses one), and an orphan only while
-// it runs (with its profile gone, a stopped one cannot be started).
-func assignable(entries []feature.AgentEntry) []feature.AgentEntry {
+// Assignable are the agents A lists: none closing (HandTask refuses one), and an orphan only while
+// it runs (with its profile gone, a stopped one cannot be started). Audit… (candidate.go) lists
+// the same.
+func Assignable(entries []feature.AgentEntry) []feature.AgentEntry {
 	var out []feature.AgentEntry
 	for _, e := range entries {
 		if !e.Closing && (!e.Orphan || e.Running) {
@@ -117,12 +119,12 @@ func assignable(entries []feature.AgentEntry) []feature.AgentEntry {
 // assign is A: the task under the cursor, in a store taking writes here, offered to AutoDoc's
 // agents in the picker. Off a task, or on a released store, it does nothing: the action row
 // offers it only where it applies.
-func (t *todos) assign() {
+func (t *Todos) assign() {
 	s, x := t.cursor()
 	if x == nil || t.readOnly(s) {
 		return
 	}
-	own := assignable(t.c.AgentEntries())
+	own := Assignable(t.c.AgentEntries())
 	tk := t.c.Ticket(nil, feature.TicketWorkspace) // taken before the crew is asked: its answer may come late
 	open := func(agents []feature.AgentEntry) {
 		if !tk.Current() {
@@ -146,7 +148,7 @@ func (t *todos) assign() {
 }
 
 // assignTo is the agent chosen: the Instructions: line is asked for, emptied.
-func (t *todos) assignTo(e feature.AgentEntry) {
+func (t *Todos) assignTo(e feature.AgentEntry) {
 	if t.assigning == nil {
 		return
 	}
@@ -163,7 +165,7 @@ func (t *todos) assignTo(e feature.AgentEntry) {
 
 // assignSet is the Instructions: line accepted: the task is assigned to the agent chosen, then
 // handed to it. Esc closes the line without a call, so nothing is written.
-func (t *todos) assignSet(text string) {
+func (t *Todos) assignSet(text string) {
 	t.c.Close("todoAssign")
 	a := t.assigning
 	t.assigning = nil
@@ -172,7 +174,7 @@ func (t *todos) assignSet(text string) {
 	}
 	instruction := strings.TrimSpace(text)
 	if instruction == "" {
-		instruction = assignDefault
+		instruction = AssignDefault
 	}
 	assignee := crew.AssigneePrefix + a.agent.Ref.Codename
 	if a.agent.Peer != nil {
@@ -210,7 +212,7 @@ func (t *todos) assignSet(text string) {
 // assignment made anywhere else reaches only the window's own agents, forwarded: crewtodos.go). It
 // is queued and woken as any mail, never typed into another host's terminal, and keyed by the
 // assignment, so a retry is the same send.
-func (t *todos) sendToPeer(a *todoAssign, s *todoStore, task map[string]any, instruction string) {
+func (t *Todos) sendToPeer(a *todoAssign, s *todoStore, task map[string]any, instruction string) {
 	p, ok := t.c.(crewPeers)
 	if !ok {
 		return
@@ -246,7 +248,7 @@ type windowScoped interface{ windowScope() string }
 // handOver gives the task, as the assign wrote it, to the agent through HandTask. Its file is where
 // the assign left it (in-progress/ once an open task is assigned), so the path is the answer's, not
 // the row's.
-func (t *todos) handOver(a *todoAssign, s *todoStore, task map[string]any, assignee, instruction string) {
+func (t *Todos) handOver(a *todoAssign, s *todoStore, task map[string]any, assignee, instruction string) {
 	ref := feature.TaskRef{Title: feature.Str(task, "title"), Path: filepath.Join(s.path, filepath.FromSlash(feature.Str(task, "path"))), ID: feature.Str(task, "id")}
 	name := a.agent.Name
 	done := func(err error) { t.handedOver(name, assignee, err) }
@@ -258,7 +260,7 @@ func (t *todos) handOver(a *todoAssign, s *todoStore, task map[string]any, assig
 // handedOver says how the hand-over went. The assignment stands either way. Delivered, the task
 // reached the agent through the window's agent messaging (agentmessaging.go): rung, or typed and
 // sent (docs/decisions/todos.md#a-message-to-an-agent-is-sent-never-left-for-enter).
-func (t *todos) handedOver(name, assignee string, err error) {
+func (t *Todos) handedOver(name, assignee string, err error) {
 	if err == nil {
 		t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_sent", name))
 		return

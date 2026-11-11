@@ -10,6 +10,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/todos"
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
@@ -239,8 +240,8 @@ func (panickyCall) Call(context.Context, string, ...any) (any, error) { panic("d
 // never come.
 func TestABackgroundPanicEndsItsCallersWait(t *testing.T) {
 	r, _ := crashTUI(t)
-	v := newTodos(panickyCall{core{r.h}})
-	r.h.p.Post(v.list)
+	v := todos.New(panickyCall{core{r.h}})
+	r.h.p.Post(func() { v.Panels()[0].Opened(nil) }) // opening the panel lists its stores
 	r.s.WaitFor(t, "the notice", func(string) bool { return r.noticed("todos.stores: it panicked: a string") })
 }
 

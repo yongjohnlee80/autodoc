@@ -16,6 +16,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/docs"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/todos"
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
@@ -287,8 +288,8 @@ func TestASwitchLeavesNoEnglishOnScreen(t *testing.T) {
 	runs := englishRuns(t)
 	onLoop(r, func() bool { // a row a model composes in Go: a todo variable set per machine, none here
 		for _, f := range h.reg.Features {
-			if td, ok := f.(*todos); ok {
-				td.vars.Reset([]map[string]any{{"name": "owner", "machine": true}})
+			if td, ok := f.(*todos.Todos); ok {
+				td.SetVarsForTest([]map[string]any{{"name": "owner", "machine": true}})
 			}
 		}
 		return true
