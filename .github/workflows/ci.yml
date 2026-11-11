@@ -252,9 +252,13 @@ jobs:
         run: |
           # the whole module's vet, not only the ported packages': it compiles every package's tests
           # for Windows, so a neutral test can't come to lean on a helper in a Unix-tagged file
-          go vet ./...
-          mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
-          go test -count=1 -timeout 20m "${pkgs[@]}"
+          go vet ./... && echo "vet rc=0" || echo "vet rc=$?"
+          # SCRATCH (never merged): the census cells x3, then each mutant x3
+          C='^(TestARefusedSaveChangesNothing|TestTheResultsCommandsRunFromTheCatalogAndThePanel)$'
+          run() { go test -count=3 -v -timeout 30m -run "$2" ./tui/ > "$RUNNER_TEMP/$1.log" 2>&1 && rc=0 || rc=$?; echo "$1 rc=$rc pass $(grep -c -- '^--- PASS' "$RUNNER_TEMP/$1.log" || true) fail $(grep -c -- '^--- FAIL' "$RUNNER_TEMP/$1.log" || true) failed: $(grep -- '^--- FAIL' "$RUNNER_TEMP/$1.log" | awk '{print $3}' | sort | uniq -c | tr '\n' ' ' || true)"; grep -E -- '_test\.go:[0-9]+: |testing\.go:[0-9]+: ' "$RUNNER_TEMP/$1.log" | sort | uniq -c | head -6 || true; }
+          run base "$C"
+          perl -0pi -e 's/if err := checkRoot\(candidate\); err != nil \{/if err := error(nil); err != nil \{ _ = candidate/' internal/daemon/configure.go && git diff --stat && run m-root '^TestARefusedSaveChangesNothing$'; git checkout -- internal/daemon/configure.go
+          perl -0pi -e 's/\tt\.Cleanup\(func\(\) \{ h\.reg\.Stopped\(\) \}\)\n//' tui/app_test.go && git diff --stat && run m-rig '^TestTheResultsCommandsRunFromTheCatalogAndThePanel$'; git checkout -- tui/app_test.go
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
