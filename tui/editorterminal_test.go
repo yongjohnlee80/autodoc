@@ -260,6 +260,7 @@ func TestTheExitMailSaysTheCodeAndNothingOfTheTab(t *testing.T) {
 func TestTheLongestLineShowsWholeOnASmallTerminal(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	h := newHost(NewSession(d.sock, nil), Options{seams: seamsFor(t)})
+	t.Cleanup(h.teardown) // Run's, once decltest has stopped the program (registered first, it runs after)
 	s := decltest.RunWith(t, 80, 20, h.attach, h.options(Options{})...)
 	t.Cleanup(h.cancel)
 	r := &running{h: h, s: s}

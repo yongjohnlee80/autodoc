@@ -326,6 +326,7 @@ func TestAFeaturesKeyRunsItsEntryInTheProgram(t *testing.T) {
 		t.Fatal(err)
 	}
 	opt := Options{Layout: []byte(main)}
+	t.Cleanup(h.teardown) // Run's, once decltest has stopped the program (registered first, it runs after)
 	s := decltest.RunWith(t, 100, 30, h.attach, h.options(opt)...)
 	t.Cleanup(h.cancel)
 	r := &running{h: h, s: s}

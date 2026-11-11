@@ -70,6 +70,8 @@ func TestAFeaturesPaneIsSearchedWithoutFindNamingIt(t *testing.T) {
             textRole: "label"
         }
 `, 1)
+	// Run's teardown, once decltest has stopped the program (registered first, it runs after)
+	t.Cleanup(h.teardown)
 	s := decltest.RunWith(t, 200, 30, h.attach, // wide: the status line holds the whole hint
 		h.options(Options{Layout: []byte(main)})...)
 	t.Cleanup(h.cancel)

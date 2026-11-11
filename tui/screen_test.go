@@ -49,6 +49,7 @@ func runTUISized(t *testing.T, sess *Session, opt Options, w, h int) *running {
 		opt.seams = seamsFor(t) // the test's own, if it tuned any (seams_test.go)
 	}
 	host := newHost(sess, opt)
+	t.Cleanup(host.teardown) // Run's, once decltest has stopped the program (registered first, it runs after)
 	s := decltest.RunWith(t, w, h, host.attach, host.options(opt)...)
 	t.Cleanup(host.cancel)
 	return &running{h: host, s: s}

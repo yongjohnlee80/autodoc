@@ -172,6 +172,7 @@ func koCatalog() fstest.MapFS {
 func TestALanguageSwitchRelabelsTheScreen(t *testing.T) {
 	sess := NewSession("unused", nil)
 	h := newHost(sess, Options{})
+	t.Cleanup(h.teardown) // Run's, once decltest has stopped the program (registered first, it runs after)
 	s := decltest.RunWith(t, 100, 30, h.attach, append(h.options(Options{}),
 		tuidecl.Translations(koCatalog(), "i18n", "autodoc"))...)
 	t.Cleanup(h.cancel)
@@ -280,6 +281,7 @@ var notCatalogText = map[string]bool{"App.tutorialText": true, "App.dock": true}
 // QML labels golib relabels itself.
 func TestASwitchLeavesNoEnglishOnScreen(t *testing.T) {
 	h := newHost(NewSession("unused", nil), Options{GUI: wholeTables})
+	t.Cleanup(h.teardown) // Run's, once decltest has stopped the program (registered first, it runs after)
 	s := decltest.RunWith(t, 120, 40, h.attach, append(h.options(Options{GUI: wholeTables}),
 		tuidecl.Translations(pseudoCatalog(t), "i18n", "autodoc"))...)
 	t.Cleanup(h.cancel)
@@ -488,6 +490,7 @@ func TestATutorialPageALanguageLacksIsEnglishs(t *testing.T) {
 // every dialog: they are not this cell's.)
 func TestTheSetupDialogFollowsTheLanguage(t *testing.T) {
 	h := newHost(NewSession("unused", nil), Options{})
+	t.Cleanup(h.teardown) // Run's, once decltest has stopped the program (registered first, it runs after)
 	s := decltest.RunWith(t, 120, 40, h.attach, h.options(Options{})...)
 	t.Cleanup(h.cancel)
 	r := &running{h: h, s: s}

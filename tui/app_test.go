@@ -382,6 +382,7 @@ func runTUI(t *testing.T, sess *Session, opt Options) *running {
 		opt.seams = seamsFor(t) // the test's own, if it tuned any (seams_test.go)
 	}
 	h := newHost(sess, opt)
+	t.Cleanup(h.teardown) // Run's, once decltest has stopped the program (registered first, it runs after)
 	s := decltest.RunWith(t, 100, 30, h.attach, h.options(opt)...)
 	t.Cleanup(h.cancel)
 	return &running{h: h, s: s}

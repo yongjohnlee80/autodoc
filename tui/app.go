@@ -701,6 +701,19 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 	return append(opts, opt.ProgramOptions...)
 }
 
+// teardown stops what the program leaves once it has stopped: the Lua engine, its package folders'
+// roots (a folder an open root holds can't be removed or renamed on Windows) and the editor's
+// socket. Run runs it; a cell's rig, whose program decltest runs instead, runs it too.
+func (h *Host) teardown() {
+	if h.scripts != nil {
+		h.scripts.Close()
+	}
+	closeRoots(h.luaRoots)
+	if h.editorSock != nil {
+		h.editorSock.stop()
+	}
+}
+
 // Run runs the program until it quits; the session and every background call end with it.
 func (h *Host) Run(ctx context.Context) error {
 	defer h.cancel()
@@ -709,13 +722,7 @@ func (h *Host) Run(ctx context.Context) error {
 	h.sayLastCrash()
 	err := h.p.Run(ctx)
 	keepErr := h.ended(err)
-	if h.scripts != nil {
-		h.scripts.Close()
-	}
-	closeRoots(h.luaRoots)
-	if h.editorSock != nil {
-		h.editorSock.stop()
-	}
+	h.teardown()
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.relaunching.Load() { // About's Update, then Restart now (update.go)
