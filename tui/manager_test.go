@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -118,7 +117,7 @@ func startManagedIncludes(t *testing.T, roots map[string]string, include []strin
 	t.Cleanup(func() {
 		cancel()
 		<-done
-		if runErr != nil && !errors.Is(runErr, context.Canceled) {
+		if serverFailed(runErr) { // said before any other wait, which could hang and bury it
 			t.Errorf("the managed test daemon's server did not shut down cleanly: %v", runErr)
 		}
 		emb.Wait()
