@@ -255,6 +255,12 @@ jobs:
           go vet ./...
           mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
           go test -count=1 -timeout 20m "${pkgs[@]}"
+          # SCRATCH (never merged): the host's todos cells on Windows
+          go test -count=2 -v -timeout 20m -run '^(TestTodos|TestTabRead|TestATogglePressedOnCoveredTodos|TestASwitchLeavesNoEnglishOnScreen|TestABackgroundPanicEndsItsCallersWait)' ./tui/ > "$RUNNER_TEMP/host.log" 2>&1; rc=$?
+          echo "== the host's todos cells x2 rc=$rc: pass $(grep -c -- '--- PASS' "$RUNNER_TEMP/host.log" || true) fail $(grep -c -- '--- FAIL' "$RUNNER_TEMP/host.log" || true)"
+          grep -E -- '--- FAIL|_test\.go:[0-9]+:' "$RUNNER_TEMP/host.log" | head -30 || true
+          go test -count=1 -v ./tui/todos/ 2>&1 | grep -E -- '^(ok|FAIL|---)|--- (FAIL|SKIP)' | head -20
+          exit $rc
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
