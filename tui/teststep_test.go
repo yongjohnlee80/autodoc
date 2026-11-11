@@ -20,7 +20,7 @@ import (
 //
 //	true | false | exit N | echo WORDS | ls -A | env | mv FROM TO
 //
-// with `> FILE` or `>&2` after it, and words quoted as agents.ShellQuote quotes them ('…', with \'
+// with `> FILE`, `>> FILE` or `>&2` after it, and words quoted as agents.ShellQuote quotes them ('…', with \'
 // outside the quotes). Anything else is refused, exit status 127, saying what: a cell that needs
 // more says so at once rather than building something else. Its answer is the exit status.
 func testStep(script string) int {
@@ -104,8 +104,12 @@ func runStepCommand(words []string) int {
 	switch n := len(words); {
 	case n >= 2 && words[n-1] == ">&2":
 		out, words = os.Stderr, words[:n-1]
-	case n >= 3 && words[n-2] == ">":
-		f, err := os.Create(words[n-1])
+	case n >= 3 && (words[n-2] == ">" || words[n-2] == ">>"):
+		flag := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+		if words[n-2] == ">>" {
+			flag = os.O_WRONLY | os.O_CREATE | os.O_APPEND
+		}
+		f, err := os.OpenFile(words[n-1], flag, 0o644)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "step:", err)
 			return 1
@@ -186,6 +190,9 @@ func TestTheTestStepRunsWhatShWould(t *testing.T) {
 	}
 	if got := testStep("true && exit 4; echo after > " + agents.ShellQuote(out)); got != 4 || read() != "yes\n" {
 		t.Fatalf("exit ends the step: status %d, %q", got, read())
+	}
+	if got := testStep("echo more >> " + agents.ShellQuote(out)); got != 0 || read() != "yes\nmore\n" {
+		t.Fatalf(">> appends: status %d, %q", got, read())
 	}
 	if got := testStep("curl example.com"); got != 127 {
 		t.Fatalf("a command the step does not know: status %d, want 127", got)
