@@ -272,22 +272,26 @@ func (pl *plugins) installCandidate(c *candidate) {
 			return
 		}
 		plugDir := filepath.Join(dir, c.name)
-		// owned before its run stops: none starts again from the folder until it is swapped
-		if ok, other := pl.own(plugDir, "updated"); !ok {
-			pl.installed(c, fmt.Errorf("its folder is being %s", other))
+		// owned before its run stops: no run or read starts again in the folder until it is swapped
+		hold := pl.own(plugDir, "updated")
+		if !hold.ok {
+			pl.installed(c, fmt.Errorf("its folder is being %s", hold.other))
 			return
 		}
 		if r := pl.running[c.name]; r != nil {
 			r.stopFor(plugin.CloseUpdate, "") // it is replaced under itself otherwise; its slot stays
 		}
 		runs := pl.stoppingIn(plugDir)
-		feature.CoreDo(pl.c, func(context.Context) error {
+		feature.CoreDo(pl.c, func(ctx context.Context) error {
 			if err := awaitShutdown(runs); err != nil { // its folder is moved once nothing runs from it
+				return err
+			}
+			if err := hold.wait(ctx); err != nil { // nor reads it (on Windows, git's working folder)
 				return err
 			}
 			return swapIn(fsys, dir, c.stage, c.name)
 		}, func(err error) {
-			pl.disown(plugDir)
+			hold.release()
 			pl.installed(c, err)
 		})
 	})
@@ -400,6 +404,17 @@ func git(ctx context.Context, env procenv.Env, timeout time.Duration, dir string
 	return strings.TrimSpace(out.String()), nil
 }
 
+// pluginGit is the git a read of an installed plugin's folder runs: the seam's, or git itself, bounded
+// as every plugin git is. Read on the loop and handed to the worker.
+func (pl *plugins) pluginGit() func(ctx context.Context, env procenv.Env, dir string, args ...string) (string, error) {
+	if g := pl.seams.pluginGit; g != nil {
+		return g
+	}
+	return func(ctx context.Context, env procenv.Env, dir string, args ...string) (string, error) {
+		return git(ctx, env, pluginCloneTimeout, dir, args...)
+	}
+}
+
 // ---------------------------------------------------------------- the manager
 
 // managePlugins is Plugins › Manage plugins….
@@ -416,7 +431,7 @@ func (pl *plugins) managePlugins() {
 // loadManaged lists the installed plugins in the manager, each with its source, read off the loop.
 func (pl *plugins) loadManaged() {
 	pl.c.Set("App.pluginsHelp", pl.c.Trf("autodoc.text.plugininstall.add_from_a_git_url_update_or_remove_the_one_unde", pl.pluginOpt.Dir))
-	entries, env := discoverPlugins(pl.pluginOpt.Dir), pl.seams.env
+	entries, env, readGit, folders := discoverPlugins(pl.pluginOpt.Dir), pl.seams.env, pl.pluginGit(), &pl.folders
 	feature.CoreDo(pl.c, func(ctx context.Context) feature.AnswerOf[[]managedPlugin] {
 		out := make([]managedPlugin, len(entries))
 		for i, e := range entries {
@@ -424,8 +439,12 @@ func (pl *plugins) loadManaged() {
 			if _, err := os.Stat(filepath.Join(e.dir, ".git")); err != nil {
 				continue
 			}
-			out[i].source, _ = git(ctx, env, pluginCloneTimeout, e.dir, "remote", "get-url", "origin")
-			out[i].commit, _ = git(ctx, env, pluginCloneTimeout, e.dir, "rev-parse", "--short", "HEAD")
+			// a folder being removed or updated is not read (its git's working folder would hold
+			// it on Windows): listed without its source until the reload its operation ends with
+			folders.read(e.dir, func() {
+				out[i].source, _ = readGit(ctx, env, e.dir, "remote", "get-url", "origin")
+				out[i].commit, _ = readGit(ctx, env, e.dir, "rev-parse", "--short", "HEAD")
+			})
 		}
 		return feature.Answered(out, nil)
 	}, func(a feature.AnswerOf[[]managedPlugin]) {
@@ -495,6 +514,7 @@ func (pl *plugins) updatePlugin(name string) error {
 func (pl *plugins) fetchAndAsk(m managedPlugin) {
 	pl.c.NotifyOngoing(toastPlugin, pl.c.Trf("autodoc.notice.plugininstall.fetching", m.e.m.Name))
 	dir, own, reg, env := pl.pluginOpt.Dir, pl.cands.allocs, pl.seams.registry, pl.seams.env
+	readGit, folders := pl.pluginGit(), &pl.folders
 	type staged struct {
 		c    *candidate
 		head string
@@ -505,13 +525,19 @@ func (pl *plugins) fetchAndAsk(m managedPlugin) {
 			if _, err := os.Stat(filepath.Join(m.e.dir, ".git")); err != nil {
 				return staged{err: errors.New("it was put in the folder by hand: update it there")}
 			}
-			src, err := git(ctx, env, pluginCloneTimeout, m.e.dir, "remote", "get-url", "origin")
-			if err != nil {
-				return staged{err: err}
-			}
-			m.source = src
 		}
-		head, err := git(ctx, env, pluginCloneTimeout, m.e.dir, "rev-parse", "HEAD") // in full, as the staged commit is
+		var head string
+		var err error
+		if what, ok := folders.read(m.e.dir, func() { // its installed folder, read while no removal or update owns it
+			if m.source == "" {
+				if m.source, err = readGit(ctx, env, m.e.dir, "remote", "get-url", "origin"); err != nil {
+					return
+				}
+			}
+			head, err = readGit(ctx, env, m.e.dir, "rev-parse", "HEAD") // in full, as the staged commit is
+		}); !ok {
+			return staged{err: fmt.Errorf("its folder is being %s", what)}
+		}
 		if err != nil {
 			return staged{err: err}
 		}
@@ -577,9 +603,10 @@ func (pl *plugins) removePluginConfirmed(dir string) {
 	if dir == "" || filepath.Dir(dir) != filepath.Clean(pl.pluginOpt.Dir) {
 		return
 	}
-	// owned before its runs stop: none starts again from the folder until it is gone, or kept
-	if ok, other := pl.own(dir, "removed"); !ok {
-		pl.c.Failed(pl.c.Tr("autodoc.notice.plugininstall.not_removed"), fmt.Errorf("its folder is being %s", other))
+	// owned before its runs stop: no run or read starts again in the folder until it is gone, or kept
+	hold := pl.own(dir, "removed")
+	if !hold.ok {
+		pl.c.Failed(pl.c.Tr("autodoc.notice.plugininstall.not_removed"), fmt.Errorf("its folder is being %s", hold.other))
 		return
 	}
 	for key, r := range pl.running {
@@ -598,10 +625,13 @@ func (pl *plugins) removePluginConfirmed(dir string) {
 	name := filepath.Base(dir)
 	prev := filepath.Join(filepath.Dir(dir), previousDir, name)
 	runs := pl.stoppingIn(dir)
-	feature.CoreDo(pl.c, func(context.Context) error {
-		// removed once nothing runs from it: on Windows a removal would stop part way, at the first
-		// file in use
+	feature.CoreDo(pl.c, func(ctx context.Context) error {
+		// removed once nothing runs from it, nor reads it: on Windows a removal would stop part way,
+		// at the first file in use, or not start, at a process's working folder
 		if err := awaitShutdown(runs); err != nil {
+			return err
+		}
+		if err := hold.wait(ctx); err != nil {
 			return err
 		}
 		if err := os.RemoveAll(dir); err != nil {
@@ -613,7 +643,7 @@ func (pl *plugins) removePluginConfirmed(dir string) {
 		_ = os.Remove(filepath.Dir(prev)) // .previous itself, once nothing else is kept there
 		return nil
 	}, func(err error) {
-		pl.disown(dir)
+		hold.release()
 		if err != nil {
 			pl.c.Failed(pl.c.Tr("autodoc.notice.plugininstall.not_removed"), err)
 			return

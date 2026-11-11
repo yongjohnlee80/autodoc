@@ -86,7 +86,7 @@ type pluginRun struct {
 // startPlugin starts e's process, its link and its surface, and sends plugin.open: a dialog's at
 // its first layout, a service's at once.
 func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
-	if what, ok := pl.owned[e.dir]; ok {
+	if what, ok := pl.folders.owner(e.dir); ok {
 		// NOTE: every start comes here (the menu, a feed, a command, a script): a run started now
 		// would run from a folder its removal or update is about to delete or move
 		return nil, fmt.Errorf("its folder is being %s; open it again once that is done", what)
@@ -625,22 +625,20 @@ func awaitShutdownBy(runs []*pluginRun, deadline <-chan time.Time, bound time.Du
 	return nil
 }
 
-// own marks dir as owned by a removal or an update ("removed", "updated") until disown: no run
-// starts from it meanwhile. It is exclusive: when another removal or update owns dir already, it
-// answers false and what that one is doing, and the caller does nothing (its disown would release
-// the other's fence).
-func (pl *plugins) own(dir, what string) (bool, string) {
-	if other, ok := pl.owned[dir]; ok {
-		return false, other
+// own marks dir as owned by a removal or an update ("removed", "updated") until the hold's release:
+// no run and no read starts in it meanwhile, and the hold's wait, on the operation's worker, waits
+// for the reads already in it. It is exclusive: when another removal or update owns dir already,
+// the hold is refused (!ok), says what that one is doing, and the caller does nothing (its release
+// would end the other's fence). On the loop.
+func (pl *plugins) own(dir, what string) *folderHold {
+	if ok, other := pl.folders.own(dir, what); !ok {
+		return &folderHold{other: other}
 	}
-	if pl.owned == nil {
-		pl.owned = map[string]string{}
-	}
-	pl.owned[dir] = what
-	return true, ""
+	h := &folderHold{ok: true, fence: &pl.folders, dir: dir}
+	bound := pl.seams.folderReadWait
+	h.waits = append(h.waits, func(ctx context.Context) error { return pl.folders.awaitReads(ctx, dir, bound) })
+	return h
 }
-
-func (pl *plugins) disown(dir string) { delete(pl.owned, dir) }
 
 // stopPlugins stops every open plugin and waits for them, as the TUI quits: bounded by the close's
 // deadlines, since they run at once. A run stopped before, still in its close, is waited for too.
