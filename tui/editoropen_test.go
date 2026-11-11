@@ -126,7 +126,7 @@ func TestAnAgentOpensAFileByItsPath(t *testing.T) {
 func TestAnAgentOpensARelativePathInTheEditorsWorkspace(t *testing.T) {
 	agent := hearingAgent(t, t.TempDir())
 	files := map[string][]string{"kb": {"a.md", "a\n"}, "notes": {"b.md", "b\n", "only.md", "notes only\n"}}
-	_, r, _ := runSetupTUIIn(t, shellTempDir(t, "autodoc-agents-"), []agents.AgentProfile{{Name: "zen", Command: agentCall(agent, "zen"), Codename: "zen"}}, "zen", nil,
+	_, r, _ := runSetupTUIIn(t, agentsFolder(t), []agents.AgentProfile{{Name: "zen", Command: agentCall(agent, "zen"), Codename: "zen"}}, "zen", nil,
 		Options{EditorDir: t.TempDir(), Workspace: "kb"}, files)
 	r.s.WaitFor(t, "kb entered", func(string) bool { return onLoop(r, func() bool { return r.h.ws == "kb" }) })
 	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
