@@ -1,10 +1,12 @@
-// Package localfs writes a file of the local disk the way core writes a workspace's: atomically,
-// through golib's vfs/local, so a reader never sees half of it. It is for the programs' own files
-// outside every workspace (an export's destination, a preview's page); core/ never imports it.
-// Resolve is where a local path really is, for asking whether one path is under another.
+// Package localfs is the local disk outside every workspace: the programs' own files (an export's
+// destination, a preview's page) and the user's own folders (a Lua folder, a themes folder); core/
+// never imports it. WriteFile writes a file the way core writes a workspace's: atomically, through
+// golib's vfs/local, so a reader never sees half of it. ReadDirIfAny reads a user's folder that may
+// not be there, answering alike on every OS. Resolve is where a local path really is, for asking
+// whether one path is under another.
 //
-// Concurrency: WriteFile and Resolve may be called from any goroutine; two writes of one path end
-// with one of them whole.
+// Concurrency: WriteFile, ReadDirIfAny and Resolve may be called from any goroutine; two writes of
+// one path end with one of them whole.
 package localfs
 
 import (
