@@ -118,3 +118,32 @@ func TestARestartRegistersAfterTheOldSessionsExit(t *testing.T) {
 			calledTimes(w, "crew.register"), registered+1, fresh, w.d.sessionEnded(t, before), presenceOf(t, a, w, "one"))
 	}
 }
+
+// TestACrewedStartOvertakenByItsTabsCloseEndsItsSession: a crew agent's start in flight (its session
+// registered, its process spawning) when its tab is closed: the close finds no session to end, the
+// session being set only once the process runs, so the start's late landing ends it, and nothing
+// runs.
+func TestACrewedStartOvertakenByItsTabsCloseEndsItsSession(t *testing.T) {
+	a, c, w := startingCrewAgents(t, oneTwo)
+	c.panel.hold = true
+	p, _ := a.Profile("one")
+	instance, err := a.StartInstance(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calledTimes(w, "crew.register") != 1 || len(c.panel.held) != 1 {
+		t.Fatalf("registered %d, starts in flight %d: want the start in flight after its registration",
+			calledTimes(w, "crew.register"), len(c.panel.held))
+	}
+	exits := calledTimes(w, "crew.exit")
+	if err := a.RemoveInstance("one"); err != nil {
+		t.Fatal(err)
+	}
+	c.panel.release(0)
+	if got := calledTimes(w, "crew.exit"); got != exits+1 {
+		t.Fatalf("crew.exit called %d times after the late landing, want %d: the overtaken start's session lives on", got, exits+1)
+	}
+	if instance.State().Running {
+		t.Fatal("a start its tab's close overtook runs")
+	}
+}

@@ -52,6 +52,9 @@ type modelPanel struct {
 	// said on its screen (reported, tab: error); unset, Start only marks the tab running
 	starts   bool
 	reported []string
+	// hold keeps each StartAsync until the test releases it (release): a start in flight
+	hold bool
+	held []heldStart
 }
 
 // fakeSeams are the program's seams as the agents' cells set them (agentSeams): its environment
@@ -175,9 +178,28 @@ func (p *modelPanel) Select(id terminal.TerminalTabID) error {
 
 // StartAsync is Start, answered at once: the model spawns nothing.
 func (p *modelPanel) StartAsync(id terminal.TerminalTabID, done func(error)) {
+	if p.hold {
+		p.held = append(p.held, heldStart{id, done})
+		return
+	}
 	err := p.Start(id)
 	if done != nil {
 		done(err)
+	}
+}
+
+// heldStart is a StartAsync the model holds (hold): its tab and its done.
+type heldStart struct {
+	id   terminal.TerminalTabID
+	done func(error)
+}
+
+// release lands held start i: the tab starts, and its done is answered.
+func (p *modelPanel) release(i int) {
+	h := p.held[i]
+	err := p.Start(h.id)
+	if h.done != nil {
+		h.done(err)
 	}
 }
 
