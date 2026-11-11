@@ -119,11 +119,13 @@ func runShellWithKeymap(t *testing.T, file string) *running {
 // openShell opens the terminal pane, its shell with the keyboard.
 func (r *running) openShell(t *testing.T) {
 	t.Helper()
+	stop := r.sampleLoop(t, "keymap: openShell")
+	defer stop()
 	r.leader(t, '`')
-	r.s.WaitForText(t, "┌ terminal")
-	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	r.landsText(t, "keymap: the terminal pane", "┌ terminal")
+	r.lands(t, "keymap: the terminal's keyboard", func() bool { return r.focused("terminalView") })
 	r.keys(t, decltest.Type("shout up\r")...)
-	r.s.WaitForText(t, "UP")
+	r.landsText(t, "keymap: the shell ran shout", "UP")
 }
 
 // leavesInput presses k in the shell, then Esc: k is the mode key when it left input mode, so the

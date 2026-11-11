@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/tui/agents"
@@ -129,8 +130,13 @@ func TestAnAgentOpensARelativePathInTheEditorsWorkspace(t *testing.T) {
 	_, r, _ := runSetupTUIIn(t, agentsFolder(t), []agents.AgentProfile{{Name: "zen", Command: agentCall(agent, "zen"), Codename: "zen"}}, "zen", nil,
 		Options{EditorDir: t.TempDir(), Workspace: "kb"}, files)
 	r.s.WaitFor(t, "kb entered", func(string) bool { return onLoop(r, func() bool { return r.h.ws == "kb" }) })
+	stop := r.sampleLoop(t, "agent start (SPC g)")
+	t0 := time.Now()
 	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
+	t.Logf("LANDING agent start: the toggle's own call took %s", time.Since(t0).Round(time.Millisecond))
 	r.waitAgentStarted(t, "zen")
+	t.Logf("LANDING agent start: started after %s", time.Since(t0).Round(time.Millisecond))
+	stop()
 	call := editorClient(t, r, onLoop(r, func() string { return r.h.agents.EditorToken("zen") }))
 	onLoop(r, func() bool {
 		r.h.prefs.luaGrants = map[string]map[string]bool{"agent:zen": {"commands": true, "editor.read": true}}
