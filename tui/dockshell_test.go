@@ -42,12 +42,17 @@ func lineShellMain() int {
 	in := bufio.NewScanner(os.Stdin)
 	for in.Scan() {
 		f := strings.Fields(strings.TrimRight(in.Text(), "\r"))
+		if len(f) > 0 && f[0] != "exit" {
+			fmt.Printf("DBG line %q\n", in.Text())
+		}
 		switch {
 		case len(f) == 1 && f[0] == "exit":
 			return 0
 		case len(f) == 3 && f[0] == "ishome":
 			if home, err := userdirs.Home(nil); err == nil && home == f[1] {
 				fmt.Printf("home-%s\n", f[2])
+			} else {
+				fmt.Printf("DBG ishome saw %q home %q err %v USERPROFILE %q HOME %q\n", f[1], home, err, os.Getenv("USERPROFILE"), os.Getenv("HOME"))
 			}
 		case len(f) == 3 && f[0] == "run":
 			if path, err := procenv.LookPath(nil, f[1]); err == nil {

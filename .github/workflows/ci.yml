@@ -252,9 +252,10 @@ jobs:
         run: |
           # the whole module's vet, not only the ported packages': it compiles every package's tests
           # for Windows, so a neutral test can't come to lean on a helper in a Unix-tagged file
-          go vet ./...
-          mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
-          go test -count=1 -timeout 20m "${pkgs[@]}"
+          # SCRATCH (never merged): DEBUG the environment cell's shell on Windows, once, the whole failure shown
+          go test -count=1 -v -timeout 20m -run '^TestATestsEnvironmentReachesOnlyItsOwnProgram$' ./tui/ > "$RUNNER_TEMP/e.log" 2>&1 && rc=0 || rc=$?; echo "env rc=$rc"
+          grep -n -E -- 'DBG|_test\.go:[0-9]+: ' "$RUNNER_TEMP/e.log" | cut -c1-400 | head -20 || true
+          sed -n '/never appeared/,+34p' "$RUNNER_TEMP/e.log" | cut -c1-160 | head -40 || true
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
