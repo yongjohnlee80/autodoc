@@ -7,7 +7,7 @@
 # no curl. Its healthcheck is autodoc's own probe (--server --health), which reads [http] from the
 # same server.toml.
 
-FROM golang:1.26.9 AS build
+FROM golang:1.26.11 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
