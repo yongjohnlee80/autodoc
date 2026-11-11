@@ -358,18 +358,23 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 
 // serverFailed is whether a test daemon's server.Run result is a failure: anything but nil or
 // nothing but cancellation (a stop before it listened). A joined error is a failure when any part of
-// it is: a drain that timed out, joined with a cancellation, is still said.
+// it is, and a wrapped one when what it wraps is: a drain that timed out, joined with a
+// cancellation, is still said, however it is wrapped.
 func serverFailed(err error) bool {
-	if err == nil {
+	switch e := err.(type) {
+	case nil:
 		return false
-	}
-	if joined, ok := err.(interface{ Unwrap() []error }); ok {
-		for _, e := range joined.Unwrap() {
-			if serverFailed(e) {
+	case interface{ Unwrap() []error }:
+		for _, part := range e.Unwrap() {
+			if serverFailed(part) {
 				return true
 			}
 		}
 		return false
+	case interface{ Unwrap() error }:
+		if inner := e.Unwrap(); inner != nil {
+			return serverFailed(inner)
+		}
 	}
 	return !errors.Is(err, context.Canceled)
 }
@@ -391,6 +396,8 @@ func TestATestDaemonsServerFailureIsSaid(t *testing.T) {
 		{"a drain failure", drain, true},
 		{"a drain failure joined with a cancellation", errors.Join(context.Canceled, drain), true},
 		{"nested", errors.Join(context.Canceled, errors.Join(nil, drain)), true},
+		{"a joined drain failure, wrapped", fmt.Errorf("shutdown: %w", errors.Join(context.Canceled, drain)), true},
+		{"a joined cancellation, wrapped", fmt.Errorf("shutdown: %w", errors.Join(context.Canceled, context.Canceled)), false},
 	} {
 		if got := serverFailed(c.err); got != c.want {
 			t.Errorf("%s: serverFailed(%v) = %v, want %v", c.name, c.err, got, c.want)
