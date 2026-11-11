@@ -39,11 +39,6 @@ type terminalRuntimeHost interface {
 	Terminals(string) (feature.TerminalPanel, error)
 }
 
-// shellSpawnSeam is the test's shell stand-in (seams.shellSpawn), nil for the user's shell.
-func (h *Host) shellSpawnSeam() func(pty.Cmd) (terminal.TerminalProcess, error) {
-	return h.seams.shellSpawn
-}
-
 func newTerminals(c feature.PanelHost) *terminals {
 	return &terminals{c: c, restore: true}
 }
