@@ -234,6 +234,70 @@ func TestARemovalGivesUpOnAReadThatDoesNotEnd(t *testing.T) {
 	}
 }
 
+// TestAPluginsLuaPackageLeavesItsFolderToUpdateAndRemove: a plugin with a Lua package, its module
+// read, is updated and removed in the app, on every OS: the update's new package runs, and the
+// removal takes the plugin's folder, lua/ with it. On Windows a folder still held could be neither
+// replaced nor removed: by the package's reads (each opens the folder and closes it again), or by
+// the manager's reads of it, its listing's git (the fence waits for them).
+func TestAPluginsLuaPackageLeavesItsFolderToUpdateAndRemove(t *testing.T) {
+	t.Parallel()
+	repo := pluginRepo(t, "Echo", "true")
+	commitLua := func(label string) {
+		t.Helper()
+		writeFiles(t, repo, map[string]string{
+			"lua/package.toml": "name = \"echo\"\n",
+			"lua/mod.lua":      `return "lua-` + label + `"`,
+			"lua/init.lua":     `autodoc.command{ name = "echolua", run = function(ed) ed:insert(require("mod")) end }`,
+		})
+		runGit(t, repo, "add", "lua")
+		runGit(t, repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "lua "+label)
+	}
+	commitLua("one")
+	dir := t.TempDir()
+	r, _ := pluginTUI(t, dir)
+	r.h.p.Post(func() { r.h.plugins.addPlugin("file://" + repo) })
+	r.question(t)
+	r.keys(t, key('y'))
+	r.waitNotice(t, "added echo at")
+	runs := func(want string) {
+		t.Helper()
+		r.s.WaitFor(t, "the package's command saying "+want, func(string) bool {
+			r.page("", 1, 1)
+			return r.luaRun("echolua") == nil && r.editorText() == want
+		})
+	}
+	runs("lua-one")
+
+	r.h.p.Post(r.h.plugins.managePlugins)
+	echo := func() int {
+		return onLoop(r, func() int {
+			for i, m := range r.h.plugins.managedPlugins.All() {
+				if m.e.m.Name == "echo" {
+					return i
+				}
+			}
+			return -1
+		})
+	}
+	r.s.WaitFor(t, "echo managed", func(string) bool { return echo() >= 0 })
+	commitLua("two")
+	i := echo()
+	r.h.p.Post(func() { r.h.plugins.startUpdatePlugin(i) })
+	r.question(t)
+	r.keys(t, key('y'))
+	r.waitNotice(t, "updated echo at")
+	runs("lua-two")
+
+	i = echo()
+	r.h.p.Post(func() { r.h.plugins.startRemovePlugin(i) })
+	r.s.WaitForText(t, "remove the plugin?")
+	r.keys(t, key('y'))
+	r.waitNotice(t, "removed echo")
+	if _, err := os.Stat(filepath.Join(dir, "echo")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the plugin's folder is still there: %v", err)
+	}
+}
+
 // TestAReadNeverStartsInAnOwnedFolder: a read of a folder a removal or an update owns runs nothing
 // and says what owns it; once the folder is released, it runs. A removal waits for a read already
 // running, and for nothing when none is.
