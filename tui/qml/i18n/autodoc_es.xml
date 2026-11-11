@@ -7497,6 +7497,10 @@ La última conexión falló:
         <source>vectors</source>
         <translation>vectores</translation>
     </message>
+    <message id="autodoc.text.terminal.starting">
+        <source>starting…</source>
+        <translation>iniciando…</translation>
+    </message>
     <message id="autodoc.text.terminal.the_page_s">
         <source>the page's</source>
         <translation>el de la página</translation>

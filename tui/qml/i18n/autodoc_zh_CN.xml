@@ -7481,6 +7481,10 @@ The last connect failed:
         <source>vectors</source>
         <translation>向量</translation>
     </message>
+    <message id="autodoc.text.terminal.starting">
+        <source>starting…</source>
+        <translation>正在启动…</translation>
+    </message>
     <message id="autodoc.text.terminal.the_page_s">
         <source>the page's</source>
         <translation>页面的</translation>

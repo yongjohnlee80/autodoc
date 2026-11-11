@@ -548,6 +548,7 @@ func newHost(session *Session, opt Options) *Host {
 	}
 	h.terminals = newTerminals(unboundPanelHost(core{h}))
 	h.terminals.startLua = h.startLuaShell
+	h.terminals.shellSpawn = h.shellSpawnSeam
 	h.agents = agents.NewAgents(unboundPanelHost(core{h}), &h.seams, opt.AgentDir, opt.ConfigPath)
 	h.crew = crew.NewHost(core{h}, h.seams.env, opt.AgentDir, crew.HostHooks{
 		DeliverJob:  h.agents.DeliverFallback,
