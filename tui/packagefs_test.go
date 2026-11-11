@@ -182,6 +182,20 @@ func TestAPluginsLuaPackageLeavesItsFolderToUpdateAndRemove(t *testing.T) {
 	r.question(t)
 	r.keys(t, key('y'))
 	r.waitNotice(t, "added echo at")
+	probe := func(step string) {
+		t.Helper()
+		a, b := filepath.Join(dir, "echo"), filepath.Join(dir, "echo-probe")
+		if err := os.Rename(a, b); err != nil {
+			out, _ := exec.Command("powershell", "-NoProfile", "-Command", "Get-CimInstance Win32_Process | Where-Object { $_.Name -ne 'svchost.exe' } | ForEach-Object { '{0} {1} {2}' -f $_.ProcessId, $_.ParentProcessId, $_.CommandLine }").CombinedOutput()
+			t.Logf("DEBUG after %s: held: %v\nPROCESSES:\n%s", step, err, out)
+			return
+		}
+		if err := os.Rename(b, a); err != nil {
+			t.Fatalf("DEBUG back: %v", err)
+		}
+		t.Logf("DEBUG after %s: free", step)
+	}
+	probe("the add")
 	runs := func(want string) {
 		t.Helper()
 		r.s.WaitFor(t, "the package's command saying "+want, func(string) bool {
