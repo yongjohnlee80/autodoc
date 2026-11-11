@@ -56,7 +56,7 @@ func TestAuditHandsAFreshCopyAndItsToastReopensTheCard(t *testing.T) {
 	heardDir := t.TempDir()
 	agent := hearingAgent(t, heardDir)
 	dir := t.TempDir()
-	_, r, _ := runAgentTUIWith(t, t.TempDir(), []agents.AgentProfile{{Name: "Scribe", Codename: "scribe", Command: agents.ShellQuote(agent) + " scribe"}},
+	_, r, _ := runSetupTUI(t, shellTempDir(t, "autodoc-agents-"), []agents.AgentProfile{{Name: "Scribe", Codename: "scribe", Command: agentCall(agent, "scribe")}},
 		"", nil, Options{Plugins: Plugins{Dir: dir, LogDir: t.TempDir()}})
 	repo := pluginRepo(t, "Echo", "true")
 	full := runGit(t, repo, "rev-parse", "HEAD")
