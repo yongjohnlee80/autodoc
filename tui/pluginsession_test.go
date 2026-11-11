@@ -59,7 +59,7 @@ func (r *running) remove(t *testing.T, dir, name string) {
 
 func waitSlot(t *testing.T, r *running, name string, want map[string]string) {
 	t.Helper()
-	r.s.WaitFor(t, fmt.Sprintf("%s's slot %v", name, want), func(string) bool { return reflect.DeepEqual(slotOf(r, name), want) })
+	r.lands(t, fmt.Sprintf("slots: %s's slot %v", name, want), func() bool { return reflect.DeepEqual(slotOf(r, name), want) })
 }
 
 func waitExited(t *testing.T, run *pluginRun) {
@@ -356,7 +356,7 @@ func TestQuitClearsTheSlotsOfEveryRun(t *testing.T) {
 	r.pluginCommand("mute", "echo") // started; it never answers
 
 	r.pluginCommand("flood", "flood")
-	r.s.WaitFor(t, "the flood", func(string) bool { return slotOf(r, "flood") != nil })
+	r.lands(t, "slots: the flood", func() bool { return slotOf(r, "flood") != nil })
 	run := runOf(r, "flood")
 	r.turnOff("flood")
 	waitExited(t, run)
