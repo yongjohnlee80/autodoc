@@ -407,7 +407,7 @@ func git(ctx context.Context, env procenv.Env, timeout time.Duration, dir string
 // pluginGit is the git a read of an installed plugin's folder runs: the seam's, or git itself, bounded
 // as every plugin git is. Read on the loop and handed to the worker.
 func (pl *plugins) pluginGit() func(ctx context.Context, env procenv.Env, dir string, args ...string) (string, error) {
-	if g := pl.seams.pluginGit; g != nil {
+	if g := pl.readGit; g != nil {
 		return g
 	}
 	return func(ctx context.Context, env procenv.Env, dir string, args ...string) (string, error) {

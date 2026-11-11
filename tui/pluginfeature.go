@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/errs"
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -53,6 +54,10 @@ type plugins struct {
 	// and no read starts in one; a removal or an update waits for the reads already in it (own).
 	// Safe from any goroutine.
 	folders folderFence
+	// folderReadWait and readGit are the folders' bound and their reads' git, its host's seams
+	// (seams.folderReadWait, seams.pluginGit) handed over as the host wires it; readGit nil is git
+	folderReadWait time.Duration
+	readGit        func(ctx context.Context, env procenv.Env, dir string, args ...string) (string, error)
 	// sessions are the plugins' session slots, by plugin name (protocol 7,
 	// docs/decisions/plugins.md#plugin-sessions): memory only, until AutoDoc quits or the plugin is
 	// removed. Loop-owned; acceptSession is their one writer, and a run gets a copy at its open,

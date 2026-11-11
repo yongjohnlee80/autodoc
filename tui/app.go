@@ -572,6 +572,7 @@ func newHost(session *Session, opt Options) *Host {
 	h.cands = newCandidates(core{h})
 	h.plugins = newPlugins(core{h}, &h.seams, opt.Plugins)
 	h.plugins.cands = h.cands
+	h.plugins.folderReadWait, h.plugins.readGit = h.seams.folderReadWait, h.seams.pluginGit
 	h.plugins.scriptsChanged = func() {
 		if err := h.reloadScripts(); err != nil {
 			h.notify(h.trf("autodoc.notice.app.the_lua_scripts_were_not_reloaded", err.Error()))
