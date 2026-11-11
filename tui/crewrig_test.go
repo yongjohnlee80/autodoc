@@ -41,7 +41,7 @@ func crewAgentsOn(t *testing.T, profiles string, noServer bool) (*agents.Agents,
 		s = &seams{}
 		*s = defaultSeams
 	}
-	agentDir := agentsFolder(t) // on Windows an agent's process works in it, and its removal waits for the process to exit
+	agentDir := agentsFolder(t)         // on Windows an agent's process works in it, and its removal waits for the process to exit
 	userpermtest.ExposeNew(t, agentDir) // a file made there the ordinary way is exposed: only a private create keeps it private
 	a := testAgentsWith(c, s, agentDir, "")
 	// a crew start's setup, in-process from the same source `crew setup` answers from, offering no
