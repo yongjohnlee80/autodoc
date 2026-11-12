@@ -849,15 +849,31 @@ func TestF11WorksWithTheKeyboardInTheShell(t *testing.T) {
 	r.s.WaitForText(t, "f11-never-sent-46")
 }
 
-// clickMenuRow opens the open panel's ≡ menu with the pointer and clicks its row label.
-func clickMenuRow(t *testing.T, r *running, label string) {
+// clickMenuRow opens panel's ≡ menu with the pointer and clicks its row label. The ≡ is the one
+// drawn inside the panel's window: the page's row of tabs has its own.
+func clickMenuRow(t *testing.T, r *running, panel, label string) {
 	t.Helper()
 	click := func(x, y int) {
 		r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y},
 			tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x, Y: y})
 	}
-	r.s.WaitForText(t, "≡")
-	click(r.textAt("≡"))
+	var mx, my int
+	r.s.WaitFor(t, "the "+panel+" panel's ≡", func(screen string) bool {
+		at, on := screenRectOf(r, panel)
+		if !on {
+			return false
+		}
+		for y, line := range strings.Split(screen, "\n") {
+			for x, c := range []rune(line) {
+				if c == '≡' && x >= at.X && x < at.X+at.W && y >= at.Y && y < at.Y+at.H {
+					mx, my = x, y
+					return true
+				}
+			}
+		}
+		return false
+	})
+	click(mx, my)
 	r.s.WaitForText(t, label)
 	x, y := r.textAt(label)
 	click(x+1, y)
@@ -885,10 +901,10 @@ func clickMaximizeAndRestore(t *testing.T, r *running, panel string) {
 	// not where the frame before did (a bottom panel's strip moves up; a top panel's grows down)
 	r.s.WaitForText(t, "┌ "+panel)
 	docked := panelHeight(r.s.String(), panel)
-	clickMenuRow(t, r, "Maximize")
+	clickMenuRow(t, r, panel, "Maximize")
 	r.s.WaitFor(t, "the "+panel+" maximized by a click", maxed(true))
 	r.s.WaitFor(t, "the maximized "+panel+" drawn", func(sc string) bool { return panelHeight(sc, panel) > docked })
-	clickMenuRow(t, r, "Restore")
+	clickMenuRow(t, r, panel, "Restore")
 	r.s.WaitFor(t, "the "+panel+" restored by a click", maxed(false))
 	r.s.WaitFor(t, "the restored "+panel+" drawn", func(sc string) bool { return panelHeight(sc, panel) == docked })
 	if errs := onLoop(r, func() []error { r.h.mu.Lock(); defer r.h.mu.Unlock(); return append([]error(nil), r.h.errs...) }); len(errs) != 0 {
