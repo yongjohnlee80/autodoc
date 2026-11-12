@@ -2134,7 +2134,7 @@ func (r *running) waitNoticed(t *testing.T, text string) {
 }
 
 // toastText is the text inside each toast's frame (╭ … ╯) on one line: the words of a toast that
-// wraps over rows whose other cells hold text of their own (the page's tabs on its bottom border),
+// wraps over rows whose other cells hold text of their own (the page's tabs on its title row),
 // which noticeText's whole rows would put between them.
 func toastText(sc string) string {
 	rows := strings.Split(sc, "\n")

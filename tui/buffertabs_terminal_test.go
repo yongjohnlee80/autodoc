@@ -3,20 +3,24 @@
 package tui
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
-// buffertabs_terminal_test.go: the buffer tabs on the terminal's page, on its frame's bottom border
-// (buffertabs.go): the window's model, drawn in cells; the title row keeps the title.
+// buffertabs_terminal_test.go: the buffer tabs on the terminal's page, at its frame's title row's
+// left (buffertabs.go), where every panel carries its tabs: the window's model, drawn in cells.
 
-// frameTab is where the tab labelled label is drawn on the page's frame's bottom border: the column of
+// frameTab is where the tab labelled label is drawn on the page's frame's title row: the column of
 // its × and of its label, and the row; ok is false while it isn't drawn there.
 func (r *running) frameTab(label string) (closeX, x, y int, ok bool) {
 	for y, row := range strings.Split(r.s.String(), "\n") {
-		if !strings.Contains(row, "└") {
+		if !strings.Contains(row, "┌") {
 			continue
 		}
 		if j := strings.Index(row, "× "+label); j >= 0 {
@@ -34,11 +38,12 @@ func (r *running) press(t *testing.T, x, y int) {
 		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x, Y: y})
 }
 
-// The terminal shows the buffers as tabs on the page's frame's bottom border once two are open (one
-// shows none), in opening order, and no tab on any frame's title row, which keeps the page's title
-// as it was: a press on a tab shows
-// its buffer, and a switch made elsewhere (SPC b 2) moves the tabs' active one with it.
-func TestTheTerminalShowsTheBuffersAsTabsOnThePagesBottomBorder(t *testing.T) {
+// The terminal shows the buffers as tabs at the left of the page's frame's title row once two are
+// open (one shows none), in opening order, as every panel carries its tabs: the file's name leaves
+// the row (the shown tab names it, and the status line), its badges and breadcrumb staying after
+// the tabs, and no tab is on any bottom border. A press on a tab shows its buffer, and a switch made
+// elsewhere (SPC b 2) moves the tabs' active one with it.
+func TestTheTerminalShowsTheBuffersAsTabsOnThePagesTitleRow(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n", "b.md", "b\n"}})
 	r := attached(t, d)
 	r.waitListed(t, 2)
@@ -53,7 +58,7 @@ func TestTheTerminalShowsTheBuffersAsTabsOnThePagesBottomBorder(t *testing.T) {
 	}
 	r.openByPicker(t, "b.md")
 	r.waitFile(t, "b.md")
-	r.s.WaitFor(t, "a.md's and b.md's tabs on the bottom border", func(string) bool {
+	r.s.WaitFor(t, "a.md's and b.md's tabs on the title row", func(string) bool {
 		_, _, ya, oka := r.frameTab("a.md")
 		_, _, yb, okb := r.frameTab("b.md")
 		return oka && okb && ya == yb
@@ -64,9 +69,12 @@ func TestTheTerminalShowsTheBuffersAsTabsOnThePagesBottomBorder(t *testing.T) {
 		t.Fatalf("a.md's tab at %d, b.md's at %d: want them in opening order", ax, bx)
 	}
 	for _, row := range strings.Split(r.s.String(), "\n") {
-		if strings.Contains(row, "┌") && strings.Contains(row, "× ") {
-			t.Fatalf("a tab on a title row %q: want the tabs on the bottom border alone", row)
+		if strings.Contains(row, "└") && strings.Contains(row, "× ") {
+			t.Fatalf("a tab on a bottom border %q: want the tabs on the page's title row alone", row)
 		}
+	}
+	if title := onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.fileTitle"); return v.Raw }); strings.Contains(title, ".md") {
+		t.Fatalf("the title with the tabs shown %q: want no file name (the shown tab names it)", title)
 	}
 	r.press(t, ax, y)
 	r.s.WaitFor(t, "a.md shown by its tab", func(string) bool { return r.file().path == "a.md" })
@@ -78,7 +86,7 @@ func TestTheTerminalShowsTheBuffersAsTabsOnThePagesBottomBorder(t *testing.T) {
 }
 
 // A press on the shown buffer's × closes it: its tab goes, and the buffer before it is shown.
-func TestABorderTabsCloseClosesTheShownBuffer(t *testing.T) {
+func TestATitleRowTabsCloseClosesTheShownBuffer(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n", "b.md", "b\n"}})
 	r := attached(t, d)
 	r.waitListed(t, 2)
@@ -98,9 +106,10 @@ func TestABorderTabsCloseClosesTheShownBuffer(t *testing.T) {
 	}
 }
 
-// In a narrow terminal the tabs scroll between the arrows in the room the bottom border has, the shown
-// buffer's tab in view, and no tab is wider than terminalTabWidth.
-func TestTheBorderTabsScrollInANarrowRoom(t *testing.T) {
+// In a narrow terminal the tabs scroll between the arrows in the room the title row has, the shown
+// buffer's tab in view, Raw | Rendered keeping its place after them, and no tab is wider than
+// terminalTabWidth.
+func TestTheTitleRowTabsScrollInANarrowRoom(t *testing.T) {
 	files := []string{}
 	names := []string{"one.md", "two.md", "three.md", "four.md", "five.md", "a-rather-long-name-for-a-tab.md"}
 	for _, n := range names {
@@ -118,7 +127,8 @@ func TestTheBorderTabsScrollInANarrowRoom(t *testing.T) {
 	}
 	r.s.WaitFor(t, "the tabs scrolled, the shown one's in view", func(screen string) bool {
 		for _, row := range strings.Split(screen, "\n") {
-			if strings.Contains(row, "└") && strings.Contains(row, "→") && strings.Contains(row, "…") && !strings.Contains(row, "× one.md") {
+			if strings.Contains(row, "┌") && strings.Contains(row, "→") && strings.Contains(row, "…") && !strings.Contains(row, "× one.md") &&
+				strings.Index(row, "→") < strings.Index(row, "[ Raw | Rendered ]") {
 				return true
 			}
 		}
@@ -129,13 +139,13 @@ func TestTheBorderTabsScrollInANarrowRoom(t *testing.T) {
 		t.Fatalf("the long name's tab %q is %d cells: want at most %d", label, w, terminalTabWidth-2)
 	}
 	if _, _, _, ok := r.frameTab(strings.TrimSuffix(label, " [+]")); !ok {
-		t.Fatalf("the shown buffer's tab %q isn't on the bottom border:\n%s", label, r.s)
+		t.Fatalf("the shown buffer's tab %q isn't on the title row:\n%s", label, r.s)
 	}
 }
 
 // The tabs read in sepia and in dark: the shown buffer's tab stands apart from the others, its text
 // apart from its own paper, and each theme draws it in its own colours.
-func TestTheBorderTabsReadInSepiaAndDark(t *testing.T) {
+func TestTheTitleRowTabsReadInSepiaAndDark(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n", "b.md", "b\n"}})
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 100, 24)
 	r.waitAttached(t, "kb")
@@ -161,5 +171,90 @@ func TestTheBorderTabsReadInSepiaAndDark(t *testing.T) {
 		})
 		looks = append(looks, active)
 		t.Logf("%s: the shown tab %+v, the other %+v", theme, active, other)
+		dumpScreen(t, r, "buffer-tabs-"+theme)
+	}
+}
+
+// With the tabs shown, Raw | Rendered keeps the title row's right, after them, and takes its presses
+// as it does without tabs: Raw opens the text, Rendered the page again.
+func TestRawRenderedStaysClickableBesideTheTitleRowTabs(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "# A\n\nalpha\n", "b.md", "# B\n\nbeta\n"}})
+	r := attached(t, d)
+	r.waitListed(t, 2)
+	for _, p := range []string{"a.md", "b.md"} {
+		r.openByPicker(t, p)
+		r.waitFile(t, p)
+	}
+	r.s.WaitFor(t, "b.md's page", func(string) bool { return shownView(r) == editor.ViewRendered })
+	var col, row int
+	r.s.WaitFor(t, "the tabs, then the switch, on the title row", func(string) bool {
+		var ok bool
+		if col, row, ok = find(r.s.Backend.Snapshot(), "[ Raw | Rendered ]"); !ok {
+			return false
+		}
+		_, bx, by, okb := r.frameTab("b.md")
+		return okb && by == row && bx < col
+	})
+	if strings.Count(r.s.String(), "[ Raw | Rendered ]") != 1 {
+		t.Fatalf("the switch shows more than once:\n%s", r.s)
+	}
+	r.press(t, col+2, row)
+	r.s.WaitFor(t, "Raw after a press on Raw", func(string) bool { return shownView(r) == editor.ViewRaw })
+	r.press(t, col+len("[ Raw ")+3, row)
+	r.s.WaitFor(t, "the page after a press on Rendered", func(string) bool { return shownView(r) == editor.ViewRendered })
+	if _, _, _, ok := r.frameTab("b.md"); !ok || r.file().path != "b.md" {
+		t.Fatalf("the switch's presses moved the tabs or the buffer:\n%s", r.s)
+	}
+}
+
+// dumpScreen writes the screen, in its colours (SGR), to $AUTODOC_SCREEN_DUMP/<name>.ansi and as
+// text to <name>.txt, when that variable names a directory: a look at a layout, for a person; no
+// cell reads it.
+func dumpScreen(t *testing.T, r *running, name string) {
+	t.Helper()
+	dir := os.Getenv("AUTODOC_SCREEN_DUMP")
+	if dir == "" {
+		return
+	}
+	sgr := func(c tuicore.CellColor, fg bool) string {
+		switch c.Kind {
+		case tuicore.CellColorRGB:
+			if fg {
+				return fmt.Sprintf("38;2;%d;%d;%d", c.R, c.G, c.B)
+			}
+			return fmt.Sprintf("48;2;%d;%d;%d", c.R, c.G, c.B)
+		case tuicore.CellColorANSI256, tuicore.CellColorANSI:
+			if fg {
+				return fmt.Sprintf("38;5;%d", c.Index)
+			}
+			return fmt.Sprintf("48;5;%d", c.Index)
+		}
+		if fg {
+			return "39"
+		}
+		return "49"
+	}
+	var b strings.Builder
+	for _, line := range r.s.Backend.Snapshot() {
+		for _, c := range line {
+			if c.Continuation() {
+				continue
+			}
+			bold := ""
+			if c.Attrs.Mask&tuicore.AttrBold != 0 {
+				bold = ";1"
+			}
+			text := c.Content
+			if text == "" {
+				text = " "
+			}
+			fmt.Fprintf(&b, "\x1b[0;%s;%s%sm%s", sgr(c.Attrs.FG, true), sgr(c.Attrs.BG, false), bold, text)
+		}
+		b.WriteString("\x1b[0m\n")
+	}
+	for ext, body := range map[string]string{".ansi": b.String(), ".txt": r.s.String() + "\n"} {
+		if err := os.WriteFile(filepath.Join(dir, name+ext), []byte(body), 0o644); err != nil {
+			t.Errorf("the screen dump: %v", err)
+		}
 	}
 }

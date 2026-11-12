@@ -21,22 +21,22 @@ import (
 // bufferTabWidth cells: a longer name is cut in its middle (bufferTabLabel), and a tab never
 // changes width as tabs open and close or the window resizes (consistent, not re-fitted each
 // time). The strip has the bar's room up to Raw | Rendered; tabs that do not fit scroll between ←
-// and →. The terminal has the same strip, the same model, on the page's frame's bottom border
-// (golib's Editor.FrameTabs), its full width, from the second buffer on (showTerminalTabs): the
-// title row keeps the file's title, its badges and breadcrumb, and Raw | Rendered
-// (docs/decisions/editor.md#switching-buffers); a terminal tab is never wider than terminalTabWidth
-// cells, so a page holds more than two.
+// and →. The terminal has the same strip, the same model, at the left of the page's frame's title
+// row (golib's Editor.FrameTabs), where every panel carries its tabs, from the second buffer on
+// (showTerminalTabs): the row keeps Raw | Rendered at its right, and the file's badges and
+// breadcrumb after the tabs, its name being the shown tab's (docs/decisions/editor.md#switching-buffers);
+// a terminal tab is never wider than terminalTabWidth cells, so a page holds more than two.
 // :b and the Buffers picker switch too, in both.
 
 // bufferTabWidth is a buffer tab's widest, in cells, its padding included: a longer name is cut in
 // its middle there, the same however many tabs are open; its menu's Go to › has the name whole.
 const bufferTabWidth = 32
 
-// terminalTabWidth is bufferTabWidth on the terminal's bottom border: a page is some 80 to 100 cells.
+// terminalTabWidth is bufferTabWidth on the terminal's title row: a page is some 80 to 100 cells.
 const terminalTabWidth = 20
 
 // tabStripper is an editor with buffer tabs: the window's on its title bar, the terminal's on its
-// frame's bottom border (golib's Editor.Tabs, in either).
+// frame's title row (golib's Editor.Tabs, in either).
 type tabStripper interface{ Tabs() *widgetcore.TabStrip }
 
 // bufferStrip is the editor's strip for the buffers, nil for an editor with none.
@@ -62,13 +62,24 @@ func (h *Host) syncBufferTabs() {
 	h.showTerminalTabs()
 }
 
-// showTerminalTabs shows the terminal's tabs, on its page's bottom border, while two or more
-// buffers are open: one buffer's name is the title row's already, and the page reads as it did
+// showTerminalTabs shows the terminal's tabs, at the left of its page's title row, while two or
+// more buffers are open: one buffer's name is the title row's already, and the page reads as it did
 // before there were tabs. The window's editor has its tabs on its title bar always, and isn't one.
+// The title follows: with the tabs shown, the file's name leaves the row (showTitle).
 func (h *Host) showTerminalTabs() {
 	if e, ok := h.editor.(*editor.Editor); ok {
-		e.SetTabsInFrame(len(h.buffers) > 1)
+		on := len(h.buffers) > 1
+		if e.TabsInFrame() != on {
+			e.SetTabsInFrame(on)
+			h.showTitle()
+		}
 	}
+}
+
+// terminalTabsShown is whether the terminal's buffer tabs lead the page's title row now.
+func (h *Host) terminalTabsShown() bool {
+	e, ok := h.editor.(*editor.Editor)
+	return ok && e.TabsInFrame()
 }
 
 // feedBufferTabs gives strip a tab per buffer and the shown one active, wiring it the first time
