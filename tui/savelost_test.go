@@ -7,6 +7,10 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
+
+	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
 // heldWrite holds the doc.write of one note, once armed: before it is sent (before) or after it
@@ -137,4 +141,50 @@ func TestASaveLostToAReadAgainSaysSo(t *testing.T) {
 	r.waitStatus(t, "opened a.md")
 	w.free()
 	r.waitStatus(t, "save a.md: it was read again from disk meanwhile; save it again")
+}
+
+// answeringNote is a window on a daemon serving kb's a.md, opened and edited, whose session
+// answers the next doc.write with write and, when read is set, the doc.read after it with read,
+// unsent: the daemon's answers a test cannot make it give.
+func answeringNote(t *testing.T, write, read error) *running {
+	t.Helper()
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	var wrote, armed atomic.Bool
+	sess := NewSession(d.sock, nil)
+	sess.SetCallError(func(method string) error {
+		switch {
+		case method == "doc.write" && armed.CompareAndSwap(true, false):
+			wrote.Store(true)
+			return write
+		case method == "doc.read" && read != nil && wrote.CompareAndSwap(true, false):
+			return read
+		}
+		return nil
+	})
+	r := runTUI(t, sess, Options{})
+	r.ready(t)
+	r.h.p.Post(func() { r.h.openPath("a.md") })
+	r.waitFile(t, "a.md")
+	onLoop(r, func() bool { r.h.editor.SetValue("edited\n"); r.h.edited(); return true })
+	armed.Store(true)
+	return r
+}
+
+// TestASaveThatFindsItsNoteDeletedSaysTheNextSaveMakesIt: a save the daemon answers "not found" (the
+// note deleted on disk) says on the status line that its text is kept and the next save creates it
+// again, not only by the buffer's badge.
+func TestASaveThatFindsItsNoteDeletedSaysTheNextSaveMakesIt(t *testing.T) {
+	t.Parallel()
+	r := answeringNote(t, &golibrpc.Error{Code: rpc.CodeNotFound, Message: "a.md is not there"}, nil)
+	r.h.p.Post(r.h.save)
+	r.waitStatus(t, "a.md was deleted on disk: its text is kept; saving creates it again")
+}
+
+// TestASaveWrittenButNotReadBackSaysSo: a write that landed (committed) whose read-back failed says
+// so on the status line, the notice's words: saved, not read back, reload before saving again.
+func TestASaveWrittenButNotReadBackSaysSo(t *testing.T) {
+	t.Parallel()
+	r := answeringNote(t, &golibrpc.Error{Code: rpc.CodeCommitted, Message: "written; a follow-up failed"}, errors.New("no read today"))
+	r.h.p.Post(r.h.save)
+	r.waitStatus(t, "saved a.md, but it could not be read back: no read today — reload before saving again")
 }
