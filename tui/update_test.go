@@ -40,17 +40,40 @@ func updateScript(t *testing.T, code string) string {
 }
 
 // TestAboutOffersUpdateOnlyForAScriptInstall: About's Update shows when install-autodoc.sh's record
-// says it installed this AutoDoc; with no record, another method's, or one that doesn't read,
-// About shows Close alone.
+// says it installed this AutoDoc, this very binary; with no record, another method's, one that
+// doesn't read, or a record whose binary is another file than the one running (a build from
+// source, a release candidate), About shows Close alone: Update would update the installed binary,
+// and the restart would bring this one back, still asking.
 func TestAboutOffersUpdateOnlyForAScriptInstall(t *testing.T) {
 	t.Parallel()
 	notes := map[string][]string{"kb": {"a.md", "a\n"}}
-	for _, tc := range []struct {
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := filepath.Join(t.TempDir(), "autodoc")
+	if err := os.WriteFile(other, []byte("another build\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	installedAt := func(bin string) func() (install.Record, bool, error) {
+		return func() (install.Record, bool, error) {
+			return install.Record{Method: "script", Version: "v9.9.8", Bin: bin, Update: "/u.sh"}, true, nil
+		}
+	}
+	type row struct {
 		name   string
 		record func() (install.Record, bool, error)
 		want   bool
-	}{
+	}
+	rows := []row{
 		{"a script install", scriptInstall("/u/.local/state/autodoc/update.sh"), true},
+		{"the installed binary itself", installedAt(self), true},
+		{"another build than the installed one", installedAt(other), false},
+	}
+	if link := filepath.Join(t.TempDir(), "autodoc"); os.Symlink(self, link) == nil {
+		rows = append(rows, row{"a link to the installed binary", installedAt(link), true})
+	}
+	for _, tc := range append(rows, []row{
 		{"no record", func() (install.Record, bool, error) { return install.Record{}, false, nil }, false},
 		{"brew's", func() (install.Record, bool, error) {
 			return install.Record{Method: "brew", Update: "/u.sh"}, true, nil
@@ -58,7 +81,7 @@ func TestAboutOffersUpdateOnlyForAScriptInstall(t *testing.T) {
 		{"a record that doesn't read", func() (install.Record, bool, error) {
 			return install.Record{}, false, errors.New("install: bad toml")
 		}, false},
-	} {
+	}...) {
 		t.Run(tc.name, func(t *testing.T) {
 			d := startDaemon(t, notes)
 			r := runTUI(t, NewSession(d.sock, nil), Options{InstallRecord: tc.record})

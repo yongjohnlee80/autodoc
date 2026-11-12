@@ -96,6 +96,13 @@ Update is hidden while the start's look for a newer release is out, and when it 
 latest. It stays when that look had no answer (offline, the preference off, a build that is not a
 release): AutoDoc can't say then that there is nothing to update to.
 
+Update is offered only to the record's own binary. Another build run while a script install exists
+(one built from source, a release candidate, a second copy) is a different file from the record's
+`bin`. Its Update would update the installed binary, not the one running, and the restart after it
+would start this one again, still asking. So About offers it no Update. The two are compared as
+files, so a link to the installed binary, or another spelling of its path, is the same binary. When
+either can't be read, the record decides, as before.
+
 On Windows, Update runs the record's `update.ps1` the same way, with PowerShell
 (`-NoProfile -ExecutionPolicy Bypass -File`). Windows has no exec, so the restart starts the new
 binary on the same console and handles, waits for it, and exits with its exit code. The old process

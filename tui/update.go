@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/yongjohnlee80/autodoc/internal/install"
@@ -101,8 +102,31 @@ func (h *Host) relaunch() {
 	})
 }
 
-// canUpdate is whether About offers Update: install-autodoc.sh installed this AutoDoc.
+// canUpdate is whether About offers Update: install-autodoc.sh installed this AutoDoc, the very
+// binary running. Another build run while a script install exists (a build from source, a release
+// candidate, a second copy) is not the record's binary: Update would update the installed one, and
+// the restart after it would start this one again, still asking. So a running program that is
+// another file than the record's bin gets no Update; when either can't be read, the record decides,
+// as before.
 func (h *Host) canUpdate() bool {
-	_, ok := h.scriptRecord()
-	return ok
+	r, ok := h.scriptRecord()
+	if !ok {
+		return false
+	}
+	return runsRecordedBinary(r)
+}
+
+// runsRecordedBinary reports whether this program is the record's binary, compared as files (a
+// link to it, or another spelling of its path, is it); true when either can't be read.
+func runsRecordedBinary(r install.Record) bool {
+	self, err := os.Executable()
+	if err != nil || r.Bin == "" {
+		return true
+	}
+	a, aerr := os.Stat(self)
+	b, berr := os.Stat(r.Bin)
+	if aerr != nil || berr != nil {
+		return true
+	}
+	return os.SameFile(a, b)
 }
