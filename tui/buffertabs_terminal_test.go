@@ -35,8 +35,8 @@ func (r *running) frameTab(label string) (closeX, x, y int, ok bool) {
 	return 0, 0, 0, false
 }
 
-// rowAt is the screen's row y, "" past its last.
-func (r *running) rowAt(y int) string {
+// screenRow is the screen's row y, "" past its last.
+func (r *running) screenRow(y int) string {
 	if rows := strings.Split(r.s.String(), "\n"); y >= 0 && y < len(rows) {
 		return rows[y]
 	}
@@ -83,8 +83,8 @@ func TestTheTerminalShowsTheBuffersAsTabsUnderThePagesTitle(t *testing.T) {
 	}
 	r.s.WaitFor(t, "a.md's tab under the title, with one buffer", func(string) bool { _, _, _, ok := r.frameTab("a.md"); return ok })
 	_, _, y1, _ := r.frameTab("a.md")
-	if !strings.Contains(r.rowAt(y1-1), "a.md") {
-		t.Fatalf("the title row %q with one buffer: want the file's name", r.rowAt(y1-1))
+	if !strings.Contains(r.screenRow(y1-1), "a.md") {
+		t.Fatalf("the title row %q with one buffer: want the file's name", r.screenRow(y1-1))
 	}
 	noTabOnABorder(t, r)
 	r.openByPicker(t, "b.md")
@@ -100,8 +100,8 @@ func TestTheTerminalShowsTheBuffersAsTabsUnderThePagesTitle(t *testing.T) {
 		t.Fatalf("a.md's tab at %d, b.md's at %d, on row %d (one buffer's on %d): want them in opening order, the row where it was", ax, bx, y, y1)
 	}
 	noTabOnABorder(t, r)
-	if title := r.fileTitle(); !strings.HasPrefix(title, "b.md") || !strings.Contains(r.rowAt(y-1), "b.md") {
-		t.Fatalf("the title %q, its row %q: want the shown file's name, as before there were tabs", title, r.rowAt(y-1))
+	if title := r.fileTitle(); !strings.HasPrefix(title, "b.md") || !strings.Contains(r.screenRow(y-1), "b.md") {
+		t.Fatalf("the title %q, its row %q: want the shown file's name, as before there were tabs", title, r.screenRow(y-1))
 	}
 	r.press(t, ax, y)
 	r.s.WaitFor(t, "a.md shown by its tab", func(string) bool { return r.file().path == "a.md" })
@@ -147,7 +147,7 @@ func TestTheRowsPlusAndMenuTakeTheirPresses(t *testing.T) {
 	_, ax, y, _ := r.frameTab("a.md")
 	// after is the column of glyph on the row of tabs past column x, -1 for none
 	after := func(glyph string, x int) int {
-		row := []rune(r.rowAt(y))
+		row := []rune(r.screenRow(y))
 		for i := x; i < len(row); i++ {
 			if string(row[i]) == glyph {
 				return i
@@ -157,13 +157,13 @@ func TestTheRowsPlusAndMenuTakeTheirPresses(t *testing.T) {
 	}
 	plus, menu := after("+", ax), after("≡", ax)
 	if plus < 0 || menu <= plus {
-		t.Fatalf("the row of tabs %q: want a.md's tab, then + and ≡", r.rowAt(y))
+		t.Fatalf("the row of tabs %q: want a.md's tab, then + and ≡", r.screenRow(y))
 	}
 	r.press(t, plus, y)
 	r.s.WaitFor(t, "a new buffer, shown, its tab added", func(string) bool {
 		return onLoop(r, func() bool { return len(r.h.buffers) == 2 && r.h.active != nil && !r.h.active.file.open })
 	})
-	r.s.WaitFor(t, "the row holds two tabs", func(screen string) bool { return strings.Count(r.rowAt(y), "× ") == 2 })
+	r.s.WaitFor(t, "the row holds two tabs", func(screen string) bool { return strings.Count(r.screenRow(y), "× ") == 2 })
 	menu = after("≡", ax)
 	r.press(t, menu, y)
 	r.s.WaitFor(t, "the tabs' menu, opened by ≡", func(screen string) bool {
@@ -196,7 +196,7 @@ func TestTheRowTabsScrollInANarrowRoom(t *testing.T) {
 		if !ok {
 			return false
 		}
-		row, title := r.rowAt(y), r.rowAt(y-1)
+		row, title := r.screenRow(y), r.screenRow(y-1)
 		return (strings.Contains(row, "→") || strings.Contains(row, "←")) &&
 			strings.Contains(row, "…") && !strings.Contains(row, "× one.md") &&
 			strings.Contains(title, "[ Raw | Rendered ]") && !strings.ContainsAny(title, "←→")
@@ -256,7 +256,7 @@ func TestRawRenderedStaysClickableOverTheRowTabs(t *testing.T) {
 		if col, row, ok = find(r.s.Backend.Snapshot(), "[ Raw | Rendered ]"); !ok {
 			return false
 		}
-		_, bx, by, okb := r.frameTab("b.md")
+		_, _, by, okb := r.frameTab("b.md")
 		return okb && by == row+1
 	})
 	if strings.Count(r.s.String(), "[ Raw | Rendered ]") != 1 {
