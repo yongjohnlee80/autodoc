@@ -919,14 +919,18 @@ func TestTheResultsCommandsRunFromTheCatalogAndThePanel(t *testing.T) {
 
 	// the daemon's answers, not a frame's change: its registrations, then the PDF read through its
 	// deriver, on daemonWait as waitFile's open is (a loaded runner took longer than a frame's clock)
+	landFormats := time.Now() // SCRATCH
 	r.waitWithin(t, "the daemon's derived formats", daemonWait, func() bool {
 		return onLoop(r, func() bool { return r.h.kinds.Readable("manual.pdf") })
 	})
+	t.Logf("LANDED the daemon's derived formats after %s", time.Since(landFormats)) // SCRATCH
+	landOpen := time.Now()                                                           // SCRATCH
 	r.h.p.Post(func() { r.h.openPath("manual.pdf") })
 	// the panel, docked at the bottom, covers the status line waitFile reads: the page's own state
 	r.waitWithin(t, "manual.pdf open, read-only", daemonWait, func() bool {
 		return onLoop(r, func() bool { return r.h.file.open && r.h.file.path == "manual.pdf" && r.h.core.ReadOnly() })
 	})
+	t.Logf("LANDED manual.pdf open after %s (daemonWait %s)", time.Since(landOpen), daemonWait) // SCRATCH
 	if err := onLoop(r, func() error { return r.h.cat.Run("results.markdown", nil) }); err != nil {
 		t.Fatal(err)
 	}
