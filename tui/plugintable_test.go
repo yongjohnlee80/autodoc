@@ -917,12 +917,14 @@ func TestTheResultsCommandsRunFromTheCatalogAndThePanel(t *testing.T) {
 	}
 	onLoop(r, func() bool { r.h.closeDialog("exportResultsFile"); return true })
 
-	r.s.WaitFor(t, "the daemon's derived formats", func(string) bool {
+	// the daemon's answers, not a frame's change: its registrations, then the PDF read through its
+	// deriver, on daemonWait as waitFile's open is (a loaded runner took longer than a frame's clock)
+	r.waitWithin(t, "the daemon's derived formats", daemonWait, func() bool {
 		return onLoop(r, func() bool { return r.h.kinds.Readable("manual.pdf") })
 	})
 	r.h.p.Post(func() { r.h.openPath("manual.pdf") })
 	// the panel, docked at the bottom, covers the status line waitFile reads: the page's own state
-	r.s.WaitFor(t, "manual.pdf open, read-only", func(string) bool {
+	r.waitWithin(t, "manual.pdf open, read-only", daemonWait, func() bool {
 		return onLoop(r, func() bool { return r.h.file.open && r.h.file.path == "manual.pdf" && r.h.core.ReadOnly() })
 	})
 	if err := onLoop(r, func() error { return r.h.cat.Run("results.markdown", nil) }); err != nil {
