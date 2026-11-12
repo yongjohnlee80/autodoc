@@ -634,7 +634,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		files := os.DirFS(opt.Dev)
 		// main.qml with the card plugins' panels written in, on every reload (pluginpanels.go)
 		opts = append(modulesFrom(files), tuidecl.Layout(cardFS{FS: files, pl: h.plugins, layout: h.windowLayout}, "main.qml"),
-			tuidecl.HotReload(tuidecl.OnReloadError(h.themeReloadError), tuidecl.OnReload(func(decl.Result) { h.reloaded() })))
+			tuidecl.HotReload(tuidecl.OnReloadError(h.themeReloadError), tuidecl.OnReload(func(decl.Result) { h.reloaded(h.hotReloadedLayout()) })))
 	} else {
 		src = opt.Layout
 		if src == nil {
@@ -650,7 +650,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		// there is nothing mutable to follow, so the normal built-in-only UI keeps no poller. A key
 		// file is followed from its first save, so its directory being named is enough.
 		if opt.KeymapFile != "" || opt.ThemeDir != "" && len(h.themeNames()) > len(themeNames) {
-			opts = append(opts, tuidecl.HotReload(tuidecl.OnReloadError(h.themeReloadError), tuidecl.OnReload(func(decl.Result) { h.reloaded() })))
+			opts = append(opts, tuidecl.HotReload(tuidecl.OnReloadError(h.themeReloadError), tuidecl.OnReload(func(decl.Result) { h.reloaded(h.hotReloadedLayout()) })))
 		}
 	}
 	if opt.ThemeDir != "" {

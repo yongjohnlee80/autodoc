@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	"github.com/yongjohnlee80/golib/tui/decl/themes"
 )
 
 // showntab_test.go: the shown buffer's tab stands apart from the others in every theme, on the
@@ -68,6 +69,71 @@ func shownTabStandsOut(t *testing.T, r *running, at func(label string) (x, y int
 		}
 		was = active
 	}
+}
+
+// devSaveStylesTheShownTab: run from a copy of the QML (-dev, dev), main.qml importing dark, two
+// buffers open and the theme switched to nord, a save of main.qml (a comment added, its import
+// kept), caught by the program's own watcher, puts dark back on screen, the file being the
+// authority (theme.go): the shown tab wears dark's highlight again, never nord's, and the host
+// knows the theme on screen is dark (the menu's check, a plugin's theme). at is where a tab's
+// label starts on the screen.
+func devSaveStylesTheShownTab(t *testing.T, r *running, dev string, at func(label string) (x, y int, ok bool)) {
+	t.Helper()
+	main := filepath.Join(dev, "main.qml")
+	src, err := os.ReadFile(main)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := themeOf(src); got != "dark" {
+		t.Fatalf("main.qml imports %q: want dark, the theme the save brings back", got)
+	}
+	r.ready(t)
+	for _, p := range []string{"a.md", "b.md"} {
+		onLoop(r, func() bool { r.h.openPath(p); return true })
+		r.waitFile(t, p)
+	}
+	nord, err := themes.Values("nord")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dark, err := themes.Values("dark")
+	if err != nil {
+		t.Fatal(err)
+	}
+	nordShown, darkShown := cellColor(t, nord["app.highlight"]), cellColor(t, dark["app.highlight"])
+	shown := func() tuicore.CellColor {
+		x, y, ok := at("b.md")
+		snap := r.s.Backend.Snapshot()
+		if !ok || y >= len(snap) || x >= len(snap[y]) {
+			return tuicore.CellColor{}
+		}
+		return snap[y][x].Attrs.BG
+	}
+	r.waitWithin(t, "the shown tab in dark's highlight, from the start", daemonWait, func() bool { return shown() == darkShown })
+	onLoop(r, func() bool { r.h.switchTheme("nord"); return true })
+	r.waitWithin(t, "the shown tab in nord's highlight, switched", daemonWait, func() bool { return shown() == nordShown })
+	// written whole and renamed in, as an editor saves: the watcher never reads half a file
+	if err := os.WriteFile(main+".tmp", append(src, "\n// a comment: the import is kept\n"...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(main+".tmp", main); err != nil {
+		t.Fatal(err)
+	}
+	r.waitWithin(t, "the save reloaded: the shown tab in dark's highlight, the host's theme dark", daemonWait, func() bool {
+		return shown() == darkShown && onLoop(r, func() string { return r.h.theme }) == "dark"
+	})
+}
+
+// TestADevSaveStylesTheShownTabInTheThemeItImports: the terminal's row of tabs
+// (devSaveStylesTheShownTab).
+func TestADevSaveStylesTheShownTabInTheThemeItImports(t *testing.T) {
+	dev := t.TempDir()
+	if err := os.CopyFS(dev, qmlFiles); err != nil {
+		t.Fatal(err)
+	}
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n", "b.md", "b\n"}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{Dev: dev, ProgramOptions: tabStyleOptions()})
+	devSaveStylesTheShownTab(t, r, dev, r.labelOnScreen)
 }
 
 // labelOnScreen is where "× label", a tab, is first drawn on the screen: its label's column and

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
@@ -31,6 +32,10 @@ func (r *running) frameTab(label string) (closeX, x, y int, ok bool) {
 	}
 	return 0, 0, 0, false
 }
+
+// tabStyleOptions are the options a cell of both builds runs with to have the buffers' tabs: in the
+// terminal, none, the tabs on the row under the page's title.
+func tabStyleOptions() []tuidecl.ProgramOption { return nil }
 
 // screenRow is the screen's row y, "" past its last.
 func (r *running) screenRow(y int) string {
