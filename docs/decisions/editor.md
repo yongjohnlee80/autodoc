@@ -88,13 +88,15 @@ In the code: `script/buffers.go`, `tui/luabuffers.go`, `tui/luaevents.go`, `tui/
 Each surface switches its own way. The terminal has `:b <n|name>`, with Tab completion, and a
 Buffers picker that lists each buffer by number and name, `[+]` on a modified one, and previews its
 text as it is, unsaved edits included. The GUI shows the buffers as tabs in the editor's title bar.
-The terminal shows the same tabs, the same model, on the page's frame's bottom border, across its
-whole width (decided 2026-11-07). A press shows a buffer, its `×` closes it (asking first over
-unsaved changes), `+` makes a new one, and a right press opens the tab's menu, as in the window.
-They are not on the title row, as the window's are: in a terminal that row holds the file's title,
-its badges, the breadcrumb that follows the cursor and `[ Raw | Rendered ]`, and tabs there would
-squeeze them. The terminal shows them from the second buffer on: one buffer's name is the title
-row's already, and a page with one reads as it did before there were tabs (the window shows its one
+The terminal shows the same tabs, the same model, at the left of the page's frame's title row,
+where every other panel (the agents, the terminals) and the window's editor carry theirs, so the
+panels read alike (decided 2026-11-12, replacing the bottom border of 2026-11-07). `[ Raw | Rendered ]`
+keeps the row's right; the file's name leaves the row while the tabs show, since the shown tab and
+the status line name it, and its badges and the breadcrumb follow the tabs. In a narrow page the
+tabs scroll and the switch keeps its place. A press shows a buffer, its `×` closes it (asking first
+over unsaved changes), `+` makes a new one, and a right press opens the tab's menu, as in the
+window. The terminal shows them from the second buffer on: one buffer's name is the title row's
+already, and a page with one reads as it did before there were tabs (the window shows its one
 tab). A terminal tab is at most 20
 cells wide (the window's, 32), so a page holds several; more scroll between the arrows. `H` and `L`
 move between them in both.
