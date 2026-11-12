@@ -3,9 +3,6 @@
 package tui
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -207,44 +204,16 @@ func TestTheRowTabsScrollInANarrowRoom(t *testing.T) {
 	noTabOnABorder(t, r)
 }
 
-// The tabs read in sepia and in dark: the shown buffer's tab stands apart from the others, its text
-// apart from its own paper, and each theme draws it in its own colours.
-func TestTheRowTabsReadInSepiaAndDark(t *testing.T) {
-	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n", "b.md", "b\n"}})
+// TestTheShownTabStandsOutInEveryTheme: the terminal's row of tabs, three buffers open
+// (shownTabStandsOut).
+func TestTheShownTabStandsOutInEveryTheme(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n", "b.md", "b\n", "c.md", "c\n"}})
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 100, 24)
 	r.waitAttached(t, "kb")
-	for _, p := range []string{"a.md", "b.md"} {
-		onLoop(r, func() bool { r.h.openPath(p); return true })
-		r.waitFile(t, p)
-	}
-	// look is the shown tab's and the other's colours once they stand apart and the shown one's
-	// differ from was: the theme switched to repainted, never the theme before it still on screen
-	look := func(name string, was tuicore.CellAttrs) (active, other tuicore.CellAttrs) {
-		r.s.WaitFor(t, name+": the shown tab apart from the other, in this theme's colours", func(string) bool {
-			_, bx, by, okb := r.frameTab("b.md")
-			_, ax, ay, oka := r.frameTab("a.md")
-			if !okb || !oka {
-				return false
-			}
-			snap := r.s.Backend.Snapshot()
-			active, other = snap[by][bx].Attrs, snap[ay][ax].Attrs
-			return active.BG != other.BG && active.FG != active.BG && other.FG != other.BG && active != was
-		})
-		return active, other
-	}
-	start := onLoop(r, func() string { return r.h.theme })
-	if start == "sepia" {
-		t.Fatalf("the theme is %s from the start: want another, so sepia's repaint is seen", start)
-	}
-	was, _ := look(start, tuicore.CellAttrs{})
-	for _, theme := range []string{"sepia", "dark"} {
-		onLoop(r, func() bool { r.h.switchTheme(theme); return true })
-		r.s.WaitFor(t, theme, func(string) bool { return onLoop(r, func() string { return r.h.theme }) == theme })
-		active, other := look(theme, was)
-		t.Logf("%s: the shown tab %+v, the other %+v", theme, active, other)
-		dumpScreen(t, r, "buffer-tabs-"+theme)
-		was = active
-	}
+	shownTabStandsOut(t, r, func(label string) (int, int, bool) {
+		_, x, y, ok := r.frameTab(label)
+		return x, y, ok
+	}, "buffer-tabs")
 }
 
 // With the tabs shown, Raw | Rendered keeps the title row's right, over them, and takes its presses
@@ -276,58 +245,6 @@ func TestRawRenderedStaysClickableOverTheRowTabs(t *testing.T) {
 	r.s.WaitFor(t, "the page after a press on Rendered", func(string) bool { return shownView(r) == editor.ViewRendered })
 	if _, _, _, ok := r.frameTab("b.md"); !ok || r.file().path != "b.md" {
 		t.Fatalf("the switch's presses moved the tabs or the buffer:\n%s", r.s)
-	}
-}
-
-// dumpScreen writes the screen, in its colours (SGR), to $AUTODOC_SCREEN_DUMP/<name>.ansi and as
-// text to <name>.txt, when that variable names a directory: a look at a layout, for a person; no
-// cell reads it.
-func dumpScreen(t *testing.T, r *running, name string) {
-	t.Helper()
-	dir := os.Getenv("AUTODOC_SCREEN_DUMP")
-	if dir == "" {
-		return
-	}
-	sgr := func(c tuicore.CellColor, fg bool) string {
-		switch c.Kind {
-		case tuicore.CellColorRGB:
-			if fg {
-				return fmt.Sprintf("38;2;%d;%d;%d", c.R, c.G, c.B)
-			}
-			return fmt.Sprintf("48;2;%d;%d;%d", c.R, c.G, c.B)
-		case tuicore.CellColorANSI256, tuicore.CellColorANSI:
-			if fg {
-				return fmt.Sprintf("38;5;%d", c.Index)
-			}
-			return fmt.Sprintf("48;5;%d", c.Index)
-		}
-		if fg {
-			return "39"
-		}
-		return "49"
-	}
-	var b strings.Builder
-	for _, line := range r.s.Backend.Snapshot() {
-		for _, c := range line {
-			if c.Continuation() {
-				continue
-			}
-			bold := ""
-			if c.Attrs.Mask&tuicore.AttrBold != 0 {
-				bold = ";1"
-			}
-			text := c.Content
-			if text == "" {
-				text = " "
-			}
-			fmt.Fprintf(&b, "\x1b[0;%s;%s%sm%s", sgr(c.Attrs.FG, true), sgr(c.Attrs.BG, false), bold, text)
-		}
-		b.WriteString("\x1b[0m\n")
-	}
-	for ext, body := range map[string]string{".ansi": b.String(), ".txt": r.s.String() + "\n"} {
-		if err := os.WriteFile(filepath.Join(dir, name+ext), []byte(body), 0o644); err != nil {
-			t.Errorf("the screen dump: %v", err)
-		}
 	}
 }
 

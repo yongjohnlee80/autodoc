@@ -99,6 +99,11 @@ row shows with one buffer as with more, as the panels show their strip whatever 
 always where it is. A terminal tab is at most 20 cells wide (the window's, 32), so a page holds
 several; more scroll between the arrows. `H` and `L` move between them in both.
 
+The shown buffer's tab wears the theme's highlight, bold, as the agent and terminal panels' shown
+tab does, in both surfaces, so it stands apart from the others in every theme (decided 2026-11-13).
+It used to wear the page's selection colour, which several themes make close to a tab's own, or
+the same, so only its weight set it apart.
+
 In the code: `tui/bufferpick.go`, `tui/buffers.go`, `tui/buffertabs.go`, `tui/qml/main.qml`
 
 ## A Lua shell in the terminal panel

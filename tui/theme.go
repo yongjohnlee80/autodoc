@@ -82,6 +82,7 @@ func (h *Host) switchTheme(name string) {
 			return
 		}
 		h.layoutSrc, h.layoutBase, h.theme = next, nextBase, name
+		h.styleBufferTabs() // golib gave the page's strip the new palette's looks: the shown tab its own again
 		h.set("App.userThemes", h.userThemeRows())
 		h.set("App.builtinThemes", h.builtinThemeRows())
 		h.reg.ThemeChanged()
@@ -163,6 +164,7 @@ func (h *Host) reloaded() {
 	h.attachTabViewMenus()                      // and the explorer's and the todos' tabs their menu
 	h.attachFindChip()                          // and the page's rebuilt window the find's card
 	h.syncBufferTabs()                          // and a rebuilt editor's strip its tabs, ≡ and +
+	h.styleBufferTabs()                         // and its looks, a theme's file reloaded restyled
 	h.themesReloaded()
 }
 

@@ -225,3 +225,13 @@ func TestTheGUIEditorsTabsAreThereFromTheStart(t *testing.T) {
 	r.s.WaitFor(t, "the strip's menu open", func(string) bool { return onLoop(r, strip.MenuOpen) })
 	wantLayoutAbove(t, "the untitled page's strip", onLoop(r, func() []widgetcore.MenuItemModel { return r.h.bufferTabRows(strip.Active()) }), "buffer.tabs.goto", true)
 }
+
+// TestTheGUIsShownTabStandsOutInEveryTheme: the window's title bar, three buffers open
+// (shownTabStandsOut).
+func TestTheGUIsShownTabStandsOutInEveryTheme(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n", "b.md", "b\n", "c.md", "c\n"}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
+	r.waitListed(t, 3)
+	r.s.Backend.InjectResize(160, 30)
+	shownTabStandsOut(t, r, r.labelOnScreen, "gui-buffer-tabs")
+}

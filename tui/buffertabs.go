@@ -8,6 +8,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	"github.com/yongjohnlee80/golib/tui/style"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
@@ -72,6 +73,38 @@ func (h *Host) showTerminalTabs() {
 	}
 }
 
+// styleBufferTabs gives the editor's strip, in either editor, the looks the agent and terminal
+// panels' strips have: the bar the page frame's window, a tab the window's button, and the shown
+// tab the window's highlight, bold (golib's active look), so it stands apart from the others in
+// every theme. golib gives an Editor's strip its own palette's highlight, and the page's Editor
+// has the document's selection there (main.qml), which a theme makes close to its button (sepia,
+// light) or the same (nord, catppuccin, mono): the shown tab read as one of the others, bold only.
+// golib restyles the strip whenever the Editor's palette changes (built, a theme switched, a hot
+// reload), so it is styled again after each: a new strip (feedBufferTabs), switchTheme and
+// reloaded. A theme whose values cannot be read keeps golib's looks.
+func (h *Host) styleBufferTabs() {
+	strip := h.bufferStrip()
+	if strip == nil {
+		return
+	}
+	v, err := h.themeValues(h.theme)
+	if err != nil {
+		return
+	}
+	look := func(bg, fg string) style.Style {
+		st := style.New()
+		if c, err := style.ParseColor(v[bg]); err == nil {
+			st = st.Background(c)
+		}
+		if c, err := style.ParseColor(v[fg]); err == nil {
+			st = st.Foreground(c)
+		}
+		return st
+	}
+	strip.SetStyles(look("document.window", "document.windowText"), look("app.button", "app.buttonText"),
+		look("app.highlight", "app.highlightedText").Bold(true))
+}
+
 // feedBufferTabs gives strip a tab per buffer and the shown one active, wiring it the first time
 // it is seen (a new editor, after a reload, is a new strip); nil, an editor with none, is left.
 func (h *Host) feedBufferTabs(strip *widgetcore.TabStrip) {
@@ -80,6 +113,7 @@ func (h *Host) feedBufferTabs(strip *widgetcore.TabStrip) {
 	}
 	if strip != h.tabStrip {
 		h.tabStrip = strip
+		h.styleBufferTabs()
 		strip.SetOnSelect(func(id string) {
 			if b := h.bufferOfTab(id); b != nil {
 				h.showBuffer(b)
