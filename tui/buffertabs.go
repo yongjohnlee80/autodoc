@@ -80,8 +80,10 @@ func (h *Host) showTerminalTabs() {
 // has the document's selection there (main.qml), which a theme makes close to its button (sepia,
 // light) or the same (nord, catppuccin, mono): the shown tab read as one of the others, bold only.
 // golib restyles the strip whenever the Editor's palette changes (built, a theme switched, a hot
-// reload), so it is styled again after each: a new strip (feedBufferTabs), switchTheme and
-// reloaded. A theme whose values cannot be read keeps golib's looks.
+// reload), so it is styled again after each, in the theme then on screen (h.theme): a new strip
+// (feedBufferTabs), switchTheme, and a reload (themeApplied, which takes the theme the reloaded
+// layout imports: under -dev, main.qml's own on its save). A theme whose values cannot be read keeps
+// golib's looks.
 func (h *Host) styleBufferTabs() {
 	strip := h.bufferStrip()
 	if strip == nil {

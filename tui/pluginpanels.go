@@ -481,7 +481,7 @@ func (h *Host) cardPanelsChanged(undo func()) {
 		}
 		commit() // only now: the panel set, the dock and Arrange never name a card with no Drawer
 		h.layoutSrc = src
-		h.reloaded()
+		h.reloaded(src)
 		h.plugins.refreshPlugins()
 		h.loadPrefs() // an added card's kept tui.card_<name>.* geometry; applyPrefs sets the panel defs
 	})

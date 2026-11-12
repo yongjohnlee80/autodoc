@@ -235,3 +235,9 @@ func TestTheGUIsShownTabStandsOutInEveryTheme(t *testing.T) {
 	r.s.Backend.InjectResize(160, 30)
 	shownTabStandsOut(t, r, r.labelOnScreen, "gui-buffer-tabs")
 }
+
+// tabStyleOptions are the options a cell of both builds runs with to have the buffers' tabs: under
+// the gui tag, --gui's style, the tabs on the window's title bar.
+func tabStyleOptions() []tuidecl.ProgramOption {
+	return []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}
+}

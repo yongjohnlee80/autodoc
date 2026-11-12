@@ -155,17 +155,46 @@ func (h *Host) themeReloadError(err error) {
 	}
 }
 
-// reloaded is a hot reload applied: the themes it may have changed, and the keys a key file moved,
-// as the cards and help name them.
-func (h *Host) reloaded() {
+// reloaded is a reload applied, applied the layout it put on screen (nil: not known): the themes it
+// may have changed, the theme it imports, and the keys a key file moved, as the cards and help name
+// them.
+func (h *Host) reloaded(applied []byte) {
 	h.keysChanged()
 	h.panelText.apply(h, agentScaleOf(h.prefs)) // the rebuilt agent and terminal panels get their views again
 	h.applyTerminalKeymap(h.prefs)              // and their keymap's normal mode
 	h.attachTabViewMenus()                      // and the explorer's and the todos' tabs their menu
 	h.attachFindChip()                          // and the page's rebuilt window the find's card
 	h.syncBufferTabs()                          // and a rebuilt editor's strip its tabs, ≡ and +
-	h.styleBufferTabs()                         // and its looks, a theme's file reloaded restyled
 	h.themesReloaded()
+	h.themeApplied(applied) // the theme on screen, after themesReloaded's check: it never starts a switch
+}
+
+// hotReloadedLayout is the layout a hot reload applied: under -dev, main.qml as it is on disk now,
+// its own import the theme on screen (the file is the authority on its next save); else the layout
+// last applied, which golib reloads with (Options.Layout's, or a theme switch's).
+func (h *Host) hotReloadedLayout() []byte {
+	if h.dev == "" {
+		return h.layoutSrc
+	}
+	b, err := h.layoutBaseNow()
+	if err != nil {
+		return nil
+	}
+	return b
+}
+
+// themeApplied makes the theme applied imports, the theme on screen now, the one the host knows
+// (h.theme: the menu's check, a plugin's theme, an export's), and styles the page's strip in it
+// (styleBufferTabs: golib restyled it in the layout's palette). A layout with no import, or not
+// known, keeps h.theme. It only records: nothing is switched or written.
+func (h *Host) themeApplied(applied []byte) {
+	if name := themeOf(applied); name != "" && name != h.theme {
+		h.theme = name
+		h.set("App.userThemes", h.userThemeRows())
+		h.set("App.builtinThemes", h.builtinThemeRows())
+		h.reg.ThemeChanged()
+	}
+	h.styleBufferTabs()
 }
 
 // keysChanged is the App's key map installed or replaced: each card and help name the keys as it binds
