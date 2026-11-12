@@ -111,15 +111,6 @@ func (n openedFile) outside() bool { return n.open && n.ws == "" }
 // (h.tr): a derived document's carries its read-only badge, an outside file's that it is in no
 // workspace.
 func (n openedFile) title(tr func(string) string) string {
-	if b := n.badges(tr); b != "" {
-		return n.name() + "  " + b
-	}
-	return n.name()
-}
-
-// badges is the file's badges as its title shows them, in brackets, "" for none: what the title row
-// keeps after the terminal's buffer tabs, which name the file.
-func (n openedFile) badges(tr func(string) string) string {
 	trf := func(id, arg string) string { return feature.Fill(tr(id), arg) }
 	badges := []string{}
 	if n.outside() {
@@ -135,9 +126,9 @@ func (n openedFile) badges(tr func(string) string) string {
 		badges = append(badges, tr("autodoc.text.files.deleted_on_disk"))
 	}
 	if len(badges) == 0 {
-		return ""
+		return n.name()
 	}
-	return "[" + strings.Join(badges, " · ") + "]"
+	return n.name() + "  [" + strings.Join(badges, " · ") + "]"
 }
 
 // outsideBadge marks a file outside every workspace (the kit's, feature.OutsideBadge).
