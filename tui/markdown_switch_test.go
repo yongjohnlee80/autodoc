@@ -57,7 +57,7 @@ func TestSwitchingBetweenMarkdownNotesKeepsThemHighlighted(t *testing.T) {
 		})
 		r.keys(t, key('G')) // the cursor under ## Shelf
 		r.s.WaitFor(t, fmt.Sprintf("%s: the crumb names its heading (%s)", how, last), func(sc string) bool {
-			return strings.Contains(sc, p+" ›") && strings.Contains(sc, "Shelf")
+			return strings.Contains(sc, p+" › "+h1+" › Shelf")
 		})
 	}
 	open := func(p string) { onLoop(r, func() bool { r.h.openPath(p); return true }) }
