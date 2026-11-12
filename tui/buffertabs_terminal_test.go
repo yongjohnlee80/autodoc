@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
@@ -256,5 +257,32 @@ func dumpScreen(t *testing.T, r *running, name string) {
 		if err := os.WriteFile(filepath.Join(dir, name+ext), []byte(body), 0o644); err != nil {
 			t.Errorf("the screen dump: %v", err)
 		}
+	}
+}
+
+// On a terminal whose panels take plain frame drags, as AutoDoc's does, a press on a tab, on the
+// frame's title row, is the tab's: it shows its buffer, and the page stays where it is.
+func TestATabTakesItsPressOnAFrameDragTerminal(t *testing.T) {
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n", "b.md", "b\n"}}, daemonOpts{})
+	h := newHost(NewSession(d.sock, nil), Options{seams: seamsFor(t)})
+	s := decltest.RunOn(t, tuicore.NewTestBackend(100, 30, tuicore.WithTestCapabilities(tuicore.Capabilities{FrameDrag: true})), h.attach, h.options(Options{})...)
+	t.Cleanup(h.cancel)
+	r := &running{h: h, s: s}
+	r.connected(t)
+	r.waitWithin(t, "the notes listed", daemonWait, func() bool { return len(r.listed()) > 1 })
+	for _, p := range []string{"a.md", "b.md"} {
+		onLoop(r, func() bool { r.h.openPath(p); return true })
+		r.waitFile(t, p)
+	}
+	var ax, y0 int
+	r.s.WaitFor(t, "a.md's tab on the title row", func(string) bool {
+		var ok bool
+		_, ax, y0, ok = r.frameTab("a.md")
+		return ok
+	})
+	r.press(t, ax, y0)
+	r.s.WaitFor(t, "a.md shown by its tab", func(string) bool { return r.file().path == "a.md" })
+	if _, x, y, ok := r.frameTab("a.md"); !ok || x != ax || y != y0 {
+		t.Fatalf("a press on a tab moved the page (its tab from %d,%d to %d,%d):\n%s", ax, y0, x, y, r.s)
 	}
 }
