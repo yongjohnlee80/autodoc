@@ -217,12 +217,10 @@ func TestTheRowTabsReadInSepiaAndDark(t *testing.T) {
 		onLoop(r, func() bool { r.h.openPath(p); return true })
 		r.waitFile(t, p)
 	}
-	var looks []tuicore.CellAttrs
-	for _, theme := range []string{"sepia", "dark"} {
-		onLoop(r, func() bool { r.h.switchTheme(theme); return true })
-		r.s.WaitFor(t, theme, func(string) bool { return onLoop(r, func() string { return r.h.theme }) == theme })
-		var active, other tuicore.CellAttrs
-		r.s.WaitFor(t, theme+": the shown tab apart from the other, in this theme's colours", func(string) bool {
+	// look is the shown tab's and the other's colours once they stand apart and the shown one's
+	// differ from was: the theme switched to repainted, never the theme before it still on screen
+	look := func(name string, was tuicore.CellAttrs) (active, other tuicore.CellAttrs) {
+		r.s.WaitFor(t, name+": the shown tab apart from the other, in this theme's colours", func(string) bool {
 			_, bx, by, okb := r.frameTab("b.md")
 			_, ax, ay, oka := r.frameTab("a.md")
 			if !okb || !oka {
@@ -230,12 +228,22 @@ func TestTheRowTabsReadInSepiaAndDark(t *testing.T) {
 			}
 			snap := r.s.Backend.Snapshot()
 			active, other = snap[by][bx].Attrs, snap[ay][ax].Attrs
-			return active.BG != other.BG && active.FG != active.BG && other.FG != other.BG &&
-				(len(looks) == 0 || active != looks[0])
+			return active.BG != other.BG && active.FG != active.BG && other.FG != other.BG && active != was
 		})
-		looks = append(looks, active)
+		return active, other
+	}
+	start := onLoop(r, func() string { return r.h.theme })
+	if start == "sepia" {
+		t.Fatalf("the theme is %s from the start: want another, so sepia's repaint is seen", start)
+	}
+	was, _ := look(start, tuicore.CellAttrs{})
+	for _, theme := range []string{"sepia", "dark"} {
+		onLoop(r, func() bool { r.h.switchTheme(theme); return true })
+		r.s.WaitFor(t, theme, func(string) bool { return onLoop(r, func() string { return r.h.theme }) == theme })
+		active, other := look(theme, was)
 		t.Logf("%s: the shown tab %+v, the other %+v", theme, active, other)
 		dumpScreen(t, r, "buffer-tabs-"+theme)
+		was = active
 	}
 }
 
