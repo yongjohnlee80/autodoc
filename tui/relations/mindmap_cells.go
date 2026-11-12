@@ -552,29 +552,34 @@ func (v *cellMindView) HandleEvent(ev tuicore.Event) bool {
 // row saying how many more; then any other document's box, in the outline's own colour. It is a
 // strip along the view's bottom, its entries side by side and wrapped, a blank row above it: the
 // map is drawn and scrolled in the rows above, so the legend never covers a box, however full the
-// map. A view too short to give it a third of its rows draws none.
+// map. Each entry's mark is a whole box in two rows, its outline's top edge over its bottom edge, and
+// the entries sit in bands of two rows, each band against the view's right edge: the legend lies in
+// the bottom right, as the window's does (paintLegend). A view too short to give it a third of its
+// rows draws none.
 
-// cellLegendEntry is one of the legend's entries: a mark (an outline's corners, "" none) in its
-// style, and its words.
+// cellLegendEntry is one of the legend's entries: a mark (an outline's top edge, "" none) and the
+// edge under it (markBottom), in its style, and its words.
 type cellLegendEntry struct {
-	mark string
-	st   style.Style
-	text string
+	mark       string
+	markBottom string
+	st         style.Style
+	text       string
 }
 
-// cellLegendMark is a group's outline as the legend draws it: the corners of its boxes' top edge,
-// golib's cell outline for the shape (tuimermaid.FormOf), the plain box's for a shape it leaves to
-// the map (cellMindShapeIn draws a group without one as a rounded box).
-func cellLegendMark(s pm.MindShape) string {
+// cellLegendMark is a group's outline as the legend draws it, a whole box in two rows: the corners
+// of its boxes' top edge, then of their bottom edge, golib's cell outline for the shape
+// (tuimermaid.FormOf), the plain box's for a shape it leaves to the map (cellMindShapeIn draws a group
+// without one as a rounded box).
+func cellLegendMark(s pm.MindShape) (top, bottom string) {
 	switch tuimermaid.FormOf(s) {
 	case tuimermaid.FormSquare:
-		return "┌─┐"
+		return "┌─┐", "└─┘"
 	case tuimermaid.FormHexagon:
-		return "╱─╲"
+		return "╱─╲", "╲─╱"
 	case tuimermaid.FormBang:
-		return "┏━┓"
+		return "┏━┓", "┗━┛"
 	}
-	return "╭─╮"
+	return "╭─╮", "╰─╯"
 }
 
 // legendEntries are the legend of cur, laid out in its groups, its colours made legible on
@@ -587,20 +592,27 @@ func (m *CellMindmap) legendEntries(cur *cellMind, ground color.NRGBA) []cellLeg
 		shown, more := legendGroups(cur.groups, cur.m)
 		for _, g := range shown {
 			c := OnGround(g.Colour, ground)
-			out = append(out, cellLegendEntry{cellLegendMark(g.Shape), style.PageText().Foreground(style.RGB(c.R, c.G, c.B)), groupLabel(g.Query)})
+			top, bottom := cellLegendMark(g.Shape)
+			out = append(out, cellLegendEntry{top, bottom, style.PageText().Foreground(style.RGB(c.R, c.G, c.B)), groupLabel(g.Query)})
 		}
 		if more > 0 {
 			out = append(out, cellLegendEntry{text: m.c.Trf("autodoc.text.relationviews_gui.more_groups", more)})
 		}
 	}
-	return append(out, cellLegendEntry{cellLegendMark(pm.MindDefault), cellMindTheme.Box, m.c.Trf("autodoc.text.mindmap_gui.any_other_document")})
+	top, bottom := cellLegendMark(pm.MindDefault)
+	return append(out, cellLegendEntry{top, bottom, cellMindTheme.Box, m.c.Trf("autodoc.text.mindmap_gui.any_other_document")})
 }
 
-// cellLegendGap is the room between two of the legend's entries on a row.
-const cellLegendGap = 3
+// cellLegendGap is the room between two of the legend's entries in a band; cellLegendBand a band's
+// rows: its marks' top edges and their words, then their bottom edges.
+const (
+	cellLegendGap  = 3
+	cellLegendBand = 2
+)
 
-// legendRows are entries laid out in rows w cells wide, a cell's margin each side: an entry too
-// wide for a row alone has its words cut with an ellipsis.
+// legendRows are entries laid out in bands w cells wide, a cell's margin each side: an entry too
+// wide for a band alone has its words cut with an ellipsis. Each band is two of the view's rows
+// (cellLegendBand), its marks whole boxes.
 func legendRows(entries []cellLegendEntry, w int) [][]cellLegendEntry {
 	room := w - 2
 	if room < 8 {
@@ -657,36 +669,56 @@ func (v *cellMindView) legend(ground color.NRGBA) [][]cellLegendEntry {
 		return nil
 	}
 	rows := legendRows(m.legendEntries(m.cur, ground), v.cells.W)
-	if (len(rows)+1)*3 > v.cells.H {
+	if (len(rows)*cellLegendBand+1)*3 > v.cells.H {
 		return nil
 	}
 	return rows
 }
 
+// legendHeight is the view's rows a legend of these bands takes: two each, and the blank row over
+// them.
+func legendHeight(rows [][]cellLegendEntry) int {
+	if len(rows) == 0 {
+		return 0
+	}
+	return len(rows)*cellLegendBand + 1
+}
+
+// bandWidth is a band's cells: its entries and the gaps between them.
+func bandWidth(row []cellLegendEntry) int {
+	w := 0
+	for i, e := range row {
+		if i > 0 {
+			w += cellLegendGap
+		}
+		w += entryWidth(e)
+	}
+	return w
+}
+
 // mapRows are the view's rows the map is drawn and scrolled in: those above the legend and the
 // blank row over it.
 func (v *cellMindView) mapRows() int {
-	if rows := v.legend(v.m.ground); len(rows) > 0 {
-		return v.cells.H - len(rows) - 1
-	}
-	return v.cells.H
+	return v.cells.H - legendHeight(v.legend(v.m.ground))
 }
 
-// paintLegend draws the legend along the view's bottom, its strip (and the blank row over it)
-// cleared of the map first.
+// paintLegend draws the legend in the view's bottom right, its strip (and the blank row over it)
+// cleared of the map first: each band against the right edge, a cell's margin from it, each mark a
+// whole box (its top edge beside the words, its bottom edge under it).
 func (v *cellMindView) paintLegend(s tuicore.Surface, ground color.NRGBA) {
 	rows := v.legend(ground)
 	if len(rows) == 0 {
 		return
 	}
 	page := style.PageText()
-	top := v.cells.H - len(rows) - 1
-	s.Fill(tuicore.Rect{X: 0, Y: top, W: v.cells.W, H: len(rows) + 1}, " ", page)
+	top := v.cells.H - legendHeight(rows)
+	s.Fill(tuicore.Rect{X: 0, Y: top, W: v.cells.W, H: legendHeight(rows)}, " ", page)
 	for i, row := range rows {
-		x, y := 1, top+1+i
+		x, y := v.cells.W-1-bandWidth(row), top+1+i*cellLegendBand
 		for _, e := range row {
 			if e.mark != "" {
 				tuicore.DrawText(s, x, y, e.mark, e.st)
+				tuicore.DrawText(s, x, y+1, e.markBottom, e.st)
 				x += tuicore.StringWidth(e.mark) + 1
 			}
 			tuicore.DrawText(s, x, y, e.text, page)

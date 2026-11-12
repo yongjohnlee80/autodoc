@@ -23,11 +23,31 @@ func findLast(cells [][]tuicore.Cell, text string) (int, int, bool) {
 	return 0, 0, false
 }
 
+// rowText is the n cells of row from x, as text.
+func rowText(row []tuicore.Cell, x, n int) string {
+	var b strings.Builder
+	for i := x; i < x+n && i < len(row); i++ {
+		b.WriteString(row[i].Content)
+	}
+	return b.String()
+}
+
+// againstRightEdge is whether a legend entry ending at end (the cell after its last) is a cell from
+// its pane's right edge: one blank cell, then the pane's frame or the screen's edge.
+func againstRightEdge(row []tuicore.Cell, end int) bool {
+	if end >= len(row) || row[end].Content != " " {
+		return false
+	}
+	return end+1 == len(row) || strings.ContainsAny(row[end+1].Content, "│┃║▕")
+}
+
 // TestTheTerminalsMindmapHasItsLegend: a terminal's Mindmap says what its outlines and colours
-// stand for, as the window's does: its group (notes/, a yellow hexagon) as a hexagon's top edge in
-// the colour its boxes wear, made legible on the page (onGround), and any other document as a
-// rounded box's top edge in the colour an ungrouped box (Gamma's) wears. It lies under the map,
-// below every box. In sepia, then in dark switched to with the map open; each theme's rows logged.
+// stand for, as the window's does: its group (notes/, a yellow hexagon) as a whole hexagon, its top
+// edge over its bottom edge, in the colour its boxes wear, made legible on the page (onGround), and
+// any other document as a whole rounded box in the colour an ungrouped box (Gamma's) wears. It lies
+// under the map, below every box, in the pane's bottom right as the window's lies: its last entry
+// ends a cell from the pane's right edge. In sepia, then in dark switched to with the map open; each
+// theme's rows logged.
 func TestTheTerminalsMindmapHasItsLegend(t *testing.T) {
 	const yellow = 0xedc948 // illegible on sepia's paper as it is: onGround darkens it there
 	kb := groupsKB(t, "[[mindmap.groups]]\nquery = \"path:notes/\"\ncolour = \"#edc948\"\nshape = \"hexagon\"\n")
@@ -64,6 +84,12 @@ func TestTheTerminalsMindmapHasItsLegend(t *testing.T) {
 			case gy <= by || gy <= cy || oy < gy:
 				why = "the legend is not under the map"
 				return false
+			case gy+1 >= len(snap) || oy+1 >= len(snap) || rowText(snap[gy+1], gx, 3) != "╲─╱" || rowText(snap[oy+1], ox, 3) != "╰─╯":
+				why = "a mark is not a whole box: its bottom edge is not under its top edge"
+				return false
+			case !againstRightEdge(snap[oy], ox+tuicore.StringWidth("╭─╮ any other document")):
+				why = "the legend is not in the pane's bottom right (its last entry a cell from the pane's right edge)"
+				return false
 			}
 			ground := snap[gy][gx].Attrs.BG
 			want := relations.OnGround(relations.HexColour(yellow), color.NRGBA{R: ground.R, G: ground.G, B: ground.B, A: 0xff})
@@ -90,7 +116,7 @@ func TestTheTerminalsMindmapHasItsLegend(t *testing.T) {
 		}
 		var rows strings.Builder
 		for _, row := range screenRows(r) {
-			if strings.ContainsAny(row, "─╱╲╭╰") {
+			if strings.ContainsAny(row, "─╱╲╭╰╯") {
 				rows.WriteString(row + "\n")
 			}
 		}

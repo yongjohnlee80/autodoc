@@ -24,10 +24,12 @@ func legendWorn(n int) (relMap, *relGroups) {
 }
 
 // TestTheCellLegendListsWrapsAndCaps: the legend lists the groups the map's documents wear, at most
-// groupLegendRows of them and a row saying how many more, then any other document; its entries
-// wrap in the view's width, cut with an ellipsis when one is too wide alone; a view too short
-// draws none and gives the map every row; and the map is scrolled in the rows above it, so the
-// selected box is never under it (the mutants: the cap off by one; the map's rows not narrowed).
+// groupLegendRows of them and a row saying how many more, then any other document, each mark a whole
+// box (its top edge and its bottom edge); its entries wrap in bands within the view's width, more
+// bands in a narrower view, cut with an ellipsis when one is too wide alone; a view too short draws
+// none and gives the map every row; and the map is scrolled in the rows above it, two rows a band and
+// a blank one, so the selected box is never under it (the mutants: the cap off by one; the map's
+// rows not narrowed).
 func TestTheCellLegendListsWrapsAndCaps(t *testing.T) {
 	rm, gs := legendWorn(groupLegendRows + 2)
 	const h = 24 // shorter than the map: it scrolls
@@ -43,8 +45,8 @@ func TestTheCellLegendListsWrapsAndCaps(t *testing.T) {
 		t.Fatalf("the legend's entries: %q; want the first %d groups, then 2 more, then any other document", texts, groupLegendRows)
 	}
 	for _, e := range m.legendEntries(m.cur, ground)[:groupLegendRows] {
-		if e.mark != "┌─┐" {
-			t.Fatalf("a square group's mark %q; want ┌─┐", e.mark)
+		if e.mark != "┌─┐" || e.markBottom != "└─┘" {
+			t.Fatalf("a square group's mark %q over %q; want ┌─┐ over └─┘, a whole box", e.mark, e.markBottom)
 		}
 	}
 	rows := v.legend(ground)
@@ -52,23 +54,26 @@ func TestTheCellLegendListsWrapsAndCaps(t *testing.T) {
 		t.Fatalf("%d entries in 80 cells: %d rows; want them wrapped", len(texts), len(rows))
 	}
 	for i, row := range rows {
-		w := 0
-		for j, e := range row {
-			w += entryWidth(e)
-			if j > 0 {
-				w += cellLegendGap
-			}
+		if w := bandWidth(row); w > 78 {
+			t.Errorf("band %d is %d cells; want 78 at most (80 less a margin each side)", i, w)
 		}
-		if w > 78 {
-			t.Errorf("row %d is %d cells; want 78 at most (80 less a margin each side)", i, w)
+	}
+	// narrower, the same entries take more bands, each still inside it
+	if narrow := legendRows(m.legendEntries(m.cur, ground), 30); len(narrow) <= len(rows) {
+		t.Errorf("in 30 cells, %d bands; want more than the %d of 80 cells", len(narrow), len(rows))
+	} else {
+		for i, row := range narrow {
+			if w := bandWidth(row); w > 28 {
+				t.Errorf("in 30 cells, band %d is %d cells; want 28 at most", i, w)
+			}
 		}
 	}
 	if got := legendRows([]cellLegendEntry{{mark: "╭─╮", text: strings.Repeat("long words ", 4)}}, 20); len(got) != 1 ||
 		entryWidth(got[0][0]) > 18 || !strings.HasSuffix(got[0][0].text, "…") {
 		t.Errorf("an entry too wide alone: %+v; want it cut to 18 cells, an ellipsis ending it", got)
 	}
-	if v.mapRows() != h-len(rows)-1 {
-		t.Errorf("the map's rows: %d; want %d (%d less the legend's %d and the blank row)", v.mapRows(), h-len(rows)-1, h, len(rows))
+	if want := h - 2*len(rows) - 1; v.mapRows() != want {
+		t.Errorf("the map's rows: %d; want %d (%d less the legend's %d bands of two rows and the blank row)", v.mapRows(), want, h, len(rows))
 	}
 	if m.cur.grid.Size.H <= v.mapRows() {
 		t.Fatalf("fixture: the map is %d rows, within the view's %d: nothing scrolls", m.cur.grid.Size.H, v.mapRows())
