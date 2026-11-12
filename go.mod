@@ -7,7 +7,7 @@ require (
 	github.com/Microsoft/go-winio v0.6.4
 	github.com/prometheus/common v0.67.2
 	github.com/yongjohnlee80/gio v0.1.6
-	github.com/yongjohnlee80/golib v0.8.50
+	github.com/yongjohnlee80/golib v0.8.51-0.20261112141904-cdbde5d7d97f
 	github.com/yongjohnlee80/golib/gui v0.3.19
 	github.com/yuin/gopher-lua v1.1.2
 	golang.org/x/image v0.45.0
