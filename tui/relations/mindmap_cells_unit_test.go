@@ -145,7 +145,7 @@ func (s *cellMindSurface) Caps() tuicore.Capabilities { return tuicore.Capabilit
 // TestTheCellMindmapGolden (§5 case 4): a small map as the terminal draws it, testdata/mindmap_tui
 // (-update rewrites it): the root a bang in the middle, its documents in rounded boxes either side,
 // joined by box-drawing lines; the selected box (here the root's first child, by l) marked; the
-// legend along the bottom (in no groups: the row saying so, then any other document's box).
+// legend in the bottom right (in no groups: the row saying so, then any other document's whole box).
 func TestTheCellMindmapGolden(t *testing.T) {
 	m, v := builtMindmap(t, smallMind(), "a.md", 72, 20)
 	v.HandleEvent(press('l', "l"))
