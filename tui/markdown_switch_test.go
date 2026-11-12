@@ -56,8 +56,10 @@ func TestSwitchingBetweenMarkdownNotesKeepsThemHighlighted(t *testing.T) {
 			return ok && head != body
 		})
 		r.keys(t, key('G')) // the cursor under ## Shelf
+		// the crumb is this note's headings: after its name with one buffer open, after the buffer
+		// tabs with two (the shown tab names the note then)
 		r.s.WaitFor(t, fmt.Sprintf("%s: the crumb names its heading (%s)", how, last), func(sc string) bool {
-			return strings.Contains(sc, p+" ›") && strings.Contains(sc, "Shelf")
+			return strings.Contains(sc, h1+" › Shelf")
 		})
 	}
 	open := func(p string) { onLoop(r, func() bool { r.h.openPath(p); return true }) }
