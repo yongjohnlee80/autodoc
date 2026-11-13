@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/msgpack"
-	"github.com/yongjohnlee80/golib/paths"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
 	corecrew "github.com/yongjohnlee80/autodoc/core/crew"
@@ -266,7 +265,7 @@ func listedScopes(t *testing.T, dir string) []string {
 	es, _ := os.ReadDir(filepath.Join(dir, ".crew-scopes"))
 	var out []string
 	for _, e := range es {
-		id, err := paths.Decode(e.Name()) // crewFileName's
+		id, err := agents.ParseCrewFileName(e.Name())
 		if err != nil {
 			t.Fatalf("a name in .crew-scopes that is not crewFileName's: %q: %v", e.Name(), err)
 		}

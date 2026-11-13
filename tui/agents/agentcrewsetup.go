@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
-	"github.com/yongjohnlee80/golib/paths"
+	corepaths "github.com/yongjohnlee80/autodoc/core/paths"
 )
 
 // crewSetupOf is the setup of a crew agent of kind whose folder is dir, as the agent's own autodoc
@@ -72,9 +72,13 @@ type CrewSession struct {
 	Dir                string // the folder whose context file names it
 }
 
-// crewFileName is identity as one path element: paths.Encode's, so a colon, a separator or a name
-// Windows reserves is escaped, and two identities never share a name.
-func CrewFileName(identity string) string { return paths.Encode(identity) }
+// CrewFileName is identity as one path element: core/paths.Name's, so a separator or a name Windows
+// reserves is escaped, a scope's ':' is kept where the OS can hold one (escaped on Windows), no
+// element holds a '%' a program could percent-decode, and two identities never share a name.
+func CrewFileName(identity string) string { return corepaths.Name(identity) }
+
+// ParseCrewFileName reverses CrewFileName: an error for an element it does not write on this OS.
+func ParseCrewFileName(element string) (string, error) { return corepaths.ParseName(element) }
 
 // crewSetupTimeout bounds a crew start's setup: one run of the agent's own autodoc, which may write
 // a file of AutoDoc's own (OpenCode's plugin) and prints its answer.

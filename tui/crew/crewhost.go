@@ -15,7 +15,6 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/internal/userperm"
-	"github.com/yongjohnlee80/golib/paths"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
 	corecrew "github.com/yongjohnlee80/autodoc/core/crew"
@@ -298,7 +297,7 @@ func (h *CrewHost) listed() []string {
 	var out []listedScope
 	for _, e := range entries {
 		// a name is crewFileName's; one that decodes to no window scope is not a claim
-		id, err := paths.Decode(e.Name())
+		id, err := agents.ParseCrewFileName(e.Name())
 		if err != nil || !e.Type().IsRegular() || !strings.HasPrefix(id, "autodoc:") {
 			continue
 		}
