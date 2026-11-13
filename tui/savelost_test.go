@@ -298,22 +298,62 @@ func TestALandedSaveOvertakenByAReadAgainKeepsTheNewerStatus(t *testing.T) {
 	}
 }
 
-// TestALandedSaveBehindALaterOneLeavesItsSavingStatus: the status line says "saving a.md…", but
-// for a later save of the buffer than the one whose landed answer comes stale: that answer leaves
-// the later save's words where they are, and says it was saved by the notice alone.
-func TestALandedSaveBehindALaterOneLeavesItsSavingStatus(t *testing.T) {
+// TestALandedSaveBehindALaterSaveLeavesItsStatus: save A of a.md is written, its answer held; the
+// note is read again (A goes stale), edited, and saved again (B, its write held before it is sent,
+// "saving a.md…" on the status line). A's late answer, landed, leaves B's "saving a.md…" where it
+// is, the same words as A's were, and says A was saved by the notice alone.
+func TestALandedSaveBehindALaterSaveLeavesItsStatus(t *testing.T) {
 	t.Parallel()
-	r := runTUI(t, NewSession("unused", nil), Options{})
-	saving := onLoop(r, func() string {
-		msg := r.h.trf("autodoc.notice.files.saving", "a.md")
-		r.h.say(msg) // the later save's
-		r.h.saveLost("a.md", true, true, nil, true, false, false)
-		return msg
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	var writes atomic.Int32
+	aHeld, aGo := make(chan struct{}, 1), make(chan struct{})
+	bHeld, bGo := make(chan struct{}, 1), make(chan struct{})
+	freeA, freeB := sync.OnceFunc(func() { close(aGo) }), sync.OnceFunc(func() { close(bGo) })
+	var armed atomic.Bool
+	sess := NewSession(d.sock, nil)
+	sess.SetAfterCall(func(method string) {
+		if method == "doc.write" && armed.Load() && writes.Load() == 1 {
+			aHeld <- struct{}{} // A written: its answer held
+			<-aGo
+		}
 	})
+	sess.SetBeforeCall(func(method string, params []any) {
+		if method != "doc.write" || !armed.Load() {
+			return
+		}
+		if writes.Add(1) == 2 {
+			bHeld <- struct{}{} // B's write held before it is sent
+			<-bGo
+		}
+	})
+	r := runTUI(t, sess, Options{})
+	t.Cleanup(func() { freeA(); freeB() })
+	r.ready(t)
+	r.h.p.Post(func() { r.h.openPath("a.md") })
+	r.waitFile(t, "a.md")
+	onLoop(r, func() bool { r.h.editor.SetValue("edited\n"); r.h.edited(); return true })
+	armed.Store(true)
+	r.h.p.Post(r.h.save)
+	held := func(ch chan struct{}, what string) {
+		t.Helper()
+		select {
+		case <-ch:
+		case <-time.After(daemonWait):
+			t.Fatalf("%s was never held", what)
+		}
+	}
+	held(aHeld, "save A's answer")
+	r.h.p.Post(func() { r.h.load(r.h.file.ws, r.h.file.path, nil) }) // A goes stale
+	r.waitStatus(t, "opened a.md")
+	onLoop(r, func() bool { r.h.editor.SetValue("edited again\n"); r.h.edited(); return true })
+	r.h.p.Post(r.h.save)
+	held(bHeld, "save B's write")
+	saving := onLoop(r, func() string { return r.h.trf("autodoc.notice.files.saving", "a.md") })
+	r.waitStatus(t, saving) // B's
+	freeA()
+	r.waitWithin(t, "A's notice", daemonWait, func() bool { return r.noticed("saved a.md") })
 	if s := onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.status"); return v.Raw }); s != saving {
-		t.Fatalf("the status says %q, want the later save's %q kept", s, saving)
+		t.Fatalf("the status says %q after A's late answer, want B's %q kept", s, saving)
 	}
-	if !r.noticed("saved a.md") {
-		t.Fatal("no notice says the earlier save landed")
-	}
+	freeB()
 }
