@@ -62,7 +62,7 @@ func runAgentTUIIn(t *testing.T, dir string, profiles []agents.AgentProfile, def
 	if opt.seams == nil {
 		opt.seams = seamsWithEnv(t, nil)
 	}
-	opt.seams.agentBin = bin
+	opt.seams.setAgentBin(bin)
 	opt.seams.agentPromptsReported = func(string, bool) bool { return true }
 	r = runTUI(t, NewSession(d.sock, nil), opt)
 	r.connected(t)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
@@ -23,6 +24,9 @@ import (
 // loop: only a field read on the loop. The four read off the loop (serverReady, installFS,
 // exportWritten, beforeSend) are set before the program starts, through tune(t), and never after;
 // a worker that needs another field (env, registry) is handed a copy read on the loop as it starts.
+// The agents' hooks an agent's start reads off the loop (agentSpawn, agentCodexHere, agentBin) are
+// the exception: each program reads its own atomic copy (live), set through their setters, so a
+// test may change one on the loop while the program runs.
 type seams struct {
 	// diskPoll is vfs.Poll's interval where the folder has no native watcher.
 	// NOTE: deadline: a poll is a listing per interval, the only way to see a change without a watcher.
@@ -61,7 +65,10 @@ type seams struct {
 	// program's PATH (env).
 	lookAgentCLI func(string) (string, error)
 	// The agents' hooks a test sets (agentSeams: SetupRun, Spawn, CommandCheck, CodexHere,
-	// PromptsReported, AgentBin), each nil or "" for the program's own.
+	// PromptsReported, AgentBin), each nil or "" for the program's own. Spawn, CodexHere and
+	// AgentBin are read off the loop too, by an agent's start (runAgent): each is set through its
+	// setter (setAgentSpawn, setAgentCodexHere, setAgentBin), and a program reads its own atomic copy
+	// (live), so a test may set one on the loop while the program runs.
 	agentSetupRun func(kind, dir string, environ []string) (crew.Setup, error)
 	agentSpawn    func(pty.Cmd) (terminal.TerminalProcess, error)
 	// shellSpawn, when a test sets it, is a shell tab's program in place of the user's shell on a
@@ -71,6 +78,10 @@ type seams struct {
 	agentCodexHere       func(environ []string, args ...string) error
 	agentPromptsReported func(kind string, reported bool) bool
 	agentBin             string
+	// live is the program's own copy of the hooks read off the loop, made from the fields above
+	// when its Host is made (ownHooks); nil before. Each Host makes its own: two programs never
+	// share one.
+	live *liveHooks
 
 	// installFS is swapIn's renames and removal; a test makes each fail in turn. Read off the loop.
 	installFS installFS
@@ -172,15 +183,75 @@ func (s *seams) VimQuestionPending(p feature.PrefsView) bool {
 func (s *seams) SetupRun() func(kind, dir string, environ []string) (crew.Setup, error) {
 	return s.agentSetupRun
 }
-func (s *seams) Spawn() func(pty.Cmd) (terminal.TerminalProcess, error) { return s.agentSpawn }
+func (s *seams) Spawn() func(pty.Cmd) (terminal.TerminalProcess, error) {
+	if s.live != nil {
+		return *s.live.spawn.Load()
+	}
+	return s.agentSpawn
+}
 func (s *seams) CommandCheck() func(shell usershell.Shell, command string, env []string) error {
 	return s.agentCommandCheck
 }
-func (s *seams) CodexHere() func(environ []string, args ...string) error { return s.agentCodexHere }
+func (s *seams) CodexHere() func(environ []string, args ...string) error {
+	if s.live != nil {
+		return *s.live.codexHere.Load()
+	}
+	return s.agentCodexHere
+}
 func (s *seams) PromptsReported() func(kind string, reported bool) bool {
 	return s.agentPromptsReported
 }
-func (s *seams) AgentBin() string { return s.agentBin }
+func (s *seams) AgentBin() string {
+	if s.live != nil {
+		return *s.live.bin.Load()
+	}
+	return s.agentBin
+}
+
+// liveHooks are a program's own copies of the agents' hooks read off the loop (Spawn, CodexHere,
+// AgentBin), each read and set atomically.
+type liveHooks struct {
+	spawn     atomic.Pointer[func(pty.Cmd) (terminal.TerminalProcess, error)]
+	codexHere atomic.Pointer[func(environ []string, args ...string) error]
+	bin       atomic.Pointer[string]
+}
+
+// ownHooks gives s its own live hooks, made from its fields: a Host calls it once, as it is made,
+// before anything reads them.
+func (s *seams) ownHooks() {
+	spawn, codexHere, bin := s.agentSpawn, s.agentCodexHere, s.agentBin
+	l := &liveHooks{}
+	l.spawn.Store(&spawn)
+	l.codexHere.Store(&codexHere)
+	l.bin.Store(&bin)
+	s.live = l
+}
+
+// setAgentSpawn, setAgentCodexHere and setAgentBin set a hook read off the loop: the program's own
+// copy once its Host is made (on the loop, then), else the field it is made from.
+func (s *seams) setAgentSpawn(f func(pty.Cmd) (terminal.TerminalProcess, error)) {
+	if s.live != nil {
+		s.live.spawn.Store(&f)
+		return
+	}
+	s.agentSpawn = f
+}
+
+func (s *seams) setAgentCodexHere(f func(environ []string, args ...string) error) {
+	if s.live != nil {
+		s.live.codexHere.Store(&f)
+		return
+	}
+	s.agentCodexHere = f
+}
+
+func (s *seams) setAgentBin(bin string) {
+	if s.live != nil {
+		s.live.bin.Store(&bin)
+		return
+	}
+	s.agentBin = bin
+}
 
 // shellSpawnSeam is the test's shell stand-in (seams.shellSpawn), nil for the user's shell: what
 // the terminals ask for each new shell (terminals.shellSpawn).

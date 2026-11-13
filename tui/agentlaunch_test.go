@@ -36,7 +36,7 @@ func TestAnAgentRetriedWhileStartedAgainReadsNoLiveState(t *testing.T) {
 	held := &pipeShell{r: pr, w: pw, done: make(chan struct{})} // the retry's program, made before
 	t.Cleanup(func() { held.Close() })
 	s := seamsWithEnv(t, nil)
-	s.agentSpawn = func(c pty.Cmd) (terminal.TerminalProcess, error) {
+	s.setAgentSpawn(func(c pty.Cmd) (terminal.TerminalProcess, error) {
 		switch spawns.Add(1) {
 		case 1:
 			return nil, errors.New("no such program")
@@ -45,7 +45,7 @@ func TestAnAgentRetriedWhileStartedAgainReadsNoLiveState(t *testing.T) {
 			return held, nil
 		}
 		return pty.Start(c)
-	}
+	})
 	profiles := []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}
 	_, r, _ := runAgentTUIWith(t, t.TempDir(), profiles, "heron", nil, Options{seams: s})
 	r.leader(t, 'g')

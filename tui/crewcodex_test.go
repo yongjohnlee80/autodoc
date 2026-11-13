@@ -33,7 +33,7 @@ func (r *codexRuns) run(environ []string, args ...string) error {
 func TestACodexAgentsStepLooksOnItsOwnServer(t *testing.T) {
 	a, c, _ := crewAgents(t, crewKinds)
 	runs := &codexRuns{calls: make(chan []string, 4), environ: make(chan []string, 4)}
-	seamsOf(a).agentCodexHere = runs.run
+	seamsOf(a).setAgentCodexHere(runs.run)
 	seamsOf(a).agentSetupRun = func(string, string, []string) (crew.Setup, error) {
 		return crew.Setup{Env: map[string]string{crew.EnvCodexServer: "/agent/codex.sock"},
 			After: [][]string{{"crew", "endpoint", "--codex-here", "--since", crew.SetupSince, "--wait", "60s"}}}, nil
@@ -68,7 +68,7 @@ func TestACrewCodexAgentIsRegisteredAsItStarts(t *testing.T) {
 		}
 		a, c, _ := crewAgents(t, crewKinds)
 		runs := &codexRuns{calls: make(chan []string, 4)}
-		seamsOf(a).agentCodexHere = runs.run
+		seamsOf(a).setAgentCodexHere(runs.run)
 		p, _ := a.Profile("codex-one")
 		instance, err := a.StartInstance(p)
 		if err != nil {
@@ -106,7 +106,7 @@ func TestACrewCodexAgentIsRegisteredAsItStarts(t *testing.T) {
 	t.Run("on a host that can't run its server", func(t *testing.T) {
 		a, c, _ := crewAgentsOn(t, crewKinds, true)
 		runs := &codexRuns{calls: make(chan []string, 4)}
-		seamsOf(a).agentCodexHere = runs.run
+		seamsOf(a).setAgentCodexHere(runs.run)
 		p, _ := a.Profile("codex-one")
 		instance, err := a.StartInstance(p)
 		if err != nil {
@@ -138,7 +138,7 @@ func TestACrewCodexAgentIsRegisteredAsItStarts(t *testing.T) {
 	t.Run("another CLI's spawn runs none", func(t *testing.T) {
 		a, c, _ := crewAgents(t, crewKinds)
 		runs := &codexRuns{calls: make(chan []string, 4)}
-		seamsOf(a).agentCodexHere = runs.run
+		seamsOf(a).setAgentCodexHere(runs.run)
 		p, _ := a.Profile("claude-one")
 		instance, err := a.StartInstance(p)
 		if err != nil {

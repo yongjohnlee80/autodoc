@@ -235,7 +235,7 @@ func runSetupTUIIn(t *testing.T, dir string, profiles []agents.AgentProfile, def
 	maps.Copy(prefs, more)
 	d = startDaemonWith(t, "", files, daemonOpts{prefs: prefs})
 	opt.AgentDir, opt.ConfigPath = dir, agentConfig
-	opt.seams.agentBin = bin
+	opt.seams.setAgentBin(bin)
 	opt.seams.agentPromptsReported = func(string, bool) bool { return true }
 	r = runTUI(t, NewSession(d.sock, nil), opt)
 	r.connected(t)

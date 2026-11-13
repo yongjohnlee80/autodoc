@@ -26,10 +26,10 @@ func retryTab(t *testing.T, a *agents.Agents, c *identityHost, codename string) 
 func TestARetryAfterAFailedCrewStartSpawnsNothing(t *testing.T) {
 	a, c, w := startingCrewAgents(t, oneTwo)
 	spawns := 0
-	seamsOf(a).agentSpawn = func(pty.Cmd) (terminal.TerminalProcess, error) {
+	seamsOf(a).setAgentSpawn(func(pty.Cmd) (terminal.TerminalProcess, error) {
 		spawns++
 		return nil, errors.New("no such program")
-	}
+	})
 	p, _ := a.Profile("one")
 	if _, err := a.StartInstance(p); err != nil {
 		t.Fatal(err)
@@ -51,10 +51,10 @@ func TestARetryAfterAFailedCrewStartSpawnsNothing(t *testing.T) {
 func TestARetryAfterACrewAgentExitedSpawnsNothing(t *testing.T) {
 	a, c, _ := startingCrewAgents(t, oneTwo)
 	spawns := 0
-	seamsOf(a).agentSpawn = func(pty.Cmd) (terminal.TerminalProcess, error) {
+	seamsOf(a).setAgentSpawn(func(pty.Cmd) (terminal.TerminalProcess, error) {
 		spawns++
 		return newFakeTerminal(), nil
-	}
+	})
 	p, _ := a.Profile("one")
 	if _, err := a.StartInstance(p); err != nil {
 		t.Fatal(err)

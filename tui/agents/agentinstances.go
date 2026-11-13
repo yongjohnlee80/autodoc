@@ -82,9 +82,9 @@ type AgentInstance struct {
 
 // agentLaunch is an agent tab's start as the loop last set it up (republishLaunch): the instance's
 // refusal, its crew session's context and setup, and its process's environment, all of which the
-// loop writes. Immutable once published. The window's seams, build and config are not in it: they
-// are fixed once the agents are made (NewAgents; the host's are its own copy), so the start reads
-// them where they are.
+// loop writes. Immutable once published. The window's seams are not in it: they are read when used,
+// and the ones the start reads off the loop are safe to read there while the loop sets them
+// (AgentSeams). Nor is agentConfig, which NewAgents alone writes.
 type agentLaunch struct {
 	refusal    error
 	crewed     bool
