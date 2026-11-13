@@ -4324,6 +4324,10 @@ WHAT A KEY NEEDS
         <source>%1: it is in no workspace: no search, links, backlinks, frontmatter check or embeddings</source>
         <translation>%1: どのワークスペースにも属していません: 検索、リンク、バックリンク、フロントマター検査、埋め込みはありません</translation>
     </message>
+    <message id="autodoc.notice.files.it_was_read_again_from_disk_meanwhile_save_it_ag">
+        <source>it was read again from disk meanwhile; save it again</source>
+        <translation>その間にディスクから読み込み直されました: もう一度保存してください</translation>
+    </message>
     <message id="autodoc.notice.files.kept_as_it_was_saved_while_it_was_read">
         <source>kept %1 as it was saved while it was read</source>
         <translation>読み込み中に保存された状態のまま %1 を保持しました</translation>
@@ -4376,6 +4380,10 @@ WHAT A KEY NEEDS
         <source>saved %1, but it could not be read back: %2 — reload before saving again</source>
         <translation>%1 を保存しましたが、読み戻せませんでした: %2 — 再度保存する前に再読み込みしてください</translation>
     </message>
+    <message id="autodoc.notice.files.saved_but_the_disk_differs_from_what_was_written">
+        <source>saved %1, but the disk differs from what was written — reload before saving again</source>
+        <translation>%1 を保存しましたが、ディスクの内容が書き込んだものと異なります — 再度保存する前に再読み込みしてください</translation>
+    </message>
     <message id="autodoc.notice.files.saved_the_draft_as">
         <source>saved the draft as %1</source>
         <translation>下書きを %1 として保存しました</translation>
@@ -4391,6 +4399,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.files.the_connection_to_the_backend_was_renewed_meanwh">
         <source>the connection to the backend was renewed meanwhile; open it again</source>
         <translation>その間にバックエンドとの接続が更新されました: もう一度開いてください</translation>
+    </message>
+    <message id="autodoc.notice.files.the_connection_to_the_backend_was_renewed_save_it">
+        <source>the connection to the backend was renewed meanwhile; save it again</source>
+        <translation>その間にバックエンドとの接続が更新されました: もう一度保存してください</translation>
     </message>
     <message id="autodoc.notice.find.find_cleared">
         <source>find cleared</source>

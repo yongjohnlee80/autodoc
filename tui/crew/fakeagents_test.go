@@ -121,6 +121,7 @@ func (c *identityHost) Prefs() feature.PrefsView { return c.p }
 func (c *identityHost) SetPref(name, value string) { c.p.values[name] = value }
 
 func (c *identityHost) Set(name string, value any) { c.state[name] = value }
+func (c *identityHost) Say(msg string)             { c.state["App.status"] = msg }
 
 func (c *identityHost) SetFormText(name, value string) { c.Set(name, value) }
 

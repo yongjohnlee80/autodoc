@@ -4329,6 +4329,10 @@ LO QUE NECESITA UNA TECLA
         <source>%1: it is in no workspace: no search, links, backlinks, frontmatter check or embeddings</source>
         <translation>%1: no está en ningún espacio de trabajo: sin búsqueda, enlaces, retroenlaces, comprobación de frontmatter ni embeddings</translation>
     </message>
+    <message id="autodoc.notice.files.it_was_read_again_from_disk_meanwhile_save_it_ag">
+        <source>it was read again from disk meanwhile; save it again</source>
+        <translation>se volvió a leer del disco entretanto; vuelve a guardarlo</translation>
+    </message>
     <message id="autodoc.notice.files.kept_as_it_was_saved_while_it_was_read">
         <source>kept %1 as it was saved while it was read</source>
         <translation>%1 se conservó tal como se guardó mientras se leía</translation>
@@ -4381,6 +4385,10 @@ LO QUE NECESITA UNA TECLA
         <source>saved %1, but it could not be read back: %2 — reload before saving again</source>
         <translation>%1 guardado, pero no se pudo volver a leer: %2 — recarga antes de guardar de nuevo</translation>
     </message>
+    <message id="autodoc.notice.files.saved_but_the_disk_differs_from_what_was_written">
+        <source>saved %1, but the disk differs from what was written — reload before saving again</source>
+        <translation>%1 guardado, pero el disco difiere de lo escrito — recarga antes de guardar de nuevo</translation>
+    </message>
     <message id="autodoc.notice.files.saved_the_draft_as">
         <source>saved the draft as %1</source>
         <translation>borrador guardado como %1</translation>
@@ -4396,6 +4404,10 @@ LO QUE NECESITA UNA TECLA
     <message id="autodoc.notice.files.the_connection_to_the_backend_was_renewed_meanwh">
         <source>the connection to the backend was renewed meanwhile; open it again</source>
         <translation>la conexión con el backend se renovó entretanto; vuelve a abrirlo</translation>
+    </message>
+    <message id="autodoc.notice.files.the_connection_to_the_backend_was_renewed_save_it">
+        <source>the connection to the backend was renewed meanwhile; save it again</source>
+        <translation>la conexión con el backend se renovó entretanto; vuelve a guardarlo</translation>
     </message>
     <message id="autodoc.notice.find.find_cleared">
         <source>find cleared</source>
