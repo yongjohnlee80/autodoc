@@ -32,6 +32,8 @@ func (s *scopedPanelHost) WidgetsChanged() { s.core.WidgetsChanged() }
 
 func (s *scopedPanelHost) Notify(msg string) { s.core.Notify(msg) }
 
+func (s *scopedPanelHost) Say(msg string) { s.core.Say(msg) }
+
 func (s *scopedPanelHost) Tr(id string) string { return s.core.Tr(id) }
 
 func (s *scopedPanelHost) Trf(id string, args ...any) string {
