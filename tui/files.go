@@ -852,7 +852,6 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 	}
 	b.saving = true
 	b.saves++
-	serial := b.saves // this save among b's: a later one is under way when b.saves has moved on
 	settled := func() {
 		b.saving = false
 		if b.recheck {
@@ -867,6 +866,8 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 		same    bool  // the read-back holds what was written
 	}
 	h.say(h.trf("autodoc.notice.files.saving", p))
+	// this save's own words on the status line: a later say, a later save's included, moves it on
+	saidAt := h.saidSeq
 	onDisk := withEndings(content, b.file.crlf) // the file's own line breaks, CRLF where it had them
 	do(h, func(ctx context.Context) answer {
 		ctx = withAuthority(ctx, who)
@@ -894,7 +895,7 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 			// a stale answer is not applied to b, which keeps its unsaved marker, but the status line,
 			// which said "saving p…", says what became of the save, or it would seem under way for ever
 			if slices.Contains(h.buffers, b) { // b closed: nothing left to say it of
-				h.saveLost(p, committed, landed, a.readErr, h.session.Gen() != sess, b.file.gen != gen, b.saves == serial)
+				h.saveLost(p, committed, landed, a.readErr, h.session.Gen() != sess, b.file.gen != gen, h.saidSeq == saidAt)
 			}
 			return
 		}
@@ -959,15 +960,16 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 // was written; else saved, but not read back (readErr) or differing on disk, and to reload before
 // saving again. A write that did not land says why it was dropped, the connection renewed
 // (renewed) or the buffer read again from disk (reread), and to save it again. A save that landed
-// whole asks nothing of the user: it takes the status line only while that still says its own
-// "saving p…" (latest: no later save of the buffer has begun, whose words those would be), so a
-// newer word there (the read again's "opened p") stays; the notice says it either way.
-func (h *Host) saveLost(p string, committed, landed bool, readErr error, renewed, reread, latest bool) {
+// whole asks nothing of the user: it takes the status line only while that still holds its own
+// "saving p…" (own: nothing said since, counted by say, not read from the text, which a later save
+// of p says too), so a newer word there (the read again's "opened p", a later save's) stays; the
+// notice says it either way.
+func (h *Host) saveLost(p string, committed, landed bool, readErr error, renewed, reread, own bool) {
 	var msg string
 	switch {
 	case landed:
 		msg = h.trf("autodoc.notice.files.saved", p)
-		if !latest || h.said != h.trf("autodoc.notice.files.saving", p) {
+		if !own {
 			h.notify(msg)
 			return
 		}

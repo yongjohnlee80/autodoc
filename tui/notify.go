@@ -129,7 +129,7 @@ func (h *Host) keepNotice(msg string) { h.noticeLog.Keep(msg) }
 
 // say is a message about the page or the view, on the status line's right until the next.
 func (h *Host) say(msg string) {
-	h.said = msg
+	h.saidSeq++
 	h.set("App.status", msg)
 }
 
