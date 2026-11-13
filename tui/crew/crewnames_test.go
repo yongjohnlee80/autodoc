@@ -2,6 +2,7 @@ package crew
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -56,10 +57,31 @@ func renamedTo(t *testing.T, base, scope, old string) {
 			t.Errorf("%s: %q, %v; want %q", f.path, b, err, f.body)
 		}
 	}
-	for _, p := range []string{filepath.Join(base, ".crew-scopes", old), filepath.Join(base, ".crew-todos", old), filepath.Join(base, "kb", old)} {
+	for _, p := range []string{filepath.Join(base, ".crew-scopes", old), filepath.Join(base, ".crew-todos", old)} {
 		if _, err := os.Lstat(p); err == nil {
 			t.Errorf("the old name is still there: %s", p)
 		}
+	}
+	linkedFrom(t, filepath.Join(base, "kb", old), enc)
+}
+
+// linkedFrom checks the agents' folder renamed from old is reached by old's name: a relative link to
+// enc beside it on Linux and macOS, and nothing at all on Windows, which renames no folder in use.
+func linkedFrom(t *testing.T, old, enc string) {
+	t.Helper()
+	fi, err := os.Lstat(old)
+	if runtime.GOOS == "windows" {
+		if err == nil {
+			t.Errorf("the old name is still there: %s", old)
+		}
+		return
+	}
+	if err != nil || fi.Mode()&fs.ModeSymlink == 0 {
+		t.Errorf("the renamed folder's old name %s: %v, %v; want a link to %s", old, fi, err, enc)
+		return
+	}
+	if to, err := os.Readlink(old); err != nil || to != enc {
+		t.Errorf("the old name %s links to %q, %v; want %q beside it", old, to, err, enc)
 	}
 }
 
@@ -140,9 +162,7 @@ func TestADotNamedWorkspacesCrewNamesAreRenamed(t *testing.T) {
 	if b, err := os.ReadFile(moved); err != nil || string(b) != "zen's guide in .kb" {
 		t.Errorf("the .kb workspace's agent folder: %q, %v; want it renamed, its guide kept", b, err)
 	}
-	if _, err := os.Lstat(filepath.Join(base, ".kb", old)); err == nil {
-		t.Error("the .kb workspace's old name is still there")
-	}
+	linkedFrom(t, filepath.Join(base, ".kb", old), agents.CrewFileName(scope))
 	if _, err := os.Stat(own); err != nil {
 		t.Errorf("the agents' own .crew-fallbacks entry was moved: %v", err)
 	}
@@ -257,5 +277,46 @@ func TestAScopesOwnSpellingIsRenamedOnlyWhereItDiffers(t *testing.T) {
 	renamedTo(t, base, scope, scope)
 	if _, err := os.Stat(same); err != nil {
 		t.Errorf("a name already CrewFileName's was moved: %v", err)
+	}
+}
+
+// A window started before the rename still names its agents' folder by the old name: on Linux and
+// macOS that name is left a link to the renamed folder, so a file the old window writes by it lands
+// in the folder, and a second run renames nothing and changes nothing. Windows renames no folder in
+// use, and leaves none. The mutant, named here: no link left (the old window's agents lose their
+// crew context, and it makes the old folder again).
+func TestARenamedFolderIsStillReachedByItsOldName(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows renames no folder in use: no link is left there")
+	}
+	base := t.TempDir()
+	const scope = "autodoc:0000000000000011"
+	old := earlier(scope)
+	earlierBuild(t, base, old)
+	if kept, err := migrateCrewNames(base); err != nil || len(kept) != 0 {
+		t.Fatalf("migrateCrewNames: kept %v, %v", kept, err)
+	}
+	// what the old window writes by the path it kept
+	if err := os.WriteFile(filepath.Join(base, "kb", old, "zen", "context.json"), []byte("the old window's"), 0o600); err != nil {
+		t.Fatalf("a write by the old name: %v", err)
+	}
+	moved := filepath.Join(base, "kb", agents.CrewFileName(scope), "zen", "context.json")
+	if b, err := os.ReadFile(moved); err != nil || string(b) != "the old window's" {
+		t.Errorf("the file written by the old name, in the renamed folder: %q, %v", b, err)
+	}
+	if kept, err := migrateCrewNames(base); err != nil || len(kept) != 0 {
+		t.Fatalf("a second run: kept %v, %v", kept, err)
+	}
+	renamedTo(t, base, scope, old)
+	entries, err := os.ReadDir(filepath.Join(base, "kb"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	if want := []string{agents.CrewFileName(scope), old}; !slices.Equal(names, want) && !slices.Equal(names, []string{old, agents.CrewFileName(scope)}) {
+		t.Errorf("the workspace's entries after a second run: %v, want the folder and its link alone", names)
 	}
 }
