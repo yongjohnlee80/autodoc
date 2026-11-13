@@ -257,24 +257,46 @@ In the code: `core/crew/claim.go`, `core/crew/proc.go`, `tui/crewhost.go`
 
 ## Crew names on disk
 
-A crew identity becomes a file or folder name only through one function, `crewFileName`, which is
-golib's `paths.Encode`: the same name on every OS. A byte other than a lower-case letter, a digit,
-`.`, `_` or `-` becomes `%XX`, so a scope's colon (`autodoc:1f2e…` → `autodoc%3A1f2e…`), a
-separator or a name Windows reserves can't reach a path, and two identities never share a name.
-For now that covers the scope (an agent's folder under its workspace, `.crew-scopes/`,
+A crew identity becomes a file or folder name only through one function, `CrewFileName`, which
+is `core/paths.Name`: one rule per OS, decided in that one function. The bytes it escapes are
+golib's `paths.Encode`'s: everything but a lower-case letter, a digit, `.`, `_` or `-`, so a
+separator or a name Windows reserves can't reach a path, two names differing only by case stay
+apart on a case-blind disk, and two identities never share a name.
+
+- **An escape is `@` and two hex digits, never `%`.** A program handed the folder may
+  percent-decode its path (OpenCode does, for its working folder), and a `%` name then names a
+  folder that isn't there. No crew name holds a `%`, so every decode leaves it as it is.
+- **A scope's colon is kept where the OS can hold one.** On Linux and macOS
+  `autodoc:1f2e…` is the folder's name; on Windows, which can't hold a colon, it is
+  `autodoc@3A1f2e…`.
+- **It reads back strictly.** `core/paths.ParseName` takes only what `Name` writes on that OS, so a
+  colon is refused on Windows and `@3A` elsewhere, and two names never decode to one identity.
+  Encode never writes an `@` of its own (it escapes one), so writing its escapes with `@` is one to
+  one.
+
+This replaces an earlier rule, "the same name on every OS", which wrote every escape as `%XX`
+(`autodoc%3A1f2e…`). OpenCode agents started in AutoDoc's own folders could not find their
+working folder under it.
+
+For now this covers the scope (an agent's folder under its workspace, `.crew-scopes/`,
 `.crew-todos/`) and the codename (an agent's folder under its scope). Codenames are lower case,
 digits and hyphens, so theirs are unchanged.
 
-Builds before this one wrote a scope as it is, which Windows can't hold. Every window renames those
-names once at its start, before anything reads the folders:
+Earlier builds wrote two other forms: a scope as it is, and then every escape as `%XX`. Every window
+renames those names once at its start, before anything reads the folders:
 
-- Only a name holding a colon is renamed, since every scope has one and nothing else AutoDoc writes
-  there does.
+- A name in the `%XX` form, or one holding a colon that `Name` would write otherwise, is renamed;
+  a name already in `Name`'s form is left as it is, and so is any other.
 - Each rename is a single rename in its own folder, under a file lock in the agents' folder
   (`.crew-names.lock`), so two windows starting together rename once.
 - A run cut short leaves each name old or new, never half, and the next start renames the rest.
 - An old name whose new one is already there is left as it is, and so is the new one: nothing is
   written over. The window says which were kept.
+- A folder an agent still works in, another window's, is renamed as any other on Linux and macOS,
+  where the agent keeps it by its inode. Windows refuses to rename a folder in use: the window says
+  so, and the next start tries again.
+- Each agent's folder files and command line are written afresh at every start, after the rename,
+  so none still names an old path.
 - It is one way: no build writes an old name again. An agent's folder moves with its scope's
   name, so a CLI that keys its state on the folder's path (Claude Code's project memory, say) sees
   it as a new folder once. The release notes say so.
@@ -981,9 +1003,9 @@ name when the agent works in its own folder (a window's agent), else its absolut
 agent works in the user's project; Neovim starts it from its argv, with no shell of its own). The
 config's JSON never goes on the command line, since a shell may change its quotes and, on Windows,
 the build's backslashes. Nor does the folder's own name: a crew folder's name holds the scope's
-`:` encoded (`%3A`), and on Windows a CLI's `.cmd` shim reads its arguments again through
-`cmd.exe`, where `%3` is its third argument, so no command line through a `.cmd` shim may name
-that folder, from either host. The file holds the servers' commands and arguments, and an environment only
+`:` (`@3A` on Windows), and a CLI's `.cmd` shim on Windows reads its arguments again through
+`cmd.exe`, while a PowerShell line reads an `@` at a word's start as a splat, so no command line
+needs to name that folder, from either host. The file holds the servers' commands and arguments, and an environment only
 for a server that has one of its own (the crew's server has none), never a credential. Like every
 folder file, the host writes it private to the user, over an earlier run's. It is never the folder's
 `.mcp.json`, whose servers the user would approve first. A host that gives no folder of the agent's

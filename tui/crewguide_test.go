@@ -212,15 +212,18 @@ func TestACrewClaudeAgentOnMCPMailStartsWithItsServer(t *testing.T) {
 	if err != nil || len(args) == 0 {
 		t.Fatalf("the spawn: %v, args %v", err, args)
 	}
-	// the folder's name holds the scope's ":" encoded (%3A), which a CLI's .cmd shim on Windows would
-	// read as its third argument: the command line names the file as the launch's working folder
-	// reaches it, its bare name, and never the folder (so the shell carries it on every OS)
+	// the folder's name holds the scope's ":" (escaped "@3A" on Windows), which no command line
+	// should carry: a CLI's .cmd shim reads its arguments again through cmd.exe, and a PowerShell line
+	// reads an "@" at a word's start as a splat. The command line names the file as the launch's
+	// working folder reaches it, its bare name, and never the folder (so the shell carries it on
+	// every OS)
 	line := args[len(args)-1]
-	if !strings.Contains(instance.State().Dir, "%") {
-		t.Fatalf("the agent's folder %s holds no encoded name: the cell's premise", instance.State().Dir)
+	scope := filepath.Base(filepath.Dir(instance.State().Dir))
+	if !strings.ContainsAny(scope, ":@") {
+		t.Fatalf("the agent's scope folder %s holds no escaped or colon name: the cell's premise", scope)
 	}
 	if !strings.Contains(line, "--mcp-config") || strings.Contains(line, "--strict-mcp-config") || strings.Contains(line, "mcpServers") ||
-		!strings.Contains(line, crew.ClaudeMCPConfig) || strings.Contains(line, "%") {
+		!strings.Contains(line, crew.ClaudeMCPConfig) || strings.Contains(line, scope) || strings.Contains(line, "%") {
 		t.Fatalf("the spawn's line %q: want --mcp-config naming %s by its bare name, never the folder, the JSON or --strict-mcp-config", line, crew.ClaudeMCPConfig)
 	}
 	// reached from where the program is launched, never re-derived: the file is in its working folder
