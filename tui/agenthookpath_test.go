@@ -21,7 +21,7 @@ func TestTheCommandsAutoDocWritesNameTheBuildByItsPath(t *testing.T) {
 		t.Errorf("crew setup's arguments %q: want --autodoc %s", args, agents.ShellQuote(build))
 	}
 	a, c, _ := crewAgents(t, crewKinds)
-	seamsOf(a).agentBin = build
+	seamsOf(a).setAgentBin(build)
 	p, _ := a.Profile("claude-one")
 	instance, err := a.StartInstance(p)
 	if err != nil {

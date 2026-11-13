@@ -23,12 +23,12 @@ func startedEnv(a *agents.Agents, c *identityHost, instance *agents.AgentInstanc
 // ends (as the cell's cleanup ends it).
 func startedCmd(a *agents.Agents, c *identityHost, instance *agents.AgentInstance) (started pty.Cmd, spawned bool, err error) {
 	cfg := c.panel.configs[instance.State().Tab]
-	spawn := seamsOf(a).agentSpawn
-	defer func() { seamsOf(a).agentSpawn = spawn }()
-	seamsOf(a).agentSpawn = func(cmd pty.Cmd) (terminal.TerminalProcess, error) {
+	spawn := seamsOf(a).Spawn()
+	defer func() { seamsOf(a).setAgentSpawn(spawn) }()
+	seamsOf(a).setAgentSpawn(func(cmd pty.Cmd) (terminal.TerminalProcess, error) {
 		started, spawned = cmd, true
 		return newFakeTerminal(), nil
-	}
+	})
 	_, err = cfg.Start(pty.Cmd{Path: cfg.Command, Args: cfg.Args, Dir: cfg.Dir})
 	return started, spawned, err
 }

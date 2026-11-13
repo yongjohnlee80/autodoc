@@ -524,6 +524,7 @@ func newHost(session *Session, opt Options) *Host {
 	if opt.seams != nil {
 		h.seams = *opt.seams // a copy: nothing the caller changes later reaches this program
 	}
+	h.seams.ownHooks() // its own copies of the hooks an agent's start reads off the loop
 	h.themeCatalog = usertheme.Open(opt.ThemeDir)
 	if opt.NoteTranslator != nil {
 		opt.NoteTranslator(h.trf)
