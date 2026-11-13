@@ -99,8 +99,8 @@ func (s *Server) docVerbs() []module.Verb {
 			return &versionJSON{Version: string(v)}, nil
 		})
 	}
-	readErrs := []int64{CodeNoSuchWorkspace, CodeNotFound, CodeUnsupported, golibrpc.CodeAccessDenied}
-	writeErrs := []int64{CodeNoSuchWorkspace, CodeNotFound, CodeConflict, CodeCommitted, CodeUnsupported, golibrpc.CodeAccessDenied}
+	readErrs := []int64{CodeNoSuchWorkspace, CodeNotFound, CodeUnsupported, golibrpc.CodeAccessDenied, CodeFileRefused}
+	writeErrs := []int64{CodeNoSuchWorkspace, CodeNotFound, CodeConflict, CodeCommitted, CodeUnsupported, golibrpc.CodeAccessDenied, CodeFileRefused}
 	return []module.Verb{
 		read(module.Contract{Verb: "doc.read", Effect: module.EffectRead, Since: 1, Scope: ws, Audience: agent, Result: "{content, version}", Errors: readErrs,
 			Doc: "The file's text and its version. A format a build derives (PDF, DOCX) answers its derived Markdown, read-only; when that is longer than one answer carries, it is cut at a paragraph's end and its last line, after a --- rule, begins [autodoc: truncated]: that line is AutoDoc's, not the document's."}, false),

@@ -3,6 +3,7 @@ package rpc
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 
 	"github.com/yongjohnlee80/golib/errs"
 	"github.com/yongjohnlee80/golib/search/embed"
@@ -19,6 +20,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
+	"github.com/yongjohnlee80/autodoc/internal/fileinuse"
 )
 
 // The error codes, chosen by what the client does next
@@ -39,6 +41,7 @@ const (
 	CodeProviderRefused   int64 = -32068 // the provider refused: switch provider, or fix its key
 	CodeSwitching         int64 = -32069 // a new model is filling: search lexically until it is ready
 	CodeRankUnavailable   int64 = -32070 // a build that answers ranked results or none could not rank: retry later
+	CodeFileRefused       int64 = -32071 // the system refused the file: in use by another program (try again), or not permitted
 )
 
 // publicErrs maps core's errors to codes, first match wins. Only the message here crosses the
@@ -159,5 +162,22 @@ func wireErr(err error) error {
 			return &golibrpc.Error{Code: pe.Code, Message: pe.Message}
 		}
 	}
+	// the operating system's refusals, said as such, not as an internal error; their path stays in
+	// the log as any detail does
+	switch {
+	case fileinuse.Is(err):
+		return errFileInUse
+	case errors.Is(err, fs.ErrPermission):
+		return errOSRefused
+	}
 	return err
 }
+
+// errFileInUse and errOSRefused are a file the system refused: held by another program (a Windows
+// sharing or lock violation, internal/fileinuse), or not permitted. Neither is the daemon's fault,
+// and neither is access denied, which a client reads as a call this peer may not make (a remote
+// daemon's file.*, a gated script past its bounds).
+var (
+	errFileInUse = &golibrpc.Error{Code: CodeFileRefused, Message: "the file is in use by another program: try again in a moment"}
+	errOSRefused = &golibrpc.Error{Code: CodeFileRefused, Message: "the operating system refused access to the file"}
+)

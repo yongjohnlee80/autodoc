@@ -233,12 +233,16 @@ import (
 // inbox.list's more, true when a page holds the items it could (by count or by bytes) and an older
 // one is there below the last; the undeliverable notices are the newest only, never paged, so their
 // more is false. A client below 53 reads items alone and pages on until a page comes back empty.
+// Protocol 55 is a file the system refused (rpc.file_refused, -32071): held by another program, a
+// Windows sharing or lock violation, or not permitted, answered by file.* and doc.* as such, where it
+// was an internal error. A client that doesn't know the code reads its message.
+//
 // Protocol 54 is who an assignment reaches (docs/decisions/todos.md#an-assignment-says-who-it-reaches):
 // todos.assign's and todos.add's crew, the assigner's crew scope, and their answers' reach, where
 // mail to a bare agent assignee from that scope goes (own, another project's, none, or ambiguous,
 // with a warning when nobody will be told). crew routes nothing. A session below 54 is refused
 // crew, and its answers carry no reach.
-const Protocol int64 = 54
+const Protocol int64 = 55
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every
