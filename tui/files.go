@@ -422,6 +422,9 @@ func (h *Host) loadInto(b *openBuffer, ws, p string, prev *editor.JumpPos, raw b
 				h.openLost(p, sess)
 				h.dropUnloaded(b)
 			}
+			if h.seams.readDropped != nil {
+				h.seams.readDropped(p)
+			}
 			return
 		}
 		if again && b.file.version != read {

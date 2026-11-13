@@ -14,17 +14,14 @@ import (
 // lostCall holds the first call of method whose second param is p, once armed, until released;
 // it says when it holds one.
 type lostCall struct {
-	armed    atomic.Bool
-	out      atomic.Bool // the held call let go, its answer not back yet
-	method   string
-	held     chan struct{}
-	answered chan struct{}
-	release  chan struct{}
-	once     sync.Once
+	armed   atomic.Bool
+	held    chan struct{}
+	release chan struct{}
+	once    sync.Once
 }
 
 func newLostCall() *lostCall {
-	return &lostCall{held: make(chan struct{}, 1), answered: make(chan struct{}, 1), release: make(chan struct{})}
+	return &lostCall{held: make(chan struct{}, 1), release: make(chan struct{})}
 }
 
 func (c *lostCall) free() { c.once.Do(func() { close(c.release) }) }
@@ -35,39 +32,17 @@ func (c *lostCall) seam(method, p string) func(string, []any) { return c.seamAt(
 
 // seamAt is seam for a call whose param i is p (file.locate's absolute path is its first).
 func (c *lostCall) seamAt(method string, i int, p string) func(string, []any) {
-	c.method = method
 	return func(m string, params []any) {
 		if m == method && len(params) > i && params[i] == p && c.armed.CompareAndSwap(true, false) {
 			c.held <- struct{}{}
 			<-c.release
-			c.out.Store(true)
 		}
 	}
 }
 
-// after is the session's after-call hook: it says when the held call's answer is back, on its way
-// to the loop.
-func (c *lostCall) after(m string) {
-	if m == c.method && c.out.CompareAndSwap(true, false) {
-		c.answered <- struct{}{}
-	}
-}
-
-// hold sets c's hooks on sess for method's call of param i, p.
+// hold sets c's hook on sess for method's call of param i, p.
 func (c *lostCall) hold(sess *Session, method string, i int, p string) {
 	sess.SetBeforeCall(c.seamAt(method, i, p))
-	sess.SetAfterCall(c.after)
-}
-
-// waitAnswered waits for the held call's answer to be back, within daemonWait: it reaches the loop
-// right after.
-func (c *lostCall) waitAnswered(t *testing.T) {
-	t.Helper()
-	select {
-	case <-c.answered:
-	case <-time.After(daemonWait):
-		t.Fatal("the held call never answered")
-	}
 }
 
 // waitHeld waits for the call to be held, within daemonWait.
@@ -131,6 +106,15 @@ func staleReadSaysNothing(t *testing.T, meanwhile func(r *running)) *running {
 	c := newLostCall()
 	sess := NewSession(d.sock, nil)
 	c.hold(sess, "doc.read", 1, "a.md")
+	dropped := make(chan struct{}, 1)
+	tune(t).readDropped = func(p string) { // on the loop, once the drop has said what it says
+		if p == "a.md" {
+			select { // never blocks the loop
+			case dropped <- struct{}{}:
+			default:
+			}
+		}
+	}
 	r := runTUI(t, sess, Options{})
 	t.Cleanup(c.free)
 	r.ready(t)
@@ -142,9 +126,11 @@ func staleReadSaysNothing(t *testing.T, meanwhile func(r *running)) *running {
 	renew(t, r)
 	meanwhile(r)
 	c.free()
-	c.waitAnswered(t)
-	onLoop(r, func() bool { return true }) // the answer's turn, posted as it came back, is behind this
-	time.Sleep(100 * time.Millisecond)
+	select {
+	case <-dropped: // the read's answer came to the loop and was dropped there, said or not
+	case <-time.After(daemonWait):
+		t.Fatal("a.md's read never answered")
+	}
 	if st := onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.status"); return v.Raw }); strings.Contains(st, "open a.md:") {
 		t.Fatalf("the status line says %q: a read no longer the buffer's own spoke for it", st)
 	}

@@ -99,6 +99,11 @@ type seams struct {
 	// (the cells count them, bufferkeys_test.go); nil in AutoDoc.
 	labelsResolved func()
 
+	// readDropped, when a test sets it, is told the path of each note's read whose answer loadInto
+	// dropped as stale, once it has said so or not (the cells of a silent drop wait on it,
+	// openlost_test.go); nil in AutoDoc.
+	readDropped func(p string)
+
 	// globeMapPage is the documents a page of the GlobeMap's map asks for; 0 is the daemon's
 	// default. A test makes it small, to read a map of a few documents over several pages.
 	globeMapPage int
