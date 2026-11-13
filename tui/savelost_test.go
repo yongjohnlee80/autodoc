@@ -180,35 +180,47 @@ func TestASaveWrittenButNotReadBackSaysSo(t *testing.T) {
 }
 
 // committedHeldRead is a window on a daemon serving kb's a.md, opened and edited, whose session
-// answers the next doc.write Committed, unsent, and holds the read-back after it (released by the
-// returned lostCall): failing with read when it is set, else read from the daemon, which still
-// holds "a\n", not what the save wrote.
-func committedHeldRead(t *testing.T, read error) (*running, *lostCall) {
+// answers the next doc.write Committed, unsent, and holds the read-back after it until the returned
+// release: failing with read when it is set (held before it is sent, then refused unsent); else
+// read from the daemon, which still holds "a\n", not what the save wrote, and held once answered,
+// so a renewed connection does not close the call under it.
+func committedHeldRead(t *testing.T, read error) (r *running, held <-chan struct{}, release func()) {
 	t.Helper()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
-	var wrote, armed atomic.Bool
-	c := newLostCall()
+	var wrote, armed, holdRead atomic.Bool
+	in, out := make(chan struct{}, 1), make(chan struct{})
+	release = sync.OnceFunc(func() { close(out) })
+	hold := func() { in <- struct{}{}; <-out }
 	sess := NewSession(d.sock, nil)
-	sess.SetBeforeCall(c.seam("doc.read", "a.md"))
+	sess.SetBeforeCall(func(method string, params []any) {
+		if read != nil && method == "doc.read" && len(params) > 1 && params[1] == "a.md" && holdRead.CompareAndSwap(true, false) {
+			hold()
+		}
+	})
 	sess.SetCallError(func(method string) error {
 		switch {
 		case method == "doc.write" && armed.CompareAndSwap(true, false):
 			wrote.Store(true)
-			c.armed.Store(true) // the read-back after it is held
+			holdRead.Store(true) // the read-back after it is held
 			return &golibrpc.Error{Code: rpc.CodeCommitted, Message: "written; a follow-up failed"}
 		case method == "doc.read" && read != nil && wrote.CompareAndSwap(true, false):
 			return read
 		}
 		return nil
 	})
-	r := runTUI(t, sess, Options{})
-	t.Cleanup(c.free)
+	sess.SetAfterCall(func(method string) {
+		if read == nil && method == "doc.read" && holdRead.CompareAndSwap(true, false) {
+			hold()
+		}
+	})
+	r = runTUI(t, sess, Options{})
+	t.Cleanup(release)
 	r.ready(t)
 	r.h.p.Post(func() { r.h.openPath("a.md") })
 	r.waitFile(t, "a.md")
 	onLoop(r, func() bool { r.h.editor.SetValue("edited\n"); r.h.edited(); return true })
 	armed.Store(true)
-	return r, c
+	return r, in, release
 }
 
 // TestAStaleCommittedSaveNeverSaysSaveItAgain: a write that landed (Committed) and whose answer
@@ -227,11 +239,15 @@ func TestAStaleCommittedSaveNeverSaysSaveItAgain(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			r, c := committedHeldRead(t, tc.read)
+			r, held, release := committedHeldRead(t, tc.read)
 			r.h.p.Post(r.h.save)
-			c.waitHeld(t) // committed; its read-back held
+			select { // committed; its read-back held
+			case <-held:
+			case <-time.After(daemonWait):
+				t.Fatal("the save's read-back was never held")
+			}
 			renew(t, r)
-			c.free()
+			release()
 			r.waitStatus(t, tc.want)
 			if s := onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.status"); return v.Raw }); strings.Contains(s, "save it again") {
 				t.Fatalf("the status says %q: a committed write told to be sent again", s)
