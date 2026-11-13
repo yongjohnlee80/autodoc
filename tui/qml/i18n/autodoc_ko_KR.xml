@@ -4376,6 +4376,10 @@ WHAT A KEY NEEDS
         <source>saved %1, but it could not be read back: %2 — reload before saving again</source>
         <translation>%1을(를) 저장했지만 다시 읽을 수 없습니다: %2 — 다시 저장하기 전에 다시 불러오세요</translation>
     </message>
+    <message id="autodoc.notice.files.saved_but_the_disk_differs_from_what_was_written">
+        <source>saved %1, but the disk differs from what was written — reload before saving again</source>
+        <translation>%1을(를) 저장했지만 디스크의 내용이 쓴 것과 다릅니다 — 다시 저장하기 전에 다시 불러오세요</translation>
+    </message>
     <message id="autodoc.notice.files.saved_the_draft_as">
         <source>saved the draft as %1</source>
         <translation>초안을 %1(으)로 저장함</translation>

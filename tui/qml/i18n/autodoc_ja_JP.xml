@@ -4380,6 +4380,10 @@ WHAT A KEY NEEDS
         <source>saved %1, but it could not be read back: %2 — reload before saving again</source>
         <translation>%1 を保存しましたが、読み戻せませんでした: %2 — 再度保存する前に再読み込みしてください</translation>
     </message>
+    <message id="autodoc.notice.files.saved_but_the_disk_differs_from_what_was_written">
+        <source>saved %1, but the disk differs from what was written — reload before saving again</source>
+        <translation>%1 を保存しましたが、ディスクの内容が書き込んだものと異なります — 再度保存する前に再読み込みしてください</translation>
+    </message>
     <message id="autodoc.notice.files.saved_the_draft_as">
         <source>saved the draft as %1</source>
         <translation>下書きを %1 として保存しました</translation>

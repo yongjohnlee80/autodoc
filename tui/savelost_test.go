@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -176,4 +177,84 @@ func TestASaveWrittenButNotReadBackSaysSo(t *testing.T) {
 	r := answeringNote(t, &golibrpc.Error{Code: rpc.CodeCommitted, Message: "written; a follow-up failed"}, errors.New("no read today"))
 	r.h.p.Post(r.h.save)
 	r.waitStatus(t, "saved a.md, but it could not be read back: no read today — reload before saving again")
+}
+
+// committedHeldRead is a window on a daemon serving kb's a.md, opened and edited, whose session
+// answers the next doc.write Committed, unsent, and holds the read-back after it (released by the
+// returned lostCall): failing with read when it is set, else read from the daemon, which still
+// holds "a\n", not what the save wrote.
+func committedHeldRead(t *testing.T, read error) (*running, *lostCall) {
+	t.Helper()
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	var wrote, armed atomic.Bool
+	c := newLostCall()
+	sess := NewSession(d.sock, nil)
+	sess.SetBeforeCall(c.seam("doc.read", "a.md"))
+	sess.SetCallError(func(method string) error {
+		switch {
+		case method == "doc.write" && armed.CompareAndSwap(true, false):
+			wrote.Store(true)
+			c.armed.Store(true) // the read-back after it is held
+			return &golibrpc.Error{Code: rpc.CodeCommitted, Message: "written; a follow-up failed"}
+		case method == "doc.read" && read != nil && wrote.CompareAndSwap(true, false):
+			return read
+		}
+		return nil
+	})
+	r := runTUI(t, sess, Options{})
+	t.Cleanup(c.free)
+	r.ready(t)
+	r.h.p.Post(func() { r.h.openPath("a.md") })
+	r.waitFile(t, "a.md")
+	onLoop(r, func() bool { r.h.editor.SetValue("edited\n"); r.h.edited(); return true })
+	armed.Store(true)
+	return r, c
+}
+
+// TestAStaleCommittedSaveNeverSaysSaveItAgain: a write that landed (Committed) and whose answer
+// comes stale, the connection renewed while its read-back is out, is never told to be saved again
+// (Committed is never sent twice): not read back, it says saved but not read back, reload; read
+// back but differing, it says saved but the disk differs, reload.
+func TestAStaleCommittedSaveNeverSaysSaveItAgain(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		read error
+		want string
+	}{
+		{"not read back", errors.New("no read today"), "saved a.md, but it could not be read back: no read today — reload before saving again"},
+		{"read back differing", nil, "saved a.md, but the disk differs from what was written — reload before saving again"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			r, c := committedHeldRead(t, tc.read)
+			r.h.p.Post(r.h.save)
+			c.waitHeld(t) // committed; its read-back held
+			renew(t, r)
+			c.free()
+			r.waitStatus(t, tc.want)
+			if s := onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.status"); return v.Raw }); strings.Contains(s, "save it again") {
+				t.Fatalf("the status says %q: a committed write told to be sent again", s)
+			}
+		})
+	}
+}
+
+// TestASaveWhoseBufferClosedSaysNothing: a save whose buffer is closed while its write is out says
+// nothing of it when the write answers: there is no buffer left to say it of, and the status line
+// is the close's.
+func TestASaveWhoseBufferClosedSaysNothing(t *testing.T) {
+	t.Parallel()
+	w := newHeldWrite("a.md")
+	r := editedNote(t, w)
+	w.before.Store(true)
+	r.h.p.Post(r.h.save)
+	w.waitHeld(t)
+	b := onLoop(r, func() *openBuffer { return r.h.active })
+	onLoop(r, func() bool { r.h.dropBuffer(b); return true }) // closed, its edit discarded
+	w.free()
+	r.waitWithin(t, "the save settled", daemonWait, func() bool { return !onLoop(r, func() bool { return b.saving }) })
+	if s := onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.status"); return v.Raw }); strings.Contains(s, "save a.md") || strings.Contains(s, "saved a.md") {
+		t.Fatalf("the status says %q: a save whose buffer was closed spoke for it", s)
+	}
 }

@@ -4635,6 +4635,10 @@ WHAT A KEY NEEDS
         <source>saved %1, but it could not be read back: %2 — reload before saving again</source>
         <translation>saved %1, but it could not be read back: %2 — reload before saving again</translation>
     </message>
+    <message id="autodoc.notice.files.saved_but_the_disk_differs_from_what_was_written">
+        <source>saved %1, but the disk differs from what was written — reload before saving again</source>
+        <translation>saved %1, but the disk differs from what was written — reload before saving again</translation>
+    </message>
     <message id="autodoc.notice.files.saved_the_draft_as">
         <source>saved the draft as %1</source>
         <translation>saved the draft as %1</translation>
