@@ -82,16 +82,6 @@ func editedNote(t *testing.T, w *heldWrite) *running {
 	return r
 }
 
-// renew renews the window's connection, as a reconnect does.
-func renew(t *testing.T, r *running) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), daemonWait)
-	defer cancel()
-	if err := r.h.session.Connect(ctx); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // TestASaveLostToAReconnectSaysSo: a save whose write is answered after the connection was renewed,
 // unwritten, says so and to save it again, and the note stays unsaved; before, the status kept
 // "saving a.md…" for ever.
