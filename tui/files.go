@@ -957,12 +957,18 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 // told to be saved again (Committed is never sent twice): saved, when what was read back is what
 // was written; else saved, but not read back (readErr) or differing on disk, and to reload before
 // saving again. A write that did not land says why it was dropped, the connection renewed
-// (renewed) or the buffer read again from disk (reread), and to save it again.
+// (renewed) or the buffer read again from disk (reread), and to save it again. A save that landed
+// whole asks nothing of the user: it takes the status line only while that still says "saving
+// p…", so a newer word there (the read again's "opened p") stays; the notice says it either way.
 func (h *Host) saveLost(p string, committed, landed bool, readErr error, renewed, reread bool) {
 	var msg string
 	switch {
 	case landed:
 		msg = h.trf("autodoc.notice.files.saved", p)
+		if h.said != h.trf("autodoc.notice.files.saving", p) {
+			h.notify(msg)
+			return
+		}
 	case committed && readErr != nil:
 		msg = h.trf("autodoc.notice.files.saved_but_it_could_not_be_read_back_reload_befor", p, feature.WireMessage(readErr))
 	case committed:
