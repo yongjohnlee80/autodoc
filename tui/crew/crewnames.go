@@ -41,8 +41,14 @@ var agentsOwnEntries = map[string]bool{".crew-scopes": true, ".crew-todos": true
 //   - A name whose new form is already there is left as it is, and so is the new one: nothing is
 //     overwritten. kept names each such old path, for the user to look at.
 //   - A folder an agent still works in (another window's, still running) is renamed as any other on
-//     Linux and macOS, where the agent keeps it by its inode; Windows refuses to rename a folder in
-//     use, which is reported and tried again at the next start.
+//     Linux and macOS, and a relative link left at its old name (localfs.LinkOldName): that window
+//     names the folder by the old path in its agents' environment ($AUTODOC_CREW_CONTEXT) and
+//     writes into it, and both reach the folder through the link. The link is a symlink, which the
+//     next run skips, so nothing renames twice. Windows refuses to rename a folder in use, which is
+//     reported and tried again at the next start; one renamed there was held by nothing, and gets
+//     no link.
+//   - Only a folder gets a link: a scope's claim and its read todo stores are files a window reads
+//     by listing, never by a path it kept.
 //   - It is one way: nothing writes an earlier name any more.
 func migrateCrewNames(base string) (kept []string, err error) {
 	if _, err := os.Stat(base); errors.Is(err, fs.ErrNotExist) {
@@ -78,6 +84,12 @@ func migrateCrewNames(base string) (kept []string, err error) {
 			default:
 				if err := os.Rename(from, to); err != nil {
 					errs = append(errs, err)
+				} else if dirs {
+					// a window started before this one still names the agents' folder by its old
+					// name ($AUTODOC_CREW_CONTEXT): the link keeps that name reaching it
+					if err := localfs.LinkOldName(from, to); err != nil {
+						errs = append(errs, err)
+					}
 				}
 			}
 		}
