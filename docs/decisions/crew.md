@@ -293,8 +293,12 @@ renames those names once at its start, before anything reads the folders:
 - An old name whose new one is already there is left as it is, and so is the new one: nothing is
   written over. The window says which were kept.
 - A folder an agent still works in, another window's, is renamed as any other on Linux and macOS,
-  where the agent keeps it by its inode. Windows refuses to rename a folder in use: the window says
-  so, and the next start tries again.
+  and a relative link is left at its old name. That window names the folder by its old path in
+  its agents' environment and writes into it, and both reach the folder through the link; the next
+  start skips the link, so nothing is renamed twice. The links stay; a later release may remove
+  them once no window from before this one can be running. Windows refuses to rename a folder in
+  use: the window says so, and the next start tries again. A folder renamed there was held by
+  nothing, and gets no link.
 - Each agent's folder files and command line are written afresh at every start, after the rename,
   so none still names an old path.
 - It is one way: no build writes an old name again. An agent's folder moves with its scope's
