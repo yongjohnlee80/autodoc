@@ -305,9 +305,9 @@ const ClaudeMCPConfig = ".autodoc-crew-mcp.json"
 // name when the agent works in its own folder (in.AgentDir, a window's agent), else its absolute
 // path (Neovim's agent works in the user's project; Neovim starts it from its argv, with no shell
 // of its own). The bare name keeps the folder's own name off the command line: a crew folder's name
-// holds a scope's ":" encoded (%3A), and on Windows a CLI's .cmd shim reads its arguments again
-// through cmd.exe, where %3 is its third argument, so no command line through a .cmd shim may name
-// that folder, from either host.
+// holds a scope's ":" (escaped "@3A" on Windows), and no command line through a CLI's .cmd shim,
+// which reads its arguments again through cmd.exe, nor a PowerShell line, where "@" begins a splat,
+// need ever carry it, from either host.
 func claudeMCPConfigArg(in SetupInput) string {
 	// compared as paths (filepath.Rel cleans both, and on Windows folds case as the disk does), never
 	// as strings; core/paths is outside the comms module, which may import only its own packages. A
