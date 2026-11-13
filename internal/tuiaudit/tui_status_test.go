@@ -6,6 +6,7 @@ import (
 	"go/token"
 	"io/fs"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -35,12 +36,7 @@ func TestOnlySayWritesTheStatusLine(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		ast.Inspect(f, func(n ast.Node) bool {
-			if lit, ok := n.(*ast.BasicLit); ok && lit.Kind == token.STRING && lit.Value == `"App.status"` {
-				found = append(found, fset.Position(lit.Pos()).String())
-			}
-			return true
-		})
+		found = append(found, namesTheStatusLine(fset, f)...)
 		return nil
 	})
 	if err != nil {
@@ -48,5 +44,40 @@ func TestOnlySayWritesTheStatusLine(t *testing.T) {
 	}
 	for _, at := range found {
 		t.Errorf("%s writes App.status itself: say it (Host.say, Core.Say), so the write is counted", at)
+	}
+}
+
+// namesTheStatusLine is where f names the status line's source: each string literal whose value,
+// not its spelling, is "App.status" (a raw `App.status` or an escaped one names it too).
+func namesTheStatusLine(fset *token.FileSet, f *ast.File) []string {
+	var at []string
+	ast.Inspect(f, func(n ast.Node) bool {
+		if lit, ok := n.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+			if v, err := strconv.Unquote(lit.Value); err == nil && v == "App.status" {
+				at = append(at, fset.Position(lit.Pos()).String())
+			}
+		}
+		return true
+	})
+	return at
+}
+
+// TestTheStatusGuardSeesEverySpelling: the guard finds the status line's name however a literal
+// spells it, interpreted, raw or escaped, and not a longer name that begins with it.
+func TestTheStatusGuardSeesEverySpelling(t *testing.T) {
+	src := "package p\n" +
+		"func f(c interface{ Set(string, any) }) {\n" +
+		"\tc.Set(\"App.status\", 1)\n" +
+		"\tc.Set(`App.status`, 2)\n" +
+		"\tc.Set(\"App\\x2estatus\", 3)\n" +
+		"\tc.Set(\"App.statusShown\", 4)\n" +
+		"}\n"
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "p.go", src, parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if at := namesTheStatusLine(fset, f); len(at) != 3 {
+		t.Fatalf("the guard found %d of the three spellings: %v", len(at), at)
 	}
 }
