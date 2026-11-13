@@ -70,8 +70,10 @@ func openWrite(t *testing.T, conn dao.DataConn, l *Lease, marker string) (commit
 	if err != nil {
 		t.Fatal(err)
 	}
+	// ended whatever the cell does: a cell that fails with the write open would leave its connection
+	// held, and the pool's close, at the scratch database's cleanup, waiting on it for ever
+	t.Cleanup(func() { _ = tx.Rollback() })
 	if err := l.Fence(ctx, tx); err != nil {
-		_ = tx.Rollback()
 		t.Fatalf("the fence of an open write: %v", err)
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO marker (name) VALUES ($1)`, marker); err != nil {
@@ -124,7 +126,10 @@ func TestALongFencedWriteKeepsItsLease(t *testing.T) {
 		if err := a.Renew(context.Background()); err != nil {
 			t.Fatalf("a renew during the holder's own open write: %v (after %s)", err, time.Since(start))
 		}
-		if _, err := Claim(context.Background(), conn, opts("t")); !held(err) {
+		ctx, cancel := context.WithTimeout(context.Background(), ttl)
+		_, err := Claim(ctx, conn, opts("t"))
+		cancel()
+		if !held(err) {
 			t.Fatalf("a standby's claim during the write: %v, want it held", err)
 		}
 		time.Sleep(ttl / 3)

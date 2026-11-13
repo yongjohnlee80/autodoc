@@ -38,6 +38,9 @@ type Writer struct{ l *pglease.Lease }
 // (pglease.DefaultTTL when 0); its holder renews it every ttl/3 (Renew). waiting is called once,
 // with the holder, when the lease is first found held.
 func AcquireWriter(ctx context.Context, conn dao.DataConn, tenant string, ttl, poll time.Duration, waiting func(holder pglease.Holder)) (*Writer, error) {
+	if err := Ended(ctx); err != nil {
+		return nil, err // a deadline past: a pool connection does not end a statement by it
+	}
 	l, err := pglease.Acquire(ctx, conn, pglease.Options{Table: LeaseTable, Scope: LeaseScope(tenant), TTL: ttl, Info: "tenant=" + tenant}, poll, waiting)
 	if err != nil {
 		if err := Ended(ctx); err != nil {
