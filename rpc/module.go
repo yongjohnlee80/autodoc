@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/yongjohnlee80/golib/logger"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
@@ -101,13 +102,14 @@ func (s *Server) verb(lo, hi int, h func(context.Context, Workspace, []any) (any
 // ctx carries the session's protocol, client token and bounds too. The result is the handler's own:
 // chain carries it with module.Wire once its events are logged.
 func (s *Server) serve(v module.Verb, errs []module.PublicError) golibrpc.Handler {
+	refusable := slices.Contains(v.Errors, CodeFileRefused)
 	call := func(ctx context.Context, w Workspace, p []any) (any, error) {
 		ctx = module.WithProtocol(ctx, protocolOf(ctx))
 		if w != nil {
 			ctx = module.WithWorkspace(context.WithValue(ctx, workspaceKey{}, w), module.Workspace{Name: w.Name(), Root: w.Root()})
 		}
 		out, err := v.Call(ctx, p)
-		return out, moduleErr(err, errs)
+		return out, unlistedRefusal(moduleErr(err, errs), refusable)
 	}
 	lo, hi := v.Required(), len(v.Params)
 	h := s.verb(lo, hi, call, v.Scope == module.ScopeWorkspace)
@@ -166,3 +168,24 @@ func (s *Server) wired(h golibrpc.Handler) golibrpc.Handler {
 		return w, nil
 	}
 }
+
+// unlistedRefusal is err for a verb whose contract lists CodeFileRefused or not (listed): the
+// catalog promises every code a verb may answer (contracts.go), so a verb that doesn't list it
+// answers the system's refusal (wireErr's errFileInUse, errOSRefused) as any unmapped error, an
+// internal error whose detail stays in the log. A verb whose handler hands the system's errors
+// back lists the code to say what they are.
+func unlistedRefusal(err error, listed bool) error {
+	if listed || err == nil {
+		return err
+	}
+	var re *golibrpc.Error
+	if errors.As(wireErr(err), &re) && re.Code == CodeFileRefused {
+		return unmapped{err}
+	}
+	return err
+}
+
+// unmapped is an error wireErr maps to nothing: its text only, none of what it wraps.
+type unmapped struct{ err error }
+
+func (e unmapped) Error() string { return e.err.Error() }

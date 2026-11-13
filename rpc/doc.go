@@ -161,7 +161,7 @@ func (s *Server) docVerbs() []module.Verb {
 				return &diagnosticsJSON{Diagnostics: diagnosticsOf(ds)}, nil
 			}),
 		module.Handle(module.Contract{Verb: "doc.rename", Effect: module.EffectWrite, Since: 1, Scope: ws, Audience: user,
-			Errors: []int64{CodeNoSuchWorkspace, CodeNotFound, CodeConflict, CodeUnsupported, golibrpc.CodeAccessDenied}},
+			Errors: []int64{CodeNoSuchWorkspace, CodeNotFound, CodeConflict, CodeUnsupported, golibrpc.CodeAccessDenied, CodeFileRefused}},
 			func(ctx context.Context, p docRename) (any, error) {
 				w := workspaceOf(ctx)
 				if err := w.Docs().Rename(ctx, p.From, p.To); err != nil {
@@ -171,7 +171,7 @@ func (s *Server) docVerbs() []module.Verb {
 				return nil, nil
 			}),
 		module.Handle(module.Contract{Verb: "doc.remove", Effect: module.EffectWrite, Since: 1, Scope: ws, Audience: user,
-			Errors: []int64{CodeNoSuchWorkspace, CodeNotFound, CodeConflict, CodeUnsupported, golibrpc.CodeAccessDenied}},
+			Errors: []int64{CodeNoSuchWorkspace, CodeNotFound, CodeConflict, CodeUnsupported, golibrpc.CodeAccessDenied, CodeFileRefused}},
 			func(ctx context.Context, p docRemove) (any, error) {
 				w := workspaceOf(ctx)
 				if err := w.Docs().Remove(ctx, p.Path, vfs.Version(p.Version)); err != nil {
