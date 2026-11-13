@@ -320,3 +320,115 @@ func TestARenamedFolderIsStillReachedByItsOldName(t *testing.T) {
 		t.Errorf("the workspace's entries after a second run: %v, want the folder and its link alone", names)
 	}
 }
+
+// olderRename is the build before this one's start-up rename (v0.3.14's migrateCrewNames): every
+// name holding a colon, not a link, renamed to golib paths.Encode's form unless that name is
+// already there (Lstat), which keeps both.
+func olderRename(t *testing.T, base string) {
+	t.Helper()
+	rename := func(dir string, dirs bool) {
+		entries, _ := os.ReadDir(dir)
+		for _, e := range entries {
+			name := e.Name()
+			if !strings.Contains(name, ":") || e.IsDir() != dirs || e.Type()&fs.ModeSymlink != 0 {
+				continue
+			}
+			from, to := filepath.Join(dir, name), filepath.Join(dir, gpaths.Encode(name))
+			if _, err := os.Lstat(to); err == nil {
+				continue // kept: the new name is there
+			}
+			if err := os.Rename(from, to); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	rename(filepath.Join(base, ".crew-scopes"), false)
+	rename(filepath.Join(base, ".crew-todos"), false)
+	rename(filepath.Join(base, "kb"), true)
+}
+
+// A window of the build before this one, started after this one's rename, finds the agents' folder
+// under its new name with the link at the old one, which its own rule takes for the new form
+// already there: it keeps both, and the folder never moves back and forth between the two builds.
+// (A scope's claim and todo files get no link: that build renames them back, contents kept, and
+// this one forward again at its next start.) The mutant, named here: no link left (the older build
+// renames the folder back to the % form).
+func TestAnOlderBuildsRenameNeverMovesTheFolderBack(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a name holding a colon, which Windows cannot hold: the older build renamed nothing there")
+	}
+	base := t.TempDir()
+	const scope = "autodoc:0000000000000022"
+	old := earlier(scope)
+	earlierBuild(t, base, old)
+	if kept, err := migrateCrewNames(base); err != nil || len(kept) != 0 {
+		t.Fatalf("migrateCrewNames: kept %v, %v", kept, err)
+	}
+	olderRename(t, base)
+	linkedFrom(t, filepath.Join(base, "kb", old), agents.CrewFileName(scope))
+	guide := filepath.Join(base, "kb", agents.CrewFileName(scope), "zen", "AGENTS.md")
+	if b, err := os.ReadFile(guide); err != nil || string(b) != "zen's guide" {
+		t.Errorf("the agents' folder after the older build's rename: %q, %v; want it where this build put it", b, err)
+	}
+}
+
+// The crew host's listing reads a scope's claim once, whatever else its folder holds: a link to the
+// claim under the earlier % name is not a claim (ParseCrewFileName refuses the %, and the listing
+// takes regular files alone). Nothing else lists the crew's folders: the todo feed reads its files
+// by name.
+func TestTheScopeListingNeverCountsALink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no link is left on Windows")
+	}
+	dir := t.TempDir()
+	scopes := filepath.Join(dir, ".crew-scopes")
+	const scope = "autodoc:0000000000000033"
+	if err := os.MkdirAll(scopes, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(scopes, agents.CrewFileName(scope)), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(agents.CrewFileName(scope), filepath.Join(scopes, earlier(scope))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := agents.ParseCrewFileName(earlier(scope)); err == nil {
+		t.Errorf("ParseCrewFileName took the earlier %% name %q", earlier(scope))
+	}
+	h := &CrewHost{dir: scopes}
+	if got := h.listed(); !slices.Equal(got, []string{scope}) {
+		t.Errorf("the scopes listed: %v, want %s once", got, scope)
+	}
+}
+
+// The rename looks at a link only by Lstat, never through it: an agents' folder already renamed,
+// with its link at the old name, is left as it is by a run, the link and the folder both, and so is
+// what the folder holds.
+func TestTheRenameNeverFollowsALink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no link is left on Windows")
+	}
+	base := t.TempDir()
+	const scope = "autodoc:0000000000000044"
+	enc, old := agents.CrewFileName(scope), earlier(scope)
+	guide := filepath.Join(base, "kb", enc, "zen", "AGENTS.md")
+	if err := os.MkdirAll(filepath.Dir(guide), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(guide, []byte("the renamed folder's"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(enc, filepath.Join(base, "kb", old)); err != nil {
+		t.Fatal(err)
+	}
+	if kept, err := migrateCrewNames(base); err != nil || len(kept) != 0 {
+		t.Fatalf("migrateCrewNames over a link: kept %v, %v", kept, err)
+	}
+	linkedFrom(t, filepath.Join(base, "kb", old), enc)
+	if b, err := os.ReadFile(guide); err != nil || string(b) != "the renamed folder's" {
+		t.Errorf("the folder behind the link: %q, %v", b, err)
+	}
+	if entries, _ := os.ReadDir(filepath.Join(base, "kb", enc)); len(entries) != 1 {
+		t.Errorf("the folder behind the link holds %d entries, want its agent alone", len(entries))
+	}
+}
