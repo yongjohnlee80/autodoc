@@ -3,10 +3,12 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
 	"path"
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -852,6 +854,9 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 	}
 	b.saving = true
 	b.saves++
+	if strings.Contains(p, "probe") { // SCRATCH (never merged): the gated cell's saves, traced
+		fmt.Fprintf(os.Stderr, "SAVETRACE %s start p=%s ws=%q gated=%v sess=%d gen=%d want=%q\n", time.Now().Format("15:04:05.000"), p, ws, who.gated(), sess, gen, want)
+	}
 	settled := func() {
 		b.saving = false
 		if b.recheck {
@@ -885,6 +890,9 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 		return answer{err: err, version: feature.Str(m, "version"), same: string(b) == onDisk}
 	}, func(a answer) {
 		defer settled()
+		if strings.Contains(p, "probe") { // SCRATCH (never merged)
+			fmt.Fprintf(os.Stderr, "SAVETRACE %s answer p=%s current=%v err=%v code=%d readErr=%v same=%v sessNow=%d genNow=%d inBuffers=%v\n", time.Now().Format("15:04:05.000"), p, tk.Current(), a.err, feature.Code(a.err), a.readErr, a.same, h.session.Gen(), b.file.gen, slices.Contains(h.buffers, b))
+		}
 		// committed is the write known to have landed (Committed: read and compare, never send it
 		// again); landed is that, with its version and content safe to take as what is on disk
 		committed := a.err == nil || feature.Code(a.err) == rpc.CodeCommitted
