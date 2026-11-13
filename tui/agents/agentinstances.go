@@ -74,6 +74,38 @@ type AgentInstance struct {
 	// at first; seenToken the incarnation it belongs to, so a restart starts again from its own
 	seen      WsRef
 	seenToken string
+	// launch is what its tab's start reads (runAgent), taken on the loop (republishLaunch) each
+	// time a field it is made of changes: the start runs off the loop (StartAsync, and golib's own
+	// retry on Enter or i), so it reads it, never the instance, which the loop writes
+	launch atomic.Pointer[agentLaunch]
+}
+
+// agentLaunch is an agent tab's start as the loop last set it up (republishLaunch): the instance's
+// refusal, its crew session's context and setup, and its process's environment, all of which the
+// loop writes. Immutable once published. The window's seams, build and config are not in it: they
+// are fixed once the agents are made (NewAgents; the host's are its own copy), so the start reads
+// them where they are.
+type agentLaunch struct {
+	refusal    error
+	crewed     bool
+	context    string
+	kind       string
+	setup      crew.Setup
+	env        procenv.Env
+	environ    []string // agentEnviron's, for the process
+	profileEnv []string // its profile's (AgentProfile.environ), for the after-steps
+}
+
+// republishLaunch sets instance's launch to what its fields say now. On the loop:
+// every write of a field the launch is made of (refusal, crewed, context, setup, profile, env)
+// calls it, and so does each start.
+func (a *Agents) republishLaunch(instance *AgentInstance) {
+	env := a.seams.Env()
+	instance.launch.Store(&agentLaunch{
+		refusal: instance.refusal, crewed: instance.crewed, context: instance.context,
+		kind: instance.profile.kind(), setup: instance.setup, env: env,
+		environ: agentEnviron(env, instance), profileEnv: instance.profile.environ(env),
+	})
 }
 
 type AgentRuntimeHost interface {
@@ -287,6 +319,7 @@ func (a *Agents) StartInstance(p AgentProfile) (*AgentInstance, error) {
 	}
 	instance.profile, instance.workspace, instance.crewed, instance.env = p, ws, crewed, env
 	instance.refusal = nil
+	a.republishLaunch(instance)
 	if fillErr != nil { // nothing set up or registered for it, and nothing started with a changed word
 		a.c.Notify(a.c.Trf("autodoc.crew.did_not_start", p.Name, fillErr.Error()))
 		a.refuse(panel, instance, fillErr)
@@ -332,6 +365,7 @@ func (a *Agents) StartInstance(p AgentProfile) (*AgentInstance, error) {
 				return
 			}
 			instance.setup = setup
+			a.republishLaunch(instance)
 			a.registerCrew(panel, instance, p, ws, dir, token, prompts, stale)
 		})
 		a.listAgents()
@@ -363,6 +397,7 @@ func (a *Agents) StartInstance(p AgentProfile) (*AgentInstance, error) {
 // (runAgent), which the terminal writes on its screen, and the tab is selected; nothing runs.
 func (a *Agents) refuse(panel feature.TerminalPanel, instance *AgentInstance, why error) {
 	instance.refusal, instance.starting = why, false
+	a.republishLaunch(instance)
 	_ = panel.Start(instance.tab) // the terminal shows the refusal, and the tab stays stopped
 	a.c.Keep(a.selectInstance(instance))
 	a.listAgents()
@@ -419,6 +454,7 @@ func (a *Agents) registerCrew(panel feature.TerminalPanel, instance *AgentInstan
 			if instance.context, err = a.Crew.Publish(s); err != nil {
 				a.Crew.Exit(s, crew.EndedStartFailed)
 			}
+			a.republishLaunch(instance)
 		}
 		if err != nil {
 			a.c.Notify(a.c.Trf("autodoc.crew.not_registered", p.Name, feature.WireMessage(err)))
@@ -435,6 +471,7 @@ func (a *Agents) registerCrew(panel feature.TerminalPanel, instance *AgentInstan
 				return
 			case err != nil:
 				instance.context = ""
+				a.republishLaunch(instance)
 				a.Crew.Exit(s, crew.EndedStartFailed)
 				a.c.Notify(a.c.Trf("autodoc.crew.did_not_start", p.Name, err.Error()))
 				a.listAgents()
@@ -480,39 +517,44 @@ func (a *Agents) applySetup(ws feature.Workspace, p AgentProfile, dir string, se
 // exited): its crew session is registered by the agents panel's start, never without one.
 var ErrCrewStartHere = errors.New("this agent runs as a crew session: start it from the agents panel, which registers one")
 
-// runAgent is an agent tab's TerminalConfig.Start, on the loop: its program, told the context
-// file of the crew session it starts under (AUTODOC_CREW_CONTEXT), that file being this session's
-// own (crew.ContextPath). A crew agent's start with no session published for it is refused. A crew
-// OpenCode agent also loads AutoDoc's OpenCode plugin (OPENCODE_CONFIG_CONTENT, opencodeEnv), which
-// registers its session and wakes it: without it the session is never reachable, so a plugin that
-// can't be had refuses the start.
+// runAgent is an agent tab's TerminalConfig.Start, off the loop (StartAsync): its program, told the
+// context file of the crew session it starts under (AUTODOC_CREW_CONTEXT), that file being this
+// session's own (crew.ContextPath). It reads only the launch the loop last published
+// (republishLaunch), never the instance. A crew agent's start with no session published for it is
+// refused. A crew OpenCode agent also loads AutoDoc's OpenCode plugin (OPENCODE_CONFIG_CONTENT,
+// opencodeEnv), which registers its session and wakes it: without it the session is never
+// reachable, so a plugin that can't be had refuses the start.
 func (a *Agents) runAgent(instance *AgentInstance, c pty.Cmd) (terminal.TerminalProcess, error) {
-	if instance.refusal != nil {
-		return nil, instance.refusal
+	l := instance.launch.Load()
+	if l == nil {
+		return nil, ErrCrewStartHere // never published: nothing set it up to start
 	}
-	if instance.crewed {
-		if instance.context == "" {
+	if l.refusal != nil {
+		return nil, l.refusal
+	}
+	if l.crewed {
+		if l.context == "" {
 			return nil, ErrCrewStartHere
 		}
 		// its setup's: AutoDoc's env (OpenCode's OPENCODE_CONFIG_CONTENT, its plugin and its MCP
 		// server), and its arguments (Claude Code's --mcp-config) after the program's own
-		if instance.profile.kind() == crew.KindOpenCode && instance.setup.Env["OPENCODE_CONFIG_CONTENT"] == "" {
+		if l.kind == crew.KindOpenCode && l.setup.Env["OPENCODE_CONFIG_CONTENT"] == "" {
 			return nil, errors.New("AutoDoc's OpenCode plugin: crew setup gave no OPENCODE_CONFIG_CONTENT")
 		}
-		args, err := withCommandArgs(a.seams.Env(), c.Args, instance.setup.Argv)
+		args, err := withCommandArgs(l.env, c.Args, l.setup.Argv)
 		if err != nil {
 			return nil, err
 		}
 		c.Args = args
 	}
-	c.Env = agentEnviron(a.seams.Env(), instance)
+	c.Env = l.environ
 	// its setup's server (a Codex agent's own app-server), started before the CLI with the CLI's
 	// environment, and bound to it: stopped if the CLI fails to start or when it ends, and closing
 	// the CLI's terminal if it ends first (agentserver.go). A Codex shell runs under this server,
 	// not the CLI, so `autodoc --editor` there needs it.
 	var server *agentServer
-	if instance.crewed && len(instance.setup.Server) > 0 {
-		srv, err := StartAgentServer(instance.setup.Server, instance.setup.ServerSocket, c.Dir, c.Env, a.seams.ServerReady())
+	if l.crewed && len(l.setup.Server) > 0 {
+		srv, err := StartAgentServer(l.setup.Server, l.setup.ServerSocket, c.Dir, c.Env, a.seams.ServerReady())
 		if err != nil {
 			return nil, err
 		}
@@ -530,14 +572,14 @@ func (a *Agents) runAgent(instance *AgentInstance, c pty.Cmd) (terminal.Terminal
 			proc = bindServer(proc, server)
 		}
 	}
-	if err == nil && instance.crewed {
+	if err == nil && l.crewed {
 		// the CLI's environment, its setup's included: a Codex agent's own app-server
 		// (crew.EnvCodexServer) is where its registration step looks
-		environ := instance.profile.environ(a.seams.Env())
-		for _, k := range slices.Sorted(maps.Keys(instance.setup.Env)) {
-			environ = append(environ, k+"="+instance.setup.Env[k])
+		environ := slices.Clone(l.profileEnv)
+		for _, k := range slices.Sorted(maps.Keys(l.setup.Env)) {
+			environ = append(environ, k+"="+l.setup.Env[k])
 		}
-		a.runAfterSteps(instance.setup.After, instance.context, c.Dir, environ, time.Now())
+		a.runAfterSteps(l.setup.After, l.context, c.Dir, environ, time.Now())
 	}
 	return proc, err
 }
@@ -618,6 +660,7 @@ func agentAutodocBound(args []string) time.Duration {
 func (a *Agents) start(panel feature.TerminalPanel, instance *AgentInstance, then func(error)) {
 	token := instance.token
 	instance.starting = true
+	a.republishLaunch(instance)
 	panel.StartAsync(instance.tab, func(err error) {
 		if a.stopping || a.instances[instance.profile.Codename] != instance || instance.closing || instance.token != token {
 			then(ErrAgentStale)
@@ -655,6 +698,10 @@ func (a *Agents) endSession(instance *AgentInstance) string {
 		return ""
 	}
 	instance.context = ""
+	// defensive: endSession runs only as the tab goes (its removal or the panel's), so no start of
+	// the tab, the terminal's retry included, reads this launch; it keeps the launch true to the
+	// instance all the same
+	a.republishLaunch(instance)
 	a.Crew.Exit(instance.session, crew.EndedExit)
 	instance.session = CrewSession{}
 	return id
@@ -679,7 +726,8 @@ func (a *Agents) tellNotStarted(instance *AgentInstance) {
 }
 
 func (a *Agents) instanceExited(instance *AgentInstance, code int) {
-	instance.context = ""                         // its session ends with it: a next start registers a new one
+	instance.context = "" // its session ends with it: a next start registers a new one
+	a.republishLaunch(instance)
 	if instance.session.ID != "" && !a.stopping { // stopping: the window's release ends every session
 		s := instance.session
 		if a.mayBeStarting(instance) {
