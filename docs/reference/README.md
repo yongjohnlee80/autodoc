@@ -76,7 +76,7 @@ Open this folder (`docs/reference/`) as a workspace in `autodoc --gui` and press
 
 ### Part V — Enterprise RAG Server (`autodoc --server`)
 19. **[Chapter 19: Multi-Tenant PostgreSQL RAG Server (`autodoc --server` & `.view` Contracts)](./19-enterprise-postgres-rag-server.md)**
-    Ingesting live PostgreSQL tables via declarative `.view` templates with keyset cursors and tenant advisory locks, serving snapshot-enforced `POST /v1/search` over `pgvector`, and evaluating self-hosted versus managed cloud RAG deployment scenarios.
+    Ingesting live PostgreSQL tables via declarative `.view` templates with keyset cursors and tenant writer leases, serving snapshot-enforced `POST /v1/search` over `pgvector`, and evaluating self-hosted versus managed cloud RAG deployment scenarios.
 
 ---
 

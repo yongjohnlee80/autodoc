@@ -781,8 +781,9 @@ func (in *Ingester) Run(ctx context.Context) error {
 func (in *Ingester) ping(ctx context.Context, cancel context.CancelCauseFunc) {
 	// NOTE: a renew failing for another reason (a timeout, a connection dropped) is not a loss by
 	// itself: the next one may land. Only the lease's own silence rule decides, by the monotonic
-	// clock, and it fires before the database's lease_until passes, so no standby can hold the
-	// tenant while this server still believes it does. Every write is fenced in the database too.
+	// clock, and it is read at each tick and each Check, so this server may believe it holds the
+	// lease up to a tick past the database's lease_until. What keeps that safe is the fence: every
+	// write confirms the lease in the database, in its own transaction, and holds it there.
 	t := time.NewTicker(in.o.PingEvery)
 	defer t.Stop()
 	for {

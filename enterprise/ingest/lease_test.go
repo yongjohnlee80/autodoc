@@ -386,7 +386,7 @@ func blackHole(t *testing.T) string {
 // the tenant's ingester. The timeout wraps context.DeadlineExceeded, the connection's own deadline,
 // not the caller's. The mutant, named here: Run treating any error that wraps a context error as a
 // clean stop (it returns nil, and the tenant is silently not ingested).
-func TestARunWhoseLockConnectionTimesOutFails(t *testing.T) {
+func TestARunWhoseLeaseConnectionTimesOutFails(t *testing.T) {
 	f := newFixture(t)
 	u, err := url.Parse(f.dsn)
 	if err != nil {
@@ -397,12 +397,12 @@ func TestARunWhoseLockConnectionTimesOutFails(t *testing.T) {
 	q.Set("connect_timeout", "1")
 	q.Set("sslmode", "disable")
 	u.RawQuery = q.Encode()
-	locks, err := postgres.OpenNamed(f.ctx, "locks-hung", u.String())
+	leases, err := postgres.OpenNamed(f.ctx, "leases-hung", u.String())
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { locks.Close() })
-	in := New(f.st, f.tenant, f.source(nil), f.business, locks, Options{})
+	t.Cleanup(func() { leases.Close() })
+	in := New(f.st, f.tenant, f.source(nil), f.business, leases, Options{})
 	done := make(chan error, 1)
 	go func() { done <- in.Run(f.ctx) }()
 	select {

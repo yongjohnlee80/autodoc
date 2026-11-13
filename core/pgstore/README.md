@@ -70,7 +70,11 @@ PostgreSQL with the `vector` extension available (the migration creates it).
   a write transaction and holds it against a takeover until the transaction ends, `Check` is the
   lease as the writer knows it with no I/O, and `Release` lets it go; a lease lost is
   `ErrWriterLost`. `Store.Fenced(fence)` is the Store whose every write transaction begins with the
-  fence: every write method runs in a transaction, so every write is fenced, and reads are not.
+  fence: every write method runs in a transaction, so every write is fenced, and reads are not; nor
+  are the ANN builder's index writes, the server's own, shared by every tenant. The renew runs on
+  the store's pool beside the writes, so the pool must be larger than the writers that may hold its
+  connections at once (each tenant's ingester and the embedding worker), or a renew waits past its
+  bound and the holder counts its lease lost.
 - **The database's clock:** `Now(ctx, conn)`, the clock a source's `updated_at` values are written
   with.
 - **A schema of its own:** `WithSchema(schema)` sets `search_path` on every pooled connection, and
