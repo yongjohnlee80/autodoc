@@ -11,6 +11,7 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
 	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 )
 
 // heldWrite holds the doc.write of one note, once armed: before it is sent (before) or after it
@@ -356,4 +357,32 @@ func TestALandedSaveBehindALaterSaveLeavesItsStatus(t *testing.T) {
 		t.Fatalf("the status says %q after A's late answer, want B's %q kept", s, saving)
 	}
 	freeB()
+}
+
+// TestALandedSaveBehindAProfileStatusLeavesIt: an agent profile made the default (its "SPC g
+// opens" on the status line) after a save went stale; the save's late answer, landed, leaves the
+// profile's words there and says it was saved by the notice alone.
+func TestALandedSaveBehindAProfileStatusLeavesIt(t *testing.T) {
+	t.Parallel()
+	profiles := agents.AgentProfilesJSON([]agents.AgentProfile{{Name: "claude", Command: "claude", Codename: "claude"}})
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{agents.PrefAgentProfiles: profiles}})
+	w := newHeldWrite("a.md")
+	r := runTUI(t, w.session(d.sock), Options{})
+	t.Cleanup(w.free)
+	r.ready(t)
+	r.h.p.Post(func() { r.h.openPath("a.md") })
+	r.waitFile(t, "a.md")
+	onLoop(r, func() bool { r.h.editor.SetValue("edited\n"); r.h.edited(); return true })
+	w.after.Store(true)
+	r.h.p.Post(r.h.save)
+	w.waitHeld(t) // written: its answer is held
+	renew(t, r)   // the save goes stale
+	theirs := onLoop(r, func() string { return r.h.trf("autodoc.text.agentprofiles.spc_g_opens", "claude") })
+	r.h.p.Post(func() { r.h.agents.MakeAgentDefault(0) })
+	r.waitStatus(t, theirs)
+	w.free()
+	r.waitWithin(t, "the save's notice", daemonWait, func() bool { return r.noticed("saved a.md") })
+	if s := onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.status"); return v.Raw }); s != theirs {
+		t.Fatalf("the status says %q after the save's late answer, want the profile's %q kept", s, theirs)
+	}
 }
