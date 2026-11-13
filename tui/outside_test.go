@@ -58,8 +58,28 @@ func (r *running) waitOpen(t *testing.T, ws, p string) {
 
 func waitDisk(t *testing.T, r *running, abs, want string) {
 	t.Helper()
-	// a save is a write through the daemon, a round trip: on daemonWait, not a frame's clock
-	r.waitWithin(t, abs+" holding "+want, daemonWait, func() bool { b, _ := os.ReadFile(abs); return string(b) == want })
+	// a save is a write through the daemon, a round trip: on daemonWait, not a frame's clock. The
+	// file is read only while no save is out: a read holds it open, and a save's replace of a file
+	// held open waits the hold out on Windows, where it would race the cell rather than its code
+	r.waitWithin(t, abs+" holding "+want, daemonWait, func() bool {
+		if r.saving() {
+			return false
+		}
+		b, _ := os.ReadFile(abs)
+		return string(b) == want
+	})
+}
+
+// saving says whether a save of any buffer is out.
+func (r *running) saving() bool {
+	return onLoop(r, func() bool {
+		for _, b := range r.h.buffers {
+			if b.saving {
+				return true
+			}
+		}
+		return false
+	})
 }
 
 // TestAFileOutsideEveryWorkspaceOpensEditsAndSaves: it opens in no workspace, the status line

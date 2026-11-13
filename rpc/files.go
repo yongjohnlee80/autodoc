@@ -192,8 +192,8 @@ func (s *Server) fileVerbs() []module.Verb {
 			return &versionJSON{Version: string(v)}, nil
 		})
 	}
-	readErrs := []int64{golibrpc.CodeAccessDenied, CodeNotFound, CodeUnsupported}
-	writeErrs := []int64{golibrpc.CodeAccessDenied, CodeNotFound, CodeConflict, CodeCommitted, CodeUnsupported}
+	readErrs := []int64{golibrpc.CodeAccessDenied, CodeNotFound, CodeUnsupported, CodeFileRefused}
+	writeErrs := []int64{golibrpc.CodeAccessDenied, CodeNotFound, CodeConflict, CodeCommitted, CodeUnsupported, CodeFileRefused}
 	return []module.Verb{
 		read(module.Contract{Verb: "file.read", Effect: module.EffectRead, Since: 17, Scope: local, Audience: module.AudienceAgent, Result: "{content, version}",
 			Errors: readErrs, Doc: "A UTF-8 text file anywhere on the daemon's disk, as doc.read; a file that is not text is invalid params."}, false),

@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 54,
+  protocol = 55,
   min_protocol = 12,
   verbs = {
     ["crew.access"] = {
@@ -1276,7 +1276,7 @@ return {
     { code = -32068, name = "rpc.provider_refused", next = "switch provider or ranker, or fix its key or base URL" },
     { code = -32069, name = "rpc.switching", next = "a new model is filling: search with lexical among the stages until it is ready" },
     { code = -32070, name = "rpc.rank_unavailable", next = "retry later, or leave rerank out of the stages for an unranked answer" },
-    { code = -32071, name = "todos.stale", next = "todos.get it again, re-apply the change, and retry with its new rev" },
+    { code = -32071, name = "rpc.file_refused", next = "the message says which: a file another program holds, try again in a moment; one the system doesn't permit, change its permissions" },
     { code = -32072, name = "todos.not_found", next = "list the tasks again" },
     { code = -32073, name = "todos.invalid", next = "fix the field and send it again" },
     { code = -32074, name = "todos.not_a_store", next = "todos.scaffold one, or todos.set_dir to another" },

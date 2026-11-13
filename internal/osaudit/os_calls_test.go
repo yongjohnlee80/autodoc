@@ -38,6 +38,7 @@ var seamPackages = []string{
 	"internal/diskspace", // free disk space
 	"internal/fileid",    // a file's identity: its device and inode, or its volume and index
 	"internal/fileowner", // whether a file is this user's: its uid, or its owner SID
+	"internal/fileinuse", // whether an error is a file another program holds: a sharing violation
 	"internal/userperm",  // a file private to this user: its mode, or its owner and DACL
 	"internal/userdirs",  // the user's folders
 	"internal/usershell", // the default shell

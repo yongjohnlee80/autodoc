@@ -1,5 +1,5 @@
 {
-  "protocol": 54,
+  "protocol": 55,
   "min_protocol": 12,
   "verbs": [
     {
@@ -23,7 +23,8 @@
         -32060,
         -32061,
         -32065,
-        -32001
+        -32001,
+        -32071
       ],
       "doc": "A Markdown file's headings in order, with the version they were read at; other kinds have none."
     },
@@ -48,7 +49,8 @@
         -32060,
         -32061,
         -32065,
-        -32001
+        -32001,
+        -32071
       ],
       "doc": "The file's text and its version. A format a build derives (PDF, DOCX) answers its derived Markdown, read-only; when that is longer than one answer carries, it is cut at a paragraph's end and its last line, after a --- rule, begins [autodoc: truncated]: that line is AutoDoc's, not the document's."
     },
@@ -73,7 +75,8 @@
         -32060,
         -32061,
         -32065,
-        -32001
+        -32001,
+        -32071
       ],
       "doc": "doc.read on an HTML file's own bytes, where doc.read gives its derived text."
     },
@@ -194,7 +197,8 @@
         -32062,
         -32066,
         -32065,
-        -32001
+        -32001,
+        -32071
       ],
       "doc": "Writes the file at version; a stale version is a conflict."
     },
@@ -231,7 +235,8 @@
         -32062,
         -32066,
         -32065,
-        -32001
+        -32001,
+        -32071
       ],
       "doc": "doc.write on an HTML file's own bytes, which doc.write refuses."
     },
@@ -611,7 +616,8 @@
       "errors": [
         -32001,
         -32061,
-        -32065
+        -32065,
+        -32071
       ],
       "doc": "A UTF-8 text file anywhere on the daemon's disk, as doc.read; a file that is not text is invalid params."
     },
@@ -632,7 +638,8 @@
       "errors": [
         -32001,
         -32061,
-        -32065
+        -32065,
+        -32071
       ],
       "doc": "file.read on an HTML file's own bytes."
     },
@@ -665,7 +672,8 @@
         -32061,
         -32062,
         -32066,
-        -32065
+        -32065,
+        -32071
       ],
       "doc": "As doc.write, on a file anywhere on the daemon's disk. A file a workspace indexes (file.locate's answer) is written by that workspace's doc.write, and indexed at once."
     },
@@ -698,7 +706,8 @@
         -32061,
         -32062,
         -32066,
-        -32065
+        -32065,
+        -32071
       ],
       "doc": "file.write on an HTML file's own bytes; in a workspace, its doc.write_raw."
     },
@@ -1941,6 +1950,11 @@
       "messages": [
         "the ranker is unavailable: this build answers ranked results or none"
       ]
+    },
+    {
+      "code": -32071,
+      "name": "rpc.file_refused",
+      "next": "the message says which: a file another program holds, try again in a moment; one the system doesn't permit, change its permissions"
     },
     {
       "code": -32601,

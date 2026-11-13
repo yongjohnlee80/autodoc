@@ -53,6 +53,7 @@ var codeDocs = []struct {
 	{CodeProviderRefused, "rpc.provider_refused", "switch provider or ranker, or fix its key or base URL"},
 	{CodeSwitching, "rpc.switching", "a new model is filling: search with lexical among the stages until it is ready"},
 	{CodeRankUnavailable, "rpc.rank_unavailable", "retry later, or leave rerank out of the stages for an unranked answer"},
+	{CodeFileRefused, "rpc.file_refused", "the message says which: a file another program holds, try again in a moment; one the system doesn't permit, change its permissions"},
 	{golibrpc.CodeMethodNotFound, "rpc.method_not_found", "the verb is unknown, or newer than the session's protocol: sys.capabilities lists the verbs it may call"},
 	{golibrpc.CodeInvalidParams, "rpc.invalid_params", "the message says which param and why; check the verb's contract. A reindex refused with held: … names the way out"},
 	{golibrpc.CodeInternal, "rpc.internal", "a failure the daemon's log details: retry, or report it"},
