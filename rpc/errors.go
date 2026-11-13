@@ -41,8 +41,12 @@ const (
 	CodeProviderRefused   int64 = -32068 // the provider refused: switch provider, or fix its key
 	CodeSwitching         int64 = -32069 // a new model is filling: search lexically until it is ready
 	CodeRankUnavailable   int64 = -32070 // a build that answers ranked results or none could not rank: retry later
-	CodeFileRefused       int64 = -32071 // the system refused the file: in use by another program (try again), or not permitted
 )
+
+// CodeFileRefused is rpc's own, beside the store's damage (-32022): the system refused the file, in
+// use by another program (try again) or not permitted. -32060 to -32070 are the shared codes, all
+// taken, and -32071 on are the modules' (core/module/codes.go).
+const CodeFileRefused int64 = -32023
 
 // publicErrs maps core's errors to codes, first match wins. Only the message here crosses the
 // wire, never an error's own text (a path, a driver's detail); each code's name and next step are

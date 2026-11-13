@@ -233,7 +233,7 @@ import (
 // inbox.list's more, true when a page holds the items it could (by count or by bytes) and an older
 // one is there below the last; the undeliverable notices are the newest only, never paged, so their
 // more is false. A client below 53 reads items alone and pages on until a page comes back empty.
-// Protocol 55 is a file the system refused (rpc.file_refused, -32071): held by another program, a
+// Protocol 55 is a file the system refused (rpc.file_refused, -32023): held by another program, a
 // Windows sharing or lock violation, or not permitted, answered by file.* and doc.* as such, where it
 // was an internal error. A client that doesn't know the code reads its message.
 //
