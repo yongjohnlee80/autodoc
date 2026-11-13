@@ -3,8 +3,11 @@ package rpc
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/vfs"
@@ -185,8 +188,13 @@ func (s *Server) fileVerbs() []module.Verb {
 				v, werr = write(ctx, name, p.Content, vfs.Version(p.Version))
 				return werr
 			}); werr != nil {
+				fmt.Fprintf(os.Stderr, "WRITETRACE %s file.write %s: write error %v (%T); wire %v\n", time.Now().Format("15:04:05.000"), p.Path, werr, werr, fileErr(werr)) // SCRATCH (never merged)
+				for e := errors.Unwrap(werr); e != nil; e = errors.Unwrap(e) {
+					fmt.Fprintf(os.Stderr, "WRITETRACE   wraps %v (%T)\n", e, e)
+				}
 				return nil, fileErr(werr)
 			} else if err != nil {
+				fmt.Fprintf(os.Stderr, "WRITETRACE %s file.write %s: task-file error %v (%T)\n", time.Now().Format("15:04:05.000"), p.Path, err, err) // SCRATCH (never merged)
 				return nil, err
 			}
 			return &versionJSON{Version: string(v)}, nil

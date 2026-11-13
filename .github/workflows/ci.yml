@@ -254,13 +254,16 @@ jobs:
           # for Windows, so a neutral test can't come to lean on a helper in a Unix-tagged file
           go vet ./...
           mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
-          # SCRATCH (never merged): all of ./tui at -parallel 16, four times; a failing run's gated-cell lines and save trace
+          # SCRATCH (never merged): all of ./tui at -parallel 16, six times; every failing cell's lines whole, the save and write traces
           R=0
-          for n in 1 2 3 4; do
+          for n in 1 2 3 4 5 6; do
             go test -count=1 -parallel 16 -timeout 60m ./tui/ > "$RUNNER_TEMP/p16-$n.log" 2>&1 && rc=0 || rc=$?
             echo "== -parallel 16 run $n rc=$rc"; grep -E -- '^(FAIL|ok)\s+github.com/yongjohnlee80/autodoc/tui\s|^--- FAIL|^    --- FAIL' "$RUNNER_TEMP/p16-$n.log" || true
-            grep -E -A3 -- '--- FAIL: TestAGatedSave' "$RUNNER_TEMP/p16-$n.log" | grep -E 'FAIL|App.status|_test\.go:[0-9]+:' | cut -c1-400 || true
-            if grep -q -- '--- FAIL: TestAGatedSave' "$RUNNER_TEMP/p16-$n.log"; then echo "== save trace"; grep -E '^SAVETRACE' "$RUNNER_TEMP/p16-$n.log" | cut -c1-400 | tail -60; fi
+            if [ $rc != 0 ]; then
+              echo "== the failing cells, whole"; awk '/^--- FAIL: /{p=1; n=0} /^(=== RUN|--- PASS|ok |FAIL\t|PASS$)/{if(!/^--- FAIL/)p=0} p && n<120 {print; n++}' "$RUNNER_TEMP/p16-$n.log" | cut -c1-300 || true
+              echo "== write trace"; grep -E '^WRITETRACE' "$RUNNER_TEMP/p16-$n.log" | cut -c1-500 | tail -40 || true
+              echo "== save trace"; grep -E '^SAVETRACE' "$RUNNER_TEMP/p16-$n.log" | grep -v '\-32001' | cut -c1-400 | tail -20 || true
+            fi
             [ $rc = 0 ] || R=1
           done
           [ $R = 0 ]
