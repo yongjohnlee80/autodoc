@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"context"
 	"errors"
 	"sync"
 	"sync/atomic"
