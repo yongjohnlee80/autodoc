@@ -77,8 +77,10 @@ func workspaceOf(ctx context.Context) Workspace {
 }
 
 // verb wraps a handler: it checks the parameter count (lo to hi), resolves the workspace named
-// first when ws is set, and maps the errors.
-func (s *Server) verb(lo, hi int, h func(context.Context, Workspace, []any) (any, error), ws bool) golibrpc.Handler {
+// first when ws is set, and maps the errors, the workspace's and the handler's alike: the system's
+// refusal of a file as rpc.file_refused only when the verb's contract lists it (refusable,
+// unlistedRefusal).
+func (s *Server) verb(lo, hi int, h func(context.Context, Workspace, []any) (any, error), ws, refusable bool) golibrpc.Handler {
 	return func(ctx context.Context, req *golibrpc.Request) (any, error) {
 		if err := argsBetween(req.Params, lo, hi); err != nil {
 			return nil, err
@@ -86,12 +88,12 @@ func (s *Server) verb(lo, hi int, h func(context.Context, Workspace, []any) (any
 		var w Workspace
 		if ws {
 			var err error
-			if w, err = s.workspace(req.Params); err != nil {
-				return nil, wireErr(err)
+			if w, err = s.workspace(req.Params); err != nil { // a workspace in error: its root unreadable, say
+				return nil, wireErr(unlistedRefusal(err, refusable))
 			}
 		}
 		out, err := h(withProtocol(ctx, sessionProtocol(req.Session)), w, req.Params)
-		return out, wireErr(err)
+		return out, wireErr(unlistedRefusal(err, refusable))
 	}
 }
 
@@ -109,12 +111,12 @@ func (s *Server) serve(v module.Verb, errs []module.PublicError) golibrpc.Handle
 			ctx = module.WithWorkspace(context.WithValue(ctx, workspaceKey{}, w), module.Workspace{Name: w.Name(), Root: w.Root()})
 		}
 		out, err := v.Call(ctx, p)
-		return out, unlistedRefusal(moduleErr(err, errs), refusable)
+		return out, moduleErr(err, errs)
 	}
 	lo, hi := v.Required(), len(v.Params)
-	h := s.verb(lo, hi, call, v.Scope == module.ScopeWorkspace)
+	h := s.verb(lo, hi, call, v.Scope == module.ScopeWorkspace, refusable)
 	if v.Scope == module.ScopeLocalPeer {
-		h = s.local(v.Verb, lo, hi, call)
+		h = s.local(v.Verb, lo, hi, call, refusable)
 	}
 	h = bounded(h, hi, v.Verb, v.Root)
 	return func(ctx context.Context, req *golibrpc.Request) (any, error) {
