@@ -24,7 +24,7 @@
         -32061,
         -32065,
         -32001,
-        -32071
+        -32023
       ],
       "doc": "A Markdown file's headings in order, with the version they were read at; other kinds have none."
     },
@@ -50,7 +50,7 @@
         -32061,
         -32065,
         -32001,
-        -32071
+        -32023
       ],
       "doc": "The file's text and its version. A format a build derives (PDF, DOCX) answers its derived Markdown, read-only; when that is longer than one answer carries, it is cut at a paragraph's end and its last line, after a --- rule, begins [autodoc: truncated]: that line is AutoDoc's, not the document's."
     },
@@ -76,7 +76,7 @@
         -32061,
         -32065,
         -32001,
-        -32071
+        -32023
       ],
       "doc": "doc.read on an HTML file's own bytes, where doc.read gives its derived text."
     },
@@ -198,7 +198,7 @@
         -32066,
         -32065,
         -32001,
-        -32071
+        -32023
       ],
       "doc": "Writes the file at version; a stale version is a conflict."
     },
@@ -236,7 +236,7 @@
         -32066,
         -32065,
         -32001,
-        -32071
+        -32023
       ],
       "doc": "doc.write on an HTML file's own bytes, which doc.write refuses."
     },
@@ -617,7 +617,7 @@
         -32001,
         -32061,
         -32065,
-        -32071
+        -32023
       ],
       "doc": "A UTF-8 text file anywhere on the daemon's disk, as doc.read; a file that is not text is invalid params."
     },
@@ -639,7 +639,7 @@
         -32001,
         -32061,
         -32065,
-        -32071
+        -32023
       ],
       "doc": "file.read on an HTML file's own bytes."
     },
@@ -673,7 +673,7 @@
         -32062,
         -32066,
         -32065,
-        -32071
+        -32023
       ],
       "doc": "As doc.write, on a file anywhere on the daemon's disk. A file a workspace indexes (file.locate's answer) is written by that workspace's doc.write, and indexed at once."
     },
@@ -707,7 +707,7 @@
         -32062,
         -32066,
         -32065,
-        -32071
+        -32023
       ],
       "doc": "file.write on an HTML file's own bytes; in a workspace, its doc.write_raw."
     },
@@ -1832,6 +1832,11 @@
       "next": "the store is damaged and the daemon is stopping: autodoc --check-store reports it; restore it from a backup (docs/ops/backup-and-restore.md)"
     },
     {
+      "code": -32023,
+      "name": "rpc.file_refused",
+      "next": "the message says which: a file another program holds, try again in a moment; one the system doesn't permit, change its permissions"
+    },
+    {
       "code": -32060,
       "name": "rpc.no_such_workspace",
       "next": "call workspace.list and use a listed name",
@@ -1950,11 +1955,6 @@
       "messages": [
         "the ranker is unavailable: this build answers ranked results or none"
       ]
-    },
-    {
-      "code": -32071,
-      "name": "rpc.file_refused",
-      "next": "the message says which: a file another program holds, try again in a moment; one the system doesn't permit, change its permissions"
     },
     {
       "code": -32601,

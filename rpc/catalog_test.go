@@ -106,7 +106,7 @@ func TestCatalogFilters(t *testing.T) {
 	for _, e := range one.Errors {
 		codes = append(codes, e.Code)
 	}
-	if !reflect.DeepEqual(names(one), []string{"doc.read"}) || !reflect.DeepEqual(codes, []int64{golibrpc.CodeAccessDenied, CodeNoSuchWorkspace, CodeNotFound, CodeUnsupported, golibrpc.CodeInvalidParams}) {
+	if !reflect.DeepEqual(names(one), []string{"doc.read"}) || !reflect.DeepEqual(codes, []int64{golibrpc.CodeAccessDenied, CodeFileRefused, CodeNoSuchWorkspace, CodeNotFound, CodeUnsupported, golibrpc.CodeInvalidParams}) {
 		t.Errorf("doc.read: %v with codes %v", names(one), codes)
 	}
 	// invalid params' messages say no verb: a filter's row keeps its next step and lists none, the
