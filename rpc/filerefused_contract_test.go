@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"path/filepath"
@@ -60,7 +61,8 @@ func (refusingFS) RenameNoReplace(_ context.Context, from, _ string) error {
 // handler on a file the system refuses (a workspace's, or one outside every workspace), answers
 // rpc.file_refused, and its contract lists it; and they are every verb that lists it. A listing
 // dropped makes that verb answer an internal error (unlistedRefusal); a listing added without a
-// row here fails the count.
+// row here fails the count. A workspace whose root the system refused is answered by the same
+// rule, before any handler runs.
 func TestEveryVerbThatAnswersAFileRefusalListsIt(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -74,7 +76,11 @@ func TestEveryVerbThatAnswersAFileRefusalListsIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	ws := Static(WorkspaceInfo{Name: "kb", Root: filepath.Join(t.TempDir(), "kb"), Docs: docs.New(refusingFS{memfs.New()}, md)})
-	srv := New(Fixed(ws), "v-test", WithListener(ln), WithDisks(disks))
+	// a workspace in error: the system refused its root, which verb answers before any handler runs
+	broken := filepath.Join(t.TempDir(), "broken")
+	unreadable := Static(WorkspaceInfo{Name: "broken", Root: broken, Docs: docs.New(memfs.New(), md),
+		Err: fmt.Errorf("opening the workspace: %w", refusedAt("open", broken))})
+	srv := New(Fixed(ws, unreadable), "v-test", WithListener(ln), WithDisks(disks))
 	done := make(chan error, 1)
 	go func() { done <- srv.Run(ctx) }()
 	t.Cleanup(func() { cancel(); <-done })
@@ -119,6 +125,19 @@ func TestEveryVerbThatAnswersAFileRefusalListsIt(t *testing.T) {
 		_, err := cli.Call(ctx, verb, calls[verb]...)
 		if code(err) != CodeFileRefused {
 			t.Errorf("%s on a file the system refuses answered %v, want rpc.file_refused (%d)", verb, err, CodeFileRefused)
+		}
+	}
+	// the workspace's own error passes the same gate: a verb that lists the code says the system
+	// refused its root; one that doesn't answers an internal error
+	if _, err := cli.Call(ctx, "doc.read", "broken", "a.md"); code(err) != CodeFileRefused {
+		t.Errorf("doc.read in a workspace whose root the system refused answered %v, want rpc.file_refused", err)
+	}
+	for verb, args := range map[string][]any{
+		"doc.validate": {"broken", "a.md", text},
+		"search.query": {"broken", "a"},
+	} {
+		if _, err := cli.Call(ctx, verb, args...); code(err) != golibrpc.CodeInternal {
+			t.Errorf("%s in a workspace whose root the system refused answered %v, want an internal error: it doesn't list rpc.file_refused", verb, err)
 		}
 	}
 }
