@@ -9,10 +9,12 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/decl"
+	"github.com/yongjohnlee80/golib/paths"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 )
 
 // htmlpane_test.go: File › Preview HTML (htmlpane.go, htmlpane_cells.go) — the note's page in the
@@ -59,6 +61,7 @@ func (r *running) paneSource() string {
 // blocks carrying their source bytes; an edit reaches it after the quiet; the cursor's block comes
 // to its top.
 func TestPreviewHTMLOpensThePane(t *testing.T) {
+	t.Parallel()
 	r, _ := runPane(t)
 	if onLoop(r, r.h.native) {
 		t.Fatal("the test backend draws native views")
@@ -88,11 +91,12 @@ func TestPreviewHTMLOpensThePane(t *testing.T) {
 // Preview HTML opens the pane: no image is placed and no browser opened. Image previews govern
 // View › Diagram alone.
 func TestImagePreviewsLeavePreviewHTMLThePane(t *testing.T) {
+	t.Parallel()
 	r, _ := runPane(t)
 	opened := make(chan string, 1)
 	onLoop(r, func() bool {
 		r.h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
-		r.h.rasterizeOverride = func(_ context.Context, _ []byte, p widget.Page) ([]byte, error) {
+		r.h.rasterizeOverride = func(_ context.Context, _ []byte, p htmlview.Page) ([]byte, error) {
 			return tallPage(t, p.Width, p.MinHeight), nil
 		}
 		r.h.browser = func(_ context.Context, p string) error { opened <- p; return nil }
@@ -121,6 +125,7 @@ func TestImagePreviewsLeavePreviewHTMLThePane(t *testing.T) {
 // TestALinkClickedInThePaneOpens: a click on the page's web link, in the pane's cells, hands it to
 // the browser; a click on its wikilink opens the note it names.
 func TestALinkClickedInThePaneOpens(t *testing.T) {
+	t.Parallel()
 	r, _ := runPane(t)
 	browsed := make(chan string, 1)
 	r.h.p.Post(func() { r.h.browser = func(_ context.Context, p string) error { browsed <- p; return nil } })
@@ -145,10 +150,14 @@ func TestALinkClickedInThePaneOpens(t *testing.T) {
 // colour apart from the function after it and from the pane's paper. The pane's rows are logged,
 // each theme's, for review.
 func TestThePaneReadsInSepiaAndDark(t *testing.T) {
+	t.Parallel()
 	note := "# Title\n\n```go\nfunc main() {}\n```\n\n```mermaid\nflowchart LR\n  A[Start] --> B[Finish]\n```\n"
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", note}})
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 140, 40)
 	r.waitAttached(t, "kb")
+	// the store's preferences first: they carry a theme, which applyPrefs switches to as they land,
+	// so a switch made before them would be undone under the steps below
+	r.prefsIn(t)
 	onLoop(r, func() bool { r.h.switchTheme("sepia"); return true })
 	r.s.WaitFor(t, "sepia", func(string) bool { return onLoop(r, func() string { return r.h.theme }) == "sepia" })
 	onLoop(r, func() bool { r.h.openPath("a.md"); return true })
@@ -169,6 +178,11 @@ func TestThePaneReadsInSepiaAndDark(t *testing.T) {
 			if !ok || !eok || !r.paneHas("Start", "Finish") {
 				return false
 			}
+			// a frame still on the other theme's paper is not this theme's yet: sepia's is light, dark's
+			// dark (under load the first frames after a switch can still be the old one's)
+			if bg := snap[py][px].Attrs.BG; bg.Kind != tuicore.CellColorRGB || lightPaper(bg) != (theme == "sepia") {
+				return false
+			}
 			kw = snap[py][px].Attrs.FG
 			return kw == snap[ey][ex].Attrs.FG && (len(kws) == 0 || kw != kws[0])
 		})
@@ -186,6 +200,11 @@ func TestThePaneReadsInSepiaAndDark(t *testing.T) {
 		kws = append(kws, kw)
 		t.Logf("%s: the pane:\n%s", theme, r.paneText())
 	}
+}
+
+// lightPaper is whether c is a light page's colour: its relative luminance over half.
+func lightPaper(c tuicore.CellColor) bool {
+	return (0.2126*float64(c.R)+0.7152*float64(c.G)+0.0722*float64(c.B))/255 > 0.5
 }
 
 // paneCorner is the pane's frame's top-left corner and heading as drawn in the UI's language now
@@ -280,8 +299,10 @@ func (r *running) clickInPane(t *testing.T, text string) {
 }
 
 // TestThePanesLinks: a page's link opens the note it names (a wikilink's page), a file: URL opens
-// that file, and a web address goes to the browser.
+// that file (localhost's too, and with a fragment, the file it is in), a file: URL that names no
+// file here is said so, and a web address goes to the browser.
 func TestThePanesLinks(t *testing.T) {
+	t.Parallel()
 	r, kb := runPane(t)
 	browsed := make(chan string, 1)
 	r.h.p.Post(func() {
@@ -293,14 +314,29 @@ func TestThePanesLinks(t *testing.T) {
 	if got := <-browsed; got != "https://example.com" {
 		t.Errorf("the browser was given %q", got)
 	}
-	r.h.p.Post(func() { r.h.htmlLink("file://" + filepath.ToSlash(filepath.Join(kb, "a.md"))) })
+	a, err := paths.URL(paths.OS(filepath.Join(kb, "a.md")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.h.p.Post(func() { r.h.htmlLink(a) })
 	r.waitOpen(t, "kb", "a.md")
+	b, err := paths.URL(paths.OS(filepath.Join(kb, "b.md")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.h.p.Post(func() { r.h.htmlLink(b + "#b") })
+	r.waitOpen(t, "kb", "b.md")
+	r.h.p.Post(func() { r.h.htmlLink(strings.Replace(a, "file://", "file://localhost", 1)) })
+	r.waitOpen(t, "kb", "a.md")
+	r.h.p.Post(func() { r.h.htmlLink("file:a.md") })
+	r.s.WaitFor(t, "the notice", func(string) bool { return r.noticed("file:a.md names no file on this computer") })
 }
 
 // TestThePaneFollowsTheOpenNote: with the pane open, another note opened shows its page at once
 // (no typing reports it), a render of the old note still on its way never lands over it, the draft
 // after a close shows an empty page, and a file that is not Markdown closes the pane.
 func TestThePaneFollowsTheOpenNote(t *testing.T) {
+	t.Parallel()
 	r, kb := runPane(t)
 	if err := os.WriteFile(filepath.Join(kb, "c.yaml"), []byte("k: v\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -340,6 +376,7 @@ func TestThePaneFollowsTheOpenNote(t *testing.T) {
 // TestThePaneTakesTheKeyboardByCtrlL: the pane is at the right edge, so Ctrl+l from the page in
 // Normal mode gives it the keyboard and Ctrl+h gives it back.
 func TestThePaneTakesTheKeyboardByCtrlL(t *testing.T) {
+	t.Parallel()
 	r, _ := runPane(t)
 	r.h.p.Post(r.h.previewHTML)
 	r.s.WaitFor(t, "the pane open", func(string) bool { return onLoop(r, r.h.htmlPaneShown) })
@@ -350,11 +387,12 @@ func TestThePaneTakesTheKeyboardByCtrlL(t *testing.T) {
 	r.s.WaitFor(t, "back to the page", func(string) bool { return r.focused("editor") })
 }
 
-var _ = widget.DirImages
+var _ = htmlview.DirImages
 
 // TestThePaneOpensItsPageInTheBrowser: under its page the pane has the terminal preview's buttons,
 // Open in browser and Close (q); Open in browser writes the note's page and opens it in the browser.
 func TestThePaneOpensItsPageInTheBrowser(t *testing.T) {
+	t.Parallel()
 	r, _ := runPane(t)
 	opened := make(chan string, 1)
 	r.h.p.Post(func() { r.h.browser = func(_ context.Context, path string) error { opened <- path; return nil } })
@@ -384,8 +422,62 @@ func TestThePaneOpensItsPageInTheBrowser(t *testing.T) {
 	}
 }
 
+// TestThePagesChartsAreDrawnInTheBrowserAndKeptInThePane: a note's vega-lite block stays its spec in
+// the pane, whose HTMLView draws it as a chart in cells, while Open in browser writes the page with
+// the chart drawn as SVG by the host's Chart, as --export does. With no Chart, the browser's page
+// keeps the spec.
+func TestThePagesChartsAreDrawnInTheBrowserAndKeptInThePane(t *testing.T) {
+	t.Parallel()
+	const note = "# Fruit\n\n```vega-lite\n" + `{"mark":"bar","data":{"values":[{"k":"Apples","v":3}]},` +
+		`"encoding":{"x":{"field":"k","type":"nominal"},"y":{"field":"v","type":"quantitative"}}}` + "\n```\n"
+	const drawn = `<svg data-sample="drawn chart"></svg>`
+	for _, tc := range []struct {
+		name  string
+		chart func([]byte, string) (string, error)
+		want  string
+	}{
+		{"with a Chart", func([]byte, string) (string, error) { return drawn, nil }, drawn},
+		{"without one", nil, `<pre class="vega-lite"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, kb, _, _ := runOutside(t)
+			if err := os.WriteFile(filepath.Join(kb, "chart.md"), []byte(note), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			opened := make(chan string, 1)
+			r.h.p.Post(func() {
+				r.h.chart = tc.chart
+				r.h.browser = func(_ context.Context, path string) error { opened <- path; return nil }
+				r.h.openAbsolute(filepath.Join(kb, "chart.md"))
+			})
+			r.waitOpen(t, "kb", "chart.md")
+			r.h.p.Post(func() { r.h.previewHTML() })
+			r.s.WaitFor(t, "the pane's page", func(string) bool { return r.paneSource() != "" })
+			if src := r.paneSource(); !strings.Contains(src, `<pre class="vega-lite"`) || strings.Contains(src, drawn) {
+				t.Fatalf("the pane's page is %.300q, want the vega-lite spec its HTMLView draws, not the SVG", src)
+			}
+			if !onLoop(r, func() bool { return buttonsUnder(r.h.p, "htmlPane")[0].Activate(tuicore.OriginUser) }) {
+				t.Fatal("Open in browser did not press")
+			}
+			select {
+			case path := <-opened:
+				page, err := os.ReadFile(path)
+				if err != nil || !strings.Contains(string(page), tc.want) {
+					t.Fatalf("the browser's page (%v) lacks %q:\n%.600s", err, tc.want, page)
+				}
+				if tc.chart != nil && strings.Contains(string(page), `<pre class="vega-lite"`) {
+					t.Fatalf("the browser's page keeps the spec beside the drawn chart:\n%.600s", page)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("the browser was not opened")
+			}
+		})
+	}
+}
+
 // TestThePanesCloseClosesIt: Close (q) under the pane's page closes the pane.
 func TestThePanesCloseClosesIt(t *testing.T) {
+	t.Parallel()
 	r, _ := runPane(t)
 	r.h.p.Post(func() { r.h.previewHTML() })
 	r.s.WaitFor(t, "the pane open", func(string) bool { return onLoop(r, func() bool { return r.h.panelOpen["htmlPane"] }) })
@@ -399,18 +491,18 @@ func TestThePanesCloseClosesIt(t *testing.T) {
 }
 
 // buttonsUnder are the Buttons under the node id names, in order.
-func buttonsUnder(p *tuidecl.Program, id string) []*widget.Button {
+func buttonsUnder(p *tuidecl.Program, id string) []*widgetcore.Button {
 	root, ok := p.Tree().NodeByID(id)
 	if !ok {
 		return nil
 	}
-	var out []*widget.Button
+	var out []*widgetcore.Button
 	queue := []decl.NodeID{root}
 	for len(queue) > 0 {
 		n := queue[0]
 		queue = queue[1:]
 		if c, ok := p.Adapter().Component(n); ok {
-			if b, ok := c.(*widget.Button); ok {
+			if b, ok := c.(*widgetcore.Button); ok {
 				out = append(out, b)
 			}
 		}
@@ -422,6 +514,7 @@ func buttonsUnder(p *tuidecl.Program, id string) []*widget.Button {
 // TestThePanesKeysPressItsButtons: with the keyboard in the pane, b opens its page in the browser
 // and q closes it, as its buttons do.
 func TestThePanesKeysPressItsButtons(t *testing.T) {
+	t.Parallel()
 	r, _ := runPane(t)
 	opened := make(chan string, 1)
 	r.h.p.Post(func() { r.h.browser = func(_ context.Context, path string) error { opened <- path; return nil } })
@@ -449,6 +542,7 @@ func TestThePanesKeysPressItsButtons(t *testing.T) {
 // for a chart, not a diagram's: the notice a note's page and a card's show (pageNotice). After a
 // language switch, with the pane open, it says it in the new language.
 func TestThePanesUndrawnChartSaysItIsAChart(t *testing.T) {
+	t.Parallel()
 	note := "# Map\n\n```vega-lite\n{\"data\":{\"values\":[{\"a\":1}]},\"mark\":\"geoshape\"}\n```\n"
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", note}})
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 140, 40)

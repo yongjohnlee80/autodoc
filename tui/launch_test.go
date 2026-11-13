@@ -14,6 +14,7 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 
 	"github.com/yongjohnlee80/autodoc/core/config"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // TestLaunchRunsAnotherClientsLayoutAndDaemon: a program launching AutoDoc's TUI with a layout and
@@ -25,11 +26,11 @@ func TestLaunchRunsAnotherClientsLayoutAndDaemon(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	sock, state := filepath.Join(dir, "s.sock"), filepath.Join(dir, "state")
+	sock, state := ipc.ScratchAddr(dir, "s.sock"), filepath.Join(dir, "state")
 	conf := filepath.Join(dir, "config.toml")
 	// a data_dir of its own: without one the store is the user's, and resolving the endpoint by the
 	// store's lease-info would find the user's daemon serving it instead of spawning this test's
-	body := "[server]\nsocket = \"" + sock + "\"\nstate_dir = \"" + state + "\"\ndata_dir = \"" + filepath.Join(dir, "data") + "\"\n"
+	body := "[server]\nsocket = " + tomlString(t, sock) + "\nstate_dir = " + tomlString(t, state) + "\ndata_dir = " + tomlString(t, filepath.Join(dir, "data")) + "\n"
 	if err := os.WriteFile(conf, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -98,23 +99,31 @@ func TestLaunchChecksTheWorkspaceNamed(t *testing.T) {
 	}
 }
 
+// printingProgram is a program named name that prints line, whatever its arguments: a /bin/sh
+// script, or on Windows a .cmd file, which Windows runs as a program.
+func printingProgram(t *testing.T, name, line string) string {
+	t.Helper()
+	p, text := filepath.Join(t.TempDir(), name), "#!/bin/sh\necho "+line+"\n"
+	if filepath.Separator == '\\' {
+		p, text = p+".cmd", "@echo "+line+"\r\n"
+	}
+	if err := os.WriteFile(p, []byte(text), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
 // TestTheInstalledVersionIsAutodocsAnswer: a binary that answers --version otherwise, or none at all,
 // gives no version.
 func TestTheInstalledVersionIsAutodocsAnswer(t *testing.T) {
-	sh := filepath.Join(t.TempDir(), "not-autodoc")
-	if err := os.WriteFile(sh, []byte("#!/bin/sh\necho something else\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
+	sh := printingProgram(t, "not-autodoc", "something else")
 	if v, err := versionOf(sh); err == nil {
 		t.Errorf("a binary that is not autodoc gave %q", v)
 	}
 	if _, err := versionOf(filepath.Join(t.TempDir(), "absent")); err == nil {
 		t.Error("an absent binary gave a version")
 	}
-	ok := filepath.Join(t.TempDir(), "autodoc")
-	if err := os.WriteFile(ok, []byte("#!/bin/sh\necho autodoc v9.9.9\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
+	ok := printingProgram(t, "autodoc", "autodoc v9.9.9")
 	if v, err := versionOf(ok); err != nil || v != "v9.9.9" {
 		t.Errorf("an autodoc's answer: %q, %v", v, err)
 	}

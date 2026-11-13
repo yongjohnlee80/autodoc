@@ -8,13 +8,13 @@
 //	modules.go    the QML the program ships, and the modules that offer it
 //	state.go      the App singleton's state: what the document reads
 //	commands.go   the App singleton's commands: what the document invokes
-//	work.go       background work, and bringing its result back
+//	feature/work.go       background work, and bringing its result back
 //	client.go     the session: the only path to the daemon
 //	session.go    connecting, and reconnecting when the connection ends
 //	workspace.go  the workspaces, and switching between them
 //	files.go      the file in the editor: opening, saving, conflicts, unsaved changes
-//	search.go     the workspace's files, as the pickers filter them
-//	pick.go       the one picker core, pick[T], behind Picker.qml and the App.pick* commands
+//	feature/search.go     the workspace's files, as the pickers filter them
+//	feature/pick.go       the one picker core, pick[T], behind Picker.qml and the App.pick* commands
 //	searchpick.go the search picker: the daemon's search as it is typed, and its hits
 //	filepick.go   File › Open and the draft's name: pickers over the workspace's files
 //	marks.go      words marked over Markdown's highlighting: the search's and the find's
@@ -45,7 +45,9 @@ import (
 	"github.com/yongjohnlee80/golib/highlight"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
+	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 	"github.com/yongjohnlee80/golib/vfs"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
@@ -54,20 +56,27 @@ import (
 	"github.com/yongjohnlee80/autodoc/internal/profiling"
 	"github.com/yongjohnlee80/autodoc/internal/usertheme"
 	"github.com/yongjohnlee80/autodoc/script"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
+	"github.com/yongjohnlee80/autodoc/tui/crew"
+	"github.com/yongjohnlee80/autodoc/tui/explorer"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/relations"
+	"github.com/yongjohnlee80/autodoc/tui/searchsetup"
 )
 
 // Host is the program behind qml/main.qml.
 type Host struct {
 	p        *tuidecl.Program
 	session  *Session
-	reg      *registry          // the features, merged (feature.go)
-	cat      *catalog           // the user commands, every source's (catalog.go): the registry's
-	asker    *asker             // the one yes-or-no question (ask.go)
-	prefRows []PrefSpec         // every preference declared, the host's and the features' (prefspec.go)
-	keys     keyset             // the keys and their cards, the host's and the features' (keys.go)
+	seams    seams              // its own copy of Options.seams, or defaultSeams; its features hold a pointer to it
+	reg      *feature.Registry  // the features, merged (feature/feature.go)
+	cat      *feature.Catalog   // the user commands, every source's (feature/catalog.go): the registry's
+	asker    *feature.Asker     // the one yes-or-no question (feature/ask.go)
+	prefRows []feature.PrefSpec // every preference declared, the host's and the features' (feature/prefspec.go)
+	keys     feature.Keyset     // the keys and their cards, the host's and the features' (feature/keys.go)
 	started  bool               // the first preferences were applied: the program has started (applyPrefs)
 	editor   editorWidget       // main.qml's Editor, terminal or native (editor.go)
-	core     *widget.EditorCore // its core: the text, the cursor and the modes
+	core     *editor.EditorCore // its core: the text, the cursor and the modes
 	gui      bool               // in a window (Options.GUI): the theme kept is gui.theme
 	ctx      context.Context
 	cancel   context.CancelFunc
@@ -91,15 +100,15 @@ type Host struct {
 	themeCatalog *usertheme.Catalog
 
 	// the models the document binds
-	workspaces, managed *rows[wsInfo] // the daemon's workspaces: the picker's and the manager's
+	workspaces, managed *feature.Rows[wsInfo] // the daemon's workspaces: the picker's and the manager's
 	wsProviders         *tuidecl.ListModel
-	kbTypes             *tuidecl.ListModel // the add dialog's KB type field (kbtype.go)
-	vectors             *rows[vectorRow]   // the workspace's models (vectors.go)
+	kbTypes             *tuidecl.ListModel       // the add dialog's KB type field (kbtype.go)
+	vectors             *feature.Rows[vectorRow] // the workspace's models (vectors.go)
 
-	// the pickers (pick.go): the search's, File › Open's and the draft's name (the outline's is
+	// the pickers (feature/pick.go): the search's, File › Open's and the draft's name (the outline's is
 	// outline.go's); the search's own state, and its words
-	searchPick        *pick[hit]
-	openPick, newPick *pick[string]
+	searchPick        *feature.Pick[hit]
+	openPick, newPick *feature.Pick[string]
 	searchSeq         uint64
 	searchCancel      context.CancelFunc
 	searchQuery       string
@@ -114,8 +123,8 @@ type Host struct {
 	find findState
 	// the Relations drawer (relations.go), a feature of its own; the jump list across the
 	// documents (navigation.go)
-	rel   *related
-	jumps *widget.JumpList
+	rel   *relations.Related
+	jumps *editor.JumpList
 
 	// the preferences (prefs.go), and the panels open now (panels.go)
 	prefs      prefs
@@ -141,6 +150,7 @@ type Host struct {
 	fonts                                  FontControl     // the window's fonts; nil in a terminal (fonts.go)
 	families                               func(mono bool) []string
 	defaultCellFont                        string
+	chart                                  func(spec []byte, theme string) (string, error) // Options.Chart
 	fontsApplied                           appliedFonts
 	panelText                              panelText               // the agent and terminal panels' text size (paneltext_gui.go)
 	fontGens                               map[uint64]appliedFonts // the fonts set at each generation, for the grid's (fontsFit)
@@ -152,21 +162,21 @@ type Host struct {
 	arranged                               string             // the panel an arrangement kept, given the keyboard as its card closes (arrange.go)
 	// Stateful terminal and agent behavior is owned by these Features.
 	terminals  *terminals
-	agents     *agents
-	crew       *crewHost   // the window's crew scope (crewhost.go)
-	crewInbox  *crewInbox  // the human's crew inbox in this window (crewinbox.go)
-	inboxView  *inboxView  // the inbox dialog: the user's mail, SPC a i (crewinboxview.go)
-	grantsView *grantsView // Agent permissions: the grants given, and Revoke (grants.go)
+	agents     *agents.Agents
+	crew       *crew.CrewHost   // the window's crew scope (crewhost.go)
+	crewInbox  *crew.Inbox      // the human's crew inbox in this window (crewinbox.go)
+	inboxView  *crew.InboxView  // the inbox dialog: the user's mail, SPC a i (crewinboxview.go)
+	grantsView *crew.GrantsView // Agent permissions: the grants given, and Revoke (grants.go)
 	// The recent-files Feature owns its rows and persisted list.
-	recent *recent
+	recent *explorer.Recent
 	tiles  *tiles // the base's Layout: each window's tiling preferences (tilelayout.go)
 	// the explorer (explorer.go), a feature of its own: find searches its rows (FindPane)
-	explorer *explorer
+	explorer *explorer.Explorer
 
 	// the AI models dialog (aimodels.go), a feature of its own: the host lists its providers again
 	// when the workspace's vectors change under them (vectors.go), and its rankers when the daemon
 	// says the ranker in use changed (events.go)
-	ai *aiModels
+	ai *searchsetup.AIModels
 
 	hitsRanked string // the hits' title's note of their order (rankedTitle)
 	// the search's stages (stages.go): the ranker in use, who it is and how its box names it ("" for
@@ -207,10 +217,10 @@ type Host struct {
 	imagePreview      previewing    // the image preview open, to zoom it (preview.go)
 	htmlPane          htmlPaneState // the native HTML preview beside the editor, under --gui (htmlpane.go)
 	graphicsOverride  func() tuicore.Tri
-	rasterizeOverride func(context.Context, []byte, widget.Page) ([]byte, error)
+	rasterizeOverride func(context.Context, []byte, htmlview.Page) ([]byte, error)
 	// the outline and the breadcrumb (outline.go), a feature of its own; crumbs is the breadcrumb
 	// it puts after the file's name (Core.Crumbs)
-	outline   *outliner
+	outline   *explorer.Outliner
 	crumbs    []string
 	focusSent time.Time
 	entered   bool // ws was entered on this connection's listing
@@ -234,10 +244,10 @@ type Host struct {
 	noteFile             func(string)        // told the open note's file (Options.NoteFile); nil: none
 	// browserOverride stands in for finding a headless browser in tests; nil: golib's HTMLRasterizer
 	browserOverride func() bool
-	paneMermaid     any              // the GUI pane's mermaid.js Diagrammer (mermaidjs_gui.go); nil until the pane opens
-	htmlAsk         *htmlOpen        // the HTML file the open question is about (OpenHTML.qml)
-	pageDir         string           // the root and base the page's resources load from (htmldoc.go)
-	pageDoc         *widget.HTMLView // the editor's own page view, kept while a table takes its place (htmldoc.go)
+	paneMermaid     any                // the GUI pane's mermaid.js Diagrammer (mermaidjs_gui.go); nil until the pane opens
+	htmlAsk         *htmlOpen          // the HTML file the open question is about (OpenHTML.qml)
+	pageDir         string             // the root and base the page's resources load from (htmldoc.go)
+	pageDoc         *htmlview.HTMLView // the editor's own page view, kept while a table takes its place (htmldoc.go)
 	// refusedNoted: the open page's refused resource was said (resourceRefused)
 	refusedNoted bool
 	// awaitExit waits for a stopped daemon's process to go (waitGone); a test's daemon shares the
@@ -245,12 +255,12 @@ type Host struct {
 	awaitExit func(ctx context.Context, pid int64) bool
 	where     string // the status line's "autodoc <version> · <workspace>", or why there is none
 	epoch     uint64
-	listSeq   uint64        // numbers the file list's loads; the latest wins (search.go)
-	listRetry time.Duration // the delay before the file list's next retry after a failure; 0 after a success
-	files     FileList      // the workspace's files, as last listed (page.go)
-	page      Page          // the page shown, its text as last snapshotted (page.go)
-	pageGen   uint64        // numbers the typing pauses; the latest wins (page.go)
-	typing    bool          // typed since the page was last snapshotted: its pause is to come (page.go)
+	listSeq   uint64           // numbers the file list's loads; the latest wins (feature/search.go)
+	listRetry time.Duration    // the delay before the file list's next retry after a failure; 0 after a success
+	files     feature.FileList // the workspace's files, as last listed (page.go)
+	page      feature.Page     // the page shown, its text as last snapshotted (page.go)
+	pageGen   uint64           // numbers the typing pauses; the latest wins (page.go)
+	typing    bool             // typed since the page was last snapshotted: its pause is to come (page.go)
 
 	// the workspace manager: the row under its cursor, and whether the edition offers the database
 	// settings
@@ -264,23 +274,23 @@ type Host struct {
 	active     *openBuffer
 	bufRecent  []*openBuffer
 	bufN       int
-	bufferPick *pick[string] // the Buffers picker (bufferpick.go)
+	bufferPick *feature.Pick[string] // the Buffers picker (bufferpick.go)
 	// the Go-to picker's rows and its cursor (widgets.go)
-	widgetRows *rows[widgetTarget]
-	dockRows   *rows[widgetTarget] // App.dock, the menu bar's corner (dock.go)
+	widgetRows *feature.Rows[widgetTarget]
+	dockRows   *feature.Rows[widgetTarget] // App.dock, the menu bar's corner (dock.go)
 	// minimized are the panels the dock hid (golib's window minimize: hidden, not closed), the decl
 	// program's window collector; dockHidden are those the editor's icon hid, to show again (dock.go)
-	minimized  *widget.MinimizedWindows
+	minimized  *widgetcore.MinimizedWindows
 	dockHidden []string
 	dockFlash  map[string]*dockFlash // by panel: its icon flashing as it hides (dock.go)
 	widgetAt   int
-	tabStrip   *widget.TabStrip // the GUI editor's buffer tabs, once wired; nil in the TUI (buffertabs.go)
+	tabStrip   *widgetcore.TabStrip // the GUI editor's buffer tabs, once wired; nil in the TUI (buffertabs.go)
 	// the folders watched for the open files (diskwatch.go), and the driver a folder is opened with
 	watches map[string]*diskWatch
 	diskFS  func(dir string) (vfs.FS, error)
 	// todoMoves are the latest task moves the todo feed read, oldest first, to name where a gone
 	// file went (todomove.go)
-	todoMoves []todoFileChange
+	todoMoves []crew.TodoFileChange
 	// openNewBuffer: File › Open's next choice opens in a buffer of its own (openPickerNewBuffer),
 	// passed to that open alone (openRefWith)
 	openNewBuffer bool
@@ -293,6 +303,10 @@ type Host struct {
 
 	// tui.gui.renderer's mirror for the next start's window (renderer.go), and what it was last written
 	rendererFile, rendererMirrored string
+	// tui.gui.titlebar's mirror for the next start's window, and what it was last written; titleBar:
+	// this window opened without the system's title bar, so its own is in the layout (titlebar.go)
+	titleBarFile, titleBarMirrored string
+	titleBar                       bool
 
 	// the Lua commands (scripts.go): the engine, and the user's folder of scripts
 	scripts   *script.Engine
@@ -315,8 +329,6 @@ type Host struct {
 	// Lua events (luaevents.go): the change debounce's generation, the revision the last change emit
 	// (or open) saw, and the mode last emitted
 	luaChangeGen uint64
-	// luaRoots are the running engine's package folders, open while it may require from them
-	luaRoots []*os.Root
 	// userPackages are the user's package names (lua/<name>/), loaded or failed: each reserves its
 	// name against a plugin's package (luapackages.go). pluginPackages are the plugin packages
 	// loaded, by script name ("plugin:<name>") → the plugin's key: autodoc.plugin.run's only
@@ -333,13 +345,13 @@ type Host struct {
 	prog           progress   // the daemon's work left (progress.go)
 	// the notifications (notify.go): the toasts over the page, what was posted before they were,
 	// and the history
-	toasts     *widget.Toasts
-	early      []widget.Toast
-	noticeLog  *notices          // the notifications kept (notices.go)
-	vimKeys    *widget.Float     // the Vim keys' card (vimkeys.go)
-	findCard   *widget.Box       // "finding …" and its ✕, at the page window's top right (find.go)
+	toasts     *widgetcore.Toasts
+	early      []widgetcore.Toast
+	noticeLog  *feature.Notices  // the notifications kept (feature/notices.go)
+	vimKeys    *widgetcore.Float // the Vim keys' card (vimkeys.go)
+	findCard   *widgetcore.Box   // "finding …" and its ✕, at the page window's top right (find.go)
 	findCardOn tuicore.Component // the page's window the card was put in: a rebuilt one gets it again
-	findLabel  *widget.Text
+	findLabel  *widgetcore.Text
 	// the plugins (pluginfeature.go), a feature of its own: the host syncs their catalog entries
 	// when the registry is built, launches their services when the program runs, and F1 names their
 	// letters (help.go), at the moments the host decides
@@ -352,10 +364,10 @@ type Host struct {
 	helpPosted bool
 	// moreFeatures follow the host's own in features(): a test's, whose keys and catalog entries
 	// run in the program as any feature's do
-	moreFeatures []Feature
+	moreFeatures []feature.Feature
 	backend      tuicore.Backend // Options.Backend: the window's, for the GUI's streams
 	// relationViews are the GUI's GlobeMap and Mindmap (relationviews_gui.go); none in a terminal
-	relationViews []Feature
+	relationViews []feature.Feature
 	graphUserFile string // graph.toml beside the config: the user's groups and palette (graphconf.go)
 	cfgDir        string // the folder beside the config (lua/, plugins/, themes/): a gated call's protect (authority.go)
 	// invoking is a gated script's key or row running its line, for authorityNow; nil otherwise
@@ -419,6 +431,12 @@ type Options struct {
 	// RendererFile is where tui.gui.renderer is mirrored for the next start's window, which opens
 	// before the store is read (renderer.go); "" mirrors nothing.
 	RendererFile string
+	// TitleBarFile is where tui.gui.titlebar is mirrored for the next start's window, as RendererFile
+	// is (titlebar.go); "" mirrors nothing.
+	TitleBarFile string
+	// TitleBar is set when the window opened without the system's title bar: the layout gets AutoDoc's
+	// own, at its top (titlebar.go). Only a window (GUI) draws it.
+	TitleBar bool
 	// CrashDir is where a contained panic's crash log goes, and a fatal one's report (crash.go); ""
 	// writes none, the notice still said.
 	CrashDir string
@@ -451,6 +469,14 @@ type Options struct {
 	Fonts           FontControl
 	FontFamilies    func(mono bool) []string
 	DefaultCellFont string
+	// Chart draws a Vega-Lite spec as inline SVG in the page Open in browser writes, as --export does
+	// (core/export Options.Chart). The pane itself keeps the spec: its HTMLView draws a vega-lite
+	// block as a chart in cells. nil: the browser's page keeps the spec too.
+	Chart func(spec []byte, theme string) (svg string, err error)
+
+	// seams are the program's waits, addresses and test hooks (seams.go); nil is defaultSeams. The
+	// host copies them as it is made.
+	seams *seams
 }
 
 // New builds the program over session. Nothing runs, and nothing dials, until Run.
@@ -468,8 +494,8 @@ func New(session *Session, opt Options) (*Host, error) {
 
 func newHost(session *Session, opt Options) *Host {
 	ctx, cancel := context.WithCancel(context.Background())
-	h := &Host{session: session, ctx: ctx, cancel: cancel, about: opt.About, aboutInfo: opt.AboutInfo, dev: opt.Dev,
-		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, installRecord: opt.InstallRecord, profiler: opt.Profiler, ownTables: opt.Registrations, recoveryDir: opt.RecoveryDir, rendererFile: opt.RendererFile, crashDir: opt.CrashDir, luaDir: opt.LuaDir, editorDir: opt.EditorDir,
+	h := &Host{session: session, seams: defaultSeams, ctx: ctx, cancel: cancel, about: opt.About, aboutInfo: opt.AboutInfo, dev: opt.Dev,
+		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, installRecord: opt.InstallRecord, profiler: opt.Profiler, ownTables: opt.Registrations, recoveryDir: opt.RecoveryDir, rendererFile: opt.RendererFile, titleBarFile: opt.TitleBarFile, titleBar: opt.TitleBar, crashDir: opt.CrashDir, luaDir: opt.LuaDir, editorDir: opt.EditorDir,
 		awaitExit:       awaitExit,
 		browser:         openDefaultApp,
 		wsLeft:          make(chan struct{}),
@@ -483,15 +509,19 @@ func newHost(session *Session, opt Options) *Host {
 		fonts:           opt.Fonts,
 		families:        opt.FontFamilies,
 		defaultCellFont: opt.DefaultCellFont,
+		chart:           opt.Chart,
 		noteFile:        opt.NoteFile,
-		vectors:         newRows(tuidecl.NewListModel("key", "state", "model", "dims", "vectors", "f32", "bits", "keys", "total"), vectorRowOf),
-		jumps:           widget.NewJumpList(0),
+		vectors:         feature.NewRows(tuidecl.NewListModel("key", "state", "model", "dims", "vectors", "f32", "bits", "keys", "total"), vectorRowOf),
+		jumps:           editor.NewJumpList(0),
 		prefs:           defaultPrefsFor(opt.GUI),
 		gui:             opt.GUI,
 		backend:         opt.Backend,
 		panelOpen:       map[string]bool{},
-		workspaces:      newRows(tuidecl.NewListModel("key", "label"), workspaceRowOf),
-		managed:         newRows(tuidecl.NewListModel("key", "name", "state", "root"), managedRowOf),
+		workspaces:      feature.NewRows(tuidecl.NewListModel("key", "label"), workspaceRowOf),
+		managed:         feature.NewRows(tuidecl.NewListModel("key", "name", "state", "root"), managedRowOf),
+	}
+	if opt.seams != nil {
+		h.seams = *opt.seams // a copy: nothing the caller changes later reaches this program
 	}
 	h.themeCatalog = usertheme.Open(opt.ThemeDir)
 	if opt.NoteTranslator != nil {
@@ -501,35 +531,33 @@ func newHost(session *Session, opt Options) *Host {
 	first := h.newBuffer()
 	first.buf = nil
 	h.active, h.file, h.bufRecent = first, &first.file, []*openBuffer{first}
-	h.noticeLog = newNotices(core{h})
-	h.recent = newRecent(core{h})
+	h.noticeLog = feature.NewNotices(core{h})
+	h.recent = explorer.NewRecent(core{h})
 	h.tiles = newTiles(core{h})
-	h.explorer = newExplorer(core{h})
-	h.ai = newAIModels(core{h})
-	h.outline = newOutline(core{h})
-	h.rel = newRelated(core{h})
+	h.explorer = explorer.NewExplorer(core{h})
+	h.ai = searchsetup.NewAIModels(core{h})
+	h.outline = explorer.NewOutline(core{h})
+	h.rel = relations.NewRelated(core{h})
 	h.searchPick, h.openPick, h.newPick = h.newSearchPick(), h.newOpenPick(), h.newNewPick()
 	h.bufferPick = h.newBufferPick()
 	h.widgetRows = newWidgetRows()
 	h.dockRows = h.newDockRows()
-	h.minimized = widget.NewMinimizedWindows()
+	h.minimized = widgetcore.NewMinimizedWindows()
 	h.reloadCards = func(src []byte, sources map[string]any) (decl.Result, error) {
 		return h.p.ReloadWithSources(src, sources)
 	}
 	h.terminals = newTerminals(unboundPanelHost(core{h}))
 	h.terminals.startLua = h.startLuaShell
-	h.agents = newAgents(unboundPanelHost(core{h}), opt.AgentDir, opt.ConfigPath)
-	h.crew = newCrewHost(core{h}, opt.AgentDir)
-	h.agents.crew = h.crew
-	h.crew.deliverJob = h.agents.deliverFallback
-	h.crew.onTodoFiles = h.todoFilesChanged
-	h.crewInbox = newCrewInbox(core{h}, h.agents.raiseSession)
-	h.crewInbox.took = h.crew.tookJob
-	h.crew.onClaim = h.crewInbox.recheckFallbacks // the scope changed hands: what waited for a host may not
-	h.agents.inbox = h.crewInbox
-	h.inboxView = newInboxView(core{h}, h.crewInbox)
-	h.crewInbox.view = h.inboxView
-	h.grantsView = newGrantsView(core{h}) // one for the program: the registry is built again, the dialog is not
+	h.agents = agents.NewAgents(unboundPanelHost(core{h}), &h.seams, opt.AgentDir, opt.ConfigPath)
+	h.crew = crew.NewHost(core{h}, h.seams.env, opt.AgentDir, crew.HostHooks{
+		DeliverJob:  h.agents.DeliverFallback,
+		OnClaim:     func() { h.crewInbox.RecheckFallbacks() }, // the scope changed hands: what waited for a host may not
+		OnTodoFiles: h.todoFilesChanged,
+	})
+	h.agents.Crew = h.crew
+	h.crewInbox, h.inboxView = crew.NewInbox(core{h}, h.agents.RaiseSession, h.crew.TookJob)
+	h.agents.Inbox = h.crewInbox
+	h.grantsView = crew.NewGrantsView(core{h}) // one for the program: the registry is built again, the dialog is not
 	if opt.ConfigPath != "" {
 		h.graphUserFile = filepath.Join(filepath.Dir(opt.ConfigPath), "graph.toml")
 		// absolute: the daemon refuses a gated call whose protect is relative, rather than protect nothing
@@ -538,10 +566,11 @@ func newHost(session *Session, opt Options) *Host {
 			h.cfgDir = abs
 		}
 	}
-	h.agents.editorPath = h.editorSocketPath // AUTODOC_EDITOR for the agents it starts
+	h.agents.EditorPath = h.editorSocketPath // AUTODOC_EDITOR for the agents it starts
 	h.cands = newCandidates(core{h})
-	h.plugins = newPlugins(core{h}, opt.Plugins)
+	h.plugins = newPlugins(core{h}, &h.seams, opt.Plugins)
 	h.plugins.cands = h.cands
+	h.plugins.folderReadWait, h.plugins.readGit = h.seams.folderReadWait, h.seams.pluginGit
 	h.plugins.scriptsChanged = func() {
 		if err := h.reloadScripts(); err != nil {
 			h.notify(h.trf("autodoc.notice.app.the_lua_scripts_were_not_reloaded", err.Error()))
@@ -569,9 +598,9 @@ func (h *Host) attach(p *tuidecl.Program) error {
 		return markedSpans(&h.findMarks, line, semantic)
 	})
 	if h.cat != nil {
-		h.cat.changed = h.commandsChanged // F1 lists the commands as they come and go (help.go)
+		h.cat.Changed = h.commandsChanged // F1 lists the commands as they come and go (help.go)
 	}
-	h.cat.attach(h.core)             // the catalog's verbs on the command line: find is the page's (catalog.go)
+	h.cat.Attach(h.core)             // the catalog's verbs on the command line: find is the page's (feature/catalog.go)
 	h.core.SetOnEscape(h.escapeFind) // Esc in the page ends its find (find.go)
 	h.loadScripts()                  // the Lua commands: AutoDoc's own, then the user's (scripts.go)
 	h.startEditorSocket(h.editorDir) // the page as the agents' tools (editorsocket.go)
@@ -604,8 +633,8 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		src, _ = os.ReadFile(filepath.Join(opt.Dev, "main.qml"))
 		files := os.DirFS(opt.Dev)
 		// main.qml with the card plugins' panels written in, on every reload (pluginpanels.go)
-		opts = append(modulesFrom(files), tuidecl.Layout(cardFS{FS: files, pl: h.plugins, gui: h.gui}, "main.qml"),
-			tuidecl.HotReload(tuidecl.OnReloadError(h.themeReloadError), tuidecl.OnReload(func(decl.Result) { h.reloaded() })))
+		opts = append(modulesFrom(files), tuidecl.Layout(cardFS{FS: files, pl: h.plugins, layout: h.windowLayout}, "main.qml"),
+			tuidecl.HotReload(tuidecl.OnReloadError(h.themeReloadError), tuidecl.OnReload(func(decl.Result) { h.reloaded(h.hotReloadedLayout()) })))
 	} else {
 		src = opt.Layout
 		if src == nil {
@@ -614,14 +643,14 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 				src = themeImport.ReplaceAll(src, []byte("import autodoc.theme."+defaultGUITheme+" "+moduleVersion))
 			}
 		}
-		h.layoutBase = withRelationViews(src, h.gui) // the GUI's relation views (relationmap.go)
+		h.layoutBase = h.windowLayout(src)           // the GUI's relation views and its own title bar (titlebar.go)
 		src = h.plugins.withCardPanels(h.layoutBase) // a panel for each card plugin found (pluginpanels.go)
 		opts = append(modulesFrom(qmlFiles), tuidecl.LayoutSource("main.qml", src))
 		// Names added later require a restart; with no registered user modules and no key file
 		// there is nothing mutable to follow, so the normal built-in-only UI keeps no poller. A key
 		// file is followed from its first save, so its directory being named is enough.
 		if opt.KeymapFile != "" || opt.ThemeDir != "" && len(h.themeNames()) > len(themeNames) {
-			opts = append(opts, tuidecl.HotReload(tuidecl.OnReloadError(h.themeReloadError), tuidecl.OnReload(func(decl.Result) { h.reloaded() })))
+			opts = append(opts, tuidecl.HotReload(tuidecl.OnReloadError(h.themeReloadError), tuidecl.OnReload(func(decl.Result) { h.reloaded(h.hotReloadedLayout()) })))
 		}
 	}
 	if opt.ThemeDir != "" {
@@ -632,10 +661,10 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 	if err := h.assembleFeatures(h.features()...); err != nil {
 		panic(err) // two features naming one source or command: a build that cannot start
 	}
-	h.cat = h.reg.catalog
-	h.cat.tr = h.trOr          // the command line's help in the UI's language (language.go)
-	h.cat.who = h.authorityNow // a user-only entry is refused to a gated script's run (authority.go)
-	cmds, err := h.keys.commands()
+	h.cat = h.reg.Catalog
+	h.cat.Tr = h.trOr                                             // the command line's help in the UI's language (language.go)
+	h.cat.Gated = func() bool { return h.authorityNow().gated() } // a user-only entry is refused to a gated script's run (authority.go)
+	cmds, err := h.keys.Commands()
 	if err != nil {
 		panic(err) // the registry's check refuses it first: a build that cannot start
 	}
@@ -647,20 +676,22 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 	h.plugins.refreshPlugins()
 	opts = append(opts,
 		tuidecl.Highlighters(h.searchDefinition(), highlight.Definition{Name: "Plain text", Highlighter: highlight.HighlighterFunc(func(string, highlight.State) ([]highlight.Span, highlight.State) { return nil, 0 })}),
-		tuidecl.Sources(h.reg.state),
-		tuidecl.Handlers(h.reg.handlers),
+		tuidecl.Sources(h.reg.State),
+		tuidecl.Handlers(h.reg.Handlers),
 		tuidecl.AdapterOptions(tuidecl.WithWindowCollector(h.minimized)), // the panels the dock hides (dock.go)
 		tuidecl.ErrorSink(h.keep),
-		tuidecl.Types(noteRendererType),         // the note editor's renderer (noterenderer.go)
+		tuidecl.Types(feature.NoteRendererType), // the note editor's renderer (feature/noterenderer.go)
 		tuidecl.Types(h.plugins.cardType()),     // a card plugin's view in its panel (pluginpanels.go)
 		tuidecl.Types(h.relationViewTypes()...), // the GUI's GlobeMap and Mindmap views (relationmap.go)
+		tuidecl.Types(h.titleBarTypes()...),     // the window's own title bar, when it has one (titlebar.go)
 		// The file dialogs read the local disk, not the daemon's: same machine, so the daemon adds
-		// nothing to a listing. Off the loop, so a slow mount cannot hold it; os.DirFS, not
-		// vfs/local, whose root refuses an absolute link and lists every link as a file.
-		tuidecl.Files(widget.FileSource{FS: os.DirFS("/"), Root: "/", Async: true}),
+		// nothing to a listing. Off the loop, so a slow mount cannot hold it; golib's local disk
+		// (os.DirFS at "/"; on Windows every drive, its paths Windows' own), not vfs/local, whose
+		// root refuses an absolute link and lists every link as a file.
+		tuidecl.Files(dialogDisk()),
 		// The too-small screen's Quit is AutoDoc's own, which asks before unsaved changes are lost;
 		// the caller's options come after, and may set another.
-		tuidecl.AppOptions(append([]tuicore.AppOption{tuicore.WithQuit(h.quit), tuicore.WithOnStopping(h.reg.stopping),
+		tuidecl.AppOptions(append([]tuicore.AppOption{tuicore.WithQuit(h.quit), tuicore.WithOnStopping(h.reg.Stopping),
 			// one failing command never takes AutoDoc down; a panic golib will not contain ends Run with
 			// it, so the unsaved work is kept and a report written (crash.go)
 			tuicore.WithHandlerRecover(h.contained), tuicore.WithPanicPolicy(tuicore.PanicReturn)}, opt.App...)...),
@@ -672,14 +703,13 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 func (h *Host) Run(ctx context.Context) error {
 	defer h.cancel()
 	defer h.session.Close()
-	defer h.reg.stopped() // after the loop: what each feature started stopped, bounded, before the session ends
+	defer h.reg.Stopped() // after the loop: what each feature started stopped, bounded, before the session ends
 	h.sayLastCrash()
 	err := h.p.Run(ctx)
 	keepErr := h.ended(err)
 	if h.scripts != nil {
 		h.scripts.Close()
 	}
-	closeRoots(h.luaRoots)
 	if h.editorSock != nil {
 		h.editorSock.stop()
 	}

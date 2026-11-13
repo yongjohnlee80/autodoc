@@ -27,20 +27,11 @@ autodoc --call doc.read '["kb", "adrs/0203-architecture.md"]'
   absolute path.
 - Integers in the parameters are sent as integers; the verbs that take a number need one.
 
-A program that speaks msgpack-rpc itself can dial the socket directly. Find the socket with
-`autodoc --print-endpoint` (one line, `unix<TAB><socket>`; add `--ensure` to start the daemon first
-when nothing answers), never by rules of your own. The first call on a connection must be
-`sys.hello` with `{"protocol": N, "name": "<your client>"}`, where `N` is the protocol your client was
-written for. The daemon serves every protocol from its `min_protocol` to its own; another is
-refused, and so is every verb until the hello succeeds. To learn the range first, send `sys.hello`
-with no protocol: that probe admits nothing and answers `min_protocol` and `server_protocol`. A verb may be written right behind the
-hello, before its answer: it waits for the hello (3 s at most). A session keeps the protocol it declared: a
-verb added after it answers as an unknown method (-32601), and the results it knew keep their shape
-and meaning, though a result may gain keys, which a client ignores. `sys.capabilities` lists the
-`verbs` the session may call. The name `autodoc-tui` is admitted at the daemon's own protocol only.
-`autodoc --call` says hello as `autodoc-cli`, so what it changes is attributed to it in
-`sys.events`; refused by an older daemon it still serves, it says hello again at that daemon's
-protocol, on a new connection (a refused hello ends its session).
+A program that speaks msgpack-rpc itself can dial the socket directly. Find it with
+`autodoc --print-endpoint` (`--ensure` starts the daemon first), never by rules of your own. Its first
+call must be `sys.hello` with `{"protocol": N, "name": "<your client>"}`. The handshake, the protocol
+range and what a session keeps are in
+[docs/reference/12-ai-agent-integration-and-cli-rpc.md](docs/reference/12-ai-agent-integration-and-cli-rpc.md).
 
 ## What you can do for the user
 
@@ -126,7 +117,8 @@ The stages:
 - Without `rerank`, the hits are never ranked, even with a ranker in use: compare a search with and
   without it to see what the ranker changed.
 - A build may answer ranked or not at all: then a search that asks for `rerank` (or auto) and cannot
-  be ranked is refused with -32070. One that leaves `rerank` out is answered, unranked.
+  be ranked is refused with -32070, and no hits. Retry later, or leave `rerank` out: that one is
+  answered, unranked.
 
 The answer:
 
@@ -172,17 +164,11 @@ The answer:
     why;
   - `off`: no ranker is in use, `rerank` was not asked for, or the query had no words to rank by
     (filters alone).
-
-  A build may answer ranked or not at all: then a search that asked for `rerank` (or auto) and the
-  ranker cannot rank is refused with code -32070, and no hits. Retry later, or leave `rerank` out.
 - `stages` says how the answer was made: `requested` is the stages asked for (auto lists all
   three), `performed` the stages that shaped these hits, and `skipped` why each other one did not
-  run, a constant sentence:
-  - `semantic`: "no embedding model is in use", "the workspace's embedding policy pauses semantic
-    search", "a new embedding model is filling" or "the query could not be embedded";
-  - `rerank`: "no ranker is in use" or "the ranker could not rank this search";
-  - any stage: "the query has no words". A query of filters alone runs only the scan that lists
-    their files, which `performed` names `lexical`.
+  run, in a constant sentence (the
+  [search pipeline reference](docs/reference/05-hybrid-search-pipeline.md) lists them). A query of
+  filters alone runs only the scan that lists their files, which `performed` names `lexical`.
 
 ### Complex queries
 
@@ -454,7 +440,7 @@ Verbs at protocol 54; the daemon serves sessions from protocol 12.
 | -32065 | `rpc.unsupported` | this daemon or the workspace's filesystem cannot: do without it, or search with lexical among the stages | "this server keeps no preferences"; "this server keeps no embedding providers"; "this server keeps no event log"; "this server's store has no check here: a PostgreSQL store is checked by its database server"; "this server keeps no profiler"; "this server keeps no rankers"; "semantic search is not ready: no embedding provider is in use yet (the daemon may still be setting it up); search by words, or set one up in System › Search models"; "this edition has no database settings"; "this server's set of workspaces is fixed"; "this server serves no files outside its workspaces"; "this document's text could not be made now: try again later, or open it in its own viewer"; "this document's text could not be derived: open it in its own viewer"; "the workspace's filesystem cannot do this" |
 | -32066 | `rpc.committed` | the write landed: doc.read and compare, never re-send | "the write landed, then a follow-up step failed: read the document and compare" |
 | -32067 | `rpc.embed_failed` | retry later, or search with lexical among the stages | "the query could not be embedded" |
-| -32068 | `rpc.provider_refused` | switch provider or ranker, or fix its key or base URL | "the ranker's usage limit is reached"; "the ranker refused the key"; "the ranker has no such model"; "the server's model is not a re-ranker"; "the ranker did not answer: check its base URL, and that it is running"; "the ranker's answer is not one score for each text"; "the ranker refused the request"; "the request is over the size a ranker is sent"; "the store's keyslot does not open this provider's key"; "the store's keyslot file is readable by others: make it 0600"; "the provider's usage limit is reached: switch provider, or wait"; "the provider refused the key"; "the provider has no such model: List models shows the ones it has"; "the provider did not answer: check its base URL, and that it is running"; "the model gave no usable vectors: it may be a chat model, not an embedding model"; "the provider rejected the probe text" |
+| -32068 | `rpc.provider_refused` | switch provider or ranker, or fix its key or base URL | "the ranker's usage limit is reached"; "the ranker refused the key"; "the ranker has no such model"; "the server's model is not a re-ranker"; "the ranker did not answer: check its base URL, and that it is running"; "the ranker's answer is not one score for each text"; "the ranker refused the request"; "the request is over the size a ranker is sent"; "the store's keyslot does not open this provider's key"; "the store's keyslot file is not private to this user (on Unix: make it 0600)"; "the provider's usage limit is reached: switch provider, or wait"; "the provider refused the key"; "the provider has no such model: List models shows the ones it has"; "the provider did not answer: check its base URL, and that it is running"; "the model gave no usable vectors: it may be a chat model, not an embedding model"; "the provider rejected the probe text" |
 | -32069 | `rpc.switching` | a new model is filling: search with lexical among the stages until it is ready | "a new model is filling: search by words until it is ready" |
 | -32070 | `rpc.rank_unavailable` | retry later, or leave rerank out of the stages for an unranked answer | "the ranker is unavailable: this build answers ranked results or none" |
 | -32071 | `todos.stale` | todos.get it again, re-apply the change, and retry with its new rev | "the task changed since it was read" |
@@ -564,7 +550,8 @@ Mermaid kinds and the Vega-Lite subset AutoDoc's GUI draws, read from golib's ow
 show the user one, check that AutoDoc's GUI draws it:
 `autodoc --check-diagram notes/flow.mmd notes/sales.chart.json notes/report.md`. It lays each one
 out with golib's renderer, as the Rendered view does, and prints `file:line: ok` or `file:line: not
-drawn: <golib's error>`; a `.md` is checked fence by fence. Exit 0 means every diagram is drawn, 1
+drawn: <golib's error>`; a `.md` fence by fence, and each `.mmd` or `.chart.json` it embeds.
+Exit 0 means every diagram is drawn, 1
 that one is not, 2 that no file was given, 3 that this build has no GUI. A Mermaid diagram golib
 does not draw still draws in an export (mermaid.js), so say which the user will see. Both commands
 need the GUI build, and exit 3 without it.

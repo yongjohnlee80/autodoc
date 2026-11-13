@@ -13,7 +13,9 @@ import (
 	"time"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 
 	"github.com/yongjohnlee80/autodoc/script"
 )
@@ -27,7 +29,7 @@ import (
 type shellRig struct {
 	t    *testing.T
 	h    *Host
-	core *widget.EditorCore
+	core *editor.EditorCore
 	s    *luaShell
 	mu   sync.Mutex
 	fns  []func()
@@ -37,7 +39,7 @@ type shellRig struct {
 
 func newShellRig(t *testing.T, page string) *shellRig {
 	t.Helper()
-	core := widget.NewEditorCore(widget.CoreInitialText(page))
+	core := editor.NewEditorCore(editor.CoreInitialText(page))
 	eng := script.New(core, script.WithGlobal("autodoc"), script.WithTimeout(300*time.Millisecond))
 	t.Cleanup(eng.Close)
 	r := &shellRig{t: t, h: &Host{scripts: eng}, core: core, ping: make(chan struct{}, 1)}
@@ -323,7 +325,7 @@ func TestAReloadBetweenRequests(t *testing.T) {
 	r.write("a\r")
 	r.until("the second request", func() bool { return r.posts() == 1 })
 	old := r.h.scripts
-	r.h.scripts = script.New(widget.NewEditorCore(), script.WithGlobal("autodoc"))
+	r.h.scripts = script.New(editor.NewEditorCore(), script.WithGlobal("autodoc"))
 	t.Cleanup(r.h.scripts.Close)
 	r.runPost()
 	r.until("the answer", func() bool { return strings.Contains(r.output(), "nil\r\n") })
@@ -408,12 +410,12 @@ func TestALuaShellFromATabsMenu(t *testing.T) {
 	r.s.WaitFor(t, "a shell", func(string) bool { return len(r.shellTabs()) == 1 })
 	newLua := func() {
 		tab := r.shellTabs()[0].ID // read before the loop is entered: shellTabs is on the loop itself
-		rows := onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows(tab) })
+		rows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.terminals.tabRows(tab) })
 		row, ok := menuRow(rows, "terminal.lua")
 		if !ok {
 			t.Fatalf("no New Lua shell in %v", rowIDs(rows))
 		}
-		onLoop(r, func() bool { row.Action.(widget.TerminalTabsMenuAction).Run(tab); return true })
+		onLoop(r, func() bool { row.Action.(terminal.TerminalTabsMenuAction).Run(tab); return true })
 	}
 	labels := func() []string {
 		var out []string

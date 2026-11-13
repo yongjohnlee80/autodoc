@@ -8,6 +8,9 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/yongjohnlee80/autodoc/tui/crew"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // A TASK'S FILE FOLLOWS ITS TASK (docs/decisions/editor.md#a-tasks-file-follows-its-task). A todo
@@ -30,14 +33,6 @@ import (
 // them, badged deleted on disk, and its save is refused: a removed task is never written again from
 // a buffer. A file that is no task's is gone as before.
 
-// todoFileChange is a change of the todo change log as the open buffers take it: a task's file
-// moved (from → to), rewritten in place (to == from), or removed (removed, to ""), its paths
-// relative to the store at store.
-type todoFileChange struct {
-	store, from, to string
-	removed         bool
-}
-
 // todoMovesKept is how many of the latest moves the feed read are kept, to name where a gone file
 // went.
 const todoMovesKept = 32
@@ -58,29 +53,29 @@ type taskFate struct {
 // todoFilesChanged takes the changes the feed read to the open buffers: each move is kept to name
 // where its file went, and every buffer on a path a change moved, rewrote or removed is checked at
 // once. A check of a file that did not change does nothing.
-func (h *Host) todoFilesChanged(cs []todoFileChange) {
+func (h *Host) todoFilesChanged(cs []crew.TodoFileChange) {
 	for _, c := range cs {
-		if c.to != "" && c.to != c.from {
+		if c.To != "" && c.To != c.From {
 			h.todoMoves = append(h.todoMoves, c)
 			if n := len(h.todoMoves); n > todoMovesKept {
 				h.todoMoves = slices.Delete(h.todoMoves, 0, n-todoMovesKept)
 			}
 		}
 		for _, b := range h.buffers {
-			if b.file.open && c.of(h.pathOnDisk(b.file.ws, b.file.path)) {
+			if b.file.open && changeIsOf(c, h.pathOnDisk(b.file.ws, b.file.path)) {
 				h.diskSoon(b)
 			}
 		}
 	}
 }
 
-// of reports whether the change is of the file at abs: its store's path joined with its from, the
+// changeIsOf reports whether c is a change of the file at abs: its store's path joined with its from, the
 // two canonical, is abs's canonical path. A path that only ends as from does is another store's.
-func (c todoFileChange) of(abs string) bool {
-	if c.store == "" || !endsWithPath(abs, c.from) { // the cheap test first
+func changeIsOf(c crew.TodoFileChange, abs string) bool {
+	if c.Store == "" || !endsWithPath(abs, c.From) { // the cheap test first
 		return false
 	}
-	return canonicalFile(abs) == canonicalFile(filepath.Join(filepath.FromSlash(c.store), filepath.FromSlash(c.from)))
+	return canonicalFile(abs) == canonicalFile(filepath.Join(filepath.FromSlash(c.Store), filepath.FromSlash(c.From)))
 }
 
 // canonicalFile is abs with its folder's symlinks resolved, as a store's path is: the folder of a
@@ -93,9 +88,9 @@ func canonicalFile(abs string) string {
 }
 
 // todoMoveOf is the latest move the feed read of the file at abs, in its own store, nil for none.
-func (h *Host) todoMoveOf(abs string) *todoFileChange {
+func (h *Host) todoMoveOf(abs string) *crew.TodoFileChange {
 	for i := len(h.todoMoves) - 1; i >= 0; i-- {
-		if c := h.todoMoves[i]; c.of(abs) {
+		if c := h.todoMoves[i]; changeIsOf(c, abs) {
 			return &c
 		}
 	}
@@ -108,7 +103,7 @@ func taskIDOf(content string) string {
 	if err != nil {
 		return ""
 	}
-	switch id := asMap(fm)["id"].(type) {
+	switch id := feature.AsMap(fm)["id"].(type) {
 	case string:
 		return id
 	case int64, int, uint64, float64:
@@ -142,7 +137,7 @@ func taskShaped(abs string) bool {
 // taskFateOf is what became of the task whose file p of workspace ws, at abs on disk, is gone. Off
 // the loop: first the move the feed read (hint), then the daemon: todos.stores for the store
 // holding abs, todos.get for the task, whose file is named by its id.
-func (h *Host) taskFateOf(ctx context.Context, ws, p, abs string, raw bool, hint *todoFileChange) taskFate {
+func (h *Host) taskFateOf(ctx context.Context, ws, p, abs string, raw bool, hint *crew.TodoFileChange) taskFate {
 	if abs == "" || !taskShaped(abs) {
 		return taskFate{}
 	}
@@ -150,8 +145,8 @@ func (h *Host) taskFateOf(ctx context.Context, ws, p, abs string, raw bool, hint
 	// the task a file of a store holds is named by its file: the file it moved to is that task's
 	// only when its own id says so
 	id := strings.TrimSuffix(path.Base(slashP), ".md")
-	if hint != nil && (slashP == hint.from || strings.HasSuffix(slashP, "/"+hint.from)) {
-		if m, ok := h.readMoved(ctx, ws, strings.TrimSuffix(slashP, hint.from)+hint.to, raw); ok && taskIDOf(m.content) == id {
+	if hint != nil && (slashP == hint.From || strings.HasSuffix(slashP, "/"+hint.From)) {
+		if m, ok := h.readMoved(ctx, ws, strings.TrimSuffix(slashP, hint.From)+hint.To, raw); ok && taskIDOf(m.content) == id {
 			return taskFate{moved: &m}
 		}
 	}
@@ -160,22 +155,22 @@ func (h *Host) taskFateOf(ctx context.Context, ws, p, abs string, raw bool, hint
 	if err != nil {
 		return taskFate{}
 	}
-	for _, s := range asList(res) {
-		sm := asMap(s)
-		roots := asList(sm["roots"])
-		rel, ok := under(str(sm, "path"), canon)
+	for _, s := range feature.AsList(res) {
+		sm := feature.AsMap(s)
+		roots := feature.AsList(sm["roots"])
+		rel, ok := under(feature.Str(sm, "path"), canon)
 		if !ok || len(roots) == 0 {
 			continue
 		}
 		root, _ := roots[0].(string)
 		got, err := h.call(ctx, "todos.get", map[string]any{"root": root}, id)
-		if code(err) == codeNoTask {
+		if feature.Code(err) == codeNoTask {
 			return taskFate{removed: true}
 		}
 		if err != nil {
 			return taskFate{}
 		}
-		now := str(asMap(got), "path")
+		now := feature.Str(feature.AsMap(got), "path")
 		if now == "" || now == rel || !(slashP == rel || strings.HasSuffix(slashP, "/"+rel)) {
 			return taskFate{}
 		}
@@ -200,9 +195,9 @@ func (h *Host) readMoved(ctx context.Context, ws, to string, raw bool) (movedFil
 	if err != nil {
 		return movedFile{}, false
 	}
-	m := asMap(read)
+	m := feature.AsMap(read)
 	content, _ := m["content"].([]byte)
-	return movedFile{path: to, content: string(content), version: str(m, "version")}, true
+	return movedFile{path: to, content: string(content), version: feature.Str(m, "version")}, true
 }
 
 // under is abs's path inside dir, with / separators, when abs is in dir.
@@ -254,7 +249,7 @@ func (h *Host) keepTaskGone(b *openBuffer, note string) {
 // edits, it keeps them where it is, its save refused.
 func (h *Host) followMove(b *openBuffer, to movedFile) {
 	from, dirty := b.file.name(), b.file.dirty
-	if o := h.bufferOf(fileRef{b.file.ws, to.path}); o != nil && o != b {
+	if o := h.bufferOf(feature.FileRef{WS: b.file.ws, Path: to.path}); o != nil && o != b {
 		if !dirty {
 			h.dropBuffer(b)
 			h.notify(h.trf("autodoc.notice.todomove.moved_to", from, to.path))

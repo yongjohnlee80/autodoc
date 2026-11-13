@@ -4,7 +4,7 @@
 // wrapping, as Down and Up do. q closes it.
 Dialog {
     closeOnQ: true
-    keyScope: "autodoc.goPick" // its keys' commands (tui/keys.go: dialogCommands)
+    keyScope: "autodoc.goPick" // its keys' commands (tui/feature/keys.go: dialogCommands)
     maxWidthPercent: 60
     maxHeightPercent: 80
     title: qsTrId("autodoc.dialog.goPick.go_to")

@@ -14,6 +14,7 @@ import (
 	"github.com/yongjohnlee80/golib/search"
 
 	"github.com/yongjohnlee80/autodoc/core/registrations"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -114,7 +115,8 @@ func TestMainReturnsItsExitCodes(t *testing.T) {
 		{[]string{"--export", "html", "--output", filepath.Join(t.TempDir(), "x.html"), filepath.Join(t.TempDir(), "missing.md")}, 1, "", "autodoc:"},
 		// --ui reads its config before it opens the terminal
 		{[]string{"--config", bad, "--ui"}, 1, "", "config: invalid"},
-		// a build without the gui tag (this test's) says so, and how to get one
+		// a build without the gui tag says so, and how to get one (the GUI build's window ends the
+		// process it runs in: TestTheWindowReturnsItsExitCodes runs it in one of its own)
 		{[]string{"--gui"}, 1, "", "built without the GUI"},
 		// one mode at a time: two together are refused, whichever the order
 		{[]string{"--version", "--serve"}, 2, "", "autodoc: --version and --serve are separate modes: give one\n"},
@@ -132,6 +134,9 @@ func TestMainReturnsItsExitCodes(t *testing.T) {
 		{[]string{"--editor", "editor.read"}, 1, "", "$AUTODOC_EDITOR and $AUTODOC_EDITOR_TOKEN are not set"},
 		{[]string{"--editor", "editor.read", "[1]", "extra"}, 2, "", "take one argument"},
 	} {
+		if guiBuild && len(c.args) == 1 && c.args[0] == "--gui" {
+			continue // the window's: TestTheWindowReturnsItsExitCodes
+		}
 		var stdout, stderr bytes.Buffer
 		code := run(context.Background(), c.args, Options{Version: "v1.2.3"}, &stdout, &stderr)
 		if code != c.code || stdout.String() != c.stdout || !strings.Contains(stderr.String(), c.says) {
@@ -178,7 +183,7 @@ func TestABuildsDeriverIsReported(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir := short(t)
-	sock := filepath.Join(dir, "a.sock")
+	sock := ipc.ScratchAddr(dir, "a.sock")
 	cfg := writeConfig(t, sock, filepath.Join(dir, "state"), "")
 	startAs(t, cfg, sock, build{version: "v1", reg: reg})
 	got, err := rpc.RegistrationsOf(call(t, dial(t, sock), "sys.capabilities"))

@@ -38,6 +38,14 @@ func (r TodoRoots) Names() []string {
 	return out
 }
 
+// canonicalDir is where dir leads on the disk
+// (docs/decisions/todos.md#a-root-is-compared-where-the-disk-says-it-is): its symlinks resolved and, on Windows, its long names
+// in the disk's own case. It is the one place the daemon asks the disk which directory a path
+// names. The todo system's paths (TodoDisk) and a served workspace's root (Workspaces.start) both
+// come from it, so the two are the same spelling for the same directory and are compared exactly,
+// never case-folded.
+func canonicalDir(dir string) (string, error) { return filepath.EvalSymlinks(dir) }
+
 // TodoDisk opens directories on the daemon's own disk for core/todo, each through golib's
 // vfs/local, so every name inside is resolved within it: the one place todos meet the disk.
 type TodoDisk struct{ Log logger.Logger }
@@ -47,7 +55,7 @@ func (d TodoDisk) Open(_ context.Context, dir string) (vfs.FS, string, error) {
 	if !filepath.IsAbs(dir) {
 		return nil, "", fmt.Errorf("daemon: todos: %s is not an absolute path: %w", dir, vfs.ErrInvalidName)
 	}
-	canon, err := filepath.EvalSymlinks(dir)
+	canon, err := canonicalDir(dir)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, "", fmt.Errorf("daemon: todos: %s: %w", dir, vfs.ErrNotExist)
 	}

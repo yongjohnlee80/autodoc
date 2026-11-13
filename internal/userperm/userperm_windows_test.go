@@ -1,0 +1,214 @@
+//go:build windows
+
+package userperm
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+	"unsafe"
+
+	"golang.org/x/sys/windows"
+)
+
+// setDACL gives path the DACL sddl names (protected when it says P), its own entries only.
+func setDACL(t *testing.T, path, sddl string) {
+	t.Helper()
+	sd, err := windows.SecurityDescriptorFromString(sddl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dacl, _, err := sd.DACL()
+	if err != nil && !errors.Is(err, windows.ERROR_OBJECT_NOT_FOUND) {
+		t.Fatal(err)
+	}
+	ctrl, _, err := sd.Control()
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := windows.SECURITY_INFORMATION(windows.DACL_SECURITY_INFORMATION)
+	if ctrl&windows.SE_DACL_PROTECTED != 0 {
+		info |= windows.PROTECTED_DACL_SECURITY_INFORMATION
+	}
+	if err := windows.SetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, info, nil, nil, dacl, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func me(t *testing.T) string {
+	t.Helper()
+	u, err := currentUser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return u.String()
+}
+
+// expose grants Everyone read access beside this user's full control.
+func expose(t *testing.T, path string) {
+	t.Helper()
+	setDACL(t, path, "D:P(A;;FA;;;"+me(t)+")(A;;FR;;;WD)")
+}
+
+// On Windows SYSTEM and the Administrators may hold access and the file stay private; Users,
+// Authenticated Users or Everyone may not; a deny never cancels another's allow; a NULL DACL is
+// exposed.
+func TestTheDACLsVerdictsOnWindows(t *testing.T) {
+	key := filepath.Join(t.TempDir(), "key")
+	write(t, key, "secret")
+	u := me(t)
+	for sddl, exposed := range map[string]bool{
+		"D:P(A;;FA;;;" + u + ")":                         false,
+		"D:P(A;;FA;;;" + u + ")(A;;FA;;;SY)(A;;FA;;;BA)": false,
+		"D:P(A;;FA;;;" + u + ")(A;;FR;;;BU)":             true,  // Users
+		"D:P(A;;FA;;;" + u + ")(A;;FR;;;AU)":             true,  // Authenticated Users
+		"D:P(A;;FA;;;" + u + ")(D;;FA;;;WD)":             false, // a deny alone exposes nothing
+		"D:P(D;;FA;;;AN)(A;;FA;;;" + u + ")(A;;FR;;;AN)": true,  // a deny never cancels an allow (Anonymous: a deny of a group this user is in would lock the user out too)
+		"D:NO_ACCESS_CONTROL":                            true,  // no DACL: everyone, everything
+	} {
+		setDACL(t, key, sddl)
+		_, err := read(t, key)
+		if got := errors.Is(err, ErrExposed); got != exposed {
+			t.Errorf("%s: %v, want exposed %v", sddl, err, exposed)
+		}
+	}
+}
+
+// A folder that grants Users read to what it holds exposes a file made the ordinary way in it
+// (inherited), while CreatePrivate's file there is private from its creation: its DACL, read before
+// anything is written or restricted, holds no entry but this user's.
+func TestInheritedAccessAndAPrivateCreateUnderABroadFolderOnWindows(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "broad")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	u := me(t)
+	setDACL(t, dir, "D:P(A;OICI;FA;;;"+u+")(A;OICI;FR;;;BU)")
+	plain := filepath.Join(dir, "plain")
+	if err := os.WriteFile(plain, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := read(t, plain); !errors.Is(err, ErrExposed) {
+		t.Errorf("a file inheriting Users read: %v, want ErrExposed", err)
+	}
+	key := filepath.Join(dir, "key")
+	f, err := CreatePrivate(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	sd, err := windows.GetNamedSecurityInfo(key, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dacl, _, err := sd.DACL()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mine, err := currentUser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := uint32(0); i < uint32(dacl.AceCount); i++ {
+		var ace *windows.ACCESS_ALLOWED_ACE
+		if err := windows.GetAce(dacl, i, &ace); err != nil {
+			t.Fatal(err)
+		}
+		if sid := (*windows.SID)(unsafe.Pointer(&ace.SidStart)); !sid.Equals(mine) {
+			t.Errorf("a file CreatePrivate made under a broad folder holds an entry for %v at its creation", sid)
+		}
+	}
+}
+
+// tokenOwner is TOKEN_OWNER: the owner a token gives the objects it creates.
+type tokenOwner struct{ Owner *windows.SID }
+
+// ownerOf is the owner of the file at path.
+func ownerOf(t *testing.T, path string) *windows.SID {
+	t.Helper()
+	sd, err := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o, _, err := sd.Owner()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return o
+}
+
+// A created file's owner is this user, not the token's default owner: under a token whose
+// default owner is the Administrators (an elevated administrator's), a file made the ordinary way
+// is theirs, while CreatePrivate's is this user's, and OpenPrivate opens it.
+func TestACreatedFileIsThisUsersWhateverTheTokensDefaultOwnerOnWindows(t *testing.T) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	var proc windows.Token
+	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_DUPLICATE|windows.TOKEN_QUERY, &proc); err != nil {
+		t.Fatal(err)
+	}
+	defer proc.Close()
+	var tok windows.Token
+	if err := windows.DuplicateTokenEx(proc, windows.TOKEN_IMPERSONATE|windows.TOKEN_QUERY|windows.TOKEN_ADJUST_DEFAULT, nil,
+		windows.SecurityImpersonation, windows.TokenImpersonation, &tok); err != nil {
+		t.Fatal(err)
+	}
+	defer tok.Close()
+	admins, err := windows.CreateWellKnownSid(windows.WinBuiltinAdministratorsSid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := tokenOwner{Owner: admins}
+	if err := windows.SetTokenInformation(tok, windows.TokenOwner, (*byte)(unsafe.Pointer(&o)), uint32(unsafe.Sizeof(o))); err != nil {
+		t.Fatalf("the cell's premise: a token defaulting its owner to the Administrators (an elevated administrator's): %v", err)
+	}
+	dir := t.TempDir()
+	if err := windows.SetThreadToken(nil, tok); err != nil {
+		t.Fatal(err)
+	}
+	defer windows.RevertToSelf()
+	plain := filepath.Join(dir, "plain")
+	if err := os.WriteFile(plain, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := ownerOf(t, plain); !got.Equals(admins) {
+		t.Fatalf("the premise: a file made the ordinary way is owned by %v, not the Administrators", got)
+	}
+	key := filepath.Join(dir, "key")
+	write(t, key, "secret")
+	if got, want := ownerOf(t, key), me(t); got.String() != want {
+		t.Fatalf("CreatePrivate's file is owned by %v, want this user %s", got, want)
+	}
+	if got, err := read(t, key); err != nil || got != "secret" {
+		t.Fatalf("CreatePrivate then OpenPrivate: %q, %v", got, err)
+	}
+}
+
+// TestAFileHeldOpenForWritingIsInUseOnWindows: a file another handle holds open for writing refuses
+// the private read, which shares no writer: ErrInUse, never ErrExposed, its privacy unread.
+func TestAFileHeldOpenForWritingIsInUseOnWindows(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "log")
+	f, err := CreatePrivate(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+	w, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r, err := OpenPrivate(path); err == nil || !errors.Is(err, ErrInUse) || errors.Is(err, ErrExposed) {
+		if err == nil {
+			_ = r.Close()
+		}
+		t.Fatalf("a file held open for writing: %v, want ErrInUse", err)
+	}
+	_ = w.Close()
+	if r, err := OpenPrivate(path); err != nil {
+		t.Fatalf("let go, the private file: %v", err)
+	} else {
+		_ = r.Close()
+	}
+}

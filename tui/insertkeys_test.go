@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // In the Vim editor mode's Insert, Vim wins. Ctrl+W there deletes the word
@@ -17,7 +17,7 @@ import (
 func (r *running) waitValue(t *testing.T, want string) {
 	t.Helper()
 	r.s.WaitFor(t, "the keys done", func(string) bool {
-		return onLoop(r, func() bool { return r.h.core.Value() == want && r.h.core.Mode() == widget.ModeNormal })
+		return onLoop(r, func() bool { return r.h.core.Value() == want && r.h.core.Mode() == editor.ModeNormal })
 	})
 }
 
@@ -49,7 +49,7 @@ func TestCtrlWSwitchesWorkspaceOutsideInsert(t *testing.T) {
 
 	onLoop(r, func() bool { r.h.setKeymap("text"); return true })
 	r.s.WaitFor(t, "the Text mode", func(string) bool {
-		return onLoop(r, func() bool { return r.h.core.Mode() == widget.ModeInsert })
+		return onLoop(r, func() bool { return r.h.core.Mode() == editor.ModeInsert })
 	})
 	r.keys(t, decltest.Ctrl('w'))
 	r.s.WaitForText(t, "Manage…")

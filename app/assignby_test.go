@@ -31,6 +31,9 @@ func newAssignRig(t *testing.T) *assignRig {
 	t.Chdir(t.TempDir())
 	r := &assignRig{crewDaemon: d, gold: d.agent("gold", "agent-1", "store-1"), jarvis: d.agent("jarvis", "agent-2", "store-1"),
 		at: todo.At{Root: t.TempDir()}}
+	// the daemon outlives this directory (it started first), so its stores are released before the
+	// directory is removed: Windows removes no directory held open
+	t.Cleanup(func() { _ = d.deps.todos.Close() })
 	if _, err := d.deps.todos.Register(d.ctx, r.at.Root); err != nil {
 		t.Fatal(err)
 	}

@@ -11,9 +11,10 @@ import (
 
 	"github.com/yongjohnlee80/golib/search"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 
 	"github.com/yongjohnlee80/autodoc/core/registrations"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // pdfAsText is a build's deriver for tests: a PDF's text is the file's own bytes.
@@ -61,11 +62,11 @@ func TestADerivedDocumentOpensReadOnly(t *testing.T) {
 	if got := d.read(t, "kb", "manual.pdf"); got != manualPDF {
 		t.Fatalf("the PDF was written: %q", got)
 	}
-	if n := onLoop(r, func() int { return len(r.h.outline.doc.Headings()) }); n != 2 {
+	if n := onLoop(r, func() int { return len(r.h.outline.Doc.Headings()) }); n != 2 {
 		t.Fatalf("the outline has %d headings, want the derived text's 2", n)
 	}
 	r.h.p.Post(r.h.openWithDefaultApp) // File › Open with Default App
-	if p := <-opened; p != "/kb/manual.pdf" {
+	if p := <-opened; p != filepath.Join(fakeRoot("kb"), "manual.pdf") {
 		t.Fatalf("the default app opened %q", p)
 	}
 	r.h.p.Post(func() { r.h.openPath("a.md") })
@@ -109,10 +110,10 @@ func holdCapabilities(sock string) (*Session, func()) {
 // headings is the page's outline's count, -1 while it has none.
 func (r *running) headings() int {
 	return onLoop(r, func() int {
-		if r.h.outline.doc == nil {
+		if r.h.outline.Doc == nil {
 			return -1
 		}
-		return len(r.h.outline.doc.Headings())
+		return len(r.h.outline.Doc.Headings())
 	})
 }
 
@@ -126,7 +127,7 @@ func (r *running) typeOnPage(t *testing.T, text string) {
 	r.keys(t, esc())
 	r.s.WaitFor(t, "the page edited, back in Normal mode", func(string) bool {
 		return onLoop(r, func() bool {
-			return strings.Contains(r.h.core.Value(), text) && r.h.file.dirty && r.h.core.Mode() == widget.ModeNormal
+			return strings.Contains(r.h.core.Value(), text) && r.h.file.dirty && r.h.core.Mode() == editor.ModeNormal
 		})
 	})
 }
@@ -187,7 +188,7 @@ func TestARegisteredPageReadsByTheRegistrationsWhenTheyCome(t *testing.T) {
 // .zig chunker reads as the last daemon's (plain text) until that build's registrations answer;
 // when they come, the page reads it as the new build does: Markdown, its "# " line a heading.
 func TestAReconnectReadsThePageByTheNewBuild(t *testing.T) {
-	sock := filepath.Join(shortDir(t), "s.sock")
+	sock := ipc.ScratchAddr(shortDir(t), "s.sock")
 	pro := startDaemonWith(t, sock, map[string][]string{"kb": {"a.zig", goWithAHashLine}}, daemonOpts{goChunker: wholeGo{}, chunked: ".zig", version: "v-pro"})
 	held := make(chan struct{})
 	release := sync.OnceFunc(func() { close(held) })

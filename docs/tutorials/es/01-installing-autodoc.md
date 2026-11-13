@@ -23,13 +23,30 @@ Puedes ejecutarlo de nuevo cuando quieras: actualiza o repara la instalación y 
 
 **Actualizar.** Instalado con el script, AutoDoc se actualiza solo: **Ayuda › Acerca de**, y luego **Actualizar**. La actualización se ejecuta en el panel de terminal de AutoDoc y, cuando la nueva versión está lista, AutoDoc ofrece **Reiniciar ahora**. Desde una shell, `~/.local/state/autodoc/update.sh` hace lo mismo.
 
+## En Windows
+
+En PowerShell, una línea instala AutoDoc con su ventana:
+
+```powershell
+irm https://github.com/yongjohnlee80/autodoc/releases/latest/download/install-autodoc.ps1 | iex
+```
+
+El script:
+
+- descarga la compilación de Windows más reciente y la comprueba con la suma de verificación de la versión;
+- la instala como `%LOCALAPPDATA%\Programs\AutoDoc\autodoc.exe`, solo para ti: nunca pide permisos de administrador;
+- añade AutoDoc al menú Inicio;
+- instala `update.ps1` en `%LOCALAPPDATA%\autodoc`, así que **Ayuda › Acerca de › Actualizar** funciona como en Linux y macOS.
+
+Solo cambia tu `PATH` si se lo pides (`-AddToPath`); si no, muestra el comando que lo haría. La compilación no está firmada, así que Windows puede decir que el editor es desconocido la primera vez que se ejecuta AutoDoc. Windows en arm64 aún no tiene compilación. En WSL2 también funciona la línea de Linux de arriba.
+
 ## Otras formas
 
 - Homebrew: `brew install yongjohnlee80/tap/autodoc` (en Linux, solo la interfaz de terminal)
 - mise: `mise use -g github:yongjohnlee80/autodoc`
 - Go: `go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` (sin `-tags gui`, solo la interfaz de terminal)
 - Un archivo comprimido de la página de Releases del proyecto
-- Windows: WSL2 y, después, el script de instalación
+- Windows: WSL2 y, después, el script de instalación de Linux
 
 Estas se actualizan de la misma forma en que se instalaron (`brew upgrade`, `mise upgrade`, `go install` otra vez), así que **Ayuda › Acerca de** no ofrece Actualizar para ellas. Servidores, contenedores y compilar desde el código fuente: [Referencia, capítulo 2](../../reference/02-quickstart-and-workspaces.md).
 

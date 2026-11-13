@@ -10,12 +10,14 @@ import (
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	"github.com/yongjohnlee80/golib/vfs"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/internal/localfs"
 	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/autodoc/tui/explorer"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE NOTE IN THE EDITOR — opening, saving, and what is asked on the way.
@@ -74,10 +76,13 @@ type openedFile struct {
 	// taskGone is a todo task's file gone from its path for good, its task removed or open in
 	// another buffer (todomove.go): its save is refused, never a second file of the task
 	taskGone bool
+	// crlf is a file that uses CRLF line breaks, as it was read (lineendings.go): it is written back
+	// with them. false, the default, writes LF.
+	crlf bool
 }
 
-// untitled is the draft's name wherever a file's path would show.
-const untitled = "untitled"
+// untitled is the draft's name wherever a file's path would show (the kit's, feature.Untitled).
+const untitled = feature.Untitled
 
 // name is the file's path; for the draft, its hint, or untitled.
 func (n openedFile) name() string {
@@ -106,7 +111,7 @@ func (n openedFile) outside() bool { return n.open && n.ws == "" }
 // (h.tr): a derived document's carries its read-only badge, an outside file's that it is in no
 // workspace.
 func (n openedFile) title(tr func(string) string) string {
-	trf := func(id, arg string) string { return fill(tr(id), arg) }
+	trf := func(id, arg string) string { return feature.Fill(tr(id), arg) }
 	badges := []string{}
 	if n.outside() {
 		badges = append(badges, tr("autodoc.text.files.no_workspace"))
@@ -126,9 +131,8 @@ func (n openedFile) title(tr func(string) string) string {
 	return n.name() + "  [" + strings.Join(badges, " · ") + "]"
 }
 
-// outsideBadge marks a file outside every workspace (autodoc.text.files.no_workspace in the UI's
-// language).
-const outsideBadge = "no workspace"
+// outsideBadge marks a file outside every workspace (the kit's, feature.OutsideBadge).
+const outsideBadge = feature.OutsideBadge
 
 // readFile is doc.read of p in workspace ws, or file.read of the absolute p when ws is "".
 // raw reads an HTML file's own bytes (doc.read_raw, file.read_raw) where the plain verbs give its
@@ -209,36 +213,36 @@ func (h *Host) unsaved(answer string) {
 }
 
 // openPath opens a file of the workspace in use, asking first over unsaved changes.
-func (h *Host) openPath(p string) { h.openRef(fileRef{h.ws, p}, true, nil) }
+func (h *Host) openPath(p string) { h.openRef(feature.FileRef{WS: h.ws, Path: p}, true, nil) }
 
 // openIn opens file p of workspace ws, entering ws first when it is not the one in use; either
 // way, unsaved changes are asked about first.
-func (h *Host) openIn(ws, p string) { h.openRef(fileRef{ws, p}, true, nil) }
+func (h *Host) openIn(ws, p string) { h.openRef(feature.FileRef{WS: ws, Path: p}, true, nil) }
 
 // openRef opens ref, asking first over unsaved changes: in the workspace in use, outside every
 // workspace (ws ""), or in another workspace, entering it. The document left behind goes on the
 // history (SPC b b) when remember is set; going back does not set it. proceed, when not nil, runs
 // once the open goes ahead — after the unsaved question's Save or Discard, never after its Stay.
-func (h *Host) openRef(ref fileRef, remember bool, proceed func()) {
+func (h *Host) openRef(ref feature.FileRef, remember bool, proceed func()) {
 	h.openRefTo(ref, remember, proceed, nil)
 }
 
 // openRefTo is openRef, the cursor landing as land says once the document is shown (navigation.go):
 // land goes with this open and no other, so an open that doesn't go ahead drops it.
-func (h *Host) openRefTo(ref fileRef, remember bool, proceed func(), land *landing) {
+func (h *Host) openRefTo(ref feature.FileRef, remember bool, proceed func(), land *landing) {
 	h.openRefWith(ref, remember, proceed, land, false)
 }
 
 // openRefWith is openRefTo; newBuffer opens ref in a buffer of its own even over an empty one shown
 // (File › Open in a new buffer). Like land, it goes with this open, through the HTML question, and
 // with nothing else: a question cancelled takes it away with the open.
-func (h *Host) openRefWith(ref fileRef, remember bool, proceed func(), land *landing, newBuffer bool) {
+func (h *Host) openRefWith(ref feature.FileRef, remember bool, proceed func(), land *landing, newBuffer bool) {
 	// a file a plugin opens (its manifest's [open],
 	// docs/decisions/plugins.md#plugins-that-open-file-types) goes to that plugin's command, by its
 	// absolute path, in place of being opened: an .ipynb becomes a lab file, which it opens
 	if h.plugins != nil {
-		if e, ok := h.plugins.opener(ref.path); ok {
-			if abs := h.pathOnDisk(ref.ws, ref.path); abs != "" {
+		if e, ok := h.plugins.opener(ref.Path); ok {
+			if abs := h.pathOnDisk(ref.WS, ref.Path); abs != "" {
 				h.plugins.runPluginCommandArgs(e.key(), e.m.Open.Command, []string{abs})
 				return
 			}
@@ -246,8 +250,8 @@ func (h *Host) openRefWith(ref fileRef, remember bool, proceed func(), land *lan
 	}
 	// an HTML file asks how to open it before anything else: entering its workspace closes the
 	// file open now, which Cancel must leave as it is
-	if kind.RawText(ref.path) && !(h.file.open && h.file.ws == ref.ws && h.file.path == ref.path) {
-		h.askHowToOpen(ref.path, func(raw bool) { h.openRefAs(ref, remember, proceed, &raw, land, newBuffer) })
+	if kind.RawText(ref.Path) && !(h.file.open && h.file.ws == ref.WS && h.file.path == ref.Path) {
+		h.askHowToOpen(ref.Path, func(raw bool) { h.openRefAs(ref, remember, proceed, &raw, land, newBuffer) })
 		return
 	}
 	h.openRefAs(ref, remember, proceed, nil, land, newBuffer)
@@ -255,20 +259,20 @@ func (h *Host) openRefWith(ref fileRef, remember bool, proceed func(), land *lan
 
 // openRefAs is openRef once an HTML file's way of opening is known: raw, or nil for a file that
 // is no question (load asks for one that is).
-func (h *Host) openRefAs(ref fileRef, remember bool, proceed func(), raw *bool, land *landing, newBuffer bool) {
-	open := func(prev *widget.JumpPos) {
+func (h *Host) openRefAs(ref feature.FileRef, remember bool, proceed func(), raw *bool, land *landing, newBuffer bool) {
+	open := func(prev *editor.JumpPos) {
 		if raw != nil {
-			h.loadAs(ref.ws, ref.path, prev, *raw, land)
+			h.loadAs(ref.WS, ref.Path, prev, *raw, land)
 			return
 		}
-		h.loadTo(ref.ws, ref.path, prev, land)
+		h.loadTo(ref.WS, ref.Path, prev, land)
 	}
 	goAhead := func() {
 		if proceed != nil {
 			proceed()
 		}
 	}
-	leaving := func() *widget.JumpPos {
+	leaving := func() *editor.JumpPos {
 		if !remember || !h.file.open {
 			return nil
 		}
@@ -278,8 +282,8 @@ func (h *Host) openRefAs(ref fileRef, remember bool, proceed func(), raw *bool, 
 	// nothing is asked: the buffer left keeps its unsaved edits (buffers.go)
 	prev := leaving()
 	goAhead()
-	if ref.ws != "" && ref.ws != h.ws {
-		h.enter(ref.ws) // entering closes no buffer
+	if ref.WS != "" && ref.WS != h.ws {
+		h.enter(ref.WS) // entering closes no buffer
 	}
 	if b := h.bufferOf(ref); b != nil {
 		if prev != nil && prev.Doc != docKey(ref) {
@@ -292,12 +296,12 @@ func (h *Host) openRefAs(ref fileRef, remember bool, proceed func(), raw *bool, 
 			h.guard(b, h.askBefore("reopen"), func() {
 				b.file.raw = *raw
 				h.activate(b)
-				h.loadInto(b, ref.ws, ref.path, nil, *raw, land)
+				h.loadInto(b, ref.WS, ref.Path, nil, *raw, land)
 			})
 			return
 		}
 		h.activate(b)
-		h.say(h.trf("autodoc.notice.files.opened", ref.path))
+		h.say(h.trf("autodoc.notice.files.opened", ref.Path))
 		h.land(land, ref, h.core.Value()) // the document is open already: the open lands at once
 		h.askDiskOnEnter(b)
 		h.focusEditor()
@@ -326,10 +330,10 @@ func (h *Host) reload() {
 // (docs/decisions/editor.md#html-files-open-raw-or-simplified): Simplified, its derived text
 // read-only as any derived document, or Raw, its own bytes, editable. Read again (a reload, a
 // conflict's), it keeps the way it was opened.
-func (h *Host) load(ws, p string, prev *widget.JumpPos) { h.loadTo(ws, p, prev, nil) }
+func (h *Host) load(ws, p string, prev *editor.JumpPos) { h.loadTo(ws, p, prev, nil) }
 
 // loadTo is load, the cursor landing as land says once the document is shown.
-func (h *Host) loadTo(ws, p string, prev *widget.JumpPos, land *landing) {
+func (h *Host) loadTo(ws, p string, prev *editor.JumpPos, land *landing) {
 	again := h.file.open && h.file.ws == ws && h.file.path == p
 	if !again && kind.RawText(p) {
 		h.askHowToOpen(p, func(raw bool) { h.loadAs(ws, p, prev, raw, land) })
@@ -387,13 +391,13 @@ func (h *Host) openHTMLAs(how string) {
 }
 
 // loadAs is load, raw or not, into the active buffer.
-func (h *Host) loadAs(ws, p string, prev *widget.JumpPos, raw bool, land *landing) {
+func (h *Host) loadAs(ws, p string, prev *editor.JumpPos, raw bool, land *landing) {
 	h.loadInto(h.active, ws, p, prev, raw, land)
 }
 
 // loadInto reads p into b off the loop; the answer lands in b, active or not, under b's own ticket:
 // a switch of buffer or workspace meanwhile does not drop it.
-func (h *Host) loadInto(b *openBuffer, ws, p string, prev *widget.JumpPos, raw bool, land *landing) {
+func (h *Host) loadInto(b *openBuffer, ws, p string, prev *editor.JumpPos, raw bool, land *landing) {
 	tk := h.bufferTicket(b, true)
 	again, read := b.file.open && b.file.ws == ws && b.file.path == p, b.file.version
 	type answer struct {
@@ -406,9 +410,9 @@ func (h *Host) loadInto(b *openBuffer, ws, p string, prev *widget.JumpPos, raw b
 		if err != nil {
 			return answer{err: err}
 		}
-		m := asMap(res)
+		m := feature.AsMap(res)
 		b, _ := m["content"].([]byte)
-		return answer{content: string(b), version: str(m, "version")}
+		return answer{content: string(b), version: feature.Str(m, "version")}
 	}, func(a answer) {
 		if !tk.Current() {
 			return
@@ -419,6 +423,9 @@ func (h *Host) loadInto(b *openBuffer, ws, p string, prev *widget.JumpPos, raw b
 		}
 		if a.err != nil {
 			h.failed(h.trf("autodoc.notice.files.open", p), a.err)
+			// the status line said "opening p…": it says the open failed now, or it would read as an
+			// open still under way, the page left untitled with nothing to say why
+			h.say(h.trf("autodoc.notice.session.text", h.trf("autodoc.notice.files.open", p), feature.WireMessage(a.err)))
 			h.missedLanding(land, a.err)
 			if h.restoreOpenFailed(b, ws, p) { // a kept copy's file gone: its text becomes a draft
 				return
@@ -428,12 +435,12 @@ func (h *Host) loadInto(b *openBuffer, ws, p string, prev *widget.JumpPos, raw b
 			}
 			return
 		}
-		if prev != nil && prev.Doc != docKey(fileRef{ws, p}) {
+		if prev != nil && prev.Doc != docKey(feature.FileRef{WS: ws, Path: p}) {
 			h.jumps.Push(*prev) // a jump: the place left, once the new document is shown
 		}
 		h.show(b, ws, p, a.content, a.version, raw) // the recent files note it (recent.go: Shown)
 		if b == h.active {
-			h.land(land, fileRef{ws, p}, a.content)
+			h.land(land, feature.FileRef{WS: ws, Path: p}, a.content)
 		}
 		h.say(h.trf("autodoc.notice.files.opened", p))
 		if ws == "" {
@@ -455,13 +462,16 @@ func (h *Host) show(b *openBuffer, ws, p, content, version string, raw bool) {
 // refused as the widget's are (editorFor).
 func (h *Host) adopt(b *openBuffer, ws, p, version string, raw bool, content *string) {
 	b.file.ws, b.file.path, b.file.version, b.file.open, b.file.dirty = ws, p, version, true, content == nil
+	if content != nil {
+		b.file.crlf = usesCRLF(*content) // a draft written under p (nil) keeps its own
+	}
 	b.file.hint = "" // a draft named: its path is its name now
 	b.file.raw = raw
 	b.file.derived = derivedOf(p, raw)
 	b.file.disk, b.file.diskVersion, b.file.diskAsked = diskSame, "", "" // read or written just now
 	b.file.taskGone = false
 	h.watchFile(b)
-	b.buf.SetName(docKey(fileRef{ws, p}))
+	b.buf.SetName(docKey(feature.FileRef{WS: ws, Path: p}))
 	if b != h.active {
 		ed := h.editorFor(b) // read-only now for a derived document
 		if content != nil {
@@ -617,24 +627,24 @@ func (h *Host) recheckBuffer(b *openBuffer) {
 	}
 	do(h, func(ctx context.Context) answer {
 		res, err := h.readFile(ctx, ws, p, raw)
-		if code(err) == rpc.CodeNotFound {
+		if feature.Code(err) == rpc.CodeNotFound {
 			return answer{err: err, fate: h.taskFateOf(ctx, ws, p, abs, raw, hint)}
 		}
 		if err != nil {
 			return answer{err: err}
 		}
-		m := asMap(res)
+		m := feature.AsMap(res)
 		c, _ := m["content"].([]byte)
-		return answer{content: string(c), version: str(m, "version")}
+		return answer{content: string(c), version: feature.Str(m, "version")}
 	}, func(a answer) {
 		if !tk.Current() || !b.file.open || b.file.version != read {
 			return
 		}
 		switch {
-		case code(a.err) == rpc.CodeNotFound && b.file.taskGone:
+		case feature.Code(a.err) == rpc.CodeNotFound && b.file.taskGone:
 			// settled already: its task is gone from this path for good
-		case code(a.err) == rpc.CodeNotFound && h.followTask(b, a.fate):
-		case code(a.err) == rpc.CodeNotFound, code(a.err) == golibrpc.CodeInvalidParams:
+		case feature.Code(a.err) == rpc.CodeNotFound && h.followTask(b, a.fate):
+		case feature.Code(a.err) == rpc.CodeNotFound, feature.Code(a.err) == golibrpc.CodeInvalidParams:
 			if !b.file.dirty {
 				h.dropBuffer(b)
 				h.notify(h.trf(gone, p))
@@ -729,8 +739,8 @@ func (h *Host) nameDraft(then func()) {
 	h.draft = &draftSave{then: then, b: h.active}
 	h.set("App.fileNameError", h.tr("autodoc.text.files.save_the_draft_a_path_in_the_workspace_md_is_add"))
 	h.setField("App.newFilePath", h.file.hint) // the name buffer.new suggested, to take or change
-	h.newPick.setAll(h.files.Paths)
-	h.newPick.filter("")
+	h.newPick.SetAll(h.files.Paths)
+	h.newPick.Filter("")
 	h.open("fileName")
 }
 
@@ -744,7 +754,7 @@ type draftSave struct {
 func (h *Host) cursorBytes() int { return cursorBytesOf(h.core) }
 
 // cursorBytesOf is an editor's cursor as a byte offset of its text.
-func cursorBytesOf(ed *widget.EditorCore) int {
+func cursorBytesOf(ed *editor.EditorCore) int {
 	row, col := ed.Line()
 	lines := ed.Lines()
 	at := 0
@@ -819,29 +829,30 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 		same    bool  // the read-back holds what was written
 	}
 	h.say(h.trf("autodoc.notice.files.saving", p))
+	onDisk := withEndings(content, b.file.crlf) // the file's own line breaks, CRLF where it had them
 	do(h, func(ctx context.Context) answer {
 		ctx = withAuthority(ctx, who)
-		res, err := h.writeFile(ctx, ws, p, []byte(content), want, raw)
+		res, err := h.writeFile(ctx, ws, p, []byte(onDisk), want, raw)
 		if err == nil {
-			return answer{version: str(asMap(res), "version")}
+			return answer{version: feature.Str(feature.AsMap(res), "version")}
 		}
-		if code(err) != rpc.CodeCommitted {
+		if feature.Code(err) != rpc.CodeCommitted {
 			return answer{err: err}
 		}
 		back, rerr := h.readFile(ctx, ws, p, raw)
 		if rerr != nil {
 			return answer{err: err, readErr: rerr}
 		}
-		m := asMap(back)
+		m := feature.AsMap(back)
 		b, _ := m["content"].([]byte)
-		return answer{err: err, version: str(m, "version"), same: string(b) == content}
+		return answer{err: err, version: feature.Str(m, "version"), same: string(b) == onDisk}
 	}, func(a answer) {
 		defer settled()
 		if !tk.Current() {
 			return
 		}
 		switch {
-		case a.err == nil, code(a.err) == rpc.CodeCommitted && a.readErr == nil && a.same:
+		case a.err == nil, feature.Code(a.err) == rpc.CodeCommitted && a.readErr == nil && a.same:
 			b.file.version = a.version
 			b.file.disk, b.file.diskVersion, b.file.diskAsked = diskSame, "", "" // what is on disk is what was written
 			// typing during the save leaves the file unsaved: what is on disk is what was written
@@ -874,17 +885,24 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 			default:
 				after()
 			}
-		case code(a.err) == rpc.CodeCommitted && a.readErr != nil:
-			h.notify(h.trf("autodoc.notice.files.saved_but_it_could_not_be_read_back_reload_befor", p, wireMessage(a.readErr)))
-		case code(a.err) == rpc.CodeConflict, code(a.err) == rpc.CodeCommitted:
+		case feature.Code(a.err) == rpc.CodeCommitted && a.readErr != nil:
+			msg := h.trf("autodoc.notice.files.saved_but_it_could_not_be_read_back_reload_befor", p, feature.WireMessage(a.readErr))
+			h.notify(msg)
+			h.say(msg) // the status line said "saving p…"
+		case feature.Code(a.err) == rpc.CodeConflict, feature.Code(a.err) == rpc.CodeCommitted:
 			h.activate(b) // the conflict is b's: its answers act on the buffer shown
 			b.file.saveAuth = who
 			h.set("App.conflictQuestion", h.trf("autodoc.text.files.changed_on_disk_since_you_opened_it_keep_editing", p))
 			h.open("fileConflict")
-		case code(a.err) == rpc.CodeNotFound:
+		case feature.Code(a.err) == rpc.CodeNotFound:
 			h.markDisk(b, diskDeleted, "") // the next save creates it again
+			// the status line said "saving p…": it says the file is gone and the next save makes it
+			h.say(h.trf("autodoc.notice.diskwatch.was_deleted_on_disk_its_text_is_kept_saving_crea", p))
 		default:
 			h.failed(h.trf("autodoc.notice.files.save", p), a.err)
+			// the status line said "saving p…": it says the save failed now, as a failed open does, or
+			// it would read as a save still under way, the reason only in a toast
+			h.say(h.trf("autodoc.notice.session.text", h.trf("autodoc.notice.files.save", p), feature.WireMessage(a.err)))
 		}
 	})
 }
@@ -938,13 +956,13 @@ func (h *Host) overwrite() {
 	}
 	do(h, func(ctx context.Context) answer {
 		res, err := h.readFile(withAuthority(ctx, who), ws, p, raw)
-		if code(err) == rpc.CodeNotFound {
+		if feature.Code(err) == rpc.CodeNotFound {
 			return answer{gone: true}
 		}
 		if err != nil {
 			return answer{err: err}
 		}
-		return answer{version: str(asMap(res), "version")}
+		return answer{version: feature.Str(feature.AsMap(res), "version")}
 	}, func(a answer) {
 		if !tk.Current() {
 			return
@@ -1066,14 +1084,14 @@ func (h *Host) writeNew(ctx context.Context, ws, name, root string, content []by
 	raw := kind.RawText(name)
 	res, err := h.writeFile(ctx, at.ws, at.path, content, "", raw)
 	if err == nil {
-		return created{at: at, version: str(asMap(res), "version")}
+		return created{at: at, version: feature.Str(feature.AsMap(res), "version")}
 	}
-	if code(err) != rpc.CodeCommitted {
+	if feature.Code(err) != rpc.CodeCommitted {
 		return created{err: err}
 	}
 	// landed: its version for the next save, read back ("" if that fails: the next save conflicts)
 	back, _ := h.readFile(ctx, at.ws, at.path, raw)
-	return created{at: at, version: str(asMap(back), "version")}
+	return created{at: at, version: feature.Str(feature.AsMap(back), "version")}
 }
 
 // inWorkspace refuses a workspace's name that is not a clean path in it (vfs.CheckMutable, as
@@ -1097,8 +1115,8 @@ func inWorkspace(root, name string) error {
 
 // createRefused says why name was not created (refuseName).
 func (h *Host) createRefused(name string, err error) {
-	reason := wireMessage(err)
-	if code(err) == rpc.CodeConflict {
+	reason := feature.WireMessage(err)
+	if feature.Code(err) == rpc.CodeConflict {
 		reason = h.trf("autodoc.notice.files.exists_pick_another_name_or_open_it", name)
 	}
 	h.refuseName(name, reason)
@@ -1114,7 +1132,7 @@ func (h *Host) refuseName(name, reason string) {
 
 // createEmpty is File › New file: an empty file at name, opened in a buffer of its own.
 func (h *Host) createEmpty(name string) {
-	ws, tk := h.ws, h.ticket(nil, TicketWorkspace)
+	ws, tk := h.ws, h.ticket(nil, feature.TicketWorkspace)
 	root, raw := h.rootOf(ws), kind.RawText(name)
 	do(h, func(ctx context.Context) created {
 		return h.writeNew(ctx, ws, name, root, []byte{})
@@ -1126,7 +1144,7 @@ func (h *Host) createEmpty(name string) {
 			h.createRefused(name, a.err)
 			return
 		}
-		h.openRefAs(fileRef{a.at.ws, a.at.path}, true, nil, &raw, nil, false)
+		h.openRefAs(feature.FileRef{WS: a.at.ws, Path: a.at.path}, true, nil, &raw, nil, false)
 		h.listFiles()
 		h.loadWorkspaces() // the explorer lists it
 	})
@@ -1136,3 +1154,32 @@ func (h *Host) createEmpty(name string) {
 // Stay. Every way out comes here: File › Exit, Ctrl+Q, SPC Q, the command line's q, the too-small
 // screen's Quit and the GUI window's close button (WithQuit).
 func (h *Host) quit() { h.guardAll(h.askBefore("quit"), h.p.Quit) }
+
+// listFiles reads every file of the workspace in use, in path order.
+func (h *Host) listFiles() {
+	tk, ws := h.ticket(&h.listSeq, feature.TicketWorkspace), h.ws
+	do(h, func(ctx context.Context) feature.AnswerOf[[]string] {
+		paths, err := explorer.ListAll(ctx, h.call, ws)
+		return feature.Answered(paths, err)
+	}, func(a feature.AnswerOf[[]string]) {
+		if !tk.Current() {
+			return
+		}
+		if a.Err() != nil {
+			// a daemon still warming up can fail a listing; an empty list would stay empty until a
+			// file changed, so try again, a little later each time, while nothing newer has asked
+			if h.listRetry == 0 {
+				h.failed("files", a.Err())
+			}
+			h.listRetry = min(max(2*h.listRetry, feature.ListRetryFirst), feature.ListRetryMax)
+			h.after(h.listRetry, func() {
+				if tk.Current() {
+					h.listFiles()
+				}
+			})
+			return
+		}
+		h.listRetry = 0
+		h.setFiles(a.Value) // the recent files and the explorer are listed again by them (Listed)
+	})
+}

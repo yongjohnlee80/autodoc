@@ -18,12 +18,10 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/yongjohnlee80/golib/logger"
 	"github.com/yongjohnlee80/golib/search/rank"
-	"github.com/yongjohnlee80/golib/vfs/local"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/crewmail/sqlitecrewmail"
@@ -40,8 +38,9 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/workspace"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
+	"github.com/yongjohnlee80/autodoc/internal/fileowner"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/internal/localfs"
-	"github.com/yongjohnlee80/autodoc/internal/peercred"
 	"github.com/yongjohnlee80/autodoc/internal/profiling"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
@@ -98,7 +97,7 @@ type process struct {
 	ranking *serving.Ranking
 	ws      *serving.Workspaces
 	emb     *serving.Embedding
-	files   *docs.Docs
+	files   *rpc.Disks
 	guard   *fsbounds.Guard // a gated script's bounds (docs/decisions/contract.md#a-gated-scripts-files-stay-in-the-workspace), over every workspace's files
 	srv     *rpc.Server
 	deps    *moduleDeps     // the modules' dependencies, built with the workspaces
@@ -139,13 +138,10 @@ func (d *process) bind() error {
 	if err := d.e.MakeDataDir(); err != nil {
 		return err
 	}
-	if err := peercred.CheckDir(filepath.Dir(sock)); err != nil {
-		return fmt.Errorf("bind %s: %w", sock, err)
-	}
-	ln, err := listen(sock)
-	if errors.Is(err, syscall.EADDRINUSE) {
+	ln, err := ipc.Listen(sock, func(err error) { logger.Warning(d.log, err, "refused a connection") })
+	if errors.Is(err, ipc.ErrInUse) {
 		probeCtx, cancel := context.WithTimeout(d.ctx, 3*time.Second)
-		info, perr := rpc.Probe(probeCtx, "unix", sock)
+		info, perr := rpc.Probe(probeCtx, ipc.Network, sock)
 		cancel()
 		switch {
 		case perr != nil:
@@ -159,13 +155,13 @@ func (d *process) bind() error {
 	if err != nil {
 		return fmt.Errorf("bind %s: %w", sock, err)
 	}
-	id, err := ownSocket(ln, sock)
-	if err != nil {
-		_ = ln.Close()
-		return err
-	}
-	d.ln = peercred.Listener(ln, func(err error) { logger.Warning(d.log, err, "refused a connection") })
-	d.stops.push(func() { removeIfStillOurs(sock, id) })
+	d.ln = ln
+	d.stops.push(ln.Remove)
+	// a start refused after the bind (a damaged store, a step that fails) closes the listener before
+	// Remove, as Remove asks: no server was made to close it, and on Windows a pipe left open keeps
+	// its name, so the next daemon finds it taken by a listener nobody accepts on. A served start's
+	// server has closed it already; a second Close is nothing.
+	d.stops.push(func() { _ = ln.Close() })
 	return nil
 }
 
@@ -255,6 +251,9 @@ func (d *process) startWorkspaces() error {
 	d.deps = &moduleDeps{store: db, storeID: d.storeID, workspaces: d.ws, journal: sqlitejournal.New(db), log: d.log,
 		onStores: d.ws.TodoStoresChanged, storesSettled: d.ws.TodoStoresSettled}
 	d.mods = modules(d.deps)
+	// the todo system holds each store's directory open while it serves: released before the store
+	// closes, and after the workspaces and the daily refresh stop (stops unwind last first)
+	d.stops.push(func() { _ = d.deps.todos.Close() })
 	d.ws.SetTodoStores(todoStores(d.deps.todos))
 	// the provider the preferences name, before any workspace starts, so each starts with it
 	d.emb = serving.NewEmbedding(db, d.ws, d.log)
@@ -410,12 +409,12 @@ func crewWakers(m *crew.Manager) map[string]crew.Waker {
 }
 
 // peerProc is crew's PeerProc from the kernel's peer credentials: c's peer must run as this user
-// (peercred.Check), and its process (peercred.PeerPID) is answered as its reference (crew.ProcRef).
+// (ipc.Check), and its process (ipc.PeerPID) is answered as its reference (crew.ProcRef).
 func peerProc(c net.Conn) (string, error) {
-	if err := peercred.Check(c); err != nil {
+	if err := ipc.Check(c); err != nil {
 		return "", err
 	}
-	pid, err := peercred.PeerPID(c)
+	pid, err := ipc.PeerPID(c)
 	if err != nil {
 		return "", err
 	}
@@ -486,7 +485,7 @@ func codexWaker(ctx context.Context, uid int, bin string) crew.Waker {
 	if err != nil || !strings.Contains(string(out), "--thread") {
 		return nil
 	}
-	return crew.NewCodexWaker(uid, bin)
+	return crew.NewCodexWaker(uid, bin, fileowner.OwnedBy)
 }
 
 // startScheduler makes the wake scheduler for a fresh run id, and answers it and how to stop it.
@@ -524,17 +523,12 @@ func newRunID() string {
 }
 
 // openFiles opens a local peer's files outside every workspace
-// (docs/decisions/editor.md#files-outside-every-workspace): the whole disk, every file.
+// (docs/decisions/editor.md#files-outside-every-workspace): the whole disk, every file. On Unix
+// that is the one tree at "/"; on Windows each drive or share is its own, opened when a path on it
+// is first asked for.
 func (d *process) openFiles() error {
-	disk, err := local.New("/", local.WithLogger(d.log))
-	if err != nil {
-		return err
-	}
-	d.stops.push(func() { _ = disk.Close() })
-	// a bounded file.* is routed into its workspace (rpc's boundedFile) and never reaches "/": behind no
-	// guard at all, every bounded operation here is refused, should a route ever skip that
-	var none *fsbounds.Guard
-	d.files = docs.New(none.Wrap(func() string { return "" }, "/", disk), nil, docs.WithRegistrations(d.b.reg.Kinds()), docs.WithDeriver(d.b.reg))
+	d.files = rpc.LocalDisks(d.log, docs.WithRegistrations(d.b.reg.Kinds()), docs.WithDeriver(d.b.reg))
+	d.stops.push(d.files.Close)
 	return nil
 }
 
@@ -543,7 +537,7 @@ func (d *process) openFiles() error {
 func (d *process) buildServer() error {
 	b, db := d.b, d.db
 	d.srv = rpc.New(d.ws, b.version, rpc.WithListener(d.ln), rpc.WithLogger(d.log), rpc.WithPreferences(db), rpc.WithEmbeddings(d.emb), rpc.WithEvents(db), rpc.WithStoreCheck(db),
-		rpc.WithRegistrations(b.reg.Tables()), rpc.WithRankers(d.ranking), rpc.WithStoreID(d.storeID), rpc.WithFiles(d.files), rpc.WithGuard(d.guard),
+		rpc.WithRegistrations(b.reg.Tables()), rpc.WithRankers(d.ranking), rpc.WithStoreID(d.storeID), rpc.WithDisks(d.files), rpc.WithGuard(d.guard),
 		rpc.WithTaskFiles(taskFiles(d.deps.todos)), rpc.WithModules(d.mods...), rpc.WithProfiler(d.prof), rpc.WithOwnDirs(d.ownDirs()))
 	d.refreshTodos(d.deps.todos)
 	li := store.LeaseInfo{StoreID: d.storeID, StorePath: d.p.Store, Addr: d.p.Socket, PID: int64(os.Getpid()), Instance: d.srv.Instance(),

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -18,6 +17,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // bigMap is a daemon serving one workspace, big, whose documents and links are written straight
@@ -46,7 +46,7 @@ func serveBigMap(t *testing.T) *bigMap {
 	ix := index.New(index.NewStore(db, row.ID), fsys, index.WithMatch(md))
 	r := &rig{t: t, fsys: fsys, cancel: cancel, done: make(chan error, 1)}
 	r.sock = shortSocket(t)
-	ln, err := net.Listen("unix", r.sock)
+	ln, err := ipc.Listen(r.sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}

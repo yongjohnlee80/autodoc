@@ -1,18 +1,16 @@
 package tui
 
 import (
-	"cmp"
-	"fmt"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/relations"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/i18n"
-	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
 // LANGUAGES — AutoDoc's UI in six languages (docs/decisions/editor.md#six-languages), on golib's
@@ -21,7 +19,7 @@ import (
 // store-wide preference (tui.language) chooses. A switch relabels everything in one frame
 // (App.ApplyLanguage); the text AutoDoc composes in Go is composed again (languageChanged). A
 // stored language this build does not offer is English, and the store keeps it (prefspec's
-// readRows).
+// ReadRows).
 
 // prefLanguage is the UI's language: store-wide, as the theme is, and the same in both builds.
 const prefLanguage = "tui.language"
@@ -95,28 +93,7 @@ func (h *Host) tr(id string) string {
 
 // trf is tr with its %1, %2 … filled with args, as Qt's QString::arg: a sentence is translated whole
 // and then filled, so no language sees it assembled from fragments.
-func (h *Host) trf(id string, args ...any) string { return fill(h.tr(id), args...) }
-
-// argRef is a %1 … %99 in a message, which fill fills.
-var argRef = regexp.MustCompile(`%[1-9][0-9]?`)
-
-// fill is s with each %N its argument, in one pass, so an argument that says "%1" itself (a path, a
-// command, a search) is shown as it is. A %N past the arguments stays, but for a two-digit one whose
-// first digit names one ("%10" with one argument): the argument, then the digit, as Qt's arg.
-func fill(s string, args ...any) string {
-	if len(args) == 0 {
-		return s
-	}
-	return argRef.ReplaceAllStringFunc(s, func(ref string) string {
-		if n, _ := strconv.Atoi(ref[1:]); n <= len(args) {
-			return fmt.Sprint(args[n-1])
-		}
-		if n := int(ref[1] - '0'); len(ref) == 3 && n <= len(args) {
-			return fmt.Sprint(args[n-1]) + ref[2:]
-		}
-		return ref
-	})
-}
+func (h *Host) trf(id string, args ...any) string { return feature.Fill(h.tr(id), args...) }
 
 // englishCatalog is autodoc_en.xml, for text composed before the program has its App.
 var englishCatalog = sync.OnceValue(func() *i18n.Set {
@@ -135,19 +112,12 @@ func englishText(id string) string {
 	return id
 }
 
-// wording is a catalog's text for a function that composes it: core{h} (or a feature's Core) in the
-// UI's language, or inEnglish.
-type wording interface {
-	Tr(id string) string
-	Trf(id string, args ...any) string
-}
-
 // inEnglish is wording in the English catalog's words, filled as trf fills: for text no screen
 // shows (a test's, a script's, an agent's task).
 type inEnglish struct{}
 
 func (inEnglish) Tr(id string) string               { return englishText(id) }
-func (inEnglish) Trf(id string, args ...any) string { return fill(englishText(id), args...) }
+func (inEnglish) Trf(id string, args ...any) string { return feature.Fill(englishText(id), args...) }
 
 // trOr is id's text in the language now, when the English catalog holds id as english: AutoDoc's own
 // text. Anything else is shown as written: a plugin's or a script's text, which no catalog holds, or
@@ -159,44 +129,21 @@ func (h *Host) trOr(id, english string) string {
 	return h.tr(id)
 }
 
-// withLabelMessage is row with its label a catalog message, when the English catalog holds label
-// as one of AutoDoc's menu rows: golib's Menu then fills it in the UI's language, its key English's.
-// A name (a buffer's, a tab's, a plugin's) is shown as written.
-func withLabelMessage(row widget.MenuItemModel, label string) widget.MenuItemModel {
-	id := menuLabelID(label)
-	if t, ok := englishCatalog().Lookup(i18n.English, id); ok && t == label {
-		row.LabelMsg = tuicore.Msg(id)
-	}
-	return row
-}
-
 // menuLabelID is a menu row's catalog id: its words and, when it has one, its key, so "&Close" and
 // "Close" are two rows.
 func menuLabelID(label string) string {
-	id := "autodoc.gomenu." + slugOf(label)
+	id := "autodoc.gomenu." + feature.SlugOf(label)
 	if _, key, _ := tuicore.ParseMnemonic(label); key != 0 {
 		id += "_" + strings.ToLower(string(key))
 	}
 	return id
 }
 
-// slugOf is s as an id's last part: its words, lower-case, joined by "_", at most 48 bytes.
-func slugOf(s string) string {
-	words := strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
-		return !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9')
-	})
-	out := strings.Join(words, "_")
-	if len(out) > 48 {
-		out = strings.Trim(out[:48], "_")
-	}
-	return cmp.Or(out, "text")
-}
-
 // choiceLabels are the choosers' rows in AutoDoc's words, by their App.* source: a ComboBox's rows
 // are text, so they are composed in the UI's language (choiceState), their keys English.
 var choiceLabels = map[string][]string{
 	"App.keymaps":           keymapLabels,
-	"App.edges":             edges,
+	"App.edges":             feature.Edges,
 	"App.yesNo":             {"yes", "no"},
 	"App.openAsChoices":     openAsLabels,
 	"App.diskReloadChoices": diskReloadLabels,
@@ -212,7 +159,7 @@ var choiceLabels = map[string][]string{
 // featureChoiceLabels are the choosers a feature owns (the GlobeMap's and the Mindmap's, in the GUI
 // build), by their App.* source: the feature sets them through choiceModel, and sets them again on a
 // switch (LanguageSink); their rows are catalog text as choiceLabels' are.
-var featureChoiceLabels = relationViewChoices()
+var featureChoiceLabels = relations.RelationViewChoices()
 
 // choiceState is the choosers' rows in the UI's language.
 func (h *Host) choiceState() map[string]any {
@@ -225,18 +172,12 @@ func (h *Host) choiceState() map[string]any {
 
 // choiceModel is the chooser src's rows (choiceLabels) in w's language, for a feature that sets them
 // again: each key its English, each label its catalog text (autodoc.choice.<slug>).
-func choiceModel(w wording, src string) *tuidecl.ListModel {
+func choiceModel(w feature.Wording, src string) *tuidecl.ListModel {
 	labels, ok := choiceLabels[src]
 	if !ok {
 		labels = featureChoiceLabels[src]
 	}
-	rows := make([]rowOf, len(labels))
-	for i, l := range labels {
-		rows[i] = rowOf{"key": l, "label": w.Tr("autodoc.choice." + slugOf(l))}
-	}
-	model := tuidecl.NewListModel("key", "label")
-	model.Reset(rows)
-	return model
+	return feature.ChoiceRows(w, labels)
 }
 
 // languageChanged composes again what AutoDoc composes in Go from catalog text and keeps on
@@ -254,7 +195,7 @@ func (h *Host) languageChanged() {
 		h.set(name, model)
 	}
 	h.commandsChanged()
-	h.cat.syncAll()
+	h.cat.SyncAll()
 	for name, text := range h.languageState() {
 		h.set(name, text)
 	}
@@ -265,7 +206,7 @@ func (h *Host) languageChanged() {
 	h.showSemantic()
 	h.syncStages(false) // the Rerank box names its ranker
 	h.showDiagnostics(h.fmDiagnostics)
-	h.reg.languageChanged()
+	h.reg.LanguageChanged()
 	if len(tutorialPages) > 0 {
 		h.showTutorialPage() // its title and Next, should it be open
 	}

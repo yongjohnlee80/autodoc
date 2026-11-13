@@ -9,7 +9,7 @@ import (
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // THE PAGE'S ACCENT IS THE DOCUMENT'S, and the menu's stays the menu's: the root Window binds
@@ -61,6 +61,7 @@ func TestThePagesAccentIsTheThemesDocumentAccent(t *testing.T) {
 				daemonOpts{prefs: map[string]string{"tui.theme": theme}})
 			r := runTUISized(t, NewSession(d.sock, nil), Options{}, 80, 20)
 			r.connected(t)
+			r.ready(t) // the workspace entered: an open before it is no note of a workspace in use
 			r.h.p.Post(func() { r.h.openPath("a.md") })
 			r.s.WaitFor(t, "a.md Rendered by the editor, its flowchart drawn", func(sc string) bool {
 				_, drawn := outlineFG(r)
@@ -116,8 +117,8 @@ func TestARawHTMLFilesPageWearsTheDocumentAccent(t *testing.T) {
 			r.openHTMLAnswer(t, page, "raw")
 			r.waitOpen(t, "", page)
 			r.s.WaitFor(t, "the file's page, Rendered", func(sc string) bool {
-				shown := onLoop(r, func() widget.EditorView { return r.h.editor.(*widget.Editor).ShownView() })
-				return shown == widget.ViewRendered && strings.Contains(sc, "plain with zq inline") && !strings.Contains(sc, "<code>")
+				shown := onLoop(r, func() editor.EditorView { return r.h.editor.(*editor.Editor).ShownView() })
+				return shown == editor.ViewRendered && strings.Contains(sc, "plain with zq inline") && !strings.Contains(sc, "<code>")
 			})
 			pageAccent := themeValue(t, r, theme, "document.accent")
 			menuAccent := themeValue(t, r, theme, "menu.accent")

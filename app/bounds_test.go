@@ -11,6 +11,7 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -41,7 +42,7 @@ func newBoundsFixture(t *testing.T) *boundsFixture {
 	}
 	writeAt(t, filepath.Join(f.root2, "b.md"), "# B\n")
 	writeAt(t, filepath.Join(f.outside, "secret"), "s")
-	f.sock = filepath.Join(dir, "a.sock")
+	f.sock = ipc.ScratchAddr(dir, "a.sock")
 	start(t, writeConfig(t, f.sock, filepath.Join(dir, "state"), "", "kb="+f.root, "kb2="+f.root2), f.sock)
 	f.cli = dial(t, f.sock)
 	eventually(t, "kb indexed", func() bool {
@@ -241,7 +242,7 @@ func TestASecondHardLinkIsRefused(t *testing.T) {
 // own is refused as one too many, never taken for bounds.
 func TestBoundsArriveFromProtocol34(t *testing.T) {
 	f := newBoundsFixture(t)
-	old, err := golibrpc.Dial(context.Background(), f.sock, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	old, err := golibrpc.Dial(context.Background(), f.sock, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +265,7 @@ func TestTheDaemonsOwnPathsAreRefused(t *testing.T) {
 	root := filepath.Join(dir, "kb")
 	writeAt(t, filepath.Join(root, "notes", "a.md"), "# A\n")
 	state := filepath.Join(root, "state")
-	sock := filepath.Join(dir, "a.sock")
+	sock := ipc.ScratchAddr(dir, "a.sock")
 	made := writeConfig(t, sock, state, "", "kb="+root)
 	body, err := os.ReadFile(made)
 	if err != nil {
@@ -295,7 +296,7 @@ func TestARelativeConfigIsProtectedWhereItIs(t *testing.T) {
 	dir := short(t)
 	root := filepath.Join(dir, "kb")
 	writeAt(t, filepath.Join(root, "notes", "a.md"), "# A\n")
-	sock := filepath.Join(dir, "a.sock")
+	sock := ipc.ScratchAddr(dir, "a.sock")
 	made := writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+root)
 	body, err := os.ReadFile(made)
 	if err != nil {

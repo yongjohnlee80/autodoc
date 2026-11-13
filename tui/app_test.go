@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"net"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -23,7 +23,7 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	"github.com/yongjohnlee80/golib/vfs"
 	"github.com/yongjohnlee80/golib/vfs/memfs"
 
@@ -32,11 +32,15 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/follow"
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/module"
+	"github.com/yongjohnlee80/autodoc/core/paths"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/todo"
 	"github.com/yongjohnlee80/autodoc/core/todo/todotest"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/system"
 )
 
 func md(p string) bool { return strings.HasSuffix(p, ".md") }
@@ -64,6 +68,17 @@ type daemon struct {
 	todos    *todo.Manager
 	todoDisk *todotest.Disk
 }
+
+// fakeRoot is the root folder of a test daemon's workspace whose files are in memory: absolute on
+// this OS, so a path the TUI joins to it is one (/kb on Unix; on Windows kb at the temp folder's
+// drive, C:\kb), and on no disk.
+func fakeRoot(ws string) string {
+	return filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), ws)
+}
+
+// slashFile is taskFile's path in the slash form, the daemon's for a store or a root, its volume
+// kept: itself on Unix, C:/kb/.todo-list on Windows.
+func slashFile(p string) string { return paths.Slash(taskFile(p)) }
 
 // startDaemon serves the workspaces named (each with its files, path then content). A name ending
 // in "!" is served on a filesystem whose writes land and then fail (Committed).
@@ -114,7 +129,7 @@ type daemonOpts struct {
 	// storeAt, when set, is where the daemon's store is: the path a config names, so a client bound
 	// to that config's store finds its daemon serving it (a real daemon's store_id). "" is a temp one.
 	storeAt string
-	// crew, when set, is served too: the crew.* verbs, on its own store (crewbridges_test.go)
+	// crew, when set, is served too: the crew.* verbs, on its own store (tui/crew/crewbridges_test.go)
 	crew *crew.Manager
 	// modules are served too: a cell's own verbs (crewinboxview_tui_test.go)
 	modules []module.Module
@@ -174,7 +189,11 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = db.Close() })
+	t.Cleanup(func() { // its error said, so a store still held at its folder's removal says which way it went
+		if err := db.Close(); err != nil {
+			t.Errorf("the test daemon's store did not close: %v", err)
+		}
+	})
 	// a daemon says the store it serves (store_id), as a real one does: a client bound to a config's
 	// store refuses one from protocol 13 on that says none (endpoint.CheckStore)
 	storeID, err := store.Identity(storePath)
@@ -205,7 +224,7 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	}
 	// a test's own preferences start quiet too, unless it names these itself
 	prefs = maps.Clone(prefs)
-	for _, k := range []string{prefAboutAt, prefUpdates} {
+	for _, k := range []string{system.PrefAboutAt, system.PrefUpdates} {
 		if _, set := prefs[k]; !set {
 			prefs[k] = "false"
 		}
@@ -246,14 +265,14 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 		d.fs[wsName] = mem
 		notes := workspaces[name]
 		for i := 0; i < len(notes) && !kept; i += 2 {
-			if dir := filepath.Dir(notes[i]); dir != "." {
+			if dir := path.Dir(notes[i]); dir != "." { // a workspace's own path: slashes on every OS
 				_ = mem.MkdirAll(ctx, dir)
 			}
 			if _, err := mem.WriteFile(ctx, notes[i], strings.NewReader(notes[i+1])); err != nil {
 				t.Fatal(err)
 			}
 		}
-		row, err := db.AddWorkspace(ctx, wsName, "/"+wsName, nil, nil)
+		row, err := db.AddWorkspace(ctx, wsName, fakeRoot(wsName), nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -263,7 +282,7 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 		ix.SetRescanner(f)
 		cores.Go(func() { _ = ix.Run(ctx) })
 		cores.Go(func() { _ = f.Run(ctx) })
-		served = append(served, rpc.Static(rpc.WorkspaceInfo{Name: wsName, Root: "/" + wsName, Include: []string{"**/*.md"}, Index: ix, Docs: docs.New(fsys, match, docOpts...), Following: f.Status, Warming: o.warming}))
+		served = append(served, rpc.Static(rpc.WorkspaceInfo{Name: wsName, Root: fakeRoot(wsName), Include: []string{"**/*.md"}, Index: ix, Docs: docs.New(fsys, match, docOpts...), Following: f.Status, Warming: o.warming}))
 		// wait until the files are indexed, so the first listing has them (a held daemon does not)
 		for deadline := time.Now().Add(indexWait); o.hold == nil; time.Sleep(10 * time.Millisecond) {
 			st, _ := ixs.Status(ctx)
@@ -282,13 +301,13 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { _ = os.RemoveAll(dir) })
-		d.sock = filepath.Join(dir, "s.sock")
+		d.sock = ipc.ScratchAddr(dir, "s.sock")
 	}
-	ln, err := net.Listen("unix", d.sock)
+	ln, err := ipc.Listen(d.sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
-	opts := []rpc.Option{rpc.WithListener(ln), rpc.WithStoreID(storeID), rpc.WithPreferences(db), rpc.WithRegistrations(o.reg), rpc.WithFiles(diskFiles(t, docOpts...))}
+	opts := []rpc.Option{rpc.WithListener(ln), rpc.WithStoreID(storeID), rpc.WithPreferences(db), rpc.WithRegistrations(o.reg), rpc.WithDisks(diskVolumes(t, docOpts...))}
 	if o.emb != nil {
 		opts = append(opts, rpc.WithEmbeddings(o.emb))
 	}
@@ -304,9 +323,9 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	}
 	d.todoDisk = todotest.NewDisk()
 	roots := todotest.Roots{}
-	for _, w := range served {
-		roots[w.Name()] = w.Root()
-		d.todoDisk.MkdirAll(w.Root())
+	for _, w := range served { // the store's root as core/todo opens it: the slash form, its volume kept
+		roots[w.Name()] = paths.Slash(w.Root())
+		d.todoDisk.MkdirAll(paths.Slash(w.Root()))
 	}
 	d.todos = todo.New(roots, d.todoDisk, todotest.NewJournal())
 	opts = append(opts, rpc.WithModules(d.todos))
@@ -317,10 +336,74 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	srv := rpc.New(set, version, opts...)
 	done := make(chan struct{})
 	d.stopped = done
-	go func() { _ = srv.Run(ctx); close(done) }()
-	d.stop = func() { cancel(); <-done; cores.Wait() }
-	t.Cleanup(func() { cancel(); <-done; cores.Wait() }) // before the store closes (its cleanup runs after)
+	// the server's own result is said, not dropped: a shutdown that returns nil has drained every
+	// request it took (golib's Run), and one that timed out draining names what it gave up on
+	var runErr error
+	go func() { runErr = srv.Run(ctx); close(done) }()
+	said := false // a cell's own stop and its cleanup's both come here: the result is said once
+	stopped := func() {
+		cancel()
+		<-done
+		// said before any other wait, which could hang and bury it
+		if serverFailed(runErr) && !said {
+			said = true
+			t.Errorf("the test daemon's server did not shut down cleanly: %v", runErr)
+		}
+		cores.Wait()
+	}
+	d.stop = stopped
+	t.Cleanup(stopped) // before the store closes (its cleanup runs after)
 	return d
+}
+
+// serverFailed is whether a test daemon's server.Run result is a failure: anything but nil or
+// nothing but cancellation (a stop before it listened). A joined error is a failure when any part of
+// it is, and a wrapped one when what it wraps is: a drain that timed out, joined with a
+// cancellation, is still said, however it is wrapped.
+func serverFailed(err error) bool {
+	switch e := err.(type) {
+	case nil:
+		return false
+	case interface{ Unwrap() []error }:
+		for _, part := range e.Unwrap() {
+			if serverFailed(part) {
+				return true
+			}
+		}
+		return false
+	case interface{ Unwrap() error }:
+		if inner := e.Unwrap(); inner != nil {
+			return serverFailed(inner)
+		}
+	}
+	return !errors.Is(err, context.Canceled)
+}
+
+// TestATestDaemonsServerFailureIsSaid: a cancellation alone is a clean stop; a drain failure is a
+// failure, joined with a cancellation or not.
+func TestATestDaemonsServerFailureIsSaid(t *testing.T) {
+	t.Parallel()
+	drain := errors.New("drain: timed out with a request still running")
+	for _, c := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"cancelled", context.Canceled, false},
+		{"cancelled, wrapped", fmt.Errorf("listen: %w", context.Canceled), false},
+		{"cancelled twice, joined", errors.Join(context.Canceled, context.Canceled), false},
+		{"a drain failure", drain, true},
+		{"a drain failure joined with a cancellation", errors.Join(context.Canceled, drain), true},
+		{"nested", errors.Join(context.Canceled, errors.Join(nil, drain)), true},
+		{"a joined drain failure, wrapped", fmt.Errorf("shutdown: %w", errors.Join(context.Canceled, drain)), true},
+		{"a joined cancellation, wrapped", fmt.Errorf("shutdown: %w", errors.Join(context.Canceled, context.Canceled)), false},
+		{"a wrapped joined drain failure, joined again", errors.Join(fmt.Errorf("serve: %w", errors.Join(context.Canceled, drain)), context.Canceled), true},
+	} {
+		if got := serverFailed(c.err); got != c.want {
+			t.Errorf("%s: serverFailed(%v) = %v, want %v", c.name, c.err, got, c.want)
+		}
+	}
 }
 
 func sortedKeys(m map[string][]string) []string {
@@ -364,6 +447,9 @@ type running struct {
 
 func runTUI(t *testing.T, sess *Session, opt Options) *running {
 	t.Helper()
+	if opt.seams == nil {
+		opt.seams = seamsFor(t) // the test's own, if it tuned any (seams_test.go)
+	}
 	h := newHost(sess, opt)
 	s := decltest.RunWith(t, 100, 30, h.attach, h.options(opt)...)
 	t.Cleanup(h.cancel)
@@ -440,6 +526,7 @@ func key(r rune) tuicore.Event {
 }
 
 func TestQClosesNavigationPanelsAndCards(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"note.md", "# Note\n"}})
 	r := attached(t, d)
 	for _, panel := range []struct {
@@ -456,7 +543,7 @@ func TestQClosesNavigationPanelsAndCards(t *testing.T) {
 		title string
 	}{{0, "1 of"}, {'p', "SPC p — plugins"}} {
 		if card.key == 0 { // the tutorial, which no key opens: Help › Tutorial… runs its entry
-			if err := onLoop(r, func() error { return r.h.cat.run("help.tutorial", nil) }); err != nil {
+			if err := onLoop(r, func() error { return r.h.cat.Run("help.tutorial", nil) }); err != nil {
 				t.Fatal(err)
 			}
 		} else {
@@ -479,6 +566,7 @@ func TestQClosesNavigationPanelsAndCards(t *testing.T) {
 }
 
 func TestQTypesInAFocusedDialogField(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"note.md", "# Note\n"}})
 	r := attached(t, d)
 	onLoop(r, func() bool { r.h.open("pluginAdd"); return true })
@@ -504,13 +592,15 @@ func (r *running) typeInEditor(t *testing.T, text string) {
 func (r *running) waitTyped(t *testing.T) {
 	t.Helper()
 	r.s.WaitFor(t, "the typing done", func(string) bool {
-		return onLoop(r, func() bool { return r.h.file.dirty && r.h.core.Mode() == widget.ModeNormal })
+		return onLoop(r, func() bool { return r.h.file.dirty && r.h.core.Mode() == editor.ModeNormal })
 	})
 }
 
 // openByPicker opens a file through File › Open.
 func (r *running) openByPicker(t *testing.T, p string) {
 	t.Helper()
+	// the picker filters the workspace's listing, the daemon's work: on daemonWait, not a frame's clock
+	r.waitWithin(t, "the notes listed", daemonWait, func() bool { return len(r.listed()) > 0 })
 	r.leader(t, 'o')
 	r.s.WaitForText(t, "open a document")
 	r.keys(t, decltest.Type(p)...)
@@ -530,11 +620,23 @@ func (r *running) editorText() string { return onLoop(r, r.h.core.Value) }
 
 func (r *running) waitFile(t *testing.T, p string) {
 	t.Helper()
-	r.s.WaitFor(t, "note "+p+" open", func(string) bool { n := r.file(); return n.open && n.path == p && !n.dirty })
-	r.s.WaitForText(t, "opened "+p)
+	// the open is a read through the daemon, a round trip: on daemonWait, as waitOpened, not a frame's
+	// clock (a loaded runner under -race still showed "opening page.md…" at WaitTimeout)
+	r.waitWithin(t, "note "+p+" open", daemonWait, func() bool { n := r.file(); return n.open && n.path == p && !n.dirty })
+	r.waitStatus(t, "opened "+p)
+}
+
+// waitStatus waits for the status line to hold text, read whole from App.status: the screen
+// elides a long one at its width (a path under Windows' temporary folder is longer than one line).
+func (r *running) waitStatus(t *testing.T, text string) {
+	t.Helper()
+	r.s.WaitFor(t, "the status "+text, func(string) bool {
+		return strings.Contains(onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.status"); return v.Raw }), text)
+	})
 }
 
 func TestEveryQMLFileIsSound(t *testing.T) {
+	t.Parallel()
 	decltest.Check(t, newHost(NewSession("unused", nil), Options{}).options(Options{})...)
 }
 
@@ -542,6 +644,7 @@ func TestEveryQMLFileIsSound(t *testing.T) {
 // left and the file under the cursor on the right; Enter opens the hit in the editor, the cursor
 // at its section; typed text marks it unsaved; Ctrl+S writes it to the file.
 func TestSearchesOpensEditsSaves(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "# A\n\nintro\n\n## Birds\n\nkestrel notes\n", "b/c.md", "# C\n\nplover\n"}})
 	r := attached(t, d)
 	r.waitListed(t, 2)
@@ -576,6 +679,7 @@ func TestSearchesOpensEditsSaves(t *testing.T) {
 // TestThePickerKeepsTheFileName: a path too long for the open picker's list loses its start, not
 // its file name.
 func TestThePickerKeepsTheFileName(t *testing.T) {
+	t.Parallel()
 	deep := "archive/2026/09/projects/autodoc/reviews/2026-09-29-the-review-of-the-store.md"
 	d := startDaemon(t, map[string][]string{"kb": {deep, "# R\n\nreview\n"}})
 	r := attached(t, d)
@@ -594,6 +698,7 @@ func TestThePickerKeepsTheFileName(t *testing.T) {
 // TestAConflictAsks: a file changed on disk since it was opened is not overwritten: the save asks,
 // and keep, reload and overwrite each do what they say.
 func TestAConflictAsks(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "one\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -636,6 +741,7 @@ func TestAConflictAsks(t *testing.T) {
 // its unsaved changes; closing a modified buffer asks: stay keeps it, save writes it first, discard
 // drops it.
 func TestUnsavedWorkIsNeverLostQuietly(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -669,7 +775,9 @@ func TestUnsavedWorkIsNeverLostQuietly(t *testing.T) {
 	r.typeInEditor(t, "Y")
 	closeShown()
 	r.keys(t, key('d'))
-	r.s.WaitFor(t, "b.md closed", func(string) bool { return onLoop(r, func() bool { return r.h.bufferOf(fileRef{"kb", "b.md"}) == nil }) })
+	r.s.WaitFor(t, "b.md closed", func(string) bool {
+		return onLoop(r, func() bool { return r.h.bufferOf(feature.FileRef{WS: "kb", Path: "b.md"}) == nil })
+	})
 	if got := d.read(t, "kb", "b.md"); got != "bbb\n" {
 		t.Errorf("discard wrote b.md: %q", got)
 	}
@@ -677,6 +785,7 @@ func TestUnsavedWorkIsNeverLostQuietly(t *testing.T) {
 
 // TestQuitOverUnsavedAsks: quitting with unsaved changes asks; with none it quits at once.
 func TestQuitOverUnsavedAsks(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -698,6 +807,7 @@ func TestQuitOverUnsavedAsks(t *testing.T) {
 
 // TestQuitOverUnsavedCanSaveFirst: Save in the quit question writes the file, then quits.
 func TestQuitOverUnsavedCanSaveFirst(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -719,6 +829,7 @@ func TestQuitOverUnsavedCanSaveFirst(t *testing.T) {
 // TestCommittedIsReadBack: a save the daemon reports as landed-then-failed is read back, and adopted
 // when the disk holds what was written.
 func TestCommittedIsReadBack(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb!": {"a.md", "one\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -743,6 +854,7 @@ func TestCommittedIsReadBack(t *testing.T) {
 // (docs/decisions/editor.md#dock-clicks-hide-and-show); SPC l shows it again, and it holds src.md's
 // own links.
 func TestBacklinks(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"target.md", "# Target\n", "src.md", "see [[target]]\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "target.md")
@@ -759,6 +871,7 @@ func TestBacklinks(t *testing.T) {
 
 // TestWorkspaces: the picker lists the daemon's workspaces, and switching lists the other's files.
 func TestWorkspaces(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"alpha": {"a.md", "a\n"}, "beta": {"b1.md", "b\n", "b2.md", "b\n"}})
 	sess := NewSession(d.sock, nil)
 	release := make(chan struct{})
@@ -787,7 +900,8 @@ func TestWorkspaces(t *testing.T) {
 
 // TestConnectFailedSaysSo: with nothing on the socket and no daemon to start, the TUI says so.
 func TestConnectFailedSaysSo(t *testing.T) {
-	sess := NewSession(filepath.Join(t.TempDir(), "none.sock"), nil)
+	t.Parallel()
+	sess := NewSession(ipc.ScratchAddr(t.TempDir(), "none.sock"), nil)
 	sess.SetProbeWindow(200 * time.Millisecond)
 	r := runTUI(t, sess, Options{})
 	r.s.WaitFor(t, "the failure", func(sc string) bool {
@@ -797,12 +911,16 @@ func TestConnectFailedSaysSo(t *testing.T) {
 
 // TestSpawnsTheDaemonOnce: nothing answering, the TUI starts the daemon once, and attaches.
 func TestSpawnsTheDaemonOnce(t *testing.T) {
+	if ipc.Network != "unix" {
+		t.Skip("the fake spawn links a socket's path to a running daemon: a named pipe has no path to link")
+	}
+	t.Parallel()
 	dir, err := os.MkdirTemp("", "ads")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir)
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	// the daemon "spawned" is one already running elsewhere: spawning links the socket path to it,
 	// after a while (as a real daemon takes time to come up), so the dial retries in between
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
@@ -824,6 +942,7 @@ func TestSpawnsTheDaemonOnce(t *testing.T) {
 // TestEveryThemeKeepsTextLegible: under each shipped theme the status line, the explorer and the
 // note wear a foreground that differs from their background.
 func TestEveryThemeKeepsTextLegible(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "legible text\n"}})
 	for _, name := range themes.Names() {
 		t.Run(name, func(t *testing.T) {
@@ -883,6 +1002,7 @@ func find(cells [][]tuicore.Cell, text string) (int, int, bool) {
 // TestASlowOpenNeverReplacesALaterOne: an open whose answer comes after a later open's is dropped:
 // the editor holds the file opened last.
 func TestASlowOpenNeverReplacesALaterOne(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"slow.md", "slow text\n", "fast.md", "fast text\n"}})
 	sess := NewSession(d.sock, nil)
 	release := make(chan struct{})
@@ -908,6 +1028,7 @@ func TestASlowOpenNeverReplacesALaterOne(t *testing.T) {
 // overwritten by someone else before the read-back, is a conflict: the other writer's version is
 // not adopted as the one the editor holds.
 func TestCommittedThenOverwrittenIsAConflict(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb!": {"a.md", "one\n"}})
 	sess := NewSession(d.sock, nil)
 	wrote := false
@@ -934,6 +1055,7 @@ func TestCommittedThenOverwrittenIsAConflict(t *testing.T) {
 // TestReconnects: when the daemon goes, the TUI says so and connects again to the next one on the
 // socket, listing its files.
 func TestReconnects(t *testing.T) {
+	t.Parallel()
 	d1 := startDaemonOn(t, "", map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUI(t, NewSession(d1.sock, nil), Options{})
 	r.waitListed(t, 1)
@@ -949,6 +1071,7 @@ func TestReconnects(t *testing.T) {
 // TestASaveNeverDropsANewerEdit: an edit made while a guarded save is on its way is not dropped by
 // what the save guarded: the close asks again.
 func TestASaveNeverDropsANewerEdit(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n"}})
 	sess := NewSession(d.sock, nil)
 	release := make(chan struct{})
@@ -973,7 +1096,7 @@ func TestASaveNeverDropsANewerEdit(t *testing.T) {
 	// the keys are the loop's to process: release the save only once the editor holds the edit and
 	// is back in Normal mode (its own mode: the status line repaints after it)
 	r.s.WaitFor(t, "the newer edit in the editor", func(string) bool {
-		return strings.Contains(r.editorText(), "Y") && onLoop(r, func() bool { return r.h.core.Mode() == widget.ModeNormal })
+		return strings.Contains(r.editorText(), "Y") && onLoop(r, func() bool { return r.h.core.Mode() == editor.ModeNormal })
 	})
 	holding.Store(false)
 	close(release)
@@ -982,7 +1105,9 @@ func TestASaveNeverDropsANewerEdit(t *testing.T) {
 		t.Fatalf("after the save: %s, dirty %v, text %q", n.path, n.dirty, r.editorText())
 	}
 	r.keys(t, key('s')) // save the newer edit too; then the close goes ahead
-	r.s.WaitFor(t, "a.md closed", func(string) bool { return onLoop(r, func() bool { return r.h.bufferOf(fileRef{"kb", "a.md"}) == nil }) })
+	r.s.WaitFor(t, "a.md closed", func(string) bool {
+		return onLoop(r, func() bool { return r.h.bufferOf(feature.FileRef{WS: "kb", Path: "a.md"}) == nil })
+	})
 	if got := d.read(t, "kb", "a.md"); !strings.Contains(got, "Y") || !strings.Contains(got, "X") {
 		t.Errorf("a.md %q", got)
 	}
@@ -992,6 +1117,7 @@ func TestASaveNeverDropsANewerEdit(t *testing.T) {
 // once the disk's version is in the editor; a file gone by then leaves the edits guarded, the file
 // marked deleted on disk.
 func TestAFailedReloadKeepsTheEditsUnsaved(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "one\n", "b.md", "b\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -1013,6 +1139,7 @@ func TestAFailedReloadKeepsTheEditsUnsaved(t *testing.T) {
 }
 
 func TestProgressText(t *testing.T) {
+	t.Parallel()
 	const qwen = "ollama|qwen3-embedding:4b|sha256:1|2560"
 	for _, c := range []struct {
 		p    progress
@@ -1044,6 +1171,7 @@ func TestProgressText(t *testing.T) {
 // TestSemanticOnline: semantic search is online with a provider in use, its model not mid-switch,
 // its last call answered; offline otherwise.
 func TestSemanticOnline(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		e    embedProgress
 		want bool
@@ -1066,6 +1194,7 @@ func TestSemanticOnline(t *testing.T) {
 // done; when it ends it says so once, and the files, listed mid-scan, are listed again whole: the
 // pickers' and the explorer's.
 func TestProgressWhileIndexing(t *testing.T) {
+	t.Parallel()
 	var notes []string
 	for i := range 40 {
 		notes = append(notes, fmt.Sprintf("n%02d.md", i), "note\n")
@@ -1080,10 +1209,10 @@ func TestProgressWhileIndexing(t *testing.T) {
 	r.s.WaitForText(t, "explorer")
 	r.keys(t, enter())
 	under := func() int {
-		return onLoop(r, func() int { return r.h.explorer.model.RowCount(&tuidecl.Index{Row: 0}) })
+		return onLoop(r, func() int { return r.h.explorer.Model.RowCount(&tuidecl.Index{Row: 0}) })
 	}
 	r.s.WaitFor(t, "kb listed", func(string) bool {
-		return onLoop(r, func() bool { _, ok := r.h.explorer.paths["kb"]; return ok })
+		return onLoop(r, func() bool { _, ok := r.h.explorer.Paths["kb"]; return ok })
 	})
 	if n := under(); n >= 40 {
 		t.Fatalf("the explorer had %d notes mid-scan: the cell needs a partial list", n)
@@ -1106,6 +1235,7 @@ func TestProgressWhileIndexing(t *testing.T) {
 // TestOnePollAfterSwitches: switching workspace (as a reconnect does) starts the next workspace's
 // poll, and the old one's pending timer starts nothing: status is asked about once a second.
 func TestOnePollAfterSwitches(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"alpha": {"a.md", "a\n"}, "beta": {"b.md", "b\n"}})
 	sess := NewSession(d.sock, nil)
 	var polls atomic.Int32

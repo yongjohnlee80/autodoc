@@ -6,8 +6,9 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 func ctrlKey(k rune) tuicore.Event {
@@ -101,11 +102,11 @@ func TestAJumpWhoseListMovedLandsNowhere(t *testing.T) {
 	r.putCursor(2, strings.Index("see [[b]] and [the c](c.md), then nothing", "b]]"))
 	r.leader(t, 'j')
 	r.waitFile(t, "b.md")
-	onLoop(r, func() bool { r.h.dropBuffer(r.h.bufferOf(fileRef{"kb", "a.md"})); return true }) // a.md must be read again
+	onLoop(r, func() bool { r.h.dropBuffer(r.h.bufferOf(feature.FileRef{WS: "kb", Path: "a.md"})); return true }) // a.md must be read again
 	hold.Store(true)
 	r.keys(t, ctrlKey('o'))
 	r.s.WaitForText(t, "opening a.md")
-	onLoop(r, func() bool { r.h.jumps.Push(widget.JumpPos{Doc: "elsewhere", Line: 1}); return true })
+	onLoop(r, func() bool { r.h.jumps.Push(editor.JumpPos{Doc: "elsewhere", Line: 1}); return true })
 	n, idx := r.jumpIndex()
 	hold.Store(false)
 	close(release)
@@ -128,7 +129,7 @@ func TestCtrlOToADocumentGoneDropsIt(t *testing.T) {
 	r.putCursor(2, strings.Index("see [[b]] and [the c](c.md), then nothing", "b]]"))
 	r.leader(t, 'j')
 	r.waitFile(t, "b.md")
-	onLoop(r, func() bool { r.h.dropBuffer(r.h.bufferOf(fileRef{"kb", "a.md"})); return true }) // not open: Ctrl+O reads it
+	onLoop(r, func() bool { r.h.dropBuffer(r.h.bufferOf(feature.FileRef{WS: "kb", Path: "a.md"})); return true }) // not open: Ctrl+O reads it
 	if err := d.fs["kb"].Remove(context.Background(), "a.md"); err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +173,7 @@ func TestASearchHitOverUnsavedChangesOpensAtItsSection(t *testing.T) {
 	// keys and a post are not ordered: every key typed, Esc included, before the hit's open
 	r.s.WaitFor(t, "the typing done", func(string) bool {
 		return onLoop(r, func() bool {
-			return strings.Contains(r.h.core.Value(), "edit ") && r.h.core.Mode() == widget.ModeNormal
+			return strings.Contains(r.h.core.Value(), "edit ") && r.h.core.Mode() == editor.ModeNormal
 		})
 	})
 	onLoop(r, func() bool { r.h.openHit(hit{path: "b.md", byteStart: 10}); return true })

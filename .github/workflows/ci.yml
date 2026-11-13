@@ -13,6 +13,14 @@ on:
     branches: [canary, main]
   pull_request:
     branches: [main]
+  # Run by hand on a branch (gh workflow run ci.yml --ref <branch>): only the jobs that list
+  # workflow_dispatch run, so a Windows change is tested on Windows before it reaches canary.
+  workflow_dispatch:
+    inputs:
+      discover:
+        description: run every package's tests on Windows and list which pass
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -220,16 +228,56 @@ jobs:
       - name: lua suites
         run: ./tests/run-all.sh
 
+  # Windows (the port): the packages ported so far, listed in
+  # .github/windows-packages.txt, build, vet and run their tests on Windows. The list only grows: a
+  # package is added once it builds and its tests pass there. Run by hand on a branch with
+  # -f discover=true, it lists every package that passes and every one that doesn't build or fails.
+  windows:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.head_ref == 'canary' || startsWith(github.head_ref, 'release/'))
+    name: windows (ported packages)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: check out with LF line endings
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: the module vets, the ported packages build and pass
+        if: ${{ !inputs.discover }}
+        run: |
+          # the whole module's vet, not only the ported packages': it compiles every package's tests
+          # for Windows, so a neutral test can't come to lean on a helper in a Unix-tagged file
+          go vet ./...
+          mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
+          go test -count=1 -timeout 20m "${pkgs[@]}"
+      - name: discover which packages pass on Windows
+        if: ${{ inputs.discover }}
+        continue-on-error: true
+        run: |
+          go test -count=1 -timeout 30m -json ./... > "$RUNNER_TEMP/win.json" 2> "$RUNNER_TEMP/win.err" || true
+          echo "== packages that pass on Windows"
+          jq -r 'select(.Action == "pass" and .Test == null) | .Package' "$RUNNER_TEMP/win.json" | sort -u
+          echo "== packages that fail on Windows"
+          jq -r 'select(.Action == "fail" and .Test == null) | .Package' "$RUNNER_TEMP/win.json" | sort -u
+          echo "== packages that don't build on Windows"
+          grep -o '^# [^ ]*' "$RUNNER_TEMP/win.err" | sort -u | head -80
+
   # The installer's scripts (docs/decisions/install.md#scripts-over-the-releases-tarballs):
   # shellcheck, then their cells against a fake release, on Linux and on a Mac (the launcher
-  # differs: a desktop entry, an app bundle).
+  # differs: a desktop entry, an app bundle), and the PowerShell scripts' cells on Windows
+  # (docs/decisions/install.md#windows), in Windows PowerShell 5.1 and in PowerShell 7.
   installer:
-    if: github.event_name == 'push' || (github.head_ref == 'canary' || startsWith(github.head_ref, 'release/'))
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.head_ref == 'canary' || startsWith(github.head_ref, 'release/'))
     name: installer (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -238,7 +286,22 @@ jobs:
         # warnings and errors: the info notes are the scripts' deliberate `a && b || c`
         run: shellcheck -s sh -S warning scripts/install/install-autodoc.sh scripts/install/update.sh scripts/install/test/run.sh
       - name: the installer's cells
+        if: runner.os != 'Windows'
         run: sh scripts/install/test/run.sh
+      # the fake autodoc.exe is built with Go
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        if: runner.os == 'Windows'
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: the PowerShell installer's cells (Windows PowerShell 5.1)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install/test/run.ps1
+      - name: the PowerShell installer's cells (PowerShell 7)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/install/test/run.ps1
 
   # macOS watches workspace roots with FSEvents through cgo (golib vfs/local):
   # the follower's native watch, and the whole suite, on a Mac.
@@ -300,8 +363,10 @@ jobs:
       # The TUI's GUI-only cells (the title bar's buffer tabs, the GUI editor's keys): no other job
       # builds tui/ with the gui tag, so they ran nowhere and main stayed green while two failed.
       # They need no display (decltest's backend), and run without -race to keep this job short.
+      # internal/tuiaudit checks the GUI build's rows of tui's feature map here
+      # (docs/decisions/editor.md#the-tui-packages-feature-map); the test job checks the terminal build's.
       - name: the TUI's GUI cells
-        run: go test -tags gui -count=1 -timeout 20m ./tui/
+        run: go test -tags gui -count=1 -timeout 20m ./tui/ ./internal/tuiaudit/
       # The export's GUI cells: the chart hook draws a chart as SVG
       # (docs/decisions/editor.md#charts-drawn-as-svg). Named, since app's other cells start the
       # GUI, which needs a display. Few and quick, so with -race.

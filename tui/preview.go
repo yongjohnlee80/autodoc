@@ -9,10 +9,11 @@ import (
 	"github.com/yongjohnlee80/golib/decl"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 
 	"github.com/yongjohnlee80/autodoc/core/export"
 	"github.com/yongjohnlee80/autodoc/core/export/mermaid"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // IMAGE PREVIEWS — a Mermaid diagram as an image in the terminal
@@ -66,7 +67,7 @@ func (h *Host) browserFound() bool {
 	if h.browserOverride != nil {
 		return h.browserOverride()
 	}
-	_, ok := widget.HTMLRasterizer()
+	_, ok := htmlview.HTMLRasterizer()
 	return ok || h.rasterizeOverride != nil
 }
 
@@ -81,11 +82,11 @@ func (h *Host) graphics() tuicore.Tri {
 // rasterizer renders a diagram's page as an image: golib's headless browser, or rasterizeOverride
 // in tests.
 // Taken on the loop, it is called off it.
-func (h *Host) rasterizer() func(context.Context, []byte, widget.Page) ([]byte, error) {
+func (h *Host) rasterizer() func(context.Context, []byte, htmlview.Page) ([]byte, error) {
 	if h.rasterizeOverride != nil {
 		return h.rasterizeOverride
 	}
-	return widget.RasterizeHTMLPage
+	return htmlview.RasterizeHTMLPage
 }
 
 // exportTheme is the export palette of the active theme.
@@ -186,7 +187,7 @@ func (h *Host) showDiagram(source string) {
 	// asked, whichever engine is chosen (sourceAsked). Whether golib draws it is learned off the
 	// loop: a newer preview, or the dialog closed, meanwhile withdraws this one (its ticket), and an
 	// engine or a preference changed meanwhile is the one it is drawn by
-	tk := h.ticket(&h.previewGen, TicketLocal)
+	tk := h.ticket(&h.previewGen, feature.TicketLocal)
 	if h.sourceAsked() {
 		h.showDiagramImage(source, "") // no image: the source, saying image previews are off
 		return
@@ -284,7 +285,7 @@ func (h *Host) showDiagramNative(source, why string) {
 	h.set("App.diagramDrawn", true)
 	h.set("App.diagramHelp", h.diagramHelpText)
 	h.open("diagram")
-	if v, ok := componentUnder[*widget.HTMLView](h.p, "diagram"); ok {
+	if v, ok := componentUnder[*htmlview.HTMLView](h.p, "diagram"); ok {
 		v.SetHTML(page)
 	}
 }
@@ -308,7 +309,7 @@ func (h *Host) showDiagramText(text, help string) {
 // keeps it until the new one comes, and keeps the part of it shown where it was.
 func (h *Host) renderPreview(fresh bool, fallback func(why string)) {
 	pv := h.imagePreview
-	h.withImageCells("diagram", fallback, func(tk Ticket, img *widget.Image, cols, rows int) {
+	h.withImageCells("diagram", fallback, func(tk feature.Ticket, img *htmlview.Image, cols, rows int) {
 		shown, w, ht := img.Scroll()
 		if fresh {
 			img.Clear()
@@ -321,24 +322,24 @@ func (h *Host) renderPreview(fresh bool, fallback func(why string)) {
 		img.SetLoading(true)
 		// a page taller than a terminal shows an image (widget.MaxImagePixels), a tall diagram zoomed
 		// in, is cut into strips here, off the loop: whole, it shows nothing at all
-		do(h, func(ctx context.Context) answerOf[widget.Strips] {
-			png, err := rasterize(ctx, pv.page, widget.Page{Width: cols * widget.CellPixelsW,
-				MinHeight: rows * widget.CellPixelsH, MaxHeight: diagramMaxHeight, Scale: zooms[pv.zoom], Wide: true, Background: pv.background})
+		do(h, func(ctx context.Context) feature.AnswerOf[htmlview.Strips] {
+			png, err := rasterize(ctx, pv.page, htmlview.Page{Width: cols * htmlview.CellPixelsW,
+				MinHeight: rows * htmlview.CellPixelsH, MaxHeight: diagramMaxHeight, Scale: zooms[pv.zoom], Wide: true, Background: pv.background})
 			if err != nil {
-				return answerOf[widget.Strips]{err: err}
+				return feature.AnswerFailed[htmlview.Strips](err)
 			}
-			strips, err := widget.SplitPNG(png)
-			return answerOf[widget.Strips]{v: strips, err: err}
-		}, func(a answerOf[widget.Strips]) {
+			strips, err := htmlview.SplitPNG(png)
+			return feature.Answered(strips, err)
+		}, func(a feature.AnswerOf[htmlview.Strips]) {
 			if !tk.Current() {
 				return // closed, or another preview since
 			}
 			img.SetLoading(false)
-			if a.err != nil {
-				fallback(h.trf("autodoc.text.preview.the_image_failed", a.err.Error()))
+			if a.Err() != nil {
+				fallback(h.trf("autodoc.text.preview.the_image_failed", a.Err().Error()))
 				return
 			}
-			img.SetStrips(a.v)
+			img.SetStrips(a.Value)
 			if w > 0 && ht > 0 { // the same place in the page, at the new scale
 				_, nw, nh := img.Scroll()
 				img.ScrollTo(shown.X*nw/w, shown.Y*nh/ht)
@@ -371,8 +372,8 @@ func (h *Host) zoomPreview(step int) {
 // preview always ends as an image or as its fallback, never blank
 // (docs/decisions/search.md#outline-breadcrumbs-and-previews). A screen resized to a usable size
 // before then renders the image. A new preview or a closed dialog drops both.
-func (h *Host) withImageCells(dialog string, fallback func(why string), fn func(tk Ticket, img *widget.Image, cols, rows int)) {
-	tk := h.ticket(&h.previewGen, TicketLocal)
+func (h *Host) withImageCells(dialog string, fallback func(why string), fn func(tk feature.Ticket, img *htmlview.Image, cols, rows int)) {
+	tk := h.ticket(&h.previewGen, feature.TicketLocal)
 	deadline := time.Now().Add(imageWait)
 	var try func()
 	try = func() {
@@ -403,8 +404,8 @@ func (h *Host) withImageCells(dialog string, fallback func(why string), fn func(
 
 // imageUnder is the Image in the subtree of the node with id: a dialog's own ids are its file's,
 // out of the program's reach, so the dialog's Image is found by its type.
-func imageUnder(p *tuidecl.Program, id string) (*widget.Image, bool) {
-	return componentUnder[*widget.Image](p, id)
+func imageUnder(p *tuidecl.Program, id string) (*htmlview.Image, bool) {
+	return componentUnder[*htmlview.Image](p, id)
 }
 
 // componentUnder is the first T in the subtree of the node id names, breadth first: a dialog's

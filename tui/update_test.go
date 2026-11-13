@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/internal/install"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
+	"github.com/yongjohnlee80/autodoc/tui/system"
 )
 
 // scriptInstall is a record install-autodoc.sh wrote, its update.sh at update.
@@ -19,9 +21,17 @@ func scriptInstall(update string) func() (install.Record, bool, error) {
 	}
 }
 
-// updateScript writes an update.sh that says it ran and exits code.
+// updateScript writes the update script this OS's install runs (install.Record.UpdateCommand), which
+// says it ran and exits code: update.sh, run by /bin/sh; on Windows update.ps1, run by PowerShell.
 func updateScript(t *testing.T, code string) string {
 	t.Helper()
+	if filepath.Separator == '\\' {
+		p := filepath.Join(t.TempDir(), "update.ps1")
+		if err := os.WriteFile(p, []byte("Write-Output (\"update-sh-\" + (40 + 2))\nexit "+code+"\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
 	p := filepath.Join(t.TempDir(), "update.sh")
 	if err := os.WriteFile(p, []byte("echo update-sh-$((40+2))\nexit "+code+"\n"), 0o755); err != nil {
 		t.Fatal(err)
@@ -30,16 +40,40 @@ func updateScript(t *testing.T, code string) string {
 }
 
 // TestAboutOffersUpdateOnlyForAScriptInstall: About's Update shows when install-autodoc.sh's record
-// says it installed this AutoDoc; with no record, another method's, or one that doesn't read,
-// About shows Close alone.
+// says it installed this AutoDoc, this very binary; with no record, another method's, one that
+// doesn't read, or a record whose binary is another file than the one running (a build from
+// source, a release candidate), About shows Close alone: Update would update the installed binary,
+// and the restart would bring this one back, still asking.
 func TestAboutOffersUpdateOnlyForAScriptInstall(t *testing.T) {
+	t.Parallel()
 	notes := map[string][]string{"kb": {"a.md", "a\n"}}
-	for _, tc := range []struct {
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := filepath.Join(t.TempDir(), "autodoc")
+	if err := os.WriteFile(other, []byte("another build\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	installedAt := func(bin string) func() (install.Record, bool, error) {
+		return func() (install.Record, bool, error) {
+			return install.Record{Method: "script", Version: "v9.9.8", Bin: bin, Update: "/u.sh"}, true, nil
+		}
+	}
+	type row struct {
 		name   string
 		record func() (install.Record, bool, error)
 		want   bool
-	}{
+	}
+	rows := []row{
 		{"a script install", scriptInstall("/u/.local/state/autodoc/update.sh"), true},
+		{"the installed binary itself", installedAt(self), true},
+		{"another build than the installed one", installedAt(other), false},
+	}
+	if link := filepath.Join(t.TempDir(), "autodoc"); os.Symlink(self, link) == nil {
+		rows = append(rows, row{"a link to the installed binary", installedAt(link), true})
+	}
+	for _, tc := range append(rows, []row{
 		{"no record", func() (install.Record, bool, error) { return install.Record{}, false, nil }, false},
 		{"brew's", func() (install.Record, bool, error) {
 			return install.Record{Method: "brew", Update: "/u.sh"}, true, nil
@@ -47,7 +81,7 @@ func TestAboutOffersUpdateOnlyForAScriptInstall(t *testing.T) {
 		{"a record that doesn't read", func() (install.Record, bool, error) {
 			return install.Record{}, false, errors.New("install: bad toml")
 		}, false},
-	} {
+	}...) {
 		t.Run(tc.name, func(t *testing.T) {
 			d := startDaemon(t, notes)
 			r := runTUI(t, NewSession(d.sock, nil), Options{InstallRecord: tc.record})
@@ -66,10 +100,9 @@ func TestAboutOffersUpdateOnlyForAScriptInstall(t *testing.T) {
 // terminal panel; when it ends well and the binary at this one's path is newer, AutoDoc asks to
 // restart, naming both versions. A failed update.sh says its code, and offers nothing.
 func TestUpdateRunsUpdateShAndOffersTheRestart(t *testing.T) {
+	t.Parallel()
 	disarm(t)
-	t.Setenv("SHELL", "/bin/sh")
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("PS1", "$ ")
+	tuneEnv(t, "SHELL=/bin/sh", "HOME="+t.TempDir(), "PS1=$ ")
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{
 		InstallRecord: scriptInstall(updateScript(t, "0")),
@@ -82,25 +115,38 @@ func TestUpdateRunsUpdateShAndOffersTheRestart(t *testing.T) {
 	r.s.WaitForText(t, "restart AutoDoc?")
 	r.s.WaitForText(t, "AutoDoc v9.9.9 is installed (this is v9.9.8)")
 
+	script := updateScript(t, "3")
 	failed := runTUI(t, NewSession(d.sock, nil), Options{
-		InstallRecord: scriptInstall(updateScript(t, "3")),
+		InstallRecord: scriptInstall(script),
 		AboutInfo:     AboutInfo{Version: "v9.9.8"},
 		Installed:     func() (string, error) { return "v9.9.9", nil },
 	})
 	failed.connected(t)
 	failed.h.p.Post(failed.h.updateAutoDoc)
-	failed.waitNotice(t, "Update: update.sh exited 3; its tab in the terminal panel says why")
+	failed.waitNotice(t, "Update: "+filepath.Base(script)+" exited 3; its tab in the terminal panel says why")
 	if strings.Contains(failed.s.String(), "restart AutoDoc?") {
 		t.Fatal("a failed update offered the restart")
 	}
 }
 
+// A failed update names the script that failed: update.ps1 on Windows, which this Linux cell stands
+// in for by telling the exit handler its name.
+func TestAFailedUpdateNamesItsOwnScript(t *testing.T) {
+	disarm(t)
+	tuneEnv(t, "SHELL=/bin/sh", "HOME="+t.TempDir(), "PS1=$ ")
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{InstallRecord: scriptInstall("/u/update.ps1")})
+	r.connected(t)
+	r.h.p.Post(func() { r.h.updateExited("update.ps1", 3) })
+	r.waitNotice(t, "Update: update.ps1 exited 3; its tab in the terminal panel says why")
+}
+
 // TestAnUpdateThatChangedNothingSaysSo: update.sh ended well, but the binary at this one's path is
 // the version running: no restart is offered.
 func TestAnUpdateThatChangedNothingSaysSo(t *testing.T) {
+	t.Parallel()
 	disarm(t)
-	t.Setenv("SHELL", "/bin/sh")
-	t.Setenv("HOME", t.TempDir())
+	tuneEnv(t, "SHELL=/bin/sh", "HOME="+t.TempDir())
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{
 		InstallRecord: scriptInstall(updateScript(t, "0")),
@@ -118,6 +164,7 @@ func TestAnUpdateThatChangedNothingSaysSo(t *testing.T) {
 // TestRestartNowWithNoBackendOfItsOwnRelaunchesTheUI: a program that starts no daemon has none to
 // restart: Restart now quits it to relaunch (Run returns ErrRelaunch).
 func TestRestartNowWithNoBackendOfItsOwnRelaunchesTheUI(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{InstallRecord: scriptInstall("/u.sh")})
 	r.connected(t)
@@ -129,12 +176,13 @@ func TestRestartNowWithNoBackendOfItsOwnRelaunchesTheUI(t *testing.T) {
 // TestRestartNowRestartsTheBackendThenRelaunches: with a backend of its own, Restart now restarts it
 // as Restart backend… does, and once the installed one answers, the UI quits to relaunch.
 func TestRestartNowRestartsTheBackendThenRelaunches(t *testing.T) {
+	t.Parallel()
 	dir, err := os.MkdirTemp("", "upd")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir)
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	notes := map[string][]string{"kb": {"a.md", "a\n"}}
 	old := startDaemonWith(t, sock, notes, daemonOpts{version: "v1"})
 	var spawns atomic.Int32
@@ -174,13 +222,14 @@ func TestRestartNowRestartsTheBackendThenRelaunches(t *testing.T) {
 // TestHowToUpdateIsAboutsUpdateForAScriptInstall: a newer release's word says About › Update when
 // install-autodoc.sh installed this AutoDoc, whatever its path.
 func TestHowToUpdateIsAboutsUpdateForAScriptInstall(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	s := startupOf(r)
 	got := onLoop(r, func() string {
-		s.exe = func() (string, error) { return "/home/u/.local/bin/autodoc", nil }
-		s.scripted = func() bool { return true }
-		return s.how(release{Tag: "v0.1.38", URL: "https://example/r"})
+		s.Exe = func() (string, error) { return "/home/u/.local/bin/autodoc", nil }
+		s.Scripted = func() bool { return true }
+		return s.How(system.Release{Tag: "v0.1.38", URL: "https://example/r"})
 	})
 	if got != "About › Update" {
 		t.Fatalf("how %q, want About › Update", got)

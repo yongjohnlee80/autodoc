@@ -1,11 +1,14 @@
 package client
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
+
+	"github.com/yongjohnlee80/autodoc/internal/proctree"
+	"github.com/yongjohnlee80/autodoc/internal/userperm"
 )
 
 // SpawnServe starts this executable's `--serve` detached from the TUI (its own session, so it
@@ -34,7 +37,7 @@ func SpawnServe(configPath, stateDir string) (string, error) {
 		return "", err
 	}
 	logPath := filepath.Join(stateDir, "serve.log")
-	f, err := os.OpenFile(logPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
+	f, err := openServeLog(logPath)
 	if err != nil {
 		return "", err
 	}
@@ -50,8 +53,7 @@ func SpawnServe(configPath, stateDir string) (string, error) {
 	cmd := exec.Command(exe, args...)
 	cmd.Env = serveEnv(os.Environ())
 	cmd.Stdout, cmd.Stderr = f, f
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	if err := cmd.Start(); err != nil {
+	if err := proctree.StartDetached(cmd); err != nil {
 		_ = f.Close()
 		return "", err
 	}
@@ -60,4 +62,60 @@ func SpawnServe(configPath, stateDir string) (string, error) {
 		_ = f.Close()
 	}()
 	return logPath, nil
+}
+
+// openServeLog opens the daemon's log at path to append to it, private to this user on every OS
+// (internal/userperm: it holds what the daemon logged): made private when new, and one there that
+// isn't (an earlier version's, made 0600, which on Windows took its folder's access list) replaced
+// by a private copy of itself first. The private create's handle shares nothing on Windows, and the
+// log is read while the daemon writes it, so it is then opened again as any log is; its access list
+// stays the private one.
+func openServeLog(path string) (*os.File, error) {
+	if err := privateLog(path); err != nil {
+		return nil, err
+	}
+	return os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0)
+}
+
+// privateLog makes the log at path private to this user: a new one empty, one that isn't private
+// replaced by a private copy (its lines kept), one that is left as it is. One another process holds
+// open so that it can't be read now (userperm.ErrInUse: on Windows, the daemon writing it) is left
+// to be appended to; any other failure to read it is the open's error.
+func privateLog(path string) error {
+	f, err := userperm.CreatePrivate(path)
+	if err == nil {
+		return f.Close()
+	}
+	if !errors.Is(err, os.ErrExist) {
+		return err
+	}
+	r, err := userperm.OpenPrivate(path)
+	switch {
+	case err == nil:
+		return r.Close()
+	case errors.Is(err, userperm.ErrInUse):
+		return nil
+	case !errors.Is(err, userperm.ErrExposed):
+		return err
+	}
+	old, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	t, err := userperm.CreatePrivateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
+	if err != nil {
+		return err
+	}
+	tmp := t.Name()
+	_, werr := t.Write(old)
+	if cerr := t.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr == nil {
+		werr = os.Rename(tmp, path)
+	}
+	if werr != nil {
+		_ = os.Remove(tmp)
+	}
+	return werr
 }

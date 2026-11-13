@@ -14,7 +14,7 @@ import (
 // whose document cannot be read; a plugin that does not start, from its command, from the
 // launch of the services and from the feed.
 func TestAFailureSaysWhatFailedAndWhy(t *testing.T) {
-	t.Setenv("XDG_CACHE_HOME", t.TempDir()) // the page Open in browser writes
+	tuneEnv(t, "XDG_CACHE_HOME="+t.TempDir()) // the page Open in browser writes
 	r := runTUI(t, NewSession("unused", nil), Options{})
 	noBrowser := errors.New("no browser here")
 	onLoop(r, func() bool {
@@ -79,9 +79,9 @@ func TestGoToLinksFailureIsTheDaemonsWords(t *testing.T) {
 	var got string
 	r.s.WaitFor(t, "go to link's failure", func(string) bool {
 		got = onLoop(r, func() string {
-			for _, n := range r.h.noticeLog.items {
-				if strings.HasPrefix(n.text, "go to link: ") {
-					return n.text
+			for _, n := range r.h.noticeLog.Items {
+				if strings.HasPrefix(n.Text, "go to link: ") {
+					return n.Text
 				}
 			}
 			return ""

@@ -10,9 +10,12 @@ import (
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
+	"github.com/yongjohnlee80/golib/tui/widget/table"
 
 	"github.com/yongjohnlee80/autodoc/plugin"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE RESULTS PANEL — a table a plugin sends (protocol 4: host.table), shown by AutoDoc itself in a
@@ -30,8 +33,9 @@ import (
 // since a fetch for the old one may still be on its way and its rows would join the new. Rows are
 // taken only as the answer to the fetch that waits.
 //
-// The panel holds at most resultsResident rows: a query of millions is read a page at a time, never
-// whole. At the cap the table stops asking for more and its heading says more remain.
+// The panel holds at most its resident rows (seams.go: resultsResident): a query of millions is
+// read a page at a time, never whole. At the cap the table stops asking for more and its heading
+// says more remain.
 //
 // THE PANEL ACTS ON THE TABLE IN THE VIEW. Its sort, its copies, results.markdown and its exports
 // take the rows loaded, in the order shown, and none of them fetches a row: what the query returns
@@ -48,21 +52,14 @@ const (
 // a page by its encoded bytes, to stay under the link's limit.
 const resultsPage = 500
 
-// resultsResident is the most rows the panel holds (a variable, so a test can lower it). Rows past
-// it are not loaded, and the table says the result has more.
-var resultsResident = 100_000
-
-// resultsCopyCap is the most text a copy puts on the clipboard (a variable, so a test can lower it):
-// past it nothing is copied, and the notice says to export instead.
-var resultsCopyCap = 16 << 20
-
 // resultsTable is the table shown: whose it is, its id there, and the plugin's paging. Loop-owned.
 type resultsTable struct {
-	model *resultsModel
-	shown tuidecl.ItemModel // what App.resultsRows holds: the model, or kindedResults over it
-	owner *pluginRun        // nil when no plugin serves it: none shown, or its plugin closed
-	id    string            // the plugin's id for it; "" when none is shown
-	title string
+	resident int // the most rows it holds (seams.go: resultsResident)
+	model    *resultsModel
+	shown    tuidecl.ItemModel // what App.resultsRows holds: the model, or kindedResults over it
+	owner    *pluginRun        // nil when no plugin serves it: none shown, or its plugin closed
+	id       string            // the plugin's id for it; "" when none is shown
+	title    string
 	// more is the last message's: rows remain to fetch. pending is a fetch sent and not yet
 	// answered: another is not sent until host.rows or host.table_end answers it. cut is rows that
 	// remained when the table's rows ended early (host.table_end, its plugin closed, or a page
@@ -75,7 +72,7 @@ type resultsTable struct {
 }
 
 // full reports whether the panel holds all the rows it may.
-func (res *resultsTable) full() bool { return len(res.model.rows) >= resultsResident }
+func (res *resultsTable) full() bool { return len(res.model.rows) >= res.resident }
 
 // partial reports whether the result has rows the view does not: rows still to fetch, rows past the
 // cap, or rows that never came.
@@ -134,11 +131,11 @@ func (m *resultsModel) addKinds(n int, kinds []string) {
 }
 
 // kind is a cell's kind: text when the table, the row or the field has none.
-func (m *resultsModel) kind(row, col int) widget.TableCellKind {
+func (m *resultsModel) kind(row, col int) table.TableCellKind {
 	if row < 0 || row >= len(m.kinds) || col < 0 || col >= len(m.kinds[row]) {
-		return widget.TableCellText
+		return table.TableCellText
 	}
-	return widget.TableCellKind(m.kinds[row][col])
+	return table.TableCellKind(m.kinds[row][col])
 }
 
 // rowKinds is a row's kinds as the table holds them: "" without.
@@ -215,7 +212,7 @@ func (m *resultsModel) Subscribe(fn func(tuidecl.Change)) (cancel func()) {
 }
 
 // CanFetchMore is the last message's more, at the root, while the panel is under its cap: it stays
-// true while a fetch is answered, and is false once the panel holds resultsResident rows, so the
+// true while a fetch is answered, and is false once the panel holds resident rows, so the
 // view stops asking.
 func (m *resultsModel) CanFetchMore(ix tuidecl.Index) bool {
 	return ix.Parent == nil && m.t.more && !m.t.full()
@@ -236,9 +233,9 @@ var _ tuidecl.Fetcher = (*resultsModel)(nil)
 // table of strings always has been read: as numbers where both cells are numbers.
 type kindedResults struct{ *resultsModel }
 
-func (k kindedResults) Kind(row, col int) widget.TableCellKind { return k.kind(row, col) }
+func (k kindedResults) Kind(row, col int) table.TableCellKind { return k.kind(row, col) }
 
-var _ widget.TableKinds = kindedResults{}
+var _ table.TableKinds = kindedResults{}
 
 // oneLine is a cell's text as a table row shows it.
 var oneLine = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ", "\t", " ").Replace
@@ -305,7 +302,7 @@ func (pl *plugins) tableOpened(r *pluginRun, t plugin.TableOpen) {
 	}
 	pl.closeTable()
 	res.owner, res.id, res.title, res.more, res.pending, res.cut = r, t.ID, cmp.Or(t.Title, r.e.m.Table.Title), t.More, false, false
-	keep := min(len(t.Rows), resultsResident)
+	keep := min(len(t.Rows), pl.results.resident)
 	res.capped = keep < len(t.Rows)
 	var kinds []string
 	if t.Kinds != nil {
@@ -355,7 +352,7 @@ func (pl *plugins) tableRows(r *pluginRun, page plugin.TableRows) {
 		return
 	}
 	res.pending, res.more = false, page.More
-	keep := min(max(resultsResident-len(res.model.rows), 0), len(page.Rows))
+	keep := min(max(res.resident-len(res.model.rows), 0), len(page.Rows))
 	res.capped = res.capped || keep < len(page.Rows)
 	var kinds []string
 	if page.Kinds != nil {
@@ -389,7 +386,7 @@ func (pl *plugins) fetchRows() {
 	if res.owner == nil || res.owner.closing || !res.more || res.pending || res.tidying {
 		return
 	}
-	n := min(resultsPage, resultsResident-len(res.model.rows))
+	n := min(resultsPage, res.resident-len(res.model.rows))
 	if n <= 0 {
 		return
 	}
@@ -545,7 +542,7 @@ func (pl *plugins) whereResults(text string) { pl.applyWhere(text, false) }
 func (pl *plugins) applyWhere(text string, newTable bool) {
 	pl.resultsFilter, pl.resultsHint = text, ""
 	pl.resultsWhereErr = ""
-	if _, err := widget.ParseTableWhere(text, pl.resultsFields()); err != nil {
+	if _, err := table.ParseTableWhere(text, pl.resultsFields()); err != nil {
 		pl.resultsWhereErr = err.Error()
 		if newTable {
 			pl.whereOn = false
@@ -582,7 +579,7 @@ var whereKeywords = map[string]bool{"AND": true, "OR": true, "NOT": true, "IS": 
 // whereHint is what the bar offers for WHERE text: the fields the word being typed may name, while
 // it is where a field goes (at the start, or after "(", AND, OR or NOT); after an operator, a
 // literal or a field, nothing.
-func whereHint(text string, fields []widget.TableField) string {
+func whereHint(text string, fields []widgetcore.TableField) string {
 	start := len(text)
 	for start > 0 && !strings.ContainsRune(whereStops, rune(text[start-1])) {
 		start--
@@ -624,7 +621,7 @@ const whereStops = " \t\n\r()=!<>',;\""
 // whereFieldName is field col as WHERE reads it back: its bare name, its "quoted name" when a bare
 // one would not read as it (a space, an operator's character, a keyword's spelling), or #position
 // when two fields share the name.
-func whereFieldName(fields []widget.TableField, col int) string {
+func whereFieldName(fields []widgetcore.TableField, col int) string {
 	name := fields[col].Title
 	shared := 0
 	for _, f := range fields {
@@ -647,7 +644,7 @@ func whereFieldName(fields []widget.TableField, col int) string {
 func (pl *plugins) orderResults(text string) {
 	pl.resultsOrder, pl.resultsHint = text, ""
 	pl.resultsOrderErr = ""
-	if _, err := widget.ParseTableOrder(text, pl.resultsFields()); err != nil {
+	if _, err := table.ParseTableOrder(text, pl.resultsFields()); err != nil {
 		pl.resultsOrderErr = err.Error()
 	}
 	pl.showOrderText(text)
@@ -679,7 +676,7 @@ func (pl *plugins) showOrderText(text string) {
 
 // orderHint is what the bar offers for text: "fields: name, 3, …" for the field the last key is
 // naming, "" once its name is followed by a space (a direction comes next) or nothing matches.
-func orderHint(text string, fields []widget.TableField) string {
+func orderHint(text string, fields []widgetcore.TableField) string {
 	word := text[strings.LastIndexByte(text, ',')+1:]
 	word = strings.TrimLeft(word, " \t")
 	if strings.ContainsAny(word, " \t") || len(fields) == 0 {
@@ -689,7 +686,7 @@ func orderHint(text string, fields []widget.TableField) string {
 	var offer []string
 	for col, f := range fields {
 		if strings.HasPrefix(strings.ToLower(f.Title), strings.ToLower(word)) {
-			offer = append(offer, strings.TrimSuffix(widget.FormatTableOrder([]widget.TableSortKey{{Col: col}}, fields), " ASC"))
+			offer = append(offer, strings.TrimSuffix(table.FormatTableOrder([]table.TableSortKey{{Col: col}}, fields), " ASC"))
 		}
 	}
 	if len(offer) == 0 {
@@ -713,8 +710,8 @@ func (pl *plugins) showSortLine() {
 }
 
 // resultsFields are the table's fields as the view has them.
-func (pl *plugins) resultsFields() []widget.TableField {
-	out := make([]widget.TableField, len(pl.results.model.fields))
+func (pl *plugins) resultsFields() []widgetcore.TableField {
+	out := make([]widgetcore.TableField, len(pl.results.model.fields))
 	for i, f := range pl.results.model.fields {
 		out[i].Title = f
 	}
@@ -741,7 +738,7 @@ func (pl *plugins) sortResults(how string, args []string) error {
 		}
 		col = n - 1
 	}
-	pl.orderResults(widget.FormatTableOrder([]widget.TableSortKey{{Col: col, Desc: how == "desc"}}, core.Fields()))
+	pl.orderResults(table.FormatTableOrder([]table.TableSortKey{{Col: col, Desc: how == "desc"}}, core.Fields()))
 	return nil
 }
 
@@ -757,8 +754,8 @@ func (pl *plugins) selectAllResults() {
 // bindResultsMenu gives the table's right-click menu its rows: built each time it opens, so the
 // sorts name the field under the pointer.
 func (pl *plugins) bindResultsMenu() {
-	order := widget.TableFieldCompleter(widget.TableOrderBar, pl.resultsFields)
-	where := widget.TableFieldCompleter(widget.TableWhereBar, pl.resultsFields)
+	order := table.TableFieldCompleter(table.TableOrderBar, pl.resultsFields)
+	where := table.TableFieldCompleter(table.TableWhereBar, pl.resultsFields)
 	pl.c.BindResultsCompleter(func(text string, cursor int) (int, []string) {
 		if pl.resultsClause == clauseWhere {
 			return where(text, cursor)
@@ -776,7 +773,7 @@ func (pl *plugins) bindResultsMenu() {
 // resultsMenuRows are the menu's rows, each a results command of the catalog, then the panel's
 // Layout › (its only menu: the panel has no strip). The sorts take the field the right press was on
 // (MenuAt), not the cursor's.
-func (pl *plugins) resultsMenuRows() []widget.MenuItemModel {
+func (pl *plugins) resultsMenuRows() []widgetcore.MenuItemModel {
 	t := pl.c.ResultsTable(resultsView)
 	if t == nil {
 		return nil
@@ -785,7 +782,7 @@ func (pl *plugins) resultsMenuRows() []widget.MenuItemModel {
 	have := core.Len() > 0
 	at, hit := t.MenuAt()
 	field := []string{}
-	onField := hit == widget.TableHitCell || hit == widget.TableHitHeader
+	onField := hit == table.TableHitCell || hit == table.TableHitHeader
 	if onField {
 		field = []string{strconv.Itoa(at.Col + 1)}
 	}
@@ -794,27 +791,27 @@ func (pl *plugins) resultsMenuRows() []widget.MenuItemModel {
 		asc = pl.c.Trf("autodoc.text.plugintable.sort_ascending_by", f[at.Col].Title)
 		desc = pl.c.Trf("autodoc.text.plugintable.sort_descending_by", f[at.Col].Title)
 	}
-	row := func(id, label, entry string, args []string, enabled bool) widget.MenuItemModel {
-		m := widget.NewCommand(widget.ItemID("results.menu."+id), label, widget.CoreMenuAction{ID: tuicore.ActionID("results.menu." + id),
-			Run: func(*widget.EditorCore) { pl.runResultsEntry(entry, args) }})
+	row := func(id, label, entry string, args []string, enabled bool) widgetcore.MenuItemModel {
+		m := widgetcore.NewCommand(widgetcore.ItemID("results.menu."+id), label, editor.CoreMenuAction{ID: tuicore.ActionID("results.menu." + id),
+			Run: func(*editor.EditorCore) { pl.runResultsEntry(entry, args) }})
 		m.Enabled = enabled
-		return withLabelMessage(m, label) // a row with a field's name is composed in the UI's language
+		return feature.WithLabelMessage(m, label) // a row with a field's name is composed in the UI's language
 	}
-	rows := []widget.MenuItemModel{
+	rows := []widgetcore.MenuItemModel{
 		row("copy", "Copy", "results.copy", nil, have),
 		row("copy_csv", "Copy as CSV", "results.copy_csv", nil, have),
 		row("copy_json", "Copy as JSON", "results.copy_json", nil, have),
 		row("copy_markdown", "Copy as Markdown", "results.copy_markdown", nil, have),
-		widget.NewSeparator("results.menu.selecting"),
+		widgetcore.NewSeparator("results.menu.selecting"),
 		row("select_all", "Select all", "results.select_all", nil, have),
-		widget.NewSeparator("results.menu.sorting"),
+		widgetcore.NewSeparator("results.menu.sorting"),
 		row("sort_asc", asc, "results.sort_asc", field, onField),
 		row("sort_desc", desc, "results.sort_desc", field, onField),
 		row("unsort", "Unsort", "results.unsort", nil, pl.resultsOrder != ""),
-		widget.NewSeparator("results.menu.leaving"),
+		widgetcore.NewSeparator("results.menu.leaving"),
 		row("export", "Export loaded rows…", "results.export", nil, have),
 		row("markdown", "Insert as Markdown", "results.markdown", nil, have),
-		widget.NewSeparator("results.menu.panel"),
+		widgetcore.NewSeparator("results.menu.panel"),
 	}
 	return append(rows, layoutRows(pl.c, "results", coreRowOf)...)
 }
@@ -839,11 +836,11 @@ const (
 	formatMarkdown copyFormat = "markdown"
 )
 
-// errPastCopyCap is a copy's text grown past resultsCopyCap.
+// errPastCopyCap is a copy's text grown past the seams' resultsCopyCap.
 var errPastCopyCap = errors.New("past the copy's cap")
 
 // copyResults is results.copy and its siblings: the selected cells (or the cursor's), from the
-// loaded rows as the table shows them, in format. Past resultsCopyCap of text nothing is copied.
+// loaded rows as the table shows them, in format. Past the seams' resultsCopyCap of text nothing is copied.
 func (pl *plugins) copyResults(format copyFormat) {
 	core := pl.c.TableCore(resultsView)
 	if core == nil || core.Len() == 0 {
@@ -851,8 +848,8 @@ func (pl *plugins) copyResults(format copyFormat) {
 		return
 	}
 	text, err := pl.selectionText(core, format)
-	if errors.Is(err, errPastCopyCap) || err == nil && len(text) > resultsCopyCap {
-		pl.c.Notify(pl.c.Trf("autodoc.notice.plugintable.nothing_copied_the_selection_is_more_than_the_a", sizeOf(resultsCopyCap)))
+	if errors.Is(err, errPastCopyCap) || err == nil && len(text) > pl.seams.resultsCopyCap {
+		pl.c.Notify(pl.c.Trf("autodoc.notice.plugintable.nothing_copied_the_selection_is_more_than_the_a", sizeOf(pl.seams.resultsCopyCap)))
 		return
 	}
 	if err != nil {
@@ -895,7 +892,7 @@ func sizeOf(n int) string {
 // as shown, no header. CSV and Markdown are the selected fields, a header first, a row for each row
 // the selection is in; a cell of those fields outside the selection (vim's charwise v, ragged at
 // its ends) is empty. JSON is an object per row holding its selected cells.
-func (pl *plugins) selectionText(core *widget.TableCore, format copyFormat) (string, error) {
+func (pl *plugins) selectionText(core *table.TableCore, format copyFormat) (string, error) {
 	if format == formatTSV {
 		return core.CopyText(), nil
 	}
@@ -910,7 +907,7 @@ func (pl *plugins) selectionText(core *widget.TableCore, format copyFormat) (str
 		kb := make([]byte, len(cols))
 		cells = make([]string, len(cols))
 		for i, c := range cols {
-			kb[i] = byte(widget.TableCellText)
+			kb[i] = byte(table.TableCellText)
 			if c < len(k) {
 				kb[i] = k[c]
 			}
@@ -935,7 +932,7 @@ func (pl *plugins) selectionText(core *widget.TableCore, format copyFormat) (str
 		return markdownTable(names, table), nil
 	case formatCSV:
 		var b strings.Builder
-		w := newCSVRows(&cappedWriter{w: &b, cap: resultsCopyCap}, names)
+		w := newCSVRows(&cappedWriter{w: &b, cap: pl.seams.resultsCopyCap}, names)
 		for _, d := range rows {
 			cells, _ := pick(core.SourceRow(d))
 			for i, c := range cols {
@@ -953,7 +950,7 @@ func (pl *plugins) selectionText(core *widget.TableCore, format copyFormat) (str
 		return b.String(), nil
 	}
 	var b strings.Builder
-	w := newJSONRows(&cappedWriter{w: &b, cap: resultsCopyCap}, names)
+	w := newJSONRows(&cappedWriter{w: &b, cap: pl.seams.resultsCopyCap}, names)
 	for _, d := range rows {
 		cells, kinds := pick(core.SourceRow(d))
 		var keep []int
@@ -975,7 +972,7 @@ func (pl *plugins) selectionText(core *widget.TableCore, format copyFormat) (str
 // selectedCells is the selection over the loaded rows as shown: the fields any selected cell is in
 // (in field order), the display rows holding one (in the order shown), and whether a cell is
 // selected. With no selection it is the cursor's cell.
-func selectedCells(core *widget.TableCore) (cols, rows []int, in func(d, col int) bool) {
+func selectedCells(core *table.TableCore) (cols, rows []int, in func(d, col int) bool) {
 	from, to, ok := core.Selection()
 	if !ok {
 		cur := core.Cursor()

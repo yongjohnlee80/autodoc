@@ -7,7 +7,7 @@ import (
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/panelgeometry"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 )
 
 // tilelayout_rules_test.go: the base's rules for its windows. Ctrl+h/j/k/l goes by where a window
@@ -73,7 +73,7 @@ func TestCtrlJFromAFloatingPanelChoosesTheTiledOneJustBelow(t *testing.T) {
 	want := tuicore.Rect{X: todos.X + 2, Y: top - 1, W: 30, H: todos.H}
 	onLoop(r, func() bool { // resized first: moved down at its full height, it would stop at the screen's bottom
 		c, _ := r.h.p.Find("explorer")
-		w := c.(interface{ WindowBehavior() *widget.WindowCore }).WindowBehavior()
+		w := c.(interface{ WindowBehavior() *widgetcore.WindowCore }).WindowBehavior()
 		b := w.Bounds()
 		w.ResizeBy(want.W-b.W, want.H-b.H)
 		b = w.Bounds()

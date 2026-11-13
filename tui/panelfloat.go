@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/panelgeometry"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // FLOATING PANELS — the five drawers move and resize anywhere over the page: Alt/Option-left drag
@@ -44,7 +45,7 @@ func withFloat(m map[string][4]float64, panel string, r *[4]float64) map[string]
 
 // floatState is what the document reads of a panel's placement: App.<panel>Floating, and its
 // rectangle App.<panel>X, Y, W and H (a docked panel's are where it would float: the middle).
-func floatState(m map[string][4]float64, specs []PanelSpec) map[string]any {
+func floatState(m map[string][4]float64, specs []feature.PanelSpec) map[string]any {
 	st := map[string]any{}
 	for _, spec := range specs {
 		panel := spec.ID
@@ -92,16 +93,16 @@ func (h *Host) panelInHand() string {
 // wrapping round, as its Go to › goes to one. A tab closing is passed over. Elsewhere, or with one
 // tab, nothing.
 func (h *Host) cyclePanelTab(step int) {
-	var panel TerminalPanel
+	var panel feature.TerminalPanel
 	var err error
-	var pick func(widget.TerminalTabID)
+	var pick func(terminal.TerminalTabID)
 	switch {
 	case h.panelHasKeyboard("terminal"):
 		panel, err = h.terminals.panel()
-		pick = func(id widget.TerminalTabID) { h.keep(panel.Select(id)) }
+		pick = func(id terminal.TerminalTabID) { h.keep(panel.Select(id)) }
 	case h.panelHasKeyboard("agent"):
-		panel, err = h.agents.runtime()
-		pick = h.agents.goToTab
+		panel, err = h.agents.Runtime()
+		pick = h.agents.GoToTab
 	default:
 		return
 	}
@@ -115,8 +116,8 @@ func (h *Host) cyclePanelTab(step int) {
 
 // tabAfter is the tab step away from active among tabs, round, a tab closing passed over: false
 // with fewer than two left, or with active closing (or gone), whose place among them is none.
-func tabAfter(tabs []widget.TerminalTab, active widget.TerminalTabID, step int) (widget.TerminalTabID, bool) {
-	var open []widget.TerminalTabID
+func tabAfter(tabs []terminal.TerminalTab, active terminal.TerminalTabID, step int) (terminal.TerminalTabID, bool) {
+	var open []terminal.TerminalTabID
 	for _, tab := range tabs {
 		if !tab.Closing {
 			open = append(open, tab.ID)
@@ -166,7 +167,7 @@ func (h *Host) resumePanel() {
 		h.notify(h.tr("autodoc.notice.panelfloat.resume_has_no_tab_to_wake_the_panel_is_empty"))
 		return
 	}
-	if err := (terminalPanel{tabs: tabs}).Resume(tabs.Active()); err != nil {
+	if err := feature.NewTerminalPanel(tabs, resumeTab).Resume(tabs.Active()); err != nil {
 		h.keep(fmt.Errorf("Resume the %s panel's tab: %w", target, err))
 	}
 }

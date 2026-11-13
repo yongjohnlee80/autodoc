@@ -6,17 +6,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
 // widgets_test.go: :go, the Go-to picker and F6
 // (docs/decisions/editor.md#going-to-a-widget-by-name).
-
-func (r *running) focusedOn(id string) bool { return onLoop(r, func() bool { return r.h.within(id) }) }
-
-func (r *running) panelIsOpen(id string) bool {
-	return onLoop(r, func() bool { return r.h.panelOpen[id] })
-}
 
 func (r *running) widgetNames() []string {
 	return onLoop(r, func() []string {
@@ -111,7 +106,7 @@ func TestF6CyclesTheOpenWidgets(t *testing.T) {
 		r.keys(t, f6(false))
 		r.s.WaitFor(t, "F6 to "+want, func(string) bool { return r.focusedOn(want) })
 	}
-	onLoop(r, func() bool { r.h.explorer.showTab(linksTab); return true })
+	onLoop(r, func() bool { r.h.explorer.ShowTab(feature.ExplorerLinksTab); return true })
 	r.s.WaitFor(t, "the Links tab's list", func(string) bool { return r.focusedOn("relationsList") })
 	for _, want := range []string{"editor", "relationsList"} {
 		r.keys(t, f6(true))

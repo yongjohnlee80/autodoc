@@ -7,6 +7,7 @@ import (
 	"github.com/yongjohnlee80/golib/parse/markdown"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // cursorLink is the link the cursor is on: its source text, as the daemon records a link's raw,
@@ -47,8 +48,8 @@ func linkAt(source []byte, cursor int) (cursorLink, bool) {
 
 // followLink is SPC j: the link under the editor's cursor, followed as the right-click menu's Go to
 // link follows it, in Raw and in a note's Rendered view alike. Off a link it says so, and where the
-// page's links are listed. On an HTML file's page, which has no cursor, it is the first link at or
-// after the page's top, among what is on screen (docs/decisions/editor.md). In a draft (no file
+// page's links are listed. On an HTML file's page, which has no cursor, it is the first link in the
+// file's source (docs/decisions/editor.md#html-files-open-raw-or-simplified). In a draft (no file
 // open) it does what Go to link does there: a link goes as written, a web address to the browser,
 // since there is no workspace to resolve it in.
 func (h *Host) followLink() {
@@ -57,16 +58,14 @@ func (h *Host) followLink() {
 	if h.file.open {
 		name = h.file.path
 	}
-	if p := h.notePage(); p != nil {
-		if from, to, shown := p.onScreen(len(source)); shown {
-			l, ok := firstLinkIn(source, from, to)
-			if !ok {
-				h.notify(h.trf("autodoc.notice.golink.no_link_on_the_page_here_spc_l_shows_what_links", name))
-				return
-			}
-			h.goToLink(l)
+	if p := h.notePage(); p != nil && p.shownHere() {
+		l, ok := firstLink(source)
+		if !ok {
+			h.notify(h.trf("autodoc.notice.golink.no_link_on_the_page_here_spc_l_shows_what_links", name))
 			return
 		}
+		h.goToLink(l)
+		return
 	}
 	l, ok := linkAt(source, h.cursorBytes())
 	if !ok {
@@ -76,22 +75,17 @@ func (h *Host) followLink() {
 	h.goToLink(l)
 }
 
-// firstLinkIn is the first link that starts in source bytes from..to, as linkAt reads one there.
-func firstLinkIn(source []byte, from, to int) (cursorLink, bool) {
+// firstLink is the first link in source, as linkAt reads one there.
+func firstLink(source []byte) (cursorLink, bool) {
 	doc := kind.ParseMarkdown(source)
 	at := -1
 	var walk func(*markdown.Node)
 	walk = func(n *markdown.Node) {
 		for c := n.FirstChild; c != nil && at < 0; c = c.Next {
-			if c.Span.End <= from || c.Span.Start >= to {
-				continue
-			}
 			switch c.Kind {
 			case markdown.KindLink, markdown.KindAutolink, markdown.KindWikilink:
-				if c.Span.Start >= from {
-					if _, ok := linkAt(source, c.Span.Start); ok {
-						at = c.Span.Start
-					}
+				if _, ok := linkAt(source, c.Span.Start); ok {
+					at = c.Span.Start
 				}
 			default:
 				walk(c)
@@ -115,17 +109,17 @@ func (h *Host) goToLink(l cursorLink) {
 		h.htmlLinkAs(who, l.dest)
 		return
 	}
-	ws, from, tk := h.file.ws, h.file.path, h.ticket(nil, TicketFile)
-	do(h, func(ctx context.Context) answerOf[map[string]any] {
+	ws, from, tk := h.file.ws, h.file.path, h.ticket(nil, feature.TicketFile)
+	do(h, func(ctx context.Context) feature.AnswerOf[map[string]any] {
 		res, err := h.call(ctx, "graph.resolve", ws, from, l.raw)
-		return answerOf[map[string]any]{v: asMap(res), err: err}
-	}, func(a answerOf[map[string]any]) {
+		return feature.Answered(feature.AsMap(res), err)
+	}, func(a feature.AnswerOf[map[string]any]) {
 		if !tk.Current() {
 			return // another file opened, or another daemon, since: the link was the old file's
 		}
-		switch path, reason := str(a.v, "path"), str(a.v, "reason"); {
-		case a.err != nil:
-			h.failed("go to link", a.err)
+		switch path, reason := feature.Str(a.Value, "path"), feature.Str(a.Value, "reason"); {
+		case a.Err() != nil:
+			h.failed("go to link", a.Err())
 		case path != "" && who.gated(): // a document, opened within the script's bounds
 			h.openAbsoluteAs(who, filepath.Join(h.rootOf(ws), filepath.FromSlash(path)))
 		case path != "":

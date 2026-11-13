@@ -3,7 +3,7 @@ package tui
 import (
 	"time"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 )
 
 // NOTIFICATIONS — what the TUI tells: toasts stacked in a corner over the page (golib's Toasts),
@@ -21,9 +21,6 @@ import (
 // finished toast stays toastSeconds (Preferences: 1 to 10, default 3), in the corner the
 // preferences name (default the bottom right, over the status line).
 
-// maxNotices bounds the history.
-const maxNotices = 500
-
 // The toasts' IDs for the ongoing ones, each updated in place.
 const (
 	toastProgress   = "progress"    // indexing and embedding
@@ -34,20 +31,15 @@ const (
 	toastSearchWait = "search-wait" // an open search waiting on embedding work
 )
 
-type notice struct {
-	at   time.Time
-	text string
-}
-
 // attachToasts puts the toasts over the page, once the Window is mounted.
 func (h *Host) attachToasts() {
 	host, ok := h.p.Overlay()
 	if !ok || h.toasts != nil {
 		return
 	}
-	h.toasts = widget.NewToasts(widget.WithToastCorner(cornerAnchor[h.prefs.toastCorner]),
-		widget.WithToastLinger(time.Duration(h.prefs.toastSeconds)*time.Second),
-		widget.WithToastMargin(h.toastMargin()), widget.WithToastWidth(60))
+	h.toasts = widgetcore.NewToasts(widgetcore.WithToastCorner(cornerAnchor[h.prefs.toastCorner]),
+		widgetcore.WithToastLinger(time.Duration(h.prefs.toastSeconds)*time.Second),
+		widgetcore.WithToastMargin(h.toastMargin()), widgetcore.WithToastWidth(60))
 	host.AttachTopmost(h.toasts.Float()) // above the dialogs, too
 	for _, t := range h.early {
 		h.toasts.Post(t)
@@ -83,9 +75,9 @@ func (h *Host) applyToastPrefs() {
 
 // post shows a toast. A click on it opens the notifications' history, unless the toast says
 // otherwise.
-func (h *Host) post(t widget.Toast) {
+func (h *Host) post(t widgetcore.Toast) {
 	if t.OnClick == nil {
-		t.OnClick = h.noticeLog.open
+		t.OnClick = h.noticeLog.Open
 	}
 	if h.toasts == nil {
 		h.early = append(h.early, t) // before the Window mounted: shown once it is
@@ -96,18 +88,18 @@ func (h *Host) post(t widget.Toast) {
 
 // notify is a notification: a toast, kept in the history.
 func (h *Host) notify(msg string) {
-	h.post(widget.Toast{Text: msg})
+	h.post(widgetcore.Toast{Text: msg})
 	h.keepNotice(msg)
 }
 
 // notifyOngoing is a long task's toast, id's, updated in place; the history keeps it once it ends.
 func (h *Host) notifyOngoing(id, msg string) {
-	h.post(widget.Toast{ID: id, Text: msg, Ongoing: true})
+	h.post(widgetcore.Toast{ID: id, Text: msg, Ongoing: true})
 }
 
 // notifyDone ends id's ongoing toast with its last message, which the history keeps.
 func (h *Host) notifyDone(id, msg string) {
-	h.post(widget.Toast{ID: id, Text: msg})
+	h.post(widgetcore.Toast{ID: id, Text: msg})
 	h.keepNotice(msg)
 }
 
@@ -132,8 +124,8 @@ func (h *Host) notifyAs(ns string, r noticeReq) {
 	}
 }
 
-// keepNotice adds a notification to the history (notices.go).
-func (h *Host) keepNotice(msg string) { h.noticeLog.keep(msg) }
+// keepNotice adds a notification to the history (feature/notices.go).
+func (h *Host) keepNotice(msg string) { h.noticeLog.Keep(msg) }
 
 // say is a message about the page or the view, on the status line's right until the next.
 func (h *Host) say(msg string) {
@@ -141,7 +133,7 @@ func (h *Host) say(msg string) {
 }
 
 // cornerAnchor is where each corner preference puts the toasts.
-var cornerAnchor = map[string]widget.Anchor{
-	"bottom-right": widget.BottomRight, "bottom-left": widget.BottomLeft,
-	"top-right": widget.TopRight, "top-left": widget.TopLeft,
+var cornerAnchor = map[string]widgetcore.Anchor{
+	"bottom-right": widgetcore.BottomRight, "bottom-left": widgetcore.BottomLeft,
+	"top-right": widgetcore.TopRight, "top-left": widgetcore.TopLeft,
 }

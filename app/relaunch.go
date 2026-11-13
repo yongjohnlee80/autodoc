@@ -4,19 +4,20 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"syscall"
 
+	"github.com/yongjohnlee80/autodoc/internal/proctree"
 	"github.com/yongjohnlee80/autodoc/tui"
 )
 
 // RELAUNCH — About's Update, then Restart now
 // (docs/decisions/install.md#abouts-update-and-the-restart): the UI has quit with tui.ErrRelaunch,
-// and the binary at this program's path, which update.sh replaced, starts in this process's place
-// with the same arguments and environment. On Linux the path is read back as it is now
-// (os.Executable drops /proc's " (deleted)"), so it's the new binary.
+// and the binary at this program's path, which the update script replaced, starts in this process's
+// place with the same arguments and environment. On Linux the path is read back as it is now
+// (os.Executable drops /proc's " (deleted)"), so it's the new binary. On Windows the script moved the
+// running binary aside, and this process's path names the new one.
 
 // execProgram replaces this process; tests stand in for it.
-var execProgram = syscall.Exec
+var execProgram = proctree.Replace
 
 // afterRun is what a UI's run ends with: its error, unless it asked to relaunch.
 func afterRun(err error) error {

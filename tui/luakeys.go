@@ -8,10 +8,11 @@ import (
 	"unicode/utf8"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/yongjohnlee80/autodoc/script"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // LUA KEYS AND MENU ROWS (docs/decisions/contract.md#script-keys-and-menu-rows): a script binds a
@@ -19,7 +20,7 @@ import (
 //
 //	autodoc.map{mode = "normal" | "visual", keys = "Q" | "<C-k>", command = "heading"}
 //	autodoc.map{mode = "leader", keys = "t", command = "table 2 3", title = "a table"}  -- SPC u t
-//	autodoc.menu{where = "editor" | "plugins", title = "&Word count", command = "wc"}  -- see menurows.go
+//	autodoc.menu{where = "editor" | "plugins", title = "&Word count", command = "wc"}  -- see feature/menurows.go
 //
 // A Normal or Visual chord reaches the page's editor through golib's chord hook, with nothing
 // pending; a leader key is a letter of SPC u, a card built at run time as SPC p's is; a menu row
@@ -68,7 +69,7 @@ type luaChord struct {
 
 // luaUI is one engine's keys and rows.
 type luaUI struct {
-	chords map[widget.KeyChord]luaChord
+	chords map[editor.KeyChord]luaChord
 	leader []luaKey
 }
 
@@ -79,8 +80,8 @@ const luaLetters = "abcdefghijklmnoprstuvwxyz0123456789"
 func (s *scripting) mapUI(eng interface {
 	SetFunction(string, lua.LGFunction)
 }) {
-	s.ui = luaUI{chords: map[widget.KeyChord]luaChord{}}
-	s.rows.drop(func(r *addedRow) bool { return r.source == fromLua }) // the old engine's; a plugin's [[menu]] stays
+	s.ui = luaUI{chords: map[editor.KeyChord]luaChord{}}
+	s.rows.Drop(func(r *feature.AddedRow) bool { return r.Source == feature.FromLua }) // the old engine's; a plugin's [[menu]] stays
 	s.refreshLuaUI()
 	eng.SetFunction("map", s.luaMap)
 	eng.SetFunction("menu", s.luaMenuFn)
@@ -126,28 +127,28 @@ func (s *scripting) luaMap(L *lua.LState) int {
 }
 
 // chordOf reads a map's keys: one character ("Q"), or a control chord ("<C-k>").
-func chordOf(mode, keys string) (widget.KeyChord, error) {
-	m := widget.ModeNormal
+func chordOf(mode, keys string) (editor.KeyChord, error) {
+	m := editor.ModeNormal
 	if mode == "visual" {
-		m = widget.ModeVisual
+		m = editor.ModeVisual
 	}
 	if inner, ok := strings.CutPrefix(keys, "<C-"); ok && strings.HasSuffix(inner, ">") {
 		inner = strings.TrimSuffix(inner, ">")
 		if r, n := utf8.DecodeRuneInString(inner); n == len(inner) && n > 0 {
-			return widget.KeyChord{Mode: m, Code: r, Ctrl: true}, nil
+			return editor.KeyChord{Mode: m, Code: r, Ctrl: true}, nil
 		}
 	}
 	if r, n := utf8.DecodeRuneInString(keys); n == len(keys) && n > 0 && r != ' ' {
-		return widget.KeyChord{Mode: m, Code: r}, nil
+		return editor.KeyChord{Mode: m, Code: r}, nil
 	}
-	return widget.KeyChord{}, fmt.Errorf("a %s key is one character, \"Q\", or a control chord, \"<C-k>\", not %q; a sequence is a leader key", mode, keys)
+	return editor.KeyChord{}, fmt.Errorf("a %s key is one character, \"Q\", or a control chord, \"<C-k>\", not %q; a sequence is a leader key", mode, keys)
 }
 
 // luaMenuFields are the fields autodoc.menu takes: any other is refused.
 var luaMenuFields = map[string]bool{"where": true, "id": true, "menu": true, "files": true, "when": true, "title": true, "command": true}
 
 // luaMenuFn is autodoc.menu{where, id, menu, files, when, title, command}: a row of the editor's
-// right-click menu or of the Plugins menu (menurows.go). It answers a handle whose remove drops
+// right-click menu or of the Plugins menu (feature/menurows.go). It answers a handle whose remove drops
 // the row; the same id from the same script again replaces the row in its place.
 func (s *scripting) luaMenuFn(L *lua.LState) int {
 	spec := L.CheckTable(1)
@@ -160,23 +161,23 @@ func (s *scripting) luaMenuFn(L *lua.LState) int {
 	if where != "editor" && where != "plugins" {
 		L.ArgError(1, fmt.Sprintf("menu's where is editor or plugins, not %q", where))
 	}
-	r := &addedRow{source: fromLua, where: where, id: lua.LVAsString(spec.RawGetString("id")), menu: lua.LVAsString(spec.RawGetString("menu"))}
+	r := &feature.AddedRow{Source: feature.FromLua, Where: where, ID: lua.LVAsString(spec.RawGetString("id")), Menu: lua.LVAsString(spec.RawGetString("menu"))}
 	line := lua.LVAsString(spec.RawGetString("command"))
 	switch t := spec.RawGetString("title").(type) {
 	case lua.LString:
-		r.title = string(t)
+		r.Title = string(t)
 	case *lua.LFunction:
-		r.titleFn = t
+		r.TitleFn = t
 	case *lua.LNilType:
 	default:
 		L.ArgError(1, "menu's title is a string or a function")
 	}
-	if (r.title == "" && r.titleFn == nil) || line == "" {
+	if (r.Title == "" && r.TitleFn == nil) || line == "" {
 		L.ArgError(1, "menu needs a title and a command")
 	}
 	switch w := spec.RawGetString("when").(type) {
 	case *lua.LFunction:
-		r.when = w
+		r.When = w
 	case *lua.LNilType:
 	default:
 		L.ArgError(1, "menu's when is a function")
@@ -188,37 +189,37 @@ func (s *scripting) luaMenuFn(L *lua.LState) int {
 			if _, err := path.Match(string(g), ""); !ok || err != nil {
 				L.ArgError(1, fmt.Sprintf("menu's files are globs: %s isn't one", lua.LVAsString(f.RawGetInt(i))))
 			}
-			r.files = append(r.files, string(g))
+			r.Files = append(r.Files, string(g))
 		}
 	case *lua.LNilType:
 	default:
 		L.ArgError(1, "menu's files is a list of globs")
 	}
-	if where == "plugins" && (r.files != nil || r.when != nil || r.titleFn != nil) {
+	if where == "plugins" && (r.Files != nil || r.When != nil || r.TitleFn != nil) {
 		L.ArgError(1, "a Plugins-menu row takes no files, when or title function: that menu isn't built as it opens")
 	}
 	by := s.binder()
-	r.owner = by.script
-	r.run = func() {
+	r.Owner = by.script
+	r.Run = func() {
 		if by.allowed(s) {
 			s.runLuaLine(by, line)
 		}
 	}
-	s.rows.add(r)
+	s.rows.Add(r)
 	s.refreshLuaUI()
 	L.Push(s.rowHandle(L, r))
 	return 1
 }
 
 // rowHandle is autodoc.menu's answer: row:remove() drops the row it added, and nothing else.
-func (s *scripting) rowHandle(L *lua.LState, r *addedRow) lua.LValue {
+func (s *scripting) rowHandle(L *lua.LState, r *feature.AddedRow) lua.LValue {
 	ud := L.NewUserData()
 	ud.Value = r
 	mt := L.NewTypeMetatable("autodoc.menu.row")
 	if mt.RawGetString("__index") == lua.LNil {
 		methods := L.NewTable()
 		L.SetField(methods, "remove", L.NewFunction(func(L *lua.LState) int {
-			if r, ok := L.CheckUserData(1).Value.(*addedRow); ok && s.rows.remove(r) {
+			if r, ok := L.CheckUserData(1).Value.(*feature.AddedRow); ok && s.rows.Remove(r) {
 				s.refreshLuaUI()
 			}
 			return 0
@@ -243,7 +244,7 @@ func (s *scripting) luaKeysText() string {
 
 // refreshLuaUI shows SPC u's letters and the Plugins menu's Lua rows as they are now.
 func (s *scripting) refreshLuaUI() {
-	s.luaMenuRows().Reset(s.rows.pluginsMenuRows(s))
+	s.luaMenuRows().Reset(pluginsMenuRowsOf(&s.rows, s))
 	// before the program runs, State's first value is the text as it stands then
 	if a, ok := s.c.(interface{ Attached() bool }); ok && a.Attached() {
 		s.c.Set("App.luaKeysText", s.luaKeysText())
@@ -273,14 +274,14 @@ func (s *scripting) luaKey(letter string) {
 // luaMenu is a Plugins-menu row of a script's, chosen: target is its serial.
 func (s *scripting) luaMenu(target string) {
 	if n, err := strconv.Atoi(target); err == nil {
-		if r := s.rows.bySerial(n); r != nil && r.where == "plugins" {
-			r.run()
+		if r := s.rows.BySerial(n); r != nil && r.Where == "plugins" {
+			r.Run()
 		}
 	}
 }
 
 // chord is the page's chord hook: a script's Normal or Visual chord runs its command line.
-func (s *scripting) chord(kc widget.KeyChord) bool {
+func (s *scripting) chord(kc editor.KeyChord) bool {
 	ch, ok := s.ui.chords[kc]
 	if !ok {
 		return false

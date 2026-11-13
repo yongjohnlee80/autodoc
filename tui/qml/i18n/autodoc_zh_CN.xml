@@ -1347,6 +1347,10 @@
         <source>This window lost its crew scope %1 while away; its agents now live under %2.</source>
         <translation>此窗口离开期间失去了团队作用域 %1；其代理现在归属于 %2。</translation>
     </message>
+    <message id="autodoc.crew.names_kept">
+        <source>Agent folders from an earlier AutoDoc kept their old names, since their new ones were already there: %1</source>
+        <translation>由于新名称已存在，先前版本 AutoDoc 的部分代理文件夹保留了旧名称：%1</translation>
+    </message>
     <message id="autodoc.crew.scope_unlisted">
         <source>This window's crew scope is held, but not listed for a successor: %1</source>
         <translation>此窗口持有团队作用域，但未为后继窗口登记：%1</translation>
@@ -3961,6 +3965,18 @@ WHAT A KEY NEEDS
         <source>This &amp;machine</source>
         <translation>本机(&amp;M)</translation>
     </message>
+    <message id="autodoc.main.title_bar">
+        <source>Title &amp;bar</source>
+        <translation>标题栏(&amp;B)</translation>
+    </message>
+    <message id="autodoc.main.title_bar_own">
+        <source>&amp;2. AutoDoc's own</source>
+        <translation>&amp;2. AutoDoc 自己的</translation>
+    </message>
+    <message id="autodoc.main.title_bar_system">
+        <source>&amp;1. The system's</source>
+        <translation>&amp;1. 系统的</translation>
+    </message>
     <message id="autodoc.main.todos">
         <source>&amp;Todos</source>
         <translation>待办(&amp;T)</translation>
@@ -5413,6 +5429,14 @@ WHAT A KEY NEEDS
         <source>theme: %1</source>
         <translation>主题：%1</translation>
     </message>
+    <message id="autodoc.notice.titlebar.from_the_next_start">
+        <source>the title bar changes at the next start: the window takes it as it opens</source>
+        <translation>标题栏在下次启动时更改：窗口打开时决定</translation>
+    </message>
+    <message id="autodoc.notice.titlebar.no_title_bar_s">
+        <source>no title bar %1: system or own</source>
+        <translation>没有标题栏 %1：system 或 own</translation>
+    </message>
     <message id="autodoc.notice.todomove.moved_to">
         <source>%1 moved to %2 with its task: the buffer follows it</source>
         <translation>%1 已随其任务移动到 %2：缓冲区随之跟进</translation>
@@ -5456,6 +5480,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.todos.todos_is_loaded_read_only_its_store_was_released">
         <source>todos: %1 is loaded, read-only: its store was released (todos.release)</source>
         <translation>待办：%1 已加载，只读：其待办库已释放 (todos.release)</translation>
+    </message>
+    <message id="autodoc.notice.todos.todos_the_store_of_is_not_listed">
+        <source>todos: the store of %1 isn't listed, so no other is shown in its place</source>
+        <translation>待办：%1 的待办库不在列表中，因此不会显示其他待办库代替它</translation>
     </message>
     <message id="autodoc.notice.todos.todos_refreshed_moved_archived_rewritten">
         <source>todos: refreshed: %1 moved, %2 archived, %3 rewritten</source>
@@ -5518,8 +5546,8 @@ WHAT A KEY NEEDS
         <translation>更新：此 AutoDoc 不是由 install-autodoc.sh 安装的，请用安装它的方式更新</translation>
     </message>
     <message id="autodoc.notice.update.the_update_exited">
-        <source>Update: update.sh exited %1; its tab in the terminal panel says why</source>
-        <translation>更新：update.sh 以 %1 退出，原因见终端面板中的标签页</translation>
+        <source>Update: %2 exited %1; its tab in the terminal panel says why</source>
+        <translation>更新：%2 以 %1 退出，原因见终端面板中的标签页</translation>
     </message>
     <message id="autodoc.notice.update.update">
         <source>Update</source>

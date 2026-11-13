@@ -1,0 +1,264 @@
+package system
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/yongjohnlee80/autodoc/internal/profiling"
+	"github.com/yongjohnlee80/autodoc/tui/feature/featuretest"
+)
+
+// shortRuntime points the runtime directory somewhere short enough for a monitor's socket.
+func shortRuntime(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "adp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	t.Setenv("XDG_RUNTIME_DIR", dir)
+	return dir
+}
+
+// badge is the status line's mark in English.
+var badge = englishText("autodoc.text.profiling.badge")
+
+func noted(c *featuretest.ScriptedCore, part string) bool {
+	return slices.ContainsFunc(c.Notes, func(n string) bool { return strings.Contains(n, part) })
+}
+
+// Profile the window starts the window's monitor in its default folder and stops it: the item's
+// check and the status line's badge follow, the start's notice names the folder and says the
+// profiles are shared as a log is, and the stop leaves its samples.
+func TestTheWindowsProfilingStartsAndStops(t *testing.T) {
+	run := shortRuntime(t)
+	c := newScripted("kb")
+	prof := profiling.New(context.Background(), "gui")
+	t.Cleanup(func() { _ = prof.Close() })
+	f := NewProfiling(c, prof, nil)
+	if st := f.State(); st["App.profilingWindow"] != false || st["App.profilingMark"] != "" {
+		t.Fatalf("before a start: %v", st)
+	}
+	f.toggleWindow()
+	dir := prof.Dir()
+	if !strings.HasPrefix(dir, run) || c.Sets["App.profilingWindow"] != true || c.Sets["App.profilingMark"] != badge {
+		t.Fatalf("after a start: dir %q, state %v", dir, c.Sets)
+	}
+	if !noted(c, dir) || !noted(c, "pprof labels") {
+		t.Errorf("the start's notice: %v", c.Notes)
+	}
+	f.toggleWindow()
+	if prof.Dir() != "" || c.Sets["App.profilingWindow"] != false || c.Sets["App.profilingMark"] != "" {
+		t.Fatalf("after a stop: dir %q, state %v", prof.Dir(), c.Sets)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "samples.jsonl")); err != nil {
+		t.Errorf("no samples after the stop: %v", err)
+	}
+	if len(c.Failures) != 0 {
+		t.Errorf("failed: %v", c.Failures)
+	}
+}
+
+// A window launched with --profile shows its monitor on, and a program with no profiler says so.
+func TestTheWindowsProfilingFromLaunchAndWithout(t *testing.T) {
+	shortRuntime(t)
+	prof := profiling.New(context.Background(), "gui")
+	t.Cleanup(func() { _ = prof.Close() })
+	if _, err := prof.Start(""); err != nil {
+		t.Fatal(err)
+	}
+	if st := NewProfiling(newScripted("kb"), prof, nil).State(); st["App.profilingWindow"] != true || st["App.profilingMark"] != badge {
+		t.Errorf("launched with --profile: %v", st)
+	}
+	c := newScripted("kb")
+	NewProfiling(c, nil, nil).toggleWindow()
+	if !noted(c, "no profiler") {
+		t.Errorf("no profiler: %v", c.Notes)
+	}
+}
+
+// Profile the backend starts and stops the daemon's monitor through sys.profile, the connection
+// learns whether it already runs, and a refusal is said and changes nothing.
+func TestTheBackendsProfiling(t *testing.T) {
+	c := newScripted("kb")
+	on := false
+	c.Answers["sys.profile"] = func(params []any) (any, error) {
+		switch params[0] {
+		case "start":
+			on = true
+		case "stop":
+			on = false
+		}
+		dir := ""
+		if on {
+			dir = "/run/user/1/autodoc-profile-serve-9"
+		}
+		return map[string]any{"on": on, "dir": dir}, nil
+	}
+	f := NewProfiling(c, nil, nil)
+	f.toggleBackend()
+	if c.Sets["App.profilingBackend"] != true || c.Sets["App.profilingMark"] != badge || !noted(c, "autodoc-profile-serve-9") {
+		t.Fatalf("after a start: %v, notes %v", c.Sets, c.Notes)
+	}
+	f.toggleBackend()
+	if c.Sets["App.profilingBackend"] != false || c.Sets["App.profilingMark"] != "" {
+		t.Fatalf("after a stop: %v", c.Sets)
+	}
+	if want := []string{"sys.profile[start ]", "sys.profile[stop ]"}; !slices.Equal(c.Calls, want) {
+		t.Errorf("calls %v; want %v", c.Calls, want)
+	}
+
+	on = true // another client started it
+	f.Connected()
+	if c.Sets["App.profilingBackend"] != true {
+		t.Errorf("a connection to a daemon already profiling: %v", c.Sets)
+	}
+
+	c.Answers["sys.profile"] = func([]any) (any, error) { return nil, errors.New("unknown method") }
+	f.toggleBackend()
+	if len(c.Failures) != 1 || c.Sets["App.profilingBackend"] != true {
+		t.Errorf("a refused stop: failed %v, state %v", c.Failures, c.Sets)
+	}
+}
+
+// With neither monitor running, a capture and the folder say to start one first; the folder opens
+// the last monitor's, after its stop too.
+func TestCaptureAndFolderNeedAMonitor(t *testing.T) {
+	shortRuntime(t)
+	c := newScripted("kb")
+	var opened []string
+	prof := profiling.New(context.Background(), "gui")
+	t.Cleanup(func() { _ = prof.Close() })
+	f := NewProfiling(c, prof, func(_ context.Context, p string) error { opened = append(opened, p); return nil })
+	f.captureCPU()
+	f.openFolder()
+	if len(c.Notes) != 2 || !noted(c, "Start profiling") || len(opened) != 0 {
+		t.Fatalf("with none running: notes %v, opened %v", c.Notes, opened)
+	}
+	f.toggleWindow()
+	dir := prof.Dir()
+	f.toggleWindow()
+	f.openFolder()
+	if !slices.Equal(opened, []string{dir}) {
+		t.Errorf("opened %v; want the last monitor's %s", opened, dir)
+	}
+}
+
+// An old status answer never undoes a newer toggle: the connection's "off", arriving after the
+// start's answer, is dropped (Ticket), so the item and the badge stay on.
+func TestAStaleBackendStatusNeverUndoesAStart(t *testing.T) {
+	c := newScripted("kb")
+	c.Deferred = true
+	on := false
+	c.Answers["sys.profile"] = func(params []any) (any, error) {
+		if params[0] == "start" {
+			on = true
+		}
+		dir := ""
+		if on {
+			dir = "/run/user/1/autodoc-profile-serve-9"
+		}
+		return map[string]any{"on": on, "dir": dir}, nil
+	}
+	f := NewProfiling(c, nil, nil)
+	f.Connected()     // asks: off
+	f.toggleBackend() // starts
+	if len(c.Pending) != 2 {
+		t.Fatalf("%d answers pending; want the status and the start", len(c.Pending))
+	}
+	c.Deliver(1, 0) // the start's answer first, then the older status's
+	if c.Sets["App.profilingBackend"] != true || c.Sets["App.profilingMark"] != badge {
+		t.Errorf("the stale status undid the start: %v", c.Sets)
+	}
+}
+
+// The window's monitor starts and stops off the loop, and a second toggle while one is under way
+// does nothing: one monitor, and the item shows the outcome.
+func TestTheWindowsToggleRunsOffTheLoopOnceAtATime(t *testing.T) {
+	shortRuntime(t)
+	c := newScripted("kb")
+	c.Deferred = true
+	prof := profiling.New(context.Background(), "gui")
+	t.Cleanup(func() { _ = prof.Close() })
+	f := NewProfiling(c, prof, nil)
+	f.toggleWindow()
+	f.toggleWindow()
+	if len(c.Pending) != 1 {
+		t.Fatalf("%d toggles under way; want one", len(c.Pending))
+	}
+	c.Deliver(0)
+	if prof.Dir() == "" || c.Sets["App.profilingWindow"] != true || f.windowBusy {
+		t.Fatalf("after the start: dir %q, state %v, busy %v", prof.Dir(), c.Sets, f.windowBusy)
+	}
+	f.toggleWindow()
+	c.Deliver(0)
+	if prof.Dir() != "" || c.Sets["App.profilingWindow"] != false {
+		t.Errorf("after the stop: dir %q, state %v", prof.Dir(), c.Sets)
+	}
+}
+
+// A stop the daemon refuses (its last samples could not be written: the monitor is off all the
+// same) is said, and the daemon asked again, whose answer the item shows.
+func TestARefusedBackendStopAsksAgain(t *testing.T) {
+	c := newScripted("kb")
+	c.Answers["sys.profile"] = func(params []any) (any, error) {
+		switch params[0] {
+		case "start":
+			return map[string]any{"on": true, "dir": "/run/user/1/p"}, nil
+		case "stop":
+			return nil, errors.New("rpc.internal: the monitor stopped, but its last samples could not be written")
+		}
+		return map[string]any{"on": false, "dir": ""}, nil
+	}
+	f := NewProfiling(c, nil, nil)
+	f.toggleBackend()
+	f.toggleBackend()
+	if len(c.Failures) != 1 || c.Sets["App.profilingBackend"] != false || c.Calls[len(c.Calls)-1] != "sys.profile[status ]" {
+		t.Errorf("a refused stop: failed %v, state %v, calls %v", c.Failures, c.Sets, c.Calls)
+	}
+}
+
+// A second Backend toggle while one is under way does nothing: two quick clicks never send two
+// starts, and the item shows where the first left the monitor.
+func TestTheBackendsToggleRunsOnceAtATime(t *testing.T) {
+	c := newScripted("kb")
+	c.Deferred = true
+	c.Answers["sys.profile"] = func(params []any) (any, error) {
+		return map[string]any{"on": params[0] == "start", "dir": "/run/user/1/p"}, nil
+	}
+	f := NewProfiling(c, nil, nil)
+	f.toggleBackend()
+	f.toggleBackend()
+	if len(c.Pending) != 1 || !slices.Equal(c.Calls, []string{"sys.profile[start ]"}) {
+		t.Fatalf("two quick toggles: %d pending, calls %v; want one start", len(c.Pending), c.Calls)
+	}
+	c.Deliver(0)
+	if c.Sets["App.profilingBackend"] != true || f.backendBusy {
+		t.Errorf("after the start: state %v, busy %v", c.Sets, f.backendBusy)
+	}
+}
+
+// A window start queued before the program closed its profiler, and run after, starts no monitor:
+// the close is for good, so the start is refused and the item stays off.
+func TestAWindowStartQueuedPastTheCloseStartsNothing(t *testing.T) {
+	shortRuntime(t)
+	c := &featuretest.HeldCore{ScriptedCore: newScripted("kb")} // Go holds the worker
+	prof := profiling.New(context.Background(), "gui")
+	f := NewProfiling(c, prof, nil)
+	f.toggleWindow()
+	if len(c.Held) != 1 {
+		t.Fatalf("%d works queued; want the start", len(c.Held))
+	}
+	if err := prof.Close(); err != nil { // the owner's close at exit
+		t.Fatal(err)
+	}
+	c.Run(0)
+	if prof.Dir() != "" || c.Sets["App.profilingWindow"] == true || len(c.Failures) != 1 {
+		t.Errorf("a start run after the close: dir %q, state %v, failed %v", prof.Dir(), c.Sets, c.Failures)
+	}
+}

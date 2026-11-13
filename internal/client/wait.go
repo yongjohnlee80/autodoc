@@ -2,9 +2,9 @@ package client
 
 import (
 	"context"
-	"os"
-	"syscall"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/internal/proctree"
 )
 
 // RestartWait bounds waiting for the old daemon to exit before the new one is started. Every build
@@ -32,11 +32,5 @@ func WaitGone(ctx context.Context, pid int64, d time.Duration) bool {
 	}
 }
 
-// alive is whether process pid exists: signal 0 checks without sending.
-func alive(pid int64) bool {
-	p, err := os.FindProcess(int(pid))
-	if err != nil {
-		return false
-	}
-	return p.Signal(syscall.Signal(0)) == nil
-}
+// alive is whether process pid exists (internal/proctree): nothing is sent to it.
+func alive(pid int64) bool { return proctree.Alive(int(pid)) }

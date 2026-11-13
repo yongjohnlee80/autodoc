@@ -10,6 +10,7 @@ import (
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
 )
 
@@ -34,13 +35,13 @@ func themeOf(src []byte) string {
 func (h *Host) builtinThemeRows() *tuidecl.ListModel {
 	m := tuidecl.NewListModel("key", "label", "checked")
 	labels := themes.MenuLabels() // golib's order, its five first, and its words with their access keys
-	rows := make([]rowOf, 0, len(labels))
+	rows := make([]feature.RowOf, 0, len(labels))
 	for _, l := range labels {
 		var label any = l.Name
 		if l.Text != l.Name { // golib has words for it: in the UI's language (language_catalog_test.go holds it)
 			label = tuicore.Msg("autodoc.theme." + l.Name)
 		}
-		rows = append(rows, rowOf{"key": l.Name, "label": label, "checked": l.Name == h.theme})
+		rows = append(rows, feature.RowOf{"key": l.Name, "label": label, "checked": l.Name == h.theme})
 	}
 	m.Reset(rows)
 	return m
@@ -81,15 +82,16 @@ func (h *Host) switchTheme(name string) {
 			return
 		}
 		h.layoutSrc, h.layoutBase, h.theme = next, nextBase, name
+		h.styleBufferTabs() // golib gave the page's strip the new palette's looks: the shown tab its own again
 		h.set("App.userThemes", h.userThemeRows())
 		h.set("App.builtinThemes", h.builtinThemeRows())
-		h.reg.themeChanged()
+		h.reg.ThemeChanged()
 		h.say(h.trf("autodoc.notice.theme.theme", name))
 	})
 }
 
 // layoutBaseNow is the layout before the card panels are written in: layoutBase, or -dev's
-// main.qml read again with the GUI's relation views.
+// main.qml read again with what a window writes in (windowLayout).
 func (h *Host) layoutBaseNow() ([]byte, error) {
 	if h.dev == "" {
 		return h.layoutBase, nil
@@ -98,7 +100,7 @@ func (h *Host) layoutBaseNow() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return withRelationViews(b, h.gui), nil
+	return h.windowLayout(b), nil
 }
 
 func (h *Host) defaultTheme() string {
@@ -127,7 +129,7 @@ func (h *Host) themeValues(name string) (map[string]string, error) {
 }
 func (h *Host) userThemeRows() *tuidecl.ListModel {
 	m := tuidecl.NewListModel("key", "label", "enabled", "checked")
-	var rows []rowOf
+	var rows []feature.RowOf
 	for _, n := range h.themeNames() {
 		if slices.Contains(themeNames, n) {
 			continue
@@ -137,7 +139,7 @@ func (h *Host) userThemeRows() *tuidecl.ListModel {
 		if err != nil {
 			label += " — invalid"
 		}
-		rows = append(rows, rowOf{"key": n, "label": label, "enabled": err == nil, "checked": n == h.theme})
+		rows = append(rows, feature.RowOf{"key": n, "label": label, "enabled": err == nil, "checked": n == h.theme})
 	}
 	m.Reset(rows)
 	return m
@@ -153,9 +155,10 @@ func (h *Host) themeReloadError(err error) {
 	}
 }
 
-// reloaded is a hot reload applied: the themes it may have changed, and the keys a key file moved,
-// as the cards and help name them.
-func (h *Host) reloaded() {
+// reloaded is a reload applied, applied the layout it put on screen (nil: not known): the themes it
+// may have changed, the theme it imports, and the keys a key file moved, as the cards and help name
+// them.
+func (h *Host) reloaded(applied []byte) {
 	h.keysChanged()
 	h.panelText.apply(h, agentScaleOf(h.prefs)) // the rebuilt agent and terminal panels get their views again
 	h.applyTerminalKeymap(h.prefs)              // and their keymap's normal mode
@@ -163,12 +166,41 @@ func (h *Host) reloaded() {
 	h.attachFindChip()                          // and the page's rebuilt window the find's card
 	h.syncBufferTabs()                          // and a rebuilt editor's strip its tabs, ≡ and +
 	h.themesReloaded()
+	h.themeApplied(applied) // the theme on screen, after themesReloaded's check: it never starts a switch
+}
+
+// hotReloadedLayout is the layout a hot reload applied: under -dev, main.qml as it is on disk now,
+// its own import the theme on screen (the file is the authority on its next save); else the layout
+// last applied, which golib reloads with (Options.Layout's, or a theme switch's).
+func (h *Host) hotReloadedLayout() []byte {
+	if h.dev == "" {
+		return h.layoutSrc
+	}
+	b, err := h.layoutBaseNow()
+	if err != nil {
+		return nil
+	}
+	return b
+}
+
+// themeApplied makes the theme applied imports, the theme on screen now, the one the host knows
+// (h.theme: the menu's check, a plugin's theme, an export's), and styles the page's strip in it
+// (styleBufferTabs: golib restyled it in the layout's palette). A layout with no import, or not
+// known, keeps h.theme. It only records: nothing is switched or written.
+func (h *Host) themeApplied(applied []byte) {
+	if name := themeOf(applied); name != "" && name != h.theme {
+		h.theme = name
+		h.set("App.userThemes", h.userThemeRows())
+		h.set("App.builtinThemes", h.builtinThemeRows())
+		h.reg.ThemeChanged()
+	}
+	h.styleBufferTabs()
 }
 
 // keysChanged is the App's key map installed or replaced: each card and help name the keys as it binds
 // them.
 func (h *Host) keysChanged() {
-	h.keys.live = h.p.App().Keymap()
+	h.keys.Live = h.p.App().Keymap()
 	for name, text := range h.cardState() {
 		h.set(name, text)
 	}
@@ -178,7 +210,7 @@ func (h *Host) keysChanged() {
 
 func (h *Host) themesReloaded() {
 	h.set("App.userThemes", h.userThemeRows())
-	h.set("App.themes", choices(h.themeLabels()...))
+	h.set("App.themes", feature.Choices(h.themeLabels()...))
 	chosen := h.prefs.theme
 	if chosen != "" && !isTheme(chosen) {
 		if _, err := h.themeValues(chosen); err == nil && chosen != h.theme {
@@ -186,5 +218,5 @@ func (h *Host) themesReloaded() {
 			return
 		}
 	}
-	h.reg.themeChanged()
+	h.reg.ThemeChanged()
 }

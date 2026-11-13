@@ -2,10 +2,10 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/search/embed"
 )
 
@@ -43,10 +43,10 @@ type progress struct {
 // follower still on its first scan of the root (searches and listings answer, but are not complete).
 func warmingReasons(m map[string]any) []string {
 	var out []string
-	if f := asMap(m["following"]); str(f, "mode") == "starting" {
+	if f := feature.AsMap(m["following"]); feature.Str(f, "mode") == "starting" {
 		out = append(out, scanningFiles)
 	}
-	for _, r := range asList(m["warming"]) {
+	for _, r := range feature.AsList(m["warming"]) {
 		if s, ok := r.(string); ok && s != "" {
 			out = append(out, s)
 		}
@@ -89,14 +89,14 @@ func embedOf(m map[string]any) embedProgress {
 	if m == nil {
 		return embedProgress{}
 	}
-	e := embedProgress{on: true, model: str(m, "model"), target: str(m, "target"), failing: str(m, "last_error") != ""}
+	e := embedProgress{on: true, model: feature.Str(m, "model"), target: feature.Str(m, "target"), failing: feature.Str(m, "last_error") != ""}
 	e.texts, _ = m["texts"].(int64)
 	e.pending, _ = m["pending"].(int64)
 	e.targetPending, _ = m["target_pending"].(int64)
 	e.refused, _ = m["refused"].(int64)
 	e.targetRefused, _ = m["target_refused"].(int64)
-	e.queueState, e.waitingFor = str(m, "queue_state"), str(m, "waiting_for")
-	e.semantic = str(m, "semantic")
+	e.queueState, e.waitingFor = feature.Str(m, "queue_state"), feature.Str(m, "waiting_for")
+	e.semantic = feature.Str(m, "semantic")
 	return e
 }
 
@@ -116,7 +116,7 @@ func (e embedProgress) online() bool {
 
 // poll asks for the status, and asks again a second after the answer, while the program runs.
 func (h *Host) poll() {
-	tk, ws := h.ticket(nil, TicketWorkspace), h.ws
+	tk, ws := h.ticket(nil, feature.TicketWorkspace), h.ws
 	if ws != "" && time.Since(h.focusSent) >= 10*time.Second {
 		h.focusSent = time.Now()
 		do(h, func(ctx context.Context) error { _, err := h.call(ctx, "workspace.focus", ws); return err }, func(error) {})
@@ -132,8 +132,8 @@ func (h *Host) poll() {
 		if err != nil {
 			return answer{err: err}
 		}
-		m := asMap(res)
-		a := answer{emb: embedOf(asMap(m["embeddings"])), warming: warmingReasons(m)}
+		m := feature.AsMap(res)
+		a := answer{emb: embedOf(feature.AsMap(m["embeddings"])), warming: warmingReasons(m)}
 		a.docs, _ = m["docs"].(int64)
 		a.pending, _ = m["pending_jobs"].(int64)
 		a.cursor, _ = m["cursor"].(int64)
@@ -155,14 +155,10 @@ func (h *Host) poll() {
 	})
 }
 
-// scheduled, when set (tests only), hears each delay h.after is given, on the loop: the seam that
-// shows a consumer's wait without timing it. Set it before the host runs anything that schedules.
-var scheduled func(time.Duration)
-
 // after runs fn on the loop once d has passed, unless the program stopped.
 func (h *Host) after(d time.Duration, fn func()) {
-	if scheduled != nil {
-		scheduled(d)
+	if h.seams.scheduled != nil {
+		h.seams.scheduled(d)
 	}
 	ctx := h.ctx
 	go func() {
@@ -198,7 +194,11 @@ func (h *Host) showProgress(docs, pending int64, emb embedProgress, cursor int64
 	was := h.prog.busy
 	prev := h.prog.emb
 	polled := h.prog.polled
-	moved := h.prog.polled && cursor != h.prog.cursor
+	// moved: the index changed since the files were last listed. The first poll after entering a
+	// workspace counts as moved: the entry's listing and this poll are two reads, and a note
+	// indexed between them is in this poll's cursor but not in that listing, so taking the cursor
+	// as the baseline unlisted would keep it unlisted until the index next changed.
+	moved := !h.prog.polled || cursor != h.prog.cursor
 	h.prog.ws, h.prog.docs, h.prog.pending, h.prog.emb = h.ws, docs, pending, emb
 	h.prog.cursor, h.prog.polled = cursor, true
 	// a new embedding model (a switch starting, the new one taking over, or words only) makes the
@@ -282,7 +282,7 @@ func (h *Host) spinWhileEmbedding() {
 		return
 	}
 	h.prog.spinning = true
-	tk := h.ticket(nil, TicketWorkspace)
+	tk := h.ticket(nil, feature.TicketWorkspace)
 	var turn func()
 	turn = func() {
 		if !tk.Current() || h.prog.emb.working() == 0 || h.prog.emb.failing || h.prog.emb.queueState == "paused" || (h.prog.emb.queueState == "waiting" && h.prog.emb.waitingFor != "") {
@@ -298,22 +298,14 @@ func (h *Host) spinWhileEmbedding() {
 	h.after(spinEvery, turn)
 }
 
-// bar is done of total as ten cells, then the numbers.
-func bar(done, total int64) string {
-	const width = 10
-	done = min(max(done, 0), total)
-	filled := int(done * width / max(total, 1))
-	return fmt.Sprintf("%s%s %d/%d", strings.Repeat("█", filled), strings.Repeat("░", width-filled), done, total)
-}
-
 // progressText is the right slot's work: indexing as done of done+pending, then embedding (or a
 // switch's fill) as the texts covered of all of them, the spinner turning while the model works.
 // Each names the workspace it is for; while the daemon's one embedding queue serves another
 // workspace, the text names that one, the workspace being processed. It is in t's language.
-func progressText(t wording, p progress) string {
+func progressText(t feature.Wording, p progress) string {
 	var parts []string
 	if p.pending > 0 {
-		done := bar(p.docs, p.docs+p.pending)
+		done := feature.Bar(p.docs, p.docs+p.pending)
 		if p.ws != "" {
 			parts = append(parts, t.Trf("autodoc.notice.progress.indexing_workspace", p.ws, done))
 		} else {
@@ -338,7 +330,7 @@ func progressText(t wording, p progress) string {
 		if e.failing {
 			mark = "!" // waiting on the provider, not working
 		}
-		done := bar(e.texts-left, e.texts)
+		done := feature.Bar(e.texts-left, e.texts)
 		var what string
 		switch {
 		case e.target != "" && p.ws != "":

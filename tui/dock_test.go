@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"golang.org/x/text/width"
@@ -37,7 +38,7 @@ func (r *running) menuAutoHides() bool {
 // click on the hidden terminal's icon opens it, the keyboard in its shell; the editor's gives the
 // keyboard back to the page.
 func TestTheDockListsTheTerminalWhileItsShellRuns(t *testing.T) {
-	_, r := runShellTUI(t, nil)
+	_, r := runLineShellTUI(t, nil)
 	r.waitDock(t, "the editor alone", "editor")
 	if !r.menuAutoHides() {
 		t.Fatal("with the editor alone the bar does not auto-hide")
@@ -115,7 +116,7 @@ func TestTheDockIconsAreOneNeutralCell(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	icons := map[string]string{"editor": editorIcon, "plugin card": "⧉"}
-	for _, s := range onLoop(r, func() []PanelSpec { return r.h.panelSpecs() }) {
+	for _, s := range onLoop(r, func() []feature.PanelSpec { return r.h.panelSpecs() }) {
 		icons[s.ID] = s.Icon
 	}
 	for name, icon := range icons {

@@ -14,7 +14,7 @@ func TestBuiltinEntriesRunByTheirIDs(t *testing.T) {
 	r.connected(t)
 	run := func(id string) {
 		t.Helper()
-		if err := onLoop(r, func() error { return r.h.cat.run(id, nil) }); err != nil {
+		if err := onLoop(r, func() error { return r.h.cat.Run(id, nil) }); err != nil {
 			t.Fatalf("%s: %v", id, err)
 		}
 	}

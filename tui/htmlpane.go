@@ -7,10 +7,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/yongjohnlee80/golib/paths"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 
 	"github.com/yongjohnlee80/autodoc/core/export"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE HTML PREVIEW PANE — File › Preview HTML (docs/decisions/editor.md#the-html-preview-pane):
@@ -38,8 +40,8 @@ func (h *Host) native() bool {
 }
 
 // htmlView is the pane's HTMLView.
-func (h *Host) htmlView() (*widget.HTMLView, bool) {
-	return tuidecl.FindAs[*widget.HTMLView](h.p, "htmlView")
+func (h *Host) htmlView() (*htmlview.HTMLView, bool) {
+	return tuidecl.FindAs[*htmlview.HTMLView](h.p, "htmlView")
 }
 
 // openPaneInBrowser opens the note's page, as the pane shows it, in the browser: the pane's Open in
@@ -50,28 +52,28 @@ func (h *Host) openPaneInBrowser() {
 		h.notify(h.tr("autodoc.notice.htmlpane.html_preview_currently_accepts_markdown_files"))
 		return
 	}
-	source, theme := []byte(h.pageNow().Text), h.exportTheme()
-	var options export.Options
+	source, theme, env := []byte(h.pageNow().Text), h.exportTheme(), h.seams.env // read on the loop
+	options := export.Options{Chart: h.chart}
 	if full := h.diskPath(); full != "" {
 		options.Base, options.Document = filepath.Dir(full), full
 	}
 	h.say(h.tr("autodoc.notice.htmlpane.opening_the_page_in_the_browser"))
-	do(h, func(ctx context.Context) answerOf[string] {
+	do(h, func(ctx context.Context) feature.AnswerOf[string] {
 		content, err := export.RenderWith(source, export.HTML, theme, options)
 		if err != nil {
-			return answerOf[string]{err: err}
+			return feature.AnswerFailed[string](err)
 		}
-		path, err := htmlPreviewFile(content)
+		path, err := htmlPreviewFile(env, content)
 		if err != nil {
-			return answerOf[string]{err: err}
+			return feature.AnswerFailed[string](err)
 		}
-		return answerOf[string]{v: path, err: h.browser(ctx, path)}
-	}, func(a answerOf[string]) {
-		if a.err != nil {
-			h.failed(h.tr("autodoc.notice.htmlpane.the_browser_did_not_open"), a.err)
+		return feature.Answered(path, h.browser(ctx, path))
+	}, func(a feature.AnswerOf[string]) {
+		if a.Err() != nil {
+			h.failed(h.tr("autodoc.notice.htmlpane.the_browser_did_not_open"), a.Err())
 			return
 		}
-		h.say(h.trf("autodoc.notice.htmlpane.html_preview_opened_in_the_browser", filepath.Base(a.v)))
+		h.say(h.trf("autodoc.notice.htmlpane.html_preview_opened_in_the_browser", filepath.Base(a.Value)))
 	})
 }
 
@@ -115,7 +117,7 @@ func (h *Host) htmlPaneShown() bool { return h.panelOpen["htmlPane"] }
 // renderHTMLPane exports the editor's text off the loop and shows it in the pane, its images read
 // from the note's folder and its blocks carrying their source bytes.
 func (h *Host) renderHTMLPane() {
-	tk := h.ticket(&h.htmlPane.gen, TicketLocal)
+	tk := h.ticket(&h.htmlPane.gen, feature.TicketLocal)
 	source, theme := h.pageNow().Text, h.exportTheme()
 	options := export.Options{SourceSpans: true}
 	dir, root, base := "", "", ""
@@ -124,15 +126,15 @@ func (h *Host) renderHTMLPane() {
 		options.Base, options.Document = dir, full
 		root, base = h.resourcesFor(h.file.ws, h.file.path)
 	}
-	do(h, func(context.Context) answerOf[[]byte] {
+	do(h, func(context.Context) feature.AnswerOf[[]byte] {
 		page, err := export.RenderWith(source, export.HTML, theme, options)
-		return answerOf[[]byte]{v: page, err: err}
-	}, func(a answerOf[[]byte]) {
+		return feature.Answered(page, err)
+	}, func(a feature.AnswerOf[[]byte]) {
 		if !tk.Current() {
 			return // an edit since: its render follows
 		}
-		if a.err != nil {
-			h.failed(h.tr("autodoc.notice.htmlpane.html_preview"), a.err)
+		if a.Err() != nil {
+			h.failed(h.tr("autodoc.notice.htmlpane.html_preview"), a.Err())
 			return
 		}
 		v, ok := h.htmlView()
@@ -145,12 +147,12 @@ func (h *Host) renderHTMLPane() {
 			h.htmlPane.dir, h.htmlPane.dirSet = key, true
 			v.SetOnRefused(h.resourceRefused)
 			if dir != "" {
-				v.SetImageResolver(widget.DirResources(root, base))
+				v.SetImageResolver(htmlview.DirResources(root, base))
 			} else {
 				v.SetImageResolver(nil)
 			}
 		}
-		v.SetHTML(a.v)
+		v.SetHTML(a.Value)
 		h.followCursorInPane()
 	})
 }
@@ -186,7 +188,18 @@ func (h *Host) htmlLinkAs(a authority, href string) {
 	}
 	switch scheme {
 	case "file":
-		h.openAbsoluteAs(a, filepath.FromSlash(u.Path))
+		// golib's reader names the OS path: a drive's file:///C:/x and a share's file://server/x on
+		// Windows, where the URL's path alone is /C:/x. A fragment or query names a place in the file.
+		file := strings.TrimSpace(href)
+		if i := strings.IndexAny(file, "?#"); i >= 0 {
+			file = file[:i]
+		}
+		p, err := paths.FromURL(file)
+		if err != nil {
+			h.notify(fmt.Sprintf("%s names no file on this computer", href))
+			return
+		}
+		h.openAbsoluteAs(a, string(p))
 		return
 	case "":
 	default:

@@ -1347,6 +1347,10 @@
         <source>This window lost its crew scope %1 while away; its agents now live under %2.</source>
         <translation>Esta ventana perdió su ámbito de equipo %1 mientras estaba fuera; sus agentes viven ahora bajo %2.</translation>
     </message>
+    <message id="autodoc.crew.names_kept">
+        <source>Agent folders from an earlier AutoDoc kept their old names, since their new ones were already there: %1</source>
+        <translation>Algunas carpetas de agentes de un AutoDoc anterior conservaron sus nombres antiguos, porque los nuevos ya existían: %1</translation>
+    </message>
     <message id="autodoc.crew.scope_unlisted">
         <source>This window's crew scope is held, but not listed for a successor: %1</source>
         <translation>El ámbito de equipo de esta ventana está tomado, pero no anotado para un sucesor: %1</translation>
@@ -3977,6 +3981,18 @@ LO QUE NECESITA UNA TECLA
         <source>This &amp;machine</source>
         <translation>Esta &amp;máquina</translation>
     </message>
+    <message id="autodoc.main.title_bar">
+        <source>Title &amp;bar</source>
+        <translation>&amp;Barra de título</translation>
+    </message>
+    <message id="autodoc.main.title_bar_own">
+        <source>&amp;2. AutoDoc's own</source>
+        <translation>&amp;2. La propia de AutoDoc</translation>
+    </message>
+    <message id="autodoc.main.title_bar_system">
+        <source>&amp;1. The system's</source>
+        <translation>&amp;1. La del sistema</translation>
+    </message>
     <message id="autodoc.main.todos">
         <source>&amp;Todos</source>
         <translation>&amp;Tareas</translation>
@@ -5429,6 +5445,14 @@ LO QUE NECESITA UNA TECLA
         <source>theme: %1</source>
         <translation>tema: %1</translation>
     </message>
+    <message id="autodoc.notice.titlebar.from_the_next_start">
+        <source>the title bar changes at the next start: the window takes it as it opens</source>
+        <translation>la barra de título cambia en el próximo inicio: la ventana la toma al abrirse</translation>
+    </message>
+    <message id="autodoc.notice.titlebar.no_title_bar_s">
+        <source>no title bar %1: system or own</source>
+        <translation>no hay barra de título %1: system u own</translation>
+    </message>
     <message id="autodoc.notice.todomove.moved_to">
         <source>%1 moved to %2 with its task: the buffer follows it</source>
         <translation>%1 se movió a %2 con su tarea: el búfer lo sigue</translation>
@@ -5472,6 +5496,10 @@ LO QUE NECESITA UNA TECLA
     <message id="autodoc.notice.todos.todos_is_loaded_read_only_its_store_was_released">
         <source>todos: %1 is loaded, read-only: its store was released (todos.release)</source>
         <translation>tareas: %1 está cargado, en solo lectura: su almacén fue liberado (todos.release)</translation>
+    </message>
+    <message id="autodoc.notice.todos.todos_the_store_of_is_not_listed">
+        <source>todos: the store of %1 isn't listed, so no other is shown in its place</source>
+        <translation>tareas: el almacén de %1 no está en la lista, así que no se muestra otro en su lugar</translation>
     </message>
     <message id="autodoc.notice.todos.todos_refreshed_moved_archived_rewritten">
         <source>todos: refreshed: %1 moved, %2 archived, %3 rewritten</source>
@@ -5534,8 +5562,8 @@ LO QUE NECESITA UNA TECLA
         <translation>Actualizar: install-autodoc.sh no instaló este AutoDoc; actualízalo como lo instalaste</translation>
     </message>
     <message id="autodoc.notice.update.the_update_exited">
-        <source>Update: update.sh exited %1; its tab in the terminal panel says why</source>
-        <translation>Actualizar: update.sh terminó con %1; su pestaña en el panel del terminal dice por qué</translation>
+        <source>Update: %2 exited %1; its tab in the terminal panel says why</source>
+        <translation>Actualizar: %2 terminó con %1; su pestaña en el panel del terminal dice por qué</translation>
     </message>
     <message id="autodoc.notice.update.update">
         <source>Update</source>

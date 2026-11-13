@@ -3,6 +3,7 @@ package config_test
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -60,6 +61,18 @@ access   = ["label_id"]
 
 // load writes src as server.toml in a test directory, with the environment the good file names,
 // and loads it.
+// tomlString is s as a TOML basic string, whatever s holds: a backslash, a quote, an apostrophe.
+// It is JSON's string, whose escapes are all TOML's, with the one character JSON leaves raw and
+// TOML refuses (U+007F) escaped.
+func tomlString(t *testing.T, s string) string {
+	t.Helper()
+	b, err := json.Marshal(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.ReplaceAll(string(b), "\x7f", `\u007F`)
+}
+
 func load(t *testing.T, src string) (*config.Server, error) {
 	t.Helper()
 	t.Setenv("TEST_SERVER_DSN", "postgres://u:secret-password@db.internal/app")
@@ -92,7 +105,7 @@ func TestAGoodConfigurationLoads(t *testing.T) {
 		t.Errorf("HTTP %+v", s.HTTP)
 	}
 	src := s.Sources[0]
-	if src.Tenant != "music" || !strings.HasSuffix(src.View, "/views/track.view") || !filepath.IsAbs(src.View) ||
+	if src.Tenant != "music" || filepath.Base(src.View) != "track.view" || filepath.Base(filepath.Dir(src.View)) != "views" || !filepath.IsAbs(src.View) ||
 		src.Refresh != 24*time.Hour || src.Interval != time.Minute || src.Lag != 2*time.Minute || !slices.Equal(src.Access, []string{"label_id"}) {
 		t.Errorf("Source %+v", src)
 	}
@@ -104,6 +117,8 @@ func TestAGoodConfigurationLoads(t *testing.T) {
 // What a minimal file leaves out takes its default: the schema, the provider's URL, the slots,
 // the durations; and no [http] is no HTTP API.
 func TestTheDefaults(t *testing.T) {
+	// absolute on any OS, kept as written; the apostrophe is one a user's folder may hold
+	view := filepath.Join(t.TempDir(), "the user's", "t.view")
 	s, err := load(t, `
 [postgres]
 dsn_env = "TEST_SERVER_DSN"
@@ -112,7 +127,7 @@ provider = "ollama"
 model = "nomic-embed-text"
 [[source]]
 tenant = "t"
-view = "/abs/t.view"
+view = `+tomlString(t, view)+`
 access = ["org"]
 `)
 	if err != nil {
@@ -121,7 +136,7 @@ access = ["org"]
 	if s.Postgres.Schema != config.DefaultSchema || s.Embedding.BaseURL != config.DefaultOllama || s.Embedding.Slots != config.DefaultSlots || s.HTTP != nil {
 		t.Errorf("%+v", s)
 	}
-	if src := s.Sources[0]; src.View != "/abs/t.view" || src.Refresh != config.DefaultRefresh || src.Interval != config.DefaultInterval || src.Lag != config.DefaultLag {
+	if src := s.Sources[0]; src.View != view || src.Refresh != config.DefaultRefresh || src.Interval != config.DefaultInterval || src.Lag != config.DefaultLag {
 		t.Errorf("source %+v", src)
 	}
 	s, err = load(t, strings.Replace(good, `base_url = "https://embeddings.example.internal/v1"`, "", 1))
@@ -272,14 +287,18 @@ func TestWarningsAndTLS(t *testing.T) {
 	if len(s.Warnings) != 1 || !strings.Contains(s.Warnings[0], "shorter than 32 bytes") || strings.Contains(s.Warnings[0], "short\"") {
 		t.Errorf("warnings %v", s.Warnings)
 	}
-	dir := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "the user's") // an apostrophe a user's folder may hold
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	for _, f := range []string{"c.pem", "k.pem"} {
 		if err := os.WriteFile(filepath.Join(dir, f), []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	tls := strings.Replace(good, `listen = "127.0.0.1:8730"`, "listen = \"0.0.0.0:8730\"\ntls_cert = \""+dir+"/c.pem\"\ntls_key = \""+dir+"/k.pem\"", 1)
-	if s, err := load(t, tls); err != nil || s.HTTP.TLSKey != dir+"/k.pem" {
+	cert, key := filepath.Join(dir, "c.pem"), filepath.Join(dir, "k.pem")
+	tls := strings.Replace(good, `listen = "127.0.0.1:8730"`, "listen = \"0.0.0.0:8730\"\ntls_cert = "+tomlString(t, cert)+"\ntls_key = "+tomlString(t, key), 1)
+	if s, err := load(t, tls); err != nil || s.HTTP.TLSKey != key {
 		t.Errorf("TLS off loopback: %v", err)
 	}
 	if s, err := load(t, strings.Replace(good, `listen = "127.0.0.1:8730"`, `listen = "localhost:8730"`, 1)); err != nil || s.HTTP.Listen != "localhost:8730" {

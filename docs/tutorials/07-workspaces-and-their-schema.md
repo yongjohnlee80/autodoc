@@ -3,7 +3,7 @@
 A **workspace** is a folder AutoDoc indexes: its Markdown, text and YAML files, `.git` skipped.
 
 - **Ctrl+W** (SPC w) switches workspace. In the Vim editor mode's Insert, Ctrl+W is Vim's and deletes a word: press Esc first.
-- **Manage…** (SPC W) adds one (a name and its folder), renames it, edits it, or deletes it. Deleting removes the index only: the files stay.
+- **Manage…** (SPC W) adds one (a name and its folder), renames it, edits it, or deletes it. Deleting removes the index only: the files stay. On Windows, the folder of a workspace AutoDoc serves can't be deleted or renamed: delete the workspace here first.
 - `autodoc --ui <name>` opens that workspace; without a name, the one used last.
 
 **A schema** says what a document's frontmatter holds: its fields, their kinds, the values they take. Give the workspace one in **Manage… › Edit…**: name the file, suggested `.autodoc/schema.yaml`.

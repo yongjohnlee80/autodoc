@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/internal/userperm"
+	"github.com/yongjohnlee80/autodoc/internal/userperm/userpermtest"
 	"github.com/yongjohnlee80/golib/gui/record"
 )
 
@@ -68,6 +70,7 @@ func TestOpenDebugRecordingNamesTheFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	userpermtest.ExposeNew(t, dir) // a file made there the ordinary way is exposed: only a private create keeps it private
 	path := filepath.Join(dir, "rec.jsonl")
 	pipeR, pipeW, err := os.Pipe()
 	if err != nil {
@@ -97,14 +100,12 @@ func TestOpenDebugRecordingNamesTheFile(t *testing.T) {
 	if !strings.Contains(string(data), `"Kind":"mount"`) {
 		t.Fatalf("the recording holds %q; want the recorded line", string(data))
 	}
-	// the file holds everything typed: it is created private
-	st, err := os.Stat(path)
+	// the file holds everything typed: it is created private, as this OS keeps a file private
+	pf, err := userperm.OpenPrivate(path)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("the recording is not private to this user: %v", err)
 	}
-	if st.Mode().Perm() != 0o600 {
-		t.Fatalf("the recording's mode is %v; want 0600, private", st.Mode().Perm())
-	}
+	_ = pf.Close()
 }
 
 // An existing path is refused, never truncated — and a symlink is refused, never

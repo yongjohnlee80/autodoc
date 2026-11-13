@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
+
+	"github.com/yongjohnlee80/autodoc/internal/localfs"
 )
 
 // A theme's name is a QML module segment, [a-z][a-z0-9_]*, and never a built-in's: anything else
@@ -166,13 +168,27 @@ func TestTheLoadersFilesystemRefusesWhatIsNotAThemesFile(t *testing.T) {
 
 // Directory is themes/ beside the config file named, or beside the default config.
 func TestDirectoryIsBesideTheConfig(t *testing.T) {
-	got, err := Directory(filepath.Join("/etc", "autodoc", "config.toml"))
-	if err != nil || got != filepath.Join("/etc", "autodoc", "themes") {
+	etc := t.TempDir() // an absolute directory on any OS
+	got, err := Directory(filepath.Join(etc, "autodoc", "config.toml"))
+	if err != nil || got != filepath.Join(etc, "autodoc", "themes") {
 		t.Errorf("Directory of a named config: %q, %v", got, err)
 	}
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "cfg"))
 	got, err = Directory("")
 	if err != nil || filepath.Base(got) != "themes" || !strings.HasPrefix(got, os.Getenv("XDG_CONFIG_HOME")) {
 		t.Errorf("Directory of the default config: %q, %v", got, err)
+	}
+}
+
+// A themes folder that is a file is a problem Open says, on every OS: on Windows, reading a file
+// as a folder gives an error errors.Is takes for fs.ErrNotExist, which once passed for "no themes"
+// (localfs.ReadDirIfAny).
+func TestOpenSaysAThemesFolderThatIsAFile(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "themes")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if c := Open(file); len(c.Problems) != 1 || !errors.Is(c.Problems[0], localfs.ErrNotAFolder) {
+		t.Fatalf("a themes file: %v; want its one problem, that it is not a folder", c.Problems)
 	}
 }

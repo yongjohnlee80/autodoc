@@ -41,7 +41,7 @@ func TestAGatedScriptAsksAndIsHeld(t *testing.T) {
 	r.wantText(t, ":pkg ungranted",
 		"[nil needs workspace.read: not granted][nil needs workspace.write: not granted]")
 
-	onLoop(r, func() bool { r.h.asker.accepted(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); return true })
 	r.s.WaitFor(t, "the grant kept", func(string) bool {
 		return onLoop(r, func() bool { return r.h.prefs.luaGrants["pkg"]["workspace.read"] })
 	})
@@ -164,9 +164,9 @@ func TestAGatedScriptHearsItsGrantAnswered(t *testing.T) {
 		answer func()
 		want   string
 	}{
-		{"closed", func() { r.h.asker.closed() }, "pkg false workspace.read,clipboard needs workspace.read: not granted"},
-		{"not now", func() { r.h.asker.rejected(); r.h.asker.closed() }, "pkg false workspace.read,clipboard needs workspace.read: not granted"},
-		{"allow", func() { r.h.asker.accepted(); r.h.asker.closed() }, "pkg true workspace.read,clipboard nil"},
+		{"closed", func() { r.h.asker.Closed() }, "pkg false workspace.read,clipboard needs workspace.read: not granted"},
+		{"not now", func() { r.h.asker.Rejected(); r.h.asker.Closed() }, "pkg false workspace.read,clipboard needs workspace.read: not granted"},
+		{"allow", func() { r.h.asker.Accepted(); r.h.asker.Closed() }, "pkg true workspace.read,clipboard nil"},
 	} {
 		if i > 0 { // Not now is not remembered: the package's requires asks again, as at its next start
 			onLoop(r, func() bool { luaGrants{r.h}.Request("pkg", []string{"workspace.read", "clipboard"}); return true })
@@ -210,12 +210,12 @@ end)`))
 	}
 	got := func() []string { return onLoop(r, func() []string { return slices.Clone(heard) }) }
 	r.s.WaitForText(t, "let the Lua script pkg use workspace.read?")
-	onLoop(r, func() bool { r.h.asker.accepted(); r.h.asker.closed(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); r.h.asker.Closed(); return true })
 	r.s.WaitForText(t, "let the Lua script pkg use clipboard?")
 	if h := got(); len(h) != 1 || h[0] != "true workspace.read" {
 		t.Fatalf("after the first card: heard %q, want its one answer", h)
 	}
-	onLoop(r, func() bool { r.h.asker.rejected(); r.h.asker.closed(); return true })
+	onLoop(r, func() bool { r.h.asker.Rejected(); r.h.asker.Closed(); return true })
 	r.s.WaitFor(t, "the second card's answer", func(string) bool { return len(got()) > 1 })
 	if h := got(); len(h) != 2 || h[1] != "false clipboard" {
 		t.Fatalf("after the second card: heard %q, want its answer, false clipboard", h)
@@ -244,9 +244,9 @@ autodoc.on("grant", function(ed, info) error("the grant handler broke") end)`))
 		t.Fatal(err)
 	}
 	r.s.WaitForText(t, "let the Lua script quiet use clipboard?")
-	onLoop(r, func() bool { r.h.asker.accepted(); r.h.asker.closed(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); r.h.asker.Closed(); return true })
 	r.s.WaitForText(t, "let the Lua script loud use workspace.read?")
-	onLoop(r, func() bool { r.h.asker.accepted(); r.h.asker.closed(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); r.h.asker.Closed(); return true })
 	r.s.WaitForText(t, "the grant handler broke")
 	if !onLoop(r, func() bool {
 		return r.h.prefs.luaGrants["quiet"]["clipboard"] && r.h.prefs.luaGrants["loud"]["workspace.read"]

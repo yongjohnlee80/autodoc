@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"go/ast"
@@ -29,7 +30,9 @@ import (
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/style"
 
+	"github.com/yongjohnlee80/autodoc/internal/proctree"
 	"github.com/yongjohnlee80/autodoc/plugin"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE PLUGINS (docs/decisions/plugins.md#plugins-are-separate-programs) — the Plugins menu lists
@@ -41,9 +44,46 @@ import (
 
 const testPluginArg = "autodoc-test-plugin"
 
+// setupRecorderEnv, set to a folder, makes this test binary a stand-in for an agent's own autodoc
+// asked its crew setup: it writes its arguments (one a line), its environment and its working
+// folder there (args, env, pwd) and answers a setup, or, with setupAnswerEnv "other", something
+// that is none (crewguide_test.go).
+const (
+	setupRecorderEnv = "AUTODOC_TUI_SETUP_RECORDER"
+	setupAnswerEnv   = "AUTODOC_TUI_SETUP_ANSWER"
+)
+
+// recordSetup is that stand-in.
+func recordSetup(dir string) int {
+	wd, _ := os.Getwd()
+	for name, text := range map[string]string{"args": strings.Join(os.Args[1:], "\n") + "\n",
+		"env": strings.Join(os.Environ(), "\n") + "\n", "pwd": wd + "\n"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o600); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+	}
+	if os.Getenv(setupAnswerEnv) == "other" {
+		fmt.Println("something else")
+		return 0
+	}
+	fmt.Println(`{"argv":[],"env":{},"mail_via":"mcp"}`)
+	return 0
+}
+
 func TestMain(m *testing.M) {
+	if dir := os.Getenv(setupRecorderEnv); dir != "" {
+		os.Exit(recordSetup(dir))
+	}
+	if os.Getenv(argvPrinterEnv) == "1" {
+		_ = json.NewEncoder(os.Stdout).Encode(os.Args[1:])
+		os.Exit(0)
+	}
 	if len(os.Args) >= 3 && os.Args[1] == testPluginArg {
 		os.Exit(runTestPlugin(os.Args[2]))
+	}
+	if os.Getenv(heldGitEnv) != "" {
+		os.Exit(heldGitMain()) // git, as heldGit's clone that waits (heldgit_test.go)
 	}
 	if os.Getenv(bridgeCellEnv) != "" {
 		bridgeCell() // a stand-in crew helper (crewbridges_test.go): it waits to be signalled
@@ -54,10 +94,11 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	registryCacheDir = func() (string, error) { return cache, nil }
-	offerAgentSetup = false  // the setup cells turn it on (agentsetup_test.go)
-	offerVimQuestion = false // the Vim question's cells turn it on (vimquestion_test.go)
-	registryURL = "http://127.0.0.1:1/index.json"
+	// The package's own defaults, set once before any test runs: each test tunes its own from them
+	// (seams_test.go).
+	defaultSeams.registry = registrySource{url: "http://127.0.0.1:1/index.json", cacheDir: func() (string, error) { return cache, nil }}
+	defaultSeams.offerAgentSetup = false  // the setup cells turn it on (agentsetup_test.go)
+	defaultSeams.offerVimQuestion = false // the Vim question's cells turn it on (vimquestion_test.go)
 	code := m.Run()
 	_ = os.RemoveAll(cache)
 	os.Exit(code)
@@ -66,8 +107,19 @@ func TestMain(m *testing.M) {
 // runTestPlugin is the test plugin, in one of its modes.
 func runTestPlugin(mode string) int {
 	switch mode {
-	case "silent": // never answers
-		select {}
+	case "true": // a build step that succeeds, on every OS (no true program on Windows)
+		return 0
+	case "step": // an install build, as sh -c would run it, on every OS (teststep_test.go)
+		if len(os.Args) < 4 {
+			fmt.Fprintln(os.Stderr, "step: no script")
+			return 2
+		}
+		return testStep(os.Args[3])
+	case "silent": // never answers: asleep, never a bare select{}, which a process with no other
+		// goroutine ends as a deadlock (exit status 2), as Windows' test binary is
+		for {
+			time.Sleep(time.Hour)
+		}
 	case "otherprotocol": // answers in a protocol its manifest does not say
 		conn := testStdio()
 		done := make(chan struct{})
@@ -206,11 +258,11 @@ func runTestPlugin(mode string) int {
 			return 1
 		}
 		return 0
+	case "deaf": // ignores plugin.close and SIGTERM, starting nothing: only the kill ends it
+		signal.Ignore(syscall.SIGTERM)
 	case "stubborn": // ignores plugin.close and SIGTERM, and starts a child of its own
 		signal.Ignore(syscall.SIGTERM)
-		child := exec.Command("sleep", "60")
-		_ = child.Start()
-		fmt.Fprintf(os.Stderr, "child %d\n", child.Process.Pid)
+		startTestChild()
 	}
 	e := &echo{mode: mode}
 	if err := plugin.Serve(context.Background(), e); err != nil {
@@ -220,12 +272,27 @@ func runTestPlugin(mode string) int {
 	return 0
 }
 
-// testStdio is the plugin's stdin and stdout, pollable, as plugin.Serve makes them.
-func testStdio() net.Conn {
-	for _, fd := range []int{0, 1} {
-		_ = syscall.SetNonblock(fd, true)
+// startTestChild starts the test binary as a silent plugin, a child that sleeps until it is ended,
+// on every OS, and writes its pid to the plugin's log as "child <pid>".
+func startTestChild() {
+	exe, err := os.Executable()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "child:", err)
+		return
 	}
-	return plugin.FileConn(os.NewFile(0, "stdin"), os.NewFile(1, "stdout"))
+	child := exec.Command(exe, testPluginArg, "silent")
+	if err := child.Start(); err != nil {
+		fmt.Fprintln(os.Stderr, "child:", err)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "child %d\n", child.Process.Pid)
+}
+
+// testStdio is the plugin's stdin and stdout as plugin.Serve makes them: pollable descriptors on
+// Unix, the process's own handles on Windows (testStdioFiles).
+func testStdio() net.Conn {
+	in, out := testStdioFiles()
+	return plugin.FileConn(in, out)
 }
 
 // echo draws what it has been sent: its size and theme, and the keys, one row each; q asks the host
@@ -247,9 +314,15 @@ func (e *echo) Open(p *plugin.Peer, o plugin.Open) {
 	if e.mode == "stubborn" {
 		fmt.Fprintln(os.Stderr, "stubborn: opened")
 	}
+	if e.mode == "leaver" { // starts a child; a key then ends it of itself, leaving the child running
+		startTestChild()
+	}
 }
 
 func (e *echo) Key(k plugin.Key) {
+	if e.mode == "leaver" { // exits of itself, its child left running
+		os.Exit(0)
+	}
 	if e.mode == "snap" && k.Key == "w" {
 		e.hold()
 		return
@@ -360,6 +433,9 @@ func (e *echo) Close() {
 	fmt.Fprintln(os.Stderr, "echo: closing")
 	if e.mode == "stubborn" {
 		select {} // never returns: the host must stop it
+	}
+	for e.mode == "deaf" {
+		time.Sleep(time.Hour) // never returns either, asleep (silent's note)
 	}
 }
 
@@ -501,12 +577,10 @@ func installPluginAt(t *testing.T, dir, name, kind, mode, extra string, p int) {
 	}
 }
 
-// shorten sets the plugin deadlines for a test and puts them back after it — registered before the
-// TUI runs, so it is undone after the TUI's own cleanups.
+// shorten sets the plugin deadlines for a test's programs, before they start.
 func shorten(t *testing.T, handshake, grace, term time.Duration) {
-	a, b, c := pluginHandshake, pluginGrace, pluginTermGrace
-	pluginHandshake, pluginGrace, pluginTermGrace = handshake, grace, term
-	t.Cleanup(func() { pluginHandshake, pluginGrace, pluginTermGrace = a, b, c })
+	s := tune(t)
+	s.pluginHandshake, s.pluginGrace, s.pluginTermGrace = handshake, grace, term
 }
 
 // pluginTUI runs the TUI with the plugins in dir, and stops what it started when the test ends.
@@ -537,19 +611,44 @@ func pluginTUIOn(t *testing.T, d *daemon, dir, luaDir string) (*running, string)
 	logs := t.TempDir()
 	r := runTUI(t, NewSession(d.sock, nil), Options{Plugins: Plugins{Dir: dir, LogDir: logs, Socket: d.sock}, LuaDir: luaDir})
 	r.connected(t)
+	stopPluginRunsAtTheEnd(t, r)
+	return r, logs
+}
+
+// stopPluginRunsAtTheEnd shuts down, at the test's end, every plugin run r's program still has
+// (running, or stopped and still closing), and waits for each: a run's process works in its
+// plugin's folder, which Windows won't remove while it does, so the folder's TempDir cleanup, run
+// after this one, can. Linux would let the folder go and the process run on, unseen.
+// A cell that quit its program has no loop to read on: its runs are read there and then, the loop's
+// state this goroutine's once the program has stopped (Quit closes after Run returns).
+func stopPluginRunsAtTheEnd(t *testing.T, r *running) {
+	t.Helper()
 	t.Cleanup(func() {
-		runs := onLoop(r, func() []*pluginRun {
+		collect := func() []*pluginRun {
 			var out []*pluginRun
 			for _, p := range r.h.plugins.running {
 				out = append(out, p)
 			}
+			for p := range r.h.plugins.stopping { // stopped, still closing: its folder is in use until it exits
+				out = append(out, p)
+			}
 			return out
-		})
+		}
+		got := make(chan []*pluginRun, 1)
+		r.h.p.Post(func() { got <- collect() })
+		var runs []*pluginRun
+		select {
+		case runs = <-got:
+		case <-r.s.Quit(): // the program has stopped: nothing posted runs now
+			runs = collect()
+		case <-time.After(decltest.WaitTimeout): // a loop held: the cell's failure, not a hang of the run
+			t.Errorf("the program's loop never answered within %s: its plugin runs were not shut down", decltest.WaitTimeout)
+			return
+		}
 		for _, p := range runs {
 			p.shutdown()
 		}
 	})
-	return r, logs
 }
 
 func (r *running) openPlugin(key string) *pluginRun {
@@ -575,25 +674,26 @@ func (r *running) waitNotice(t *testing.T, text string) {
 	t.Helper()
 	deadline := time.Now().Add(20 * time.Second)
 	for !onLoop(r, func() bool {
-		for _, n := range r.h.noticeLog.items {
-			if strings.Contains(n.text, text) {
+		for _, n := range r.h.noticeLog.Items {
+			if strings.Contains(n.Text, text) {
 				return true
 			}
 		}
 		return false
 	}) {
 		if time.Now().After(deadline) {
-			t.Fatalf("no notification %q; the history: %v", text, onLoop(r, func() []notice { return r.h.noticeLog.items }))
+			t.Fatalf("no notification %q; the history: %v", text, onLoop(r, func() []feature.Notice { return r.h.noticeLog.Items }))
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 }
 
-func pidAlive(pid int) bool { return syscall.Kill(pid, 0) == nil }
+func pidAlive(pid int) bool { return proctree.Alive(pid) }
 
 // TestThePluginsMenuListsThePluginsFolder: each plugin is an entry, one that cannot run is listed
 // disabled with why, and a directory with no plugin.toml, or a clone being added, is not listed.
 func TestThePluginsMenuListsThePluginsFolder(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "echo", "echo", 30, 6)
 	for name, toml := range map[string]string{
@@ -649,6 +749,7 @@ func TestThePluginsMenuListsThePluginsFolder(t *testing.T) {
 // shows what it draws, told the size and the theme; keys reach it in order, Esc does not; a
 // frame's colours are the theme vocabulary; a title it sets shows; Esc closes it and stops it.
 func TestAPluginsDialogShowsItsFramesAndTakesItsKeys(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "echo", "echo", 30, 6)
 	r, logs := pluginTUI(t, dir)
@@ -703,6 +804,7 @@ func TestAPluginsDialogShowsItsFramesAndTakesItsKeys(t *testing.T) {
 // TestAPluginThatFailsClosesItsDialogAndSaysWhy: a crash, silence, another protocol, a command that
 // is not there, each closes the dialog with a toast naming the cause.
 func TestAPluginThatFailsClosesItsDialogAndSaysWhy(t *testing.T) {
+	t.Parallel()
 	// the plugins that answer get a handshake longer than a loaded runner's start of this test binary
 	// (the plugin) under -race; only the one that never answers is held to the short deadline
 	shorten(t, 30*time.Second, 2*time.Second, time.Second)
@@ -720,10 +822,10 @@ func TestAPluginThatFailsClosesItsDialogAndSaysWhy(t *testing.T) {
 	r.keys(t, key('x'))
 	r.waitNotice(t, "crash exited (exit status 3): boom: the test plugin crashed")
 
-	onLoop(r, func() bool { pluginHandshake = 4 * time.Second; return true }) // read as a plugin opens, on the loop
+	onLoop(r, func() bool { r.h.seams.pluginHandshake = 4 * time.Second; return true }) // read as a plugin opens, on the loop
 	r.openPlugin("silent")
 	r.waitNotice(t, "silent did not answer in 4s")
-	onLoop(r, func() bool { pluginHandshake = 30 * time.Second; return true })
+	onLoop(r, func() bool { r.h.seams.pluginHandshake = 30 * time.Second; return true })
 
 	r.openPlugin("future")
 	r.waitNotice(t, fmt.Sprintf("future speaks protocol %d; its manifest says 1", plugin.Protocol+1))
@@ -740,22 +842,14 @@ func TestAPluginThatFailsClosesItsDialogAndSaysWhy(t *testing.T) {
 // TestTheCloseStopsAStubbornPluginAndWhatItStarted: a plugin that ignores plugin.close and SIGTERM
 // is killed after the deadlines, with the child it started, while it is busy — nothing of it runs.
 func TestTheCloseStopsAStubbornPluginAndWhatItStarted(t *testing.T) {
+	t.Parallel()
 	shorten(t, 5*time.Second, 200*time.Millisecond, 200*time.Millisecond)
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "stubborn", "stubborn", 30, 6)
 	r, logs := pluginTUI(t, dir)
 	run := r.openPlugin("stubborn")
 	r.waitShown(t, "open 30x6")
-	var child int
-	deadline := time.Now().Add(5 * time.Second)
-	for child == 0 && time.Now().Before(deadline) {
-		b, _ := os.ReadFile(filepath.Join(logs, "stubborn.log"))
-		fmt.Sscanf(string(b), "child %d", &child)
-		time.Sleep(10 * time.Millisecond)
-	}
-	if child == 0 || !pidAlive(child) {
-		t.Fatalf("the plugin's child is not running (%d)", child)
-	}
+	child := waitTestChild(t, logs, "stubborn")
 	pid := run.cmd.Process.Pid
 	r.keys(t, esc())
 	select {
@@ -763,15 +857,95 @@ func TestTheCloseStopsAStubbornPluginAndWhatItStarted(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the close did not end")
 	}
+	// Unix: SIGKILL to its group. Windows: the job terminated with code 1, Stop and kill alike.
 	var ee *exec.ExitError
-	if !errors.As(run.exitErr, &ee) || ee.ProcessState.String() != "signal: killed" {
+	if !errors.As(run.exitErr, &ee) {
+		t.Errorf("the plugin ended with %v, want it ended by the stop", run.exitErr)
+	} else if runtime.GOOS == "windows" && ee.ExitCode() != 1 {
+		t.Errorf("the plugin ended with %v, want exit status 1 (its job terminated)", run.exitErr)
+	} else if runtime.GOOS != "windows" && ee.ProcessState.String() != "signal: killed" {
 		t.Errorf("the plugin ended with %v, want killed", run.exitErr)
 	}
-	time.Sleep(50 * time.Millisecond) // the child's reaping is init's
 	for _, p := range []int{pid, child} {
-		if pidAlive(p) && !zombie(p) {
+		if !waitGone(p, 2*time.Second) {
 			t.Errorf("process %d is still running", p)
 		}
+	}
+}
+
+// TestAPluginThatExitsLeavesItsChildAsEachOSHoldsIt: a plugin that starts a child, then exits of
+// itself at a key (once the child is seen running), is closed. On Windows the close of its job ends the child it left; on Unix its group was
+// never signalled, so the child lives on (the stated difference between the two).
+func TestAPluginThatExitsLeavesItsChildAsEachOSHoldsIt(t *testing.T) {
+	t.Parallel()
+	shorten(t, 5*time.Second, 200*time.Millisecond, 200*time.Millisecond)
+	dir := t.TempDir()
+	installTestPlugin(t, dir, "leaver", "leaver", 30, 6)
+	r, logs := pluginTUI(t, dir)
+	run := r.openPlugin("leaver")
+	if run == nil {
+		t.Fatal("the plugin did not start")
+	}
+	r.waitShown(t, "open 30x6")
+	child := waitTestChild(t, logs, "leaver")
+	r.keys(t, key('e')) // the plugin exits of itself
+	select {
+	case <-run.shutDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the plugin's exit did not close it")
+	}
+	if run.exitErr != nil {
+		t.Errorf("the plugin ended with %v, want it to exit of itself", run.exitErr)
+	}
+	if runtime.GOOS == "windows" {
+		if !waitGone(child, 2*time.Second) {
+			t.Errorf("the child %d the plugin left is still running after its job closed", child)
+		}
+		return
+	}
+	time.Sleep(200 * time.Millisecond) // a group stop, were one sent, has landed by now
+	if !pidAlive(child) || zombie(child) {
+		t.Errorf("the child %d the plugin left was ended; on Unix it lives on", child)
+	}
+}
+
+// waitTestChild is the pid of the child the plugin name started (startTestChild), read from its log
+// in logs once it is there and running. The test's end kills it if it still runs: a cell that fails
+// because the child outlived the stop leaves no sleeper behind.
+func waitTestChild(t *testing.T, logs, name string) int {
+	t.Helper()
+	var child int
+	deadline := time.Now().Add(5 * time.Second)
+	for child == 0 && time.Now().Before(deadline) {
+		b, _ := os.ReadFile(filepath.Join(logs, name+".log"))
+		if i := strings.Index(string(b), "child "); i >= 0 {
+			fmt.Sscanf(string(b[i:]), "child %d", &child)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if child == 0 || !pidAlive(child) {
+		t.Fatalf("the plugin's child is not running (%d)", child)
+	}
+	t.Cleanup(func() {
+		if p, err := os.FindProcess(child); err == nil && pidAlive(child) {
+			_ = p.Kill()
+		}
+	})
+	return child
+}
+
+// waitGone says p ended within d: no longer running, or a zombie its parent has yet to reap (whose
+// reaping is init's once its parent is gone).
+func waitGone(p int, d time.Duration) bool {
+	deadline := time.Now().Add(d)
+	for {
+		if !pidAlive(p) || zombie(p) {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 
@@ -819,6 +993,7 @@ func (r *running) dialogEdges(title string) (left, right int) {
 // left opens on the right, its first; Place moves it to the left at once and keeps the choice in the
 // store; with no placements it is centred.
 func TestADialogSitsWhereItsManifestSaysAndTheUserMovesIt(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "echo", "echo", 30, 6)
 	installTestPlugin(t, dir, "side", "echo", 30, 6)
@@ -827,17 +1002,7 @@ func TestADialogSitsWhereItsManifestSaysAndTheUserMovesIt(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{Plugins: Plugins{Dir: dir, LogDir: logs, Socket: d.sock}})
 	r.connected(t)
-	t.Cleanup(func() {
-		for _, p := range onLoop(r, func() []*pluginRun {
-			var out []*pluginRun
-			for _, p := range r.h.plugins.running {
-				out = append(out, p)
-			}
-			return out
-		}) {
-			p.shutdown()
-		}
-	})
+	stopPluginRunsAtTheEnd(t, r)
 
 	r.openPlugin("side")
 	r.waitShown(t, "╭ Side")
@@ -874,6 +1039,7 @@ func TestADialogSitsWhereItsManifestSaysAndTheUserMovesIt(t *testing.T) {
 // TestAStoredPlacementIsReadAtStart: the placement kept in the store is the dialog's from the
 // start; one the manifest does not offer is ignored, and the first it offers is used.
 func TestAStoredPlacementIsReadAtStart(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "side", "echo", 30, 6)
 	appendManifest(t, dir, "side", "placements = [\"right\", \"left\"]\n")
@@ -885,17 +1051,7 @@ func TestAStoredPlacementIsReadAtStart(t *testing.T) {
 	r.s.WaitFor(t, "the stored placement read", func(string) bool {
 		return onLoop(r, func() bool { return r.h.prefs.pluginPlace["side"] == "left" })
 	})
-	t.Cleanup(func() {
-		for _, p := range onLoop(r, func() []*pluginRun {
-			var out []*pluginRun
-			for _, p := range r.h.plugins.running {
-				out = append(out, p)
-			}
-			return out
-		}) {
-			p.shutdown()
-		}
-	})
+	stopPluginRunsAtTheEnd(t, r)
 	r.openPlugin("side")
 	r.waitShown(t, "╭ Side")
 	if l, _ := r.dialogEdges("Side"); l != 0 {
@@ -913,6 +1069,7 @@ func TestAStoredPlacementIsReadAtStart(t *testing.T) {
 // TestEscHidesAPluginWithItsOwnQuit: esc = "hide" hides the dialog and tells the plugin, which
 // runs on; its menu entry shows it again and tells it so; its own close ends it.
 func TestEscHidesAPluginWithItsOwnQuit(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "game", "echo", 30, 6)
 	appendManifest(t, dir, "game", "esc = \"hide\"\n")
@@ -946,6 +1103,7 @@ func TestEscHidesAPluginWithItsOwnQuit(t *testing.T) {
 // TestAHeightInPercentIsTheScreensShare: height = "80%" lays the dialog out at 80% of the rows it
 // may use, and the plugin is opened at that size.
 func TestAHeightInPercentIsTheScreensShare(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "tall", "echo", 30, 6)
 	b, _ := os.ReadFile(filepath.Join(dir, "tall", "plugin.toml"))
@@ -966,11 +1124,22 @@ func TestAHeightInPercentIsTheScreensShare(t *testing.T) {
 // once re-opened fd 1 and left the original os.Stdout unreferenced, so its finalizer closed the
 // pipe at the next GC and the plugin ended some seconds in, cleanly and without a word.
 func TestAPluginOutlivesGarbageCollection(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "gc", "gc", 30, 6)
 	r, _ := pluginTUI(t, dir)
 	run := r.openPlugin("gc")
-	r.waitShown(t, "tick 60") // dozens of collections in
+	// its count past 60, dozens of collections in. It draws a new count every 20 ms, faster than a
+	// loaded screen draws, so a frame showing exactly "tick 60" may never be drawn: the count is read
+	ticks := regexp.MustCompile(`tick (\d+)`)
+	r.waitWithin(t, "a count of 60 or more", 20*time.Second, func() bool {
+		m := ticks.FindStringSubmatch(r.s.String())
+		n := -1
+		if m != nil {
+			n, _ = strconv.Atoi(m[1])
+		}
+		return n >= 60
+	})
 	select {
 	case <-run.exited:
 		t.Fatalf("the plugin exited under garbage collection: %v", run.exitErr)
@@ -981,6 +1150,7 @@ func TestAPluginOutlivesGarbageCollection(t *testing.T) {
 // TestAPluginIsToldTheThemeAndTheSizeItGot: a theme switch reaches the open plugin, and a dialog
 // larger than the screen is laid out smaller, and the plugin is opened at that size.
 func TestAPluginIsToldTheThemeAndTheSizeItGot(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "echo", "echo", 200, 60)
 	r, _ := pluginTUI(t, dir) // 100×30
@@ -1016,12 +1186,19 @@ func commitPlugin(t *testing.T, repo, title, build string) {
 // commitPluginNamed commits the test plugin's manifest, as the plugin name, into repo.
 func commitPluginNamed(t *testing.T, repo, name, title, build string) {
 	t.Helper()
+	commitPluginAs(t, repo, name, "echo", title, build)
+}
+
+// commitPluginAs commits the test plugin's manifest, as the plugin name in mode, into repo.
+func commitPluginAs(t *testing.T, repo, name, mode, title, build string) {
+	t.Helper()
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
-	toml := fmt.Sprintf("name = %q\ntitle = %q\nkind = \"dialog\"\nprotocol = 1\ncommand = [%q, %q, \"echo\"]\n[dialog]\nwidth = 30\nheight = 6\n[install]\nbuild = [\"sh\", \"-c\", %q]\n",
-		name, title, exe, testPluginArg, build)
+	// the build runs through the test binary's step mode, as sh -c would run it: on every OS
+	toml := fmt.Sprintf("name = %q\ntitle = %q\nkind = \"dialog\"\nprotocol = 1\ncommand = [%q, %q, %q]\n[dialog]\nwidth = 30\nheight = 6\n[install]\nbuild = [%q, %q, \"step\", %q]\n",
+		name, title, exe, testPluginArg, mode, exe, testPluginArg, build)
 	if err := os.WriteFile(filepath.Join(repo, "plugin.toml"), []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1056,7 +1233,7 @@ func (r *running) question(t *testing.T) string {
 			return q
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("PluginConfirm never opened; the history: %v", onLoop(r, func() []notice { return r.h.noticeLog.items }))
+			t.Fatalf("PluginConfirm never opened; the history: %v", onLoop(r, func() []feature.Notice { return r.h.noticeLog.Items }))
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -1076,6 +1253,7 @@ func entries(t *testing.T, dir string) []string {
 // commit, the build and the command, with the warning; No throws the clone away; Yes builds it, puts
 // it in the folder and in the Plugins menu, and it runs.
 func TestAddingAPluginFromAGitURLAsksFirst(t *testing.T) {
+	t.Parallel()
 	repo := pluginRepo(t, "Echo", "echo built > built.txt")
 	commit := runGit(t, repo, "rev-parse", "--short", "HEAD")
 	dir := t.TempDir()
@@ -1089,8 +1267,12 @@ func TestAddingAPluginFromAGitURLAsksFirst(t *testing.T) {
 	r.keys(t, decltest.Type(url)...)
 	r.keys(t, enter())
 	q := r.question(t)
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, want := range []string{"Echo (echo)", "from  " + url, "at    " + commit,
-		"Its build runs:  sh -c echo built > built.txt", "It then starts:  ", "at your own risk"} {
+		"Its build runs:  " + exe + " " + testPluginArg + " step echo built > built.txt", "It then starts:  ", "at your own risk"} {
 		if !strings.Contains(q, want) {
 			t.Errorf("the question lacks %q:\n%s", want, q)
 		}
@@ -1125,6 +1307,7 @@ func TestAddingAPluginFromAGitURLAsksFirst(t *testing.T) {
 // cannot run, one already installed and a build that fails are each refused, saying why, and leave
 // nothing in the folder.
 func TestWhatIsNotAPluginIsNotAdded(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	r, logs := pluginTUI(t, dir)
 	add := func(url string) { r.h.p.Post(func() { r.h.plugins.addPlugin(url) }) }
@@ -1168,6 +1351,7 @@ func TestWhatIsNotAPluginIsNotAdded(t *testing.T) {
 // commit; Update… fetches, asks about the new commit's build, and moves to it; it says when there is
 // nothing new; Remove… asks, then takes the directory away and the menu entry with it.
 func TestAPluginIsUpdatedAndRemovedFromTheManager(t *testing.T) {
+	t.Parallel()
 	repo := pluginRepo(t, "Echo", "echo one > built.txt")
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "local", "echo", 30, 6)
@@ -1244,6 +1428,7 @@ func TestAPluginIsUpdatedAndRemovedFromTheManager(t *testing.T) {
 // plugin, naming it; each key's own rules hold. A 0209 manifest still runs, and a valid card and
 // service are listed enabled.
 func TestProtocolTwosManifestKeys(t *testing.T) {
+	t.Parallel()
 	const head = "kind = \"dialog\"\ncommand = [\"x\"]\n"
 	const svc = "kind = \"service\"\nprotocol = 2\ncommand = [\"x\"]\n"
 	for _, c := range []struct{ toml, reason string }{
@@ -1296,6 +1481,7 @@ func (r *running) textAt(text string) (x, y int) {
 // plugin.focus true, and its keys go to the plugin; Esc gives them back to the editor, plugin.focus
 // false, and closes the panel, the plugin told plugin.hide and running on.
 func TestACardTakesTheKeysOnlyWhenFocused(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 36\nheight = 8\nplacements = [\"top-right\"]\n")
 	r, logs := pluginTUI(t, dir)
@@ -1344,6 +1530,7 @@ func TestACardTakesTheKeysOnlyWhenFocused(t *testing.T) {
 // newest, at the tail of what came before it; the keys and commands all wait, in order. Documents
 // never count toward the queue's bound, and anything else past it is a plugin not reading.
 func TestTheHostKeepsOnlyTheNewestDocumentWaiting(t *testing.T) {
+	t.Parallel()
 	q := newOutQueue()
 	var want []string
 	for i := 1; i <= 50; i++ {
@@ -1403,6 +1590,7 @@ func TestTheHostKeepsOnlyTheNewestDocumentWaiting(t *testing.T) {
 // refused, a document as well as any other notification, though the queue is empty and far under
 // its bound; the sender, popping, hears it is done at once with nothing to send.
 func TestAClosedQueueTakesNothingMore(t *testing.T) {
+	t.Parallel()
 	q := newOutQueue()
 	q.close()
 	for _, n := range []outNote{
@@ -1431,6 +1619,7 @@ func TestAClosedQueueTakesNothingMore(t *testing.T) {
 // hides a shown one, its plugin running on (docs/decisions/plugins.md#plugin-sessions: Turn off
 // stops it); and it starts one that is off.
 func TestPluginCommandsOnTheSpcPCard(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "alpha", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 36\nheight = 8\n"+
 		"[[commands]]\nid = \"toggle\"\ntitle = \"Show the card\"\nkey = \"s\"\n"+
@@ -1526,6 +1715,7 @@ func TestPluginCommandsOnTheSpcPCard(t *testing.T) {
 // override, as a manifest refuses it): the first in the manifest keeps it, and the other is listed
 // unbound with why.
 func TestAPreferenceRebindsAPluginCommand(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "alpha", "dialog", "echo", "[dialog]\nwidth = 36\nheight = 8\n"+
 		"[[commands]]\nid = \"a\"\ntitle = \"Do a\"\nkey = \"s\"\n"+
@@ -1623,17 +1813,19 @@ func docsIn(lines []string) []string {
 // version rising with each edit. A note too large for the link is sent too large. A plugin that did
 // not declare the feed is never sent it.
 func TestTheDocumentFeed(t *testing.T) {
+	// Serial: it holds a 1 MiB document, which golib's editor lays out whole on SetValue (about
+	// 5 GB under -race), so two such cells at once pass a gate lane's memory. It runs in parallel
+	// again once the editor lays out only what it shows (the AM-6 memory fix in golib).
 	dir := t.TempDir()
 	installPlugin2(t, dir, "stats", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 60\nheight = 6\n[feed]\ndocument = true\n")
 	installPlugin2(t, dir, "quiet", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 30\nheight = 4\nplacements = [\"bottom-left\"]\n")
 	// a pause longer than a slow (-race) runner takes between two keys of one burst, so the burst is
 	// one document whatever the runner; the debounce is the same code at any length
-	delay := pluginFeedDelay
-	pluginFeedDelay = time.Second
-	t.Cleanup(func() { pluginFeedDelay = delay })
+	const delay = time.Second
+	tune(t).pluginFeed = delay
 	r, logs := pluginTUI(t, dir)
 	// any feed the start scheduled has fired, to nobody: the one sent now is the plugin's start's
-	time.Sleep(3 * pluginFeedDelay)
+	time.Sleep(3 * delay)
 	onLoop(r, func() bool { r.h.plugins.openPlugin("stats"); r.h.plugins.openPlugin("quiet"); return true })
 	first := docsIn(waitSaid(t, logs, "stats", "doc "))
 	if len(first) != 1 || !strings.HasPrefix(first[0], `doc "" v`) || !strings.Contains(first[0], `"" at 1:1 large=false`) {
@@ -1647,7 +1839,7 @@ func TestTheDocumentFeed(t *testing.T) {
 		return onLoop(r, func() bool { return r.h.core.Value() == "héllo" && r.h.core.Mode().String() == "NORMAL" })
 	})
 	waitSaid(t, logs, "stats", `doc "" v`+fmt.Sprint(onLoop(r, func() int { return r.h.pageVersion })))
-	time.Sleep(2 * pluginFeedDelay) // nothing more comes of that burst
+	time.Sleep(2 * delay) // nothing more comes of that burst
 	got := docsIn(said(t, logs, "stats"))
 	if len(got) != 2 || !strings.Contains(got[1], `"héllo" at 1:5 large=false`) {
 		t.Fatalf("one document for the burst, the text typed and the cursor on o (column 5): %q", got)
@@ -1685,14 +1877,13 @@ func version(t *testing.T, doc string) int {
 // event of its feed; one that starts at launch runs with the TUI. Each is opened with no size.
 //
 // The page shown at start is the feed's first event (docs/decisions/plugins.md#the-document-feed:
-// sent when a note opens), so onfeed starts pluginFeedDelay after it. The cell holds that send (the
+// sent when a note opens), so onfeed starts the seams' pluginFeed after it. The cell holds that send (the
 // delay an hour) while it looks for onfeed not running, then puts the delay back and types: the
 // edit's send replaces the held one, and onfeed starts with it. Asserting "not running" against the
 // real 300 ms raced the debounce, and a slow (-race, GUI) runner lost.
 func TestServicesStartOnUseOrAtLaunch(t *testing.T) {
-	delay := pluginFeedDelay
-	pluginFeedDelay = time.Hour                   // before the TUI starts: its loop reads it from then on
-	t.Cleanup(func() { pluginFeedDelay = delay }) // after the TUI's own cleanup has stopped it
+	t.Parallel()
+	tune(t).pluginFeed = time.Hour // before the TUI starts: its loop reads its own copy from then on
 	dir := t.TempDir()
 	installPlugin2(t, dir, "oncmd", "service", "echo", "[[commands]]\nid = \"run\"\ntitle = \"Run\"\nkey = \"r\"\n")
 	installPlugin2(t, dir, "onfeed", "service", "echo", "[feed]\ndocument = true\n")
@@ -1717,7 +1908,7 @@ func TestServicesStartOnUseOrAtLaunch(t *testing.T) {
 	if onLoop(r, func() bool { return r.h.plugins.running["onfeed"] != nil }) {
 		t.Fatal("onfeed runs before its feed's first event")
 	}
-	onLoop(r, func() bool { pluginFeedDelay = delay; return true }) // on the loop, which reads it
+	onLoop(r, func() bool { r.h.seams.pluginFeed = defaultSeams.pluginFeed; return true }) // on the loop, which reads it
 	r.keys(t, key('i'), key('k'), esc())
 	waitSaid(t, logs, "onfeed", `doc "" v`)
 }
@@ -1726,6 +1917,7 @@ func TestServicesStartOnUseOrAtLaunch(t *testing.T) {
 // after the risk, the question says what the manifest declares: a card or a service and when it
 // starts, the feed, and the commands with their letters; a 0209 dialog declares nothing more.
 func TestTheInstallConfirmationListsWhatIsDeclared(t *testing.T) {
+	t.Parallel()
 	read := func(toml string) manifest {
 		dir := filepath.Join(t.TempDir(), "p")
 		_ = os.MkdirAll(dir, 0o755)
@@ -1763,6 +1955,7 @@ func TestTheInstallConfirmationListsWhatIsDeclared(t *testing.T) {
 // runs: it decodes, strictly, with no reason against it. One sample declares editor menu rows
 // ([[menu]], protocol 11).
 func TestThePluginReferenceKeepsUp(t *testing.T) {
+	t.Parallel()
 	doc, err := os.ReadFile("../docs/plugins.md")
 	if err != nil {
 		t.Fatal(err)
@@ -1837,6 +2030,7 @@ func TestThePluginReferenceKeepsUp(t *testing.T) {
 // command, and the feed. It needs python3 with msgpack (AUTODOC_TEST_PYTHON names another
 // interpreter); without one it is skipped, saying so.
 func TestThePythonExampleSpeaksTheProtocol(t *testing.T) {
+	t.Parallel()
 	py := os.Getenv("AUTODOC_TEST_PYTHON")
 	if py == "" {
 		py = "python3"
@@ -1879,6 +2073,7 @@ func TestThePythonExampleSpeaksTheProtocol(t *testing.T) {
 // plugin, the letter); run by id they run the plugin's command; the folder read anew without the
 // plugin takes them out, and SPC p with them. A plugin that cannot run has none.
 func TestPluginCommandsAreCatalogEntries(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "alpha", "dialog", "echo", "[dialog]\nwidth = 36\nheight = 8\n"+
 		"[[commands]]\nid = \"hello\"\ntitle = \"Say hello\"\nkey = \"h\"\n[[commands]]\nid = \"quiet\"\ntitle = \"Stay quiet\"\n")
@@ -1886,9 +2081,9 @@ func TestPluginCommandsAreCatalogEntries(t *testing.T) {
 	r, _ := pluginTUI(t, dir)
 	got := onLoop(r, func() []string {
 		var out []string
-		for _, e := range r.h.cat.entries() {
-			if e.Source == SourcePlugin {
-				out = append(out, fmt.Sprintf("%s %s %q %q", e.ID, e.Owner, e.Title, r.h.cat.owned(e.ID)))
+		for _, e := range r.h.cat.Entries() {
+			if e.Source == feature.SourcePlugin {
+				out = append(out, fmt.Sprintf("%s %s %q %q", e.ID, e.Owner, e.Title, r.h.cat.Owned(e.ID)))
 			}
 		}
 		return out
@@ -1900,16 +2095,21 @@ func TestPluginCommandsAreCatalogEntries(t *testing.T) {
 		help := strings.Join(strings.Fields(onLoop(r, func() string { return r.h.helpNow })), " ")
 		return strings.Contains(help, "the plugins' (SPC p) plugin.alpha.hello — · SPC p › Alpha h · Alpha: Say hello")
 	})
-	if err := onLoop(r, func() error { return r.h.cat.run("plugin.alpha.hello", nil) }); err != nil {
+	if err := onLoop(r, func() error { return r.h.cat.Run("plugin.alpha.hello", nil) }); err != nil {
 		t.Fatal(err)
 	}
 	r.waitShown(t, "command hello")
-	onLoop(r, func() bool { r.h.plugins.running["alpha"].close(""); return true })
+	run := onLoop(r, func() *pluginRun { p := r.h.plugins.running["alpha"]; p.close(""); return p })
+	select { // its process works in its folder until it exits: Windows won't remove the folder before
+	case <-run.shutDone:
+	case <-time.After(decltest.WaitTimeout):
+		t.Fatal("alpha's run never ended after its close")
+	}
 	if err := os.RemoveAll(filepath.Join(dir, "alpha")); err != nil {
 		t.Fatal(err)
 	}
 	onLoop(r, func() bool { r.h.plugins.loadPlugins(); return true })
-	if e := onLoop(r, func() *Entry { return r.h.cat.lookup("plugin.alpha.hello") }); e != nil {
+	if e := onLoop(r, func() *feature.Entry { return r.h.cat.Lookup("plugin.alpha.hello") }); e != nil {
 		t.Fatalf("a removed plugin's command stayed: %+v", e)
 	}
 	r.leader(t, 'p')
@@ -1920,6 +2120,7 @@ func TestPluginCommandsAreCatalogEntries(t *testing.T) {
 // plugin has says so; a plugin refused when it was read says its reason. A theme golib does not
 // know is sent with no colours, its name kept.
 func TestAPluginEntryThatStartsNothingSaysWhy(t *testing.T) {
+	t.Parallel()
 	r := runTUI(t, NewSession("unused", nil), Options{})
 	refused := pluginEntry{dir: "/plugins/broken", m: manifest{Name: "broken"}, reason: "it speaks protocol 9"}
 	onLoop(r, func() bool {
@@ -1935,7 +2136,7 @@ func TestAPluginEntryThatStartsNothingSaysWhy(t *testing.T) {
 		t.Fatalf("%d plugins started from entries that start nothing", n)
 	}
 	if onLoop(r, func() bool {
-		return slices.ContainsFunc(r.h.noticeLog.items, func(n notice) bool { return n.text == "no plugin " })
+		return slices.ContainsFunc(r.h.noticeLog.Items, func(n feature.Notice) bool { return n.Text == "no plugin " })
 	}) {
 		t.Error(`the empty entry ("no plugins yet") looked for a plugin named ""`)
 	}

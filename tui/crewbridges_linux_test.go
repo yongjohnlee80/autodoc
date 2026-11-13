@@ -16,6 +16,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/crew/crewtest"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // On screen, against a daemon serving crew: System › Crew Bridges lists a real bridge whose session
@@ -58,7 +59,7 @@ func TestCrewBridgesListsAndKillsARealOrphanOnScreen(t *testing.T) {
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.connected(t)
 	r.s.WaitFor(t, "the window holds its scope", func(string) bool {
-		return onLoop(r, func() bool { _, _, ok := r.h.crew.held(); return ok })
+		return onLoop(r, func() bool { _, _, ok := r.h.crew.Held(); return ok })
 	})
 	onLoop(r, func() bool { r.h.runEntry("crew.bridges"); return true })
 	r.s.WaitFor(t, "the orphaned bridge listed", func(sc string) bool {
@@ -67,7 +68,7 @@ func TestCrewBridgesListsAndKillsARealOrphanOnScreen(t *testing.T) {
 	})
 	// Kill on the row under the cursor, as the dialog's button sends it
 	if err := onLoop(r, func() error {
-		return r.h.reg.handlers["App.crewBridgeKill"]([]qml.SpecValue{{Kind: argNum, Raw: "0"}})
+		return r.h.reg.Handlers["App.crewBridgeKill"]([]qml.SpecValue{{Kind: feature.ArgNum, Raw: "0"}})
 	}); err != nil {
 		t.Fatal(err)
 	}

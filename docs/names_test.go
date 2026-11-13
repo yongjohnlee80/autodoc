@@ -26,6 +26,7 @@ var teamPaths = regexp.MustCompile(`(?i)reviews/(lector|zen|jarvis|bartz|juliet|
 // A release merges into main by a merge commit while one is listed, so the hash survives there.
 var publishedCommitsExempt = map[string]string{
 	"db4e20af2efd1360e034083039cb07d88a355b25": "the buffer tabs' placement commit (2026-11-07): its subject credits the decision to its owner by name; rewording it would rewrite every later canary commit",
+	"093a05437508c1196974bfe19d96b4e163380486": "filelock's Windows half (2026-11-09): its body names the machine that cross-compiles the gate; rewording it would rewrite every later canary commit",
 }
 
 // namesExempt are the files that may name the team: this guard, whose patterns spell the names out.

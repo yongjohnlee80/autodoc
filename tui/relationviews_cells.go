@@ -10,13 +10,6 @@ import (
 // Links (relationmap.go). withRelationViews writes them into main.qml on a terminal; a window
 // writes the window's (relationviews_gui.go).
 
-// cellRelationViews are a terminal's relation views, one graph store for both: the GlobeMap and
-// the Mindmap, in cells.
-func cellRelationViews(h *Host) []Feature {
-	store := newGraphStore(core{h}, core{h}, h.graphUserFile)
-	return []Feature{newCellGlobeMap(core{h}, store), newCellMindmap(core{h}, store)}
-}
-
 // cellRelationMenuQML is the terminal's Relations menu items for its GlobeMap and Mindmap.
 const cellRelationMenuQML = `            MenuItem { text: qsTrId("autodoc.gui.relations.globemap"); onTriggered: App.toggleGlobeMap() }
             MenuItem { text: qsTrId("autodoc.gui.relations.globemap_settings"); onTriggered: App.openGlobeSettings() }

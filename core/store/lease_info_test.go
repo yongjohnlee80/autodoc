@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -36,8 +37,8 @@ func TestLeaseInfoRoundTripsUnderEverySpellingOfTheStore(t *testing.T) {
 	if err != nil || got != li {
 		t.Fatalf("ReadLeaseInfo through the symlink = %+v, %v; want %+v", got, err, li)
 	}
-	if fi, err := os.Stat(filepath.Join(dir, ".autodoc-lease-"+id+".json")); err != nil || fi.Mode().Perm() != 0o600 {
-		t.Fatalf("the record is beside the store, 0600: %v, %v", fi, err)
+	if err := privateFile(filepath.Join(dir, ".autodoc-lease-"+id+".json")); err != nil {
+		t.Fatalf("the record is beside the store, private to this user: %v", err)
 	}
 }
 
@@ -112,6 +113,9 @@ func TestRemoveLeaseInfoTakesOnlyItsOwnRecord(t *testing.T) {
 func TestLeaseInfoInADirectoryItCannotWriteIsAnError(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root writes a read-only directory")
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows keeps no write permission in a folder's mode: a mode-0500 folder takes new files")
 	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "autodoc.db")

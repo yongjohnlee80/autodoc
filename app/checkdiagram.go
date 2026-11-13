@@ -4,17 +4,21 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/yongjohnlee80/autodoc/core/diagram"
+	"github.com/yongjohnlee80/autodoc/core/export"
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	pm "github.com/yongjohnlee80/golib/parse/mermaid"
 )
 
 // --check-diagram checks diagrams against the GUI's own renderer, with no UI: each file's Mermaid
-// diagram or Vega-Lite chart, or a Markdown file's mermaid and vega-lite fences, laid out by golib's
+// diagram or Vega-Lite chart, or a Markdown file's mermaid and vega-lite fences and the .mmd and
+// .chart.json files it embeds (![title](flow.mmd), alone on its line), laid out by golib's
 // gui/mermaid and gui/vegalite as the Rendered view lays them out. An agent checks a diagram before
 // it shows one; a chart or diagram golib does not draw says why in golib's words.
 //
@@ -33,16 +37,20 @@ const (
 var layDiagram func(lang, src string) error
 
 // checkDiagram is one diagram to check: its file and the line its source starts on there, its
-// language, and its source.
+// language, and its source. An embedded one names its embed too, as written, and why its file was
+// not read, if it was not.
 type checkDiagram struct {
 	file      string
 	line      int
 	lang, src string
+	embed     string
+	unread    error
 }
 
 // diagramsIn are the diagrams file holds: the whole of a .mmd or .mermaid (Mermaid), the whole of a
-// .chart.json or .vl.json (Vega-Lite), each mermaid and vega-lite fence of a .md (vegalite too), none
-// for a .md with none. Any other file is refused.
+// .chart.json or .vl.json (Vega-Lite), and in a .md each mermaid and vega-lite fence (vegalite too)
+// and each .mmd and .chart.json file it embeds, in the order of their lines; none for a .md with
+// none. Any other file is refused. An embed of anything else (a table, an image) is no diagram.
 func diagramsIn(file string) ([]checkDiagram, error) {
 	name := strings.ToLower(filepath.Base(file))
 	var lang string
@@ -68,6 +76,15 @@ func diagramsIn(file string) ([]checkDiagram, error) {
 	for _, f := range diagram.Fences(kind.ParseMarkdown(data)) {
 		out = append(out, checkDiagram{file: file, line: f.Line, lang: f.Lang, src: f.Src})
 	}
+	// the embeds are every reader's too (export.EmbedLines: the page's, the window's, the HTML
+	// preview's), each read where the page reads it (export.EmbedDiagramSource)
+	for _, e := range export.EmbedLines(data) {
+		lang, src, ok, err := export.EmbedDiagramSource(file, e.Dest)
+		if ok {
+			out = append(out, checkDiagram{file: file, line: e.Line + 1, lang: lang, src: src, embed: e.Dest, unread: err})
+		}
+	}
+	slices.SortStableFunc(out, func(a, b checkDiagram) int { return a.line - b.line })
 	return out, nil
 }
 
@@ -95,15 +112,43 @@ func checkDiagrams(files []string, out io.Writer) int {
 			continue
 		}
 		for _, d := range diagrams {
-			if err := layDiagram(d.lang, d.src); err != nil {
-				fmt.Fprintf(out, "%s:%d: not drawn: %v\n", d.file, d.line+errorLine(err), err)
+			if !d.report(out) {
 				code = diagramsNotDrawn
-				continue
 			}
-			fmt.Fprintf(out, "%s:%d: ok (%s)\n", d.file, d.line, d.lang)
 		}
 	}
 	return code
+}
+
+// report checks d and writes its line: "file:line: ok (mermaid)", "file:line: not drawn: <golib's
+// error>" (at the line of the file the error is in), and for an embed the embed after the note's
+// line: "note.md:7: flow.mmd: ok (mermaid)", "note.md:7: flow.mmd:3: not drawn: …", "note.md:7:
+// flow.mmd: missing file" or "…: not read: <why>". It reports whether d was drawn.
+func (d checkDiagram) report(out io.Writer) bool {
+	at := fmt.Sprintf("%s:%d: ", d.file, d.line)
+	if d.embed != "" {
+		at += d.embed + ": "
+		switch {
+		case errors.Is(d.unread, fs.ErrNotExist):
+			fmt.Fprintf(out, "%smissing file\n", at)
+			return false
+		case d.unread != nil:
+			fmt.Fprintf(out, "%snot read: %v\n", at, d.unread)
+			return false
+		}
+	}
+	if err := layDiagram(d.lang, d.src); err != nil {
+		switch {
+		case d.embed == "":
+			at = fmt.Sprintf("%s:%d: ", d.file, d.line+errorLine(err))
+		case errorLine(err) > 0:
+			at = fmt.Sprintf("%s:%d: %s:%d: ", d.file, d.line, d.embed, 1+errorLine(err))
+		}
+		fmt.Fprintf(out, "%snot drawn: %v\n", at, err)
+		return false
+	}
+	fmt.Fprintf(out, "%sok (%s)\n", at, d.lang)
+	return true
 }
 
 // errorLine is how far into its source golib's error is: the line of a Mermaid syntax error, or of

@@ -160,7 +160,9 @@ func TestStatusIsForOperatorsOnly(t *testing.T) {
 // The counts are the requests answered since they were last taken, by status class, and the
 // slowest; taking them starts them again from zero.
 func TestTheCountsAreTakenPerInterval(t *testing.T) {
-	f := &fake{}
+	// a search that takes longer than a tick of the coarsest clock (Windows' 15.6 ms), so the
+	// slowest is never measured as nothing
+	f := &fake{pause: 20 * time.Millisecond}
 	srv, h, _ := api(t, f)
 	post(t, srv, bearer, "application/json", valid)
 	post(t, srv, bearer, "application/json", valid)

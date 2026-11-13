@@ -231,7 +231,7 @@ type are user-only.
 For the same reason a gated script may not write the two preferences whose value is rights or a
 command: `lua.grants` and the agent profiles. Reading them is an ordinary read.
 
-In the code: `tui/catalog.go`, `tui/builtins.go`, `tui/scripting.go`
+In the code: `tui/feature/catalog.go`, `tui/builtins.go`, `tui/scripting.go`
 
 ## Path commands run within the workspace
 
@@ -278,7 +278,7 @@ script through a golib hook that runs only with nothing pending, so counts, oper
 their meaning, and golib stays free of Lua. The keys and rows belong to the engine that made them,
 and a reload drops them. A gated script's key or row checks `commands` when it runs.
 
-In the code: `tui/luakeys.go`, `tui/menurows.go`, `tui/qml/views/LuaKeys.qml`
+In the code: `tui/luakeys.go`, `tui/feature/menurows.go`, `tui/qml/views/LuaKeys.qml`
 
 ## KB types are git repos of files
 

@@ -5,18 +5,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // fakeBuffers is a BufferSource over editors kept by number; edited records Edited's calls.
 type fakeBuffers struct {
 	infos  []BufferInfo
-	eds    map[int]*widget.EditorCore
+	eds    map[int]*editor.EditorCore
 	edited []int
 }
 
 func (f *fakeBuffers) Buffers() []BufferInfo { return f.infos }
-func (f *fakeBuffers) Editor(n int) (*widget.EditorCore, bool) {
+func (f *fakeBuffers) Editor(n int) (*editor.EditorCore, bool) {
 	ed, ok := f.eds[n]
 	return ed, ok
 }
@@ -24,13 +24,13 @@ func (f *fakeBuffers) Edited(n int) { f.edited = append(f.edited, n) }
 
 // buffersEngine is an engine given two buffers: 1, a.md in kb, and 2, the draft; buffer 1's editor
 // runs the shown editor's commands, as the host's headless editors do.
-func buffersEngine(t *testing.T) (*Engine, *widget.EditorCore, *fakeBuffers, *[]string) {
+func buffersEngine(t *testing.T) (*Engine, *editor.EditorCore, *fakeBuffers, *[]string) {
 	t.Helper()
-	core := widget.NewEditorCore(widget.CoreInitialText("shown"))
+	core := editor.NewEditorCore(editor.CoreInitialText("shown"))
 	src := &fakeBuffers{
 		infos: []BufferInfo{{N: 1, Path: "a.md", Workspace: "kb", Kind: "markdown", Modified: true}, {N: 2, Kind: "markdown", Active: true}},
-		eds: map[int]*widget.EditorCore{
-			1: widget.NewEditorCore(widget.CoreInitialText("aaa"), widget.CoreCommands(core.Commands())),
+		eds: map[int]*editor.EditorCore{
+			1: editor.NewEditorCore(editor.CoreInitialText("aaa"), editor.CoreCommands(core.Commands())),
 			2: core,
 		},
 	}
@@ -104,8 +104,8 @@ editor.command{ name = "late", run = function() local ok, err = pcall(function()
 // runs the command on that buffer's editor.
 func TestAGatedBufferHandleRunNeedsCommands(t *testing.T) {
 	e, core, src, said := buffersEngine(t)
-	var on *widget.EditorCore
-	if err := core.Commands().Set(widget.Command{Name: "boom", Run: func(x widget.CommandContext) error { on = x.Core; return nil }}); err != nil {
+	var on *editor.EditorCore
+	if err := core.Commands().Set(editor.Command{Name: "boom", Run: func(x editor.CommandContext) error { on = x.Core; return nil }}); err != nil {
 		t.Fatal(err)
 	}
 	g := &fakeGrants{granted: map[string]map[string]bool{}, requested: map[string][]string{}}

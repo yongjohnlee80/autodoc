@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 )
 
 // diagramHelp is the diagram dialog's help line, as the preview last set it.
@@ -66,7 +66,7 @@ func TestATerminalWithoutImagesDrawsTheDiagramInCharacters(t *testing.T) {
 // Mermaid in characters with the native engine chosen, and mermaid.js's image again, saying why,
 // for a block golib does not draw. The menu is a terminal's too.
 func TestATerminalsPreviewOptionChoosesTheEngine(t *testing.T) {
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	tuneEnv(t, "XDG_CACHE_HOME="+t.TempDir())
 	if strings.Contains(string(layout), "qsTrId(\"autodoc.main.preview_option\")\n                visible: App.gui") {
 		t.Fatal("File › Preview option is a window's alone")
 	}
@@ -76,7 +76,7 @@ func TestATerminalsPreviewOptionChoosesTheEngine(t *testing.T) {
 	r.waitAttached(t, "kb")
 	onLoop(r, func() bool {
 		r.h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
-		r.h.rasterizeOverride = func(_ context.Context, _ []byte, p widget.Page) ([]byte, error) {
+		r.h.rasterizeOverride = func(_ context.Context, _ []byte, p htmlview.Page) ([]byte, error) {
 			return tallPage(t, p.Width, int(float64(p.MinHeight)*p.Scale)), nil
 		}
 		return true

@@ -54,6 +54,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/derived"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 )
 
 // Options is what a main hands Main: what makes its build its own.
@@ -79,6 +80,9 @@ type Options struct {
 	// ranker, the texts the ranker reads, and whether a search answers ranked or not at all. The zero
 	// value: the stored ranker models, over the chunks' texts, falling back to recall order.
 	Rank Rank
+	// guiDrawn, a test's, is told once --gui's window has its first frame, with quit, which ends the
+	// UI as a quit does (runGUI). nil: nothing is told, and the window is the backend itself.
+	guiDrawn func(quit func())
 }
 
 // Rank is a build's search ranking.
@@ -122,6 +126,7 @@ type build struct {
 	buildDate string
 	reg       *registrations.Table
 	rank      Rank
+	guiDrawn  func(quit func()) // Options.guiDrawn
 }
 
 // Main runs autodoc as its CLI does and returns the process's exit code: 2 for usage, 1 for an
@@ -132,7 +137,7 @@ func Main(ctx context.Context, args []string, o Options) int {
 
 func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer) int {
 	if rest, configPath, ok := crewCommandArgs(args); ok { // an agent's `autodoc crew|mail …` (docs/decisions/crew.md#the-agent-guide-and-commands), not a mode
-		return crewMainIn(ctx, configPath, rest, os.Stdin, stdout, stderr)
+		return crewMainIn(ctx, configFrom(configPath, procenv.Env(nil)), rest, os.Stdin, stdout, stderr)
 	}
 	chunkers, err := registrations.Builtin(o.Chunkers)
 	var reg *registrations.Table
@@ -146,14 +151,14 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 		fmt.Fprintln(stderr, "autodoc:", err)
 		return 1
 	}
-	b := build{version: o.Version, buildDate: o.BuildDate, reg: reg, rank: o.Rank}
+	b := build{version: o.Version, buildDate: o.BuildDate, reg: reg, rank: o.Rank, guiDrawn: o.guiDrawn}
 	fs := flag.NewFlagSet("autodoc", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Bool("serve", false, "run the daemon")
 	fs.Bool("ui", false, "run the TUI (starts --serve when nothing answers); a workspace name after the flags opens it")
 	fs.Bool("gui", false, "run the UI in a window instead of the terminal, as --ui does (a build with the GUI: make build on macOS, or on Linux with its window libraries); a workspace name after the flags opens it")
 	dev := fs.String("dev", "", "--ui and --gui: read the TUI's QML from this directory, and follow edits to it")
-	configPath := fs.String("config", "", "config file (default $XDG_CONFIG_HOME/autodoc/config.toml)")
+	configPath := fs.String("config", "", "config file (default $AUTODOC_CONFIG, else $XDG_CONFIG_HOME/autodoc/config.toml)")
 	fs.Bool("version", false, "print the version")
 	fs.Bool("contracts", false, `print the daemon's verb contracts and error codes, with no daemon; a verb or "domain.*" after the flags narrows them (AGENTS.md's tables)`)
 	fs.Bool("theme-reference", false, "print the installed agent-ready user-theme reference, with no UI or daemon")
@@ -164,7 +169,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	fs.Bool("new-theme", false, "copy a built-in theme under a new name beside config.toml; never overwrite")
 	fs.Bool("keymap-reference", false, "print the reference for keymap.xml, every key's command id with its keys, with no UI or daemon")
 	fs.Bool("commands-reference", false, "print the reference for the commands AutoDoc is built with: each one's id, its ':' name and arguments, with no UI or daemon")
-	fs.Bool("check-diagram", false, "check the diagrams in the files after the flags (.mmd, .mermaid, .chart.json, .vl.json, or a .md's mermaid and vega-lite fences) as --gui draws them, with golib's renderer; print ok or golib's error for each, with no UI or daemon. Exit 0 all drawn, 1 any not drawn, 2 no file, 3 a build without the GUI")
+	fs.Bool("check-diagram", false, "check the diagrams in the files after the flags (.mmd, .mermaid, .chart.json, .vl.json, or a .md's mermaid and vega-lite fences and the .mmd and .chart.json files it embeds) as --gui draws them, with golib's renderer; print ok or golib's error for each, with no UI or daemon. Exit 0 all drawn, 1 any not drawn, 2 no file, 3 a build without the GUI")
 	fs.Bool("diagram-reference", false, "print the Mermaid diagram kinds and the Vega-Lite subset --gui draws, read from golib's renderer, with no UI or daemon. Exit 3 in a build without the GUI")
 	fs.Bool("check-keymap", false, "check a keymap.xml (the file after the flags, or the one beside config.toml) as AutoDoc reads it; report every problem, without a UI or daemon")
 	fromTheme := fs.String("from", "sepia", "--new-theme: built-in starting theme (default sepia)")
@@ -363,7 +368,23 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	if !ok {
 		return code
 	}
+	*configPath = configFrom(*configPath, procenv.Env(nil))
 	return m.run(arg)
+}
+
+// EnvConfig names the config file a run reads when no --config names one: an agent's autodoc is
+// told its window's this way (on Windows the build itself is on the agent's PATH, with no wrapper to
+// pass --config).
+const EnvConfig = "AUTODOC_CONFIG"
+
+// configFrom is the config file a run reads: --config's (flag), else $AUTODOC_CONFIG's in env (an
+// empty one is none), else "" for the default. A relative one is the working directory's, as a
+// relative --config is.
+func configFrom(flag string, env procenv.Env) string {
+	if flag != "" {
+		return flag
+	}
+	return env.Get(EnvConfig)
 }
 
 // uiMode is --ui and --gui. SIGTERM and SIGHUP (the terminal gone): the program ends and keeps

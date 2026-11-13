@@ -51,6 +51,10 @@ type SetupInput struct {
 	// Servers are the MCP servers the daemon offers the session (none from a daemon without them): a
 	// kind that takes MCP servers delivers each its own way.
 	Servers []MCPServer
+	// NoAgentServer says the host can't run an agent's own server (a Codex agent's app-server, which
+	// a host runs in a process group of its own, which some systems lack): the agent then starts as
+	// one with no folder of its own for a server does, and the setup says so.
+	NoAgentServer bool
 }
 
 // MCPServer is an MCP server a crew session's CLI is given (its tools the crew's own, such as
@@ -67,7 +71,8 @@ type MCPServer struct {
 // FolderFile is a file a host writes into the agent's own folder (SetupInput.AgentDir): a CLI's
 // folder-scoped configuration, never a user-level file and never the user's project. Its Path is
 // local (filepath.IsLocal: relative, no "..", nothing outside the folder): SetupFor refuses any
-// other. A host writes it with mode 0600, since it may name the session's context.
+// other. A host writes it private to the user (0600 on Unix, an access list granting only the user
+// on Windows), replacing an earlier one, since it may name the session's context.
 type FolderFile struct {
 	Path    string `json:"path"` // relative to SetupInput.AgentDir
 	Content string `json:"content"`
@@ -123,13 +128,15 @@ type Setup struct {
 //   - Claude Code: the settings ClaudeSettings builds for the Claude Code on in.Env's PATH, which
 //     names only the hook events it knows; with none found, ClaudeFloor's, prompts unreported, and a
 //     notice. A Neovim host gets them as --settings; a window writes them into the agent's folder
-//     itself, so it gets no Argv.
+//     itself, so its Argv holds only --mcp-config, when it takes the crew MCP server.
 //   - OpenCode: AutoDoc's plugin, written into in.DataDir (AutoDoc's own folder, so setup writes
 //     it), and the OPENCODE_CONFIG_CONTENT that loads it, in.Env's own value extended.
 //   - Codex: one step after its start, the agent's autodoc registering the folder's thread, looking
 //     until it is found (crew endpoint --codex-here --wait); given in.Servers, an app-server of its
 //     own carrying them (Server), the TUI attached to it (codexSetup).
 //   - Antigravity (agy): its mail as in.Servers' tools (agySetup).
+//   - Junie: its mail as in.Servers' tools, their config in a folder of the agent's own that its
+//     command line adds (junieSetup).
 //   - the other kinds: nothing yet.
 //
 // Each kind's is its kindSetups entry; a new kind, or a kind taking in.Servers, changes only its own.
@@ -154,8 +161,8 @@ func SetupFor(in SetupInput, cache string) (Setup, error) {
 }
 
 // kindSetup adds kind's setup to s: its argv, env, files and allowance, and, once it takes them, the
-// MCP servers in.Servers names, delivered its own way (Claude's --mcp-config or the folder's
-// .mcp.json, OpenCode's mcp key, Antigravity's folder .agents/mcp_config.json found by --add-dir).
+// MCP servers in.Servers names, delivered its own way (Claude's --mcp-config naming a file of its
+// folder, OpenCode's mcp key, Antigravity's folder .agents/mcp_config.json found by --add-dir).
 type kindSetup func(in SetupInput, cache string, s *Setup) error
 
 // kindSetups are the kinds with a setup: a kind is added here, never by rewriting SetupFor.
@@ -164,6 +171,7 @@ var kindSetups = map[string]kindSetup{
 	KindCodex:    codexSetup,
 	KindOpenCode: opencodeSetup,
 	KindAgy:      agySetup,
+	KindJunie:    junieSetup,
 }
 
 // AgyBridgeCommand is the one shell command an agy crew agent runs, its guide's wake step and its
@@ -230,6 +238,45 @@ func agySetup(in SetupInput, _ string, s *Setup) error {
 	return nil
 }
 
+// JunieMCPFolder is the folder of the agent's own that holds Junie's MCP config (mcp.json), relative
+// to the agent's folder. Junie reads mcp.json from the folders --mcp-location names, beside its user
+// and project defaults, which stay on: the agent's own servers are added and nothing of the user's
+// is written. Which of two servers of one name Junie keeps is not documented, so a user server
+// named like the crew's may shadow it, or be shadowed.
+const JunieMCPFolder = ".junie-crew/mcp"
+
+// JunieMCPConfig is Junie's MCP config file in the agent's folder, in JunieMCPFolder.
+const JunieMCPConfig = JunieMCPFolder + "/mcp.json"
+
+// junieSetup gives a Junie agent its crew mail as in.Servers' tools
+// (docs/decisions/crew.md#the-crew-mcp-server): their config, mcp.json, in a folder of the agent's own
+// (FolderFiles), which its command line adds with --mcp-location. The config names no env, so the
+// server is expected to inherit the agent's (Junie documents neither way). No session-scoped
+// allowlist is documented for Junie (its rules are the user's ~/.junie/allowlist.json, which AutoDoc
+// never writes), so a tool call may ask the user; and it has no prompt reporter: its prompts are
+// unreported. Without servers or a folder it keeps its mail as commands, with a notice.
+func junieSetup(in SetupInput, _ string, s *Setup) error {
+	if len(in.Servers) == 0 || in.AgentDir == "" {
+		if len(in.Servers) > 0 {
+			s.Notices = append(s.Notices, "Junie's crew mail as MCP tools needs the agent's own folder, which this host didn't give: it reads its mail with the autodoc commands")
+		}
+		return nil
+	}
+	servers, err := mcpServers(in.Servers)
+	if err != nil {
+		return err
+	}
+	cfg, err := json.Marshal(map[string]any{"mcpServers": servers})
+	if err != nil {
+		return err
+	}
+	s.FolderFiles = append(s.FolderFiles, FolderFile{Path: JunieMCPConfig, Content: string(cfg)})
+	s.Argv = append(s.Argv, "--mcp-location", filepath.Join(in.AgentDir, filepath.FromSlash(JunieMCPFolder)))
+	s.Notices = append(s.Notices, "Junie may ask before each crew mail tool: its allowlist (~/.junie/allowlist.json, rules.mcpTools) can allow the autodoc server's tools")
+	s.MailVia = MailViaMCP
+	return nil
+}
+
 // mcpServers is servers as the mcpServers map agy's and Claude Code's configs share: each server's
 // command, args and, only when it has one, its env (the crew's own server has none: it inherits the
 // agent's, its session's context included).
@@ -248,6 +295,29 @@ func mcpServers(servers []MCPServer) (map[string]any, error) {
 	return out, nil
 }
 
+// ClaudeMCPConfig is the file of a Claude agent's own folder (SetupInput.AgentDir) holding its crew
+// MCP servers, which its --mcp-config names: their commands and args, and an env only a server of
+// its own carries (the crew's server has none), never a credential. A host writes it private, as
+// every folder file, replacing an earlier one.
+const ClaudeMCPConfig = ".autodoc-crew-mcp.json"
+
+// claudeMCPConfigArg is ClaudeMCPConfig as the agent's working folder (in.Dir) reaches it: its bare
+// name when the agent works in its own folder (in.AgentDir, a window's agent), else its absolute
+// path (Neovim's agent works in the user's project; Neovim starts it from its argv, with no shell
+// of its own). The bare name keeps the folder's own name off the command line: a crew folder's name
+// holds a scope's ":" encoded (%3A), and on Windows a CLI's .cmd shim reads its arguments again
+// through cmd.exe, where %3 is its third argument, so no command line through a .cmd shim may name
+// that folder, from either host.
+func claudeMCPConfigArg(in SetupInput) string {
+	// compared as paths (filepath.Rel cleans both, and on Windows folds case as the disk does), never
+	// as strings; core/paths is outside the comms module, which may import only its own packages. A
+	// relative Dir never matches the absolute AgentDir: Rel refuses the pair
+	if rel, err := filepath.Rel(in.AgentDir, in.Dir); err == nil && rel == "." {
+		return ClaudeMCPConfig
+	}
+	return filepath.Join(in.AgentDir, ClaudeMCPConfig)
+}
+
 // claudeSetup is crew.ClaudeSettings for the Claude Code on in.Env's PATH, the guide's commands
 // allowed: Neovim's --settings; a window writes them into the agent's folder itself.
 func claudeSetup(in SetupInput, cache string, s *Setup) error {
@@ -263,10 +333,17 @@ func claudeSetup(in SetupInput, cache string, s *Setup) error {
 	settings, prompts := ClaudeSettings(in.Autodoc, k)
 	s.Prompts = prompts
 	s.Allow = ClaudeAllow() // the guide's commands, for a session on CLI mail
-	if len(in.Servers) > 0 {
-		// the crew MCP server on its command line, on both hosts (a folder's .mcp.json would have the
-		// user approve its servers first), each tool allowed by its exact mcp__<server>__<tool>; never
-		// --strict-mcp-config, which would take the user's own MCP servers from their agent
+	switch {
+	case len(in.Servers) == 0:
+	case !filepath.IsAbs(in.AgentDir):
+		s.Notices = append(s.Notices, "Claude Code's crew mail over MCP needs the agent's own folder, which this host didn't give: the agent reads its mail through the CLI")
+	default:
+		// the crew MCP server in a file of the agent's own folder, named on the command line as the
+		// agent's working folder reaches it (claudeMCPConfigArg), on both hosts: never its JSON, whose
+		// quotes and, on Windows, backslashes a shell may change, and never the folder's .mcp.json,
+		// whose servers the user would approve first. Each tool is allowed by its exact
+		// mcp__<server>__<tool>; never --strict-mcp-config, which would take the user's own MCP
+		// servers from their agent
 		servers, err := mcpServers(in.Servers)
 		if err != nil {
 			return err
@@ -275,7 +352,8 @@ func claudeSetup(in SetupInput, cache string, s *Setup) error {
 		if err != nil {
 			return err
 		}
-		s.Argv = append(s.Argv, "--mcp-config", string(cfg))
+		s.FolderFiles = append(s.FolderFiles, FolderFile{Path: ClaudeMCPConfig, Content: string(cfg)})
+		s.Argv = append(s.Argv, "--mcp-config", claudeMCPConfigArg(in))
 		// least privilege: a session on MCP mail is allowed its tools, and of the guide's shell commands
 		// only the read-only contracts, which its guide points to
 		s.Allow = []string{ClaudeContractsAllow}
@@ -309,31 +387,38 @@ func claudeSetup(in SetupInput, cache string, s *Setup) error {
 // None of it is written to ~/.codex, and the shared app-server, where `-c` overrides can't go (a
 // TUI given any runs embedded, off every app-server: codex-cli 0.163.0), is left alone.
 // AUTODOC_CODEX_SERVER names the agent's server to its autodoc, for codex-here and the waker's
-// locator. With no folder of its own, a Codex that takes --no-daemon is given it
-// (codexHasNoDaemon), and has no step: there is no server to find its thread on, so it isn't woken,
-// and the setup says so. One whose Codex can't be read (not found, failing, or slow) is refused:
-// either way of starting it could be wrong.
+// locator. With no folder of its own, or on a host that can't run the agent's server
+// (NoAgentServer), there is no server of its own: a Codex that takes --no-daemon is given it
+// (codexHasNoDaemon), and has no step, since no server holds its thread to find, so it isn't woken,
+// and the setup says so; a Codex before the flag keeps the registration step, as it always had (it
+// has no shared daemon to keep off). One whose Codex can't be read (not found, failing, or slow) is
+// refused: either way of starting it could be wrong.
 func codexSetup(in SetupInput, _ string, s *Setup) error {
 	program := in.Program
 	if program == "" {
 		program = "codex"
 	}
 	register := []string{"crew", "endpoint", "--codex-here", "--since", SetupSince, "--wait", codexRegisterWait}
-	if in.AgentDir == "" {
+	if in.AgentDir == "" || in.NoAgentServer {
 		// its own server's socket lives in the agent's own folder: with none, the TUI runs its own,
-		// never Codex's shared daemon, which keeps the environment of whichever agent started it
+		// never Codex's shared daemon, which keeps the environment of whichever agent started it. A
+		// host that can't run the server (NoAgentServer) is the same: there is no server of its own
+		needs, why, remedy := "the agent's own folder", "Codex has no folder of its own for its app-server", "give the agent a folder of its own, or start it again"
+		if in.AgentDir != "" {
+			needs, why, remedy = "the agent's own app-server, which this system can't run", "this system can't run an app-server of the agent's own for Codex", "start it again once Codex answers"
+		}
 		if len(in.Servers) > 0 {
-			s.Notices = append(s.Notices, "Codex's crew MCP server needs the agent's own folder: its mail stays the CLI's")
+			s.Notices = append(s.Notices, "Codex's crew MCP server needs "+needs+": its mail stays the CLI's")
 		}
 		has, err := codexHasNoDaemon(program, in.Env, in.Dir)
 		if err != nil {
 			// unknown is neither: a start without the flag would run in the shared daemon, and one
 			// with it would fail on a Codex before it
-			return fmt.Errorf("crew: can't tell whether Codex takes --no-daemon, which keeps an agent with no folder of its own off Codex's shared daemon (%w): give the agent a folder of its own, or start it again", err)
+			return fmt.Errorf("crew: can't tell whether Codex takes --no-daemon, which keeps an agent with no server of its own off Codex's shared daemon (%w): %s", err, remedy)
 		}
 		if has {
 			s.Argv = append(s.Argv, "--no-daemon")
-			s.Notices = append(s.Notices, "Codex has no folder of its own for its app-server, so crew mail can't wake it: it reads its mail when asked")
+			s.Notices = append(s.Notices, why+", so crew mail can't wake it: it reads its mail when asked")
 			return nil
 		}
 		s.After = append(s.After, register) // a Codex before --no-daemon has no shared daemon to keep off
@@ -407,8 +492,8 @@ var codexNoDaemon sync.Map
 // find, run or read within codexProbeTimeout.
 func codexHasNoDaemon(program string, env map[string]string, dir string) (bool, error) {
 	bin := program
-	if !strings.Contains(program, "/") {
-		found := lookAll(program, env["PATH"], dir)
+	if !isPath(program) {
+		found := programsOn(program, env["PATH"], dir)
 		if len(found) == 0 {
 			return false, fmt.Errorf("no %s on PATH", program)
 		}

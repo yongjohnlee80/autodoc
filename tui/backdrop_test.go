@@ -15,6 +15,7 @@ import (
 // of the page wear the theme's app.backdrop, not the terminal's own background, and — but for
 // mono, whose page is the terminal's — a tone apart from the page.
 func TestTheScreenAroundThePageIsTheThemesBackdrop(t *testing.T) {
+	t.Parallel()
 	for _, name := range themes.Names() {
 		t.Run(name, func(t *testing.T) {
 			// the theme as the user picks it: the preference, which the TUI applies once connected
@@ -66,6 +67,7 @@ func cellColor(t *testing.T, v string) tuicore.CellColor {
 // its catalog (builtinThemeRows), not a list of its own: a theme golib adds shows with no change
 // here; and its row's access key switches to it, stored and checked.
 func TestEveryThemeGolibShipsIsOnTheThemeMenu(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.keys(t, decltest.Alt('o'))
@@ -102,6 +104,7 @@ func TestEveryThemeGolibShipsIsOnTheThemeMenu(t *testing.T) {
 // TestSepiaIsOnTheThemeMenu: Options › Theme › Sepia switches to it, as the other themes do — the
 // preference stored, the menu's check on it, and the page in its paper.
 func TestSepiaIsOnTheThemeMenu(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.keys(t, decltest.Alt('o'))

@@ -5,12 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"path"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/yongjohnlee80/golib/logger"
+
+	"github.com/yongjohnlee80/autodoc/core/paths"
 )
 
 // RefreshEvery is how often the daemon refreshes each claimed store by itself
@@ -107,11 +107,11 @@ func (m *Manager) refreshDaily(ctx context.Context, st Settings, rec StoreRecord
 func (m *Manager) whereOf(ctx context.Context, st Settings, rec StoreRecord) (where, error) {
 	var roots []string
 	for _, root := range slices.Sorted(maps.Keys(st.Roots)) {
-		if rr := st.Roots[root]; rr.Override == rec.Path || (rr.Override == "" && root+"/"+todoDir == rec.Path) {
+		if rr := st.Roots[root]; rr.Override == rec.Path || (rr.Override == "" && paths.Join(root, todoDir) == rec.Path) {
 			roots = append(roots, root)
 		}
 	}
-	if root, ok := strings.CutSuffix(rec.Path, "/"+todoDir); ok && !slices.Contains(roots, root) {
+	if root, ok := storeRootOf(rec.Path); ok && !slices.Contains(roots, root) {
 		roots = append(roots, root)
 	}
 	var errs []error
@@ -134,7 +134,7 @@ func (m *Manager) whereOf(ctx context.Context, st Settings, rec StoreRecord) (wh
 // store by the workspace's name, any other by its root.
 func (m *Manager) changedOf(w where) Event {
 	for _, name := range m.roots.Names() {
-		if r, ok := m.roots.Root(name); ok && path.Clean(r) == w.root {
+		if r, ok := m.roots.Root(name); ok && paths.Clean(r) == w.root {
 			return Event{Kind: "todos.changed", Workspace: name}
 		}
 	}

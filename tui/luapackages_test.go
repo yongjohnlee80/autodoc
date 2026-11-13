@@ -52,7 +52,7 @@ end }`,
 	r.page("", 1, 1)
 	r.mustRun(t, "pkgwc")
 	r.wantText(t, ":pkgwc ungranted", "words nil needs workspace.read: not granted")
-	onLoop(r, func() bool { r.h.asker.accepted(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); return true })
 	r.s.WaitFor(t, "the grant", func(string) bool {
 		return onLoop(r, func() bool { return r.h.prefs.luaGrants["wc"]["workspace.read"] })
 	})
@@ -75,7 +75,7 @@ end }`,
 	}
 	r.mustRun(t, "lua-install "+repo)
 	r.s.WaitForText(t, "install the Lua package hello?")
-	onLoop(r, func() bool { r.h.asker.accepted(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); return true })
 	r.waitNotice(t, "installed the Lua package hello")
 	// the reload runs at once; it says bad/ did not load again, the test's own broken package
 	r.waitNotice(t, "lua-reload: 1 of the scripts did not load")

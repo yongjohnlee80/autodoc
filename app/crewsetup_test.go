@@ -87,8 +87,13 @@ func TestCrewSetupOffersTheMCPServerOnlyToAHostThatRegistersItsMode(t *testing.T
 	if s := setup("--kind", "claude", "--host", "nvim"); slices.Contains(s.Argv, "--mcp-config") || !slices.Equal(s.Allow, crew.ClaudeAllow()) || s.MailVia != crew.MailViaCLI {
 		t.Errorf("claude without --mail-via: argv %q, allow %q, mail via %v; want the CLI's setup", s.Argv, s.Allow, s.MailVia)
 	}
-	if s := setup("--kind", "claude", "--host", "nvim", "--mail-via", "mcp"); !slices.Contains(s.Argv, "--mcp-config") || !slices.Equal(s.Allow, crew.ClaudeMCPAllow()) || s.MailVia != crew.MailViaMCP {
-		t.Errorf("claude with --mail-via mcp: argv %q, allow %q, mail via %v; want the MCP server, its tools alone", s.Argv, s.Allow, s.MailVia)
+	if s := setup("--kind", "claude", "--host", "nvim", "--mail-via", "mcp", "--agent-dir", agent); !slices.Contains(s.Argv, filepath.Join(agent, crew.ClaudeMCPConfig)) ||
+		len(s.FolderFiles) != 1 || !slices.Equal(s.Allow, crew.ClaudeMCPAllow()) || s.MailVia != crew.MailViaMCP {
+		t.Errorf("claude with --mail-via mcp: argv %q, folder files %+v, allow %q, mail via %v; want the MCP server's file, its tools alone", s.Argv, s.FolderFiles, s.Allow, s.MailVia)
+	}
+	// its server is a file of the agent's own folder: a host that gives none keeps the CLI's mail
+	if s := setup("--kind", "claude", "--host", "nvim", "--mail-via", "mcp"); slices.Contains(s.Argv, "--mcp-config") || s.MailVia != crew.MailViaCLI {
+		t.Errorf("claude with --mail-via mcp and no --agent-dir: argv %q, mail via %v; want the CLI's setup", s.Argv, s.MailVia)
 	}
 	if s := setup("--kind", "claude", "--host", "nvim", "--mail-via", "cli"); slices.Contains(s.Argv, "--mcp-config") || s.MailVia != crew.MailViaCLI {
 		t.Errorf("claude with --mail-via cli: argv %q, mail via %v; want the CLI's setup", s.Argv, s.MailVia)
@@ -105,5 +110,37 @@ func TestCrewSetupOffersTheMCPServerOnlyToAHostThatRegistersItsMode(t *testing.T
 	var out, errOut bytes.Buffer
 	if code := run(t.Context(), []string{"--config", cfg, "crew", "setup", "--kind", "claude", "--mail-via", "smtp"}, Options{Version: "v1"}, &out, &errOut); code != 2 {
 		t.Errorf("--mail-via smtp: exit %d, want usage", code)
+	}
+}
+
+// TestCrewSetupGivesNoAgentServerToAHostThatCantRunOne: `crew setup --kind codex --agent-dir D
+// --no-agent-server` (the window where it can't run an agent's own server) answers no server, the
+// Codex taking --no-daemon instead; without the flag, the agent's folder gives it its own server.
+func TestCrewSetupGivesNoAgentServerToAHostThatCantRunOne(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	bin := t.TempDir()
+	script := "#!/bin/sh\ncase \"$1\" in --version) echo 'codex-cli 0.0.0-test';; --help) echo '      --no-daemon   Run without the shared background server';; esac\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(bin, "codex"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	setup := func(args ...string) crew.Setup {
+		t.Helper()
+		var out, errOut bytes.Buffer
+		if code := run(t.Context(), append([]string{"crew", "setup", "--kind", "codex", "--host", "window", "--agent-dir", t.TempDir()}, args...), Options{Version: "v1.2.3"}, &out, &errOut); code != 0 {
+			t.Fatalf("crew setup %v: exit %d, %s", args, code, errOut.String())
+		}
+		var s crew.Setup
+		if err := json.Unmarshal(out.Bytes(), &s); err != nil {
+			t.Fatalf("%q: %v", out.String(), err)
+		}
+		return s
+	}
+	if s := setup("--no-agent-server"); len(s.Server) != 0 || !slices.Contains(s.Argv, "--no-daemon") || slices.Contains(s.Argv, "--remote") {
+		t.Fatalf("--no-agent-server: server %q, argv %q; want no server, and --no-daemon", s.Server, s.Argv)
+	}
+	if s := setup(); len(s.Server) == 0 || !slices.Contains(s.Argv, "--remote") {
+		t.Fatalf("an agent folder, no flag: server %q, argv %q; want its own server, the TUI on it", s.Server, s.Argv)
 	}
 }

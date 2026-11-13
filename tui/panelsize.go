@@ -3,10 +3,12 @@ package tui
 import (
 	"strconv"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/todos"
 	"github.com/yongjohnlee80/golib/tui/panelgeometry"
 )
 
-func (p prefs) geometrySpecs() []PanelSpec {
+func (p prefs) geometrySpecs() []feature.PanelSpec {
 	if p.panelDefs != nil {
 		return p.panelDefs
 	}
@@ -19,21 +21,9 @@ func (p prefs) geometrySpecs() []PanelSpec {
 // in panelFloat (panelfloat.go). Each panel's defaults and
 // bounds are its spec's (panels.go); the HTML pane sizes itself and keeps none.
 
-// sidePanelMin is the explorer's and the relations' smallest size across their edge, in percent: their
-// trees stay readable.
-const sidePanelMin = 15
-
-// sideDefault is the explorer's and the relations' size and length before the user drags them: a
-// third across, and 85% along a side or 80% along the top or bottom.
-func sideDefault(edge string) (size, length int) { return 30, panelLength(edge) }
-
-// explorerDefault is the explorer's size and length before the user drags it: 35% across, so its
-// tabs have room, and its length a side panel's.
-func explorerDefault(edge string) (size, length int) { return 35, panelLength(edge) }
-
 // panelGeometry is a panel's size and length at a place: the kept ones, or its spec's defaults.
 func (p prefs) panelGeometry(id, edge string) (size, length int) {
-	s := findPanel(p.geometrySpecs(), id)
+	s := feature.FindPanel(p.geometrySpecs(), id)
 	if s == nil || s.Default == nil {
 		return 0, 0
 	}
@@ -87,7 +77,7 @@ func (h *Host) keepPanelGeo(panel, what string, n int) {
 	v := strconv.Itoa(n)
 	// golib's one check: the panel's places and its bounds
 	// (docs/decisions/plugins.md#shared-panels-and-their-geometry)
-	if panelgeometry.Validate([]panelgeometry.Spec{s.geometry()}, k, v) != nil {
+	if panelgeometry.Validate([]panelgeometry.Spec{s.Geometry()}, k, v) != nil {
 		return
 	}
 	h.setPref(k, v, func(p *prefs) { p.panelGeo = withEntry(p.panelGeo, k, n) })
@@ -96,7 +86,7 @@ func (h *Host) keepPanelGeo(panel, what string, n int) {
 // panelState is what the document reads of the side panels' sizes, at the edges they open from.
 func panelState(p prefs) map[string]any {
 	es, el := p.panelGeometry("explorer", p.explorerEdge)
-	ts, tl := p.panelGeometry(todosPanelSpec().ID, p.todosEdge)
+	ts, tl := p.panelGeometry(todos.PanelSpec().ID, p.todosEdge)
 	return map[string]any{
 		"App.explorerSize": es, "App.explorerLength": el,
 		"App.todosSize": ts, "App.todosLength": tl,
@@ -107,7 +97,7 @@ func panelState(p prefs) map[string]any {
 // now, the one way for every panel.
 func (h *Host) panelResized(panel string, size, length int) {
 	if s := h.panelSpec(panel); s == nil || len(s.Places) == 0 ||
-		!inPercentRange(size, s.Size) || !inPercentRange(length, s.Length) {
+		!feature.InPercentRange(size, s.Size) || !feature.InPercentRange(length, s.Length) {
 		return // a panel that sizes itself keeps no geometry
 	}
 	h.keepPanelGeo(panel, "size", size)

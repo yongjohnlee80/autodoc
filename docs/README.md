@@ -159,7 +159,14 @@ workspace.
 
    It installs AutoDoc with its window as `~/.local/bin/autodoc`, for you alone (no `sudo`),
    checksum-verified, with a launcher in your applications. AutoDoc then updates itself from
-   **Help › About › Update**. Windows: use WSL2, then the same line.
+   **Help › About › Update**. On Windows, in PowerShell:
+
+   ```powershell
+   irm https://github.com/yongjohnlee80/autodoc/releases/latest/download/install-autodoc.ps1 | iex
+   ```
+
+   It installs AutoDoc for you alone, with no administrator rights, and **Help › About › Update**
+   keeps it current there too. Under WSL2, the Linux line works as well.
 
    Other ways: Homebrew (`brew install yongjohnlee80/tap/autodoc`), mise
    (`mise use -g github:yongjohnlee80/autodoc`), `go install -tags gui

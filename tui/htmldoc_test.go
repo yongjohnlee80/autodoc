@@ -8,11 +8,12 @@ import (
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 
 	"github.com/yongjohnlee80/autodoc/core/derived"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // runHTML is the TUI on a managed daemon that derives HTML, as every build's does (the test
@@ -73,7 +74,7 @@ func TestOpeningAnHTMLFileAsksSimplifiedOrRaw(t *testing.T) {
 	waitDisk(t, r, page, "<!-- edited --><h1>Title</h1><p>body</p>\n")
 
 	r.h.p.Post(func() { r.h.load(r.h.file.ws, r.h.file.path, nil) }) // read again: no question
-	r.s.WaitForText(t, "opened "+page)
+	r.waitStatus(t, "opened "+page)
 	if f := r.file(); !f.raw || onLoop(r, func() bool { return r.h.htmlAsk != nil }) {
 		t.Errorf("read again: raw %v, asked %v", f.raw, onLoop(r, func() bool { return r.h.htmlAsk != nil }))
 	}
@@ -130,7 +131,7 @@ func TestARawHTMLFilesPageIsItsRenderedView(t *testing.T) {
 	r.waitOpen(t, "", page)
 	r.s.WaitFor(t, "the raw file's cell page on", func(string) bool {
 		return onLoop(r, func() bool {
-			e, ok := r.h.editor.(*widget.Editor)
+			e, ok := r.h.editor.(*editor.Editor)
 			if !ok || len(seen) == 0 || !seen[len(seen)-1] {
 				return false
 			}
@@ -153,22 +154,22 @@ func TestATerminalDrawsARawHTMLFilesPage(t *testing.T) {
 	}
 	r.openHTMLAnswer(t, page, "raw")
 	r.waitOpen(t, "", page)
-	shown := func() widget.EditorView {
-		return onLoop(r, func() widget.EditorView { return r.h.editor.(*widget.Editor).ShownView() })
+	shown := func() editor.EditorView {
+		return onLoop(r, func() editor.EditorView { return r.h.editor.(*editor.Editor).ShownView() })
 	}
 	r.s.WaitFor(t, "the file's page, Rendered", func(sc string) bool {
-		return shown() == widget.ViewRendered && strings.Contains(sc, "Harbour") && strings.Contains(sc, "Gull") && strings.Contains(sc, "┌")
+		return shown() == editor.ViewRendered && strings.Contains(sc, "Harbour") && strings.Contains(sc, "Gull") && strings.Contains(sc, "┌")
 	})
 	if sc := r.s.String(); strings.Contains(sc, "<h1>") || strings.Contains(sc, "<td>") {
 		t.Fatalf("the page shows the file's tags:\n%s", sc)
 	}
 	ctrlT := tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: 't', Mods: tuicore.ModCtrl}
 	r.keys(t, ctrlT)
-	r.s.WaitFor(t, "the source after Ctrl+T", func(sc string) bool { return shown() == widget.ViewRaw && strings.Contains(sc, "<h1>Harbour</h1>") })
+	r.s.WaitFor(t, "the source after Ctrl+T", func(sc string) bool { return shown() == editor.ViewRaw && strings.Contains(sc, "<h1>Harbour</h1>") })
 	r.keys(t, ctrlT)
-	r.s.WaitFor(t, "the page again", func(sc string) bool { return shown() == widget.ViewRendered && !strings.Contains(sc, "<h1>") })
+	r.s.WaitFor(t, "the page again", func(sc string) bool { return shown() == editor.ViewRendered && !strings.Contains(sc, "<h1>") })
 	onLoop(r, func() bool {
-		if _, err := r.h.core.Insert(widget.TextPos{}, "<h2>Tides</h2>\n"); err != nil {
+		if _, err := r.h.core.Insert(editor.TextPos{}, "<h2>Tides</h2>\n"); err != nil {
 			t.Error(err)
 		}
 		return true
@@ -215,7 +216,7 @@ func TestCancellingAnHTMLFileInAnotherWorkspaceStaysPut(t *testing.T) {
 	r, kb, _, _ := runOutside(t)
 	r.h.p.Post(func() { r.h.openAbsolute(filepath.Join(kb, "a.md")) })
 	r.waitOpen(t, "kb", "a.md")
-	r.h.p.Post(func() { r.h.openRef(fileRef{"notes", "page.html"}, true, nil) })
+	r.h.p.Post(func() { r.h.openRef(feature.FileRef{WS: "notes", Path: "page.html"}, true, nil) })
 	r.s.WaitForText(t, "open an HTML file")
 	if ws := onLoop(r, func() string { return r.h.ws }); ws != "kb" {
 		t.Fatalf("the question was asked in %q, after entering the other workspace", ws)
@@ -241,14 +242,16 @@ func TestAPagesResourcesComeFromItsWorkspace(t *testing.T) {
 	if got := at("kb", "top.html"); got != [2]string{kb, ""} {
 		t.Errorf("a file at the workspace's root: %q", got)
 	}
-	if got := at("", "/elsewhere/site/page.html"); got != [2]string{"/elsewhere/site", ""} {
-		t.Errorf("an outside file's: %q, want its own folder and no base", got)
+	// a file outside every workspace, at its absolute path on this OS (on a drive on Windows)
+	outside := filepath.Join(filepath.VolumeName(t.TempDir())+string(filepath.Separator), "elsewhere", "site")
+	if got := at("", filepath.Join(outside, "page.html")); got != [2]string{outside, ""} {
+		t.Errorf("an outside file's: %q, want its own folder %q and no base", got, outside)
 	}
 	said := func(part string) int {
 		return onLoop(r, func() int {
 			c := 0
-			for _, m := range r.h.noticeLog.items {
-				if strings.Contains(m.text, part) {
+			for _, m := range r.h.noticeLog.Items {
+				if strings.Contains(m.Text, part) {
 					c++
 				}
 			}

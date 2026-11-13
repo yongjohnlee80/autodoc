@@ -6,9 +6,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/style"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // FIND — / in the page, the explorer, the relations or any pane a feature registers (Findable), as
@@ -24,25 +26,6 @@ import (
 // THE EXPLORER is searched over the rows it has loaded, in the order the tree shows them, a closed
 // folder's loaded rows included: a hit there is revealed, its folders opened.
 
-// FindPane is a pane / searches: what find calls it, the view whose keyboard makes it the pane
-// searched, and its rows as they are now. Name and View are declarations, the same whenever read: a
-// panel's View is its own PanelSpec's, never one looked up.
-type FindPane struct {
-	Name string // "explorer": "find in the explorer", "n and N find again in the explorer"
-	View string // / searches the pane whose view has the keyboard
-	// Scope is the pane's keyScope (keys.go), where it answers / n N itself; "" for none, and the
-	// Window's / n N, which say where to put the keyboard, answer there
-	Scope string
-	// Rows are the pane's rows as it shows them, the row under its cursor (-1 for none), and how to put
-	// the cursor on row i, the match at col (grapheme columns). The move is bound to this same snapshot,
-	// so a pane whose rows are not plain indexes (the explorer's tree) moves to the row it listed.
-	Rows func() (rows []string, cursor int, moveTo func(row, col int) error)
-}
-
-// Findable is a feature whose pane / searches. The registry takes the panes in the features' order,
-// the page first (the host's own).
-type Findable interface{ FindPane() FindPane }
-
 // findPage is the page's pane: the host's own, which Search › Find in page, the page's marks and Esc
 // name.
 const findPage = "page"
@@ -57,18 +40,18 @@ type findState struct {
 }
 
 // findPanes are the panes find searches, in the registry's order: the page first.
-func (h *Host) findPanes() []FindPane {
+func (h *Host) findPanes() []feature.FindPane {
 	if h.reg == nil {
 		return nil // a host built without its options (tests)
 	}
-	return h.reg.finds
+	return h.reg.Finds
 }
 
 // findPane is the pane named name.
-func (h *Host) findPane(name string) (FindPane, bool) {
-	i := slices.IndexFunc(h.findPanes(), func(p FindPane) bool { return p.Name == name })
+func (h *Host) findPane(name string) (feature.FindPane, bool) {
+	i := slices.IndexFunc(h.findPanes(), func(p feature.FindPane) bool { return p.Name == name })
 	if i < 0 {
-		return FindPane{}, false
+		return feature.FindPane{}, false
 	}
 	return h.findPanes()[i], true
 }
@@ -95,7 +78,7 @@ func (h *Host) openFind() {
 }
 
 // findPaneList names the panes as the hint does: "the page, the explorer or the links".
-func findPaneList(panes []FindPane) string {
+func findPaneList(panes []feature.FindPane) string {
 	var names []string
 	for _, p := range panes {
 		names = append(names, "the "+p.Name)
@@ -129,7 +112,7 @@ func (h *Host) startFind(pattern string) {
 	h.find.target, h.find.pending = h.find.pending, ""
 	h.find.query, h.find.whole = pattern, false
 	h.find.at, h.find.total = 0, 0
-	h.core.SetFind("", widget.FindOptions{}) // n and N are this find's, not a replace's leftover
+	h.core.SetFind("", editor.FindOptions{}) // n and N are this find's, not a replace's leftover
 	h.set("App.lastFind", pattern)
 	h.showFind()
 	h.p.Post(func() { h.findJump(+1, true) }) // once the question has closed
@@ -150,7 +133,7 @@ func (h *Host) clearFind() {
 	if h.find.query == "" {
 		return
 	}
-	h.core.SetCurrentMatch(widget.TextRange{})
+	h.core.SetCurrentMatch(editor.TextRange{})
 	h.find.query, h.find.target = "", ""
 	h.showFind()
 	h.say(h.tr("autodoc.notice.find.find_cleared"))
@@ -203,11 +186,11 @@ func (h *Host) attachFindChip() {
 	if h.findCard == nil {
 		// the replace card's look: the panel's colours, a frame and a title
 		look := style.New().Background(style.TokenPanel).Foreground(style.TokenForeground)
-		h.findLabel = widget.NewText("", widget.WithTextStyle(look))
-		clear := widget.NewButton("X", widget.WithOnActivate(h.clearFind), widget.WithButtonDecoration(" ", " "))
+		h.findLabel = widgetcore.NewText("", widgetcore.WithTextStyle(look))
+		clear := widgetcore.NewButton("X", widgetcore.WithOnActivate(h.clearFind), widgetcore.WithButtonDecoration(" ", " "))
 		row := tuicore.NewFlex(tuicore.Horizontal)
 		row.Add(h.findLabel, clear)
-		h.findCard = widget.NewBox(row, widget.WithTitle("Find"), widget.WithBorder(style.BorderNormal), widget.WithStyle(look.Padding(0, 1)))
+		h.findCard = widgetcore.NewBox(row, widgetcore.WithTitle("Find"), widgetcore.WithBorder(style.BorderNormal), widgetcore.WithStyle(look.Padding(0, 1)))
 		h.findCard.SetVisible(false)
 	}
 	w.AddAligned(h.findCard, tuicore.AlignTopRight)
@@ -284,21 +267,21 @@ func (h *Host) findJump(dir int, includeCurrent bool) {
 // find's order.
 type pageFind struct{ h *Host }
 
-func (pageFind) Name() string                 { return "page find" }
-func (pageFind) State() map[string]any        { return nil }
-func (pageFind) Commands() map[string]Command { return nil }
-func (p pageFind) FindPane() FindPane         { return p.h.pageFindPane() }
+func (pageFind) Name() string                         { return "page find" }
+func (pageFind) State() map[string]any                { return nil }
+func (pageFind) Commands() map[string]feature.Command { return nil }
+func (p pageFind) FindPane() feature.FindPane         { return p.h.pageFindPane() }
 
 // pageFindPane is the page's pane, the host's own: a hit puts the cursor on it, highlights it and
 // gives the page the keyboard.
-func (h *Host) pageFindPane() FindPane {
-	return FindPane{Name: findPage, View: "editor", Scope: "page", Rows: func() ([]string, int, func(int, int) error) {
+func (h *Host) pageFindPane() feature.FindPane {
+	return feature.FindPane{Name: findPage, View: "editor", Scope: "page", Rows: func() ([]string, int, func(int, int) error) {
 		cur, _ := h.core.Line()
 		return h.core.Lines(), cur, func(row, col int) error {
 			h.core.SetLine(row, col)
 			// the match the find is on, highlighted whatever the mode, so it is plain which it is
 			n := len(slices.Collect(tuicore.Graphemes(h.find.query)))
-			h.core.SetCurrentMatch(widget.TextRange{From: widget.TextPos{Line: row, Col: col}, To: widget.TextPos{Line: row, Col: col + n}})
+			h.core.SetCurrentMatch(editor.TextRange{From: editor.TextPos{Line: row, Col: col}, To: editor.TextPos{Line: row, Col: col + n}})
 			return h.p.Call("editor", "forceActiveFocus")
 		}
 	}}
@@ -344,7 +327,7 @@ func (h *Host) pageFindJump(dir int, includeCurrent bool, count int) {
 		return
 	}
 	f := &h.find
-	all := h.core.FindAll(f.query, widget.FindOptions{IgnoreCase: true, WholeWord: f.whole})
+	all := h.core.FindAll(f.query, editor.FindOptions{IgnoreCase: true, WholeWord: f.whole})
 	if len(all) == 0 {
 		f.at, f.total = 0, 0
 		h.showFind()
@@ -352,8 +335,8 @@ func (h *Host) pageFindJump(dir int, includeCurrent bool, count int) {
 		return
 	}
 	ln, col := h.core.Line()
-	cur := widget.TextPos{Line: ln, Col: col}
-	before := func(a, b widget.TextPos) bool { return a.Line < b.Line || a.Line == b.Line && a.Col < b.Col }
+	cur := editor.TextPos{Line: ln, Col: col}
+	before := func(a, b editor.TextPos) bool { return a.Line < b.Line || a.Line == b.Line && a.Col < b.Col }
 	sel := -1
 	if dir > 0 {
 		for i, r := range all {
@@ -389,12 +372,13 @@ func (h *Host) pageFindJump(dir int, includeCurrent bool, count int) {
 
 // notePageFind is the page's find on an HTML file's page, when one is shown (notepage.go; a note's
 // Rendered view is the editor's, its find the text's): what the page shows is marked
-// (docs/decisions/editor.md), and the current mark steps count on (dir +1) or back, from the one it
-// is on, or for the first from the first at or after the page's top. It is brought into view, the
-// editor's cursor put at its block (Raw opens there) and the page given the keyboard. A term the
-// page doesn't show but the source has (a link's target, Markdown's own syntax) is the text's: the
-// page opens Raw at the reader's place, says so, and reports false, and the text's find goes on, as
-// with no page shown. A term in neither is not found, on the page.
+// (docs/decisions/editor.md#html-files-open-raw-or-simplified), and the current mark steps count on
+// (dir +1) or back, from the one it is on, or for the first from the first at or after the page's
+// top. It is brought into view and the page given the keyboard; the editor's cursor stays where it
+// is, since the page's bytes name no place in the text. A term the page doesn't show but the source
+// has (a link's target, a tag's attribute) is the text's: the page opens Raw, says so, and reports
+// false, and the text's find goes on, as with no page shown. A term in neither is not found, on the
+// page.
 func (h *Host) notePageFind(dir int, includeCurrent bool, count int) bool {
 	p := h.notePage()
 	if p == nil || !p.shownHere() {
@@ -403,7 +387,7 @@ func (h *Host) notePageFind(dir int, includeCurrent bool, count int) bool {
 	f := &h.find
 	n := p.view.SetMarks(pageFindIn(f.query, f.whole))
 	if n == 0 {
-		if len(h.core.FindAll(f.query, widget.FindOptions{IgnoreCase: true, WholeWord: f.whole})) > 0 && p.toText() {
+		if len(h.core.FindAll(f.query, editor.FindOptions{IgnoreCase: true, WholeWord: f.whole})) > 0 && p.toText() {
 			h.notify(h.trf("autodoc.notice.find.not_on_the_page_found_in_the_text", strconv.Quote(f.query)))
 			return false
 		}
@@ -423,7 +407,6 @@ func (h *Host) notePageFind(dir int, includeCurrent bool, count int) bool {
 		sel = (sel + dir + n) % n
 	}
 	p.view.MarkTo(sel)
-	p.cursorToMark(sel)
 	f.at, f.total = sel+1, n
 	h.showFind()
 	h.say(h.trf("autodoc.notice.find.match_of", strconv.Quote(f.query), sel+1, n, f.target))
@@ -451,7 +434,7 @@ func (h *Host) findRecount() {
 		h.showFind()
 		return
 	}
-	all := h.core.FindAll(f.query, widget.FindOptions{IgnoreCase: true, WholeWord: f.whole})
+	all := h.core.FindAll(f.query, editor.FindOptions{IgnoreCase: true, WholeWord: f.whole})
 	f.at, f.total = 0, len(all)
 	ln, col := h.core.Line()
 	for i, r := range all {
@@ -483,8 +466,8 @@ func pageFindIn(query string, whole bool) func(string) [][2]int {
 				continue
 			}
 			e := s + len(needle)
-			if whole && (widget.IsKeyword(needle[0]) && s > 0 && widget.IsKeyword(hay[s-1]) ||
-				widget.IsKeyword(needle[len(needle)-1]) && e < len(hay) && widget.IsKeyword(hay[e])) {
+			if whole && (editor.IsKeyword(needle[0]) && s > 0 && editor.IsKeyword(hay[s-1]) ||
+				editor.IsKeyword(needle[len(needle)-1]) && e < len(hay) && editor.IsKeyword(hay[e])) {
 				continue
 			}
 			out = append(out, [2]int{at[s], at[e]})
@@ -497,11 +480,11 @@ func pageFindIn(query string, whole bool) func(string) [][2]int {
 // starFind is the editor's * and # (and g* g#): the word becomes the page's find, whole words or
 // not, and the cursor steps count occurrences on or back from the word's start. One find state:
 // AutoDoc's, its marks, "finding …", n and N.
-func (h *Host) starFind(r widget.FindRequest) bool {
+func (h *Host) starFind(r editor.FindRequest) bool {
 	f := &h.find
 	f.pending, f.target, f.query, f.whole = "", findPage, r.Term, r.Options.WholeWord
 	f.at, f.total = 0, 0
-	h.core.SetFind("", widget.FindOptions{})
+	h.core.SetFind("", editor.FindOptions{})
 	h.set("App.lastFind", r.Term)
 	dir := +1
 	if r.Backward {

@@ -24,6 +24,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 func md(p string) bool { return strings.HasSuffix(p, ".md") }
@@ -41,6 +42,7 @@ func (c committing) WriteFileIf(ctx context.Context, name string, r io.Reader, w
 
 type rig struct {
 	t      *testing.T
+	roots  string // the folder the workspaces' roots are named in: absolute on any OS, never made
 	sock   string
 	srv    *Server
 	fsys   *memfs.FS
@@ -70,29 +72,29 @@ func serve(t *testing.T) *rig {
 func serveWith(t *testing.T, opts ...Option) *rig {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
-	r := &rig{t: t, fsys: memfs.New(), cancel: cancel, done: make(chan error, 1)}
+	r := &rig{t: t, roots: filepath.Join(t.TempDir(), "roots"), fsys: memfs.New(), cancel: cancel, done: make(chan error, 1)}
 	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "autodoc.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	open := func(name string, fsys vfs.FS) Workspace {
-		row, err := db.AddWorkspace(ctx, name, "/roots/"+name, nil, nil)
+		row, err := db.AddWorkspace(ctx, name, filepath.Join(r.roots, name), nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 		ix := index.New(index.NewStore(db, row.ID), fsys, index.WithMatch(md), index.WithBatching(0, 5*time.Millisecond),
-			index.WithModes(rigModes), index.WithRoot("/roots/"+name))
+			index.WithModes(rigModes), index.WithRoot(filepath.Join(r.roots, name)))
 		f := follow.New(fsys, ix, ix, follow.WithMatch(md), follow.WithPollInterval(20*time.Millisecond))
 		ix.SetRescanner(f)
 		r.cores.Go(func() { _ = ix.Run(ctx) })
 		r.cores.Go(func() { _ = f.Run(ctx) })
-		return Static(WorkspaceInfo{Name: name, Root: "/roots/" + name, Index: ix, Docs: docs.New(fsys, md), Following: f.Status})
+		return Static(WorkspaceInfo{Name: name, Root: filepath.Join(r.roots, name), Index: ix, Docs: docs.New(fsys, md), Following: f.Status})
 	}
 	ws := []Workspace{open("kb", r.fsys), open("flaky", committing{memfs.New()}),
-		Static(WorkspaceInfo{Name: "broken", Root: "/roots/broken", Err: fmt.Errorf("workspace %q: %w", "broken", workspace.ErrNotADirectory)})}
+		Static(WorkspaceInfo{Name: "broken", Root: filepath.Join(r.roots, "broken"), Err: fmt.Errorf("workspace %q: %w", "broken", workspace.ErrNotADirectory)})}
 	r.sock = shortSocket(t) // macOS bounds a socket's path at 104 bytes; a test's TempDir can pass it
-	ln, err := net.Listen("unix", r.sock)
+	ln, err := ipc.Listen(r.sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +116,7 @@ func serveWith(t *testing.T, opts ...Option) *rig {
 // false.
 func (r *rig) dial(hello bool) *golibrpc.Client {
 	r.t.Helper()
-	cli, err := golibrpc.Dial(context.Background(), r.sock, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"),
+	cli, err := golibrpc.Dial(context.Background(), r.sock, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer),
 		golibrpc.OnNotification(func(string, []any) { r.notes.Add(1) }))
 	if err != nil {
 		r.t.Fatal(err)
@@ -413,12 +415,12 @@ func TestShutdownStopsTheServer(t *testing.T) {
 func TestProbe(t *testing.T) {
 	r := serve(t)
 	ctx := context.Background()
-	if v, err := ProbeOn(ctx, "unix", r.sock); err != nil || v != "v-test" {
+	if v, err := ProbeOn(ctx, ipc.Network, r.sock); err != nil || v != "v-test" {
 		t.Errorf("probing autodoc: %q, %v", v, err)
 	}
 	// the probe admitted nothing, and a probe leaves no session behind that another client could use
-	other := filepath.Join(t.TempDir(), "o.sock")
-	ln, err := net.Listen("unix", other)
+	other := ipc.ScratchAddr(t.TempDir(), "o.sock")
+	ln, err := ipc.Listen(other, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -430,10 +432,10 @@ func TestProbe(t *testing.T) {
 			_ = c.Close()
 		}
 	}()
-	if _, err := ProbeOn(ctx, "unix", other); !errors.Is(err, ErrNotAutodoc) {
+	if _, err := ProbeOn(ctx, ipc.Network, other); !errors.Is(err, ErrNotAutodoc) {
 		t.Errorf("probing a foreign occupant: %v", err)
 	}
-	if _, err := ProbeOn(ctx, "unix", filepath.Join(t.TempDir(), "none.sock")); err == nil || errors.Is(err, ErrNotAutodoc) {
+	if _, err := ProbeOn(ctx, ipc.Network, ipc.ScratchAddr(t.TempDir(), "none.sock")); err == nil || errors.Is(err, ErrNotAutodoc) {
 		t.Errorf("probing nothing: %v", err)
 	}
 }
@@ -467,8 +469,8 @@ func (p *memPrefs) SetPreference(_ context.Context, name, value string) error {
 // TestPreferenceVerbs: a preference set reads back in the listing; a nameless one is invalid; a
 // server given no Preferences says it keeps none.
 func TestPreferenceVerbs(t *testing.T) {
-	sock := filepath.Join(t.TempDir(), "p.sock")
-	ln, err := net.Listen("unix", sock)
+	sock := ipc.ScratchAddr(t.TempDir(), "p.sock")
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -499,5 +501,29 @@ func TestPreferenceVerbs(t *testing.T) {
 	none := serve(t).dial(true)
 	if _, err := none.Call(ctx, "preference.list"); code(err) != CodeUnsupported {
 		t.Fatalf("preference.list without Preferences: %v, want unsupported", err)
+	}
+}
+
+// TestProbeDialsTheNetworkItIsGiven: Probe dials the network its caller names, not always ipc's:
+// a server on TCP is probed there, and answers as one on the daemon's socket does.
+func TestProbeDialsTheNetworkItIsGiven(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	srv := New(Fixed(), "v-tcp", WithListener(ln))
+	go func() { done <- srv.Run(ctx) }()
+	defer func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Error("the server did not stop")
+		}
+	}()
+	if v, err := ProbeOn(context.Background(), "tcp", ln.Addr().String()); err != nil || v != "v-tcp" {
+		t.Fatalf("probing a server on TCP: %q, %v; want v-tcp", v, err)
 	}
 }

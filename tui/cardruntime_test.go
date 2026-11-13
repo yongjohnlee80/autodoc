@@ -11,7 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/decl"
+	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/panelgeometry"
 )
 
@@ -35,11 +37,7 @@ func liveCardTUI(t *testing.T, dir string, prefs map[string]string, gui bool) (*
 	logs := t.TempDir()
 	r := runTUI(t, NewSession(d.sock, nil), Options{GUI: gui, Plugins: Plugins{Dir: dir, LogDir: logs, Socket: d.sock}})
 	r.connected(t)
-	t.Cleanup(func() {
-		for _, p := range onLoop(r, func() []*pluginRun { return slices.Collect(maps.Values(r.h.plugins.running)) }) {
-			p.shutdown()
-		}
-	})
+	stopPluginRunsAtTheEnd(t, r)
 	return d, r, logs
 }
 
@@ -92,15 +90,18 @@ func runACardAddedWhileRunningOpensAtOnce(t *testing.T, gui bool) {
 
 // A card plugin added while AutoDoc runs opens at once, docked at its placement, in both builds.
 func TestACardAddedWhileRunningOpensAtOnce(t *testing.T) {
+	t.Parallel()
 	runACardAddedWhileRunningOpensAtOnce(t, false)
 }
 func TestACardAddedWhileRunningOpensAtOnceGUI(t *testing.T) {
+	t.Parallel()
 	runACardAddedWhileRunningOpensAtOnce(t, true)
 }
 
 // An open, focused card keeps its plugin, its panel and the keys while another card is added and
 // removed: the reload patches the document around it.
 func TestAnOpenCardSurvivesAnotherCardsAddAndRemoval(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "first", "dialog", "echo", rightCard+toggleCmd)
 	_, r, logs := liveCardTUI(t, dir, nil, false)
@@ -130,10 +131,46 @@ func TestAnOpenCardSurvivesAnotherCardsAddAndRemoval(t *testing.T) {
 	steady("another card removed", 'y')
 }
 
-// Removing a card stops its plugin and closes its open panel before the reload, while its Drawer is
-// there: its Closed hook gives the keys back to the page. Then its panel, its dock icon and its
-// Plugins menu row go, and its panel can no longer be opened.
+// removeRunningPluginFolder removes a plugin's folder while its run is up, as a user deleting it
+// does. Where the OS refuses to remove a running process's working folder (Windows: the plugin's
+// process works in it), the case can't arise, and the cell is skipped, saying so.
+func removeRunningPluginFolder(t *testing.T, dir string) {
+	t.Helper()
+	err := os.RemoveAll(dir)
+	if folderInUse(err) {
+		t.Skipf("a running process's working folder can't be removed on this system, so the case can't arise: %v", err)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// stopPluginRun closes the plugin name's run and waits for it to end: its process exited, the run
+// gone from the running plugins. Its folder can then be removed on every OS.
+func stopPluginRun(t *testing.T, r *running, name string) {
+	t.Helper()
+	run := onLoop(r, func() *pluginRun { return r.h.plugins.running[name] })
+	if run == nil {
+		t.Fatalf("%s has no run to stop", name)
+	}
+	onLoop(r, func() bool { run.close(""); return true })
+	select {
+	case <-run.shutDone:
+	case <-time.After(decltest.WaitTimeout):
+		t.Fatalf("%s's run never ended after its close", name)
+	}
+	r.s.WaitFor(t, name+"'s run gone", func(string) bool {
+		return onLoop(r, func() bool { return r.h.plugins.running[name] == nil })
+	})
+}
+
+// Removing a running card's folder (a user deleting it) stops its plugin and closes its open panel
+// before the reload, while its Drawer is there: its Closed hook gives the keys back to the page.
+// Then its panel, its dock icon and its Plugins menu row go, and its panel can no longer be opened.
+// Where a running process's working folder can't be removed (Windows), the case can't arise and the
+// cell is skipped; TestRemovingAStoppedCardTakesItsPanelAway is the removal there.
 func TestRemovingACardTakesItsPanelAway(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "echo", rightCard+toggleCmd)
 	_, r, logs := liveCardTUI(t, dir, nil, false)
@@ -141,9 +178,7 @@ func TestRemovingACardTakesItsPanelAway(t *testing.T) {
 	waitSaid(t, logs, "card", "focus true")
 	run := onLoop(r, func() *pluginRun { return r.h.plugins.running["card"] })
 	id := cardPanelID("card")
-	if err := os.RemoveAll(filepath.Join(dir, "card")); err != nil {
-		t.Fatal(err)
-	}
+	removeRunningPluginFolder(t, filepath.Join(dir, "card")) // skipped where a running card's folder can't go
 	// loadPlugins runs here on the loop; the reload it asks for is only posted, so what follows is
 	// the moment before it
 	type moment struct{ open, drawer, running, editor bool }
@@ -160,9 +195,39 @@ func TestRemovingACardTakesItsPanelAway(t *testing.T) {
 	r.s.WaitFor(t, "the panel gone", func(string) bool { return onLoop(r, func() bool { return r.h.panelSpec(id) == nil }) })
 	select {
 	case <-run.exited:
-	case <-time.After(pluginGrace + pluginTermGrace + 5*time.Second):
+	case <-time.After(defaultSeams.pluginGrace + defaultSeams.pluginTermGrace + 5*time.Second):
 		t.Fatal("the removed card's plugin did not exit")
 	}
+	if r.listsPanel(id) {
+		t.Fatal("the dock still lists the removed card")
+	}
+	if label, _ := r.pluginRowLabel("card"); label != "" {
+		t.Fatalf("the Plugins menu still has the removed card: %q", label)
+	}
+	if err := onLoop(r, func() error { return r.h.p.Call(id, "open") }); err == nil {
+		t.Fatal("the removed card's panel still opens")
+	}
+}
+
+// A card's folder removed once its plugin has stopped, on every OS: its panel goes at the reload, as
+// do its dock icon and its Plugins menu row, and its panel can no longer be opened. Nothing runs from
+// the folder when it goes, so there is no run for the reload to stop.
+func TestRemovingAStoppedCardTakesItsPanelAway(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	installPlugin2(t, dir, "card", "dialog", "echo", rightCard+toggleCmd)
+	_, r, logs := liveCardTUI(t, dir, nil, false)
+	r.h.p.Post(func() { r.h.plugins.runPluginCommand("card", "toggle") })
+	waitSaid(t, logs, "card", "focus true")
+	id := cardPanelID("card")
+	stopPluginRun(t, r, "card")
+	if err := os.RemoveAll(filepath.Join(dir, "card")); err != nil {
+		t.Fatal(err)
+	}
+	if running := onLoop(r, func() bool { r.h.plugins.loadPlugins(); return r.h.plugins.running["card"] != nil }); running {
+		t.Fatal("the stopped card runs again at the reload")
+	}
+	r.s.WaitFor(t, "the panel gone", func(string) bool { return onLoop(r, func() bool { return r.h.panelSpec(id) == nil }) })
 	if r.listsPanel(id) {
 		t.Fatal("the dock still lists the removed card")
 	}
@@ -177,6 +242,7 @@ func TestRemovingACardTakesItsPanelAway(t *testing.T) {
 // The same card added again opens with its kept geometry (tui.card_<name>.*, read again once it has
 // a panel), and nothing is declared twice.
 func TestACardAddedAgainKeepsItsGeometry(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	id := cardPanelID("card")
 	_, r, _ := liveCardTUI(t, dir, map[string]string{panelgeometry.SizeKey(id, "right"): "60"}, false)
@@ -194,6 +260,7 @@ func TestACardAddedAgainKeepsItsGeometry(t *testing.T) {
 		if n := r.noticesSaying("already"); n != 0 {
 			t.Fatalf("round %d: %d notices of a source declared twice", round, n)
 		}
+		stopPluginRun(t, r, "card") // its process works in its folder: on Windows the folder goes only once it has exited
 		if err := os.RemoveAll(filepath.Join(dir, "card")); err != nil {
 			t.Fatal(err)
 		}
@@ -205,12 +272,13 @@ func TestACardAddedAgainKeepsItsGeometry(t *testing.T) {
 // The registry stages a contributor's panels under the build's checks and changes nothing until
 // commit: a duplicate id, a feature with no panels and a PanelBound feature are refused.
 func TestTheRegistryStagesThenCommits(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "echo", rightCard)
 	_, r, _ := liveCardTUI(t, dir, nil, false)
-	none := onLoop(r, func() Feature {
-		for _, f := range r.h.reg.features {
-			if _, ok := f.(Panel); !ok {
+	none := onLoop(r, func() feature.Feature {
+		for _, f := range r.h.reg.Features {
+			if _, ok := f.(feature.Panel); !ok {
 				return f
 			}
 		}
@@ -220,32 +288,32 @@ func TestTheRegistryStagesThenCommits(t *testing.T) {
 		t.Fatal("every feature contributes panels: this cell needs one that does not")
 	}
 	onLoop(r, func() any {
-		reg := r.h.reg.panels
-		before, host := slices.Clone(reg.specs), reg.hosts[resultsPanel]
-		dup := append(r.h.plugins.Panels(), PanelSpec{ID: "explorer", View: "elsewhere", Edge: func(prefs) string { return "left" }})
-		if _, _, err := reg.stage(core{r.h}, r.h.plugins, dup); err == nil || !strings.Contains(err.Error(), "explorer") {
+		reg := r.h.reg.Panels
+		before, host := slices.Clone(reg.Specs), reg.Hosts[resultsPanel]
+		dup := append(r.h.plugins.Panels(), feature.PanelSpec{ID: "explorer", View: "elsewhere", Edge: func(feature.PrefsView) string { return "left" }})
+		if _, _, err := stagePanels(reg, core{r.h}, r.h.plugins, dup); err == nil || !strings.Contains(err.Error(), "explorer") {
 			t.Errorf("a panel id two features claim: %v", err)
 		}
-		if _, _, err := reg.stage(core{r.h}, r.h.agents, nil); err == nil || !strings.Contains(err.Error(), "holds its panel host") {
+		if _, _, err := stagePanels(reg, core{r.h}, r.h.agents, nil); err == nil || !strings.Contains(err.Error(), "holds its panel host") {
 			t.Errorf("a PanelBound feature's panels: %v, want refused for holding its host", err)
 		}
-		if _, _, err := reg.stage(core{r.h}, none, nil); err == nil || !strings.Contains(err.Error(), "contributes no panels") {
+		if _, _, err := stagePanels(reg, core{r.h}, none, nil); err == nil || !strings.Contains(err.Error(), "contributes no panels") {
 			t.Errorf("a feature contributing no panels: %v, want refused", err)
 		}
-		own := slices.DeleteFunc(r.h.plugins.Panels(), func(s PanelSpec) bool { return s.ID == cardPanelID("card") })
-		specs, commit, err := reg.stage(core{r.h}, r.h.plugins, own)
+		own := slices.DeleteFunc(r.h.plugins.Panels(), func(s feature.PanelSpec) bool { return s.ID == cardPanelID("card") })
+		specs, commit, err := stagePanels(reg, core{r.h}, r.h.plugins, own)
 		if err != nil {
 			t.Error(err)
 			return nil
 		}
-		if !slices.EqualFunc(reg.specs, before, func(a, b PanelSpec) bool { return a.ID == b.ID }) || reg.hosts[resultsPanel] != host {
+		if !slices.EqualFunc(reg.Specs, before, func(a, b feature.PanelSpec) bool { return a.ID == b.ID }) || reg.Hosts[resultsPanel] != host {
 			t.Error("staging changed the registry")
 		}
 		commit()
-		if len(reg.specs) != len(specs) || findPanel(reg.specs, cardPanelID("card")) != nil || reg.hosts[resultsPanel] == host {
+		if len(reg.Specs) != len(specs) || feature.FindPanel(reg.Specs, cardPanelID("card")) != nil || reg.Hosts[resultsPanel] == host {
 			t.Error("the commit did not swap the plugins' panels and rebuild their host")
 		}
-		if _, ok := reg.hosts[cardPanelID("card")]; ok {
+		if _, ok := reg.Hosts[cardPanelID("card")]; ok {
 			t.Error("the commit kept the dropped card's host")
 		}
 		return nil
@@ -256,10 +324,11 @@ func TestTheRegistryStagesThenCommits(t *testing.T) {
 // has no spec for the card, the dock does not list it, the plugins' host is the one it was, and the
 // document has no Drawer for it. Opening it says why.
 func TestAReloadRefusedAfterAStageChangesNothing(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "first", "dialog", "echo", rightCard)
 	_, r, _ := liveCardTUI(t, dir, nil, false)
-	host, cards := loopPair(r, func() (PanelHost, int) { return r.h.reg.panels.hosts[resultsPanel], len(r.h.plugins.cardOrder) })
+	host, cards := loopPair(r, func() (feature.PanelHost, int) { return r.h.reg.Panels.Hosts[resultsPanel], len(r.h.plugins.cardOrder) })
 	onLoop(r, func() any {
 		r.h.reloadCards = func([]byte, map[string]any) (decl.Result, error) {
 			return decl.Result{}, errors.New("refused for the test")
@@ -273,7 +342,7 @@ func TestAReloadRefusedAfterAStageChangesNothing(t *testing.T) {
 	type after struct{ spec, set, sameHost, n bool }
 	a := onLoop(r, func() after {
 		_, inSet := r.h.plugins.cards["card"]
-		return after{r.h.panelSpec(id) != nil, inSet, r.h.reg.panels.hosts[resultsPanel] == host, len(r.h.plugins.cardOrder) == cards}
+		return after{r.h.panelSpec(id) != nil, inSet, r.h.reg.Panels.Hosts[resultsPanel] == host, len(r.h.plugins.cardOrder) == cards}
 	})
 	spec, set, sameHost, n := a.spec, a.set, a.sameHost, a.n
 	if spec || set || !sameHost || !n {
@@ -294,6 +363,7 @@ func TestAReloadRefusedAfterAStageChangesNothing(t *testing.T) {
 // A theme switch after a card was added writes the card set as it is: the added card keeps its
 // panel, and its running plugin its run.
 func TestAThemeSwitchKeepsAnAddedCard(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	_, r, _ := liveCardTUI(t, dir, nil, false)
 	installPlugin2(t, dir, "card", "dialog", "echo", rightCard)
@@ -323,6 +393,7 @@ func TestAThemeSwitchKeepsAnAddedCard(t *testing.T) {
 // before the tree is touched: the tree is not latched, the registry, the card set and the document
 // are as they were, and the card already there and the page still work.
 func TestARefusedCardConstructorChangesNothing(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "first", "dialog", "echo", rightCard)
 	_, r, _ := liveCardTUI(t, dir, nil, false)
@@ -361,6 +432,7 @@ func TestARefusedCardConstructorChangesNothing(t *testing.T) {
 // widgets): it says it must restart and puts the card set back. Once latched, a later change tries no
 // reload and says the same.
 func TestALatchedTreeAsksForARestart(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "first", "dialog", "echo", rightCard)
 	_, r, _ := liveCardTUI(t, dir, nil, false)

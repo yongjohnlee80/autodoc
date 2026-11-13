@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/internal/filelock"
 )
 
 // HANDOFF — a restart's successor is the requester's build
@@ -149,4 +151,23 @@ func (h handoff) holdsBack(self int64, sock string, now time.Time) bool {
 		return false
 	}
 	return alive(h.PID)
+}
+
+// lockHandoff holds the handoff's lock file (path + ".lock") exclusively until the returned
+// release: a write's rename and a removal's read, check and unlink each run whole under it. With
+// wait false it refuses at once (errHandoffBusy) when another holds it. The lock file is left in
+// place: removing it would let two holders lock two files.
+func lockHandoff(path string, wait bool) (release func(), err error) {
+	take := filelock.TryLock
+	if wait {
+		take = filelock.Lock
+	}
+	unlock, err := take(path + ".lock")
+	if errors.Is(err, filelock.ErrHeld) {
+		return nil, errHandoffBusy
+	}
+	if err != nil {
+		return nil, err
+	}
+	return func() { _ = unlock() }, nil
 }

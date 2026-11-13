@@ -364,7 +364,7 @@ case $(uname -s) in
 Linux) os=linux ;;
 Darwin) os=darwin ;;
 MINGW* | MSYS* | CYGWIN* | Windows_NT)
-	die 2 "AutoDoc doesn't run on Windows yet: its port is under way. Until then it runs under WSL, where this script works as on Linux."
+	die 2 "On Windows, install AutoDoc with install-autodoc.ps1 instead, in PowerShell: irm https://github.com/yongjohnlee80/autodoc/releases/latest/download/install-autodoc.ps1 | iex (under WSL, this script works as on Linux)."
 	;;
 *) die 2 "AutoDoc has no build for $(uname -s)." ;;
 esac

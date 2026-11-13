@@ -86,7 +86,7 @@ none of its own.
 - The result reports the stage's state (off, ready or error) and the model that ranked it, and each
   ranked hit carries its score. A failed ranker leaves the hits in recall order.
 
-In the code: `internal/daemon/ranking.go`, `core/store/rankers.go`, `rpc/rankers.go`, `tui/rankers.go`
+In the code: `internal/daemon/ranking.go`, `core/store/rankers.go`, `rpc/rankers.go`, `tui/searchsetup/rankers.go`
 
 ## A build's own ranking
 
@@ -189,6 +189,11 @@ derived    = "d" EXT ":" DERIVER "@" VERSION "+" built-in
 derived string splits at its last `+` and a registered one is read from the right. Every string
 parses one way. Versions are 1 to 32 characters of letters, digits, `.`, `_`, `+` or `-`; a deriver
 id may also contain `/`. The hold, the skip check and reindexing all read this string.
+
+`.r` N is the reading of a Markdown document's links and relations. When what the same bytes read
+as changes, N is raised: every Markdown document is then read again at the next start, its file
+unchanged, and its links are replaced; its unchanged chunks keep their rows and their vectors, so
+nothing is embedded again.
 
 In the code: `core/index/hold.go`, `core/index/store.go`, `core/registrations/registrations.go`
 
@@ -387,9 +392,10 @@ In the code: `rpc/embedsetup.go`, `rpc/embeddings.go`, `internal/daemon/embedset
 ## Host probe
 
 The probe reads what the machine offers without a network or a provider: GPU vendor, VRAM and
-compute capability, RAM, free space under the data directory, and whether Ollama answers. It reads
-`/sys` and `/proc` first, and runs `nvidia-smi` only when it is on the path, under a short timeout.
-Nothing fails: what cannot be read is reported as unknown.
+compute capability, RAM, free space under the data directory, and whether Ollama answers. On Linux
+it reads `/sys` and `/proc` first; on Windows the RAM is `GlobalMemoryStatusEx`'s. On both it runs
+`nvidia-smi` only when it is on the path, under a short timeout. On Windows a GPU other than an
+NVIDIA one is unknown. Nothing fails: what cannot be read is reported as unknown.
 
 In the code: `core/hostprobe/hostprobe.go`
 
@@ -410,4 +416,4 @@ workspace start embedding with the new model. A failed step stops the plan and R
 from the start; a step already done changes nothing. When Ollama updates a model in use, the notice
 names the model and says it is refilling.
 
-In the code: `tui/embedsetup.go`, `tui/progress.go`, `tui/qml/dialogs/EmbeddingSetup.qml`
+In the code: `tui/searchsetup/embedsetup.go`, `tui/progress.go`, `tui/qml/dialogs/EmbeddingSetup.qml`

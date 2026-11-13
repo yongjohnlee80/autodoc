@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/panelgeometry"
@@ -108,7 +109,7 @@ func TestResetAndANewEdgeDockThePanels(t *testing.T) {
 	d, r := runShellTUI(t, map[string]string{"tui.explorer.float": "50,25,30,50", "tui.todos.float": "10,10,30,50", "tui.terminal.float": "0,50,100,30"})
 	onLoop(r, func() bool { r.h.togglePanel("explorer"); return true })
 	r.s.WaitFor(t, "the explorer floating mid-screen", func(sc string) bool { _, c := panelAt(sc, "explorer"); return c >= 45 })
-	onLoop(r, func() bool { r.h.choosePrefNamed(prefExplorer, 1); return true }) // right
+	onLoop(r, func() bool { r.h.choosePrefNamed(feature.PrefExplorer, 1); return true }) // right
 	storedPref(t, d, r, "tui.explorer.float", "")
 	onLoop(r, func() bool { r.h.terminals.setTerminalEdge(indexOf(termEdges, "top")); return true })
 	storedPref(t, d, r, "tui.terminal.float", "")
@@ -122,7 +123,7 @@ func TestResetAndANewEdgeDockThePanels(t *testing.T) {
 // App.panelResized takes a panel's name and two whole numbers, and refuses anything else, naming it.
 func TestPanelResizedTakesANameAndTwoWholeNumbers(t *testing.T) {
 	var got []any
-	h := stringAndTwoNumbers("a panel and its size and length", func(p string, s, l int) { got = []any{p, s, l} }).handler("App.panelResized")
+	h := feature.StringAndTwoNumbers("a panel and its size and length", func(p string, s, l int) { got = []any{p, s, l} }).Handler("App.panelResized")
 	str := func(v string) qml.SpecValue { return qml.SpecValue{Kind: qml.SpecValueString, Raw: v} }
 	num := func(v string) qml.SpecValue { return qml.SpecValue{Kind: qml.SpecValueNumber, Raw: v} }
 	if err := h([]qml.SpecValue{str("agent"), num("60"), num("70")}); err != nil || len(got) != 3 || got[0] != "agent" || got[1] != 60 || got[2] != 70 {

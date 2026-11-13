@@ -6,15 +6,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 )
 
 // buffertabs_test.go: the GUI's buffer tabs, through what they are made of, which the TUI has too:
 // each tab's label and its menu's rows (buffertabs.go). The strip itself is gui_buffertabs_test.go's.
 
 // tabRow is the row of rows with id, searching submenus, and whether it is there.
-func tabRow(rows []widget.MenuItemModel, id string) (widget.MenuItemModel, bool) {
+func tabRow(rows []widgetcore.MenuItemModel, id string) (widgetcore.MenuItemModel, bool) {
 	for _, r := range rows {
 		if string(r.ID) == id {
 			return r, true
@@ -23,7 +24,7 @@ func tabRow(rows []widget.MenuItemModel, id string) (widget.MenuItemModel, bool)
 			return c, true
 		}
 	}
-	return widget.MenuItemModel{}, false
+	return widgetcore.MenuItemModel{}, false
 }
 
 // runTabRow runs the row with id of the menu of b's tab, on the loop.
@@ -32,7 +33,7 @@ func runTabRow(t *testing.T, r *running, b *openBuffer, id string) {
 	ok := onLoop(r, func() bool {
 		row, ok := tabRow(r.h.bufferTabRows(tabID(b)), id)
 		if ok {
-			row.Action.(widget.TabStripMenuAction).Run(tabID(b))
+			row.Action.(widgetcore.TabStripMenuAction).Run(tabID(b))
 		}
 		return ok
 	})
@@ -94,17 +95,17 @@ func TestABufferTabsMenu(t *testing.T) {
 	r.waitFile(t, "c.md")
 	a, b, c := bufferOn(r, "a.md"), bufferOn(r, "b.md"), bufferOn(r, "c.md")
 
-	rows := onLoop(r, func() []widget.MenuItemModel { return r.h.bufferTabRows(tabID(a)) })
+	rows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.bufferTabRows(tabID(a)) })
 	if g, ok := tabRow(rows, "buffer.tabs.goto"); !ok || len(g.Children) != onLoop(r, func() int { return len(r.h.buffers) }) {
 		t.Fatalf("Go to: %+v; want a row for each buffer", g)
 	}
 	if s, _ := tabRow(rows, "buffer.tabs.save"); s.Enabled {
 		t.Fatal("Save offered for a.md, which is clean")
 	}
-	if s, _ := tabRow(onLoop(r, func() []widget.MenuItemModel { return r.h.bufferTabRows(tabID(b)) }), "buffer.tabs.save"); !s.Enabled {
+	if s, _ := tabRow(onLoop(r, func() []widgetcore.MenuItemModel { return r.h.bufferTabRows(tabID(b)) }), "buffer.tabs.save"); !s.Enabled {
 		t.Fatal("Save not offered for b.md, which is modified")
 	}
-	if rows := onLoop(r, func() []widget.MenuItemModel { return r.h.bufferTabRows("") }); len(rows) != 4 {
+	if rows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.bufferTabRows("") }); len(rows) != 4 {
 		t.Fatalf("the menu off a tab: %d rows, want New buffer, Open file, Layout and Go to", len(rows))
 	}
 
@@ -139,7 +140,7 @@ func TestBufferTabsAreToldApart(t *testing.T) {
 	r.waitFile(t, "notes/a.md")
 	ws := r.file().ws
 	otherWS := map[string]string{"kb": "kb2", "kb2": "kb"}[ws]
-	onLoop(r, func() bool { r.h.openRef(fileRef{otherWS, "notes/a.md"}, false, nil); return true })
+	onLoop(r, func() bool { r.h.openRef(feature.FileRef{WS: otherWS, Path: "notes/a.md"}, false, nil); return true })
 	r.s.WaitFor(t, "notes/a.md of "+otherWS+" open", func(string) bool { f := r.file(); return f.open && f.ws == otherWS })
 	onLoop(r, func() bool {
 		r.h.restoreAsDraft(recovered{Text: "one\n"}, "")
@@ -331,8 +332,8 @@ func TestACancelledHTMLQuestionTakesTheNewBufferRequestWithIt(t *testing.T) {
 	empty := onLoop(r, func() *openBuffer { return r.h.active })
 	onLoop(r, func() bool {
 		r.h.openPickerNewBuffer()
-		r.h.closeDialog(r.h.openPick.dialog)
-		r.h.openPick.choose("page.html") // as Enter on it does
+		r.h.closeDialog(r.h.openPick.Dialog)
+		r.h.openPick.Choose("page.html") // as Enter on it does
 		return true
 	})
 	r.s.WaitForText(t, "open an HTML file")

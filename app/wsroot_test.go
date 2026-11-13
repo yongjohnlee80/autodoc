@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // autodocDirsOf is a workspace answer's autodoc_dirs as "dir relation path" lines.
@@ -28,7 +30,7 @@ func autodocDirsOf(w map[string]any) []string {
 // --check-workspaces reports such workspaces: exit 1 with one, 0 with none, 2 with no daemon.
 func TestARootHoldingAutoDocsFoldersIsAddedWithAWarningAndReported(t *testing.T) {
 	dir := short(t)
-	state, sock := filepath.Join(dir, "state"), filepath.Join(dir, "s.sock")
+	state, sock := filepath.Join(dir, "state"), ipc.ScratchAddr(dir, "s.sock")
 	cfg := writeConfig(t, sock, state, "")
 	d := start(t, cfg, sock)
 	cli := dial(t, sock)

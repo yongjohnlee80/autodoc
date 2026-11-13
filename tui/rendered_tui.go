@@ -2,7 +2,9 @@
 
 package tui
 
-import "github.com/yongjohnlee80/golib/tui/widget"
+import (
+	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
+)
 
 // startRendered chooses the terminal editor's Rendered view, a table file's table (rendered_term.go).
 func startRendered(e editorWidget) { startTermRendered(e) }
@@ -14,4 +16,4 @@ func editorView(e editorWidget) string { v, _ := termView(e); return v }
 func setEditorView(e editorWidget, view string) { setTermView(e, view) }
 
 // paneDiagrams does nothing in a terminal build: it opens no pane.
-func (h *Host) paneDiagrams(*widget.HTMLView) {}
+func (h *Host) paneDiagrams(*htmlview.HTMLView) {}

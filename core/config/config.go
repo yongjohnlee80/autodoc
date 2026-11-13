@@ -13,6 +13,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/yongjohnlee80/autodoc/core/paths"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/golib/errs"
 	"github.com/yongjohnlee80/golib/logger"
 )
@@ -181,9 +182,6 @@ func (c *Config) normalize() error {
 	return nil
 }
 
-// SocketName is the default endpoint's file name.
-const SocketName = "autodoc.sock"
-
 // maxSocketPath bounds a unix socket path below the kernels' sockaddr_un limits (104 bytes on
 // Darwin, 108 on Linux), so a long path fails here with its length rather than at bind with EINVAL.
 const maxSocketPath = 100
@@ -196,7 +194,7 @@ func (s Server) SocketPath() (string, error) {
 		if err != nil {
 			return "", err
 		}
-		p = filepath.Join(dir, SocketName)
+		p = ipc.DefaultAddr(dir)
 	}
 	if len(p) > maxSocketPath {
 		return "", fmt.Errorf("%w: socket path %q is %d bytes, over the %d-byte limit — set server.socket to something shorter", ErrInvalid, p, len(p), maxSocketPath)

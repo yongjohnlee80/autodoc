@@ -9,9 +9,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // luahost_test.go: the host functions scripts reach — the clipboard, a picker, AutoDoc's agents —
@@ -20,6 +22,7 @@ import (
 // Writing sets the system clipboard; a read waits for the clipboard's answer and gives it to the
 // callback on the loop; a failed read is said by its name.
 func TestScriptsReadAndWriteTheClipboard(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.luaLoad(t, `
@@ -51,6 +54,7 @@ end }`)
 // A script's picker lists its items, a filter narrows them, and choosing one gives the callback the
 // item's value; Esc gives it "cancelled"; a second picker while one is open is "busy".
 func TestScriptsPickFromAList(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.luaLoad(t, `
@@ -83,6 +87,7 @@ end }`)
 // nothing) answers it "cancelled", so the next is not "busy" for good; a callback that asks a new
 // line or pick as the old one closes, by a choice, Enter or Esc, keeps it, and it answers.
 func TestScriptsHearALineOrPickClosedAnyWay(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.luaLoad(t, `
@@ -175,6 +180,7 @@ end }`)
 // :lua-reload closes a line or picker the old scripts left open, and drops its callback, another
 // engine's: the new scripts' line and pick are asked, never "busy".
 func TestScriptsReloadEndsTheirOpenLineAndPick(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	old := `
@@ -213,9 +219,10 @@ autodoc.command{ name = "pk", run = function() autodoc.ui.pick({ items = { "afte
 // autodoc.agents lists the agents and sends one text as a bracketed paste, typed and not submitted;
 // agents.lua's :agent-buffer sends the page to the one running, and :agent-forward the selection.
 func TestScriptsSendTextToAnAgent(t *testing.T) {
+	t.Parallel()
 	agent, report := recordingAgent(t, true)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron")
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	r.s.WaitForText(t, "ready")
 	r.luaLoad(t, `
@@ -251,7 +258,7 @@ end }`)
 	// :agent-forward: the selection, with its lines, in a request
 	onLoop(r, func() bool { r.h.core.SetValue("ignored selected-part ignored"); return true })
 	onLoop(r, func() bool {
-		r.h.core.Select(widget.TextRange{From: widget.TextPos{Col: 8}, To: widget.TextPos{Col: 21}})
+		r.h.core.Select(editor.TextRange{From: editor.TextPos{Col: 8}, To: editor.TextPos{Col: 21}})
 		return true
 	})
 	if err := r.luaRun("agent-forward"); err != nil {
@@ -282,10 +289,11 @@ func (r *running) instruct(t *testing.T, title, text string) {
 // refused, nothing asked; an empty instruction, or Esc, sends nothing (the mutants: the text sent
 // for a saved page; no instruction asked; no bound; an empty instruction sent).
 func TestAPageIsHandedOverByItsPathNeverItsText(t *testing.T) {
+	t.Parallel()
 	agent, report := recordingAgent(t, true)
-	_, r, _ := runAgentTUIIn(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron",
+	_, r, _ := runAgentTUIIn(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron",
 		nil, Options{}, map[string][]string{"kb": {"a.md", "a\n", "plan.md", "the-saved-page-text\n"}})
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	r.s.WaitForText(t, "ready")
 	r.h.p.Post(func() { r.h.openPath("plan.md") })
@@ -361,9 +369,10 @@ func TestAPageIsHandedOverByItsPathNeverItsText(t *testing.T) {
 // with {subject, body} sends a request (its subject heading the paste); a subject with a line
 // break, or none, is the script's error, nothing sent.
 func TestScriptsAskALineAndSendARequest(t *testing.T) {
+	t.Parallel()
 	agent, report := recordingAgent(t, true)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron")
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	r.s.WaitForText(t, "ready")
 	r.luaLoad(t, `
@@ -413,9 +422,10 @@ end }`)
 // decoder's raw newline inside a Lua string) is the command's error, never ok; a send with no
 // callback that fails is a notice.
 func TestScriptsSendALongRichTextThroughLua(t *testing.T) {
+	t.Parallel()
 	agent, report := recordingAgent(t, true)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron")
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	r.s.WaitForText(t, "ready")
 	cb := `function(ok, err) autodoc.notify("%s " .. tostring(ok) .. " " .. tostring(err)) end`
@@ -461,9 +471,10 @@ func TestScriptsSendALongRichTextThroughLua(t *testing.T) {
 // keys, and the script hears "unbracketed"
 // (docs/decisions/todos.md#text-reaches-an-agent-only-as-a-bracketed-paste).
 func TestScriptsSendNothingToAnUnbracketedAgent(t *testing.T) {
+	t.Parallel()
 	agent, report := recordingAgent(t, false)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron")
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	r.s.WaitForText(t, "ready")
 	r.luaLoad(t, `
@@ -485,23 +496,24 @@ end }`)
 // SendText goes through HandTask's delivery: a running agent gets one paste, empty text is refused,
 // and a stopped one is asked about, naming what will be sent.
 func TestSendTextSharesHandTasksDelivery(t *testing.T) {
+	t.Parallel()
 	a, c := modelAgents(t)
-	a.promptsReported = func(string, bool) bool { return true } // its prompts reported: the base sends with its Enter
-	one, _ := a.profile("one")
-	first, _ := a.startInstance(one)
+	seamsOf(a).agentPromptsReported = func(string, bool) bool { return true } // its prompts reported: the base sends with its Enter
+	one, _ := a.Profile("one")
+	first, _ := a.StartInstance(one)
 	var got []error
-	if err := a.SendText(AgentRef{Codename: "one"}, "", func(err error) { got = append(got, err) }); !errors.Is(err, ErrAgentText) {
+	if err := a.SendText(feature.AgentRef{Codename: "one"}, "", func(err error) { got = append(got, err) }); !errors.Is(err, agents.ErrAgentText) {
 		t.Fatalf("empty text: %v", err)
 	}
-	if err := a.SendText(AgentRef{Codename: "one", Instance: first.token}, "line one\nline two", func(err error) { got = append(got, err) }); err != nil {
+	if err := a.SendText(feature.AgentRef{Codename: "one", Instance: first.State().Token}, "line one\nline two", func(err error) { got = append(got, err) }); err != nil {
 		t.Fatal(err)
 	}
 	c.drainPosts()
 	c.fireAfters() // the Enter, submitDelay after the paste, and then done
-	if len(got) != 1 || got[0] != nil || !slices.Equal(c.panel.pastes, []string{string(first.tab) + ":[bracketed]line one\nline two"}) {
+	if len(got) != 1 || got[0] != nil || !slices.Equal(c.panel.pastes, []string{string(first.State().Tab) + ":[bracketed]line one\nline two"}) {
 		t.Fatalf("a running agent: done %v, pastes %q", got, c.panel.pastes)
 	}
-	if err := a.SendText(AgentRef{Codename: "two"}, "for two", func(err error) { got = append(got, err) }); err != nil {
+	if err := a.SendText(feature.AgentRef{Codename: "two"}, "for two", func(err error) { got = append(got, err) }); err != nil {
 		t.Fatal(err)
 	}
 	if len(c.questions) != 1 || !strings.Contains(c.questions[0].Text, "send this text") {
@@ -518,9 +530,10 @@ func TestSendTextSharesHandTasksDelivery(t *testing.T) {
 // SPC a opens the agents' card, its keys listed; b hands the page to the agent running, f the
 // selection, each with the instruction asked, and Backspace goes back to SPC's card.
 func TestTheAgentsCardSendsThePage(t *testing.T) {
+	t.Parallel()
 	agent, report := recordingAgent(t, true)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron")
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	r.s.WaitForText(t, "ready")
 	onLoop(r, func() bool {
@@ -545,7 +558,7 @@ func TestTheAgentsCardSendsThePage(t *testing.T) {
 	// f: the selection
 	onLoop(r, func() bool { r.h.core.SetValue("ignored card-selected ignored"); return true })
 	onLoop(r, func() bool {
-		r.h.core.Select(widget.TextRange{From: widget.TextPos{Col: 8}, To: widget.TextPos{Col: 21}})
+		r.h.core.Select(editor.TextRange{From: editor.TextPos{Col: 8}, To: editor.TextPos{Col: 21}})
 		return r.h.p.Call("editor", "forceActiveFocus") == nil
 	})
 	r.leader(t, 'a')
@@ -566,7 +579,7 @@ func TestTheAgentsCardSendsThePage(t *testing.T) {
 	r.keys(t, key('g'))
 	r.s.WaitFor(t, "the panel raised by g", func(string) bool { return shown() && !r.covered("agent") })
 	// its terminal has the keyboard now, so SPC is the agent's: the same toggle again, as a command
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitFor(t, "the panel hidden by g", func(string) bool { return !shown() })
 	if !r.agentRunningNow() {
 		t.Error("g stopped the agent")

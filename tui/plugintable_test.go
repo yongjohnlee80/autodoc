@@ -16,7 +16,8 @@ import (
 
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
+	"github.com/yongjohnlee80/golib/tui/widget/table"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/plugin"
@@ -215,15 +216,14 @@ func (r *running) waitResults(t *testing.T, id string, rows int) {
 // slowFeed keeps the feed from sending a document during a test: what a plugin is sent of the note
 // is then only what a command carries.
 func slowFeed(t *testing.T) {
-	delay := pluginFeedDelay
-	pluginFeedDelay = time.Minute
-	t.Cleanup(func() { pluginFeedDelay = delay })
+	tune(t).pluginFeed = time.Minute
 }
 
 // TestATableNeedsProtocolFour: [table] needs protocol = 4, so an AutoDoc that speaks 3 refuses the
 // manifest rather than run a plugin whose results it cannot show; it names the panel's title, and
 // the install question says it shows a table.
 func TestATableNeedsProtocolFour(t *testing.T) {
+	t.Parallel()
 	const head = "name = \"p\"\nkind = \"service\"\ncommand = [\"x\"]\n[[commands]]\nid = \"run\"\ntitle = \"Run\"\n"
 	for _, c := range []struct{ toml, reason string }{
 		{"protocol = 4\n" + head + "[table]\ntitle = \"Results\"\n", ""},
@@ -249,6 +249,7 @@ func TestATableNeedsProtocolFour(t *testing.T) {
 // of those loaded, and asks again only once the plugin has answered: however often the table wants
 // more, a fetch waiting is never sent twice.
 func TestAFetchWaitsForItsAnswer(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin4(t, dir, "rows", "service", "tablestall", tableManifest)
 	r, logs := pluginTUI(t, dir)
@@ -256,12 +257,13 @@ func TestAFetchWaitsForItsAnswer(t *testing.T) {
 	// the cursor at the top of the first page is within a page of its end: the table asks once, and
 	// the answer lands
 	r.waitResults(t, "q1", tablePage+resultsPage)
-	if got := saidLines(t, logs, "rows", "fetch "); len(got) != 1 {
+	// the plugin's log reaches its file after its answer: waited for, then counted
+	if got := waitSaidN(t, logs, "rows", "fetch ", 1); len(got) != 1 {
 		t.Fatalf("the first page asked %d times: %q", len(got), got)
 	}
 	onLoop(r, func() bool {
 		tc := r.h.plugins.c.TableCore(resultsView)
-		tc.SetCursor(widget.TablePos{Row: tc.Len() - 1})
+		tc.SetCursor(table.TablePos{Row: tc.Len() - 1})
 		for range 5 {
 			r.h.plugins.results.model.FetchMore(tuidecl.Index{})
 		}
@@ -283,6 +285,7 @@ func TestAFetchWaitsForItsAnswer(t *testing.T) {
 // TestANewerTableClosesTheOld: a newer host.table replaces the one shown, and its plugin is told
 // the old one is gone (plugin.table.close); closing the panel tells it of the one shown.
 func TestANewerTableClosesTheOld(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin4(t, dir, "rows", "service", "table", tableManifest)
 	r, logs := pluginTUI(t, dir)
@@ -345,6 +348,7 @@ func wantAllRows(t *testing.T, records [][]string, n int) {
 // the sort's order. After scrolling loads another page, it writes both. No .part is left. A file
 // there already is asked about, and replaced once the rows are written.
 func TestExportingTheLoadedRowsAsCSV(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin4(t, dir, "rows", "service", "table", tableManifest)
 	r, logs := pluginTUI(t, dir)
@@ -380,7 +384,7 @@ func TestExportingTheLoadedRowsAsCSV(t *testing.T) {
 	// a reader scrolls to the end: the next page loads, and the export takes both
 	onLoop(r, func() bool {
 		tc := r.h.plugins.c.TableCore(resultsView)
-		tc.SetCursor(widget.TablePos{Row: tc.Len() - 1})
+		tc.SetCursor(table.TablePos{Row: tc.Len() - 1})
 		return true
 	})
 	r.waitResults(t, "q1", loaded+resultsPage)
@@ -400,11 +404,23 @@ func TestExportingTheLoadedRowsAsCSV(t *testing.T) {
 	if b, _ := os.ReadFile(path); string(b) != "old\n" {
 		t.Fatal("the file was written before the question was answered")
 	}
-	onLoop(r, func() bool { r.h.asker.accepted(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); return true })
 	r.s.WaitFor(t, "the file replaced", func(string) bool { b, _ := os.ReadFile(path); return len(b) > 4 })
 	if records := readCSV(path); len(records) != loaded+resultsPage+1 {
 		t.Fatalf("the replaced file holds %d records", len(records))
 	}
+}
+
+// saidFetches is how many plugin.table.fetch the plugin has said it was sent so far, counted once a
+// witness it says after them is in its log: its stderr reaches the log through a copy of its own (an
+// os/exec goroutine), so a line said before an answer already on screen may not be in the file yet.
+// The plugin says its lines in order, so when the witness is there, every fetch before it is too.
+func (r *running) saidFetches(t *testing.T, logs string) int {
+	t.Helper()
+	n := len(saidLines(t, logs, "rows", "witness"))
+	onLoop(r, func() bool { r.h.plugins.runPluginCommand("rows", "witness"); return true })
+	waitSaidN(t, logs, "rows", "witness", n+1)
+	return len(saidLines(t, logs, "rows", "fetch "))
 }
 
 // wantNoFetchSince checks the plugin was sent no plugin.table.fetch past the first fetches: the
@@ -424,6 +440,7 @@ func (r *running) wantNoFetchSince(t *testing.T, logs string, fetches int) {
 // the same name, asked about and accepted) removes its .part and leaves the folder as it was; one
 // whose .part is there already writes nothing, and leaves that .part alone.
 func TestAFailedExportLeavesNothing(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin4(t, dir, "rows", "service", "tablestall", tableManifest)
 	r, _ := pluginTUI(t, dir)
@@ -438,7 +455,7 @@ func TestAFailedExportLeavesNothing(t *testing.T) {
 	r.s.WaitFor(t, "the replace question", func(string) bool {
 		return onLoop(r, func() bool { v, _ := r.h.p.Tree().Source("App.askTitle"); return v.Raw == "replace rows.csv?" })
 	})
-	onLoop(r, func() bool { r.h.asker.accepted(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); return true })
 	r.waitNotice(t, "the results were not exported: ")
 	r.waitNotice(t, "; "+path+" not written")
 	if _, err := os.Stat(path + ".part"); !errors.Is(err, os.ErrNotExist) {
@@ -466,6 +483,7 @@ func TestAFailedExportLeavesNothing(t *testing.T) {
 // now into the page, on lines of their own, a cell on one line with its | escaped; while the result
 // has more the notice says so, and that changing the query changes what is returned.
 func TestInsertingTheLoadedRowsAsMarkdown(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin4(t, dir, "rows", "service", "tablestall", tableManifest)
 	r, _ := pluginTUI(t, dir)
@@ -473,7 +491,7 @@ func TestInsertingTheLoadedRowsAsMarkdown(t *testing.T) {
 	r.waitResults(t, "q1", tablePage+resultsPage)
 	n := onLoop(r, func() int {
 		r.h.editor.SetValue("intro\nafter")
-		r.h.core.SetCursor(widget.TextPos{})
+		r.h.core.SetCursor(editor.TextPos{})
 		r.h.plugins.insertResults()
 		return len(r.h.plugins.results.model.rows)
 	})
@@ -503,6 +521,7 @@ func TestInsertingTheLoadedRowsAsMarkdown(t *testing.T) {
 // by the command with no pause for the feed, run on the new text, cursor and selection: the command
 // carries them. The byte offsets are the grapheme cursor's, on multibyte text.
 func TestACommandCarriesTheNoteItWasChosenOn(t *testing.T) {
+	t.Parallel()
 	slowFeed(t)
 	dir := t.TempDir()
 	installPlugin4(t, dir, "snap", "dialog", "snap", snapManifest)
@@ -523,17 +542,17 @@ func TestACommandCarriesTheNoteItWasChosenOn(t *testing.T) {
 		return func() {
 			r.h.editor.SetValue(text)
 			r.h.edited()
-			r.h.core.SetCursor(widget.TextPos{Line: line, Col: col})
+			r.h.core.SetCursor(editor.TextPos{Line: line, Col: col})
 		}
 	}
 	if got := run("an edit", edited("SELECT 1;\nSELECT 2;", 1, 3)); !strings.Contains(got, `"SELECT 1;\nSELECT 2;" at 2:4 byte 13 rest "EC" sel [] large=false`) {
 		t.Errorf("an edit, then the command: %q", got)
 	}
-	if got := run("a move", func() { r.h.core.SetCursor(widget.TextPos{}) }); !strings.Contains(got, `at 1:1 byte 0 rest "SE"`) {
+	if got := run("a move", func() { r.h.core.SetCursor(editor.TextPos{}) }); !strings.Contains(got, `at 1:1 byte 0 rest "SE"`) {
 		t.Errorf("a move, then the command: %q", got)
 	}
 	selectLine := func() {
-		r.h.core.Select(widget.TextRange{From: widget.TextPos{Line: 1}, To: widget.TextPos{Line: 1, Col: 9}})
+		r.h.core.Select(editor.TextRange{From: editor.TextPos{Line: 1}, To: editor.TextPos{Line: 1, Col: 9}})
 	}
 	if got := run("a selection", selectLine); !strings.Contains(got, `sel ["SELECT 2;"]`) {
 		t.Errorf("a selection, then the command: %q", got)
@@ -548,12 +567,12 @@ func TestACommandCarriesTheNoteItWasChosenOn(t *testing.T) {
 	if want := fmt.Sprintf(`at 1:3 byte %d rest "x\n"`, len(accent+family)); !strings.Contains(got, want) {
 		t.Errorf("the cursor on x after two clusters: %q, want %s", got, want)
 	}
-	got = run("multibyte, line two", func() { r.h.core.SetCursor(widget.TextPos{Line: 1, Col: 2}) })
+	got = run("multibyte, line two", func() { r.h.core.SetCursor(editor.TextPos{Line: 1, Col: 2}) })
 	if want := fmt.Sprintf(`at 2:3 byte %d rest "어;"`, len(accent+family+"x\n한국")); !strings.Contains(got, want) {
 		t.Errorf("the cursor on the third syllable: %q, want %s", got, want)
 	}
 	got = run("a multibyte selection", func() {
-		r.h.core.Select(widget.TextRange{From: widget.TextPos{Line: 0, Col: 1}, To: widget.TextPos{Line: 0, Col: 2}})
+		r.h.core.Select(editor.TextRange{From: editor.TextPos{Line: 0, Col: 1}, To: editor.TextPos{Line: 0, Col: 2}})
 	})
 	if want := fmt.Sprintf(`sel [%q]`, family); !strings.Contains(got, want) {
 		t.Errorf("the family selected: %q, want %s", got, want)
@@ -565,6 +584,7 @@ func TestACommandCarriesTheNoteItWasChosenOn(t *testing.T) {
 // document waiting, but not the command's: the command runs on the note it was chosen on, and the
 // newer one arrives after it.
 func TestACommandRunsOnItsOwnNoteWhenANewerOneFollows(t *testing.T) {
+	t.Parallel()
 	slowFeed(t)
 	dir := t.TempDir()
 	installPlugin4(t, dir, "snap", "dialog", "snap", snapManifest)
@@ -611,6 +631,9 @@ func TestACommandRunsOnItsOwnNoteWhenANewerOneFollows(t *testing.T) {
 // inside a plugin.command goes with the command as its too-large form, through the real link; the
 // plugin stays connected, and the next command carries its note whole.
 func TestACommandTooLargeForTheLinkGoesTooLarge(t *testing.T) {
+	// Serial: it holds a 1 MiB document, which golib's editor lays out whole on SetValue (about
+	// 5 GB under -race), so two such cells at once pass a gate lane's memory. It runs in parallel
+	// again once the editor lays out only what it shows (the AM-6 memory fix in golib).
 	slowFeed(t)
 	dir := t.TempDir()
 	installPlugin4(t, dir, "snap", "dialog", "snap", snapManifest)
@@ -625,7 +648,7 @@ func TestACommandTooLargeForTheLinkGoesTooLarge(t *testing.T) {
 		for range 4 { // the version's encoding can grow a byte as the text is set again
 			r.h.editor.SetValue(lines + strings.Repeat("y", tail))
 			r.h.edited()
-			r.h.core.SetCursor(widget.TextPos{})
+			r.h.core.SetCursor(editor.TextPos{})
 			d = r.h.plugins.document()
 			n, _ := plugin.EncodedSize(plugin.MethodDocument, plugin.DocumentParamsAt(4, d))
 			if n == target {
@@ -666,6 +689,7 @@ func TestACommandTooLargeForTheLinkGoesTooLarge(t *testing.T) {
 // read as plain text, with no Markdown table keys, though its text looks like a Markdown table; a
 // note beside it keeps them.
 func TestASQLFileOpensAsSource(t *testing.T) {
+	t.Parallel()
 	const table = "| a | b |\n|---|---|\n| 1 | 2 |\n"
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", table, "q.sql", table}}, daemonOpts{goFiles: true, chunked: ".sql"})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
@@ -710,6 +734,7 @@ func pluginLogHas(logs, name, text string) bool {
 // the shown table's id. It is refused and noted; the table shown, and its rows, are as they were, and
 // the fetch's answer is taken as the shown table's: nothing of the new one mixes in.
 func TestATableReusingTheShownIDIsRefused(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin4(t, dir, "rows", "service", "tablereuse", tableManifest)
 	r, logs := pluginTUI(t, dir)
@@ -728,6 +753,7 @@ func TestATableReusingTheShownIDIsRefused(t *testing.T) {
 // TestAReusedIDLeavesAnExportWhole: the same reuse at every fetch while the reader scrolls page
 // after page in: the export writes every row loaded once, in order, none of the refused tables'.
 func TestAReusedIDLeavesAnExportWhole(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin4(t, dir, "rows", "service", "tablereuse", tableManifest)
 	r, _ := pluginTUI(t, dir)
@@ -737,14 +763,14 @@ func TestAReusedIDLeavesAnExportWhole(t *testing.T) {
 	r.s.WaitFor(t, "two more pages scrolled in", func(string) bool {
 		return onLoop(r, func() bool {
 			tc := r.h.plugins.c.TableCore(resultsView)
-			tc.SetCursor(widget.TablePos{Row: tc.Len() - 1})
+			tc.SetCursor(table.TablePos{Row: tc.Len() - 1})
 			return len(r.h.plugins.results.model.rows) >= loaded
 		})
 	})
 	// the reader back at the top: once the last fetch is answered, nothing more loads
 	r.s.WaitFor(t, "the pages settled", func(string) bool {
 		return onLoop(r, func() bool {
-			r.resultsCore().SetCursor(widget.TablePos{})
+			r.resultsCore().SetCursor(table.TablePos{})
 			return !r.h.plugins.results.pending
 		})
 	})
@@ -758,6 +784,7 @@ func TestAReusedIDLeavesAnExportWhole(t *testing.T) {
 // TestRowsNoFetchAskedForAreDropped: host.rows with no fetch waiting are dropped and noted, the
 // table as it was.
 func TestRowsNoFetchAskedForAreDropped(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin4(t, dir, "rows", "service", "tablestall", tableManifest)
 	r, logs := pluginTUI(t, dir)
@@ -780,9 +807,8 @@ func TestRowsNoFetchAskedForAreDropped(t *testing.T) {
 // more; the panel never holds more than 250 (every change the model announces is measured). The
 // export writes those 250, fetching nothing past the cap, and says the result has more.
 func TestThePanelHoldsAtMostItsCap(t *testing.T) {
-	cap := resultsResident
-	resultsResident = 250
-	t.Cleanup(func() { resultsResident = cap })
+	t.Parallel()
+	tune(t).resultsResident = 250
 	dir := t.TempDir()
 	installPlugin4(t, dir, "rows", "service", "table1000", tableManifest)
 	r, logs := pluginTUI(t, dir)
@@ -798,7 +824,7 @@ func TestThePanelHoldsAtMostItsCap(t *testing.T) {
 	r.s.WaitFor(t, "the panel filled to its cap", func(string) bool {
 		return onLoop(r, func() bool {
 			if tc := r.h.plugins.c.TableCore(resultsView); tc != nil && tc.Len() > 0 {
-				tc.SetCursor(widget.TablePos{Row: tc.Len() - 1})
+				tc.SetCursor(table.TablePos{Row: tc.Len() - 1})
 			}
 			return r.h.plugins.results.id == "q1" && len(r.h.plugins.results.model.rows) >= 250
 		})
@@ -809,13 +835,13 @@ func TestThePanelHoldsAtMostItsCap(t *testing.T) {
 	r.s.WaitFor(t, "the heading at the cap", func(string) bool {
 		return strings.Contains(title(), "the first 250 rows shown; the result has more: change the query to change what is returned")
 	})
-	onLoop(r, func() bool { // at the last row again: at the cap, nothing is asked
+	fetches := r.saidFetches(t, logs) // before the ask that must send nothing
+	onLoop(r, func() bool {           // at the last row again: at the cap, nothing is asked
 		tc := r.h.plugins.c.TableCore(resultsView)
-		tc.SetCursor(widget.TablePos{Row: tc.Len() - 1})
+		tc.SetCursor(table.TablePos{Row: tc.Len() - 1})
 		r.h.plugins.results.model.FetchMore(tuidecl.Index{})
 		return true
 	})
-	fetches := len(saidLines(t, logs, "rows", "fetch "))
 	r.wantNoFetchSince(t, logs, fetches)
 	if n := onLoop(r, func() int { return len(r.h.plugins.results.model.rows) }); n != 250 || onLoop(r, func() bool {
 		return r.h.plugins.results.model.CanFetchMore(tuidecl.Index{})
@@ -843,13 +869,14 @@ func resultsTUI(t *testing.T, dir string, workspaces map[string][]string, o daem
 	d := startDaemonWith(t, "", workspaces, o)
 	r := runTUI(t, NewSession(d.sock, nil), Options{Plugins: Plugins{Dir: dir, LogDir: logs, Socket: d.sock}})
 	r.connected(t)
+	stopPluginRunsAtTheEnd(t, r) // its service plugin runs in the plugin's folder until shut down
 	return r, logs
 }
 
 // app runs one of the App.* commands, as the panel's buttons and the Go menu do.
 func (r *running) app(t *testing.T, name string, args ...qml.SpecValue) {
 	t.Helper()
-	if err := onLoop(r, func() error { return r.h.reg.handlers[name](args) }); err != nil {
+	if err := onLoop(r, func() error { return r.h.reg.Handlers[name](args) }); err != nil {
 		t.Fatalf("%s: %v", name, err)
 	}
 }
@@ -862,6 +889,7 @@ func (r *running) app(t *testing.T, name string, args ...qml.SpecValue) {
 // cannot; results.toggle closes the panel, telling the plugin its table is gone, and Go › Results
 // opens it again, empty.
 func TestTheResultsCommandsRunFromTheCatalogAndThePanel(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin4(t, dir, "rows", "service", "tablestall", tableManifest)
 	r, logs := resultsTUI(t, dir, map[string][]string{"kb": {"a.md", "# A\n", "manual.pdf", manualPDF}}, daemonOpts{deriver: pdfAsText{}})
@@ -897,12 +925,12 @@ func TestTheResultsCommandsRunFromTheCatalogAndThePanel(t *testing.T) {
 	r.s.WaitFor(t, "manual.pdf open, read-only", func(string) bool {
 		return onLoop(r, func() bool { return r.h.file.open && r.h.file.path == "manual.pdf" && r.h.core.ReadOnly() })
 	})
-	if err := onLoop(r, func() error { return r.h.cat.run("results.markdown", nil) }); err != nil {
+	if err := onLoop(r, func() error { return r.h.cat.Run("results.markdown", nil) }); err != nil {
 		t.Fatal(err)
 	}
 	// the refusal is golib's ErrReadOnly, its words the sentinel's own whatever its category says
-	r.waitNotice(t, "insert the results: "+widget.ErrReadOnly.Error())
-	if err := onLoop(r, func() error { return core{r.h}.InsertBlock("x") }); !errors.Is(err, widget.ErrReadOnly) {
+	r.waitNotice(t, "insert the results: "+editor.ErrReadOnly.Error())
+	if err := onLoop(r, func() error { return core{r.h}.InsertBlock("x") }); !errors.Is(err, editor.ErrReadOnly) {
 		t.Fatalf("a block inserted into the read-only page: %v, want widget.ErrReadOnly", err)
 	}
 	if r.editorText() != manualPDF {
@@ -925,7 +953,7 @@ func TestTheResultsCommandsRunFromTheCatalogAndThePanel(t *testing.T) {
 	// the page that has the keyboard covers the panel: the first toggle brings it to the front, the
 	// second closes it (docs/decisions/editor.md#a-toggle-raises-a-covered-panel)
 	for i := range 2 {
-		if err := onLoop(r, func() error { return r.h.cat.run("results.toggle", nil) }); err != nil {
+		if err := onLoop(r, func() error { return r.h.cat.Run("results.toggle", nil) }); err != nil {
 			t.Fatal(err)
 		}
 		if i == 0 {
@@ -945,13 +973,13 @@ func TestTheResultsCommandsRunFromTheCatalogAndThePanel(t *testing.T) {
 // TestQuittingStopsAnExport: AutoDoc quitting with an export not finished (its writer held after
 // its first chunk) cancels it: the .part is removed and the chosen path never written.
 func TestQuittingStopsAnExport(t *testing.T) {
+	t.Parallel()
 	entered, release := make(chan struct{}), make(chan struct{})
 	var once sync.Once
-	exportWritten = func(int) {
+	tune(t).exportWritten = func(int) {
 		once.Do(func() { close(entered) })
 		<-release
 	}
-	t.Cleanup(func() { exportWritten = nil })
 	dir := t.TempDir()
 	installPlugin4(t, dir, "rows", "service", "tablestall", tableManifest)
 	r, _ := resultsTUI(t, dir, map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{})
@@ -974,7 +1002,7 @@ func TestQuittingStopsAnExport(t *testing.T) {
 		t.Fatal("the program did not stop")
 	}
 	close(release)    // the writer waits for its next step
-	r.h.reg.stopped() // what Run does once the loop has ended: each feature stops what it started
+	r.h.reg.Stopped() // what Run does once the loop has ended: each feature stops what it started
 	_, partErr := os.Stat(path + ".part")
 	_, pathErr := os.Stat(path)
 	if !errors.Is(partErr, os.ErrNotExist) || !errors.Is(pathErr, os.ErrNotExist) {
@@ -986,6 +1014,7 @@ func TestQuittingStopsAnExport(t *testing.T) {
 // never another view or an id that is none; before the program runs the host has neither a table
 // nor a page to insert into.
 func TestTheHostsTableAndBlockServices(t *testing.T) {
+	t.Parallel()
 	early := core{newHost(NewSession("unused", nil), Options{})}
 	if early.TableCore(resultsView) != nil {
 		t.Error("a table before the program runs")

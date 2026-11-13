@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // THE CONFORMANCE OF package script (M10): it is AutoDoc's engine and anyone's. It imports nothing of
@@ -40,7 +40,7 @@ func TestScriptImportsNothingOfAutoDocs(t *testing.T) {
 // engine over a golib Editor with no AutoDoc around it, under the global AutoDoc gives them, and
 // their commands edit as they do in AutoDoc.
 func TestAutoDocsScriptsRunOnABareEditor(t *testing.T) {
-	ed := widget.NewEditor(widget.WithCore(widget.CoreInitialText("Intro")))
+	ed := editor.NewEditor(editor.WithCore(editor.CoreInitialText("Intro")))
 	core := ed.Core()
 	e := New(core, WithGlobal("autodoc"))
 	t.Cleanup(e.Close)
@@ -68,7 +68,7 @@ func TestAutoDocsScriptsRunOnABareEditor(t *testing.T) {
 	}
 	// its completion works there too: golib's prompt reads the same Complete
 	c, _ := core.Commands().Lookup("mermaid")
-	if c.Complete == nil || !strings.Contains(strings.Join(c.Complete(widget.CompleteContext{Core: core}), " "), "sequence") {
+	if c.Complete == nil || !strings.Contains(strings.Join(c.Complete(editor.CompleteContext{Core: core}), " "), "sequence") {
 		t.Fatal(":mermaid offers no types on a bare editor")
 	}
 }

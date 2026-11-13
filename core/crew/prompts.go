@@ -11,6 +11,7 @@ const (
 	KindCodex    = "codex"
 	KindAgy      = "agy"
 	KindOpenCode = "opencode"
+	KindJunie    = "junie"
 )
 
 // StartsWithItsEndpoint is whether a session of kind registers its endpoint only once its CLI is

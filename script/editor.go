@@ -5,7 +5,7 @@ import (
 	"io"
 	"maps"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -127,7 +127,7 @@ func (e *Engine) editorValueFor(fn *lua.LFunction) lua.LValue {
 }
 
 // ed is the core a method acts on; outside a command, none.
-func (e *Engine) ed(L *lua.LState) *widget.EditorCore {
+func (e *Engine) ed(L *lua.LState) *editor.EditorCore {
 	if e.cur == nil {
 		L.RaiseError("the editor is only reachable inside a command's run")
 	}
@@ -135,22 +135,22 @@ func (e *Engine) ed(L *lua.LState) *widget.EditorCore {
 }
 
 // pos reads a 1-based (line, col) from arguments i and i+1 into a TextPos.
-func pos(L *lua.LState, i int) widget.TextPos {
-	return widget.TextPos{Line: L.CheckInt(i) - 1, Col: L.CheckInt(i+1) - 1}
+func pos(L *lua.LState, i int) editor.TextPos {
+	return editor.TextPos{Line: L.CheckInt(i) - 1, Col: L.CheckInt(i+1) - 1}
 }
 
 // rng reads a 1-based range from arguments i..i+3.
-func rng(L *lua.LState, i int) widget.TextRange {
-	return widget.TextRange{From: pos(L, i), To: pos(L, i+2)}
+func rng(L *lua.LState, i int) editor.TextRange {
+	return editor.TextRange{From: pos(L, i), To: pos(L, i+2)}
 }
 
 // pushPos pushes a TextPos as two 1-based numbers.
-func pushPos(L *lua.LState, p widget.TextPos) {
+func pushPos(L *lua.LState, p editor.TextPos) {
 	L.Push(lua.LNumber(p.Line + 1))
 	L.Push(lua.LNumber(p.Col + 1))
 }
 
-func pushRange(L *lua.LState, r widget.TextRange) int {
+func pushRange(L *lua.LState, r editor.TextRange) int {
 	pushPos(L, r.From)
 	pushPos(L, r.To)
 	return 4
@@ -170,7 +170,7 @@ func (e *Engine) edValue(L *lua.LState) int {
 
 func (e *Engine) edSetValue(L *lua.LState) int {
 	c := e.ed(L)
-	all := widget.TextRange{To: widget.TextPos{Line: c.LineCount() - 1, Col: 1 << 30}}
+	all := editor.TextRange{To: editor.TextPos{Line: c.LineCount() - 1, Col: 1 << 30}}
 	_, err := c.Replace(all, L.CheckString(2))
 	check(L, err)
 	return 0
@@ -262,7 +262,7 @@ func (e *Engine) edUnselect(L *lua.LState) int {
 }
 
 // findOptions reads a find's opts table, argument i, if there is one; atCursor is its at_cursor.
-func findOptions(L *lua.LState, i int) (o widget.FindOptions, atCursor bool) {
+func findOptions(L *lua.LState, i int) (o editor.FindOptions, atCursor bool) {
 	switch v := L.Get(i).(type) {
 	case *lua.LNilType:
 	case *lua.LTable:
@@ -282,7 +282,7 @@ func (e *Engine) edFind(L *lua.LState) int {
 	term := L.CheckString(2)
 	o, atCursor := findOptions(L, 3)
 	var (
-		r  widget.TextRange
+		r  editor.TextRange
 		ok bool
 	)
 	if atCursor {
@@ -299,11 +299,11 @@ func (e *Engine) edFind(L *lua.LState) int {
 
 // findFrom is Find's choice among all with a match starting at the cursor counted: forward, the
 // first starting at or after at; backward, the last starting at or before it; Wrap goes round.
-func findFrom(all []widget.TextRange, at widget.TextPos, o widget.FindOptions) (widget.TextRange, bool) {
+func findFrom(all []editor.TextRange, at editor.TextPos, o editor.FindOptions) (editor.TextRange, bool) {
 	if len(all) == 0 {
-		return widget.TextRange{}, false
+		return editor.TextRange{}, false
 	}
-	cmp := func(r widget.TextRange) int {
+	cmp := func(r editor.TextRange) int {
 		switch {
 		case r.From.Line != at.Line:
 			return r.From.Line - at.Line
@@ -354,17 +354,17 @@ func (e *Engine) edReplaceAll(L *lua.LState) int {
 }
 
 // modeNames are ed:mode's answers.
-var modeNames = map[widget.EditorMode]string{
-	widget.ModeNormal:      "normal",
-	widget.ModeInsert:      "insert",
-	widget.ModeReplace:     "replace",
-	widget.ModeVisual:      "visual",
-	widget.ModeVisualLine:  "visual_line",
-	widget.ModeVisualBlock: "visual_block",
+var modeNames = map[editor.EditorMode]string{
+	editor.ModeNormal:      "normal",
+	editor.ModeInsert:      "insert",
+	editor.ModeReplace:     "replace",
+	editor.ModeVisual:      "visual",
+	editor.ModeVisualLine:  "visual_line",
+	editor.ModeVisualBlock: "visual_block",
 }
 
 // ModeName is m as ed:mode() says it: "normal", "insert", "visual_line", ….
-func ModeName(m widget.EditorMode) string {
+func ModeName(m editor.EditorMode) string {
 	if name, ok := modeNames[m]; ok {
 		return name
 	}

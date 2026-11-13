@@ -3,13 +3,13 @@ package client
 import (
 	"context"
 	"fmt"
-	"net"
 	"os"
 	"testing"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -18,7 +18,7 @@ import (
 // sys.shutdown, admitted, stops it.
 func otherDaemon(t *testing.T, sock string, proto int64) (stopped chan struct{}) {
 	t.Helper()
-	ln, err := net.Listen("unix", sock)
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}

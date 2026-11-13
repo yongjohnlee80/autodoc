@@ -130,7 +130,9 @@ func TestAClaudesPromptsAreReportedOnlyOnceItStarted(t *testing.T) {
 	ctx := context.Background()
 	clock := crewtest.NewClock()
 	st := crewtest.NewMem(clock.Now)
-	m := crew.New(st)
+	// the endpoint row is written to the store (started): what is checked is the start, the same on
+	// every OS, so the crew can wake through a socket here whatever this OS offers
+	m := crew.New(st, crew.WithSocketWakes(true))
 	epoch, err := m.Claim(ctx, "autodoc:w", "host", "")
 	if err != nil {
 		t.Fatal(err)

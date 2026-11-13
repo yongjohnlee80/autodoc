@@ -2,7 +2,7 @@ package tui
 
 import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 )
 
 // ARRANGE PANEL — Go › Arrange panel (SPC L): the panel with the keyboard, else the one opened
@@ -21,10 +21,10 @@ type arrangeState struct {
 
 // arrangeSteps are the keys' steps, in cells: a move, or a resize.
 var arrangeSteps = map[string]tuicore.Action{
-	"left": widget.WindowMoveByAction{DX: -2}, "right": widget.WindowMoveByAction{DX: 2},
-	"up": widget.WindowMoveByAction{DY: -1}, "down": widget.WindowMoveByAction{DY: 1},
-	"narrower": widget.WindowResizeByAction{DW: -2}, "wider": widget.WindowResizeByAction{DW: 2},
-	"shorter": widget.WindowResizeByAction{DH: -1}, "taller": widget.WindowResizeByAction{DH: 1},
+	"left": widgetcore.WindowMoveByAction{DX: -2}, "right": widgetcore.WindowMoveByAction{DX: 2},
+	"up": widgetcore.WindowMoveByAction{DY: -1}, "down": widgetcore.WindowMoveByAction{DY: 1},
+	"narrower": widgetcore.WindowResizeByAction{DW: -2}, "wider": widgetcore.WindowResizeByAction{DW: 2},
+	"shorter": widgetcore.WindowResizeByAction{DH: -1}, "taller": widgetcore.WindowResizeByAction{DH: 1},
 }
 
 // arrangePanel begins an arrangement.
@@ -58,7 +58,7 @@ func (h *Host) arrangeStep(step string) {
 		return
 	}
 	c, found := h.p.Find(h.arrange.panel)
-	w, isWindow := c.(interface{ WindowBehavior() *widget.WindowCore })
+	w, isWindow := c.(interface{ WindowBehavior() *widgetcore.WindowCore })
 	if !found || !isWindow || w.WindowBehavior() == nil {
 		return
 	}

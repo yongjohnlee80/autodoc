@@ -20,8 +20,8 @@ func TestReadThisProcess(t *testing.T) {
 }
 
 func TestCPUSecondsRise(t *testing.T) {
-	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
-		t.Skip("no getrusage here")
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
+		t.Skip("no CPU reading here")
 	}
 	before := Read().CPUSeconds
 	x := 0
@@ -33,9 +33,10 @@ func TestCPUSecondsRise(t *testing.T) {
 	}
 }
 
-func TestResidentSizeOnLinux(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("RSS is Linux's")
+// TestResidentSize: Linux's resident pages and Windows' working set, in bytes.
+func TestResidentSize(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "windows" {
+		t.Skip("no resident size here")
 	}
 	s := Read()
 	// bytes, not KiB or pages: a Go test binary is more than a MiB resident and far less than 64 GiB

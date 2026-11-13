@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/script"
@@ -26,7 +26,7 @@ func (s luaBuffers) Buffers() []script.BufferInfo {
 
 // Editor is buffer n's editor: the widget's for the buffer shown, its own headless one otherwise,
 // which runs the user's commands by the user's code (editorFor).
-func (s luaBuffers) Editor(n int) (*widget.EditorCore, bool) {
+func (s luaBuffers) Editor(n int) (*editor.EditorCore, bool) {
 	b := s.h.bufferNumbered(n)
 	if b == nil || b.buf == nil {
 		return nil, false

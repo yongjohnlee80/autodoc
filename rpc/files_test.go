@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -23,26 +22,22 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
-// filesRig is a daemon serving the disk as the daemon does (app/serve.go), over network ("unix" or
+// filesRig is a daemon serving the disk as the daemon does (app/serve.go), over network (ipc.Network or
 // "tcp"), with the workspaces ws. Its client has said hello at protocol proto.
 func filesRig(t *testing.T, network string, proto int64, ws ...Workspace) *golibrpc.Client {
 	t.Helper()
-	disk, err := local.New("/")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = disk.Close() })
 	addr := shortSocket(t)
 	if network == "tcp" {
 		addr = "127.0.0.1:0"
 	}
-	ln, err := net.Listen(network, addr)
+	ln, err := rigListen(network, addr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := New(Fixed(ws...), "v-test", WithListener(ln), WithFiles(docs.New(disk, nil)))
+	srv := New(Fixed(ws...), "v-test", WithListener(ln), WithDisks(localDisks(t)))
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- srv.Run(ctx) }()
@@ -54,7 +49,7 @@ func filesRig(t *testing.T, network string, proto int64, ws ...Workspace) *golib
 			t.Error("the server did not stop")
 		}
 	})
-	cli, err := golibrpc.Dial(context.Background(), ln.Addr().String(), msgpackrpc.New(nil), golibrpc.ClientNetwork(network))
+	cli, err := golibrpc.Dial(context.Background(), ln.Addr().String(), msgpackrpc.New(nil), rigNetwork(network)...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +70,7 @@ func callErr(cli *golibrpc.Client, method string, params ...any) error {
 // write or a second create is a conflict that leaves the file as it is
 // (docs/decisions/editor.md#files-outside-every-workspace).
 func TestFileVerbsEditAFileOutsideEveryWorkspace(t *testing.T) {
-	cli := filesRig(t, "unix", Protocol)
+	cli := filesRig(t, ipc.Network, Protocol)
 	abs := filepath.Join(t.TempDir(), "notes", "deep", "a.md")
 
 	v1 := call(t, cli, "file.write", abs, []byte("# one\n"), "").(map[string]any)["version"].(string)
@@ -104,7 +99,7 @@ func TestFileVerbsEditAFileOutsideEveryWorkspace(t *testing.T) {
 // TestFileVerbsRefuseWhatIsNotAnAbsoluteTextFile: a relative, unclean or root path is invalid, and
 // so is a file the editor cannot hold — binary bytes, read or written — whatever its extension.
 func TestFileVerbsRefuseWhatIsNotAnAbsoluteTextFile(t *testing.T) {
-	cli := filesRig(t, "unix", Protocol)
+	cli := filesRig(t, ipc.Network, Protocol)
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "blob.md")
 	if err := os.WriteFile(bin, []byte("PK\x03\x04\x00\x00binary"), 0o644); err != nil {
@@ -145,7 +140,7 @@ func TestFileVerbsAreForLocalPeers(t *testing.T) {
 
 // TestFileVerbsNeedProtocol17: a session below 17 does not have them.
 func TestFileVerbsNeedProtocol17(t *testing.T) {
-	cli := filesRig(t, "unix", 16)
+	cli := filesRig(t, ipc.Network, 16)
 	for _, v := range []string{"file.read", "file.write", "file.locate"} {
 		err := callErr(cli, v, "/tmp/a.md")
 		if code(err) != golibrpc.CodeMethodNotFound || !strings.Contains(err.Error(), "needs protocol 17") {
@@ -165,7 +160,7 @@ func TestFileVerbsOnAServerWithoutFiles(t *testing.T) {
 			t.Errorf("%s without files: %v, want unsupported", c[0], err)
 		}
 	}
-	if got := call(t, cli, "file.locate", "/roots/kb/a.md"); !reflect.DeepEqual(got, map[string]any{"workspace": "kb", "path": "a.md"}) {
+	if got := call(t, cli, "file.locate", filepath.Join(r.roots, "kb", "a.md")); !reflect.DeepEqual(got, map[string]any{"workspace": "kb", "path": "a.md"}) {
 		t.Errorf("file.locate without files = %v", got)
 	}
 }
@@ -179,7 +174,7 @@ func TestFileLocateFindsTheWorkspaceThatServesAPath(t *testing.T) {
 	ws := func(name, root string) Workspace {
 		return Static(WorkspaceInfo{Name: name, Root: root, Docs: docs.New(memfs.New(), md)})
 	}
-	cli := filesRig(t, "unix", Protocol,
+	cli := filesRig(t, ipc.Network, Protocol,
 		ws("kb", filepath.Join(base, "kb")),
 		ws("inner", filepath.Join(base, "kb", "sub")),
 		Static(WorkspaceInfo{Name: "all", Root: filepath.Join(base, "all"), Docs: docs.New(memfs.New(), nil)}), // every path
@@ -251,7 +246,7 @@ func diskWorkspaceOf(t *testing.T, root string, match func(string) bool, reg *re
 func TestFileWriteInAWorkspaceIsItsDocWrite(t *testing.T) {
 	root := t.TempDir()
 	w, ix := diskWorkspace(t, root)
-	cli := filesRig(t, "unix", Protocol, w)
+	cli := filesRig(t, ipc.Network, Protocol, w)
 	ctx := context.Background()
 	indexed := func(p string) bool {
 		t.Helper()
@@ -314,7 +309,7 @@ func TestFileWriteRawInAWorkspaceIsItsDocWriteRaw(t *testing.T) {
 		t.Fatal(err)
 	}
 	w, ix := diskWorkspaceOf(t, root, nil, reg)
-	cli := filesRig(t, "unix", Protocol, w)
+	cli := filesRig(t, ipc.Network, Protocol, w)
 	raw := call(t, cli, "doc.read_raw", "kb", "page.html").(map[string]any) // the version a read through "/" gives too
 	if err := callErr(cli, "file.write", page, []byte("<p>x</p>"), raw["version"]); code(err) != golibrpc.CodeInvalidParams {
 		t.Errorf("file.write of an HTML page in a workspace: %v; want refused, as doc.write refuses it", err)

@@ -8,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	"math"
-	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -26,6 +25,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/mail"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/todo/sqlitejournal"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -48,13 +48,13 @@ func newCrewDaemon(t *testing.T) *crewDaemon {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	d := &crewDaemon{t: t, ctx: ctx, sock: short(t) + "/c.sock", run: "run-a"}
+	d := &crewDaemon{t: t, ctx: ctx, sock: ipc.ScratchAddr(short(t), "c.sock"), run: "run-a"}
 	d.deps = &moduleDeps{store: db, storeID: "store-1", workspaces: rpc.Fixed(), journal: sqlitejournal.New(db), log: logger.Nop{}}
 	ms := modules(d.deps)
 	if err := d.deps.mail.EnsureReserved(ctx); err != nil {
 		t.Fatal(err)
 	}
-	ln, err := net.Listen("unix", d.sock)
+	ln, err := ipc.Listen(d.sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -413,7 +413,7 @@ func TestASnapshotPastTheMessageLimitPagesThroughRPC(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	cli, err := golibrpc.Dial(d.ctx, d.sock, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	cli, err := golibrpc.Dial(d.ctx, d.sock, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -482,7 +482,7 @@ func TestASnapshotMeasuresMetadataThroughRPC(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	cli, err := golibrpc.Dial(d.ctx, d.sock, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	cli, err := golibrpc.Dial(d.ctx, d.sock, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -526,7 +526,7 @@ func TestTheLongPollCapIsPerConnectionAcrossReHellos(t *testing.T) {
 	d := newCrewDaemon(t)
 	dial := func() *golibrpc.Client {
 		t.Helper()
-		cli, err := golibrpc.Dial(d.ctx, d.sock, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+		cli, err := golibrpc.Dial(d.ctx, d.sock, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 		if err != nil {
 			t.Fatal(err)
 		}

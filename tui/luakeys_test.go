@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 )
 
 // keysLua binds :mark to a chord, a control chord, a leader letter and both menus.
@@ -53,14 +53,14 @@ func TestLuaKeysAndMenusRunTheirCommands(t *testing.T) {
 		t.Fatalf("the Plugins menu has %d Lua rows", rows)
 	}
 	onLoop(r, func() bool { // the Plugins row, by its target, as the menu's row runs it
-		for _, row := range r.h.luaFeature().rows.rows {
-			if row.where == "plugins" {
-				r.h.luaFeature().luaMenu(strconv.Itoa(row.serial))
+		for _, row := range r.h.luaFeature().rows.Rows {
+			if row.Where == "plugins" {
+				r.h.luaFeature().luaMenu(strconv.Itoa(row.Serial))
 			}
 		}
 		return true
 	})
-	var row widget.MenuItemModel
+	var row widgetcore.MenuItemModel
 	onLoop(r, func() bool {
 		for _, it := range r.h.editorMenu(r.h.core) {
 			if it.Label == "Mark here" {
@@ -113,7 +113,7 @@ func TestLuaKeysAndMenusRunTheirCommands(t *testing.T) {
 	// a reload drops the test's script, and every key and row with it
 	r.mustRun(t, "lua-reload")
 	ui := onLoop(r, func() luaUI { return r.h.luaFeature().ui })
-	rows = onLoop(r, func() int { return len(r.h.luaFeature().rows.rows) })
+	rows = onLoop(r, func() int { return len(r.h.luaFeature().rows.Rows) })
 	if len(ui.chords) != 0 || len(ui.leader) != 0 || rows != 0 {
 		t.Fatalf("after the reload: %+v, %d menu rows", ui, rows)
 	}

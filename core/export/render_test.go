@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 
 	"github.com/yongjohnlee80/autodoc/core/export"
 	"github.com/yongjohnlee80/autodoc/core/export/mermaid"
@@ -93,7 +93,7 @@ func digest(s string) string {
 // diagram. The page as the browser leaves it holds each one's SVG, in the page's theme, and no
 // error.
 func TestMermaidDrawsInABrowser(t *testing.T) {
-	browser, ok := widget.HTMLRasterizer()
+	browser, ok := htmlview.HTMLRasterizer()
 	if !ok {
 		t.Skip("no headless Chromium or Chrome")
 	}
@@ -214,8 +214,15 @@ func TestABrowserThatHangsInItsTeardownAfterThePageIsThePage(t *testing.T) {
 	}
 }
 
-// fileURL is the file: URL of an absolute path whose every byte is safe in a URL, written by hand.
-func fileURL(path string) string { return "file://" + filepath.ToSlash(path) }
+// fileURL is the file: URL of an absolute path whose every byte is safe in a URL, written by hand: a
+// drive's path ("C:/x") takes the leading slash a URL's path starts with (file:///C:/x).
+func fileURL(path string) string {
+	p := filepath.ToSlash(path)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	return "file://" + p
+}
 
 // With a base, a relative link is the file: URL of the file it names there: its escapes decoded, the
 // path encoded again (a space, a '#', a byte past ASCII), its query and fragment kept; an absolute
@@ -234,7 +241,7 @@ func TestRelativeLinksResolveAgainstTheBase(t *testing.T) {
 	}
 	page := string(content)
 	docs := fileURL(parent) + "/my%20docs"
-	for _, want := range []string{
+	wants := []string{
 		`href="` + docs + `/notes/a.md#intro"`,
 		`href="` + fileURL(parent) + `/x.md#sec"`,
 		`href="` + docs + `/sub%20dir/b%20c.md"`,
@@ -242,13 +249,17 @@ func TestRelativeLinksResolveAgainstTheBase(t *testing.T) {
 		`href="` + docs + `/a%23b.md"`,
 		`href="` + docs + `/100%25.md"`,
 		`href="` + docs + `/c.md?x=1&amp;y=2#f"`,
-		`href="file:///etc/hosts"`,
 		`href="` + docs + `/ref.md"`,
 		`href="https://example.com/x#y"`,
 		`href="//example.com/z"`,
 		`href="#local"`,
 		`href="mailto:a@example.com"`,
-	} {
+	}
+	if filepath.IsAbs(filepath.FromSlash("/etc/hosts")) {
+		// absolute where it has no drive: on Unix; on Windows a path with no drive is not absolute
+		wants = append(wants, `href="file:///etc/hosts"`)
+	}
+	for _, want := range wants {
 		if !strings.Contains(page, want) {
 			t.Errorf("the page lacks %s", want)
 		}
@@ -291,7 +302,7 @@ func TestARelativeBaseIsReadFromTheWorkingDirectory(t *testing.T) {
 // test's own page frames the export, clicks its link and writes down where the frame went and what
 // it shows.
 func TestAResolvedLinkIsFollowedInABrowser(t *testing.T) {
-	browser, ok := widget.HTMLRasterizer()
+	browser, ok := htmlview.HTMLRasterizer()
 	if !ok {
 		t.Skip("no headless Chromium or Chrome")
 	}

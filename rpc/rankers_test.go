@@ -3,7 +3,6 @@ package rpc
 import (
 	"context"
 	"errors"
-	"net"
 	"reflect"
 	"testing"
 
@@ -12,6 +11,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // fakeRankers records what the verbs hand it, and answers with err when it is set.
@@ -53,7 +53,7 @@ func (f *fakeRankers) Supplied() (string, bool) { return f.supplied, f.supplied 
 func rankersServer(t *testing.T, f *fakeRankers) *golibrpc.Client {
 	t.Helper()
 	sock := shortSocket(t)
-	ln, err := net.Listen("unix", sock)
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}

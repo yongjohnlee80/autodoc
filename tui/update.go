@@ -4,13 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/yongjohnlee80/autodoc/internal/install"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
-// UPDATE — About's Update (docs/decisions/install.md#abouts-update-and-the-restart). When
-// install-autodoc.sh installed this AutoDoc, its record says so, and About offers Update: update.sh
-// runs in a tab of the terminal panel, where the user sees its progress and can answer it. When it
+// UPDATE — About's Update (docs/decisions/install.md#abouts-update-and-the-restart). When the
+// install script installed this AutoDoc, its record says so, and About offers Update: the update
+// script (update.sh; update.ps1 on Windows) runs in a tab of the terminal panel, where the user sees its progress and can answer it. When it
 // ends well and the binary at this one's path is newer, AutoDoc offers to restart: the backend
 // restarts as Restart backend… does, then this program starts again as the new binary (Launch
 // returns ErrRelaunch, and the program execs it). An AutoDoc installed another way has no record,
@@ -34,7 +37,7 @@ func (h *Host) scriptRecord() (install.Record, bool) {
 	return r, true
 }
 
-// updateAutoDoc is About's Update: update.sh runs in a tab of the terminal panel.
+// updateAutoDoc is About's Update: the update script runs in a tab of the terminal panel.
 func (h *Host) updateAutoDoc() {
 	r, ok := h.scriptRecord()
 	if !ok {
@@ -42,32 +45,35 @@ func (h *Host) updateAutoDoc() {
 		return
 	}
 	h.closeDialog("about")
-	if _, err := h.terminals.runFor("AutoDoc", "/bin/sh "+shellQuote(r.Update), "", h.updateExited); err != nil {
+	program, args := r.UpdateCommand()
+	script := filepath.Base(r.Update)
+	exited := func(code int) { h.updateExited(script, code) }
+	if _, err := h.terminals.runProgramFor("AutoDoc", program, args, "", exited); err != nil {
 		h.failed(h.tr("autodoc.notice.update.update"), err)
 	}
 }
 
-// updateExited hears update.sh's exit: a failure is said (its tab says why); a success that put a
+// updateExited hears the update script's exit: a failure is said (its tab says why); a success that put a
 // newer AutoDoc at this one's path offers the restart.
-func (h *Host) updateExited(code int) {
+func (h *Host) updateExited(script string, code int) {
 	if code != 0 {
-		h.notify(h.trf("autodoc.notice.update.the_update_exited", fmt.Sprint(code)))
+		h.notify(h.trf("autodoc.notice.update.the_update_exited", fmt.Sprint(code), script))
 		return
 	}
 	running := h.aboutInfo.Version
-	do(h, func(context.Context) answerOf[string] {
+	do(h, func(context.Context) feature.AnswerOf[string] {
 		if h.installed == nil {
-			return answered("", nil)
+			return feature.Answered("", nil)
 		}
-		return answered(h.installed())
-	}, func(a answerOf[string]) {
-		if a.err != nil || a.v == "" || a.v == running {
+		return feature.Answered(h.installed())
+	}, func(a feature.AnswerOf[string]) {
+		if a.Err() != nil || a.Value == "" || a.Value == running {
 			h.notify(h.trf("autodoc.notice.update.autodoc_is_up_to_date", running))
 			return
 		}
-		h.ask(Question{
+		h.ask(feature.Question{
 			Title: h.tr("autodoc.question.update.restart_autodoc"),
-			Text:  h.trf("autodoc.text.update.autodoc_is_installed_restart_now", a.v, running),
+			Text:  h.trf("autodoc.text.update.autodoc_is_installed_restart_now", a.Value, running),
 			Yes:   h.tr("autodoc.question.update.restart_now"),
 			No:    h.tr("autodoc.question.update.later"),
 			OnYes: h.restartUpdated,
@@ -96,8 +102,31 @@ func (h *Host) relaunch() {
 	})
 }
 
-// canUpdate is whether About offers Update: install-autodoc.sh installed this AutoDoc.
+// canUpdate is whether About offers Update: install-autodoc.sh installed this AutoDoc, the very
+// binary running. Another build run while a script install exists (a build from source, a release
+// candidate, a second copy) is not the record's binary: Update would update the installed one, and
+// the restart after it would start this one again, still asking. So a running program that is
+// another file than the record's bin gets no Update; when either can't be read, the record decides,
+// as before.
 func (h *Host) canUpdate() bool {
-	_, ok := h.scriptRecord()
-	return ok
+	r, ok := h.scriptRecord()
+	if !ok {
+		return false
+	}
+	return runsRecordedBinary(r)
+}
+
+// runsRecordedBinary reports whether this program is the record's binary, compared as files (a
+// link to it, or another spelling of its path, is it); true when either can't be read.
+func runsRecordedBinary(r install.Record) bool {
+	self, err := os.Executable()
+	if err != nil || r.Bin == "" {
+		return true
+	}
+	a, aerr := os.Stat(self)
+	b, berr := os.Stat(r.Bin)
+	if aerr != nil || berr != nil {
+		return true
+	}
+	return os.SameFile(a, b)
 }

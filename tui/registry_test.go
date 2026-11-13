@@ -14,6 +14,8 @@ import (
 	"time"
 
 	regindex "github.com/yongjohnlee80/autodoc/core/registry"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/system"
 )
 
 const (
@@ -31,6 +33,7 @@ type servedReg struct {
 	etag   string
 	status int
 	seen   []string // each request's If-None-Match
+	src    registrySource
 }
 
 func serveRegistry(t *testing.T, body []byte) *servedReg {
@@ -51,11 +54,9 @@ func serveRegistry(t *testing.T, body []byte) *servedReg {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	url, dir := registryURL, registryCacheDir
-	t.Cleanup(func() { registryURL, registryCacheDir = url, dir })
 	cache := t.TempDir()
-	registryURL = srv.URL + "/index.json"
-	registryCacheDir = func() (string, error) { return cache, nil }
+	s.src = registrySource{url: srv.URL + "/index.json", cacheDir: func() (string, error) { return cache, nil }}
+	tune(t).registry = s.src // the test's programs read it too
 	return s
 }
 
@@ -100,30 +101,30 @@ var regNow = time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
 func TestTheRegistryIsReadAtMostDailyOnItsETag(t *testing.T) {
 	ctx := context.Background()
 	s := serveRegistry(t, testIndex(t, testEntry("plugin", "echo", "https://github.com/example/echo", regC1)))
-	l := fetchRegistry(ctx, regNow)
+	l := s.src.fetch(ctx, regNow)
 	if l.note != "" || l.ix.Entry("plugin", "echo") == nil {
 		t.Fatalf("the first fetch: %+v", l)
 	}
-	if l := fetchRegistry(ctx, regNow.Add(time.Hour)); len(s.requests()) != 1 || l.ix.Entry("plugin", "echo") == nil {
+	if l := s.src.fetch(ctx, regNow.Add(time.Hour)); len(s.requests()) != 1 || l.ix.Entry("plugin", "echo") == nil {
 		t.Fatalf("an hour on: %d requests, %+v", len(s.requests()), l)
 	}
-	l = fetchRegistry(ctx, regNow.Add(25*time.Hour))
+	l = s.src.fetch(ctx, regNow.Add(25*time.Hour))
 	if got := s.requests(); len(got) != 2 || got[1] != `"v1"` {
 		t.Fatalf("a day on, the requests' ETags: %q", got)
 	}
 	if l.note != "" || l.ix.Entry("plugin", "echo") == nil {
 		t.Fatalf("after the 304: %+v", l)
 	}
-	if fetchRegistry(ctx, regNow.Add(26*time.Hour)); len(s.requests()) != 2 {
+	if s.src.fetch(ctx, regNow.Add(26*time.Hour)); len(s.requests()) != 2 {
 		t.Fatal("a 304 did not keep the list for another day")
 	}
 	s.set(testIndex(t, testEntry("plugin", "echo", "https://github.com/example/echo", regC1),
 		testEntry("lua", "hello", "https://codeberg.org/example/hello")), `"v2"`, 0)
-	l = fetchRegistry(ctx, regNow.Add(50*time.Hour))
+	l = s.src.fetch(ctx, regNow.Add(50*time.Hour))
 	if l.note != "" || l.ix.Entry("lua", "hello") == nil {
 		t.Fatalf("the new index: %+v", l)
 	}
-	if c, ok := readRegistryCache(); !ok || c.etag != `"v2"` || c.ix.Entry("lua", "hello") == nil {
+	if c, ok := s.src.read(); !ok || c.etag != `"v2"` || c.ix.Entry("lua", "hello") == nil {
 		t.Fatalf("the cache: %+v %v", c, ok)
 	}
 }
@@ -137,7 +138,7 @@ func TestABadIndexKeepsTheListAlreadyRead(t *testing.T) {
 	short.Audits = []regindex.IndexAudit{good.Audits[0]}
 	short.Audits[0].Commit = regC1[:7]
 	big := good
-	big.Description = strings.Repeat("x", httpMaxBody)
+	big.Description = strings.Repeat("x", system.HttpMaxBody)
 	for name, bad := range map[string][]byte{
 		"malformed":  []byte("{"),
 		"truncated":  whole[:len(whole)/2],
@@ -147,13 +148,13 @@ func TestABadIndexKeepsTheListAlreadyRead(t *testing.T) {
 		"over a MiB": testIndex(t, big),
 	} {
 		s := serveRegistry(t, whole)
-		fetchRegistry(context.Background(), regNow)
+		s.src.fetch(context.Background(), regNow)
 		s.set(bad, `"bad"`, 0)
-		l := fetchRegistry(context.Background(), regNow.Add(25*time.Hour))
+		l := s.src.fetch(context.Background(), regNow.Add(25*time.Hour))
 		if !strings.HasPrefix(l.note, "offline: the list as of 2026-10-19 (") || l.ix.Entry("plugin", "echo") == nil {
 			t.Errorf("%s: %q, %d entries", name, l.note, len(l.ix.Entries))
 		}
-		if c, ok := readRegistryCache(); !ok || c.etag != `"v1"` {
+		if c, ok := s.src.read(); !ok || c.etag != `"v1"` {
 			t.Errorf("%s: the cache was replaced: %q %v", name, c.etag, ok)
 		}
 	}
@@ -165,7 +166,7 @@ func TestNoRegistryIsTheBuiltinKBTypes(t *testing.T) {
 	s := serveRegistry(t, nil)
 	for status, why := range map[int]string{500: "500 Internal Server Error", 304: "304 Not Modified"} {
 		s.set(nil, `"v1"`, status)
-		l := fetchRegistry(context.Background(), regNow)
+		l := s.src.fetch(context.Background(), regNow)
 		if l.note != "offline: the built-in KB types only (the registry answered "+why+")" {
 			t.Errorf("%d: %q", status, l.note)
 		}
@@ -189,7 +190,7 @@ func TestAFailedRegistryReadIsTheBuiltins(t *testing.T) {
 	if got := ok.usable(); got.note != "x" {
 		t.Errorf("a read that did not fail changed: %+v", got)
 	}
-	if l, ok := failed[registryList](errPanicked{value: "boom"}); !ok || l.err == nil {
+	if l, ok := feature.Failed[registryList](feature.ErrPanicked{Value: "boom"}); !ok || l.err == nil {
 		t.Errorf("a panicked read does not carry its failure: %+v %v", l, ok)
 	}
 }
@@ -290,7 +291,7 @@ func TestALuaPackageIsInstalledByItsRegistryName(t *testing.T) {
 	if !strings.Contains(text, "from "+url+" at ") || !strings.Contains(text, "never audited\n\n"+packageRisk+"\n\n"+auditNote) {
 		t.Errorf("the card:\n%s", text)
 	}
-	onLoop(r, func() bool { r.h.asker.rejected(); return true })
+	onLoop(r, func() bool { r.h.asker.Rejected(); return true })
 
 	r.clearNotices()
 	r.mustRun(t, "lua-install nope")
@@ -338,7 +339,7 @@ func TestBrowsingTheRegistryListsPluginsAndPackages(t *testing.T) {
 		testEntry("kb-type", "team.kb", "https://github.com/example/team.kb")))
 	r, _ := pluginTUI(t, t.TempDir())
 	b := onLoop(r, func() *registryBrowse {
-		for _, f := range r.h.reg.features {
+		for _, f := range r.h.reg.Features {
 			if b, ok := f.(*registryBrowse); ok {
 				return b
 			}
@@ -360,7 +361,7 @@ func TestBrowsingTheRegistryListsPluginsAndPackages(t *testing.T) {
 	if p := source("App.registryPreviewText"); !strings.Contains(p, "- audited by claude-opus-5-5, 2026-10-10, at 1111111") {
 		t.Errorf("the preview:\n%s", p)
 	}
-	r.h.p.Post(func() { b.pick.accept(0, "") })
+	r.h.p.Post(func() { b.pick.Accept(0, "") })
 	q := r.question(t)
 	if !strings.Contains(q, "not audited at this commit (last audited: 1111111, 2026-10-10)\n\n"+pluginRisk) || !strings.Contains(q, full[:7]) {
 		t.Errorf("the card:\n%s", q)
@@ -370,12 +371,10 @@ func TestBrowsingTheRegistryListsPluginsAndPackages(t *testing.T) {
 }
 
 // insteadOf has git clone repo wherever it is asked for url: a registry entry's repo is on a host,
-// and the test's is a folder.
+// and the test's is a folder. It is set in t's program's environment, which its git inherits.
 func insteadOf(t *testing.T, repo, url string) {
 	t.Helper()
-	t.Setenv("GIT_CONFIG_COUNT", "1")
-	t.Setenv("GIT_CONFIG_KEY_0", "url.file://"+filepath.ToSlash(repo)+".insteadOf")
-	t.Setenv("GIT_CONFIG_VALUE_0", url)
+	tuneEnv(t, "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=url.file://"+filepath.ToSlash(repo)+".insteadOf", "GIT_CONFIG_VALUE_0="+url)
 }
 
 // An entry's preview names its kind, its declares at their commit (HEAD for none) and its audits,
@@ -387,7 +386,7 @@ func TestARegistryEntrysPreviewNamesItsKindAndAudits(t *testing.T) {
 	}{{regindex.KindPlugin, "plugin echo, by jo"}, {regindex.KindLua, "Lua package echo, by jo"}, {regindex.KindKBType, "KB type echo, by jo"}} {
 		e := regindex.IndexEntry{Kind: c.kind, Name: "echo", Title: "Echo", Author: "jo", Repo: "https://example.com/echo",
 			Declares: regindex.Declares{Items: []string{"workspace.read"}}}
-		text := registryPane(inEnglish{}.Trf, e).text
+		text := registryPane(inEnglish{}.Trf, e).Text
 		for _, want := range []string{c.by + "\nhttps://example.com/echo\n", "### Declares, at HEAD\n\n- workspace.read\n", "### Audits\n\nnever audited\n",
 			"Install asks first, as any install does: the card names the commit it would install, and whether that commit is audited."} {
 			if !strings.Contains(text, want) {
@@ -397,7 +396,7 @@ func TestARegistryEntrysPreviewNamesItsKindAndAudits(t *testing.T) {
 	}
 	e := regindex.IndexEntry{Kind: regindex.KindPlugin, Name: "echo", Declares: regindex.Declares{Commit: full, Items: []string{"x"}},
 		Audits: []regindex.IndexAudit{{Commit: full, Model: "claude-opus-5-5", Date: "2026-10-10", Report: "https://r.example/a%2Fb"}}}
-	text := registryPane(inEnglish{}.Trf, e).text
+	text := registryPane(inEnglish{}.Trf, e).Text
 	for _, want := range []string{"### Declares, at " + regindex.Short(full) + "\n", "- audited by claude-opus-5-5, 2026-10-10, at " + regindex.Short(full) + " (https://r.example/a%2Fb)\n"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("the audited entry's preview lacks %q:\n%s", want, text)

@@ -15,6 +15,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/todo"
 	"github.com/yongjohnlee80/autodoc/core/todo/todotest"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
+	"github.com/yongjohnlee80/autodoc/tui/crew"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // todomove_test.go: an open task follows its file when the daemon moves it to another status's
@@ -28,6 +30,13 @@ var alphaTodos = todo.At{Workspace: "alpha"}
 func onTodoDisk(t *testing.T) (r *running, root string, m *todo.Manager, task todo.Task) {
 	t.Helper()
 	root = fileDir(t, "a.md", "one\n")
+	// the manager closed once the daemon has stopped, before root is removed, as the daemon closes
+	// its own at its end: a store left open keeps its folder in use, which Windows won't remove
+	t.Cleanup(func() {
+		if m != nil {
+			_ = m.Close()
+		}
+	})
 	d := startManagedIncludes(t, map[string]string{"alpha": root}, nil, serving.Options{}, serving.Supplied{},
 		func(ws *serving.Workspaces) module.Module {
 			m = todo.New(serving.TodoRoots{Workspaces: ws}, serving.TodoDisk{}, todotest.NewJournal())
@@ -53,7 +62,7 @@ func waitNoticed(t *testing.T, r *running, text string) {
 	t.Helper()
 	r.s.WaitFor(t, "the notice "+text, func(string) bool {
 		return onLoop(r, func() bool {
-			return slices.ContainsFunc(r.h.noticeLog.items, func(n notice) bool { return strings.Contains(n.text, text) })
+			return slices.ContainsFunc(r.h.noticeLog.Items, func(n feature.Notice) bool { return strings.Contains(n.Text, text) })
 		})
 	})
 }
@@ -62,6 +71,7 @@ func waitNoticed(t *testing.T, r *running, text string) {
 // takes the new path and the moved file's text, clean, as one undo step, with the cursor where it
 // was, and no buffer is left on the old path. A save then writes the new path, never the old one.
 func TestAnOpenTaskFollowsItsStatusMove(t *testing.T) {
+	t.Parallel()
 	r, root, m, task := onTodoDisk(t)
 	from, to := ".todo-list/"+task.Path, ".todo-list/completed/"+task.ID+".md"
 	// the cursor on a line of the body, below the frontmatter the move rewrites
@@ -88,7 +98,7 @@ func TestAnOpenTaskFollowsItsStatusMove(t *testing.T) {
 	if line := onLoop(r, func() string { return r.h.core.Lines()[r.h.core.Cursor().Line] }); !strings.Contains(line, "HAND-EDIT FREELY") {
 		t.Errorf("the cursor is on %q, want the line it was on", line)
 	}
-	if b := onLoop(r, func() *openBuffer { return r.h.bufferOf(fileRef{"alpha", from}) }); b != nil {
+	if b := onLoop(r, func() *openBuffer { return r.h.bufferOf(feature.FileRef{WS: "alpha", Path: from}) }); b != nil {
 		t.Errorf("a buffer is still on the old path %s", from)
 	}
 	waitNoticed(t, r, from+" moved to "+to)
@@ -109,6 +119,7 @@ func TestAnOpenTaskFollowsItsStatusMove(t *testing.T) {
 // kept and badged changed on disk; its save asks rather than writing over the moved file, and
 // nothing is written in the old folder.
 func TestAModifiedTaskFollowsItsMoveAndAsks(t *testing.T) {
+	t.Parallel()
 	r, root, m, task := onTodoDisk(t)
 	from, to := ".todo-list/"+task.Path, ".todo-list/deferred/"+task.ID+".md"
 	r.typeInEditor(t, "X")
@@ -134,6 +145,7 @@ func TestAModifiedTaskFollowsItsMoveAndAsks(t *testing.T) {
 // TestAFileThatIsNoTaskIsStillDeleted: a Markdown file deleted on disk that no store holds is badged
 // deleted, as before: following a move is for a store's tasks alone.
 func TestAFileThatIsNoTaskIsStillDeleted(t *testing.T) {
+	t.Parallel()
 	r, root, _, _ := onTodoDisk(t)
 	r.openOnDisk(t, "a.md")
 	if err := os.Remove(filepath.Join(root, "a.md")); err != nil {
@@ -149,6 +161,7 @@ func TestAFileThatIsNoTaskIsStillDeleted(t *testing.T) {
 // daemon away, say) is found by the check every open buffer gets on a new connection, which would
 // otherwise close a clean buffer whose file is gone: the buffer follows the task instead.
 func TestATaskMovedWhileUnwatchedIsFollowedOnANewConnection(t *testing.T) {
+	t.Parallel()
 	r, _, m, task := onTodoDisk(t)
 	to := ".todo-list/completed/" + task.ID + ".md"
 	onLoop(r, func() bool { r.h.unwatchFile(r.h.active); return true }) // no event will say it moved
@@ -166,13 +179,14 @@ func TestATaskMovedWhileUnwatchedIsFollowedOnANewConnection(t *testing.T) {
 // TestARemovedTasksCleanBufferCloses: another client removes the open task; its buffer, with no
 // unsaved edits, closes rather than staying badged deleted, a save away from writing the task back.
 func TestARemovedTasksCleanBufferCloses(t *testing.T) {
+	t.Parallel()
 	r, root, m, task := onTodoDisk(t)
 	from := ".todo-list/" + task.Path
 	if err := m.Remove(context.Background(), alphaTodos, task.ID, task.Rev); err != nil {
 		t.Fatal(err)
 	}
 	r.s.WaitFor(t, "no buffer on "+from, func(string) bool {
-		return onLoop(r, func() bool { return r.h.bufferOf(fileRef{"alpha", from}) == nil })
+		return onLoop(r, func() bool { return r.h.bufferOf(feature.FileRef{WS: "alpha", Path: from}) == nil })
 	})
 	waitNoticed(t, r, "task was removed")
 	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(from))); !os.IsNotExist(err) {
@@ -185,6 +199,7 @@ func TestARemovedTasksCleanBufferCloses(t *testing.T) {
 // refused, and nothing is written: the task never comes back from a buffer. A later check of the
 // buffer says nothing more.
 func TestARemovedTasksModifiedBufferKeepsItsEditsAndRefusesItsSave(t *testing.T) {
+	t.Parallel()
 	r, root, m, task := onTodoDisk(t)
 	from := ".todo-list/" + task.Path
 	r.typeInEditor(t, "X")
@@ -206,10 +221,10 @@ func TestARemovedTasksModifiedBufferKeepsItsEditsAndRefusesItsSave(t *testing.T)
 	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(from))); !os.IsNotExist(err) {
 		t.Fatalf("the save wrote the removed task back: %v", err)
 	}
-	notices := onLoop(r, func() int { return len(r.h.noticeLog.items) })
+	notices := onLoop(r, func() int { return len(r.h.noticeLog.Items) })
 	onLoop(r, func() bool { r.h.diskSoon(r.h.active); return true })
 	time.Sleep(4 * diskWait) // NOTE: absence: no event says a check found nothing to say
-	if n := onLoop(r, func() int { return len(r.h.noticeLog.items) }); n != notices {
+	if n := onLoop(r, func() int { return len(r.h.noticeLog.Items) }); n != notices {
 		t.Errorf("a later check said %d notices more, want none", n-notices)
 	}
 }
@@ -217,6 +232,7 @@ func TestARemovedTasksModifiedBufferKeepsItsEditsAndRefusesItsSave(t *testing.T)
 // TestAHandMovedTaskIsFollowedByItsID: a task's file moved by hand (no change the window read
 // names it) is found by its id: the buffer follows it.
 func TestAHandMovedTaskIsFollowedByItsID(t *testing.T) {
+	t.Parallel()
 	r, root, _, task := onTodoDisk(t)
 	from, to := ".todo-list/"+task.Path, ".todo-list/deferred/"+task.ID+".md"
 	if err := os.MkdirAll(filepath.Join(root, ".todo-list", "deferred"), 0o755); err != nil {
@@ -235,6 +251,7 @@ func TestAHandMovedTaskIsFollowedByItsID(t *testing.T) {
 // TestAMoveTheFeedReadIsFollowedWithoutTheDiskWatch: the todo feed's move of a file asks for a check
 // of the buffer on it at once, the disk watch silent, and names where it went.
 func TestAMoveTheFeedReadIsFollowedWithoutTheDiskWatch(t *testing.T) {
+	t.Parallel()
 	r, root, m, task := onTodoDisk(t)
 	to := ".todo-list/completed/" + task.ID + ".md"
 	onLoop(r, func() bool { r.h.unwatchFile(r.h.active); return true }) // no event will say it moved
@@ -243,7 +260,7 @@ func TestAMoveTheFeedReadIsFollowedWithoutTheDiskWatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := filepath.Join(root, ".todo-list")
-	r.h.p.Post(func() { r.h.todoFilesChanged([]todoFileChange{{store: store, from: task.Path, to: moved.Path}}) })
+	r.h.p.Post(func() { r.h.todoFilesChanged([]crew.TodoFileChange{{Store: store, From: task.Path, To: moved.Path}}) })
 	r.s.WaitFor(t, "the buffer on "+to, func(string) bool { return r.file().path == to })
 	if f := r.file(); f.dirty || !strings.Contains(r.editorText(), "status: completed") {
 		t.Fatalf("after the feed's move: dirty %v, text %q; want the completed task, clean", f.dirty, r.editorText())
@@ -255,6 +272,7 @@ func TestAMoveTheFeedReadIsFollowedWithoutTheDiskWatch(t *testing.T) {
 // (an unrelated document at deferred/<id>.md): the buffer follows its own store's move, never the
 // other's (the mutant: the hint matched by its relative path alone).
 func TestAnotherStoresMoveIsNotFollowed(t *testing.T) {
+	t.Parallel()
 	r, root, m, task := onTodoDisk(t)
 	from, to := ".todo-list/"+task.Path, ".todo-list/completed/"+task.ID+".md"
 	onLoop(r, func() bool { r.h.unwatchFile(r.h.active); return true }) // the feed alone says it moved
@@ -271,8 +289,8 @@ func TestAnotherStoresMoveIsNotFollowed(t *testing.T) {
 	}
 	store, other := filepath.Join(root, ".todo-list"), filepath.Join(t.TempDir(), ".todo-list")
 	r.h.p.Post(func() {
-		r.h.todoFilesChanged([]todoFileChange{{store: store, from: task.Path, to: moved.Path},
-			{store: other, from: task.Path, to: "deferred/" + task.ID + ".md"}})
+		r.h.todoFilesChanged([]crew.TodoFileChange{{Store: store, From: task.Path, To: moved.Path},
+			{Store: other, From: task.Path, To: "deferred/" + task.ID + ".md"}})
 	})
 	r.s.WaitFor(t, "the buffer to leave "+from, func(string) bool { return r.file().path != from })
 	if got := r.file().path; got != to {
@@ -284,6 +302,7 @@ func TestAnotherStoresMoveIsNotFollowed(t *testing.T) {
 // same task's, by its own id: one naming another task's file (a stale hint) is passed over, and the
 // task is found by its id (the mutant: any readable file the hint names followed).
 func TestAMoveToAnotherTasksFileIsNotFollowed(t *testing.T) {
+	t.Parallel()
 	r, root, m, task := onTodoDisk(t)
 	from, to := ".todo-list/"+task.Path, ".todo-list/completed/"+task.ID+".md"
 	ctx := context.Background()
@@ -296,7 +315,7 @@ func TestAMoveToAnotherTasksFileIsNotFollowed(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := filepath.Join(root, ".todo-list")
-	r.h.p.Post(func() { r.h.todoFilesChanged([]todoFileChange{{store: store, from: task.Path, to: y.Path}}) })
+	r.h.p.Post(func() { r.h.todoFilesChanged([]crew.TodoFileChange{{Store: store, From: task.Path, To: y.Path}}) })
 	r.s.WaitFor(t, "the buffer to leave "+from, func(string) bool { return r.file().path != from })
 	if got := r.file().path; got != to {
 		t.Fatalf("the buffer followed to %s, want the task's own file, %s", got, to)

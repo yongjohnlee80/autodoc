@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 
 	"github.com/yongjohnlee80/autodoc/core/todo"
 
@@ -224,7 +224,7 @@ func TestTheTutorialsLuaRuns(t *testing.T) {
 	seedTodos(t, d, true)
 	onLoop(r, func() bool {
 		r.h.core.SetValue("Ship the release\nwith its notes\n")
-		r.h.core.Select(widget.TextRange{From: widget.TextPos{}, To: widget.TextPos{Line: 1, Col: 14}})
+		r.h.core.Select(editor.TextRange{From: editor.TextPos{}, To: editor.TextPos{Line: 1, Col: 14}})
 		return true
 	})
 	if err := r.luaRun("todo"); err != nil {

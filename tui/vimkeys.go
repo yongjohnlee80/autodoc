@@ -3,7 +3,7 @@ package tui
 import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/style"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 )
 
 // THE VIM KEYS' CARD — ? in Normal mode: the Vim editor mode's keys, in a card at the bottom
@@ -20,12 +20,12 @@ func (h *Host) attachVimKeys() {
 	// the text wears the card's colours: a Text with none clears its cells to the screen's default
 	// background, a dark block on the card in a themed window
 	look := style.New().Background(style.TokenPanel).Foreground(style.TokenForeground)
-	card := widget.NewBox(widget.NewText(vimKeysText, widget.WithWrapMode(widget.Wrap), widget.WithTextStyle(look)),
-		widget.WithTitle("Vim keys · Normal mode · ? closes"), widget.WithBorder(style.BorderRounded),
-		widget.WithStyle(look.Padding(0, 1)))
+	card := widgetcore.NewBox(widgetcore.NewText(vimKeysText, widgetcore.WithWrapMode(widgetcore.Wrap), widgetcore.WithTextStyle(look)),
+		widgetcore.WithTitle("Vim keys · Normal mode · ? closes"), widgetcore.WithBorder(style.BorderRounded),
+		widgetcore.WithStyle(look.Padding(0, 1)))
 	col := tuicore.NewFlex(tuicore.Vertical)
-	col.Add(card, widget.NewText("")) // the empty row keeps the status line under the card
-	h.vimKeys = widget.NewFloat(col, widget.WithAnchor(widget.BottomRight))
+	col.Add(card, widgetcore.NewText("")) // the empty row keeps the status line under the card
+	h.vimKeys = widgetcore.NewFloat(col, widgetcore.WithAnchor(widgetcore.BottomRight))
 	host.Attach(h.vimKeys)
 }
 

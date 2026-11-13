@@ -23,13 +23,30 @@ curl -fsSL https://github.com/yongjohnlee80/autodoc/releases/latest/download/ins
 
 **업데이트.** 스크립트로 설치한 AutoDoc은 스스로 업데이트합니다. **도움말 › 정보**에서 **업데이트**를 누르세요. 업데이트는 AutoDoc의 터미널 패널에서 실행되고, 새 버전이 준비되면 **지금 다시 시작**을 제안합니다. 셸에서는 `~/.local/state/autodoc/update.sh`가 같은 일을 합니다.
 
+## Windows에서
+
+PowerShell에서 한 줄로 창과 함께 AutoDoc을 설치합니다.
+
+```powershell
+irm https://github.com/yongjohnlee80/autodoc/releases/latest/download/install-autodoc.ps1 | iex
+```
+
+이 스크립트는:
+
+- 최신 Windows 빌드를 내려받아 릴리스의 체크섬으로 확인합니다.
+- `%LOCALAPPDATA%\Programs\AutoDoc\autodoc.exe`로 당신만을 위해 설치합니다. 관리자 권한을 요구하지 않습니다.
+- 시작 메뉴에 AutoDoc을 추가합니다.
+- `%LOCALAPPDATA%\autodoc`에 `update.ps1`을 설치하므로, **도움말 › 정보 › 업데이트**가 Linux, macOS에서처럼 동작합니다.
+
+`PATH`는 요청할 때(`-AddToPath`)만 바꾸고, 그렇지 않으면 바꾸는 명령을 보여 줍니다. 빌드는 서명되어 있지 않아 AutoDoc을 처음 실행할 때 Windows가 게시자를 알 수 없다고 표시할 수 있습니다. arm64 Windows용 빌드는 아직 없습니다. WSL2에서는 위의 Linux용 한 줄도 동작합니다.
+
 ## 다른 방법
 
 - Homebrew: `brew install yongjohnlee80/tap/autodoc` (Linux에서는 터미널 버전만)
 - mise: `mise use -g github:yongjohnlee80/autodoc`
 - Go: `go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` (`-tags gui` 없이는 터미널 버전만)
 - 프로젝트 Releases 페이지의 릴리스 아카이브
-- Windows: WSL2를 설치한 뒤 설치 스크립트로
+- Windows: WSL2를 설치한 뒤 Linux 설치 스크립트로
 
 이 방법들은 설치한 방식 그대로 업데이트합니다 (`brew upgrade`, `mise upgrade`, `go install` 다시 실행). 그래서 **도움말 › 정보**에 업데이트 버튼이 나오지 않습니다. 서버, 컨테이너, 소스에서 빌드하기는 [레퍼런스 2장](../../reference/02-quickstart-and-workspaces.md)을 보세요.
 

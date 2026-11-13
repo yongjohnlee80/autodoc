@@ -3,10 +3,12 @@ package tui
 import (
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 )
 
 // codexRuns is a stand-in for the agent's autodoc in runAfterSteps: each run's args are sent on
@@ -31,13 +33,13 @@ func (r *codexRuns) run(environ []string, args ...string) error {
 func TestACodexAgentsStepLooksOnItsOwnServer(t *testing.T) {
 	a, c, _ := crewAgents(t, crewKinds)
 	runs := &codexRuns{calls: make(chan []string, 4), environ: make(chan []string, 4)}
-	a.codexHere = runs.run
-	a.setupRun = func(string, string, []string) (crew.Setup, error) {
+	seamsOf(a).agentCodexHere = runs.run
+	seamsOf(a).agentSetupRun = func(string, string, []string) (crew.Setup, error) {
 		return crew.Setup{Env: map[string]string{crew.EnvCodexServer: "/agent/codex.sock"},
 			After: [][]string{{"crew", "endpoint", "--codex-here", "--since", crew.SetupSince, "--wait", "60s"}}}, nil
 	}
-	p, _ := a.profile("codex-one")
-	instance, err := a.startInstance(p)
+	p, _ := a.Profile("codex-one")
+	instance, err := a.StartInstance(p)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,11 +63,14 @@ func TestACodexAgentsStepLooksOnItsOwnServer(t *testing.T) {
 // The window sets no timer of its own. Another CLI's spawn runs none of it.
 func TestACrewCodexAgentIsRegisteredAsItStarts(t *testing.T) {
 	t.Run("one waiting registration", func(t *testing.T) {
+		if !agents.CanRunAgentServers {
+			t.Skip("this system can't run an agent's own server: a Codex agent starts without one (the next subtest)")
+		}
 		a, c, _ := crewAgents(t, crewKinds)
 		runs := &codexRuns{calls: make(chan []string, 4)}
-		a.codexHere = runs.run
-		p, _ := a.profile("codex-one")
-		instance, err := a.startInstance(p)
+		seamsOf(a).agentCodexHere = runs.run
+		p, _ := a.Profile("codex-one")
+		instance, err := a.StartInstance(p)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -94,12 +99,48 @@ func TestACrewCodexAgentIsRegisteredAsItStarts(t *testing.T) {
 		}
 	})
 
+	// a host that can't run an agent's own server (the window where there are no process groups):
+	// the agent starts with no server of its own, off Codex's shared daemon (--no-daemon), and
+	// with no registration step, since no server holds its thread; the user is told, once, that
+	// crew mail can't wake it. Forced here on every OS: it is what Windows does.
+	t.Run("on a host that can't run its server", func(t *testing.T) {
+		a, c, _ := crewAgentsOn(t, crewKinds, true)
+		runs := &codexRuns{calls: make(chan []string, 4)}
+		seamsOf(a).agentCodexHere = runs.run
+		p, _ := a.Profile("codex-one")
+		instance, err := a.StartInstance(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, spawned, err := startedCmd(a, c, instance); err != nil || !spawned {
+			t.Fatalf("the start: spawned %v, %v; want Codex started without a server of its own", spawned, err)
+		}
+		// the setup it started with (the command line is the shell's on Windows: pwsh -Command …)
+		if s := instance.State().Setup; !slices.Contains(s.Argv, "--no-daemon") || slices.Contains(s.Argv, "--remote") || len(s.Server) != 0 {
+			t.Fatalf("its setup: argv %q, server %q; want --no-daemon, and no server of its own nor --remote to one", s.Argv, s.Server)
+		}
+		select {
+		case args := <-runs.calls:
+			t.Fatalf("a run %q: want no registration step, with no server to find its thread on", args)
+		case <-time.After(50 * time.Millisecond):
+		}
+		said := 0
+		for _, n := range c.notes {
+			if strings.Contains(n, "crew mail can't wake it") {
+				said++
+			}
+		}
+		if said != 1 {
+			t.Fatalf("the notices %q: want it said once that crew mail can't wake it", c.notes)
+		}
+	})
+
 	t.Run("another CLI's spawn runs none", func(t *testing.T) {
 		a, c, _ := crewAgents(t, crewKinds)
 		runs := &codexRuns{calls: make(chan []string, 4)}
-		a.codexHere = runs.run
-		p, _ := a.profile("claude-one")
-		instance, err := a.startInstance(p)
+		seamsOf(a).agentCodexHere = runs.run
+		p, _ := a.Profile("claude-one")
+		instance, err := a.StartInstance(p)
 		if err != nil {
 			t.Fatal(err)
 		}

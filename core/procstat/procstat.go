@@ -1,7 +1,8 @@
 // Package procstat reads what one process uses of its machine: the daemon's for sys.stats, the
-// app's for autodoc.app.stats (docs/decisions/editor.md#process-stats). It needs nothing beyond the
-// standard library. A size the platform cannot say is 0: Darwin has no current resident size
-// without Mach's task_info, so its RSS is 0 and its PeakRSS is getrusage's.
+// app's for autodoc.app.stats (docs/decisions/editor.md#process-stats). Each OS's own reading is in
+// its file: getrusage on Linux and Darwin, GetProcessTimes and GetProcessMemoryInfo on Windows. A
+// size the platform cannot say is 0: Darwin has no current resident size without Mach's
+// task_info, so its RSS is 0 and its PeakRSS is getrusage's.
 package procstat
 
 import (
@@ -16,8 +17,8 @@ import (
 type Stats struct {
 	PID        int
 	Started    time.Time // when this process loaded the package: its start, near enough
-	RSS        uint64    // resident bytes now (Linux; 0 elsewhere)
-	PeakRSS    uint64    // the most resident bytes so far, getrusage's maxrss in bytes
+	RSS        uint64    // resident bytes now (Linux; Windows' working set; 0 on Darwin)
+	PeakRSS    uint64    // the most resident bytes so far: getrusage's maxrss, or Windows' peak working set
 	CPUSeconds float64   // user + system CPU used so far: cumulative, never a rate
 	GoMemory   uint64    // what the Go runtime has mapped
 	GoHeap     uint64    // live heap objects

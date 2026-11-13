@@ -8,19 +8,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/gui"
 	guiwidget "github.com/yongjohnlee80/golib/gui/widget"
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	tuiwidget "github.com/yongjohnlee80/golib/tui/widget"
+	widgeteditor "github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 func TestNoteReadingViewHidesMetadataWithoutChangingTheBuffer(t *testing.T) {
 	source := "---\ntitle: hidden title\ntags: [private]\n---\n<!-- hidden comment\n![not-an-embed](secret.png)\n-->\n# Visible body\n"
-	r := noteRenderer(&NoteEmbeds{})(NoteRendererSpec{})
+	r := noteRenderer(&NoteEmbeds{})(feature.NoteRendererSpec{})
 	e := guiwidget.NewEditor(guiwidget.WithRenderer(r))
 	e.Core().SetValue(source)
 	before := e.Core().Value()
-	e.SetView(tuiwidget.ViewRendered)
+	e.SetView(widgeteditor.ViewRendered)
 	lines := strings.Split(e.Core().Value(), "\n")
 	sh := gui.NewRecordingCanvas(gui.Size{W: 500, H: 500}, gui.Size{W: 8, H: 16}).Text()
 	th := guiwidget.Theme{Prose: gui.Font{Size: 16}, Mono: gui.Font{Size: 14}}
@@ -41,7 +42,7 @@ func TestNoteReadingViewHidesMetadataWithoutChangingTheBuffer(t *testing.T) {
 	if text := visible.String(); !strings.Contains(text, "Visible body") || strings.Contains(text, "hidden") || strings.Contains(text, "secret.png") {
 		t.Fatalf("reading text %q", text)
 	}
-	e.SetView(tuiwidget.ViewRaw)
+	e.SetView(widgeteditor.ViewRaw)
 	if got := e.Core().Value(); got != before {
 		t.Fatalf("view switch changed source: %q", got)
 	}
@@ -75,8 +76,8 @@ func (r *metadataObserver) LayOut(b guiwidget.Block, lines []string, width float
 }
 
 func TestLaterCommentCloseReflowsTheActualNoteEditor(t *testing.T) {
-	r := &metadataObserver{Renderer: noteRenderer(&NoteEmbeds{})(NoteRendererSpec{})}
-	editor := guiwidget.NewEditor(guiwidget.WithRenderer(r), guiwidget.WithView(tuiwidget.ViewRendered))
+	r := &metadataObserver{Renderer: noteRenderer(&NoteEmbeds{})(feature.NoteRendererSpec{})}
+	editor := guiwidget.NewEditor(guiwidget.WithRenderer(r), guiwidget.WithView(widgeteditor.ViewRendered))
 	editor.SetValue("before <!-- note\nstill note\nend\n\nlast")
 	backend := &nativeBackend{TestBackend: tuicore.NewTestBackend(100, 50, tuicore.WithTestCapabilities(tuicore.Capabilities{NativeViews: true}))}
 	app := tuicore.NewApp(editor, tuicore.WithBackend(backend))
@@ -119,7 +120,7 @@ func TestLaterCommentCloseReflowsTheActualNoteEditor(t *testing.T) {
 		}
 	})
 	onApp(func() {
-		if _, err := editor.Core().Insert(tuiwidget.TextPos{Line: 2, Col: 3}, " -->"); err != nil {
+		if _, err := editor.Core().Insert(widgeteditor.TextPos{Line: 2, Col: 3}, " -->"); err != nil {
 			t.Error(err)
 		}
 		editor.Core().SetLine(4, 0)
@@ -127,7 +128,7 @@ func TestLaterCommentCloseReflowsTheActualNoteEditor(t *testing.T) {
 		if r.first != "before " {
 			t.Errorf("earlier note layout stale after close: %q", r.first)
 		}
-		if err := editor.Core().Delete(tuiwidget.TextRange{From: tuiwidget.TextPos{Line: 2, Col: 3}, To: tuiwidget.TextPos{Line: 2, Col: 7}}); err != nil {
+		if err := editor.Core().Delete(widgeteditor.TextRange{From: widgeteditor.TextPos{Line: 2, Col: 3}, To: widgeteditor.TextPos{Line: 2, Col: 7}}); err != nil {
 			t.Error(err)
 		}
 		editor.Core().SetLine(4, 0)

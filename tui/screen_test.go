@@ -5,13 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/yongjohnlee80/autodoc/rpc"
-	"github.com/yongjohnlee80/golib/dao/sqlite"
-	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
-	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 	"io"
 	"io/fs"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -24,12 +19,23 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/internal/userdirs"
+	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/golib/dao/sqlite"
+	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
+	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
+
 	"github.com/yongjohnlee80/golib/highlight"
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 
+	"github.com/yongjohnlee80/autodoc/core/paths"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/searchsetup"
 )
 
 // THE WRITING SCREEN — the page alone until asked for more, centred at the ruler; the panels as
@@ -39,6 +45,9 @@ import (
 // runTUISized is runTUI on a w×h screen.
 func runTUISized(t *testing.T, sess *Session, opt Options, w, h int) *running {
 	t.Helper()
+	if opt.seams == nil {
+		opt.seams = seamsFor(t) // the test's own, if it tuned any (seams_test.go)
+	}
 	host := newHost(sess, opt)
 	s := decltest.RunWith(t, w, h, host.attach, host.options(opt)...)
 	t.Cleanup(host.cancel)
@@ -113,6 +122,7 @@ func f10() tuicore.Event { return tuicore.KeyEvent{Kind: tuicore.KeyPress, Code:
 // TestTheScreenIsThePageAlone: by default, nothing but the page: no menu bar until F10 brings it
 // up, no status line; Escape puts the menu bar away again.
 func TestTheScreenIsThePageAlone(t *testing.T) {
+	t.Parallel()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{"tui.toast.seconds": "1"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
@@ -137,6 +147,7 @@ func TestTheScreenIsThePageAlone(t *testing.T) {
 }
 
 func TestLeaderMenuToggleFocusesOnlyWhenShown(t *testing.T) {
+	t.Parallel()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
@@ -158,6 +169,7 @@ func TestLeaderMenuToggleFocusesOnlyWhenShown(t *testing.T) {
 // as a fast hand does), opens the File menu on the bar SPC m showed, and the Enter never reaches the
 // page: the bar takes the keyboard before any key after it is read.
 func TestSPCmEnterTypedAtOnceOpensTheMenu(t *testing.T) {
+	t.Parallel()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "aaa\n"}}, daemonOpts{prefs: map[string]string{}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -176,6 +188,7 @@ func TestSPCmEnterTypedAtOnceOpensTheMenu(t *testing.T) {
 // took every click, the menu bar's among them; golib's
 // hit-testing now lets the pointer through a non-modal float wherever its content is not.
 func TestAMenuTitleIsClickedUnderTheToasts(t *testing.T) {
+	t.Parallel()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}},
 		daemonOpts{prefs: map[string]string{"tui.menu.autohide": "false", "tui.status.shown": "true"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
@@ -191,6 +204,7 @@ func TestAMenuTitleIsClickedUnderTheToasts(t *testing.T) {
 // TestAToastClickedOpensTheNotificationsHistory: a click on a toast's card opens the history of the
 // notifications, where it and the ones before it are kept.
 func TestAToastClickedOpensTheNotificationsHistory(t *testing.T) {
+	t.Parallel()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{"tui.toast.seconds": "10"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.connected(t)
@@ -202,13 +216,14 @@ func TestAToastClickedOpensTheNotificationsHistory(t *testing.T) {
 	}
 	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y},
 		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x, Y: y})
-	r.s.WaitFor(t, "the history open", func(string) bool { return onLoop(r, func() bool { return r.h.noticeLog.shown }) })
+	r.s.WaitFor(t, "the history open", func(string) bool { return onLoop(r, func() bool { return r.h.noticeLog.Shown }) })
 	r.s.WaitForText(t, "TIME")
 }
 
 // TestTheStatusLineShowsWhileDisconnected: the status line hidden by preference still shows while
 // the TUI is not connected, so a lost connection is never silent.
 func TestTheStatusLineShowsWhileDisconnected(t *testing.T) {
+	t.Parallel()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
@@ -233,6 +248,7 @@ func col(line, sub string) int {
 // centred; its right edge is the column past the ruler's; a line scrolled past it still shows the
 // guide.
 func TestThePageIsCentredAtTheRuler(t *testing.T) {
+	t.Parallel()
 	long := strings.Repeat("x", 80)
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "short\n" + long + "\n"}},
 		daemonOpts{prefs: map[string]string{"tui.ruler": "60", "tui.editor.wrap": "false"}}) // scrolled, not wrapped
@@ -246,11 +262,12 @@ func TestThePageIsCentredAtTheRuler(t *testing.T) {
 	if l, rt := col(rows[0], "┌"), col(rows[0], "┐"); l != 49 || rt != 110 {
 		t.Fatalf("the page spans columns %d to %d, want 49 to 110:\n%s", l, rt, r.s)
 	}
-	// the page's Raw | Rendered switch is on its frame's title row; the text starts on its first row
-	if !strings.Contains(rows[0], "[ Raw | Rendered ]") || strings.Contains(rows[1], "[ Raw | Rendered ]") {
-		t.Fatalf("the switch isn't on the page's title row alone:\n%s", r.s)
+	// the page's Raw | Rendered switch is on its frame's title row, its buffer's tab on the row under
+	// it (buffertabs.go); the text starts on the row after
+	if !strings.Contains(rows[0], "[ Raw | Rendered ]") || strings.Contains(rows[1], "[ Raw | Rendered ]") || !strings.Contains(rows[1], "× a.md") {
+		t.Fatalf("the switch isn't on the page's title row alone, its tab under it:\n%s", r.s)
 	}
-	short := rows[1]
+	short := rows[2]
 	if c := col(short, "short"); c != 50 {
 		t.Fatalf("the text starts at column %d, want 50:\n%s", c, r.s)
 	}
@@ -263,7 +280,7 @@ func TestThePageIsCentredAtTheRuler(t *testing.T) {
 	r.asText(t)
 	r.keys(t, decltest.Alt('2'), key('j'), key('$'))
 	r.s.WaitFor(t, "the guide inside the page", func(sc string) bool {
-		row := strings.Split(sc, "\n")[1] // the text's first row: the switch is on the title row
+		row := strings.Split(sc, "\n")[2] // the text's first row: the switch is on the title row, the tab under it
 		return strings.Count(row, "│") == 3
 	})
 }
@@ -275,6 +292,7 @@ func TestThePageIsCentredAtTheRuler(t *testing.T) {
 // closes it, and the page is back. A side panel takes the middle 85% of the rows, one at the top or
 // bottom the middle 80% of the columns: the page shows around it.
 func TestThePanelsAreDrawersOverAStillPage(t *testing.T) {
+	t.Parallel()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "still text\n", "b.md", "see [[a]]\n"}},
 		daemonOpts{prefs: map[string]string{"tui.status.shown": "true", "tui.explorer.edge": "right"}})
 	r := attached(t, d)
@@ -316,7 +334,10 @@ func TestThePanelsAreDrawersOverAStillPage(t *testing.T) {
 	r.s.WaitFor(t, "the bar hidden, the page back", func(string) bool { x, y := where(); return x == x0 && y == y0 })
 
 	// at the bottom now, SPC l opens it on its Links tab, the heading the tab's
-	onLoop(r, func() bool { r.h.choosePrefNamed(prefExplorer, slices.Index(edges, "bottom")); return true })
+	onLoop(r, func() bool {
+		r.h.choosePrefNamed(feature.PrefExplorer, slices.Index(feature.Edges, "bottom"))
+		return true
+	})
 	r.leader(t, 'l')
 	r.s.WaitForText(t, "links (1) · d depth")
 	for i, row := range strings.Split(r.s.String(), "\n") {
@@ -344,6 +365,7 @@ func TestThePanelsAreDrawersOverAStillPage(t *testing.T) {
 // opens to its folders then its files, a folder to its own; Enter on a file opens it, entering
 // its workspace when it is another, and closes the explorer.
 func TestTheExplorerIsATreeOfEveryWorkspace(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{
 		"alpha": {"a.md", "# A\n", "dir/b.md", "# B\n"},
 		"beta":  {"c.md", "# C\n"},
@@ -379,6 +401,7 @@ func TestTheExplorerIsATreeOfEveryWorkspace(t *testing.T) {
 // TestPanesMoveInNormalModeOnly: Ctrl+h/j/k/l move between the page and the panel open at that
 // edge, in Normal mode; in Insert mode they are the editor's, and the keyboard stays.
 func TestPanesMoveInNormalModeOnly(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -413,6 +436,7 @@ func TestPanesMoveInNormalModeOnly(t *testing.T) {
 // TestPreferencesAreKept: a preference changed is in the daemon's store at once, and a TUI
 // started later reads it; the page's width takes a number of columns in its range.
 func TestPreferencesAreKept(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.leader(t, 't') // the status line, shown by the tests' preferences: hidden
@@ -448,6 +472,7 @@ func TestPreferencesAreKept(t *testing.T) {
 // TestPreferencesAreStoredInTheOrderTheyChanged: a preference changed twice in a row is stored as
 // the second change, however long the first one's write takes to reach the daemon.
 func TestPreferencesAreStoredInTheOrderTheyChanged(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	var holding atomic.Bool
 	var answered atomic.Int32
@@ -500,6 +525,7 @@ func TestPreferencesAreStoredInTheOrderTheyChanged(t *testing.T) {
 // TestTheSearchMarksItsWordsWhereTheyAre: the preview marks each of the search's words, case
 // aside, over exactly its bytes, however lower-casing changes the line's length before it.
 func TestTheSearchMarksItsWordsWhereTheyAre(t *testing.T) {
+	t.Parallel()
 	h := newHost(NewSession("unused", nil), Options{})
 	hl := h.searchHighlighter()
 	marked := func(line string) []string {
@@ -535,6 +561,7 @@ func TestTheSearchMarksItsWordsWhereTheyAre(t *testing.T) {
 // writes it; the context window starts at the default and takes a number; Save keeps the
 // provider, its key sealed and never on screen.
 func TestTheProviderForm(t *testing.T) {
+	t.Parallel()
 	var mu sync.Mutex
 	var auth []string
 	ollama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -594,7 +621,7 @@ func TestTheProviderForm(t *testing.T) {
 		return strings.Contains(sc, "nomic-embed-text") && !strings.Contains(sc, "nomic-embed-text, say")
 	})
 	r.s.WaitForText(t, "model max 4096")
-	r.h.p.Post(func() { r.h.ai.providers.save("cloud", ollama.URL, "nomic-embed-text", "", "8192") })
+	r.app(t, "App.saveProvider", str("cloud"), str(ollama.URL), str("nomic-embed-text"), str(""), str("8192"))
 	r.s.WaitForText(t, "exceeds this model's maximum of 4096")
 	r.keys(t, key('s'))
 	r.s.WaitForText(t, "saved the provider cloud")
@@ -610,9 +637,9 @@ func TestTheProviderForm(t *testing.T) {
 	// list is read again after the save's notice, so wait for its row: "cloud" is on the screen
 	// already (the notice, the name typed), and editing row 0 of a list not yet read does nothing.
 	r.s.WaitFor(t, "cloud listed, its key sealed", func(string) bool {
-		return onLoop(r, func() bool { p, ok := r.h.ai.providers.at(0); return ok && p.name == "cloud" && p.hasKey })
+		return onLoop(r, func() bool { p, ok := r.h.ai.Providers.At(0); return ok && p.Name == "cloud" && p.HasKey })
 	})
-	r.h.p.Post(func() { r.h.ai.providers.startEdit(0) })
+	r.app(t, "App.startEditProvider", num(0))
 	r.s.WaitForText(t, "API key (sealed; leave empty to keep it)")
 	r.keys(t, tab(), enter()) // the kind
 	r.s.WaitForText(t, "OpenAI-compatible")
@@ -625,7 +652,7 @@ func TestTheProviderForm(t *testing.T) {
 	r.s.WaitFor(t, "Ollama Cloud again", func(sc string) bool {
 		return strings.Contains(sc, "Ollama Cloud") && !strings.Contains(sc, "OpenAI-compatible")
 	})
-	r.h.p.Post(func() { r.h.ai.providers.listModels(ollama.URL, "") })
+	r.app(t, "App.listProviderModels", str(ollama.URL), str(""))
 	r.s.WaitForText(t, "2 models")
 	mu.Lock()
 	last := auth[len(auth)-1]
@@ -634,7 +661,7 @@ func TestTheProviderForm(t *testing.T) {
 		t.Errorf("an edited provider's models were asked for with %q, not its stored key", last)
 	}
 	// a context window that is not a number is refused in the form, the store unchanged
-	r.h.p.Post(func() { r.h.ai.providers.save("cloud", ollama.URL, "nomic-embed-text", "", "lots") })
+	r.app(t, "App.saveProvider", str("cloud"), str(ollama.URL), str("nomic-embed-text"), str(""), str("lots"))
 	r.s.WaitForText(t, "the context window is a number of tokens")
 	if info, _, err := d.db.ProviderWithKey(context.Background(), "cloud"); err != nil || info.Context != 4096 {
 		t.Errorf("after the refused window: %+v, %v", info, err)
@@ -644,6 +671,7 @@ func TestTheProviderForm(t *testing.T) {
 // A provider coming into use is a new embedding model: the picker's query and hits answered by
 // words alone are cleared, the field emptied, and the clearing said, so the search starts afresh.
 func TestAModelChangeClearsTheSearch(t *testing.T) {
+	t.Parallel()
 	o := newFakeOllama(t, "embedder")
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
@@ -669,6 +697,7 @@ func TestAModelChangeClearsTheSearch(t *testing.T) {
 }
 
 func TestPartialEmbeddingExplainsEmptyHitsUntilSearchRefreshes(t *testing.T) {
+	t.Parallel()
 	o := newFakeOllama(t, "embedder")
 	release := o.hold()
 	defer release()
@@ -702,6 +731,7 @@ func TestPartialEmbeddingExplainsEmptyHitsUntilSearchRefreshes(t *testing.T) {
 }
 
 func TestClearingAndClosingAWaitingSearchCancelsItsRequest(t *testing.T) {
+	t.Parallel()
 	o := newFakeOllama(t, "embedder")
 	release := o.hold()
 	defer release()
@@ -716,14 +746,18 @@ func TestClearingAndClosingAWaitingSearchCancelsItsRequest(t *testing.T) {
 	if _, err := r.h.session.Call(context.Background(), "embedding.use", "local"); err != nil {
 		t.Fatal(err)
 	}
-	r.h.p.Post(func() {
-		r.h.showProgress(1, 0, embedProgress{on: true, semantic: "partial", texts: 1, pending: 1}, 1)
-		r.h.searchLive("unrelatedquery")
+	// The daemon's own poll, not a made-up one: the provider in use and its text pending (the
+	// provider is held). A made-up pending state lasts only until the next poll, which ends the
+	// waiting toast when it reports no work yet (progress.go), so under load the toast could
+	// close before a frame drew it.
+	r.s.WaitFor(t, "the TUI polled the provider in use, its text pending", func(string) bool {
+		return onLoop(r, func() bool { return r.h.prog.emb.on && r.h.prog.emb.model != "" && r.h.prog.emb.working() > 0 })
 	})
+	r.h.p.Post(func() { r.h.searchLive("unrelatedquery") })
 	r.s.WaitForText(t, "search in kb is waiting: 1 texts still embedding")
 	r.h.p.Post(func() { r.h.searchLive("") })
 	r.s.WaitForText(t, "search cleared")
-	if count := onLoop(r, func() int { return r.h.searchPick.list.Len() }); count != 0 {
+	if count := onLoop(r, func() int { return r.h.searchPick.List.Len() }); count != 0 {
 		t.Errorf("clearing search left %d hits", count)
 	}
 	r.h.p.Post(func() { r.h.searchLive("unrelatedquery") })
@@ -737,6 +771,7 @@ func TestClearingAndClosingAWaitingSearchCancelsItsRequest(t *testing.T) {
 }
 
 func TestSemanticQueryErrorNotifiesOfWordsOnlyFallback(t *testing.T) {
+	t.Parallel()
 	o := newFakeOllama(t, "embedder")
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
 	if _, err := d.db.AddProvider(context.Background(), store.ProviderSpec{Name: "local", Kind: store.KindOllama, BaseURL: o.URL, Model: "embedder"}); err != nil {
@@ -762,12 +797,13 @@ func TestSemanticQueryErrorNotifiesOfWordsOnlyFallback(t *testing.T) {
 				r.h.lastSearchError == "semantic search could not answer in kb; results are by words only"
 		})
 	})
-	if hits := onLoop(r, func() int { return r.h.searchPick.list.Len() }); hits == 0 {
+	if hits := onLoop(r, func() int { return r.h.searchPick.List.Len() }); hits == 0 {
 		t.Error("query error dropped lexical results")
 	}
 }
 
 func TestModelSwitchExplainsTemporaryWordsOnlyAndClearsSearch(t *testing.T) {
+	t.Parallel()
 	o := newFakeOllama(t, "first", "second")
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
 	for _, model := range []string{"first", "second"} {
@@ -804,6 +840,7 @@ func TestModelSwitchExplainsTemporaryWordsOnlyAndClearsSearch(t *testing.T) {
 }
 
 func TestCanceledSwitchDoesNotClaimSemanticSearchReturned(t *testing.T) {
+	t.Parallel()
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "alpha\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
@@ -817,6 +854,7 @@ func TestCanceledSwitchDoesNotClaimSemanticSearchReturned(t *testing.T) {
 // An updated model, the same name with another digest, says it refills rather than that the search
 // switches to a new model (docs/decisions/search.md#the-setup-dialog).
 func TestAnUpdatedModelSaysItRefills(t *testing.T) {
+	t.Parallel()
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "alpha\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
@@ -835,6 +873,7 @@ func TestAnUpdatedModelSaysItRefills(t *testing.T) {
 }
 
 func TestWorkspaceSwitchReplacesSearchResultsWithoutEditingQuery(t *testing.T) {
+	t.Parallel()
 	d := startManaged(t, map[string]string{
 		"alpha": fileDir(t, "a.md", "# A\n\nzebra plains\n"),
 		"bravo": fileDir(t, "b.md", "# B\n\nriver mud\n"),
@@ -852,6 +891,7 @@ func TestWorkspaceSwitchReplacesSearchResultsWithoutEditingQuery(t *testing.T) {
 }
 
 func TestSearchFailureClearsStaleHitsAndSaysWhy(t *testing.T) {
+	t.Parallel()
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n\nzebra plains\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
@@ -861,7 +901,7 @@ func TestSearchFailureClearsStaleHitsAndSaysWhy(t *testing.T) {
 	r.s.WaitForText(t, "hits (1) · lexical")
 	r.h.p.Post(func() { r.h.ws = "missing"; r.h.searchLive("zebra") })
 	r.s.WaitForText(t, "search in missing is unavailable")
-	if count := onLoop(r, func() int { return r.h.searchPick.list.Len() }); count != 0 {
+	if count := onLoop(r, func() int { return r.h.searchPick.List.Len() }); count != 0 {
 		t.Fatalf("%d hits survived a failed search", count)
 	}
 }
@@ -869,6 +909,7 @@ func TestSearchFailureClearsStaleHitsAndSaysWhy(t *testing.T) {
 // TestEveryFieldHasALabel: every TextField the QML declares has a Text over it, saying what goes
 // in it (the folder dialog's path field is its own, and labelled).
 func TestEveryFieldHasALabel(t *testing.T) {
+	t.Parallel()
 	n := 0
 	err := fs.WalkDir(qmlEmbed, "qml", func(p string, e fs.DirEntry, err error) error {
 		if err != nil || e.IsDir() || !strings.HasSuffix(p, ".qml") {
@@ -963,10 +1004,21 @@ func newFakeOllama(t *testing.T, models ...string) *fakeOllama {
 	return f
 }
 
+// embedderWait bounds TestAProviderInUse's waits for what reaches the provider's log: its calls,
+// and a refused embedding's. That is daemon work on the daemon's own schedule, which daemonWait
+// (sized for CPU-bound work) doesn't cover: a file is followed and indexed, the embedder embeds it
+// (at once when woken, at its next poll, 30 s, when the wake came while it was busy; after a failure
+// it waits 1 s, doubling), and the call meter writes the calls at its next flush, every 2 s. On a
+// loaded Windows runner the refused call landed after 2.0 s and after 15.8 s, and the first usage
+// after more than 6 s. The clock only turns a call that never comes into a failure rather than a
+// hang.
+var embedderWait = 45 * time.Second * raceFactor
+
 // TestAProviderInUse: Use sets a provider up and semantic search runs with it, its usage and
 // calls shown under the list; one that does not set up is refused, the one in use staying; Words
 // only turns it off; Remove asks, then removes it.
 func TestAProviderInUse(t *testing.T) {
+	t.Parallel()
 	ollama := newFakeOllama(t, "embedder")
 	root := fileDir(t, "a.md", "# A\n\nalpha\n", "b.md", "# B\n\nbeta\n")
 	d := startManaged(t, map[string]string{"kb": root})
@@ -998,9 +1050,9 @@ func TestAProviderInUse(t *testing.T) {
 	})
 	r.s.WaitFor(t, "the dialog's green mark", func(string) bool { return r.markAbove(1) == "green semantic search · embedder" })
 	// its calls, metered and written every flushEvery (2s) by the daemon, under the list: the
-	// daemon's clock, not a frame's
-	r.waitWithin(t, "local's usage", daemonWait, func() bool {
-		r.h.p.Post(func() { r.h.ai.providers.detail(0) })
+	// embedder's schedule, not a frame's (embedderWait)
+	r.waitWithin(t, "local's usage", embedderWait, func() bool {
+		r.h.p.Post(func() { _ = r.h.reg.Handlers["App.showProvider"]([]qml.SpecValue{num(0)}) })
 		sc := r.s.String()
 		return strings.Contains(sc, "requests ·") && strings.Contains(sc, "latest calls") && strings.Contains(sc, "· ok")
 	})
@@ -1011,9 +1063,10 @@ func TestAProviderInUse(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "c.md"), []byte("# C\n\ngamma\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// the file followed, its embedding refused, the call written at the next flush: the daemon's clock
-	r.waitWithin(t, "the refused call", daemonWait, func() bool {
-		r.h.p.Post(func() { r.h.ai.providers.detail(0) })
+	// the file followed, its embedding refused, the call written at the next flush: the embedder's
+	// schedule, not a CPU-bound wait (embedderWait)
+	r.waitWithin(t, "the refused call", embedderWait, func() bool {
+		r.h.p.Post(func() { _ = r.h.reg.Handlers["App.showProvider"]([]qml.SpecValue{num(0)}) })
 		text := strings.Join(strings.Fields(strings.ReplaceAll(r.s.String(), "│", " ")), " ") // wrapped: running text
 		return strings.Contains(text, "at the usage limit") && strings.Contains(text, "rate limited")
 	})
@@ -1025,13 +1078,13 @@ func TestAProviderInUse(t *testing.T) {
 	}
 
 	// a provider that does not set up: refused, and local stays in use
-	r.h.p.Post(func() { r.h.ai.providers.use(1) })
+	r.app(t, "App.useProvider", num(1))
 	r.s.WaitFor(t, "missing refused", func(sc string) bool {
 		// the reason, not the model's name in the list, wrapped: read as running text
 		text := strings.Join(strings.Fields(strings.ReplaceAll(sc, "│", " ")), " ")
 		return strings.Contains(text, "missing not used: the provider has no such model")
 	})
-	if got := onLoop(r, func() string { return r.h.ai.providers.active }); got != "local" {
+	if got := onLoop(r, func() string { return r.h.ai.Providers.Active }); got != "local" {
 		t.Fatalf("after a refused Use the provider in use is %q", got)
 	}
 
@@ -1057,6 +1110,7 @@ func TestAProviderInUse(t *testing.T) {
 // TestEveryCommandRefusesArgumentsNotItsOwn: a command the document calls with the wrong arguments
 // (a QML edit that got a call wrong) is refused, saying what it takes, and runs nothing.
 func TestEveryCommandRefusesArgumentsNotItsOwn(t *testing.T) {
+	t.Parallel()
 	h := newHost(NewSession("unused", nil), Options{})
 	b := qml.SpecValue{Kind: qml.SpecValueBool, Raw: "true"}
 	frac := qml.SpecValue{Kind: qml.SpecValueNumber, Raw: "1.5"}
@@ -1064,7 +1118,7 @@ func TestEveryCommandRefusesArgumentsNotItsOwn(t *testing.T) {
 	// each list is one no command takes: a Host with no program would panic running any
 	bad := [][]qml.SpecValue{{s, b}, {b, b}, {b, b, b, b}, {frac}, {frac, s}, {s, s, s, b}, {s, s, s, s, b}}
 	for name, c := range h.commands() {
-		fn := c.handler(name)
+		fn := c.Handler(name)
 		for _, args := range bad {
 			if err := fn(args); err == nil {
 				t.Errorf("%s accepted %v", name, args)
@@ -1075,23 +1129,26 @@ func TestEveryCommandRefusesArgumentsNotItsOwn(t *testing.T) {
 	}
 }
 
-// TestTheFolderPickerStartsAtHome: adding a workspace starts in the home directory, or at the root
-// when there is none.
+// TestTheFolderPickerStartsAtHome: adding a workspace starts in the home directory, or, when there
+// is none, at the root of a volume the dialogs' disk opens: "/" on Unix, the temporary folder's
+// drive's root on Windows, never "/" there.
 func TestTheFolderPickerStartsAtHome(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	if got := homeDir(); got != home {
+	if got := homeDir(procenv.Env(nil).With("HOME="+home, "USERPROFILE="+home)); got != home {
 		t.Errorf("with a home: %q", got)
 	}
-	t.Setenv("HOME", "")
-	if got := homeDir(); got != "/" {
-		t.Errorf("with none: %q, want /", got)
+	none := procenv.Env(nil).With("HOME=", "USERPROFILE=", "HOMEDRIVE=", "HOMEPATH=")
+	want := filepath.VolumeName(userdirs.Temp(none)) + string(filepath.Separator)
+	if got := homeDir(none); got != want || !paths.IsRoot(got) {
+		t.Errorf("with none: %q, want the volume's root %q", got, want)
 	}
 }
 
 // TestAListingThatFailsSaysSo: the workspace's files not listed (a workspace gone from the daemon)
 // is on the status line, and the pickers list nothing.
 func TestAListingThatFailsSaysSo(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.h.p.Post(func() { r.h.enter("gone") })
@@ -1105,12 +1162,13 @@ func TestAListingThatFailsSaysSo(t *testing.T) {
 // the preview's too, however many runes the characters before it are made of (a combining accent,
 // a family emoji joined by ZWJs, a CRLF line break).
 func TestAHitOpensWhereItIsAfterJoinedCharacters(t *testing.T) {
+	t.Parallel()
 	joined := "# A\r\n\r\ncafé \U0001F468‍\U0001F469‍\U0001F467 x\r\n\r\n## Birds\r\n\r\nkestrel notes\r\n"
-	if got, want := cursorAt(joined, strings.Index(joined, "## Birds")), 3+1+1+8+1+1; got != want {
+	if got, want := feature.CursorAt(joined, strings.Index(joined, "## Birds")), 3+1+1+8+1+1; got != want {
 		t.Errorf("cursorAt before ## Birds = %d, want %d (3, a break, a break, 8 characters, a break, a break)", got, want)
 	}
 	// a byte inside a character is that character: the one after e starts the accent, which is é's
-	if got := cursorAt("xe\u0301y", strings.Index("xe\u0301y", "\u0301")); got != 1 {
+	if got := feature.CursorAt("xe\u0301y", strings.Index("xe\u0301y", "\u0301")); got != 1 {
 		t.Errorf("cursorAt inside é = %d, want 1 (é's start)", got)
 	}
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", joined}})
@@ -1132,6 +1190,7 @@ func TestAHitOpensWhereItIsAfterJoinedCharacters(t *testing.T) {
 // unsaved; Ctrl+S names it in the new-note picker and creates the file with its text, open, the
 // cursor where it was. Closing the picker keeps the draft.
 func TestTheBlankPageIsADraft(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.typeInEditor(t, "first thoughts\nsecond line")
@@ -1160,6 +1219,7 @@ func TestTheBlankPageIsADraft(t *testing.T) {
 // TestADraftIsGuardedLikeAFile: opening a file over an unsaved draft asks nothing, and the draft
 // keeps its text in its buffer; closing the draft asks, and Save names it and creates the file.
 func TestADraftIsGuardedLikeAFile(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	r := attached(t, d)
 	r.typeInEditor(t, "draft text")
@@ -1195,6 +1255,7 @@ func TestADraftIsGuardedLikeAFile(t *testing.T) {
 // same workspaces, the rows open stay open. A note added is a change, and is listed with nothing
 // asked.
 func TestTheExplorerStaysOpenWhenNothingChanged(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "# A\n", "dir/b.md", "# B\n"}})
 	r := attached(t, d)
 	r.leader(t, 'e')
@@ -1224,6 +1285,7 @@ func TestTheExplorerStaysOpenWhenNothingChanged(t *testing.T) {
 // TestTheOptionsMenu: the editor mode, the theme and the editor's preferences are under Options; the AI
 // models and the backend's restart under System, right of Options; File keeps the file's commands.
 func TestTheOptionsMenu(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.keys(t, decltest.Alt('o'))
@@ -1256,6 +1318,7 @@ func TestTheOptionsMenu(t *testing.T) {
 // TestTheTodosMenu: Todos opens the todos, and makes or loads a store; a store's label is the
 // store bar's Edit and L's, not the menu's.
 func TestTheTodosMenu(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.keys(t, decltest.Alt('t'))
@@ -1270,6 +1333,7 @@ func TestTheTodosMenu(t *testing.T) {
 // TestTheTextKeymap: in the Text keymap the page types as an ordinary editor does — no i, Space a
 // space — Ctrl+Space opens the leader card, and Ctrl+S saves; the keymap is kept.
 func TestTheTextKeymap(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -1296,6 +1360,7 @@ func TestTheTextKeymap(t *testing.T) {
 // TestTheLeaderCardListsACommandARow: the card's commands are on rows of their own, two columns
 // of them, not run together on one line.
 func TestTheLeaderCardListsACommandARow(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.keys(t, key(' '))
@@ -1330,6 +1395,7 @@ var prefLabels = [][]string{
 // start at one column after them; the dialog holds every row and its buttons, at the tests' screen
 // and at a small window's (the 80 × 24 a 200% zoom can leave).
 func TestEachPreferenceHasItsChooserOnItsRow(t *testing.T) {
+	t.Parallel()
 	for _, size := range [][2]int{{100, 30}, {80, 24}} {
 		t.Run(fmt.Sprintf("%dx%d", size[0], size[1]), func(t *testing.T) {
 			d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
@@ -1374,6 +1440,7 @@ func TestEachPreferenceHasItsChooserOnItsRow(t *testing.T) {
 // TestThePagesWidthAppliesAsTyped: in the editor's preferences, a width typed is the page's at
 // once, with no Enter; a width out of range says so and changes nothing.
 func TestThePagesWidthAppliesAsTyped(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 160, 30)
 	r.ready(t)
@@ -1392,6 +1459,7 @@ func TestThePagesWidthAppliesAsTyped(t *testing.T) {
 // TestTheAIModelsSideBySide: the providers on the left, the usage and calls on the right, on the
 // same rows.
 func TestTheAIModelsSideBySide(t *testing.T) {
+	t.Parallel()
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "a\n")})
 	if _, err := d.db.AddProvider(context.Background(), store.ProviderSpec{Name: "local", Kind: store.KindOllama, BaseURL: "http://127.0.0.1:1", Model: "m"}); err != nil {
 		t.Fatal(err)
@@ -1411,6 +1479,7 @@ func TestTheAIModelsSideBySide(t *testing.T) {
 // TestEveryPreferenceIsKept: each preference command changes the screen's preference and the
 // store's; a name the TUI does not know changes nothing and says so.
 func TestEveryPreferenceIsKept(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	// the daemon's store, written through a call: the daemon's clock, not a frame's
@@ -1435,7 +1504,7 @@ func TestEveryPreferenceIsKept(t *testing.T) {
 	stored("tui.menu.autohide", "true")
 	post(func() { r.h.choosePrefNamed(prefStatus, 1) }) // no: hidden
 	stored("tui.status.shown", "false")
-	post(func() { r.h.choosePrefNamed(prefExplorer, 2) })
+	post(func() { r.h.choosePrefNamed(feature.PrefExplorer, 2) })
 	stored("tui.explorer.edge", "top")
 	// light by name: its place is golib's order, which moves as golib ships more themes
 	post(func() { r.h.choosePrefNamed(themePref(r.h.gui), slices.Index(r.h.themeNames(), "light")) })
@@ -1488,6 +1557,7 @@ func TestEveryPreferenceIsKept(t *testing.T) {
 // TestThePreferencesAreReadWithTheirDefaults: what the store keeps is read over the defaults; a
 // value the TUI cannot use is the default's.
 func TestThePreferencesAreReadWithTheirDefaults(t *testing.T) {
+	t.Parallel()
 	p := prefsOf(map[string]any{"tui.editor.wrap": "false", "tui.editor.linenumbers": "true",
 		"tui.toast.corner": "top-left", "tui.toast.seconds": "7", "tui.editor.indentmarks": "cursorLine"})
 	if p.wrap || !p.lineNumbers || p.toastCorner != "top-left" || p.toastSeconds != 7 || p.indentMarks != "cursorLine" {
@@ -1561,12 +1631,13 @@ func markIn(row []tuicore.Cell, stop string) string {
 // and the one installed; yes stops the daemon, the reconnect waits for it to go, starts the
 // installed one, and says so.
 func TestRestartBringsUpTheInstalledBackend(t *testing.T) {
+	t.Parallel()
 	dir, err := os.MkdirTemp("", "adr")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir)
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	notes := map[string][]string{"kb": {"a.md", "a\n"}}
 	old := startDaemonWith(t, sock, notes, daemonOpts{version: "v1"})
 	var spawns atomic.Int32
@@ -1618,6 +1689,7 @@ func TestRestartBringsUpTheInstalledBackend(t *testing.T) {
 // TestRestartNeedsASpawner: a TUI that starts no daemon offers no restart, since nothing would
 // bring one back.
 func TestRestartNeedsASpawner(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.h.p.Post(r.h.startRestart)
@@ -1634,6 +1706,7 @@ func TestRestartNeedsASpawner(t *testing.T) {
 // one is refused, on the unused one asks, then removes it. Cancel indexing with nothing embedding
 // says so.
 func TestVectorsListsTheModelsAndPurgesAnUnusedOne(t *testing.T) {
+	t.Parallel()
 	ollama := newFakeOllama(t, "embedder", "other")
 	root := fileDir(t, "a.md", "# A\n\nalpha\n", "b.md", "# B\n\nbeta\n")
 	d := startManaged(t, map[string]string{"kb": root})
@@ -1662,8 +1735,8 @@ func TestVectorsListsTheModelsAndPurgesAnUnusedOne(t *testing.T) {
 	// (docs/decisions/store.md#when-a-model-is-reclaimed)
 	r.s.WaitFor(t, "other active, embedder reclaimed", func(string) bool {
 		v, _ := r.h.session.Call(ctx, "index.models", "kb")
-		ms := asList(v)
-		return len(ms) == 1 && str(asMap(ms[0]), "name") == "other" && str(asMap(ms[0]), "state") == "active"
+		ms := feature.AsList(v)
+		return len(ms) == 1 && feature.Str(feature.AsMap(ms[0]), "name") == "other" && feature.Str(feature.AsMap(ms[0]), "state") == "active"
 	})
 	settled("other covering the notes")
 	r.h.p.Post(r.h.cancelIndexing)
@@ -1697,6 +1770,7 @@ func TestVectorsListsTheModelsAndPurgesAnUnusedOne(t *testing.T) {
 // counted across the workspaces. Another provider of the same model: its vectors kept. Another
 // provider in use: its vectors go once nothing uses them.
 func TestRemovingAProviderSaysWhatItDeletes(t *testing.T) {
+	t.Parallel()
 	ollama := newFakeOllama(t, "embedder", "other")
 	root := fileDir(t, "a.md", "# A\n\nalpha\n", "b.md", "# B\n\nbeta\n")
 	d := startManaged(t, map[string]string{"kb": root})
@@ -1718,16 +1792,18 @@ func TestRemovingAProviderSaysWhatItDeletes(t *testing.T) {
 	// ask opens the removal's question for name, once the list holds listed too
 	ask := func(name, listed string) {
 		t.Helper()
-		onLoop(r, func() bool { r.h.ai.providers.load(); return true })
+		onLoop(r, func() bool { r.h.ai.ReloadProviders(); return true })
 		r.s.WaitFor(t, "the providers listed", func(string) bool {
 			return onLoop(r, func() bool {
-				return slices.ContainsFunc(r.h.ai.providers.rows.All(), func(p endpointRow) bool { return p.name == listed })
+				return slices.ContainsFunc(r.h.ai.Providers.Rows.All(), func(p searchsetup.EndpointRow) bool { return p.Name == listed })
 			})
 		})
-		onLoop(r, func() bool {
-			r.h.ai.providers.startRemove(slices.IndexFunc(r.h.ai.providers.rows.All(), func(p endpointRow) bool { return p.name == name }))
-			return true
-		})
+		if err := onLoop(r, func() error { // the row and its removal in one turn, as a click is
+			i := slices.IndexFunc(r.h.ai.Providers.Rows.All(), func(p searchsetup.EndpointRow) bool { return p.Name == name })
+			return r.h.reg.Handlers["App.startRemoveProvider"]([]qml.SpecValue{num(i)})
+		}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	question := func() string {
 		return onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.askText"); return v.Raw })
@@ -1790,7 +1866,7 @@ func seedUnusedModel(t *testing.T, db *store.Store, name, fp string, n int) {
 // answers a probe with its number; sys.shutdown, admitted, stops it.
 func otherDaemon(t *testing.T, sock string, proto int64) (stopped chan struct{}) {
 	t.Helper()
-	ln, err := net.Listen("unix", sock)
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1825,12 +1901,13 @@ func otherDaemon(t *testing.T, sock string, proto int64) (stopped chan struct{})
 // status line says it is older and how to replace it, and Restart backend… stops it over its own
 // protocol and starts the installed one.
 func TestRestartReplacesAnOlderBackend(t *testing.T) {
+	t.Parallel()
 	dir, err := os.MkdirTemp("", "ado")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir)
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	old := otherDaemon(t, sock, rpc.Protocol-1)
 	var spawns atomic.Int32
 	sess := NewSession(sock, func() (string, error) {
@@ -1872,6 +1949,7 @@ func TestRestartReplacesAnOlderBackend(t *testing.T) {
 // spinner beside it that turns; a model switch shows the new model's fill and a red mark saying
 // the search is by words meanwhile; once the fill is done, the mark is green again.
 func TestTheSpinnerTurnsWhileTheModelEmbeds(t *testing.T) {
+	t.Parallel()
 	ollama := newFakeOllama(t, "embedder", "other")
 	root := fileDir(t, "a.md", "# A\n\nalpha\n", "b.md", "# B\n\nbeta\n")
 	d := startManaged(t, map[string]string{"kb": root})
@@ -1915,12 +1993,13 @@ func TestTheSpinnerTurnsWhileTheModelEmbeds(t *testing.T) {
 // TestANewerBackendSaysTheTUIIsOlder: a daemon of a newer protocol refuses this TUI, which says it
 // is the older one and offers no restart (it would start this, older, build).
 func TestANewerBackendSaysTheTUIIsOlder(t *testing.T) {
+	t.Parallel()
 	dir, err := os.MkdirTemp("", "adn")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir)
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	newer := otherDaemon(t, sock, rpc.Protocol+1)
 	r := runTUI(t, NewSession(sock, func() (string, error) { return "", errors.New("not in this test") }), Options{})
 	r.s.WaitForText(t, fmt.Sprintf("this TUI (protocol %d) is older than the backend", rpc.Protocol))
@@ -1937,8 +2016,9 @@ func TestANewerBackendSaysTheTUIIsOlder(t *testing.T) {
 }
 
 func TestOlderBackendWithoutSpawnOnlyOffersQuit(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	otherDaemon(t, sock, rpc.Protocol-1)
 	running := runTUI(t, NewSession(sock, nil), Options{})
 	running.s.WaitFor(t, "restart unavailable", func(screen string) bool {
@@ -1950,6 +2030,7 @@ func TestOlderBackendWithoutSpawnOnlyOffersQuit(t *testing.T) {
 // the cursor goes to it, n to the next, N back, wrapping. In the explorer the cursor goes to the
 // row holding it. The workspace's search is SPC SPC (and SPC /, Ctrl+G), not /.
 func TestFindInThePanes(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "one kestrel\ntwo\nthree kestrel\nfour\n", "b.md", "see [[a]]\n",
 		"kestrels/c.md", "c\n", "x.md", "also [[a]]\n"}})
 	r := attached(t, d)
@@ -2001,7 +2082,7 @@ func TestFindInThePanes(t *testing.T) {
 	r.keys(t, decltest.Type("b.md")...)
 	r.keys(t, enter())
 	r.s.WaitForText(t, `find "b.md": 1 of 1 in the explorer`)
-	if at := onLoop(r, func() []string { return r.h.explorer.at }); len(at) == 0 || !strings.HasSuffix(at[len(at)-1], "b.md") {
+	if at := onLoop(r, func() []string { return r.h.explorer.At }); len(at) == 0 || !strings.HasSuffix(at[len(at)-1], "b.md") {
 		t.Fatalf("the explorer's cursor is on %q, want b.md", at)
 	}
 	// from the cursor on: ".md" first holds b.md, under it; n goes on to x.md, N back to b.md
@@ -2015,7 +2096,7 @@ func TestFindInThePanes(t *testing.T) {
 	r.s.WaitForText(t, `find ".md": 3 of 3 in the explorer`)
 	r.keys(t, key('N'))
 	r.s.WaitForText(t, `find ".md": 2 of 3 in the explorer`)
-	if at := onLoop(r, func() []string { return r.h.explorer.at }); len(at) == 0 || !strings.HasSuffix(at[len(at)-1], "b.md") {
+	if at := onLoop(r, func() []string { return r.h.explorer.At }); len(at) == 0 || !strings.HasSuffix(at[len(at)-1], "b.md") {
 		t.Fatalf("after n and N the explorer's cursor is on %q, want b.md", at)
 	}
 	r.keys(t, esc())
@@ -2030,7 +2111,7 @@ func TestFindInThePanes(t *testing.T) {
 	r.keys(t, decltest.Type("x.md")...)
 	r.keys(t, enter())
 	r.s.WaitForText(t, `find "x.md": 1 of 1 in the links`)
-	if at := onLoop(r, func() int { return r.h.rel.at }); at != 2 {
+	if at := onLoop(r, func() int { return r.h.rel.Snapshot().At }); at != 2 {
 		t.Fatalf("the links' cursor is on row %d, want 2 (x.md, under the heading and b.md)", at)
 	}
 	r.keys(t, enter()) // Enter on the row found opens it: the view's own cursor is there
@@ -2054,8 +2135,8 @@ func (r *running) waitNoticed(t *testing.T, text string) {
 }
 
 // toastText is the text inside each toast's frame (╭ … ╯) on one line: the words of a toast that
-// wraps over rows whose other cells hold text of their own (the page's tabs on its bottom border),
-// which noticeText's whole rows would put between them.
+// wraps over rows whose other cells hold text of their own, which noticeText's whole rows would put
+// between them.
 func toastText(sc string) string {
 	rows := strings.Split(sc, "\n")
 	var words []string
@@ -2092,6 +2173,7 @@ func noticeText(sc string) string {
 // right, kept in the history (SPC h). A find's result is the status line's alone: no toast, not
 // kept. The corner and the time a toast stays are preferences.
 func TestNotificationsAndTheStatusLine(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "kestrel one\nkestrel two\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -2114,8 +2196,8 @@ func TestNotificationsAndTheStatusLine(t *testing.T) {
 	})
 	kept := onLoop(r, func() []string {
 		var out []string
-		for _, n := range r.h.noticeLog.items {
-			out = append(out, n.text)
+		for _, n := range r.h.noticeLog.Items {
+			out = append(out, n.Text)
 		}
 		return out
 	})
@@ -2166,6 +2248,7 @@ func TestNotificationsAndTheStatusLine(t *testing.T) {
 // TestThePageWrapsAndNumbersItsLines: long lines wrap by default; View › Wrap long lines turns it
 // off and on; line numbers show in a gutter when asked, the preference kept.
 func TestThePageWrapsAndNumbersItsLines(t *testing.T) {
+	t.Parallel()
 	long := strings.Repeat("word ", 40)
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "short\n" + long + "\n"}})
 	r := attached(t, d)
@@ -2194,6 +2277,7 @@ func TestThePageWrapsAndNumbersItsLines(t *testing.T) {
 // TestTheVimKeysCard: ? shows the Vim keys at the bottom right, the page keeping the keyboard;
 // ? again hides it. About names the author and the license.
 func TestTheVimKeysCard(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.keys(t, key('?'))
@@ -2227,6 +2311,7 @@ func TestTheVimKeysCard(t *testing.T) {
 // TestThePageHoldsTheRulersColumnsWithTheLineNumbers: the ruler is the page's editable columns;
 // the line numbers' gutter is added to the page, so a line as long as the ruler still fits.
 func TestThePageHoldsTheRulersColumnsWithTheLineNumbers(t *testing.T) {
+	t.Parallel()
 	line := strings.Repeat("y", 60)
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", line + "z\n"}},
 		daemonOpts{prefs: map[string]string{"tui.status.shown": "true", "tui.toast.seconds": "1", "tui.ruler": "60", "tui.editor.linenumbers": "true"}})
@@ -2241,9 +2326,9 @@ func TestThePageHoldsTheRulersColumnsWithTheLineNumbers(t *testing.T) {
 	if l, rt := col(rows[0], "┌"), col(rows[0], "┐"); rt-l+1 != 68 {
 		t.Fatalf("the page is %d wide, want 68 (60 of text, the gutter, the border):\n%s", rt-l+1, r.s)
 	}
-	// the 60 y's fill the text's columns, from the page's first row (its Raw | Rendered switch is on
-	// the title row); the 61st column's z wraps to the next row
-	if !strings.Contains(rows[0], "[ Raw | Rendered ]") || !strings.Contains(rows[1], "   1  "+line+"│") || !strings.Contains(rows[2], "z") {
+	// the 60 y's fill the text's columns, from the row under the page's tab (its Raw | Rendered switch
+	// is on the title row, its tab on the row under it); the 61st column's z wraps to the next row
+	if !strings.Contains(rows[0], "[ Raw | Rendered ]") || !strings.Contains(rows[2], "   1  "+line+"│") || !strings.Contains(rows[3], "z") {
 		t.Fatalf("the ruler's 60 columns are not the text's:\n%s", r.s)
 	}
 	// hidden, the page is the ruler and its border again
@@ -2257,6 +2342,7 @@ func TestThePageHoldsTheRulersColumnsWithTheLineNumbers(t *testing.T) {
 // TestTheIndentationMarksReachTheEditor: the kept choice draws a line's leading spaces as dimmed
 // marks, on every line; off, they are spaces again.
 func TestTheIndentationMarksReachTheEditor(t *testing.T) {
+	t.Parallel()
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"ind.md", "flat\n    deep\n"}},
 		daemonOpts{prefs: map[string]string{"tui.editor.indentmarks": "all"}})
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 160, 20)
@@ -2272,6 +2358,7 @@ func TestTheIndentationMarksReachTheEditor(t *testing.T) {
 }
 
 func TestClosingAFileGivesThePageItsDraftWidth(t *testing.T) {
+	t.Parallel()
 	long := strings.Repeat("y\n", 10000) // five digits: a gutter one column wider
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"long.md", long}},
 		daemonOpts{prefs: map[string]string{"tui.ruler": "60", "tui.editor.linenumbers": "true"}})
@@ -2293,6 +2380,7 @@ func TestClosingAFileGivesThePageItsDraftWidth(t *testing.T) {
 // The cursor follows the theme: Options › Theme switching to sepia sends sepia's cursor colour, so
 // a light theme never keeps a dark one's cursor (or the terminal's own) on its light ground.
 func TestTheCursorFollowsAThemeSwitch(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
@@ -2314,6 +2402,7 @@ func TestTheCursorFollowsAThemeSwitch(t *testing.T) {
 // the loop, not by a poll racing the search's own answer, which clears the toast too; asserted on
 // the notifications kept, since a done toast leaves the screen.
 func TestASearchWaitingOnEmbeddingSaysWhenItFinishes(t *testing.T) {
+	t.Parallel()
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
@@ -2328,8 +2417,8 @@ func TestASearchWaitingOnEmbeddingSaysWhenItFinishes(t *testing.T) {
 	// read on the loop after the post: a done toast may already be gone from the screen, the
 	// history keeps it
 	said, waiting := onLoop(r, func() (n int) {
-		for _, m := range r.h.noticeLog.items {
-			if m.text == "embedding finished; search is refreshing in kb" {
+		for _, m := range r.h.noticeLog.Items {
+			if m.Text == "embedding finished; search is refreshing in kb" {
 				n++
 			}
 		}

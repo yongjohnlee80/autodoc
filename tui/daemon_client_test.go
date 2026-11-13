@@ -4,11 +4,11 @@ import (
 	"context"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/internal/client"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // shortDir is a directory whose socket path fits a unix socket's limit on every platform.
@@ -27,7 +27,7 @@ func shortDir(t *testing.T) string {
 func TestTheMovedFunctionsKeepTheirNames(t *testing.T) {
 	var _ func(string, string) (string, error) = SpawnServe
 	dir := shortDir(t)
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	if err := WriteHandoff(dir, sock, int64(os.Getpid())); err != nil || !client.HasHandoff(dir, sock) {
 		t.Fatalf("WriteHandoff: %v, found %v", err, client.HasHandoff(dir, sock))
 	}

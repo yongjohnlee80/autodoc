@@ -2,34 +2,34 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
 
 	"github.com/yongjohnlee80/autodoc/core/todo"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
+	"github.com/yongjohnlee80/autodoc/tui/todos"
 )
 
 // hearingAgent is an agent that takes bracketed pastes (mode 2004), as agent CLIs do, and writes
-// every byte it is sent, its tty raw, into heard-<its first argument> in dir. It says "started"
-// only once it takes bracketed pastes, so a test that waits for that line may hand a running
-// instance a task: a running agent that doesn't take them yet refuses a delivery at once, and a
-// "started" written first left a window where it did (seen under coverage on CI).
+// every byte it is sent, its terminal raw, into heard-<its first argument> in dir: this test binary
+// (hearingAgentMain), on every OS. It says "started" only once it takes bracketed pastes, so a test
+// that waits for that line may hand a running instance a task: a running agent that doesn't take
+// them yet refuses a delivery at once, and a "started" written first left a window where it did
+// (seen under coverage on CI). Its program's folder is shellTempDir's, as a running program's file
+// can't be removed on Windows; its profile's command is agentCall's.
 func hearingAgent(t *testing.T, dir string) string {
 	t.Helper()
-	p := filepath.Join(t.TempDir(), "hearing-agent")
-	script := "#!/bin/sh\nstty raw -echo\nprintf '\\033[?2004hstarted %s\\r\\n' \"$1\"\nexec cat >> " +
-		shellQuote(dir) + "/heard-\"$1\"\n"
-	if err := os.WriteFile(p, []byte(script), 0o755); err != nil {
+	bin := shellTempDir(t, "autodoc-hearing-agent-")
+	agent := standIn(t, bin, "hearing-agent")
+	if err := os.WriteFile(filepath.Join(bin, "heard-dir"), []byte(dir), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	return p
+	return agent
 }
 
 // heardRaw is every byte agent name has been sent.
@@ -72,10 +72,10 @@ func taskIn(t *testing.T, d *daemon, bucket, title string) (todo.Task, bool) {
 func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 	heardDir := t.TempDir()
 	agent := hearingAgent(t, heardDir)
-	d, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{
-		{Name: "Scribe", Codename: "scribe", Command: shellQuote(agent) + " scribe"},
-		{Name: "Critic", Codename: "critic", Command: shellQuote(agent) + " critic"},
-	}, "")
+	d, r, _ := runSetupTUI(t, agentsFolder(t), []agents.AgentProfile{
+		{Name: "Scribe", Codename: "scribe", Command: agentCall(agent, "scribe")},
+		{Name: "Critic", Codename: "critic", Command: agentCall(agent, "critic")},
+	}, "", nil, Options{})
 	tasks := seedTodos(t, d, true, todo.Spec{Title: "Draft the guide"}, todo.Spec{Title: "Edit the links"},
 		todo.Spec{Title: "Fix the typos"})
 	openTodos(t, r, "kb", '1')
@@ -118,18 +118,20 @@ func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 	r.keys(t, enter())
 	r.s.WaitForText(t, "start the agent?")
 	r.keys(t, key('y'))
-	r.s.WaitFor(t, "Scribe told", func(string) bool { return len(heard(heardDir, "scribe")) >= 4 })
+	// Yes starts Scribe, then hands it the task: an agent's start (its programs started), on
+	// agentStartWait, not a frame's clock, which a loaded runner's start outran
+	r.waitWithin(t, "Scribe told", agentStartWait, func() bool { return len(heard(heardDir, "scribe")) >= 4 })
 	x, ok := taskIn(t, d, "in-progress", "Draft the guide")
 	if !ok || x.Assignee != "autodoc:scribe" {
 		t.Fatalf("after A the task is %+v (in progress %v), want in progress for autodoc:scribe", x, ok)
 	}
 	got := heard(heardDir, "scribe")
 	file := strings.TrimPrefix(got[1], "File: ")
-	if got[0] != "Task: Draft the guide" || got[2] != "ID: "+tasks[0].ID || got[3] != "Instruction: "+assignDefault {
+	if got[0] != "Task: Draft the guide" || got[2] != "ID: "+tasks[0].ID || got[3] != "Instruction: "+todos.AssignDefault {
 		t.Fatalf("Scribe heard %q", got)
 	}
 	// the workspace kb is the daemon's /kb: the store is its .todo-list, on the todos' own disk
-	if want := "/kb/.todo-list/in-progress/" + tasks[0].ID + ".md"; file != want || x.Path != "in-progress/"+tasks[0].ID+".md" {
+	if want := taskFile("/kb/.todo-list/in-progress/" + tasks[0].ID + ".md"); file != want || x.Path != "in-progress/"+tasks[0].ID+".md" {
 		t.Fatalf("Scribe was handed %q (the task at %q), want %q: the path the assign returned", file, x.Path, want)
 	}
 	if _, err := d.todoDisk.ReadFile(file); err != nil {
@@ -149,7 +151,7 @@ func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 	agentShown := func() bool { return onLoop(r, func() bool { return r.h.panelOpen["agent"] }) }
 	r.s.WaitFor(t, "the agent's panel open", func(string) bool { return agentShown() })
 	r.s.WaitFor(t, "the keyboard in the agent", func(string) bool { return r.focused("agentView") })
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitFor(t, "the agent's panel hidden", func(string) bool { return !agentShown() })
 	r.s.WaitForText(t, "status: in-progress") // the cursor followed the task
 
@@ -200,284 +202,5 @@ func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 	}
 	if strings.Contains(r.s.String(), "start the agent?") {
 		t.Fatal("a running agent was asked about")
-	}
-}
-
-// TestAssignableAgents: the picker leaves out a closing instance (HandTask refuses one) and a stopped
-// orphan (its profile gone, it cannot be started), and keeps the order AgentEntries gives.
-func TestAssignableAgents(t *testing.T) {
-	entries := []AgentEntry{
-		{Ref: AgentRef{Codename: "stopped"}},
-		{Ref: AgentRef{Codename: "closing", Instance: "1"}, Running: true, Closing: true},
-		{Ref: AgentRef{Codename: "running", Instance: "2"}, Running: true},
-		{Ref: AgentRef{Codename: "orphan-running", Instance: "3"}, Running: true, Orphan: true},
-		{Ref: AgentRef{Codename: "orphan-stopped"}, Orphan: true},
-	}
-	var got []string
-	for _, e := range assignable(entries) {
-		got = append(got, e.Ref.Codename)
-	}
-	if want := []string{"stopped", "running", "orphan-running"}; !slices.Equal(got, want) {
-		t.Fatalf("assignable = %v, want %v", got, want)
-	}
-}
-
-// agentCore is a scripted daemon with AutoDoc's agents: AgentEntries lists entries, and HandTask
-// records each hand-over, refusing at once with refuse when it is set. switchWorkspace moves the
-// workspace on: a TicketWorkspace taken before it is stale.
-type agentCore struct {
-	*scriptedCore
-	entries []AgentEntry
-	handed  []handOverCall
-	refuse  error
-	wsGen   int
-}
-
-func (c *agentCore) switchWorkspace() { c.wsGen++ }
-func (c *agentCore) Ticket(seq *uint64, scope TicketScope) Ticket {
-	if seq != nil || scope != TicketWorkspace {
-		return c.scriptedCore.Ticket(seq, scope)
-	}
-	gen := c.wsGen
-	return Ticket{current: func() bool { return c.wsGen == gen }}
-}
-
-type handOverCall struct {
-	to          AgentRef
-	task        TaskRef
-	instruction string
-	done        func(error)
-}
-
-func (c *agentCore) AgentEntries() []AgentEntry { return c.entries }
-func (c *agentCore) HandTask(to AgentRef, task TaskRef, instruction string, done func(error)) error {
-	if c.refuse != nil {
-		return c.refuse
-	}
-	c.handed = append(c.handed, handOverCall{to, task, instruction, done})
-	return nil
-}
-
-// assigningStore is a claimed store whose open task t1 todos.assign moves to in-progress, as D1
-// does; assigned records each todos.assign's params.
-func assigningStore(entries ...AgentEntry) (*agentCore, *[][]any) {
-	s := scriptedStore(true)
-	var assigned [][]any
-	s.answers["todos.assign"] = func(p []any) (any, error) {
-		assigned = append(assigned, p)
-		return map[string]any{"id": "t1", "rev": "r2", "title": "Ship", "status": "in-progress", "path": "in-progress/t1.md",
-			"assignee": p[3]}, nil
-	}
-	return &agentCore{scriptedCore: s, entries: entries}, &assigned
-}
-
-// TestTodosAssignWritesThenHandsOverAtTheReturnedPath: the assign is written first (autodoc:
-// <codename>, the instruction its reason, an empty one "Task assigned to you."), then the task is
-// handed over at the path the assign returned, the store's root joined: in-progress/, where D1 left
-// the file, not open/, where the row had it. The current incarnation is HandTask's to resolve.
-func TestTodosAssignWritesThenHandsOverAtTheReturnedPath(t *testing.T) {
-	c, assigned := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe", Instance: "7"}, Name: "Scribe", Running: true})
-	v := newTodos(c)
-	v.list()
-	onTask(t, v, "open")
-	v.assign()
-	if !slices.Contains(c.opened, "agentAssignPicker") || c.set["App.agentAssignStatus"] != "agents (1 of 1)" {
-		t.Fatalf("A opened %v, listing %v", c.opened, c.set["App.agentAssignStatus"])
-	}
-	v.assignPick.accept(0, "")
-	if c.opened[len(c.opened)-1] != "todoAssign" || c.set["App.todoAssignText"] != "" || c.set["App.todoAssignTitle"] != "assign to Scribe" {
-		t.Fatalf("the agent chosen: opened %v, text %q, title %v", c.opened, c.set["App.todoAssignText"], c.set["App.todoAssignTitle"])
-	}
-	v.assignSet("   ")
-	if len(*assigned) != 1 {
-		t.Fatalf("todos.assign called %d times", len(*assigned))
-	}
-	if p := (*assigned)[0]; p[1] != "t1" || p[2] != "r1" || p[3] != "autodoc:scribe" || p[4] != assignDefault {
-		t.Fatalf("todos.assign params %v", p)
-	}
-	if len(c.handed) != 1 {
-		t.Fatalf("handed over %d times", len(c.handed))
-	}
-	h := c.handed[0]
-	if h.to != (AgentRef{Codename: "scribe"}) || h.instruction != assignDefault ||
-		h.task != (TaskRef{Title: "Ship", Path: "/kb/.todo-list/in-progress/t1.md", ID: "t1"}) {
-		t.Fatalf("handed %+v", h)
-	}
-	h.done(nil)
-	h.done(ErrAgentCancelled)                  // as a second A's would: each says how it went
-	h.done(widget.ErrTerminalPasteUnbracketed) // a program that takes no bracketed paste got nothing
-	if len(c.notes) != 3 || c.notes[0] != "todos: assigned to Scribe, and sent to it" ||
-		!strings.Contains(c.notes[1], "assigned to autodoc:scribe, but not delivered (you didn't start it)") ||
-		c.notes[2] != "todos: assigned to Scribe, but not handed over: its program takes no bracketed paste; open its panel and paste the task" {
-		t.Fatalf("notes %q", c.notes)
-	}
-
-	// a typed instruction is the reason and the instruction; HandTask's refusal at once is told, and
-	// the assignment stands (nothing undoes it)
-	c.refuse = ErrAgentUnavailable
-	v.showTab(0) // the task followed to In progress; this store's answers keep it in Open
-	v.assign()
-	v.assignPick.accept(0, "")
-	v.assignSet("  Read the ADR first ")
-	if p := (*assigned)[1]; p[4] != "Read the ADR first" {
-		t.Fatalf("todos.assign params %v", p)
-	}
-	if last := c.notes[len(c.notes)-1]; !strings.Contains(last, "not delivered ("+ErrAgentUnavailable.Error()+")") {
-		t.Fatalf("a refused hand-over: %q", last)
-	}
-	if slices.Contains(c.calls, "todos.status") {
-		t.Fatalf("an assignment was undone: %v", c.calls)
-	}
-}
-
-// TestTodosAssignIsRefusedWithoutATaskAnAgentOrWrites: A off a task row, or on a store not claimed,
-// does nothing and says nothing (the action row offers it on neither); with no AutoDoc agent to list
-// it says how to add one. None opens the picker. A dismissed picker has chosen no agent: nothing is
-// written.
-func TestTodosAssignIsRefusedWithoutATaskAnAgentOrWrites(t *testing.T) {
-	c, assigned := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe"})
-	v := newTodos(c)
-	v.list()
-	v.showTab(1) // In progress: no task under the cursor
-	v.assign()
-	if strings.Contains(fmt.Sprint(c.set["App.todosStatus"]), "assign") || len(c.notes) != 0 || slices.Contains(c.opened, "agentAssignPicker") {
-		t.Fatalf("off a task: status %q, notes %q, opened %v", c.set["App.todosStatus"], c.notes, c.opened)
-	}
-	v.showTab(0)
-	v.assign()
-	v.assignPick.dismiss()
-	v.assignSet("") // as a stray App.todoAssignSet after the dismissal would
-	if len(*assigned) != 0 {
-		t.Fatalf("a dismissed picker wrote %v", *assigned)
-	}
-
-	none, _ := assigningStore(AgentEntry{Ref: AgentRef{Codename: "gone"}, Closing: true})
-	v = newTodos(none)
-	v.list()
-	onTask(t, v, "open")
-	v.assign()
-	if len(none.notes) != 1 || none.notes[0] != "todos: no AutoDoc agent to assign to: add one in the agent profiles" ||
-		slices.Contains(none.opened, "agentAssignPicker") {
-		t.Fatalf("no agent: notes %q, opened %v", none.notes, none.opened)
-	}
-
-	ro := &agentCore{scriptedCore: scriptedStore(false), entries: []AgentEntry{{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe"}}}
-	v = newTodos(ro)
-	v.list()
-	onTask(t, v, "open")
-	v.assign()
-	if len(ro.notes) != 0 || len(ro.failed) != 0 || slices.Contains(ro.opened, "agentAssignPicker") {
-		t.Fatalf("read-only: notes %q, failed %q, opened %v", ro.notes, ro.failed, ro.opened)
-	}
-}
-
-// TestTodosAssignAnsweredAfterAWorkspaceSwitchIsHandedToNoOne: HandTask delivers to the workspace in
-// use, so an assign whose answer lands after a switch is not handed over: the assignment stands,
-// and the notice says to deliver it from the task's own workspace. Answered late in the same
-// workspace, it is handed over as ever.
-func TestTodosAssignAnsweredAfterAWorkspaceSwitchIsHandedToNoOne(t *testing.T) {
-	for _, switched := range []bool{false, true} {
-		c, assigned := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
-		v := newTodos(c)
-		v.list()
-		onTask(t, v, "open")
-		v.assign()
-		v.assignPick.accept(0, "")
-		c.deferred = true
-		v.assignSet("")
-		if len(*assigned) != 1 || len(c.pending) != 1 {
-			t.Fatalf("switched %v: assigned %v, answers held %d", switched, *assigned, len(c.pending))
-		}
-		if switched {
-			c.switchWorkspace()
-		}
-		c.deliver(0) // the assign's answer, late
-		switch {
-		case switched && (len(c.handed) != 0 || len(c.notes) != 1 ||
-			!strings.Contains(c.notes[0], "assigned to autodoc:scribe, but not delivered (the workspace changed before the assign landed)")):
-			t.Fatalf("after a switch: handed %+v, notes %q", c.handed, c.notes)
-		case !switched && (len(c.handed) != 1 || c.handed[0].task.Path != "/kb/.todo-list/in-progress/t1.md"):
-			t.Fatalf("same workspace, answered late: handed %+v", c.handed)
-		}
-	}
-}
-
-// A's answer that lands after the stores were listed again (the panel opened again, a label set, a
-// store registered) is still the shown store's: the task is followed to In progress, which is read
-// again, and Open no longer shows it. Listing made the store shown a new value, and the answer,
-// compared by value, was dropped: no follow, no read.
-func TestTodosAssignAnsweredAfterTheStoresAreListedAgainFollowsTheTask(t *testing.T) {
-	c, assigned := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
-	v := newTodos(c)
-	v.list()
-	onTask(t, v, "open")
-	v.assign()
-	v.assignPick.accept(0, "")
-	c.deferred = true
-	v.assignSet("")
-	if len(*assigned) != 1 || len(c.pending) != 1 {
-		t.Fatalf("the premise, the assign's answer held: assigned %v, held %d", *assigned, len(c.pending))
-	}
-	assignAnswer := c.pending[0]
-	c.pending = nil
-	shown := v.cur
-	v.list()                 // the stores listed again while the assign is out
-	for len(c.pending) > 0 { // the listing to its end: the stores, their labels, the workspace's store
-		held := c.pending
-		c.pending = nil
-		for _, answer := range held {
-			answer()
-		}
-	}
-	if v.cur == shown || v.cur == nil || v.cur.id != shown.id {
-		t.Fatalf("the premise, the same store listed again as a new value: %p %p", shown, v.cur)
-	}
-	c.deferred = false
-	before := len(c.calls)
-	assignAnswer() // then the assign's answer
-	inProgress := tabOf("in-progress")
-	if v.tab != inProgress || c.set["App.todoTab"] != inProgress {
-		t.Fatalf("after the assign the panel is on tab %d (App.todoTab %v), want In progress (%d)", v.tab, c.set["App.todoTab"], inProgress)
-	}
-	read := false
-	for _, call := range c.calls[before:] {
-		read = read || strings.HasPrefix(call, "todos.list") && strings.Contains(call, "in-progress")
-	}
-	if !read {
-		t.Fatalf("In progress was not read after the assign's answer: %v", c.calls[before:])
-	}
-}
-
-// scopedAgentCore is agentCore in a window holding the crew scope scope ("" for none).
-type scopedAgentCore struct {
-	*agentCore
-	scope string
-}
-
-func (c *scopedAgentCore) windowScope() string { return c.scope }
-
-// TestTodosAssignCarriesTheWindowsScope: A assigns with the window's crew scope, so the window's
-// assignment feed (crewtodos.go) leaves this assignment to the hand-over A makes itself; a window
-// holding no scope assigns with none, as before.
-func TestTodosAssignCarriesTheWindowsScope(t *testing.T) {
-	for _, scope := range []string{"autodoc:0123456789abcdef", ""} {
-		ac, assigned := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
-		c := &scopedAgentCore{agentCore: ac, scope: scope}
-		v := newTodos(c)
-		v.list()
-		onTask(t, v, "open")
-		v.assign()
-		v.assignPick.accept(0, "")
-		v.assignSet("Go.")
-		if len(*assigned) != 1 {
-			t.Fatalf("scope %q: todos.assign called %d times", scope, len(*assigned))
-		}
-		p := (*assigned)[0]
-		if scope != "" && (len(p) != 6 || p[5] != scope) || scope == "" && len(p) != 5 {
-			t.Errorf("scope %q: todos.assign params %v", scope, p)
-		}
-		if len(ac.handed) != 1 {
-			t.Errorf("scope %q: handed over %d times, want once, by A itself", scope, len(ac.handed))
-		}
 	}
 }

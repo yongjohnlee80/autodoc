@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"io/fs"
-	"net"
 	"os"
 	"path/filepath"
 	"sort"
@@ -21,6 +20,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -97,8 +97,8 @@ func startManagedIncludes(t *testing.T, roots map[string]string, include []strin
 	if err != nil {
 		t.Fatal(err)
 	}
-	sock := filepath.Join(dir, "s.sock")
-	ln, err := net.Listen("unix", sock)
+	sock := ipc.ScratchAddr(dir, "s.sock")
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,20 +106,26 @@ func startManagedIncludes(t *testing.T, roots map[string]string, include []strin
 	emb.Start(ctx)
 	opts := []rpc.Option{rpc.WithListener(ln), rpc.WithPreferences(db), rpc.WithEmbeddings(emb), rpc.WithEvents(db),
 		rpc.WithRegistrations(o.Registrations.Tables()), rpc.WithRankers(ranking),
-		rpc.WithFiles(diskFiles(t, docs.WithRegistrations(o.Registrations.Kinds()), docs.WithDeriver(o.Registrations)))}
+		rpc.WithDisks(diskVolumes(t, docs.WithRegistrations(o.Registrations.Kinds()), docs.WithDeriver(o.Registrations)))}
 	for _, mod := range mods {
 		opts = append(opts, rpc.WithModules(mod(ws)))
 	}
 	srv := rpc.New(ws, "v-test", opts...)
 	done := make(chan struct{})
-	go func() { _ = srv.Run(ctx); close(done) }()
+	var runErr error // said, not dropped, as startDaemonWith's (app_test.go)
+	go func() { runErr = srv.Run(ctx); close(done) }()
 	t.Cleanup(func() {
 		cancel()
 		<-done
+		if serverFailed(runErr) { // said before any other wait, which could hang and bury it
+			t.Errorf("the managed test daemon's server did not shut down cleanly: %v", runErr)
+		}
 		emb.Wait()
 		ranking.Wait()
 		ws.StopAll()
-		_ = db.Close()
+		if err := db.Close(); err != nil {
+			t.Errorf("the managed test daemon's store did not close: %v", err)
+		}
 		_ = os.RemoveAll(dir)
 	})
 	return &managedDaemon{sock: sock, db: db}

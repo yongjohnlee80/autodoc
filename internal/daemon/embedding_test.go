@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 
 	"github.com/yongjohnlee80/golib/search/embed"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
@@ -444,8 +444,8 @@ func TestTheProviderVerbsChangeNothingWhenTheyFail(t *testing.T) {
 	var prefs, removes atomic.Bool
 	e.db = faulty{db, &prefs, &removes} // before the server runs: its handlers read it
 	ctx, cancel := context.WithCancel(context.Background())
-	sock := filepath.Join(t.TempDir(), "s.sock")
-	ln, err := net.Listen("unix", sock)
+	sock := ipc.ScratchAddr(t.TempDir(), "s.sock")
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -453,7 +453,7 @@ func TestTheProviderVerbsChangeNothingWhenTheyFail(t *testing.T) {
 	done := make(chan struct{})
 	go func() { _ = srv.Run(ctx); close(done) }()
 	t.Cleanup(func() { cancel(); <-done })
-	cli, err := golibrpc.Dial(ctx, sock, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	cli, err := golibrpc.Dial(ctx, sock, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 	if err != nil {
 		t.Fatal(err)
 	}

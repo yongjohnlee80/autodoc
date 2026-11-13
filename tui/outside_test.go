@@ -13,10 +13,11 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/vfs/local"
 
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/autodoc/tui/explorer"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // outside_test.go: files outside every workspace
@@ -24,15 +25,14 @@ import (
 // over the whole disk, file.locate's routing into a workspace, and what such a file keeps and
 // lacks.
 
-// diskFiles is the daemon's documents of the whole disk, as app/serve.go serves them.
-func diskFiles(t *testing.T, opts ...docs.Option) *docs.Docs {
+// diskVolumes are the daemon's documents of the whole disk, as app/serve.go serves them: each
+// volume's tree opened the first time a path on it is asked for, "/" on Unix, each drive or share
+// on Windows.
+func diskVolumes(t *testing.T, opts ...docs.Option) *rpc.Disks {
 	t.Helper()
-	disk, err := local.New("/")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = disk.Close() })
-	return docs.New(disk, nil, opts...)
+	k := rpc.LocalDisks(nil, opts...) // the daemon's own opener, its guard included
+	t.Cleanup(k.Close)
+	return k
 }
 
 // runOutside is the TUI on a managed daemon serving kb and notes from real folders, and a folder
@@ -58,13 +58,15 @@ func (r *running) waitOpen(t *testing.T, ws, p string) {
 
 func waitDisk(t *testing.T, r *running, abs, want string) {
 	t.Helper()
-	r.s.WaitFor(t, abs+" holding "+want, func(string) bool { b, _ := os.ReadFile(abs); return string(b) == want })
+	// a save is a write through the daemon, a round trip: on daemonWait, not a frame's clock
+	r.waitWithin(t, abs+" holding "+want, daemonWait, func() bool { b, _ := os.ReadFile(abs); return string(b) == want })
 }
 
 // TestAFileOutsideEveryWorkspaceOpensEditsAndSaves: it opens in no workspace, the status line
 // says so, a save writes it, and a change on disk since it was read is a conflict that asks
 // (docs/decisions/editor.md#files-outside-every-workspace).
 func TestAFileOutsideEveryWorkspaceOpensEditsAndSaves(t *testing.T) {
+	t.Parallel()
 	r, _, _, abs := runOutside(t)
 	r.h.p.Post(func() { r.h.openAbsolute(abs) })
 	r.waitOpen(t, "", abs)
@@ -99,6 +101,7 @@ func TestAFileOutsideEveryWorkspaceOpensEditsAndSaves(t *testing.T) {
 // entering it when it is not the one in use
 // (docs/decisions/editor.md#files-outside-every-workspace).
 func TestOpenFileInAWorkspacesRootOpensItThere(t *testing.T) {
+	t.Parallel()
 	r, kb, notes, _ := runOutside(t)
 	r.h.p.Post(func() { r.h.openAbsolute(filepath.Join(kb, "a.md")) })
 	r.waitOpen(t, "kb", "a.md")
@@ -113,6 +116,7 @@ func TestOpenFileInAWorkspacesRootOpensItThere(t *testing.T) {
 // it; the plugin feed sends workspace "" and its absolute path; Recent files lists it as in no
 // workspace and opens it again (docs/decisions/editor.md#files-outside-every-workspace).
 func TestAnOutsideFileStaysOpenAcrossWorkspacesAndReachesTheFeedAndRecent(t *testing.T) {
+	t.Parallel()
 	r, _, _, abs := runOutside(t)
 	r.h.p.Post(func() { r.h.openAbsolute(abs) })
 	r.waitOpen(t, "", abs)
@@ -127,10 +131,10 @@ func TestAnOutsideFileStaysOpenAcrossWorkspacesAndReachesTheFeedAndRecent(t *tes
 	r.leader(t, 'r')
 	r.s.WaitForText(t, "("+outsideBadge+")")
 	rows := r.recentListedNow()
-	if len(rows) == 0 || rows[0] != (recentDoc{Workspace: "", Path: abs}) {
+	if len(rows) == 0 || rows[0] != (explorer.RecentDoc{Workspace: "", Path: abs}) {
 		t.Fatalf("recent files %v, want the outside file first", rows)
 	}
-	r.h.p.Post(func() { r.h.recent.choose(0) })
+	r.h.p.Post(func() { r.h.recent.Choose(0) })
 	r.waitOpen(t, "", abs)
 	if ws := onLoop(r, func() string { return r.h.ws }); ws != "notes" {
 		t.Errorf("reopening it left the workspace in use %q, want notes", ws)
@@ -141,6 +145,7 @@ func TestAnOutsideFileStaysOpenAcrossWorkspacesAndReachesTheFeedAndRecent(t *tes
 // outside every workspace (".md" added); one named in a workspace's root is that workspace's file;
 // one that exists is left as it is (docs/decisions/editor.md#files-outside-every-workspace).
 func TestNewFileInAnyFolder(t *testing.T) {
+	t.Parallel()
 	r, kb, _, abs := runOutside(t)
 	fresh := filepath.Join(filepath.Dir(abs), "fresh", "idea")
 	r.keys(t, decltest.Ctrl('n'))
@@ -169,6 +174,7 @@ func TestNewFileInAnyFolder(t *testing.T) {
 // TestOpenFileDialogOpensTheFileChosen: SPC f lists the disk at the workspace's root, with the
 // preview, and Enter on a file opens it.
 func TestOpenFileDialogOpensTheFileChosen(t *testing.T) {
+	t.Parallel()
 	r, _, _, _ := runOutside(t)
 	r.leader(t, 'f')
 	r.s.WaitForText(t, "open a file")
@@ -177,9 +183,30 @@ func TestOpenFileDialogOpensTheFileChosen(t *testing.T) {
 	r.waitOpen(t, "kb", "a.md")
 }
 
+// TestOpenFileDialogOpensAnOutsideFile: SPC f over an outside file lists its folder (the disk's own
+// spelling: a drive's path on Windows), and Enter on another file there opens it outside every
+// workspace, at its absolute path.
+func TestOpenFileDialogOpensAnOutsideFile(t *testing.T) {
+	t.Parallel()
+	r, _, _, abs := runOutside(t)
+	other := filepath.Join(filepath.Dir(abs), "other.md")
+	if err := os.WriteFile(other, []byte("# Other\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	onLoop(r, func() bool { r.h.openAbsolute(abs); return true })
+	r.waitOpen(t, "", abs)
+	r.leader(t, 'f')
+	r.s.WaitForText(t, "open a file")
+	r.s.WaitForText(t, "other.md")
+	down := tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyDown}
+	r.keys(t, down, down, enter()) // ../, notes.md, other.md
+	r.waitOpen(t, "", other)
+}
+
 // TestTheFileDialogsFollowALinkToAFolder: a link to a folder, absolute, lists as a folder in
 // Open file…, and Enter goes into it.
 func TestTheFileDialogsFollowALinkToAFolder(t *testing.T) {
+	t.Parallel()
 	r, kb, _, abs := runOutside(t)
 	if err := os.Symlink(filepath.Dir(abs), filepath.Join(kb, "linked")); err != nil {
 		t.Fatal(err)
@@ -194,8 +221,9 @@ func TestTheFileDialogsFollowALinkToAFolder(t *testing.T) {
 // TestARefusedFileVerbSaysTheDaemonIsRemote: the daemon refuses file.* to a peer not on its unix
 // socket; the TUI says why rather than echoing the refusal.
 func TestARefusedFileVerbSaysTheDaemonIsRemote(t *testing.T) {
+	t.Parallel()
 	denied := &golibrpc.Error{Code: golibrpc.CodeAccessDenied, Message: "file.read is for local peers"}
-	if got := wireMessage(localOnly(denied)); !strings.Contains(got, "this AutoDoc is remote") {
+	if got := feature.WireMessage(localOnly(denied)); !strings.Contains(got, "this AutoDoc is remote") {
 		t.Errorf("a refusal reads %q", got)
 	}
 	other := &golibrpc.Error{Code: golibrpc.CodeInvalidParams, Message: "bad"}
@@ -207,6 +235,7 @@ func TestARefusedFileVerbSaysTheDaemonIsRemote(t *testing.T) {
 // TestReopeningTheOpenOutsideFileKeepsThePage: opening the file already open, unchanged, does not
 // read it again.
 func TestReopeningTheOpenOutsideFileKeepsThePage(t *testing.T) {
+	t.Parallel()
 	r, _, _, abs := runOutside(t)
 	r.h.p.Post(func() { r.h.openAbsolute(abs) })
 	r.waitOpen(t, "", abs)
@@ -221,6 +250,7 @@ func TestReopeningTheOpenOutsideFileKeepsThePage(t *testing.T) {
 // TestAnOutsideFileGoneFromDiskIsClosedOnRecheck: a reconnect's recheck finds it deleted, and
 // closes it, saying it is gone from disk (not "from the workspace").
 func TestAnOutsideFileGoneFromDiskIsClosedOnRecheck(t *testing.T) {
+	t.Parallel()
 	r, _, _, abs := runOutside(t)
 	r.h.p.Post(func() { r.h.openAbsolute(abs) })
 	r.waitOpen(t, "", abs)
@@ -235,6 +265,7 @@ func TestAnOutsideFileGoneFromDiskIsClosedOnRecheck(t *testing.T) {
 // TestTheDefaultAppOpensAnOutsideFileAtItsPath: Open with Default App hands the desktop the absolute path, and
 // says so when the desktop cannot open it.
 func TestTheDefaultAppOpensAnOutsideFileAtItsPath(t *testing.T) {
+	t.Parallel()
 	r, _, _, abs := runOutside(t)
 	opened := make(chan string, 2)
 	// set on the loop, read by the browser stub on openWithDefaultApp's worker: atomic
@@ -265,8 +296,8 @@ func (r *running) waitKeptNotice(t *testing.T, text string) {
 	t.Helper()
 	r.s.WaitFor(t, "the notice "+text, func(string) bool {
 		return onLoop(r, func() bool {
-			for _, n := range r.h.noticeLog.items {
-				if n.text == text {
+			for _, n := range r.h.noticeLog.Items {
+				if n.Text == text {
 					return true
 				}
 			}
@@ -279,6 +310,7 @@ func (r *running) waitKeptNotice(t *testing.T, text string) {
 // root holding a file, and the exclude pattern that keeps it out ("" when it is only not admitted);
 // none for a file under no root.
 func TestWhyAFileIsInNoWorkspace(t *testing.T) {
+	t.Parallel()
 	list := []wsInfo{
 		{name: "outer", root: "/src", exclude: []string{".git/**"}},
 		{name: "kb", root: "/src/kb", exclude: []string{".git/**", ".todo-list/**"}},
@@ -304,6 +336,7 @@ func TestWhyAFileIsInNoWorkspace(t *testing.T) {
 // pattern, and offers that workspace's settings
 // (docs/decisions/todos.md#excluded-todo-stores-are-reported).
 func TestAnExcludedFileSaysWhyAndOffersItsSettings(t *testing.T) {
+	t.Parallel()
 	root := fileDir(t, "a.md", "# A\n")
 	if err := os.MkdirAll(filepath.Join(root, "drafts"), 0o755); err != nil {
 		t.Fatal(err)
@@ -337,7 +370,7 @@ func TestAnExcludedFileSaysWhyAndOffersItsSettings(t *testing.T) {
 	if strings.Contains(r.s.String(), "unsaved file") {
 		t.Fatal("opening the excluded file asked about a.md's unsaved changes")
 	}
-	if a := onLoop(r, func() *openBuffer { return r.h.bufferOf(fileRef{"kb", "a.md"}) }); a == nil || !onLoop(r, func() bool { return a.file.dirty }) {
+	if a := onLoop(r, func() *openBuffer { return r.h.bufferOf(feature.FileRef{WS: "kb", Path: "a.md"}) }); a == nil || !onLoop(r, func() bool { return a.file.dirty }) {
 		t.Fatal("a.md's buffer lost its unsaved edit")
 	}
 }
@@ -346,6 +379,7 @@ func TestAnExcludedFileSaysWhyAndOffersItsSettings(t *testing.T) {
 // writeFile): created from no version, read back with the version it wrote, a stale version a
 // conflict.
 func TestCoreReadsAndWritesAnAbsoluteFile(t *testing.T) {
+	t.Parallel()
 	r, _, _, abs := runOutside(t)
 	c := core{r.h}
 	p := filepath.Join(filepath.Dir(abs), ".autodoc", "graph.toml")
@@ -358,14 +392,14 @@ func TestCoreReadsAndWritesAnAbsoluteFile(t *testing.T) {
 	if err != nil || string(b) != "one\n" || v != v1 {
 		t.Fatalf("read back %q, %q, %v; want one, %q", b, v, err, v1)
 	}
-	if _, err := c.WriteAbsolute(ctx, p, []byte("two\n"), "stale"); code(err) != rpc.CodeConflict {
+	if _, err := c.WriteAbsolute(ctx, p, []byte("two\n"), "stale"); feature.Code(err) != rpc.CodeConflict {
 		t.Errorf("a stale version: %v; want a conflict", err)
 	}
-	if _, _, err := c.ReadAbsolute(ctx, filepath.Join(filepath.Dir(abs), "none.toml")); code(err) != rpc.CodeNotFound {
+	if _, _, err := c.ReadAbsolute(ctx, filepath.Join(filepath.Dir(abs), "none.toml")); feature.Code(err) != rpc.CodeNotFound {
 		t.Errorf("no file: %v; want not found", err)
 	}
 	// the theme choices a chooser offers: its own first, then every theme the window can wear
-	names, labels := themeChoices(c, []string{"terminal", "page"}, []string{"the terminals'", "the page's"})
+	names, labels := feature.ThemeChoices(c, []string{"terminal", "page"}, []string{"the terminals'", "the page's"})
 	if names[0] != "terminal" || labels[1] != "the page's" || len(names) != len(labels) || len(names) < 3 {
 		t.Errorf("choices %q, %q", names, labels)
 	}

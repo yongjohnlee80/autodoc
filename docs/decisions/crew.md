@@ -31,9 +31,16 @@ In the code: `tui/agent.go`, `tui/agentprofiles.go`, `tui/agenttabs.go`, `agents
 
 A profile can carry an `env` map, set on its agent's process: for example, Claude Code on another
 account is `{"name": "Sephiroth", "command": "claude", "env": {"CLAUDE_CONFIG_DIR":
-"~/.claude-work"}}`. AutoDoc starts the agent's command with `/bin/sh -c`, which reads no shell
+"~/.claude-work"}}`. AutoDoc starts the agent's command with `/bin/sh -c` (on Windows, PowerShell's `-Command`: see `internal/usershell`), which reads no shell
 startup file, so a `.bashrc` alias never reaches it. A wrapper script would, but its name would
 be the agent's kind, so it would not get Claude's crew setup.
+
+On Windows a profile's command is PowerShell's: AutoDoc runs it with PowerShell's `-Command`, and
+reads it (its kind, its program) as PowerShell reads a line, where a backslash is a path's
+separator. A path with spaces runs through the call operator: `& 'C:\Program Files\x\claude.cmd'
+--model haiku`. cmd.exe's syntax is not supported: `%VAR%` and a `^` escape reach PowerShell as
+written, and a line that starts with a quoted path (`"C:\x\claude.cmd" --model haiku`) is a string
+to PowerShell, not a command, so it starts nothing.
 
 - The profile's variables come before AutoDoc's own, so AutoDoc's win. A key AutoDoc sets for every
   agent (`AUTODOC_*`), or for a crew OpenCode agent (`OPENCODE_CONFIG_CONTENT`), is refused when the
@@ -77,11 +84,14 @@ In the code: `tui/agentsetup.go`, `AGENTS.md`
 The agents a TUI starts reach the page open in that TUI, its unsaved text included, through a unix
 socket the TUI serves at `<state>/editor/<pid>.sock`, mode 0600, removed when it stops. A TUI that
 was killed never removes its own, so each TUI at its start removes the `<pid>.sock` files in that
-folder that refuse a connection. A socket that answers is another TUI's, and stays.
+folder that refuse a connection. A socket that answers is another TUI's, and stays. On Windows it is
+a named pipe instead (`ipc.AddrIn`, named for that folder and pid), whose access list lets in the
+user alone, as the daemon's does; a pipe goes with the TUI, so there is nothing to sweep.
 
 - An agent calls it as `autodoc --editor <verb> [params]`. Its environment names the socket
   (`AUTODOC_EDITOR`) and its token (`AUTODOC_EDITOR_TOKEN`). Codex's tool shells drop every variable
-  named `*TOKEN*`, so a Codex agent's token is also a 0600 file in its own folder, which
+  named `*TOKEN*`, so a Codex agent's token is also a file in its own folder, private to the user
+  from its creation (`internal/userperm`: 0600 on Unix, an access list on Windows), which
   `AUTODOC_EDITOR_CREDENTIAL_FILE` names. `autodoc --editor` reads that file when the token variable
   is missing, and refuses it if it is a link, isn't a regular file, another user owns it, others can
   open it, or it holds more than 256 bytes. It opens the file once, without following a link or
@@ -103,7 +113,7 @@ folder that refuse a connection. A socket that answers is another TUI's, and sta
   needs the user (sudo, pkexec, an installer) never needs a pasted command or a passphrase given to
   the agent. It needs the `terminal` grant, and every call shows the user the exact
   line, the agent and the folder on a card: Run or Don't run. Nothing runs without that Run, and only
-  the line the card showed runs, as `sh -c` in a new tab of its own, in the root of the workspace in
+  the line the card showed runs, as `sh -c` (PowerShell's `-Command` on Windows) in a new tab of its own, in the root of the workspace in
   use, where the user types any passphrase. The call answers `{started, tab, exit_by_mail}` once the
   user has; Don't run, or a closed card, refuses it. Nothing of the tab is read back for the agent:
   when the command exits, its code reaches the agent as the user's mail, and the user is told when
@@ -245,6 +255,34 @@ scope has one owner at a time: one process of its host, fenced by an epoch.
 
 In the code: `core/crew/claim.go`, `core/crew/proc.go`, `tui/crewhost.go`
 
+## Crew names on disk
+
+A crew identity becomes a file or folder name only through one function, `crewFileName`, which is
+golib's `paths.Encode`: the same name on every OS. A byte other than a lower-case letter, a digit,
+`.`, `_` or `-` becomes `%XX`, so a scope's colon (`autodoc:1f2e…` → `autodoc%3A1f2e…`), a
+separator or a name Windows reserves can't reach a path, and two identities never share a name.
+For now that covers the scope (an agent's folder under its workspace, `.crew-scopes/`,
+`.crew-todos/`) and the codename (an agent's folder under its scope). Codenames are lower case,
+digits and hyphens, so theirs are unchanged.
+
+Builds before this one wrote a scope as it is, which Windows can't hold. Every window renames those
+names once at its start, before anything reads the folders:
+
+- Only a name holding a colon is renamed, since every scope has one and nothing else AutoDoc writes
+  there does.
+- Each rename is a single rename in its own folder, under a file lock in the agents' folder
+  (`.crew-names.lock`), so two windows starting together rename once.
+- A run cut short leaves each name old or new, never half, and the next start renames the rest.
+- An old name whose new one is already there is left as it is, and so is the new one: nothing is
+  written over. The window says which were kept.
+- It is one way: no build writes an old name again. An agent's folder moves with its scope's
+  name, so a CLI that keys its state on the folder's path (Claude Code's project memory, say) sees
+  it as a new folder once. The release notes say so.
+- A scope whose name held `/` or `\` was written with `_` there, so it can't be read back. Its old
+  folder is renamed as it stands, and the agent starts in a new one.
+
+In the code: `tui/crewnames.go`, `tui/agent.go`, `tui/crewhost.go`, `tui/crewtodos.go`
+
 ## One daemon is one crew
 
 Agents in an AutoDoc window and in Neovim reach each other by codename, wherever each runs: one
@@ -354,7 +392,8 @@ In the code: `core/crew/guard.go`, `core/crew/register.go`, `tui/agentinstances.
 
 The host writes a session context before the agent starts: the daemon's store id and socket, the
 scope, profile and session, the credential (`<session id>.<secret>`) and the CLI kind. It is a file of
-its own, mode 0600, written by rename so a reader sees all of it or none, in the agent folder's
+its own, private to this user (on Unix mode 0600; on Windows owned by this user, with an access list
+that grants this user alone), written by rename so a reader sees all of it or none, in the agent folder's
 `.autodoc-crew/` folder and named by the session id. `$AUTODOC_CREW_CONTEXT` names it, and it is
 removed once the session ends.
 
@@ -558,7 +597,8 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
   frees its codename at the next start. One under another epoch is still `crew.codename_busy`.
 - `crew.list` says why a session can't be woken now: `ended`, `host_gone`, `host` (a host's own session, kind
   `host`: Neovim's gateway forwards mail and takes no replies, so it is never woken; `crew list` and `crew_list` leave
-  it out unless `--all` / `all`), `no_endpoint`, `wakes_failing` (with
+  it out unless `--all` / `all`), `no_endpoint`, `no_wake_on_this_os` (a Claude, Codex or OpenCode
+  session on an OS that can't wake one: [Wakes an OS can't offer](#wakes-an-os-cant-offer)), `wakes_failing` (with
   the last failure's cause, once one is known), or `backoff_until` the next try, while a failed
   wake's backoff runs. The store keeps the count of failures, never their reasons: the cause is in
   the daemon's memory, and after a restart `wakes_failing` names none until the next failure.
@@ -586,7 +626,9 @@ Each channel queues a busy agent itself, so no waker needs to wait for the agent
     are never assumed reported.
   - OpenCode's plugin (`permission.asked`, `permission.replied`) and agy's bridge (a trajectory step
     waiting on a permission, read every 2 s) report them, and say they are alive (`crew.attention
-    alive`, every 5 s and every look). Their sessions' prompts count as reported only within 15 s of
+    alive`, every 5 s and every look). The bridge reads the trajectory's tail as a stream, keeping
+    one step at a time: a step holds what the agent read or wrote, so a tail has no small bound,
+    and a read refused for its size would be asked the same tail again and report nothing after it. Their sessions' prompts count as reported only within 15 s of
     the last heartbeat, which the daemon keeps in memory alone: a reporter that stopped, or a daemon
     that restarted, reads as unreported, and no Enter is pressed.
   - Codex's bridge (`autodoc crew bridge --codex`), which `crew endpoint --codex-here --wait`
@@ -608,6 +650,23 @@ In the code: `core/crew/scheduler.go`, `core/crew/scheduler_run.go`, `core/crew/
 `core/crew/wakecodex.go`, `core/crew/wakeagy.go`, `core/crew/wakeopencode.go`,
 `app/crewbridge.go`, `app/crewcodexbridge.go`, `app/crewopencode.go`, `core/crew/opencodeplugin.go`,
 `core/crew/opencode/autodoc-crew.js`, `app/serve.go`
+
+## Wakes an OS can't offer
+
+Claude Code, Codex's app-server and AutoDoc's OpenCode plugin are woken through a Unix socket each
+binds under the user's runtime folders. Windows can't offer that wake yet: the folders are no paths
+there. It is a capability crew states (`crew.SocketWakes`, read from the standard library's own
+reading of a path, so crew keeps no OS rule), not a build tag at each call site:
+- a socket locator is refused as a bad endpoint (`ErrBadEndpoint`, an invalid argument), saying the wake isn't available on this OS and
+  that the agent's mail waits until it reads it;
+- `crew.list` gives such a live session the why `no_wake_on_this_os`, not `no_endpoint`, so the
+  user isn't left guessing why it isn't woken;
+- its mail waits, queued: a Claude whose endpoint never registered never falls back to a host typing
+  into it, and its next receive gets the mail;
+- agy's wake, over loopback, is every OS's.
+
+In the code: `core/crew/wakes.go`, `core/crew/endpoint.go` (`SetEndpointWith`), `core/crew/list.go`,
+`core/mail/mailtest/fallback.go` (`testMailWaitsForAnAgentItsOSCantWake`)
 
 ## The human inbox
 
@@ -856,8 +915,8 @@ rules in its first 24,000 bytes too.
   kind's per-tool rules come from), and delivers it its own way. The server takes no environment of
   its own: started by the agent's CLI, it inherits the agent's, its session context with it.
 - What a kind writes into the agent's folder for it (a folder-scoped config) goes into that folder
-  only: `crew.SetupFor` refuses any path that isn't local to it, and hosts write the files with mode
-  0600, since they may name the session's context.
+  only: `crew.SetupFor` refuses any path that isn't local to it, and hosts write the files private to
+  their user, since they may name the session's context.
 
 In the code: `app/crewmcp.go`, `app/crewcli.go`, `app/crewsetup.go`, `core/crew/scheduler.go`,
 `core/crew/guide.go`, `core/crew/setup.go`
@@ -916,9 +975,21 @@ absolute, or with none for a kind that keeps such a file, is refused, so nothing
 that may be the user's project.
 
 Claude Code's and OpenCode's setups take the crew MCP server too, when `crew setup` offers it. Claude
-Code gets it on its command line on both hosts (`--mcp-config`; a folder's `.mcp.json` would have
-the user approve its servers first), each tool allowed by its exact `mcp__<server>__<tool>` rule, and
-never `--strict-mcp-config`, which would take the user's own MCP servers from their agent. OpenCode
+Code gets it on both hosts as a file of the agent's own folder (`.autodoc-crew-mcp.json`, a folder
+file), named on its command line (`--mcp-config`) as the agent's working folder reaches it: its bare
+name when the agent works in its own folder (a window's agent), else its absolute path (Neovim's
+agent works in the user's project; Neovim starts it from its argv, with no shell of its own). The
+config's JSON never goes on the command line, since a shell may change its quotes and, on Windows,
+the build's backslashes. Nor does the folder's own name: a crew folder's name holds the scope's
+`:` encoded (`%3A`), and on Windows a CLI's `.cmd` shim reads its arguments again through
+`cmd.exe`, where `%3` is its third argument, so no command line through a `.cmd` shim may name
+that folder, from either host. The file holds the servers' commands and arguments, and an environment only
+for a server that has one of its own (the crew's server has none), never a credential. Like every
+folder file, the host writes it private to the user, over an earlier run's. It is never the folder's
+`.mcp.json`, whose servers the user would approve first. A host that gives no folder of the agent's
+own gets no MCP server, and the agent reads its mail through the CLI, with a notice. Each tool is
+allowed by its exact `mcp__<server>__<tool>` rule, and never `--strict-mcp-config`, which would take
+the user's own MCP servers from their agent. OpenCode
 gets it in `OPENCODE_CONFIG_CONTENT`'s `mcp` key, beside the user's own servers, and no allowance,
 since OpenCode gates no MCP tool. A setup answers how the session reads its mail (`mail_via`): `mcp`
 only when it delivered the server, else `cli`.
@@ -933,6 +1004,22 @@ the bridge alone, since agy gives a session its MCP tools only from its second t
 as the user's own input, so it says it comes from AutoDoc, the host, not the user. Nothing goes in
 the user's agy settings. A host that gives no servers, or no folder, still starts the agent, with a
 notice.
+
+Junie's setup gives the agent its mail as the crew MCP servers' tools too. The servers' config,
+`mcp.json`, goes in a folder of the agent's own, `.junie-crew/mcp`, which its command line adds with
+`--mcp-location`; Junie's own default locations (the user's `~/.junie/mcp` and the project's
+`.junie/mcp`) stay on, and nothing of the user's is written. The server's config has no env, so it is
+expected to inherit the agent's environment, which holds the session's context.
+
+- **No allowance.** Junie's tool rules are the user's own `~/.junie/allowlist.json`; no
+  session-scoped one is documented, and AutoDoc never writes a user's settings. So a mail tool may
+  ask the user before it runs; the setup's notice points at the allowlist's MCP rules.
+- **No prompt reporter and no waker.** Junie's prompts are unreported, and its host tells it when
+  mail is waiting (its guide says so); a mail it didn't receive in time falls back to its terminal.
+- **Unproven parts**, checked only by launching a Junie with the setup: that `--mcp-location` reads
+  `mcp.json` from the folder it names; that Junie passes its environment to the server; which server
+  wins when a user's own is also named `autodoc` (undocumented); and the exact tool-name form an
+  allowlist rule must use.
 
 Claude Code's settings have one source, which AutoDoc's own agents get and another host gets from
 `autodoc crew setup` (or, alone, `autodoc crew claude-settings`: the JSON `claude --settings`

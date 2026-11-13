@@ -23,13 +23,30 @@ curl -fsSL https://github.com/yongjohnlee80/autodoc/releases/latest/download/ins
 
 **更新。** 用脚本安装的 AutoDoc 可以自行更新：打开 **帮助 › 关于**，然后点 **更新**。更新在 AutoDoc 的终端面板中运行，新版本就绪后，AutoDoc 会提供 **立即重启**。在 shell 中运行 `~/.local/state/autodoc/update.sh` 效果相同。
 
+## 在 Windows 上
+
+在 PowerShell 中，一行命令即可安装带窗口的 AutoDoc：
+
+```powershell
+irm https://github.com/yongjohnlee80/autodoc/releases/latest/download/install-autodoc.ps1 | iex
+```
+
+该脚本会：
+
+- 下载最新的 Windows 版本，并用发布的校验和进行核对；
+- 将其安装为 `%LOCALAPPDATA%\Programs\AutoDoc\autodoc.exe`，仅供你使用：从不要求管理员权限；
+- 把 AutoDoc 添加到开始菜单；
+- 在 `%LOCALAPPDATA%\autodoc` 中安装 `update.ps1`，因此 **帮助 › 关于 › 更新** 与在 Linux 和 macOS 上一样可用。
+
+只有在你要求时（`-AddToPath`）它才会修改 `PATH`，否则会打印出执行修改的命令。该版本未签名，因此 AutoDoc 第一次运行时，Windows 可能会提示发布者未知。arm64 版 Windows 暂时还没有构建。在 WSL2 中，上面的 Linux 命令同样可用。
+
 ## 其他方式
 
 - Homebrew：`brew install yongjohnlee80/tap/autodoc`（在 Linux 上只有终端界面）
 - mise：`mise use -g github:yongjohnlee80/autodoc`
 - Go：`go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest`（不带 `-tags gui` 时只有终端界面）
 - 项目 Releases 页面上的发布包
-- Windows：先安装 WSL2，再用安装脚本
+- Windows：先安装 WSL2，再用 Linux 的安装脚本
 
 这些方式按安装时的方式更新（`brew upgrade`、`mise upgrade`、再次 `go install`），所以 **帮助 › 关于** 不会为它们提供更新。服务器、容器以及从源码构建：见 [参考手册，第 2 章](../../reference/02-quickstart-and-workspaces.md)。
 

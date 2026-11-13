@@ -4,13 +4,16 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/feature/featuretest"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
@@ -49,10 +52,11 @@ func gone(path string) bool { _, err := os.Stat(path); return errors.Is(err, os.
 // copy, gets a fresh, pristine copy, and the first is still there. Install installs the candidate
 // and ends it once: its copies and task files go, and a late click on its toast does nothing.
 func TestAuditHandsAFreshCopyAndItsToastReopensTheCard(t *testing.T) {
+	t.Parallel()
 	heardDir := t.TempDir()
 	agent := hearingAgent(t, heardDir)
 	dir := t.TempDir()
-	_, r, _ := runAgentTUIWith(t, t.TempDir(), []agentProfile{{Name: "Scribe", Codename: "scribe", Command: shellQuote(agent) + " scribe"}},
+	_, r, _ := runSetupTUI(t, agentsFolder(t), []agents.AgentProfile{{Name: "Scribe", Codename: "scribe", Command: agentCall(agent, "scribe")}},
 		"", nil, Options{Plugins: Plugins{Dir: dir, LogDir: t.TempDir()}})
 	repo := pluginRepo(t, "Echo", "true")
 	full := runGit(t, repo, "rev-parse", "HEAD")
@@ -64,7 +68,8 @@ func TestAuditHandsAFreshCopyAndItsToastReopensTheCard(t *testing.T) {
 	c := r.card()
 	task := func(n int) (root, copy string) {
 		t.Helper()
-		r.s.WaitFor(t, "the audit handed over", func(string) bool { return len(heard(heardDir, "scribe")) >= 4*n })
+		// the first hand-over starts Scribe: an agent's start, on agentStartWait, not a frame's clock
+		r.waitWithin(t, "the audit handed over", agentStartWait, func() bool { return len(heard(heardDir, "scribe")) >= 4*n })
 		got := heard(heardDir, "scribe")[4*(n-1):]
 		if got[0] != "Task: Audit echo at "+full[:7] || !strings.HasPrefix(got[3], "Instruction: Audit the repository") {
 			t.Fatalf("Scribe heard %q", got)
@@ -116,7 +121,8 @@ func TestAuditHandsAFreshCopyAndItsToastReopensTheCard(t *testing.T) {
 	r.s.WaitForText(t, "audit with an agent")
 	r.s.WaitForText(t, "Scribe  (scribe)")
 	r.keys(t, enter())
-	r.s.WaitForText(t, "start the agent?")
+	// asked once the audit's copy is cloned: a git process, on daemonWait, as B's card below
+	r.waitWithin(t, `"start the agent?"`, daemonWait, func() bool { return strings.Contains(r.s.String(), "start the agent?") })
 	r.keys(t, key('y'))
 	root1, copy1 := task(1)
 	settled(1, false) // the agent was started for it: not rung
@@ -163,10 +169,11 @@ func TestAuditHandsAFreshCopyAndItsToastReopensTheCard(t *testing.T) {
 // A's card, not B's. A second add of a target already live is refused; Install twice on one card
 // builds once; the session's end removes every live candidate's stage.
 func TestEachCandidateOwnsItsCard(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	r, _ := pluginTUI(t, dir)
 	counter := filepath.Join(t.TempDir(), "builds")
-	alpha := namedPluginRepo(t, "alpha", "echo built >> "+shellQuote(counter))
+	alpha := namedPluginRepo(t, "alpha", "echo built >> "+agents.ShellQuote(counter))
 	beta := namedPluginRepo(t, "beta", "true")
 	add := func(repo string) { r.h.p.Post(func() { r.h.plugins.addPlugin("file://" + repo) }) }
 
@@ -182,7 +189,10 @@ func TestEachCandidateOwnsItsCard(t *testing.T) {
 	}
 
 	add(beta)
-	r.s.WaitFor(t, "B's card", func(string) bool { c := r.card(); return c != nil && c.name == "beta" })
+	// B's card comes once its clone answers: a git process, on daemonWait, not a frame's clock. In
+	// four Windows CI runs it landed in 0.27-0.32 s (0.3-1.47 s with -parallel 16); in a fifth it was
+	// still cloning when a frame's 3 s ran out
+	r.waitWithin(t, "B's card", daemonWait, func() bool { c := r.card(); return c != nil && c.name == "beta" })
 	r.s.WaitForText(t, "the plugin alpha waits")
 	r.keys(t, key('y'))
 	r.waitNotice(t, "added beta at")
@@ -218,6 +228,7 @@ func TestEachCandidateOwnsItsCard(t *testing.T) {
 // late installs its own commit. Cancel leaves the installed plugin as it was, and a stage changed
 // after staging is refused.
 func TestAnUpdateInstallsItsCandidateNeverTheInstalledTree(t *testing.T) {
+	t.Parallel()
 	const build = "ls -A > built.txt"
 	repo := pluginRepo(t, "Echo", build)
 	if err := os.WriteFile(filepath.Join(repo, ".gitignore"), []byte("gen.out\nbuilt.txt\n"), 0o644); err != nil {
@@ -292,6 +303,7 @@ func TestAnUpdateInstallsItsCandidateNeverTheInstalledTree(t *testing.T) {
 
 // A failed update build leaves the installed plugin as it was, running.
 func TestAFailedUpdateBuildLeavesThePluginRunning(t *testing.T) {
+	t.Parallel()
 	repo := pluginRepo(t, "Echo", "true")
 	dir := t.TempDir()
 	r, _ := pluginTUI(t, dir)
@@ -315,6 +327,7 @@ func TestAFailedUpdateBuildLeavesThePluginRunning(t *testing.T) {
 // swapIn leaves the installed plugin as it was when any step fails, or, when the old folder can't
 // be put back, says where it is.
 func TestTheSwapRecoversFromEachFailedStep(t *testing.T) {
+	t.Parallel()
 	setup := func(t *testing.T) (dir, stage string) {
 		dir = t.TempDir()
 		writeFiles(t, dir, map[string]string{"p/old.txt": "old", ".adding-1/new.txt": "new", previousDir + "/p/older.txt": "older"})
@@ -326,7 +339,6 @@ func TestTheSwapRecoversFromEachFailedStep(t *testing.T) {
 			t.Errorf("%s is gone", path)
 		}
 	}
-	defer func(r func(string, string) error, d func(string) error) { pluginRename, pluginRemoveAll = r, d }(pluginRename, pluginRemoveAll)
 	failing := func(n int) func(string, string) error { // the nth rename fails
 		i := 0
 		return func(a, b string) error {
@@ -339,24 +351,24 @@ func TestTheSwapRecoversFromEachFailedStep(t *testing.T) {
 
 	t.Run("the older copy can't be removed", func(t *testing.T) {
 		dir, stage := setup(t)
-		pluginRename, pluginRemoveAll = os.Rename, func(string) error { return errors.New("busy") }
-		if err := swapIn(dir, stage, "p"); err == nil || !strings.Contains(err.Error(), "the plugin was left as it was") {
+		fsys := installFS{rename: os.Rename, removeAll: func(string) error { return errors.New("busy") }}
+		if err := swapIn(fsys, dir, stage, "p"); err == nil || !strings.Contains(err.Error(), "the plugin was left as it was") {
 			t.Fatalf("%v", err)
 		}
 		has(t, filepath.Join(dir, "p", "old.txt"))
 	})
 	t.Run("the first rename fails", func(t *testing.T) {
 		dir, stage := setup(t)
-		pluginRename, pluginRemoveAll = failing(1), os.RemoveAll
-		if err := swapIn(dir, stage, "p"); err == nil || !strings.Contains(err.Error(), "the plugin was left as it was") {
+		fsys := installFS{rename: failing(1), removeAll: os.RemoveAll}
+		if err := swapIn(fsys, dir, stage, "p"); err == nil || !strings.Contains(err.Error(), "the plugin was left as it was") {
 			t.Fatalf("%v", err)
 		}
 		has(t, filepath.Join(dir, "p", "old.txt"))
 	})
 	t.Run("the second rename fails, and the old folder goes back", func(t *testing.T) {
 		dir, stage := setup(t)
-		pluginRename, pluginRemoveAll = failing(2), os.RemoveAll
-		if err := swapIn(dir, stage, "p"); err == nil || !strings.Contains(err.Error(), "the plugin was left as it was") {
+		fsys := installFS{rename: failing(2), removeAll: os.RemoveAll}
+		if err := swapIn(fsys, dir, stage, "p"); err == nil || !strings.Contains(err.Error(), "the plugin was left as it was") {
 			t.Fatalf("%v", err)
 		}
 		has(t, filepath.Join(dir, "p", "old.txt"))
@@ -364,22 +376,21 @@ func TestTheSwapRecoversFromEachFailedStep(t *testing.T) {
 	t.Run("the second rename fails, and so does the restore", func(t *testing.T) {
 		dir, stage := setup(t)
 		calls := 0
-		pluginRename, pluginRemoveAll = func(a, b string) error {
+		fsys := installFS{rename: func(a, b string) error {
 			if calls++; calls >= 2 {
 				return errors.New("rename refused")
 			}
 			return os.Rename(a, b)
-		}, os.RemoveAll
+		}, removeAll: os.RemoveAll}
 		prev := filepath.Join(dir, previousDir, "p")
-		if err := swapIn(dir, stage, "p"); err == nil || !strings.Contains(err.Error(), "its old folder is "+prev) {
+		if err := swapIn(fsys, dir, stage, "p"); err == nil || !strings.Contains(err.Error(), "its old folder is "+prev) {
 			t.Fatalf("%v", err)
 		}
 		has(t, filepath.Join(prev, "old.txt"))
 	})
 	t.Run("both renames succeed", func(t *testing.T) {
 		dir, stage := setup(t)
-		pluginRename, pluginRemoveAll = os.Rename, os.RemoveAll
-		if err := swapIn(dir, stage, "p"); err != nil {
+		if err := swapIn(defaultSeams.installFS, dir, stage, "p"); err != nil {
 			t.Fatal(err)
 		}
 		has(t, filepath.Join(dir, "p", "new.txt"))
@@ -392,8 +403,9 @@ func TestTheSwapRecoversFromEachFailedStep(t *testing.T) {
 
 // The audit picker lists the default agent first.
 func TestDefaultFirst(t *testing.T) {
-	es := []AgentEntry{{Ref: AgentRef{Codename: "a"}}, {Ref: AgentRef{Codename: "b"}}, {Ref: AgentRef{Codename: "c"}}}
-	code := func(es []AgentEntry) (out []string) {
+	t.Parallel()
+	es := []feature.AgentEntry{{Ref: feature.AgentRef{Codename: "a"}}, {Ref: feature.AgentRef{Codename: "b"}}, {Ref: feature.AgentRef{Codename: "c"}}}
+	code := func(es []feature.AgentEntry) (out []string) {
 		for _, e := range es {
 			out = append(out, e.Ref.Codename)
 		}
@@ -425,6 +437,7 @@ func luaPackageRepo(t *testing.T, name string) string {
 // it: another package's question takes the card over without cancelling the first, and a plugin's
 // card takes the Lua card down, leaving no second dialog up. Each toast reopens its own card.
 func TestALuaCardReplacedWaitsOnItsToast(t *testing.T) {
+	t.Parallel()
 	plugins, lua := t.TempDir(), t.TempDir()
 	r, _ := pluginLuaTUI(t, plugins, nil, lua)
 	r.waitNamespaces(t)
@@ -455,7 +468,7 @@ func TestALuaCardReplacedWaitsOnItsToast(t *testing.T) {
 	r.h.p.Post(func() { r.h.plugins.addPlugin("file://" + namedPluginRepo(t, "gamma", "true")) })
 	r.question(t)
 	// taken down, not covered: the generic card's question was closed (a larger card would hide its text)
-	r.s.WaitFor(t, "the Lua card down", func(string) bool { return !onLoop(r, func() bool { return r.h.asker.pending }) })
+	r.s.WaitFor(t, "the Lua card down", func(string) bool { return !onLoop(r, func() bool { return r.h.asker.Pending }) })
 	if b := look("lua/beta"); !b.live || b.state != opSuspended || gone(b.stage) {
 		t.Fatalf("Lua beta, replaced by a plugin's card: %+v", b)
 	}
@@ -486,16 +499,16 @@ func TestALuaCardReplacedWaitsOnItsToast(t *testing.T) {
 }
 
 // handingCore is a scripted Core whose agents take every task handed to them.
-type handingCore struct{ *scriptedCore }
+type handingCore struct{ *featuretest.ScriptedCore }
 
-func (handingCore) HandTask(AgentRef, TaskRef, string, func(error)) error { return nil }
+func (handingCore) HandTask(feature.AgentRef, feature.TaskRef, string, func(error)) error { return nil }
 
 // scriptedCandidate is a live plugin candidate over a real, pristine stage, its card shown counted,
 // on a scripted Core whose background answers wait until delivered and whose agents take tasks.
-func scriptedCandidate(t *testing.T) (*scriptedCore, *candidates, *candidate, *int) {
+func scriptedCandidate(t *testing.T) (*featuretest.ScriptedCore, *candidates, *candidate, *int) {
 	t.Helper()
 	s := newScripted("kb")
-	s.deferred = true
+	s.Deferred = true
 	cs := newCandidates(handingCore{s})
 	repo := pluginRepo(t, "Echo", "true")
 	c := &candidate{kind: "plugin", name: "echo", commit: runGit(t, repo, "rev-parse", "HEAD"), stage: repo, toasted: true}
@@ -509,9 +522,10 @@ func scriptedCandidate(t *testing.T) (*scriptedCore, *candidates, *candidate, *i
 // Two Lua cards in turn: the second question takes the generic card over, and the first, replaced,
 // waits on its toast, still live; nothing ends it.
 func TestASecondLuaCardKeepsTheFirstCandidate(t *testing.T) {
+	t.Parallel()
 	s := newScripted("kb")
 	cs := newCandidates(s)
-	h := &Host{asker: newAsker(s), cands: cs}
+	h := &Host{asker: feature.NewAsker(s), cands: cs}
 	first := &candidate{kind: "lua", name: "alpha", commit: strings.Repeat("1", 40), stage: t.TempDir(), pkg: packageManifest{Name: "alpha"}}
 	second := &candidate{kind: "lua", name: "beta", commit: first.commit, stage: t.TempDir(), pkg: packageManifest{Name: "beta"}}
 	for _, c := range []*candidate{first, second} {
@@ -529,10 +543,11 @@ func TestASecondLuaCardKeepsTheFirstCandidate(t *testing.T) {
 // Cancel are refused, and another Audit does not start. The copy's answer then hands it over, and
 // the candidate, suspended, reopens from its toast as before.
 func TestAnAuditCopyInFlightCannotBeClaimed(t *testing.T) {
+	t.Parallel()
 	s, cs, c, shown := scriptedCandidate(t)
 	defer cs.Stopped()
 	cs.auditing = c
-	cs.auditWith(AgentEntry{Name: "Scribe", Ref: AgentRef{Codename: "scribe"}})
+	cs.auditWith(feature.AgentEntry{Name: "Scribe", Ref: feature.AgentRef{Codename: "scribe"}})
 	cs.reopen(c) // the toast of the audit before
 	if cs.claim(c) || cs.cancel(c, "") || *shown != 0 || c.state != opCopying {
 		t.Fatalf("while copying: claimed or cancelled or reopened (state %d, shown %d)", c.state, *shown)
@@ -541,7 +556,7 @@ func TestAnAuditCopyInFlightCannotBeClaimed(t *testing.T) {
 	if cs.auditing == c {
 		t.Fatal("another Audit started while the copy was made")
 	}
-	s.deliver(0)
+	s.Deliver(0)
 	if c.state != opSuspended || len(c.auditCopies) != 1 {
 		t.Fatalf("after the copy's answer: state %d, %d copies", c.state, len(c.auditCopies))
 	}
@@ -554,13 +569,14 @@ func TestAnAuditCopyInFlightCannotBeClaimed(t *testing.T) {
 // A copy whose candidate ended while it was made is removed when its answer arrives; it never moves
 // the ended candidate.
 func TestAnAuditCopyAnsweredAfterItsCandidateEndedIsRemoved(t *testing.T) {
+	t.Parallel()
 	s, cs, c, _ := scriptedCandidate(t)
 	root := t.TempDir()
-	t.Setenv("TMPDIR", root)
+	c.env = procenv.Env(nil).With("TMPDIR=" + root) // the environment it was staged in
 	cs.auditing = c
-	cs.auditWith(AgentEntry{})
+	cs.auditWith(feature.AgentEntry{})
 	cs.end(c, "cancelled")
-	s.deliver(0, 1) // the end's removal, then the copy's answer
+	s.Deliver(0, 1) // the end's removal, then the copy's answer
 	if copies, _ := filepath.Glob(filepath.Join(root, "autodoc-audit-*")); len(copies) != 0 || c.state != opEnded {
 		t.Fatalf("copies left %v, state %d", copies, c.state)
 	}
@@ -570,11 +586,13 @@ func TestAnAuditCopyAnsweredAfterItsCandidateEndedIsRemoved(t *testing.T) {
 // answer never reached the loop, and a stage or copy a worker makes after the end is removed by that
 // worker itself.
 func TestTheSessionsEndRemovesWhatWorkersMadeAnsweredOrNot(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	t.Setenv("TMPDIR", root)
+	env := procenv.Env(nil).With("TMPDIR="+root, "TMP="+root) // the temporary folder on Unix and on Windows
 	_, cs, c, _ := scriptedCandidate(t)
+	c.env = env // the environment it was staged in
 	cs.auditing = c
-	cs.auditWith(AgentEntry{}) // the copy is made; its answer is held, never delivered
+	cs.auditWith(feature.AgentEntry{}) // the copy is made; its answer is held, never delivered
 	copies, _ := filepath.Glob(filepath.Join(root, "autodoc-audit-*"))
 	if len(copies) != 1 {
 		t.Fatalf("the copy: %v", copies)
@@ -586,11 +604,11 @@ func TestTheSessionsEndRemovesWhatWorkersMadeAnsweredOrNot(t *testing.T) {
 
 	// a worker still working when the session ended: what it makes after is its own to remove
 	late := pluginRepo(t, "Echo", "true")
-	if _, _, err := auditCopy(context.Background(), &candidate{name: "late", stage: late, commit: runGit(t, late, "rev-parse", "HEAD")}, cs.allocs); !errors.Is(err, errSessionEnded) {
+	if _, _, err := auditCopy(context.Background(), &candidate{name: "late", stage: late, commit: runGit(t, late, "rev-parse", "HEAD"), env: env}, cs.allocs); !errors.Is(err, errSessionEnded) {
 		t.Errorf("a copy made after the end: %v", err)
 	}
 	plugins := t.TempDir()
-	if _, _, err := cloneStage(context.Background(), plugins, "file://"+pluginRepo(t, "Echo", "true"), cs.allocs); !errors.Is(err, errSessionEnded) {
+	if _, _, err := cloneStage(context.Background(), nil, plugins, "file://"+pluginRepo(t, "Echo", "true"), cs.allocs); !errors.Is(err, errSessionEnded) {
 		t.Errorf("a stage made after the end: %v", err)
 	}
 	if left, _ := filepath.Glob(filepath.Join(root, "autodoc-audit-*")); len(left) != 0 || len(entries(t, plugins)) != 0 {
@@ -598,44 +616,25 @@ func TestTheSessionsEndRemovesWhatWorkersMadeAnsweredOrNot(t *testing.T) {
 	}
 }
 
-// heldGit puts a git on PATH whose clone waits, once it is running, until release is called: a
-// worker caught between holding its directory and finishing its work.
-func heldGit(t *testing.T) (running func() bool, release func()) {
-	t.Helper()
-	real, err := exec.LookPath("git")
-	if err != nil {
-		t.Fatal(err)
-	}
-	bin, controls := t.TempDir(), t.TempDir()
-	ready, go_ := filepath.Join(controls, "ready"), filepath.Join(controls, "release")
-	script := "#!/bin/sh\nif [ \"$1\" = clone ]; then\n touch " + shellQuote(ready) + "\n while [ ! -f " + shellQuote(go_) +
-		" ]; do sleep 0.01; done\nfi\nexec " + shellQuote(real) + " \"$@\"\n"
-	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	return func() bool { return !gone(ready) }, func() { _ = os.WriteFile(go_, nil, 0o600) }
-}
-
 // The session ends while a worker still writes into the directory it already holds (a clone
 // running): the end removes it, the clone writes it again, and the worker's last word removes it
 // for good and answers that the session ended. A stage and an audit copy alike.
 func TestTheSessionsEndWhileAWorkerStillWrites(t *testing.T) {
+	t.Parallel()
 	repo := pluginRepo(t, "Echo", "true")
 	head := runGit(t, repo, "rev-parse", "HEAD")
 	for _, kind := range []string{"a stage", "an audit copy"} {
 		t.Run(kind, func(t *testing.T) {
 			tmp, parent := t.TempDir(), filepath.Join(t.TempDir(), "plugins")
-			t.Setenv("TMPDIR", tmp)
-			running, release := heldGit(t)
+			env, running, release := heldGit(t, procenv.Env(nil).With("TMPDIR="+tmp, "TMP="+tmp))
 			own := newAllocs()
 			answer := make(chan error, 1)
 			go func() {
 				var err error
 				if kind == "a stage" {
-					_, _, err = cloneStage(context.Background(), parent, "file://"+repo, own)
+					_, _, err = cloneStage(context.Background(), env, parent, "file://"+repo, own)
 				} else {
-					_, _, err = auditCopy(context.Background(), &candidate{name: "echo", stage: repo, commit: head}, own)
+					_, _, err = auditCopy(context.Background(), &candidate{name: "echo", stage: repo, commit: head, env: env}, own)
 				}
 				answer <- err
 			}()

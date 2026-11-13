@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +11,7 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -23,7 +22,7 @@ import (
 func TestAClientSurvivesAnOlderDaemon(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	sock := filepath.Join(shortDir(t), "s.sock")
+	sock := ipc.ScratchAddr(shortDir(t), "s.sock")
 	stopped := otherDaemon(t, sock, rpc.Protocol-1)
 
 	tui := NewSession(sock, nil)
@@ -45,7 +44,7 @@ func TestAClientSurvivesAnOlderDaemon(t *testing.T) {
 	}
 	<-stopped
 
-	sock = filepath.Join(shortDir(t), "s.sock")
+	sock = ipc.ScratchAddr(shortDir(t), "s.sock")
 	otherDaemon(t, sock, rpc.MinProtocol-1)
 	tooOld := NewSession(sock, nil).As(rpc.CLIName)
 	if err := tooOld.Connect(ctx); !errors.As(err, &mismatch) || mismatch.Server != rpc.MinProtocol-1 {
@@ -57,7 +56,7 @@ func TestAClientSurvivesAnOlderDaemon(t *testing.T) {
 // Protocol-1, or with an error when probeFails.
 func refusingDaemon(t *testing.T, sock string, probeFails bool) {
 	t.Helper()
-	ln, err := net.Listen("unix", sock)
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +89,7 @@ func TestAClientsSecondHelloCanFail(t *testing.T) {
 		{true, "hello: protocol mismatch, and the probe failed"},
 		{false, fmt.Sprintf("hello at protocol %d", rpc.Protocol-1)},
 	} {
-		sock := filepath.Join(shortDir(t), "s.sock")
+		sock := ipc.ScratchAddr(shortDir(t), "s.sock")
 		refusingDaemon(t, sock, c.probeFails)
 		err := NewSession(sock, nil).As(rpc.CLIName).Connect(ctx)
 		if err == nil || !strings.Contains(err.Error(), c.says) {

@@ -20,7 +20,7 @@ import (
 //	                     "text", "yaml", "derived", "registered"), derived the format of a derived
 //	                     document ("PDF"). frontmatter is a Markdown page's, as Lua values (nil
 //	                     without one); frontmatter_error says why it could not be read.
-//	autodoc.commands()   the command catalog (catalog.go), then the editor's own verbs (:w, :q, …),
+//	autodoc.commands()   the command catalog (feature/catalog.go), then the editor's own verbs (:w, :q, …),
 //	                     source "editor" with no id (script.CommandInfo).
 
 // bindDocument gives the engine autodoc.document, and makes autodoc.commands list the catalog.
@@ -154,9 +154,9 @@ func plainYAML(v any) (any, error) {
 func (h *Host) commandInfos() []script.CommandInfo {
 	var out []script.CommandInfo
 	taken := map[string]bool{}
-	for _, e := range h.cat.entries() {
+	for _, e := range h.cat.Entries() {
 		info := script.CommandInfo{ID: e.ID, Args: e.Args, Help: e.Help, Title: e.Title, Source: string(e.Source)}
-		if own := h.cat.owned(e.ID); len(own) > 0 {
+		if own := h.cat.Owned(e.ID); len(own) > 0 {
 			info.Name, info.Aliases = own[0], own[1:]
 			for _, n := range own {
 				taken[n] = true

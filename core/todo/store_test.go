@@ -357,6 +357,7 @@ func TestSymlinksAreNotFollowed(t *testing.T) {
 	os.Symlink(filepath.Join(outside, "bucket"), filepath.Join(root, ".todo-list/completed"))
 	j := todotest.NewJournal()
 	m := todo.New(todotest.Roots{"ws": root}, localDisk{}, j)
+	t.Cleanup(func() { m.Close() }) // before the directory is removed: Windows removes no directory held open
 	at := todo.At{Workspace: "ws"}
 	e := &env{t: t}
 	e.must(m.Claim(ctx, at))
@@ -392,6 +393,7 @@ func TestSameSizeSameMtimeEditIsCaught(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, ".todo-list/open"), 0o755)
 	m := todo.New(todotest.Roots{"ws": dir}, localDisk{}, todotest.NewJournal())
+	t.Cleanup(func() { m.Close() }) // before the directory is removed: Windows removes no directory held open
 	at := todo.At{Workspace: "ws"}
 	if err := m.Claim(ctx, at); err != nil {
 		t.Fatal(err)

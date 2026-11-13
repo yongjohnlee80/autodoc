@@ -88,16 +88,21 @@ In the code: `script/buffers.go`, `tui/luabuffers.go`, `tui/luaevents.go`, `tui/
 Each surface switches its own way. The terminal has `:b <n|name>`, with Tab completion, and a
 Buffers picker that lists each buffer by number and name, `[+]` on a modified one, and previews its
 text as it is, unsaved edits included. The GUI shows the buffers as tabs in the editor's title bar.
-The terminal shows the same tabs, the same model, on the page's frame's bottom border, across its
-whole width (decided 2026-11-07). A press shows a buffer, its `×` closes it (asking first over
-unsaved changes), `+` makes a new one, and a right press opens the tab's menu, as in the window.
-They are not on the title row, as the window's are: in a terminal that row holds the file's title,
-its badges, the breadcrumb that follows the cursor and `[ Raw | Rendered ]`, and tabs there would
-squeeze them. The terminal shows them from the second buffer on: one buffer's name is the title
-row's already, and a page with one reads as it did before there were tabs (the window shows its one
-tab). A terminal tab is at most 20
-cells wide (the window's, 32), so a page holds several; more scroll between the arrows. `H` and `L`
-move between them in both.
+The terminal shows the same tabs, the same model, on the first row inside the page's frame, under
+its title row, as the agent and terminal panels carry theirs (their title row, then their tabs and
+`≡`), so the panels read alike (decided 2026-11-12, replacing the title row's left of earlier that
+day and the bottom border of 2026-11-07). The title row keeps the file's name, its badges and the
+breadcrumb, with `[ Raw | Rendered ]` at its right; the bottom border is plain. In a narrow page
+the tabs scroll on their row. A press shows a buffer, its `×` closes it (asking first over unsaved
+changes), `+` makes a new one, and `≡` or a right press opens the tab's menu, as in the window. The
+row shows with one buffer as with more, as the panels show their strip whatever it holds, so it is
+always where it is. A terminal tab is at most 20 cells wide (the window's, 32), so a page holds
+several; more scroll between the arrows. `H` and `L` move between them in both.
+
+The shown buffer's tab wears the theme's highlight, bold, as the agent and terminal panels' shown
+tab does, in both surfaces, so it stands apart from the others in every theme (decided 2026-11-13).
+It used to wear the page's selection colour, which several themes make close to a tab's own, or
+the same, so only its weight set it apart.
 
 In the code: `tui/bufferpick.go`, `tui/buffers.go`, `tui/buffertabs.go`, `tui/qml/main.qml`
 
@@ -116,7 +121,7 @@ line and shows its values as a notice.
 - Closing is safe from any goroutine, and a closed shell's queued chunk runs nothing. `:lua-reload`
   moves an open shell onto the new engine.
 
-In the code: `tui/luashell.go`, `tui/terminalpanel.go`, `tui/scripting.go`
+In the code: `tui/luashell.go`, `tui/feature/terminalpanel.go`, `tui/scripting.go`
 
 ## The shell's environment
 
@@ -219,7 +224,12 @@ A raw HTML file's Rendered view is the drawn page itself, in place of the text b
 the UI library's HTML view, in a terminal golib's HTMLView laid out in cells, the file's own bytes
 in either, its images from where a page's come from. Ctrl+T flips between the source and the page;
 the page scrolls with the usual keys, its links open as the preview's do, and it is never edited:
-in a terminal its first editing key opens the source there.
+in a terminal its first editing key opens the source there, at the source's own cursor.
+
+A terminal's page has no cursor, and its bytes carry no source spans, so nothing on it maps to a
+place in the source. A find on it counts and marks what the page shows; a term only the source has,
+a link's target say, opens the source and is found there. Ctrl+T counts again in the view it shows,
+both ways. SPC j follows the first link in the file's source.
 
 In the code: `tui/files.go`, `tui/htmldoc.go`, `tui/notepage.go`, `rpc/server.go`
 
@@ -284,7 +294,9 @@ from the note's folder, and is its alt text elsewhere. A line holding only an im
 (`.mmd`), a chart (`.chart.json`) or a table (`.csv`) file is drawn as that file would be in a fence,
 read from the note's folder as the HTML preview reads it: the diagram or chart as a picture, the
 table boxed, its first rows only. A file over 1 MiB is a notice in its place, and a file that isn't
-there is the image's alt text. Any line that is only such an image is drawn, even inside a longer
+there is the image's alt text. While the note is shown, the folders of its embedded files are
+followed as an open file's folder is, so a file rewritten on disk, or written where an embed names
+one that wasn't there, is drawn anew with no switch. Any line that is only such an image is drawn, even inside a longer
 paragraph; the window draws one only when it is alone in its paragraph.
 
 A note opens Rendered, as a table file does. Ctrl+T flips between the two views of the same text,
@@ -313,7 +325,7 @@ the text, and its find and links worked on what the page showed. The editor repl
 the renderer drew tables, Mermaid, Vega-Lite and images, so no reader lost a table or a chart in
 between.
 
-In the code: `tui/notepage.go`, `tui/feature.go`, `tui/find.go`, `tui/golink.go`
+In the code: `tui/notepage.go`, `tui/feature/feature.go`, `tui/find.go`, `tui/golink.go`
 
 ## The table's clipboard, menu and row numbers
 
@@ -388,8 +400,11 @@ the fast picker over the workspace in use.
   daemon can read.
 - An outside file has an empty workspace and an absolute path. It stays open when the workspace
   changes, and has no search, links, backlinks or frontmatter check; the status line says so.
+- The daemon's disk is a tree per volume. On Unix there's one, at `/`. On Windows each drive
+  (`C:`) and share (`\\server\share`) is its own tree, opened the first time a path on it is asked
+  for, and a file's name in it is its path below that root.
 
-In the code: `rpc/files.go`, `app/serve.go`, `tui/outside.go`, `tui/files.go`
+In the code: `rpc/files.go`, `rpc/disks.go`, `app/serve.go`, `tui/outside.go`, `tui/files.go`
 
 ## The Relations drawer
 
@@ -432,8 +447,9 @@ In the code: `tui/globemap.go`, `tui/globemap_cells.go`, `tui/relationviews_cell
 ## Process stats
 
 AutoDoc reports what its own processes use. One package reads a process: resident and peak memory,
-CPU seconds so far, Go memory, goroutines and start time, using only the standard library; a size
-a platform cannot report is 0. The daemon serves its own as `sys.stats`, and the app answers
+CPU seconds so far, Go memory, goroutines and start time. Each OS's reading is its own file:
+getrusage on Linux and macOS, GetProcessTimes and the working set on Windows. A size a platform
+cannot report is 0. The daemon serves its own as `sys.stats`, and the app answers
 `autodoc.app.stats()` from the same package. CPU stays cumulative seconds; a reader takes a
 percentage between two samples.
 
@@ -472,7 +488,7 @@ English and the store keeps it.
 - Tests gate it: every id used is in the English catalog, every shipped language covers every id,
   the library's checks find no wrong mnemonic or collision, and a switch relabels an open dialog.
 
-In the code: `tui/language.go`, `tui/feature.go`, `tui/tutorial.go`, `tui/qml/i18n/`
+In the code: `tui/language.go`, `tui/feature/feature.go`, `tui/tutorial.go`, `tui/qml/i18n/`
 
 ## The documentation site
 
@@ -501,3 +517,36 @@ neither build promises the browser's exact layout. The site workflow still build
 the window system's libraries but no display.
 
 In the code: `app/exportchart.go`, `app/exportchart_on.go`, `app/exportchart_off.go`, `app/export.go`, `.github/workflows/pages.yml`, `.github/workflows/ci.yml`
+
+## The tui package's feature map
+
+The `tui` package is splitting into one package per feature, under a small kit they share, with the host (the program, its buffers and its panels) left in `tui` and importing them all.
+- **The kit:** `tui/feature` holds the feature interfaces, commands, panels, pickers and notices.
+- **The features:** `tui/crew`, `tui/todos`, `tui/scripting`, `tui/plugins`, `tui/terminals`, `tui/relations`, `tui/page`, `tui/searchsetup`, `tui/system` and `tui/explorer`.
+
+Imports point down only:
+
+| Feature | May use |
+|---|---|
+| `crew`, `relations`, `searchsetup`, `explorer` | the kit |
+| `todos`, `scripting`, `system` | the kit, `crew` |
+| `plugins` | the kit, `crew`, `scripting` |
+| `terminals` | the kit, `scripting` |
+| `page` | the kit, `scripting`, `relations` |
+
+Nothing imports the host. Until the files move, each file's group is set by its name, and a guard type-checks the package in both builds.
+- It lists every name a group uses outside what it may use, in a ledger that may only shrink.
+- A new crossing fails until the code uses an allowed group, or the name moves.
+- A crossing that is gone fails until its row is removed.
+- A step of the split may add rows, named in its pull request with the step that removes them. The per-test seams are one: until each feature has its own, the features read the host's.
+- Empty is the destination. After the split, the same guard checks the imports instead.
+
+The whole-program tests stay in `tui`: they drive the host and read its state, which an external test package can't see.
+
+In the code: `internal/tuiaudit/tui_coupling_test.go`, `internal/tuiaudit/testdata/tui_coupling.txt`, `tui/feature/feature.go`
+
+## Line endings
+
+AutoDoc writes LF line breaks on every platform, Windows included: the editor holds a file's text with LF whatever the file has, as golib's text model reads CRLF and a lone CR as LF. The one exception is a file that already uses CRLF, where most of its line breaks are CRLF. It's written back with CRLF, so editing a Windows user's file changes the lines edited, not every line of it; Save As carries it to the new name too. A file with as many LF as CRLF breaks is LF's, the default. A batch file (`.bat`, `.cmd`), which `cmd.exe` reads reliably only with CRLF, keeps its CRLF this way too. A file changed on disk while open is reloaded as the editor holds it, LF, with its line breaks noted again, so only its changed lines are replaced and the cursor stays on an unchanged one.
+
+In the code: `tui/lineendings.go`, `tui/files.go`, `tui/diskwatch.go`

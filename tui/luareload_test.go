@@ -34,7 +34,7 @@ end }`)
 	r := runTUI(t, NewSession(d.sock, nil), Options{LuaDir: dir})
 	r.connected(t)
 	r.waitNamespaces(t)
-	owner := func(name string) string { return onLoop(r, func() string { return r.h.cat.names[name] }) }
+	owner := func(name string) string { return onLoop(r, func() string { return r.h.cat.Names[name] }) }
 
 	r.page("", 1, 1)
 	r.mustRun(t, "greet")
@@ -73,8 +73,8 @@ end }`)
 		t.Fatalf("after the reload the page is %q: the old engine's callback ran", got)
 	}
 	if onLoop(r, func() bool {
-		for _, n := range r.h.noticeLog.items {
-			if strings.Contains(n.text, "a Lua callback failed") {
+		for _, n := range r.h.noticeLog.Items {
+			if strings.Contains(n.Text, "a Lua callback failed") {
 				return true
 			}
 		}
@@ -133,7 +133,7 @@ func TestSavingAScriptInAWorkspaceReloads(t *testing.T) {
 	for _, p := range []string{"a.md", "config/lua/x.txt", "config/other/x.lua", "config/lua/deeper/x.lua"} {
 		r.clearNotices()
 		onLoop(r, func() bool { r.h.reloadOnSave("kb", p); return true })
-		if onLoop(r, func() bool { return len(r.h.noticeLog.items) > 0 }) {
+		if onLoop(r, func() bool { return len(r.h.noticeLog.Items) > 0 }) {
 			t.Fatalf("saving %s reloaded", p)
 		}
 	}

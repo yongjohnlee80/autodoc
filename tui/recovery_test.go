@@ -1,12 +1,13 @@
 package tui
 
 import (
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
+
+	"github.com/yongjohnlee80/autodoc/internal/userperm/userpermtest"
 )
 
 // attachedWith is attached with a recovery folder: unsaved work is kept there and offered back.
@@ -19,7 +20,9 @@ func attachedWith(t *testing.T, d *daemon, dir string) *running {
 
 // The open document, unsaved when the program ends unasked, is kept; a clean one is not.
 func TestUnsavedWorkIsKeptWhenTheProgramEndsUnasked(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
+	userpermtest.ExposeNew(t, dir) // a file made there the ordinary way is others' too (Windows: an inherited access list)
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	r := attachedWith(t, d, dir)
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
@@ -40,14 +43,15 @@ func TestUnsavedWorkIsKeptWhenTheProgramEndsUnasked(t *testing.T) {
 	if len(got) != 1 || got[0].WS != "kb" || got[0].Path != "a.md" || got[0].Text != "Xaaa\n" {
 		t.Fatalf("kept %+v", got)
 	}
-	if fi, err := os.Stat(recoveryFile(dir, recoveryKey{"kb", "a.md", ""})); err != nil || fi.Mode().Perm() != 0o600 {
-		t.Fatalf("the copy: %v, %v; want it the user's alone", fi, err)
+	if err := privateFile(recoveryFile(dir, recoveryKey{"kb", "a.md", ""})); err != nil {
+		t.Fatalf("the copy: %v; want it the user's alone", err)
 	}
 }
 
 // The next start offers the copy: Restore opens the document with the kept text, unsaved, and
 // saving it removes the copy.
 func TestTheNextStartOffersAKeptCopyBack(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := writeRecovery(dir, recovered{WS: "kb", Path: "a.md", Text: "kept text\n", Saved: time.Now()}); err != nil {
 		t.Fatal(err)
@@ -69,6 +73,7 @@ func TestTheNextStartOffersAKeptCopyBack(t *testing.T) {
 
 // Discard deletes the copy; Later keeps it.
 func TestDiscardDeletesTheCopyAndLaterKeepsIt(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	_ = writeRecovery(dir, recovered{WS: "kb", Path: "a.md", Text: "one", Saved: time.Now()})
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "on disk\n"}})
@@ -88,6 +93,7 @@ func TestDiscardDeletesTheCopyAndLaterKeepsIt(t *testing.T) {
 
 // Discarding in the unsaved question, and q!, leave nothing to keep.
 func TestADiscardedEditIsNotKept(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	r := attachedWith(t, d, dir)
@@ -110,6 +116,7 @@ func TestADiscardedEditIsNotKept(t *testing.T) {
 // A kept copy whose file is gone is restored as the untitled draft, and the next copy is asked
 // about.
 func TestACopyWhoseFileIsGoneBecomesTheDraft(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	now := time.Now()
 	_ = writeRecovery(dir, recovered{WS: "kb", Path: "gone.md", Text: "the lost text\n", Saved: now})
@@ -143,6 +150,7 @@ func TestACopyWhoseFileIsGoneBecomesTheDraft(t *testing.T) {
 
 // A restored copy stays until its text is discarded; then it goes.
 func TestARestoredCopyStaysUntilDiscarded(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	_ = writeRecovery(dir, recovered{WS: "kb", Path: "gone.md", Text: "lost\n", Saved: time.Now()})
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "on disk\n"}})
@@ -175,6 +183,7 @@ func TestARestoredCopyStaysUntilDiscarded(t *testing.T) {
 
 // Restoring the copy of the document open now puts its text in at once.
 func TestACopyOfTheOpenDocumentGoesInAtOnce(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "on disk\n"}})
 	r := attachedWith(t, d, dir)
@@ -195,6 +204,7 @@ func TestACopyOfTheOpenDocumentGoesInAtOnce(t *testing.T) {
 // unsaved asks nothing: each is in a buffer of its own, both unsaved, and both copies are kept
 // until each is saved or discarded.
 func TestRestoringTwoCopiesGivesEachItsBuffer(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	now := time.Now()
 	_ = writeRecovery(dir, recovered{WS: "kb", Path: "b.md", Text: "b kept\n", Saved: now})
@@ -226,6 +236,7 @@ func TestRestoringTwoCopiesGivesEachItsBuffer(t *testing.T) {
 
 // :q! deletes a copy kept earlier for the document it discards.
 func TestQBangDeletesAnOlderCopy(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	_ = writeRecovery(dir, recovered{WS: "kb", Path: "a.md", Text: "older\n", Saved: time.Now()})
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "on disk\n"}})
@@ -249,6 +260,7 @@ func TestQBangDeletesAnOlderCopy(t *testing.T) {
 
 // A copy whose file was gone, restored as the draft, goes once the draft is saved under a name.
 func TestARestoredDraftsCopyGoesWhenTheDraftIsSaved(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	_ = writeRecovery(dir, recovered{WS: "kb", Path: "gone.md", Text: "lost\n", Saved: time.Now()})
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "on disk\n"}})
@@ -271,6 +283,7 @@ func TestARestoredDraftsCopyGoesWhenTheDraftIsSaved(t *testing.T) {
 // Saving a draft drops only the copy it was restored from: an older draft's copy, kept with Later,
 // stays for the next start.
 func TestSavingADraftKeepsAnotherDraftsCopy(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	// a draft's copy, as keepRecovery writes it: no file open, so no workspace and no path
 	_ = writeRecovery(dir, recovered{WS: "", Path: "", Text: "an old draft\n", Saved: time.Now()})

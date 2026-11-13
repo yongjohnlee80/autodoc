@@ -85,6 +85,8 @@ func roots(t *testing.T, cell func(t *testing.T, fsys vfs.FS)) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		// the root is a handle on the directory: held past the cell, Windows can't remove the folder
+		t.Cleanup(func() { _ = fsys.Close() })
 		cell(t, fsys)
 	})
 	t.Run("memfs", func(t *testing.T) { cell(t, memfs.New()) })

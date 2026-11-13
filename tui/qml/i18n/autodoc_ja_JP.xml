@@ -1347,6 +1347,10 @@
         <source>This window lost its crew scope %1 while away; its agents now live under %2.</source>
         <translation>このウィンドウは離れている間にクルーのスコープ %1 を失いました。エージェントは現在 %2 の下にあります。</translation>
     </message>
+    <message id="autodoc.crew.names_kept">
+        <source>Agent folders from an earlier AutoDoc kept their old names, since their new ones were already there: %1</source>
+        <translation>以前の AutoDoc のエージェントフォルダーの一部は、新しい名前がすでにあったため、古い名前のまま残しました: %1</translation>
+    </message>
     <message id="autodoc.crew.scope_unlisted">
         <source>This window's crew scope is held, but not listed for a successor: %1</source>
         <translation>このウィンドウのクルーのスコープは保持されていますが、後継のために記録されていません: %1</translation>
@@ -3972,6 +3976,18 @@ WHAT A KEY NEEDS
         <source>This &amp;machine</source>
         <translation>このマシン(&amp;m)</translation>
     </message>
+    <message id="autodoc.main.title_bar">
+        <source>Title &amp;bar</source>
+        <translation>タイトルバー(&amp;b)</translation>
+    </message>
+    <message id="autodoc.main.title_bar_own">
+        <source>&amp;2. AutoDoc's own</source>
+        <translation>&amp;2. AutoDoc 独自</translation>
+    </message>
+    <message id="autodoc.main.title_bar_system">
+        <source>&amp;1. The system's</source>
+        <translation>&amp;1. システムのもの</translation>
+    </message>
     <message id="autodoc.main.todos">
         <source>&amp;Todos</source>
         <translation>ToDo(&amp;t)</translation>
@@ -5424,6 +5440,14 @@ WHAT A KEY NEEDS
         <source>theme: %1</source>
         <translation>テーマ: %1</translation>
     </message>
+    <message id="autodoc.notice.titlebar.from_the_next_start">
+        <source>the title bar changes at the next start: the window takes it as it opens</source>
+        <translation>タイトルバーは次回の起動時に変わります: ウィンドウが開くときに決まります</translation>
+    </message>
+    <message id="autodoc.notice.titlebar.no_title_bar_s">
+        <source>no title bar %1: system or own</source>
+        <translation>タイトルバー %1 はありません: system または own</translation>
+    </message>
     <message id="autodoc.notice.todomove.moved_to">
         <source>%1 moved to %2 with its task: the buffer follows it</source>
         <translation>%1 はタスクとともに %2 に移動しました: バッファも追従します</translation>
@@ -5467,6 +5491,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.todos.todos_is_loaded_read_only_its_store_was_released">
         <source>todos: %1 is loaded, read-only: its store was released (todos.release)</source>
         <translation>ToDo: %1 を読み取り専用で読み込みました: ストアは解放されています (todos.release)</translation>
+    </message>
+    <message id="autodoc.notice.todos.todos_the_store_of_is_not_listed">
+        <source>todos: the store of %1 isn't listed, so no other is shown in its place</source>
+        <translation>ToDo: %1 のストアは一覧にないため、代わりに別のストアは表示しません</translation>
     </message>
     <message id="autodoc.notice.todos.todos_refreshed_moved_archived_rewritten">
         <source>todos: refreshed: %1 moved, %2 archived, %3 rewritten</source>
@@ -5529,8 +5557,8 @@ WHAT A KEY NEEDS
         <translation>アップデート: この AutoDoc は install-autodoc.sh でインストールされていません。インストールした方法でアップデートしてください</translation>
     </message>
     <message id="autodoc.notice.update.the_update_exited">
-        <source>Update: update.sh exited %1; its tab in the terminal panel says why</source>
-        <translation>アップデート: update.sh が %1 で終了しました。理由はターミナルパネルのタブに表示されています</translation>
+        <source>Update: %2 exited %1; its tab in the terminal panel says why</source>
+        <translation>アップデート: %2 が %1 で終了しました。理由はターミナルパネルのタブに表示されています</translation>
     </message>
     <message id="autodoc.notice.update.update">
         <source>Update</source>

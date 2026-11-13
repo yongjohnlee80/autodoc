@@ -23,13 +23,30 @@ Rode de novo quando quiser: ele atualiza ou repara a instalação e nunca adicio
 
 **Atualizando.** Instalado pelo script, o AutoDoc se atualiza sozinho: **Ajuda › Sobre**, depois **Atualizar**. A atualização roda no painel de terminal do AutoDoc e, quando a nova versão está pronta, o AutoDoc oferece **Reiniciar agora**. Num shell, `~/.local/state/autodoc/update.sh` faz o mesmo.
 
+## No Windows
+
+No PowerShell, uma linha instala o AutoDoc com sua janela:
+
+```powershell
+irm https://github.com/yongjohnlee80/autodoc/releases/latest/download/install-autodoc.ps1 | iex
+```
+
+O script:
+
+- baixa a compilação mais recente para Windows e a confere com o checksum da versão;
+- instala-a como `%LOCALAPPDATA%\Programs\AutoDoc\autodoc.exe`, só para você: nunca pede permissões de administrador;
+- adiciona o AutoDoc ao menu Iniciar;
+- instala o `update.ps1` em `%LOCALAPPDATA%\autodoc`, então **Ajuda › Sobre › Atualizar** funciona como no Linux e no macOS.
+
+Ele só muda o seu `PATH` se você pedir (`-AddToPath`); senão, mostra o comando que faria isso. A compilação não é assinada, então o Windows pode dizer que o editor é desconhecido na primeira vez que o AutoDoc roda. O Windows em arm64 ainda não tem compilação. No WSL2, a linha do Linux acima também funciona.
+
 ## Outros jeitos
 
 - Homebrew: `brew install yongjohnlee80/tap/autodoc` (no Linux, só a interface de terminal)
 - mise: `mise use -g github:yongjohnlee80/autodoc`
 - Go: `go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` (sem `-tags gui`, só a interface de terminal)
 - Um arquivo de release da página Releases do projeto
-- Windows: WSL2 e, depois, o script de instalação
+- Windows: WSL2 e, depois, o script de instalação do Linux
 
 Esses são atualizados do mesmo jeito que foram instalados (`brew upgrade`, `mise upgrade`, `go install` de novo), então **Ajuda › Sobre** não oferece Atualizar para eles. Servidores, contêineres e compilar do código-fonte: [Referência, Capítulo 2](../../reference/02-quickstart-and-workspaces.md).
 

@@ -67,6 +67,7 @@ func twoPlugins(t *testing.T) string {
 // card's s runs its own plugin's command. Backspace on a card goes back to the chooser; q closes
 // the chooser.
 func TestEachPluginsCardRunsItsOwnLetter(t *testing.T) {
+	t.Parallel()
 	r, logs := pluginTUI(t, twoPlugins(t))
 	r.pluginCardOf(t, "beta")
 	r.s.WaitForText(t, "s  Do x")
@@ -97,6 +98,7 @@ func TestEachPluginsCardRunsItsOwnLetter(t *testing.T) {
 // the chooser saying so. One of the chooser's own (j, k, q) is refused, and nothing moves.
 // Backspace after * removes the letter. F1 names the keys.
 func TestStarGivesAPluginALetter(t *testing.T) {
+	t.Parallel()
 	dir := twoPlugins(t)
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: maps.Clone(testPrefs)})
 	r, logs := pluginTUIOn(t, d, dir, "")
@@ -162,6 +164,7 @@ func loopPair[A, B any](r *running, fn func() (A, B)) (A, B) {
 // name keeps it, and the other says why; a reserved one is refused. Binding the letter to the
 // second takes it from every other, so the preferences then name one plugin per letter.
 func TestPluginLettersFromThePreferences(t *testing.T) {
+	t.Parallel()
 	dir := twoPlugins(t)
 	installPlugin2(t, dir, "gamma", "dialog", "echo", "[[commands]]\nid = \"g\"\ntitle = \"Do g\"\nkey = \"h\"\n")
 	prefs := maps.Clone(testPrefs)
@@ -182,6 +185,7 @@ func TestPluginLettersFromThePreferences(t *testing.T) {
 
 // TestNoPluginHasCommands: the chooser says how to add one.
 func TestNoPluginHasCommands(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "plain", "dialog", "echo", "[dialog]\nwidth = 36\nheight = 8\n")
 	r, _ := pluginTUI(t, dir)
@@ -198,6 +202,7 @@ func TestNoPluginHasCommands(t *testing.T) {
 // the plugins with commands, and a plugin's letter there runs its command. With no plugin, the card
 // says there are none.
 func TestPluginsCommandsOpensTheChooser(t *testing.T) {
+	t.Parallel()
 	r, logs := pluginTUI(t, twoPlugins(t))
 	r.keys(t, decltest.Alt('p'))
 	r.s.WaitForText(t, "Commands…  (SPC p)")

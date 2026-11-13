@@ -105,12 +105,12 @@ A UI feature is a `Feature` ([architecture §4.2](docs/architecture.md#42-a-ui-f
 - **The screen is QML.** A feature's QML is a component in `tui/qml/dialogs` or `tui/qml/views`,
   declared once in `main.qml`; every QML file must load (`TestEveryQMLFileIsSound`).
 - **`App.*` commands are the whole surface QML may call** (`tui/commands.go`). A user-visible action
-  is also a catalog entry (`tui/builtins.go`, `tui/catalog.go`), whose `Run` calls the same function
+  is also a catalog entry (`tui/builtins.go`, `tui/feature/catalog.go`), whose `Run` calls the same function
   as its `App.*` twin. One action, one function.
   - Catalog ids are `<subject>.<action>`, lower-case and dotted. `lua.*` belongs to Lua and
     `plugin.<name>.*` to that plugin (`TestTheCatalogsNamespacesAreOwned`).
   - Every menu row and leader key is a catalog entry (`TestEveryMenuRowAndLeaderKeyIsACatalogEntry`).
-- **Keys are declared once, in `tui/keys.go`.** The key blocks in `main.qml`, the card views and
+- **Keys are declared once, in `tui/feature/keys.go`.** The key blocks in `main.qml`, the card views and
   `docs/keymap.md` are generated from it: run `go test ./tui -run TestKeysAreGenerated -update`.
   Every key is in the help (`TestEveryKeyIsInTheHelp`).
 - **One layout per kind of choice:** a list to filter and choose from is `Picker.qml` over a
@@ -149,9 +149,10 @@ AutoDoc ships in six languages: `en`, `es`, `ja_JP`, `ko_KR`, `pt_BR` and `zh_CN
 
 ## 7. Plugins and Lua
 
-- **The plugin protocol** (`plugin.Protocol`, `plugin.MinProtocol`) rises only for something a
-  manifest can declare that an older host must not run without, a changed meaning, or something a
-  plugin must handle. Each version has its own `plugin/protocolN_test.go`.
+- **The plugin protocol** (`core/pluginproto`, which the SDK gives as `plugin.Protocol` and
+  `plugin.MinProtocol`) rises only for something a manifest can declare that an older host must not
+  run without, a changed meaning, or something a plugin must handle. Each version has its own
+  `plugin/protocolN_test.go`.
 - `docs/plugins.md` documents every plugin method, and every manifest sample in it decodes
   (`TestThePluginReferenceKeepsUp`).
 - **Lua:** a capability a script may use is gated by its contract's effect (`tui/luagate.go`,
@@ -201,12 +202,12 @@ when a generated file falls behind; the rest is held in review.
 
 | A change to… | Also updates |
 | --- | --- |
-| a key | `tui/keys.go`, then the generated `main.qml` blocks, card views and `docs/keymap.md`; the help |
+| a key | `tui/feature/keys.go`, then the generated `main.qml` blocks, card views and `docs/keymap.md`; the help |
 | a command or catalog entry | `tui/builtins.go` / the feature's `Catalog()`, the help (`tui/help.go`), all six catalogs |
 | any user-facing text | all six catalogs |
 | a verb, its params, results or errors | the contract, `Protocol`, `contracts.json` and the wire goldens, AGENTS.md and `contracts.lua` |
 | the Lua surface | `docs/lua/reference.md` (generated blocks and hand-written rows) |
-| the plugin protocol | `plugin.Protocol` when §7 says so, `docs/plugins.md`, a `protocolN_test.go` |
+| the plugin protocol | `pluginproto.Current` when §7 says so, `docs/plugins.md`, a `protocolN_test.go` |
 | the schema | a new migration pair, `docs/ops/schema-scripts.md` |
 | a user-visible behaviour | the relevant `docs/reference` chapter, and the tutorials it changes, in every language |
 | a package's role | its `doc.go`/`README.md`, and [architecture §2](docs/architecture.md#2-packages) |

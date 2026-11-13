@@ -9,11 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	"github.com/yongjohnlee80/golib/vfs"
 	"github.com/yongjohnlee80/golib/vfs/local"
 
 	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/autodoc/tui/crew"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // OPEN FILES FOLLOW THE DISK (docs/decisions/editor.md#open-files-follow-the-disk). The TUI watches
@@ -38,14 +40,22 @@ type diskWatch struct {
 	dir    string             // absolute
 	gen    uint64             // this run of the watch: events and its end from an older run are dropped
 	cancel context.CancelFunc // a child of h.ctx: the TUI's stop ends every watch
-	refs   int                // the open buffers in dir
+	refs   int                // the open buffers in dir, and the follows (followDir)
 	mode   string             // diskWatching or diskPolling; "" while no run is up
-	// at and rel are where the driver is opened and dir within it: dir's parent and its name, so the
-	// driver holds the parent open, not dir, and dir's own removal ends the watch (a directory held
-	// open is never reported deleted: Linux sends no IN_DELETE_SELF for it); "." in dir for a root
+	// at and rel are where the driver is opened and dir within it: dir's parent and its name, so
+	// dir's own removal ends the watch (a directory held open is never reported deleted: Linux sends
+	// no IN_DELETE_SELF for it); "." in dir for a root. The driver holds nothing on at between its
+	// operations (localDisk: local.RootPerOperation): the watch's own handle on dir is all it keeps,
+	// one Windows lets dir go with. Windows still refuses to rename or remove a folder with a handle
+	// open beneath it, so a watched folder's parent, or any folder above it, can't be renamed or
+	// removed there while the watch runs.
 	at, rel string
 	err     error         // why the last start failed; nil while a run is up
 	wait    time.Duration // the next restart's backoff
+	// follows are told of changes in dir by followDir's callers (a note's embedded files): the name
+	// of each file that changed, "" when anything may have (an overflow, a start)
+	follows    map[uint64]func(name string)
+	nextFollow uint64
 }
 
 // the TUI's own names for how a folder is followed (the daemon's core/follow uses the same words)
@@ -53,10 +63,6 @@ const (
 	diskWatching = "watch"
 	diskPolling  = "poll"
 )
-
-// diskPollEvery is vfs.Poll's interval where the folder has no native watcher.
-// NOTE: deadline: a poll is a listing per interval, the only way to see a change without a watcher.
-var diskPollEvery = 2 * time.Second
 
 // diskWait collapses a burst of events for one buffer (an agent writing in steps, an editor's
 // atomic save as remove+create) into one check.
@@ -81,8 +87,9 @@ const (
 	diskReloadAsk   = "ask"
 )
 
-// localDisk is the folder's driver: golib's local FS, which watches natively.
-func localDisk(dir string) (vfs.FS, error) { return local.New(dir) }
+// localDisk is the folder's driver: golib's local FS, which watches natively, opening its root for
+// each operation rather than holding it, so nothing but the watch's own handle holds the folder.
+func localDisk(dir string) (vfs.FS, error) { return local.New(dir, local.RootPerOperation()) }
 
 // watchFile counts b in its folder's watch, starting the watch with the first buffer there. b's
 // file must be known (open); a file whose folder is not known yet (its workspace not listed) is
@@ -98,6 +105,11 @@ func (h *Host) watchFile(b *openBuffer) {
 		return // the same file: its watch already counts it
 	}
 	h.unwatchFile(b)
+	b.watch, b.watchName = h.holdWatch(dir), filepath.Base(abs)
+}
+
+// holdWatch counts one more holder of dir's watch, starting the watch with the first.
+func (h *Host) holdWatch(dir string) *diskWatch {
 	w := h.watches[dir]
 	if w == nil {
 		w = &diskWatch{dir: dir, wait: diskRetryMin, at: filepath.Dir(dir), rel: filepath.Base(dir)}
@@ -108,16 +120,11 @@ func (h *Host) watchFile(b *openBuffer) {
 		h.startWatch(w)
 	}
 	w.refs++
-	b.watch, b.watchName = w, filepath.Base(abs)
+	return w
 }
 
-// unwatchFile drops b from its folder's watch; the last buffer in a folder ends the watch.
-func (h *Host) unwatchFile(b *openBuffer) {
-	w := b.watch
-	if w == nil {
-		return
-	}
-	b.watch, b.watchName = nil, ""
+// releaseWatch drops one holder of w; the last ends the watch.
+func (h *Host) releaseWatch(w *diskWatch) {
 	if w.refs--; w.refs > 0 {
 		return
 	}
@@ -130,6 +137,44 @@ func (h *Host) unwatchFile(b *openBuffer) {
 	}
 }
 
+// followDir watches dir, as an open buffer's folder is watched, for a caller that isn't a buffer
+// (a note's embedded files, noteembeds.go): onChange is told, on the loop, the name of each file in
+// dir that changes, or "" when anything in it may have. release ends the follow; it is safe to call
+// twice.
+func (h *Host) followDir(dir string, onChange func(name string)) (release func()) {
+	w := h.holdWatch(dir)
+	if w.follows == nil {
+		w.follows = map[uint64]func(string){}
+	}
+	w.nextFollow++
+	id := w.nextFollow
+	w.follows[id] = onChange
+	return func() {
+		if _, ok := w.follows[id]; !ok {
+			return
+		}
+		delete(w.follows, id)
+		h.releaseWatch(w)
+	}
+}
+
+// tellFollows passes a change in w's folder to its follows: name is the file's, "" anything.
+func (w *diskWatch) tellFollows(name string) {
+	for _, f := range w.follows {
+		f(name)
+	}
+}
+
+// unwatchFile drops b from its folder's watch; the last buffer in a folder ends the watch.
+func (h *Host) unwatchFile(b *openBuffer) {
+	w := b.watch
+	if w == nil {
+		return
+	}
+	b.watch, b.watchName = nil, ""
+	h.releaseWatch(w)
+}
+
 // startWatch starts a run of w: native if the driver watches, Poll otherwise. Each event is posted
 // to the loop; the channel's end is the run's end (watchEnded). A run that cannot start is tried
 // again (restartWatch).
@@ -138,7 +183,7 @@ func (h *Host) startWatch(w *diskWatch) {
 	gen, dir := w.gen, w.dir
 	ctx, cancel := context.WithCancel(h.ctx)
 	w.cancel = cancel
-	events, mode, closeFS, err := openWatch(ctx, h.diskFS, w.at, w.rel)
+	events, mode, closeFS, err := openWatch(ctx, h.diskFS, w.at, w.rel, h.seams.diskPoll)
 	if err != nil {
 		cancel()
 		if w.err == nil { // said once, not at every retry
@@ -153,16 +198,16 @@ func (h *Host) startWatch(w *diskWatch) {
 		for ev := range events {
 			h.p.Post(func() { h.diskEvent(dir, gen, ev) })
 		}
-		closeFS()                                   // the run is over: its driver's handle on the folder goes with it
+		closeFS()                                   // the run is over: its driver's resources go with it
 		h.p.Post(func() { h.watchEnded(dir, gen) }) // cancelled, or the folder went
 	}()
 }
 
 // openWatch is a run's events: the native watch of rel in the driver opened at at, or a poll of it
 // where the driver has none (or its watch would not start). Events name paths under at. closeFS
-// releases the driver (its os.Root on the folder): the caller runs it once the events end; a run
-// that does not start has released it already.
-func openWatch(ctx context.Context, open func(string) (vfs.FS, error), at, rel string) (events <-chan vfs.Event, mode string, closeFS func(), err error) {
+// releases the driver's resources: the caller runs it once the events end; a run that does not
+// start has released it already.
+func openWatch(ctx context.Context, open func(string) (vfs.FS, error), at, rel string, poll time.Duration) (events <-chan vfs.Event, mode string, closeFS func(), err error) {
 	fsys, err := open(at)
 	if err != nil {
 		return nil, "", nil, err
@@ -177,7 +222,7 @@ func openWatch(ctx context.Context, open func(string) (vfs.FS, error), at, rel s
 			return events, diskWatching, closeFS, nil
 		}
 	}
-	events, err = vfs.Poll(ctx, fsys, rel, diskPollEvery)
+	events, err = vfs.Poll(ctx, fsys, rel, poll)
 	if err != nil {
 		closeFS()
 		return nil, "", nil, err
@@ -230,6 +275,7 @@ func (h *Host) checkFolder(w *diskWatch) {
 			h.diskSoon(b)
 		}
 	}
+	w.tellFollows("")
 }
 
 // diskEvent: an event for a file asks for a check of the buffers whose file it is; an overflow, of
@@ -255,6 +301,14 @@ func (h *Host) diskEvent(dir string, gen uint64, ev vfs.Event) {
 	for _, b := range h.buffers {
 		if b.watch == w && vfs.Join(w.rel, b.watchName) == ev.Path {
 			h.diskSoon(b)
+		}
+	}
+	if name, ok := strings.CutPrefix(ev.Path, w.rel+"/"); ok || w.rel == "." {
+		if w.rel == "." {
+			name = ev.Path
+		}
+		if !strings.Contains(name, "/") { // a file in the folder, not deeper
+			w.tellFollows(name)
 		}
 	}
 }
@@ -283,7 +337,7 @@ type diskSnap struct {
 	raw           bool
 	version       string
 	saves         uint64
-	hint          *todoFileChange
+	hint          *crew.TodoFileChange
 }
 
 // diskRead is a check's read of the file through the daemon; missing, fate is what became of its
@@ -298,15 +352,15 @@ type diskRead struct {
 // readDisk reads snap's file as a load does.
 func readDisk(ctx context.Context, h *Host, snap diskSnap) diskRead {
 	res, err := h.readFile(ctx, snap.ws, snap.path, snap.raw)
-	if code(err) == rpc.CodeNotFound {
+	if feature.Code(err) == rpc.CodeNotFound {
 		return diskRead{missing: true, fate: h.taskFateOf(ctx, snap.ws, snap.path, snap.abs, snap.raw, snap.hint)}
 	}
 	if err != nil {
 		return diskRead{err: err}
 	}
-	m := asMap(res)
+	m := feature.AsMap(res)
 	content, _ := m["content"].([]byte)
-	return diskRead{content: string(content), version: str(m, "version")}
+	return diskRead{content: string(content), version: feature.Str(m, "version")}
 }
 
 // diskCheck reads b's file through the daemon and settles what changed. Held while b's save is in
@@ -386,7 +440,9 @@ func (h *Host) askDiskOnEnter(b *openBuffer) {
 // did not change keeps the cursor on it. b is clean after.
 func (h *Host) reloadFromDisk(b *openBuffer, content, version string) {
 	ed := h.editorFor(b)
-	old, now := ed.Lines(), strings.Split(content, "\n")
+	b.file.crlf = usesCRLF(content)
+	// compared as the editor holds it, LF (lineendings.go): a CRLF file's lines keep no CR
+	old, now := ed.Lines(), strings.Split(asEditorText(content), "\n")
 	if hunks := lineHunks(old, now); len(hunks) > 0 {
 		ro := ed.ReadOnly()
 		ed.SetReadOnly(false) // read-only to the user, not to the disk
@@ -520,22 +576,22 @@ func middleBlock(old, now []string) (pre, oldEnd, newEnd int) {
 // blockEdit is the edit that replaces old's lines from..to with lines. Inside the text, whole
 // lines with their line breaks; reaching its end, from the end of the line before, so the last
 // line's missing break stays missing.
-func blockEdit(old []string, from, to int, lines []string) (widget.TextRange, string) {
+func blockEdit(old []string, from, to int, lines []string) (editor.TextRange, string) {
 	if to < len(old) {
 		text := strings.Join(lines, "\n")
 		if len(lines) > 0 {
 			text += "\n"
 		}
-		return widget.TextRange{From: widget.TextPos{Line: from}, To: widget.TextPos{Line: to}}, text
+		return editor.TextRange{From: editor.TextPos{Line: from}, To: editor.TextPos{Line: to}}, text
 	}
 	const lineEnd = 1 << 30 // clamped to the line's last column
-	last := widget.TextPos{Line: len(old) - 1, Col: lineEnd}
+	last := editor.TextPos{Line: len(old) - 1, Col: lineEnd}
 	if from == 0 {
-		return widget.TextRange{To: last}, strings.Join(lines, "\n")
+		return editor.TextRange{To: last}, strings.Join(lines, "\n")
 	}
 	text := ""
 	if len(lines) > 0 {
 		text = "\n" + strings.Join(lines, "\n")
 	}
-	return widget.TextRange{From: widget.TextPos{Line: from - 1, Col: lineEnd}, To: last}, text
+	return editor.TextRange{From: editor.TextPos{Line: from - 1, Col: lineEnd}, To: last}, text
 }

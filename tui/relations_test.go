@@ -7,8 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // relations_test.go: the Relations drawer (docs/decisions/editor.md#the-relations-drawer) — each
@@ -35,13 +37,7 @@ var relationsKB = map[string][]string{"kb": {
 }}
 
 func (r *running) relationLabels() []string {
-	return onLoop(r, func() []string {
-		var out []string
-		for _, row := range r.h.rel.rows.All() {
-			out = append(out, row.label)
-		}
-		return out
-	})
+	return onLoop(r, func() []string { return r.h.rel.Snapshot().Rows })
 }
 
 // waitRelations waits for the drawer's rows to be want.
@@ -67,6 +63,7 @@ var docRelations = []string{
 // opens a row and hides the drawer (docs/decisions/editor.md#dock-clicks-hide-and-show), whose rows
 // follow the document opened.
 func TestTheRelationsDrawerGroupsByKindAndDirection(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, relationsKB)
 	r := attached(t, d)
 	r.openByPicker(t, "doc.md")
@@ -79,7 +76,7 @@ func TestTheRelationsDrawerGroupsByKindAndDirection(t *testing.T) {
 	r.leader(t, 'l')
 	r.waitRelations(t, docRelations)
 	r.s.WaitForText(t, "links (10)")
-	if onLoop(r, func() bool { return r.h.rel.deep }) {
+	if onLoop(r, func() bool { return r.h.rel.Snapshot().Deep }) {
 		t.Fatal("d in the explorer turned the drawer's depth 2 on")
 	}
 
@@ -114,6 +111,7 @@ var linksKB = map[string][]string{"kb": {
 // TestSPCjInADraftFollowsAWebLink: in a draft, with no file open, SPC j follows the link as the
 // right-click Go to link does: a web address goes to the browser as written.
 func TestSPCjInADraftFollowsAWebLink(t *testing.T) {
+	t.Parallel()
 	r := attached(t, startDaemon(t, linksKB))
 	opened := make(chan string, 1)
 	onLoop(r, func() bool {
@@ -138,6 +136,7 @@ func TestSPCjInADraftFollowsAWebLink(t *testing.T) {
 // first document; the right-click menu has Back. Off a link (the empty draft's included), SPC j
 // opens nothing and says so.
 func TestSPCjFollowsTheLinkAndBack(t *testing.T) {
+	t.Parallel()
 	r := attached(t, startDaemon(t, linksKB))
 	r.leader(t, 'j') // the draft, empty: no link under the cursor, Rendered as in the text
 	r.waitKeptNotice(t, "no link under the cursor: SPC l shows what untitled links with")
@@ -184,6 +183,7 @@ func (r *running) menuRow(t *testing.T, label string) {
 
 // TestAnOutsideFileHasNoRelations: the drawer says why it is empty.
 func TestAnOutsideFileHasNoRelations(t *testing.T) {
+	t.Parallel()
 	r, _, _, abs := runOutside(t)
 	r.h.p.Post(func() { r.h.openAbsolute(abs) })
 	r.waitOpen(t, "", abs)
@@ -194,6 +194,7 @@ func TestAnOutsideFileHasNoRelations(t *testing.T) {
 // TestBackOverUnsavedChangesKeepsThem: SPC b over unsaved changes asks nothing: the document goes
 // back, and the one left keeps its edits in its buffer.
 func TestBackOverUnsavedChangesKeepsThem(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, relationsKB)
 	r := attached(t, d)
 	r.openByPicker(t, "doc.md")
@@ -218,6 +219,7 @@ func TestBackOverUnsavedChangesKeepsThem(t *testing.T) {
 // TestRelationsEdges: with no file open the drawer is empty; Enter on a heading opens nothing; back
 // skips the page already open (its own entries on the jump list).
 func TestRelationsEdges(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, relationsKB)
 	r := attached(t, d)
 	r.leader(t, 'l')
@@ -228,14 +230,14 @@ func TestRelationsEdges(t *testing.T) {
 	r.waitFile(t, "doc.md")
 	r.s.WaitFor(t, "doc's relations", func(string) bool { return slices.Equal(r.relationLabels(), docRelations) })
 	gen := r.file().gen
-	if g := onLoop(r, func() uint64 { r.h.rel.open(0); return r.h.file.gen }); g != gen {
+	if g := onLoop(r, func() uint64 { r.h.rel.Open(0); return r.h.file.gen }); g != gen {
 		t.Errorf("Enter on the heading %q opened something", docRelations[0])
 	}
 
 	// the page itself on top (old.md, then doc.md): back goes to old.md, past it
 	r.h.p.Post(func() {
-		r.h.jumps.Push(widget.JumpPos{Doc: docKey(fileRef{"kb", "old.md"})})
-		r.h.jumps.Push(widget.JumpPos{Doc: docKey(fileRef{"kb", "doc.md"}), Line: 1})
+		r.h.jumps.Push(editor.JumpPos{Doc: docKey(feature.FileRef{WS: "kb", Path: "old.md"})})
+		r.h.jumps.Push(editor.JumpPos{Doc: docKey(feature.FileRef{WS: "kb", Path: "doc.md"}), Line: 1})
 		r.h.goBack()
 	})
 	r.waitFile(t, "old.md")
@@ -247,6 +249,7 @@ func TestRelationsEdges(t *testing.T) {
 // The editor's right-click menu has View diagram, enabled when the file has a Mermaid block to
 // show, as File › Preview Mermaid diagram does.
 func TestTheEditorMenuViewsTheDiagram(t *testing.T) {
+	t.Parallel()
 	r := attached(t, startDaemon(t, map[string][]string{"kb": {
 		"a.md", "# A\n",
 		"d.md", "# D\n\n```mermaid\nflowchart LR\n  A --> B\n```\n",
@@ -282,6 +285,7 @@ func TestTheEditorMenuViewsTheDiagram(t *testing.T) {
 
 // linkAt finds the link the cursor is on, of each kind, and nothing elsewhere.
 func TestLinkAtTheCursor(t *testing.T) {
+	t.Parallel()
 	src := "see [the doc](doc.md) and [[far|Far away]], <https://example.com>, [[#Heading]].\n"
 	at := func(s string) int { return strings.Index(src, s) }
 	for _, c := range []struct {
@@ -305,6 +309,7 @@ func TestLinkAtTheCursor(t *testing.T) {
 // Go to link, on the right-click menu, is there only on a link, and opens the document the
 // daemon resolves it to now: one just typed, unsaved, too. A wikilink to no document says so.
 func TestGoToLinkOpensTheLinkedDocument(t *testing.T) {
+	t.Parallel()
 	r := attached(t, startDaemon(t, relationsKB))
 	r.h.p.Post(func() { r.h.openPath("new.md") })
 	r.waitFile(t, "new.md")
@@ -332,7 +337,7 @@ func TestGoToLinkOpensTheLinkedDocument(t *testing.T) {
 	if !onLoop(r, func() bool {
 		for _, item := range r.h.editorMenu(r.h.core) {
 			if item.ID == "autodoc.link" {
-				item.Action.(widget.CoreMenuAction).Run(r.h.core)
+				item.Action.(editor.CoreMenuAction).Run(r.h.core)
 				return true
 			}
 		}
@@ -358,6 +363,7 @@ func TestGoToLinkOpensTheLinkedDocument(t *testing.T) {
 // An answer that comes after another file opened is the old file's: dropped, not followed from the
 // new one.
 func TestGoToLinkDropsAnAnswerForAFileNoLongerOpen(t *testing.T) {
+	t.Parallel()
 	r := attached(t, startDaemon(t, relationsKB))
 	r.h.p.Post(func() { r.h.openPath("new.md") })
 	r.waitFile(t, "new.md")
@@ -376,6 +382,7 @@ func TestGoToLinkDropsAnAnswerForAFileNoLongerOpen(t *testing.T) {
 // The links' rows are a hand: a row opens its note (main.qml's cursorShape). Only rows that hold
 // a link are; the space past the last row is not.
 func TestTheLinksRowsAreAHand(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, relationsKB)
 	r := attached(t, d)
 	r.openByPicker(t, "doc.md")
@@ -388,7 +395,7 @@ func TestTheLinksRowsAreAHand(t *testing.T) {
 		view, _ := r.h.p.Adapter().Component(n)
 		ctx := view.(interface{ Context() *tuicore.Context }).Context()
 		for _, c := range ctx.Children(view) {
-			if l, ok := c.(*widget.List[int]); ok {
+			if l, ok := c.(*widgetcore.List[int]); ok {
 				return l.PointerShapes(nil)
 			}
 		}

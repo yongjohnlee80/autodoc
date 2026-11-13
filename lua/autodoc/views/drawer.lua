@@ -73,7 +73,7 @@ M.SECTIONS = {
 
 local CODE_CURSOR_EXPIRED = -32063
 
--- The TUI's provider and ranker forms (tui/providers.go, tui/rankers.go): the store's kind, how the
+-- The TUI's provider and ranker forms (tui/searchsetup/providers.go, tui/searchsetup/rankers.go): the store's kind, how the
 -- form offers it, where it usually is, whether it takes a key, whether it is sent a context window,
 -- whether its model is typed.
 M.PROVIDER_KINDS = {
@@ -1141,7 +1141,7 @@ function M.new(profile)
     end)
   end
 
-  ---provider_form is the TUI's provider form as a prompt chain (tui/providers.go).
+  ---provider_form is the TUI's provider form as a prompt chain (tui/searchsetup/providers.go).
   local function provider_form(existing)
     local kinds = vim.deepcopy(M.PROVIDER_KINDS)
     if existing then
@@ -1195,7 +1195,7 @@ function M.new(profile)
     end)
   end
 
-  ---ranker_form is the TUI's ranker form (tui/rankers.go): a TEI server names its own model.
+  ---ranker_form is the TUI's ranker form (tui/searchsetup/rankers.go): a TEI server names its own model.
   local function ranker_form(existing)
     local kinds = vim.deepcopy(M.RANKER_KINDS)
     if existing then

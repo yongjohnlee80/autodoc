@@ -11,7 +11,34 @@ import (
 	"regexp"
 	"syscall"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
+
+// listenEditor listens at dir/name, guarded: the folder is the user's alone before anything listens
+// in it (privateDir), a socket left by an earlier run with this pid and those of the runs that were
+// killed are removed first, and the socket's own 0600 after Listen is a second lock, not the first.
+func listenEditor(dir, name string) (net.Listener, string, error) {
+	path := ipc.AddrIn(dir, name)
+	if err := privateDir(dir); err != nil {
+		return nil, "", err
+	}
+	_ = os.Remove(path)
+	sweepEditorSockets(dir)
+	ln, err := net.Listen("unix", path)
+	if err != nil {
+		return nil, "", err
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		_ = ln.Close()
+		return nil, "", err
+	}
+	// another user's process is closed unanswered; the folder already keeps it out
+	return ipc.Guard(ln, nil), path, nil
+}
+
+// unlistenEditor removes the socket's file once it is closed.
+func unlistenEditor(path string) { _ = os.Remove(path) }
 
 // privateDir makes dir the user's alone before the editor socket goes in it: a real folder, not a
 // link, owned by this user, mode 0700. A folder that was there with a wider mode is narrowed; one of

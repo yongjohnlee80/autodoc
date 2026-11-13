@@ -5,7 +5,7 @@ package tui
 import (
 	guiwidget "github.com/yongjohnlee80/golib/gui/widget"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // textPanels are the panels whose terminals draw their text at the shells' share of the window's:
@@ -22,7 +22,7 @@ type panelText struct {
 // panelViews are one panel's views, and the TerminalTabs they were given to.
 type panelViews struct {
 	views *guiwidget.TerminalViews
-	tabs  *widget.TerminalTabs
+	tabs  *terminal.TerminalTabs
 }
 
 // apply sets the panels' scale (in percent), making each panel's views the first time and again for

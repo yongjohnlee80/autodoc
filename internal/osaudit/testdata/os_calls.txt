@@ -1,0 +1,91 @@
+# What a file outside the OS seam packages does that only its OS can
+# (docs/decisions/platforms.md#each-os-concern-is-one-package; internal/osaudit/os_calls_test.go).
+#
+#   file <TAB> kind <TAB> name
+#
+# kind: import (golang.org/x/sys's unix or windows), syscall (a name of syscall's), unix-socket
+# (net given "unix"), goos (runtime.GOOS), os-file (a file of one OS, by its name or its build
+# constraint).
+#
+# This list may only SHRINK: each row moves behind a seam package in the Windows port's step 0, and
+# empty is the destination.
+#
+# Regenerate: AUTODOC_OS_CALLS_UPDATE=1 go test ./internal/osaudit/
+app/app.go	syscall	SIGHUP
+app/app.go	syscall	SIGINT
+app/app.go	syscall	SIGTERM
+app/crewbridge.go	syscall	ECONNREFUSED
+app/crewbridge_other.go	os-file	unix
+app/crewbridge_unix.go	os-file	unix
+app/crewbridge_unix.go	syscall	O_NOFOLLOW
+app/crewbridge_unix.go	syscall	SysProcAttr
+app/crewclaude_darwin.go	os-file	darwin
+app/crewclaude_linux.go	os-file	linux
+app/crewclaude_other.go	os-file	darwin
+app/crewclaude_other.go	os-file	linux
+app/crewcodexbridge.go	syscall	ECONNREFUSED
+app/gui_preferences_darwin.go	os-file	darwin
+app/gui_preferences_other.go	os-file	darwin
+app/keys_darwin.go	os-file	darwin
+app/keys_other.go	os-file	darwin
+app/server_on.go	syscall	SIGINT
+app/server_on.go	syscall	SIGTERM
+core/config/config.go	goos	runtime.GOOS
+core/crew/bridges_linux.go	import	golang.org/x/sys/unix
+core/crew/bridges_linux.go	os-file	linux
+core/crew/bridges_linux.go	syscall	Stat_t
+core/crew/bridges_linux.go	unix-socket	DialContext("unix")
+core/crew/bridges_other.go	os-file	linux
+core/crew/proc_darwin.go	import	golang.org/x/sys/unix
+core/crew/proc_darwin.go	os-file	darwin
+core/crew/proc_linux.go	os-file	linux
+core/crew/proc_other.go	os-file	darwin
+core/crew/proc_other.go	os-file	linux
+core/crew/scheduler.go	syscall	ECONNREFUSED
+core/crew/scheduler.go	syscall	ENOENT
+core/crew/wakeagy.go	syscall	ECONNREFUSED
+core/crew/wakeagy.go	syscall	RawConn
+core/crew/wakeclaude.go	unix-socket	DialContext("unix")
+core/crew/wakeopencode.go	unix-socket	DialContext("unix")
+core/fsbounds/guard.go	syscall	ENOTDIR
+core/fsbounds/os_unix.go	os-file	unix
+core/fsbounds/os_unix.go	syscall	Stat_t
+core/fsbounds/os_windows.go	import	golang.org/x/sys/windows
+core/fsbounds/os_windows.go	os-file	windows
+examples/surface-go/main.go	os-file	linux
+plugin/stdio_other.go	os-file	unix
+plugin/stdio_unix.go	os-file	unix
+plugin/stdio_unix.go	syscall	Close
+plugin/stdio_unix.go	syscall	CloseOnExec
+plugin/stdio_unix.go	syscall	Dup
+plugin/stdio_unix.go	syscall	ForkLock
+plugin/stdio_unix.go	syscall	SetNonblock
+plugin/surface_linux.go	import	golang.org/x/sys/unix
+plugin/surface_linux.go	os-file	linux
+plugin/surface_other.go	os-file	linux
+plugin/surfaceconn_linux.go	import	golang.org/x/sys/unix
+plugin/surfaceconn_linux.go	os-file	linux
+tui/agents/agentserver.go	os-file	unix
+tui/agents/agentserver.go	syscall	Kill
+tui/agents/agentserver.go	syscall	SIGKILL
+tui/agents/agentserver.go	syscall	SIGTERM
+tui/agents/agentserver.go	syscall	SysProcAttr
+tui/agents/agentserver_other.go	os-file	unix
+tui/detach_other.go	os-file	unix
+tui/detach_other.go	syscall	SysProcAttr
+tui/detach_unix.go	os-file	unix
+tui/detach_unix.go	syscall	SysProcAttr
+tui/editorsocket_other.go	os-file	unix
+tui/editorsocket_unix.go	os-file	unix
+tui/editorsocket_unix.go	syscall	ECONNREFUSED
+tui/editorsocket_unix.go	syscall	Stat_t
+tui/editorsocket_unix.go	unix-socket	DialTimeout("unix")
+tui/editorsocket_unix.go	unix-socket	Listen("unix")
+tui/html.go	goos	runtime.GOOS
+tui/html.go	syscall	SysProcAttr
+tui/pluginsurface_linux.go	import	golang.org/x/sys/unix
+tui/pluginsurface_linux.go	os-file	linux
+tui/pluginsurface_other.go	os-file	linux
+tui/resume_other.go	os-file	unix
+tui/resume_unix.go	os-file	unix
+tui/resume_unix.go	syscall	SIGCONT

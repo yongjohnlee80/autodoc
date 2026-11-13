@@ -41,12 +41,15 @@ const (
 	cellInherit = "AUTODOC_BRIDGE_CELL_INHERIT"
 )
 
-func TestMain(m *testing.M) {
-	if os.Getenv(cellEnv) != "" {
+// the stand-in helper is one of this test binary's lives (fakemise_test.go's TestMain)
+func init() {
+	helperMains = append(helperMains, func() bool {
+		if os.Getenv(cellEnv) == "" {
+			return false
+		}
 		cellProcess()
-		return
-	}
-	os.Exit(m.Run())
+		return true
+	})
 }
 
 // cellProcess is a stand-in helper: it ignores SIGTERM if told to, starts its chain, and waits.

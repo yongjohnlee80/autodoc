@@ -9,11 +9,10 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
-	"github.com/yongjohnlee80/autodoc/internal/peercred"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // TestASocketInAFolderOthersCanWriteIsRefused: a server.socket in a folder its group or others can
@@ -21,6 +20,9 @@ import (
 // so nobody else can have bound the path first for a client to reach. The default-like 0700 folder
 // is served by every other daemon test here.
 func TestASocketInAFolderOthersCanWriteIsRefused(t *testing.T) {
+	if ipc.Network != "unix" { // the seam: a named pipe's access control is its DACL, which ipc's cells check
+		t.Skip("about a socket's folder: a named pipe lives in no folder")
+	}
 	for _, mode := range []os.FileMode{0o777 | os.ModeSticky, 0o770} {
 		dir := short(t)
 		shared := filepath.Join(dir, "shared")
@@ -30,12 +32,12 @@ func TestASocketInAFolderOthersCanWriteIsRefused(t *testing.T) {
 		if err := os.Chmod(shared, mode); err != nil {
 			t.Fatal(err)
 		}
-		sock := filepath.Join(shared, "a.sock")
+		sock := ipc.ScratchAddr(shared, "a.sock")
 		// bounded: a daemon that binds there anyway serves until ctx ends, and fails the cell then
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		err := runServe(ctx, writeConfig(t, sock, filepath.Join(dir, "state"), ""), io.Discard, testBuild, nil, "")
 		cancel()
-		var unsafe *peercred.UnsafeDirError
+		var unsafe *ipc.UnsafeDirError
 		if !errors.As(err, &unsafe) || unsafe.Dir != shared {
 			t.Fatalf("mode %v: %v, want an UnsafeDirError naming %s", mode, err, shared)
 		}
@@ -45,41 +47,18 @@ func TestASocketInAFolderOthersCanWriteIsRefused(t *testing.T) {
 	}
 }
 
-// TestTheSocketIsBornPrivate: the socket file is created with no group or other bits by the bind
-// itself, whatever the process's umask, not opened wider and narrowed by the chmod after it.
-func TestTheSocketIsBornPrivate(t *testing.T) {
-	old := syscall.Umask(0)
-	defer syscall.Umask(old)
-	sock := filepath.Join(short(t), "a.sock")
-	ln, err := listen(sock)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer ln.Close()
-	fi, err := os.Lstat(sock)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if perm := fi.Mode().Perm(); perm&0o077 != 0 {
-		t.Errorf("the socket as bound is %#o, want its owner's alone", perm)
-	}
-	if now := syscall.Umask(0); now != 0 {
-		t.Errorf("the bind left the umask %#o, want the process's own (0) back", now)
-	}
-}
-
 // TestTheDaemonServesOnlyItsUsersProcesses: the daemon closes, unanswered, a connection from
-// another user's process (played: peercred.PlayUser), and logs the refusal; the control, this
+// another user's process (played: ipc.PlayUser), and logs the refusal; the control, this
 // user's, is answered.
 func TestTheDaemonServesOnlyItsUsersProcesses(t *testing.T) {
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("no peer credentials on " + runtime.GOOS)
 	}
 	dir := short(t)
-	sock := filepath.Join(dir, "a.sock")
+	sock := ipc.ScratchAddr(dir, "a.sock")
 	d := start(t, writeConfig(t, sock, filepath.Join(dir, "state"), ""), sock)
 
-	restore := peercred.PlayUser(os.Getuid() + 1)
+	restore := ipc.PlayUser(os.Getuid() + 1)
 	defer restore()
 	c, err := net.Dial("unix", sock)
 	if err != nil {

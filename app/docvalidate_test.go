@@ -7,6 +7,8 @@ import (
 	"maps"
 	"path/filepath"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // TestDocValidateDiagnosesADiagramTheViewerCantDraw
@@ -16,7 +18,7 @@ import (
 // the same diagram with <br/> answers none.
 func TestDocValidateDiagnosesADiagramTheViewerCantDraw(t *testing.T) {
 	dir := short(t)
-	state, sock := filepath.Join(dir, "state"), filepath.Join(dir, "s.sock")
+	state, sock := filepath.Join(dir, "state"), ipc.ScratchAddr(dir, "s.sock")
 	kb := mustEval(t, t.TempDir())
 	cfg := writeConfig(t, sock, state, "", "kb="+kb)
 	start(t, cfg, sock)

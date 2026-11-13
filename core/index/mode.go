@@ -6,13 +6,13 @@ import (
 	"maps"
 	"net/url"
 	"path"
-	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/yongjohnlee80/golib/parse/markdown"
 	"github.com/yongjohnlee80/golib/search/chunk"
 
+	"github.com/yongjohnlee80/autodoc/core/paths"
 	"github.com/yongjohnlee80/autodoc/core/schema"
 )
 
@@ -159,7 +159,8 @@ func todoKey(store, id string) string { return todoPrefix + store + "/" + id }
 func taskID(p string) string { return strings.TrimSuffix(path.Base(p), ".md") }
 
 // externalPrefix starts the name of a link to a file outside the workspace: no document answers to
-// it, so it never resolves inside the index.
+// it, so it never resolves inside the index. The path after it, and a link's Target, are in the
+// slash form (core/paths): "/src/x.md", "C:/src/x.md" on Windows.
 const externalPrefix = "#file:"
 
 // storeRelations are a task's relations that only a store's documents make: "blocked" names other
@@ -167,12 +168,13 @@ const externalPrefix = "#file:"
 var storeRelations = []string{"blocked"}
 
 // varRelations reads the relations of file p, whose workspace's variables are vars and whose index
-// root is root (absolute; "" for none known). They are read as extractRelations reads them, except:
+// root is root (each spelling absolute; none for none known). They are read as extractRelations reads them, except:
 //   - a $NAME path resolves through vars: inside the workspace it is looked up by its workspace
 //     path, outside it is an external link, and an unknown or unset name is unresolved rather than
 //     read from the workspace root;
-//   - an absolute path is a workspace path, or an external link.
-func varRelations(doc *markdown.Document, p string, vars *Vars, root string) []DocLink {
+//   - an absolute path (core/paths' rule: "/x", and a drive's or a share's on Windows) is a
+//     workspace path, or an external link.
+func varRelations(doc *markdown.Document, p string, vars *Vars, root roots) []DocLink {
 	var out []DocLink
 	for _, r := range chunk.Relations(doc, RelationFields) {
 		ref := chunk.ParseRef(r.Raw)
@@ -184,14 +186,14 @@ func varRelations(doc *markdown.Document, p string, vars *Vars, root string) []D
 				out = append(out, unresolvedVar(r.Raw, ref, r.Field, true))
 				continue
 			}
-			abs = filepath.Join(v, ref.Target)
-		case ref.Form == chunk.RefPath && strings.HasPrefix(ref.Target, "/"):
-			abs = filepath.Clean(ref.Target)
+			abs = varPath(v, ref.Target)
+		case ref.Form == chunk.RefPath && paths.IsAbs(ref.Target):
+			abs = paths.Slash(ref.Target)
 		default:
 			out = append(out, relationsOf(p, r, ref)...)
 			continue
 		}
-		if rel, ok := inside(root, abs); ok {
+		if rel, ok := root.inside(abs); ok {
 			k := exactName(wikiName(rel))
 			out = append(out, DocLink{Raw: r.Raw, Name: k, Anchor: ref.Anchor, Kind: r.Field, Keys: []string{k}})
 			continue
@@ -214,7 +216,7 @@ func unresolvedVar(raw string, ref chunk.Ref, kind string, relation bool) DocLin
 
 // taskRelations reads the relations of file p, a task of store t, as varRelations does, and its
 // store's own: "blocked" names a task of the same store, by id.
-func taskRelations(doc *markdown.Document, p string, t *TodoStore, vars *Vars, root string) []DocLink {
+func taskRelations(doc *markdown.Document, p string, t *TodoStore, vars *Vars, root roots) []DocLink {
 	out := varRelations(doc, p, vars, root)
 	for _, r := range chunk.Relations(doc, storeRelations) {
 		id := strings.TrimSpace(r.Raw)
@@ -227,14 +229,54 @@ func taskRelations(doc *markdown.Document, p string, t *TodoStore, vars *Vars, r
 	return out
 }
 
-// inside is abs as a path under root ("" never holds it), slash-separated.
+// varPath is target, a $NAME ref's path, joined to v, its variable's value, in the slash form
+// (core/paths), whichever form v and target are written in.
+func varPath(v, target string) string { return paths.Join(paths.Slash(v), paths.Slash(target)) }
+
+// roots are the spellings of the workspace's root a ref is compared with
+// (docs/decisions/todos.md#a-root-is-compared-where-the-disk-says-it-is): where the root leads on
+// the disk, and the root as configured when that is another spelling (a symlink to it; on Windows a
+// short name or another case of a drive letter). A workspace's variables carry the first; a ref a
+// user wrote out by hand usually carries the second. A ref under either is the workspace's, each
+// compared as inside compares: exactly, by whole segments, never by resolving the ref itself, so a
+// ref spelled a third way is an external link. The longest spelling holding a ref decides its
+// path: with a root configured as a link that lies inside the folder it leads to (/real/kb/alias to
+// /real/kb), /real/kb/alias/x.md is x.md, the document it names, not alias/x.md.
+type roots []string
+
+// roots are o's root spellings, each once, the longest first.
+func (o options) roots() roots {
+	var r roots
+	for _, root := range []string{o.Canon, o.Root} {
+		if root = paths.Slash(root); root != "" && !slices.Contains(r, root) {
+			r = append(r, root)
+		}
+	}
+	slices.SortStableFunc(r, func(a, b string) int { return len(b) - len(a) })
+	return r
+}
+
+// inside is abs as a path under the longest of r's roots holding it, slash-separated.
+func (r roots) inside(abs string) (string, bool) {
+	for _, root := range r {
+		if rel, ok := inside(root, abs); ok {
+			return rel, true
+		}
+	}
+	return "", false
+}
+
+// inside is abs as a path under root ("" never holds it), slash-separated. Both are compared in the
+// slash form (core/paths), cleaned, by whole segments and exactly (never case-folded): a sibling
+// sharing root's prefix is outside, a name like "..x" under root inside, and another volume never
+// holds it.
 func inside(root, abs string) (string, bool) {
 	if root == "" {
 		return "", false
 	}
-	rel, err := filepath.Rel(root, abs)
-	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, "../") || filepath.IsAbs(rel) {
+	rel, ok := paths.Rel(paths.Slash(root), paths.Slash(abs))
+	if !ok || rel == "." {
 		return "", false
 	}
-	return filepath.ToSlash(rel), true
+	return rel, true
 }

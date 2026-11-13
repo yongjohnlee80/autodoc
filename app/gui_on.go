@@ -5,10 +5,13 @@ package app
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"github.com/yongjohnlee80/golib/gui"
+	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
+	"github.com/yongjohnlee80/autodoc/internal/proctree"
 	"github.com/yongjohnlee80/autodoc/tui"
 )
 
@@ -16,11 +19,16 @@ import (
 // The document's Editor is gui's Editor there (guidecl.Native): proportional text, and a Rendered
 // view of Markdown beside the Raw one. The terminal keeps tui's Editor for the same main.qml.
 // Gio needs the process's main thread for windows (macOS requires it), so gui.Main takes it and
-// ends the process when the UI quits: it never returns.
-func runGUI(ctx context.Context, o tui.LaunchOptions, owned []owner) error {
+// ends the process when the UI quits: it never returns. drawn, when set (a test's), is told once the
+// window has its first frame, with quit, which ends the UI as a quit does.
+func runGUI(ctx context.Context, o tui.LaunchOptions, drawn func(quit func()), owned []owner) error {
+	if proctree.ReleaseConsoleIfAlone() { // on Windows, a Start menu launch's console window goes
+		keepStartupErrors()
+	}
 	configureGUIPreferences()
 	gui.Main(func() error {
-		opts := append([]gui.Option{gui.WithTitle("AutoDoc")}, rendererOptions(tui.GUIRendererFile(o.ConfigPath))...)
+		var opts []gui.Option
+		o, opts = windowFor(o)
 		if o.DebugRecorder != nil {
 			// --debug: the window's input path records into the same file the TUI's
 			// trace does, but wrapped: the backend closes what it is given on window
@@ -30,6 +38,12 @@ func runGUI(ctx context.Context, o tui.LaunchOptions, owned []owner) error {
 		b := gui.NewBackend(opts...)
 		o.Backend, o.Fonts, o.FontFamilies, o.DefaultCellFont = b, b, gui.Families, gui.MonospaceFamily()
 		o.GUI = true
+		if drawn != nil {
+			var quit context.CancelFunc
+			ctx, quit = context.WithCancel(ctx)
+			defer quit()
+			o.Backend = &firstFrame{Backend: b, drawn: func() { drawn(quit) }}
+		}
 		// the note editor's Rendered view draws the open note's embeds (tui/embeds_gui.go): the
 		// host tells it which note is open, and its diagrams draw through one chain, as golib's
 		// renderer's do. Every other Editor keeps golib's MarkdownRenderer.
@@ -48,6 +62,44 @@ func runGUI(ctx context.Context, o tui.LaunchOptions, owned []owner) error {
 	return nil // not reached: gui.Main exits the process
 }
 
+// firstFrame is the window's backend, telling drawn once the UI has handed it its first frame (a
+// test's: runGUI wraps the window only when one asks). Every other method is the window's own.
+type firstFrame struct {
+	*gui.Backend
+	once  sync.Once
+	drawn func()
+}
+
+// Flush and FlushSized are the window's, telling drawn after the first frame either delivers (the
+// App hands a backend with FlushSized its frames there alone, as gui's has).
+func (f *firstFrame) Flush(diff []tuicore.CellUpdate) error {
+	return f.told(f.Backend.Flush(diff), diff)
+}
+
+func (f *firstFrame) FlushSized(size tuicore.Size, diff []tuicore.CellUpdate) error {
+	return f.told(f.Backend.FlushSized(size, diff), diff)
+}
+
+func (f *firstFrame) told(err error, diff []tuicore.CellUpdate) error {
+	if err == nil && len(diff) > 0 {
+		f.once.Do(f.drawn)
+	}
+	return err
+}
+
+// windowFor is how the window opens, read from the state directory's mirrors before the store can
+// be read: its title and renderer, and, when tui.gui.titlebar names AutoDoc's own, no frame of the
+// system's (gui.WithDecorations(false)) and o.TitleBar set, so the layout gets AutoDoc's bar. The
+// two go together: a window without the system's frame and without AutoDoc's bar would have no
+// title bar at all.
+func windowFor(o tui.LaunchOptions) (tui.LaunchOptions, []gui.Option) {
+	opts := append([]gui.Option{gui.WithTitle("AutoDoc")}, rendererOptions(tui.GUIRendererFile(o.ConfigPath))...)
+	if o.TitleBar = ownsTitleBar(tui.GUITitleBarFile(o.ConfigPath)); o.TitleBar {
+		opts = append(opts, gui.WithDecorations(false))
+	}
+	return o, opts
+}
+
 // rendererOptions are the window's renderer, chosen as it opens: Vulkan first where it can have it,
 // OpenGL where it can't (gui.WithZeroCopyFrames), unless tui.gui.renderer's mirror at path names
 // OpenGL (prefersVulkan).
@@ -56,4 +108,13 @@ func rendererOptions(path string) []gui.Option {
 		return []gui.Option{gui.WithZeroCopyFrames()}
 	}
 	return nil
+}
+
+// keepStartupErrors gives a program that has just given up its console somewhere to say why it
+// failed: from here its standard error is the startup log. With no log to be had, there is nowhere
+// left to report that, so it goes on: the GUI may still start.
+func keepStartupErrors() {
+	if f, err := openStartupLog(); err == nil {
+		proctree.SetStderr(f) // held open to the process's end: its last words are the point
+	}
 }

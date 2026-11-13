@@ -9,10 +9,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	guiwidget "github.com/yongjohnlee80/golib/gui/widget"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 )
 
 // TestTheGUIEditorsTabsAreTheBuffers: under --gui's style the editor's title bar has a tab for each
@@ -22,7 +23,7 @@ func TestTheGUIEditorsTabsAreTheBuffers(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n", "loooong-file-title-to-test-the-cut.md", "long\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
 	r.waitListed(t, 3)
-	strip := onLoop(r, func() *widget.TabStrip { return r.h.editor.(*guiwidget.Editor).Tabs() })
+	strip := onLoop(r, func() *widgetcore.TabStrip { return r.h.editor.(*guiwidget.Editor).Tabs() })
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
 	r.typeInEditor(t, "X")
@@ -45,7 +46,7 @@ func TestTheGUIEditorsTabsAreTheBuffers(t *testing.T) {
 	// the first buffer was the untitled draft, made the file a.md opened into
 	r.s.WaitFor(t, "the buffers as tabs", func(string) bool { return tabs() == "a.md [+]|*b.md" })
 
-	spans := onLoop(r, func() []widget.TabSpan { return strip.TabSpans() })
+	spans := onLoop(r, func() []widgetcore.TabSpan { return strip.TabSpans() })
 	if len(spans) != 4 {
 		t.Fatalf("spans %v: want two tabs, + and ≡", spans)
 	}
@@ -78,11 +79,11 @@ func TestTheGUITabsKeepOneWidth(t *testing.T) {
 	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
 	r.waitListed(t, 3)
 	r.s.Backend.InjectResize(220, 30)
-	strip := onLoop(r, func() *widget.TabStrip { return r.h.editor.(*guiwidget.Editor).Tabs() })
+	strip := onLoop(r, func() *widgetcore.TabStrip { return r.h.editor.(*guiwidget.Editor).Tabs() })
 	// the tabs' widths, told from the strip's other cells by place, not width: the row is
 	// [←] tab… [→] + ≡, and a tab the window cuts can be as narrow as an arrow
 	look := func(arrows bool) []int {
-		spans := onLoop(r, func() []widget.TabSpan { return strip.TabSpans() })
+		spans := onLoop(r, func() []widgetcore.TabSpan { return strip.TabSpans() })
 		lead, trail := 0, 2 // + ≡
 		if arrows {
 			lead, trail = 1, 3 // ←, and → + ≡
@@ -150,7 +151,7 @@ func TestLInTheGUIScrollsTheStripToTheTab(t *testing.T) {
 	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
 	r.waitListed(t, 3)
 	r.s.Backend.InjectResize(220, 30)
-	strip := onLoop(r, func() *widget.TabStrip { return r.h.editor.(*guiwidget.Editor).Tabs() })
+	strip := onLoop(r, func() *widgetcore.TabStrip { return r.h.editor.(*guiwidget.Editor).Tabs() })
 	for _, f := range long {
 		r.openByPicker(t, f)
 		r.waitFile(t, f)
@@ -175,7 +176,7 @@ func TestAGUITabsCloseButton(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
 	r.waitListed(t, 2)
-	strip := onLoop(r, func() *widget.TabStrip { return r.h.editor.(*guiwidget.Editor).Tabs() })
+	strip := onLoop(r, func() *widgetcore.TabStrip { return r.h.editor.(*guiwidget.Editor).Tabs() })
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
 	r.typeInEditor(t, "X")
@@ -190,10 +191,12 @@ func TestAGUITabsCloseButton(t *testing.T) {
 		})
 	}
 	pressX(1) // b.md's ×: clean, closed at once
-	r.s.WaitFor(t, "b.md closed", func(string) bool { return onLoop(r, func() bool { return r.h.bufferOf(fileRef{"kb", "b.md"}) == nil }) })
+	r.s.WaitFor(t, "b.md closed", func(string) bool {
+		return onLoop(r, func() bool { return r.h.bufferOf(feature.FileRef{WS: "kb", Path: "b.md"}) == nil })
+	})
 	pressX(0) // a.md's ×: modified, asked first
 	r.s.WaitForText(t, "unsaved file")
-	if onLoop(r, func() bool { return r.h.bufferOf(fileRef{"kb", "a.md"}) == nil }) {
+	if onLoop(r, func() bool { return r.h.bufferOf(feature.FileRef{WS: "kb", Path: "a.md"}) == nil }) {
 		t.Fatal("a.md, modified, closed without the question")
 	}
 }
@@ -205,7 +208,7 @@ func TestTheGUIEditorsTabsAreThereFromTheStart(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
 	r.ready(t)
-	strip := onLoop(r, func() *widget.TabStrip { return r.h.editor.(*guiwidget.Editor).Tabs() })
+	strip := onLoop(r, func() *widgetcore.TabStrip { return r.h.editor.(*guiwidget.Editor).Tabs() })
 	r.s.WaitFor(t, "the untitled page's tab, + and ≡", func(string) bool {
 		return onLoop(r, func() bool {
 			tabs := strip.Tabs()
@@ -215,10 +218,26 @@ func TestTheGUIEditorsTabsAreThereFromTheStart(t *testing.T) {
 	if title := r.source("App.fileTitle"); title != untitled {
 		t.Fatalf("the title says %q; the tab says %q", title, untitled)
 	}
-	menu := onLoop(r, func() widget.TabSpan { s := strip.TabSpans(); return s[len(s)-1] }) // ≡, last
+	menu := onLoop(r, func() widgetcore.TabSpan { s := strip.TabSpans(); return s[len(s)-1] }) // ≡, last
 	onLoop(r, func() bool {
 		return strip.HandleEvent(tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: menu.X, Y: 0})
 	})
 	r.s.WaitFor(t, "the strip's menu open", func(string) bool { return onLoop(r, strip.MenuOpen) })
-	wantLayoutAbove(t, "the untitled page's strip", onLoop(r, func() []widget.MenuItemModel { return r.h.bufferTabRows(strip.Active()) }), "buffer.tabs.goto", true)
+	wantLayoutAbove(t, "the untitled page's strip", onLoop(r, func() []widgetcore.MenuItemModel { return r.h.bufferTabRows(strip.Active()) }), "buffer.tabs.goto", true)
+}
+
+// TestTheGUIsShownTabStandsOutInEveryTheme: the window's title bar, three buffers open
+// (shownTabStandsOut).
+func TestTheGUIsShownTabStandsOutInEveryTheme(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n", "b.md", "b\n", "c.md", "c\n"}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
+	r.waitListed(t, 3)
+	r.s.Backend.InjectResize(160, 30)
+	shownTabStandsOut(t, r, r.labelOnScreen, "gui-buffer-tabs")
+}
+
+// tabStyleOptions are the options a cell of both builds runs with to have the buffers' tabs: under
+// the gui tag, --gui's style, the tabs on the window's title bar.
+func tabStyleOptions() []tuidecl.ProgramOption {
+	return []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}
 }

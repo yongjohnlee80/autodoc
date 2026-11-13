@@ -30,7 +30,7 @@ func embedsTUI(t *testing.T, theme string) (r *running, dir string) {
 		"sales.chart.json", embedsChart("Fruit sold", "Apples", "Pears"), "stock.csv", "Item,Qty\napple,3\npear,5\n", "big.csv", big,
 		"other.md", "# Other\n\nanother note\n")
 	d := startManagedIncluding(t, map[string]string{"kb": dir}, tableInclude)
-	h := newHost(NewSession(d.sock, nil), Options{})
+	h := newHost(NewSession(d.sock, nil), Options{seams: seamsFor(t)})
 	s := decltest.RunOn(t, tuicore.NewTestBackend(100, 70), h.attach, h.options(Options{})...)
 	t.Cleanup(h.cancel)
 	r = &running{h: h, s: s}
@@ -116,5 +116,48 @@ func TestANotesEmbedsAreDrawnInTheRenderedView(t *testing.T) {
 				return strings.Contains(sc, "Plums") && strings.Contains(sc, "Figs") && !strings.Contains(sc, "Apples")
 			})
 		})
+	}
+}
+
+// TestAnEmbeddedFileWrittenWhileItsNoteIsShownIsDrawnAnew (docs/decisions/editor.md#a-terminal-notes-rendered-view):
+// while a note is shown, the folders of the files it embeds are followed, so a file rewritten on
+// disk is drawn anew on the page with no switch, and a file it embeds that wasn't there is drawn
+// once it is written. Another note shown ends those follows.
+func TestAnEmbeddedFileWrittenWhileItsNoteIsShownIsDrawnAnew(t *testing.T) {
+	r, dir := embedsTUI(t, "sepia")
+	r.s.WaitFor(t, "the chart drawn", func(sc string) bool { return strings.Contains(sc, "Apples") })
+	chart := filepath.Join(dir, "sales.chart.json")
+	if err := os.WriteFile(chart, []byte(embedsChart("Fruit sold again", "Plums", "Figs")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	later := time.Now().Add(time.Minute) // a time of its own, whatever the file system's resolution
+	if err := os.Chtimes(chart, later, later); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitFor(t, "the rewritten chart drawn while its note is shown", func(sc string) bool {
+		return strings.Contains(sc, "Plums") && strings.Contains(sc, "Figs") && !strings.Contains(sc, "Apples")
+	})
+	if err := os.WriteFile(filepath.Join(dir, "gone.mmd"), []byte("flowchart LR\n  Heron --> Crane\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitFor(t, "the embedded file that wasn't there drawn once written", func(sc string) bool {
+		return strings.Contains(sc, "Heron") && strings.Contains(sc, "Crane")
+	})
+	follows := func() int {
+		return onLoop(r, func() int {
+			if w := r.h.watches[dir]; w != nil {
+				return len(w.follows)
+			}
+			return 0
+		})
+	}
+	if n := follows(); n == 0 {
+		t.Fatal("the shown note follows no folder of its embeds")
+	}
+	onLoop(r, func() bool { r.h.openPath("other.md"); return true })
+	r.waitFile(t, "other.md")
+	r.s.WaitForText(t, "another note")
+	if n := follows(); n != 0 {
+		t.Fatalf("another note shown, the first note's embeds are still followed (%d)", n)
 	}
 }

@@ -3,7 +3,7 @@
 Um **espaço de trabalho** é uma pasta que o AutoDoc indexa: os arquivos Markdown, de texto e YAML dela, com `.git` ignorado.
 
 - **Ctrl+W** (SPC w) troca de espaço de trabalho. No modo Inserção do editor Vim, Ctrl+W é do Vim e apaga uma palavra: aperte Esc antes.
-- **Gerenciar…** (SPC W) adiciona um (um nome e a pasta), renomeia, edita ou exclui. Excluir remove só o índice: os arquivos ficam.
+- **Gerenciar…** (SPC W) adiciona um (um nome e a pasta), renomeia, edita ou exclui. Excluir remove só o índice: os arquivos ficam. No Windows, a pasta de um espaço de trabalho que o AutoDoc está servindo não pode ser excluída nem renomeada: exclua antes o espaço de trabalho aqui.
 - `autodoc --ui <name>` abre aquele espaço de trabalho; sem nome, o último usado.
 
 **Um esquema** diz o que o frontmatter de um documento contém: os campos, os tipos deles e os valores que aceitam. Dê um ao espaço de trabalho em **Gerenciar… › Editar…**: indique o arquivo, sugerido `.autodoc/schema.yaml`.

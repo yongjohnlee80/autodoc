@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 	"unicode"
 
 	"github.com/yongjohnlee80/autodoc/core/mail"
+	"github.com/yongjohnlee80/autodoc/internal/usershell"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
@@ -87,11 +89,6 @@ func terminalLine(line string) error {
 // Unicode's overlays (ccc=1 has a few more in rare scripts); the stacked-marks rule bounds the rest.
 func overlay(r rune) bool { return (r >= 0x0334 && r <= 0x0338) || (r >= 0x20D0 && r <= 0x20F0) }
 
-// terminalCardArm is how long a terminal card shows before its Run counts: a card queued behind
-// another opens the moment that one is answered, Run in the same place on the same key, so a key
-// typed ahead or a double click could run a line unread. A Run sooner is a Don't run, and said.
-var terminalCardArm = 400 * time.Millisecond
-
 // maxCardFolderRunes bounds the folder the card names, so a long one never pushes the line off it.
 const maxCardFolderRunes = 48
 
@@ -156,13 +153,13 @@ func (h *Host) editorTerminalRun(ctx context.Context, req *golibrpc.Request) (an
 		}
 		dir := ""
 		if ws, ok := h.activeWorkspaceInfo(); ok {
-			dir = termDir(ws.root)
+			dir = termDir(h.seams.env, ws.root)
 		}
-		h.asker.askWhenFree(Question{ // behind an open card, never in its place
+		h.asker.AskWhenFree(feature.Question{ // behind an open card, never in its place
 			Title: h.trf("autodoc.question.editorterminal.let_the_agent_run_this_in_the_terminal", agent),
 			Text:  h.trf("autodoc.question.editorterminal.it_runs_in_a_new_tab_in", line, cutMiddle(dir, maxCardFolderRunes)),
 			Yes:   h.tr("autodoc.question.editorterminal.run"), No: h.tr("autodoc.question.editorterminal.dont_run"),
-			Arm: terminalCardArm,
+			Arm: h.seams.terminalCardArm,
 			OnTooSoon: func() {
 				early = true
 				h.notify(h.trf("autodoc.notice.editorterminal.not_run_answered_before_it_showed", agent))
@@ -212,17 +209,24 @@ func (h *Host) terminalRunExited(agent, line string, code int, mailed bool) {
 		return
 	}
 	subject, body := terminalExitBody(line, code)
-	h.crew.userSend(agent, mail.KindMessage, subject, body, func(err error) {
-		if err != nil && !errors.Is(err, errHandedOver) {
+	h.crew.UserSend(agent, mail.KindMessage, subject, body, func(err error) {
+		if err != nil && !errors.Is(err, agents.ErrHandedOver) {
 			h.notify(h.trf("autodoc.notice.editorterminal.the_exit_mail_to_the_agent_was_not_sent", agent, err.Error()))
 		}
 	})
 }
 
-// runFor starts line, as sh -c, in a new tab of the terminal panel named for agent, in dir, and
+// runFor starts line, run by the shell for command lines (internal/usershell: sh -c on Unix,
+// PowerShell on Windows), in a new tab of the terminal panel named for agent, in dir, and
 // gives it the keyboard so the user can type a passphrase; exited hears its code. The tab stays
 // after the command ends, so the user can read what it printed and close it.
 func (t *terminals) runFor(agent, line, dir string, exited func(int)) (string, error) {
+	program, args := usershell.Commands(t.c.Env()).Run(line)
+	return t.runProgramFor(agent, program, args, dir, exited)
+}
+
+// runProgramFor is runFor for a program and its arguments, through no shell.
+func (t *terminals) runProgramFor(agent, program string, args []string, dir string, exited func(int)) (string, error) {
 	panel, err := t.panel()
 	if err != nil {
 		return "", err
@@ -231,7 +235,7 @@ func (t *terminals) runFor(agent, line, dir string, exited func(int)) (string, e
 		t.c.Keep(t.c.CallView("terminal", "open"))
 	}
 	label := agentRunLabel(panel, agent)
-	id, err := panel.Add(label, TerminalConfig{Command: "/bin/sh", Args: []string{"-c", line}, Dir: dir, Exited: exited})
+	id, err := panel.Add(label, t.inOwnEnv(feature.TerminalConfig{Command: program, Args: args, Dir: dir, Exited: exited}))
 	if err != nil {
 		return "", err
 	}
@@ -244,7 +248,7 @@ func (t *terminals) runFor(agent, line, dir string, exited func(int)) (string, e
 
 // agentRunLabel names an agent's command tab: "<agent>: run", then "<agent>: run 2", …, the first
 // not on panel.
-func agentRunLabel(panel TerminalPanel, agent string) string {
+func agentRunLabel(panel feature.TerminalPanel, agent string) string {
 	taken := map[string]bool{}
 	for _, tab := range panel.Tabs() {
 		taken[tab.Label] = true

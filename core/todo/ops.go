@@ -75,11 +75,10 @@ func (m *Manager) writing(ctx context.Context, at At) (where, *store, error) {
 }
 
 func (m *Manager) locked(ctx context.Context, w where) (where, *store, error) {
-	st, err := m.open(ctx, w)
+	st, err := m.openLocked(ctx, w)
 	if err != nil {
 		return w, nil, err
 	}
-	st.mu.Lock()
 	if err := m.ready(ctx, st); err != nil {
 		st.mu.Unlock()
 		return w, nil, err

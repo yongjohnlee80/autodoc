@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,6 +19,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/internal/client"
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -41,7 +41,7 @@ func olderDaemon(t *testing.T, sock, storePath string, proto int64) (stopped cha
 	if err != nil {
 		t.Fatal(err)
 	}
-	ln, err := net.Listen("unix", sock)
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func restartOnce(t *testing.T, r restarter, cfgPath string) (string, error) {
 // its place on the same socket: once, and only after the old one is gone.
 func TestRestartReplacesAnOlderDaemon(t *testing.T) {
 	dir := short(t)
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	cfgPath := configSharing(t, sock, filepath.Join(dir, "state"), filepath.Join(dir, "data"))
 	stopped, declared := olderDaemon(t, sock, filepath.Join(dir, "data", config.StoreName), rpc.Protocol-1)
 	var spawns atomic.Int32
@@ -142,7 +142,7 @@ func TestRestartReplacesAnOlderDaemon(t *testing.T) {
 	if n := spawns.Load(); n != 1 {
 		t.Fatalf("%d daemons spawned, want one", n)
 	}
-	info, err := rpc.Probe(context.Background(), "unix", sock)
+	info, err := rpc.Probe(context.Background(), ipc.Network, sock)
 	if err != nil || info.Protocol != rpc.Protocol {
 		t.Errorf("after the restart the socket answers %+v (%v), want this build's protocol %d", info, err, rpc.Protocol)
 	}
@@ -152,10 +152,10 @@ func TestRestartReplacesAnOlderDaemon(t *testing.T) {
 // it and starts another: a new instance answers where the old one did.
 func TestRestartReplacesACurrentDaemon(t *testing.T) {
 	dir := short(t)
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	cfgPath := configSharing(t, sock, filepath.Join(dir, "state"), filepath.Join(dir, "data"))
 	old := start(t, cfgPath, sock)
-	before, err := rpc.Probe(context.Background(), "unix", sock)
+	before, err := rpc.Probe(context.Background(), ipc.Network, sock)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +176,7 @@ func TestRestartReplacesACurrentDaemon(t *testing.T) {
 	if _, err := restartOnce(t, r, cfgPath); err != nil {
 		t.Fatalf("--restart: %v", err)
 	}
-	after, err := rpc.Probe(context.Background(), "unix", sock)
+	after, err := rpc.Probe(context.Background(), ipc.Network, sock)
 	if err != nil {
 		t.Fatalf("nothing answers after the restart: %v", err)
 	}
@@ -188,7 +188,7 @@ func TestRestartReplacesACurrentDaemon(t *testing.T) {
 // TestRestartWithNothingServingStarts: with no daemon, a restart is a start.
 func TestRestartWithNothingServingStarts(t *testing.T) {
 	dir := short(t)
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	cfgPath := configSharing(t, sock, filepath.Join(dir, "state"), filepath.Join(dir, "data"))
 	var spawns atomic.Int32
 	var fresh *daemon
@@ -206,9 +206,9 @@ func TestRestartWithNothingServingStarts(t *testing.T) {
 // neither stopped nor replaced: the restart refuses with the store mismatch, as --ensure does.
 func TestRestartLeavesAnotherStoresDaemonAlone(t *testing.T) {
 	dir := short(t)
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	start(t, configSharing(t, sock, filepath.Join(dir, "state-a"), filepath.Join(dir, "data-a")), sock)
-	before, err := rpc.Probe(context.Background(), "unix", sock)
+	before, err := rpc.Probe(context.Background(), ipc.Network, sock)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +222,7 @@ func TestRestartLeavesAnotherStoresDaemonAlone(t *testing.T) {
 	if !errors.As(err, &mm) {
 		t.Errorf("--restart over another store's daemon: %v, want a store mismatch", err)
 	}
-	after, perr := rpc.Probe(context.Background(), "unix", sock)
+	after, perr := rpc.Probe(context.Background(), ipc.Network, sock)
 	if perr != nil || after.Instance != before.Instance {
 		t.Errorf("another store's daemon was disturbed: %+v (%v)", after, perr)
 	}
@@ -232,7 +232,7 @@ func TestRestartLeavesAnotherStoresDaemonAlone(t *testing.T) {
 // time, the restart fails saying so, and starts nothing into a store lease still held.
 func TestRestartStartsNothingWhileTheOldDaemonLives(t *testing.T) {
 	dir := short(t)
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	cfgPath := configSharing(t, sock, filepath.Join(dir, "state"), filepath.Join(dir, "data"))
 	olderDaemon(t, sock, filepath.Join(dir, "data", config.StoreName), rpc.Protocol-1)
 	r := restarter{

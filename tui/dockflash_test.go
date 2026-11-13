@@ -6,15 +6,14 @@ import (
 	"testing"
 )
 
-// flashes records each panel's flash steps (flashed), as the loop takes them, for the test's life.
+// flashes records each panel's flash steps (the seams' flashed), as r's loop takes them.
 func flashes(t *testing.T, r *running) func(id string) []bool {
 	t.Helper()
 	got := map[string][]bool{}
 	onLoop(r, func() bool {
-		flashed = func(id string, lit bool) { got[id] = append(got[id], lit) }
+		r.h.seams.flashed = func(id string, lit bool) { got[id] = append(got[id], lit) }
 		return true
 	})
-	t.Cleanup(func() { onLoop(r, func() bool { flashed = nil; return true }) })
 	return func(id string) []bool { return onLoop(r, func() []bool { return slices.Clone(got[id]) }) }
 }
 
@@ -104,8 +103,8 @@ func (r *running) dockFlashRow(key string) bool {
 // The terminal's x with no shell running closes it at once, asking nothing, every tab already closing
 // left to close.
 func TestTheTerminalsXWithNoShellRunningClosesAtOnce(t *testing.T) {
-	_, r := runShellTUI(t, nil)
-	catInTheTerminal(t, r)
+	_, r := runLineShellTUI(t, nil)
+	shellInTheTerminal(t, r)
 	onLoop(r, func() bool {
 		panel, err := r.h.terminals.panel()
 		if err != nil {

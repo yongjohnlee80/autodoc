@@ -3,6 +3,7 @@ package install_test
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/internal/install"
@@ -66,18 +67,23 @@ func TestNoRecordIsAnotherInstall(t *testing.T) {
 	}
 }
 
-// TestThePathFollowsXDGStateHome: $XDG_STATE_HOME when it's absolute, else ~/.local/state, as the
-// scripts resolve it.
-func TestThePathFollowsXDGStateHome(t *testing.T) {
-	t.Setenv("HOME", "/home/u")
-	t.Setenv("XDG_STATE_HOME", "/xdg/state")
-	if p, err := install.Path(); err != nil || p != "/xdg/state/autodoc/install.toml" {
-		t.Fatalf("XDG_STATE_HOME set: %q, %v", p, err)
-	}
-	for _, v := range []string{"", "relative/state"} {
-		t.Setenv("XDG_STATE_HOME", v)
-		if p, err := install.Path(); err != nil || p != "/home/u/.local/state/autodoc/install.toml" {
-			t.Fatalf("XDG_STATE_HOME %q: %q, %v", v, p, err)
+// The update script's own extension picks its program, whichever OS's path the record holds.
+func TestAnUpdateScriptRunsInItsOwnProgram(t *testing.T) {
+	const ps = "powershell.exe"
+	flags := []string{"-NoProfile", "-ExecutionPolicy", "Bypass", "-File"}
+	for _, c := range []struct {
+		update, program string
+		args            []string
+	}{
+		{"/home/u/.local/state/autodoc/update.sh", "/bin/sh", []string{"/home/u/.local/state/autodoc/update.sh"}},
+		{`C:\Users\A B\AppData\Local\autodoc\update.ps1`, ps, append(slices.Clone(flags), `C:\Users\A B\AppData\Local\autodoc\update.ps1`)},
+		{`C:\autodoc\UPDATE.PS1`, ps, append(slices.Clone(flags), `C:\autodoc\UPDATE.PS1`)},
+		{`/odd.ps1/update.sh`, "/bin/sh", []string{`/odd.ps1/update.sh`}},
+		{`C:\odd.ps1\update`, "/bin/sh", []string{`C:\odd.ps1\update`}},
+	} {
+		program, args := install.Record{Update: c.update}.UpdateCommand()
+		if program != c.program || !slices.Equal(args, c.args) {
+			t.Errorf("UpdateCommand of %q = %q %q; want %q %q", c.update, program, args, c.program, c.args)
 		}
 	}
 }

@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -12,19 +11,6 @@ import (
 
 // sysRoot is where /sys and /proc are read from: "/", or a fake tree in a test.
 var sysRoot = "/"
-
-// smi runs nvidia-smi with args and answers its output, or not ok when it isn't on PATH or fails
-// within probeTimeout (a variable, so a test can stand in for it).
-var smi = func(ctx context.Context, args ...string) (string, bool) {
-	path, err := exec.LookPath("nvidia-smi")
-	if err != nil {
-		return "", false
-	}
-	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, path, args...).Output()
-	return string(out), err == nil
-}
 
 // pciVendors are the PCI vendor ids sysfs names a display device's vendor by.
 var pciVendors = map[string]string{"0x10de": VendorNVIDIA, "0x1002": VendorAMD, "0x8086": VendorIntel}
@@ -52,15 +38,8 @@ func readGPU(ctx context.Context) GPU {
 		}
 	}
 	if g.Vendor == VendorNVIDIA {
-		if out, ok := smi(ctx, "--query-gpu=name,memory.total,compute_cap", "--format=csv,noheader,nounits"); ok {
-			first, _, _ := strings.Cut(strings.TrimSpace(out), "\n") // the first GPU
-			if f := strings.Split(first, ","); len(f) == 3 {
-				g.Name = strings.TrimSpace(f[0])
-				if mib, err := strconv.ParseInt(strings.TrimSpace(f[1]), 10, 64); err == nil {
-					g.VRAM = mib << 20
-				}
-				g.Compute = strings.TrimSpace(f[2])
-			}
+		if n, ok := nvidiaGPU(ctx); ok {
+			g = n
 		}
 	}
 	return g

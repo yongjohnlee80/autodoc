@@ -2,12 +2,13 @@ package tui
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // restarted is the TUI on a daemon at a socket of its own, and a way to stop that daemon and start
@@ -21,7 +22,7 @@ type restarted struct {
 
 func onARestartableDaemon(t *testing.T, notes map[string][]string) *restarted {
 	t.Helper()
-	sock := filepath.Join(shortDir(t), "s.sock")
+	sock := ipc.ScratchAddr(shortDir(t), "s.sock")
 	x := &restarted{sock: sock, d: startDaemonWith(t, sock, notes, daemonOpts{version: "v-1"})}
 	sess := NewSession(sock, nil)
 	sess.SetBeforeCall(func(method string, _ []any) {

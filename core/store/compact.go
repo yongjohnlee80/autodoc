@@ -3,11 +3,13 @@ package store
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	"github.com/yongjohnlee80/golib/errs"
+
+	"github.com/yongjohnlee80/autodoc/internal/diskspace"
 )
 
 // COMPACTING (docs/decisions/store.md#the-store-compacts) — SQLite puts the pages a delete frees on
@@ -79,13 +81,14 @@ type Compaction struct {
 // (core/hostprobe).
 func FreeSpace(dir string) (int64, error) { return freeSpace(dir) }
 
-// freeSpace is FreeSpace's reading (a variable, so a test can say there is none).
+// freeSpace is FreeSpace's reading (a variable, so a test can say there is none), through
+// internal/diskspace.
 var freeSpace = func(dir string) (int64, error) {
-	var st syscall.Statfs_t
-	if err := syscall.Statfs(dir, &st); err != nil {
+	n, err := diskspace.Free(dir)
+	if err != nil {
 		return 0, err
 	}
-	return int64(st.Bavail) * int64(st.Bsize), nil
+	return int64(min(n, math.MaxInt64)), nil
 }
 
 // FileSize is the store's file's size in bytes, its write-ahead log aside.

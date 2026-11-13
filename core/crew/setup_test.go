@@ -351,18 +351,27 @@ func TestSetupForRefusesADataDirThatIsntAbsolute(t *testing.T) {
 	}
 }
 
-// TestSetupForClaudeTakesTheCrewMCPServer: a Claude agent given the crew's MCP server gets it on its
-// command line on both hosts (--mcp-config, the server's command and args, no env of its own), never
+// TestSetupForClaudeTakesTheCrewMCPServer: a Claude agent given the crew's MCP server gets it on both
+// hosts as a file of its own folder (ClaudeMCPConfig: the server's command and args, no env of its
+// own), named on its command line (--mcp-config) as its working folder reaches it (its bare name for
+// a window's agent, which works in that folder; its absolute path for Neovim's), never
 // --strict-mcp-config (which would take the user's own servers away), exactly its tools allowed by
 // their mcp__<server>__<tool> rules and no shell rule for its mail (least privilege; Neovim's
 // --settings carries them), and its mail via MCP; without servers it keeps the guide's commands
-// allowed (P6's), its mail via the CLI.
+// allowed (P6's), its mail via the CLI; and without a folder of its own, the same, with a notice.
 func TestSetupForClaudeTakesTheCrewMCPServer(t *testing.T) {
 	full := claudeOnPath(t, everyClaudeEvent...)
 	servers := []crew.MCPServer{{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"}, Tools: []string{"mail_receive", "mail_ack"}}}
 	rules := []string{"Bash(autodoc --contracts:*)", "mcp__autodoc__mail_receive", "mcp__autodoc__mail_ack"}
 	for _, host := range []string{crew.HostWindow, crew.HostNvim} {
-		in := crew.SetupInput{Kind: crew.KindClaude, Host: host, Autodoc: "a", Env: map[string]string{"PATH": full}, Dir: t.TempDir(), DataDir: t.TempDir(), Servers: servers}
+		// a window's agent works in its own folder (here spelled another way: the rule compares paths);
+		// Neovim's in the user's project
+		agent, dir := t.TempDir(), t.TempDir()
+		want := filepath.Join(agent, crew.ClaudeMCPConfig)
+		if host == crew.HostWindow {
+			dir, want = agent+string(filepath.Separator)+".", crew.ClaudeMCPConfig
+		}
+		in := crew.SetupInput{Kind: crew.KindClaude, Host: host, Autodoc: "a", Env: map[string]string{"PATH": full}, Dir: dir, DataDir: t.TempDir(), AgentDir: agent, Servers: servers}
 		s, err := crew.SetupFor(in, "")
 		if err != nil {
 			t.Fatal(err)
@@ -371,11 +380,23 @@ func TestSetupForClaudeTakesTheCrewMCPServer(t *testing.T) {
 		if i < 0 || i+1 >= len(s.Argv) || slices.Contains(s.Argv, "--strict-mcp-config") {
 			t.Fatalf("%s: argv %q, want --mcp-config and never --strict-mcp-config", host, s.Argv)
 		}
+		// the argument names the file as the agent's working folder reaches it, never the JSON: its
+		// bare name in its own folder (no folder name reaches a shell), else its absolute path; and the
+		// file is the folder's own, never its .mcp.json
+		if s.Argv[i+1] != want || crew.ClaudeMCPConfig == ".mcp.json" {
+			t.Errorf("%s: --mcp-config %q, want %q", host, s.Argv[i+1], want)
+		}
+		if len(s.FolderFiles) != 1 || s.FolderFiles[0].Path != crew.ClaudeMCPConfig {
+			t.Fatalf("%s: folder files %+v, want the MCP config alone", host, s.FolderFiles)
+		}
 		var cfg struct {
 			Servers map[string]map[string]any `json:"mcpServers"`
 		}
-		if err := json.Unmarshal([]byte(s.Argv[i+1]), &cfg); err != nil || len(cfg.Servers) != 1 || cfg.Servers["autodoc"]["command"] != "/x/autodoc" || cfg.Servers["autodoc"]["env"] != nil {
-			t.Errorf("%s: --mcp-config %s (%v), want the autodoc server's command, args, and no env", host, s.Argv[i+1], err)
+		err = json.Unmarshal([]byte(s.FolderFiles[0].Content), &cfg)
+		args, _ := cfg.Servers["autodoc"]["args"].([]any)
+		if err != nil || len(cfg.Servers) != 1 || cfg.Servers["autodoc"]["command"] != "/x/autodoc" ||
+			!slices.Equal(args, []any{"crew", "mcp"}) || cfg.Servers["autodoc"]["env"] != nil {
+			t.Errorf("%s: the MCP config %s (%v), want the autodoc server's command, args, and no env", host, s.FolderFiles[0].Content, err)
 		}
 		if !slices.Equal(s.Allow, rules) { // least privilege: its tools and the read-only contracts, no shell rule for its mail
 			t.Errorf("%s: Allow %q, want exactly %q", host, s.Allow, rules)
@@ -392,10 +413,24 @@ func TestSetupForClaudeTakesTheCrewMCPServer(t *testing.T) {
 		if s.MailVia != crew.MailViaMCP {
 			t.Errorf("%s: mail via %v, want MCP", host, s.MailVia)
 		}
-		in.Servers = nil
-		without, err := crew.SetupFor(in, "")
-		if err != nil || slices.Contains(without.Argv, "--mcp-config") || without.MailVia != crew.MailViaCLI || !slices.Equal(without.Allow, crew.ClaudeAllow()) {
-			t.Errorf("%s without servers: %+v %v, want no MCP, the guide's commands allowed (P6's), and mail via the CLI", host, without, err)
+		for _, c := range []struct {
+			name   string
+			change func(*crew.SetupInput)
+			notice bool
+		}{
+			{"without servers", func(in *crew.SetupInput) { in.Servers = nil }, false},
+			{"without a folder of its own", func(in *crew.SetupInput) { in.AgentDir = "" }, true},
+			{"with a relative folder", func(in *crew.SetupInput) { in.AgentDir = "agent" }, true},
+		} {
+			in := in
+			c.change(&in)
+			without, err := crew.SetupFor(in, "")
+			if err != nil || slices.Contains(without.Argv, "--mcp-config") || len(without.FolderFiles) != 0 || without.MailVia != crew.MailViaCLI || !slices.Equal(without.Allow, crew.ClaudeAllow()) {
+				t.Errorf("%s %s: %+v %v, want no MCP, the guide's commands allowed (P6's), and mail via the CLI", host, c.name, without, err)
+			}
+			if said := slices.ContainsFunc(without.Notices, func(n string) bool { return strings.Contains(n, "own folder") }); said != c.notice {
+				t.Errorf("%s %s: notices %q, want the folder's notice %v", host, c.name, without.Notices, c.notice)
+			}
 		}
 	}
 }
@@ -664,6 +699,41 @@ func TestSetupForCodexWithNoFolderStaysOffTheSharedDaemon(t *testing.T) {
 	}
 }
 
+// TestSetupForCodexOnAHostWithNoAgentServer: a host that can't run an agent's own server
+// (NoAgentServer: the window on a system without process groups) gets no server for a Codex agent
+// even with a folder of its own: it starts as one with no folder for its server does (--no-daemon
+// where Codex takes it, then no step; before the flag, the step), on the CLI's mail, and the setup
+// says, once, why crew mail can't wake it and that the crew MCP server needs the app-server.
+func TestSetupForCodexOnAHostWithNoAgentServer(t *testing.T) {
+	newer := codexOnPath(t, codexNewerHelp)
+	server := []crew.MCPServer{{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"}}}
+	s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostWindow, Env: map[string]string{"PATH": newer}, Dir: t.TempDir(),
+		AgentDir: t.TempDir(), Servers: server, NoAgentServer: true}, "")
+	if err != nil || !slices.Equal(s.Argv, []string{"--no-daemon"}) || len(s.Server) != 0 || s.ServerSocket != "" || len(s.After) != 0 ||
+		s.MailVia != crew.MailViaCLI || s.Env[crew.EnvCodexServer] != "" {
+		t.Fatalf("no agent server: %+v %v; want --no-daemon, no server, no step, the CLI's mail", s, err)
+	}
+	said := func(text string) int {
+		return len(slices.DeleteFunc(slices.Clone(s.Notices), func(n string) bool { return !strings.Contains(n, text) }))
+	}
+	if said("this system can't run an app-server of the agent's own for Codex, so crew mail can't wake it") != 1 ||
+		said("needs the agent's own app-server, which this system can't run") != 1 {
+		t.Fatalf("no agent server: notices %q; want why it can't be woken and why its MCP server isn't given, each once", s.Notices)
+	}
+	older := codexOnPath(t, codexOlderHelp)
+	s, err = crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostWindow, Env: map[string]string{"PATH": older}, Dir: t.TempDir(),
+		AgentDir: t.TempDir(), NoAgentServer: true}, "")
+	if err != nil || len(s.Argv) != 0 || len(s.Server) != 0 || len(s.After) != 1 || s.After[0][2] != "--codex-here" {
+		t.Fatalf("no agent server, a Codex without --no-daemon: %+v %v; want no flag, no server, the registration step", s, err)
+	}
+	// a Codex that can't be read is refused with this host's remedy: a folder of its own changes nothing here
+	_, err = crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostWindow, Env: map[string]string{"PATH": t.TempDir()}, Dir: t.TempDir(),
+		AgentDir: t.TempDir(), NoAgentServer: true}, "")
+	if err == nil || !strings.Contains(err.Error(), "start it again once Codex answers") || strings.Contains(err.Error(), "folder of its own, or") {
+		t.Fatalf("no agent server, no Codex to read: %v; want it refused, the remedy this host's (start it again), not a folder of its own", err)
+	}
+}
+
 // The --help lines of a Codex that takes --no-daemon, and of one before it.
 const (
 	codexNewerHelp = "      --no-daemon   Run without the shared background server"
@@ -825,5 +895,65 @@ func TestSetupForAClaudeWrapperOfAnotherName(t *testing.T) {
 	}
 	if !s.Prompts || len(s.Notices) != 0 || len(s.Argv) != 2 || s.Argv[0] != "--settings" || !strings.Contains(s.Argv[1], "PermissionRequest") {
 		t.Fatalf("claude_tui.sh's setup: prompts %v, notices %q, argv %q; want --settings naming PermissionRequest, prompts, no notice", s.Prompts, s.Notices, s.Argv)
+	}
+}
+
+// TestSetupForJunieGivesItsMailAsMCPTools: a Junie agent's setup writes the crew MCP servers' config,
+// mcp.json, into a folder of the agent's own, and adds that folder on its command line with
+// --mcp-location; Junie's own default locations stay on, and nothing of the user's is written. Its
+// mail is then MCP; its prompts are unreported (Junie has no reporter), nothing goes in its env, and
+// a notice says a tool call may ask the user. Without servers it keeps its mail as commands, with no
+// notice; with servers and no folder, as commands with a notice.
+func TestSetupForJunieGivesItsMailAsMCPTools(t *testing.T) {
+	servers := []crew.MCPServer{{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"}, Tools: []string{"mail_receive", "mail_ack"}}}
+	for _, host := range []string{crew.HostWindow, crew.HostNvim} {
+		s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindJunie, Host: host, AgentDir: "/a", Dir: "/p", Servers: servers,
+			Env: map[string]string{"PATH": "/x", "SECRET": "s3"}}, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(s.FolderFiles) != 1 || s.FolderFiles[0].Path != ".junie-crew/mcp/mcp.json" || crew.JunieMCPConfig != ".junie-crew/mcp/mcp.json" {
+			t.Fatalf("%s: folder files %+v, want .junie-crew/mcp/mcp.json alone", host, s.FolderFiles)
+		}
+		var cfg map[string]map[string]struct {
+			Command string            `json:"command"`
+			Args    []string          `json:"args"`
+			Env     map[string]string `json:"env"`
+		}
+		if err := json.Unmarshal([]byte(s.FolderFiles[0].Content), &cfg); err != nil {
+			t.Fatal(err)
+		}
+		if a, ok := cfg["mcpServers"]["autodoc"]; !ok || a.Command != "/x/autodoc" || !slices.Equal(a.Args, []string{"crew", "mcp"}) ||
+			strings.Contains(s.FolderFiles[0].Content, `"env"`) {
+			t.Errorf("%s: mcp.json %s, want the server's command and args, and no env (it inherits the agent's)", host, s.FolderFiles[0].Content)
+		}
+		want := []string{"--mcp-location", filepath.Join("/a", ".junie-crew", "mcp")}
+		if !slices.Equal(s.Argv, want) {
+			t.Errorf("%s: argv %q, want %q: the folder added, Junie's default locations left on", host, s.Argv, want)
+		}
+		if slices.Contains(s.Argv, "--mcp-default-locations") || strings.Contains(strings.Join(s.Argv, " "), "s3") {
+			t.Errorf("%s: argv %q: the user's own locations must stay on, and the profile's env must not appear", host, s.Argv)
+		}
+		if s.MailVia != crew.MailViaMCP || s.Prompts || len(s.Env) != 0 || len(s.Allow) != 0 {
+			t.Errorf("%s: mail %v, prompts %v, env %v, allow %q: want MCP, unreported, no env, no rule written", host, s.MailVia, s.Prompts, s.Env, s.Allow)
+		}
+		if len(s.Notices) != 1 || !strings.Contains(s.Notices[0], "allowlist") {
+			t.Errorf("%s: notices %q, want the one saying a tool call may ask", host, s.Notices)
+		}
+	}
+	// no servers (a daemon without them): its mail stays commands, and nothing is said
+	s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindJunie, Host: crew.HostNvim, AgentDir: "/a"}, "")
+	if err != nil || s.MailVia == crew.MailViaMCP || len(s.FolderFiles) != 0 || len(s.Argv) != 0 || len(s.Notices) != 0 {
+		t.Errorf("no servers: %+v %v, want the commands and nothing else", s, err)
+	}
+	// servers but no folder of its own: commands, and a notice why
+	s, err = crew.SetupFor(crew.SetupInput{Kind: crew.KindJunie, Host: crew.HostNvim, Servers: servers}, "")
+	if err != nil || s.MailVia == crew.MailViaMCP || len(s.FolderFiles) != 0 || len(s.Argv) != 0 || len(s.Notices) != 1 {
+		t.Errorf("no folder: %+v %v, want the commands and one notice", s, err)
+	}
+	// its guide in the MCP form names the tools and, with no waker for Junie, says its host tells it
+	if g := crew.GuideOfVia(crew.KindJunie, crew.MailViaMCP).Markdown; !strings.Contains(g, "`mail_receive`") || !strings.Contains(g, "no waker yet") ||
+		strings.Contains(g, "autodoc mail receive") {
+		t.Errorf("Junie's MCP guide:\n%s\nwant the tools, the no-waker step, and no mail command", g)
 	}
 }

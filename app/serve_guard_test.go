@@ -14,6 +14,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/fsbounds"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // TestAGuardThatCannotBeBuiltStopsTheStart: a daemon whose guard cannot be built (a relative path
@@ -24,7 +25,7 @@ func TestAGuardThatCannotBeBuiltStopsTheStart(t *testing.T) {
 	defer func(f func(...string) (*fsbounds.Guard, error)) { newGuard = f }(newGuard)
 	newGuard = func(...string) (*fsbounds.Guard, error) { return nil, failed }
 	dir := short(t)
-	sock := filepath.Join(dir, "a.sock")
+	sock := ipc.ScratchAddr(dir, "a.sock")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute) // a daemon that serves anyway stops here
 	defer cancel()
 	err := runServe(ctx, writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+t.TempDir()), io.Discard, testBuild, nil, "")
@@ -51,13 +52,19 @@ func TestTheDiskOutsideEveryWorkspaceRefusesABoundedCall(t *testing.T) {
 	if err := d.openFiles(); err != nil {
 		t.Fatal(err)
 	}
-	name := strings.TrimPrefix(p, "/") // as rpc names a file on the disk (its root is "/")
-	if _, err := d.files.Read(context.Background(), name); err != nil {
+	// as rpc names a file on its volume's disk: "/" on Unix, the drive's root on Windows
+	volume := filepath.VolumeName(p)
+	disk, err := d.files.For(volume)
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := filepath.ToSlash(strings.TrimPrefix(p[len(volume):], string(filepath.Separator)))
+	if _, err := disk.Read(context.Background(), name); err != nil {
 		t.Fatalf("the user's read: %v", err)
 	}
 	for _, within := range []string{fsbounds.AnyWorkspace, "kb"} {
 		ctx := fsbounds.With(context.Background(), fsbounds.Bounds{Within: within})
-		if _, err := d.files.Read(ctx, name); !errors.Is(err, fsbounds.ErrRefused) {
+		if _, err := disk.Read(ctx, name); !errors.Is(err, fsbounds.ErrRefused) {
 			t.Errorf("a read bounded within %q of the disk outside every workspace: %v, want refused", within, err)
 		}
 	}

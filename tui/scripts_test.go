@@ -7,14 +7,15 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/script"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // ownCore is a bare editor core with AutoDoc's own Lua commands loaded.
-func ownCore(t *testing.T, text string) *widget.EditorCore {
+func ownCore(t *testing.T, text string) *editor.EditorCore {
 	t.Helper()
-	core := widget.NewEditorCore(widget.CoreInitialText(text))
+	core := editor.NewEditorCore(editor.CoreInitialText(text))
 	e := script.New(core, script.WithGlobal("autodoc"))
 	t.Cleanup(e.Close)
 	if errs := e.LoadDir(ownScripts, "lua"); len(errs) > 0 {
@@ -41,7 +42,7 @@ func TestTableMakesTheMarkdownTable(t *testing.T) {
 	if got := core.Value(); got != want {
 		t.Fatalf("table 3 4:\n%s\nwant:\n%s", got, want)
 	}
-	if got := core.Cursor(); got != (widget.TextPos{Line: 0, Col: 2}) {
+	if got := core.Cursor(); got != (editor.TextPos{Line: 0, Col: 2}) {
 		t.Fatalf("the cursor is at %v, want the first header cell", got)
 	}
 	core.HandleKey(tuicore.KeyEvent{Code: 'u', Text: "u"})
@@ -164,7 +165,7 @@ end }
 // from outside ':' edits the attached editor.
 func TestAutodocRunRunsTheCatalog(t *testing.T) {
 	_, r := luaTUI(t, "a\n", map[string]string{"run.lua": runit})
-	if e := onLoop(r, func() *Entry { return r.h.cat.lookup("lua.mark") }); e == nil || e.Source != SourceLua || e.Title != "mark the page" || e.Owner != "run.lua" {
+	if e := onLoop(r, func() *feature.Entry { return r.h.cat.Lookup("lua.mark") }); e == nil || e.Source != feature.SourceLua || e.Title != "mark the page" || e.Owner != "run.lua" {
 		t.Fatalf("the Lua command's entry: %+v", e)
 	}
 	for line, want := range map[string]string{
@@ -179,14 +180,14 @@ func TestAutodocRunRunsTheCatalog(t *testing.T) {
 	}
 	r.waitPage(t, "<3 4")
 	// a Lua entry run as a key or a plugin runs it, off the prompt: the attached editor
-	if err := onLoop(r, func() error { return r.h.cat.run("lua.mark", []string{"by", "id"}) }); err != nil {
+	if err := onLoop(r, func() error { return r.h.cat.Run("lua.mark", []string{"by", "id"}) }); err != nil {
 		t.Fatal(err)
 	}
 	r.waitPage(t, "<by id")
 	// a built-in, then a feature's (each takes the keyboard, so runit is run by its id)
 	// the todos' panel opens at the right, beside the explorer
 	for _, c := range []struct{ id, want string }{{"explorer.toggle", "┌ explorer"}, {"todos.open", "┌ todos"}} {
-		if err := onLoop(r, func() error { return r.h.cat.run("lua.runit", []string{c.id}) }); err != nil {
+		if err := onLoop(r, func() error { return r.h.cat.Run("lua.runit", []string{c.id}) }); err != nil {
 			t.Fatal(err)
 		}
 		r.s.WaitForText(t, c.want)
@@ -203,8 +204,7 @@ func (r *running) waitPage(t *testing.T, want string) {
 // a Lua find replaces :find and leaves the page's find runnable by its id; a Lua term takes :term
 // alone, and :terminal still opens the terminal. A Lua id outside lua.* does not load.
 func TestALuaCommandTakesOnlyTheNameItAsksFor(t *testing.T) {
-	t.Setenv("SHELL", "/bin/sh")
-	t.Setenv("HOME", t.TempDir())
+	tuneEnv(t, "SHELL=/bin/sh", "HOME="+t.TempDir())
 	_, r := luaTUI(t, "one\ntwo\n", map[string]string{"over.lua": `
 autodoc.command{ name = "find", run = function(ed, args, line) ed:insert("lua find " .. line .. ";") end }
 autodoc.command{ name = "term", run = function(ed) ed:insert("lua term;") end }
@@ -220,7 +220,7 @@ autodoc.command{ name = "term", run = function(ed) ed:insert("lua term;") end }
 	if r.termShown() {
 		t.Fatal(":term opened the terminal")
 	}
-	if err := onLoop(r, func() error { return r.h.cat.run("find.term", []string{"two"}) }); err != nil {
+	if err := onLoop(r, func() error { return r.h.cat.Run("find.term", []string{"two"}) }); err != nil {
 		t.Fatal(err)
 	}
 	r.s.WaitForText(t, `finding "two"`)

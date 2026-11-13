@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 
 	"github.com/yongjohnlee80/autodoc/plugin"
 	"github.com/yongjohnlee80/autodoc/script"
@@ -28,8 +28,8 @@ func shows(r *running, text string) bool { return strings.Contains(noticeText(r.
 func kept(r *running, text string) int {
 	return onLoop(r, func() int {
 		n := 0
-		for _, it := range r.h.noticeLog.items {
-			if strings.Contains(it.text, text) {
+		for _, it := range r.h.noticeLog.Items {
+			if strings.Contains(it.Text, text) {
 				n++
 			}
 		}
@@ -160,7 +160,7 @@ func TestLuaNotices(t *testing.T) {
 	}
 
 	var got []string
-	eng := script.New(widget.NewEditorCore(), script.WithNotify(func(s string) { got = append(got, s) }))
+	eng := script.New(editor.NewEditorCore(), script.WithNotify(func(s string) { got = append(got, s) }))
 	if err := eng.L.DoString(`editor.notify("only notify", {id = "x", ongoing = true})`); err != nil || len(got) != 1 || got[0] != "only notify" {
 		t.Fatalf("with WithNotify alone: %v %q", err, got)
 	}

@@ -4,6 +4,9 @@ import (
 	"context"
 	"slices"
 	"strings"
+
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/searchsetup"
 )
 
 // THE SEARCH'S STAGES — the row of checkboxes along the search picker's foot: Lexical, Semantic and
@@ -159,7 +162,7 @@ func (h *Host) toggleSearchStage(stage string) {
 // model is not known (a TEI server names its own, which a ranked answer then says). refresh
 // searches again whatever changed; otherwise only a change of the stages asked for does.
 func (h *Host) loadStageRanker(refresh bool) {
-	tk := h.ticket(nil, TicketSession)
+	tk := h.ticket(nil, feature.TicketSession)
 	type answer struct {
 		id, label string
 		err       error
@@ -169,7 +172,7 @@ func (h *Host) loadStageRanker(refresh bool) {
 		if err != nil {
 			return answer{err: err}
 		}
-		id, label := rankerInUse(asMap(res))
+		id, label := rankerInUse(feature.AsMap(res))
 		return answer{id: id, label: label}
 	}, func(a answer) {
 		if !tk.Current() {
@@ -195,16 +198,16 @@ func (h *Host) loadStageRanker(refresh bool) {
 // rankerInUse is ranker.list's ranker in use: who it is ("" for none), and its model's short name
 // when the list knows it.
 func rankerInUse(m map[string]any) (id, model string) {
-	if s := str(m, "supplied"); s != "" {
-		return s, shortModel(s)
+	if s := feature.Str(m, "supplied"); s != "" {
+		return s, searchsetup.ShortModel(s)
 	}
-	active := str(m, "active")
+	active := feature.Str(m, "active")
 	if active == "" {
 		return "", ""
 	}
-	for _, x := range asList(m["rankers"]) {
-		if r := asMap(x); str(r, "name") == active && str(r, "model") != "" {
-			return active, shortModel(str(r, "model"))
+	for _, x := range feature.AsList(m["rankers"]) {
+		if r := feature.AsMap(x); feature.Str(r, "name") == active && feature.Str(r, "model") != "" {
+			return active, searchsetup.ShortModel(feature.Str(r, "model"))
 		}
 	}
 	return active, ""
@@ -212,7 +215,7 @@ func rankerInUse(m map[string]any) (id, model string) {
 
 // rankedBy names the Rerank box by the model an answer says ranked its hits.
 func (h *Host) rankedBy(model string) {
-	if model = shortModel(model); model != "" && model != h.stageRanker && h.stageRankerID != "" {
+	if model = searchsetup.ShortModel(model); model != "" && model != h.stageRanker && h.stageRankerID != "" {
 		h.stageRanker = model
 		h.syncStages(false)
 	}

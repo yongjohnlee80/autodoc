@@ -755,10 +755,6 @@ func planeLayout(size int64, w, h, offset, pitch int) string {
 // {reason: "size"}, not a violation.
 const errDMABufSize = "buffer.add: a DMA-BUF larger than its frame"
 
-// surfaceSinkOf is where a run's frames go: the window's stream (pluginsurface_gui.go), or none in
-// a terminal. A cell sets its own, so the host's whole surface path runs without a window.
-var surfaceSinkOf = (*plugins).newSurfaceSink
-
 // openSurfaceChannel is e's side channel, when e declares a surface and the window draws streams:
 // the child's end (fd 3), attach to start its owner once the run exists, and abort for a start that
 // failed. nil, nil, nil: no surface, and the plugin draws cells.
@@ -766,7 +762,11 @@ func (pl *plugins) openSurfaceChannel(e pluginEntry) (child *os.File, attach fun
 	if e.m.Surface == nil || e.m.Protocol < 10 {
 		return nil, nil, nil
 	}
-	sink, stream, ok := surfaceSinkOf(pl)
+	sinkOf := pl.seams.surfaceSinkOf
+	if sinkOf == nil {
+		sinkOf = (*plugins).newSurfaceSink
+	}
+	sink, stream, ok := sinkOf(pl)
 	if !ok {
 		return nil, nil, nil
 	}

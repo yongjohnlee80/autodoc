@@ -8,10 +8,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/errs"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
+	"github.com/yongjohnlee80/golib/tui/widget/table"
 )
 
 // THE PLUGINS, A FEATURE — the Plugins menu, its dialogs and services, their commands on SPC p and
@@ -24,6 +28,7 @@ import (
 // commands.
 type plugins struct {
 	c         pluginHost
+	seams     *seams // its host's (seams.go)
 	pluginOpt Plugins
 	// the folder's plugins, as found, and the Plugins menu's rows
 	pluginList []pluginEntry
@@ -39,6 +44,20 @@ type plugins struct {
 	pluginCards map[string]*pluginCard
 	cardPlugin  string
 	running     map[string]*pluginRun
+	// stopping are the runs stopped and not yet shut down: out of running, their process still in its
+	// close (shutDown). Loop-owned. A quit, a removal and an update wait for them: on Windows a
+	// running program's folder can be neither removed nor renamed.
+	stopping map[*pluginRun]struct{}
+	// folders are the plugin folders a removal or an update owns, from the stop of their runs until
+	// the folder is gone or swapped, and the reads of them that run off the loop: no run starts from
+	// an owned folder (startPlugin), since it would run from a folder about to be deleted or moved,
+	// and no read starts in one; a removal or an update waits for the reads already in it (own).
+	// Safe from any goroutine.
+	folders folderFence
+	// folderReadWait and readGit are the folders' bound and their reads' git, its host's seams
+	// (seams.folderReadWait, seams.pluginGit) handed over as the host wires it; readGit nil is git
+	folderReadWait time.Duration
+	readGit        func(ctx context.Context, env procenv.Env, dir string, args ...string) (string, error)
 	// sessions are the plugins' session slots, by plugin name (protocol 7,
 	// docs/decisions/plugins.md#plugin-sessions): memory only, until AutoDoc quits or the plugin is
 	// removed. Loop-owned; acceptSession is their one writer, and a run gets a copy at its open,
@@ -54,7 +73,7 @@ type plugins struct {
 	// installed ones
 	pendingPlugin  *candidate // the candidate on PluginConfirm, and it alone (candidate.go)
 	cands          *candidates
-	managedPlugins *rows[managedPlugin]
+	managedPlugins *feature.Rows[managedPlugin]
 	// the results panel's table, a plugin's (plugintable.go), and its export while one runs, in
 	// the format last chosen (plugintable_export.go)
 	results      *resultsTable
@@ -72,12 +91,12 @@ type plugins struct {
 	cardOrder []*cardPanel
 }
 
-func newPlugins(c pluginHost, opt Plugins) *plugins {
-	pl := &plugins{c: c, pluginOpt: opt,
+func newPlugins(c pluginHost, s *seams, opt Plugins) *plugins {
+	pl := &plugins{c: c, seams: s, pluginOpt: opt,
 		pluginRows: tuidecl.NewListModel("key", "kind", "label", "enabled", "target", "rows"),
 		running:    map[string]*pluginRun{}}
-	pl.managedPlugins = newRows(tuidecl.NewListModel("key", "name", "place", "commit", "source"), pl.managedPluginRowOf)
-	pl.results = &resultsTable{}
+	pl.managedPlugins = feature.NewRows(tuidecl.NewListModel("key", "name", "place", "commit", "source"), pl.managedPluginRowOf)
+	pl.results = &resultsTable{resident: s.resultsResident}
 	pl.results.model = newResultsModel(pl.results, pl.fetchRows)
 	pl.results.shown = pl.results.model
 	pl.exportFormat = formatCSV
@@ -88,7 +107,7 @@ func newPlugins(c pluginHost, opt Plugins) *plugins {
 func (*plugins) Name() string { return "plugins" }
 
 func (pl *plugins) State() map[string]any {
-	size, length := pl.c.Prefs().panelGeometry(resultsPanel, "bottom")
+	size, length := pl.c.Prefs().PanelGeometry(resultsPanel, "bottom")
 	st := map[string]any{
 		"App.plugins":            pl.pluginRows,
 		"App.pluginChooserTitle": "SPC p — plugins",
@@ -124,103 +143,103 @@ func (pl *plugins) State() map[string]any {
 	return st
 }
 
-func (pl *plugins) Commands() map[string]Command {
-	return map[string]Command{
-		"App.openPlugin":          oneString("a plugin", pl.openPlugin),
-		"App.pluginEntry":         oneString("a plugin's menu row or letter", pl.pluginEntry),
-		"App.openPluginChooser":   none(pl.openPluginChooser),
-		"App.pluginChooserKey":    oneString("a key on the SPC p chooser", pl.pluginChooserKey),
-		"App.startAddPlugin":      none(pl.startAddPlugin),
-		"App.addPlugin":           oneString("a git URL", pl.addPlugin),
-		"App.pluginConfirmed":     none(pl.pluginConfirmed),
-		"App.pluginDeclined":      none(pl.pluginDeclined),
-		"App.pluginAudit":         none(pl.pluginAudit),
-		"App.managePlugins":       none(pl.managePlugins),
-		"App.startUpdatePlugin":   oneNumber("a row", pl.startUpdatePlugin),
-		"App.startRemovePlugin":   oneNumber("a row", pl.startRemovePlugin),
-		"App.placePlugin":         oneNumber("a row", pl.placePlugin),
-		"App.toggleResults":       none(func() { pl.c.TogglePanel(resultsPanel) }),
-		"App.copyResults":         none(func() { pl.copyResults(formatTSV) }),
-		"App.startExportResults":  none(func() { pl.startExportResults("") }),
-		"App.exportFormatChosen":  oneNumber("a format's row", pl.exportFormatChosen),
-		"App.chooseExportFile":    none(pl.chooseExportFile),
-		"App.exportResults":       oneString("a file's path", pl.exportResults),
-		"App.insertResults":       none(pl.insertResults),
-		"App.resultsClauseChosen": numberAndString("a clause and the text typed", pl.resultsClauseChosen),
-		"App.applyResultsClause":  oneString("a clause's text", pl.applyResultsClause),
-		"App.resultsClauseTyped":  oneString("a clause's text", pl.resultsClauseTyped),
-		"App.resultsOrderChanged": oneString("an ORDER BY", pl.resultsOrderChanged),
+func (pl *plugins) Commands() map[string]feature.Command {
+	return map[string]feature.Command{
+		"App.openPlugin":          feature.OneString("a plugin", pl.openPlugin),
+		"App.pluginEntry":         feature.OneString("a plugin's menu row or letter", pl.pluginEntry),
+		"App.openPluginChooser":   feature.None(pl.openPluginChooser),
+		"App.pluginChooserKey":    feature.OneString("a key on the SPC p chooser", pl.pluginChooserKey),
+		"App.startAddPlugin":      feature.None(pl.startAddPlugin),
+		"App.addPlugin":           feature.OneString("a git URL", pl.addPlugin),
+		"App.pluginConfirmed":     feature.None(pl.pluginConfirmed),
+		"App.pluginDeclined":      feature.None(pl.pluginDeclined),
+		"App.pluginAudit":         feature.None(pl.pluginAudit),
+		"App.managePlugins":       feature.None(pl.managePlugins),
+		"App.startUpdatePlugin":   feature.OneNumber("a row", pl.startUpdatePlugin),
+		"App.startRemovePlugin":   feature.OneNumber("a row", pl.startRemovePlugin),
+		"App.placePlugin":         feature.OneNumber("a row", pl.placePlugin),
+		"App.toggleResults":       feature.None(func() { pl.c.TogglePanel(resultsPanel) }),
+		"App.copyResults":         feature.None(func() { pl.copyResults(formatTSV) }),
+		"App.startExportResults":  feature.None(func() { pl.startExportResults("") }),
+		"App.exportFormatChosen":  feature.OneNumber("a format's row", pl.exportFormatChosen),
+		"App.chooseExportFile":    feature.None(pl.chooseExportFile),
+		"App.exportResults":       feature.OneString("a file's path", pl.exportResults),
+		"App.insertResults":       feature.None(pl.insertResults),
+		"App.resultsClauseChosen": feature.NumberAndString("a clause and the text typed", pl.resultsClauseChosen),
+		"App.applyResultsClause":  feature.OneString("a clause's text", pl.applyResultsClause),
+		"App.resultsClauseTyped":  feature.OneString("a clause's text", pl.resultsClauseTyped),
+		"App.resultsOrderChanged": feature.OneString("an ORDER BY", pl.resultsOrderChanged),
 	}
 }
 
-// Catalog is the plugins' user commands (catalog.go); their plugin.* entries, one per [[commands]]
+// Catalog is the plugins' user commands (feature/catalog.go); their plugin.* entries, one per [[commands]]
 // row, follow the folder through pluginHost (syncPluginEntries).
-func (pl *plugins) Catalog() []Entry {
-	return []Entry{
-		builtin("plugins.add", "add a plugin by its registry name or a git URL", "App.startAddPlugin()", pl.startAddPlugin),
-		builtin("plugins.manage", "manage plugins", "App.managePlugins()", pl.managePlugins),
+func (pl *plugins) Catalog() []feature.Entry {
+	return []feature.Entry{
+		feature.Builtin("plugins.add", "add a plugin by its registry name or a git URL", "App.startAddPlugin()", pl.startAddPlugin),
+		feature.Builtin("plugins.manage", "manage plugins", "App.managePlugins()", pl.managePlugins),
 		{ID: "plugins.update", Title: "update a plugin", Args: "<name>",
 			Help: "update a plugin by its name, as Manage plugins › Update does: its new commit is asked about first. A plugin may name only itself",
-			Run: func(x Invocation) error {
+			Run: func(x feature.Invocation) error {
 				if len(x.Args) != 1 {
 					return errors.New("plugins.update: takes a plugin's name")
 				}
 				return pl.updatePlugin(x.Args[0])
 			}},
-		builtin("plugins.commands", "plugin commands: choose a plugin, then one of its commands", "App.openPluginChooser()", pl.openPluginChooser),
+		feature.Builtin("plugins.commands", "plugin commands: choose a plugin, then one of its commands", "App.openPluginChooser()", pl.openPluginChooser),
 		// the results panel (plugintable.go), and its rows, each command saying which rows it takes
-		builtin("results.toggle", "results panel", "App.toggleResults()", func() { pl.c.TogglePanel(resultsPanel) }),
-		builtin("results.copy", "results: copy selection (the selected cells, or the cursor's, as TSV)", "App.copyResults()", func() { pl.copyResults(formatTSV) }),
-		builtin("results.copy_csv", "results: copy selection as CSV (its fields as a header)", "", func() { pl.copyResults(formatCSV) }),
-		builtin("results.copy_json", "results: copy selection as JSON (an object per row)", "", func() { pl.copyResults(formatJSON) }),
-		builtin("results.copy_markdown", "results: copy selection as a Markdown table", "", func() { pl.copyResults(formatMarkdown) }),
-		builtin("results.select_all", "results: select every loaded row", "", pl.selectAllResults),
+		feature.Builtin("results.toggle", "results panel", "App.toggleResults()", func() { pl.c.TogglePanel(resultsPanel) }),
+		feature.Builtin("results.copy", "results: copy selection (the selected cells, or the cursor's, as TSV)", "App.copyResults()", func() { pl.copyResults(formatTSV) }),
+		feature.Builtin("results.copy_csv", "results: copy selection as CSV (its fields as a header)", "", func() { pl.copyResults(formatCSV) }),
+		feature.Builtin("results.copy_json", "results: copy selection as JSON (an object per row)", "", func() { pl.copyResults(formatJSON) }),
+		feature.Builtin("results.copy_markdown", "results: copy selection as a Markdown table", "", func() { pl.copyResults(formatMarkdown) }),
+		feature.Builtin("results.select_all", "results: select every loaded row", "", pl.selectAllResults),
 		{ID: "results.sort_asc", Title: "results: sort the loaded rows by a field, ascending", Args: "[field]",
 			Help: "results: sort the loaded rows by a field (its 1-based position; the cursor's when none), ascending",
-			Run:  func(inv Invocation) error { return pl.sortResults("asc", inv.Args) }},
+			Run:  func(inv feature.Invocation) error { return pl.sortResults("asc", inv.Args) }},
 		{ID: "results.sort_desc", Title: "results: sort the loaded rows by a field, descending", Args: "[field]",
 			Help: "results: sort the loaded rows by a field (its 1-based position; the cursor's when none), descending",
-			Run:  func(inv Invocation) error { return pl.sortResults("desc", inv.Args) }},
+			Run:  func(inv feature.Invocation) error { return pl.sortResults("desc", inv.Args) }},
 		{ID: "results.unsort", Title: "results: unsort, the rows in the query's order", Help: "results: unsort, the rows in the query's order",
-			Run: func(inv Invocation) error { return pl.sortResults("off", inv.Args) }},
-		builtin("results.export", "results: export loaded rows…", "App.startExportResults()", func() { pl.startExportResults("") }),
-		builtin("results.csv", "results: export loaded rows as CSV…", "", func() { pl.startExportResults(formatCSV) }),
-		builtin("results.markdown", "results: insert loaded rows as a Markdown table", "App.insertResults()", pl.insertResults),
+			Run: func(inv feature.Invocation) error { return pl.sortResults("off", inv.Args) }},
+		feature.Builtin("results.export", "results: export loaded rows…", "App.startExportResults()", func() { pl.startExportResults("") }),
+		feature.Builtin("results.csv", "results: export loaded rows as CSV…", "", func() { pl.startExportResults(formatCSV) }),
+		feature.Builtin("results.markdown", "results: insert loaded rows as a Markdown table", "App.insertResults()", pl.insertResults),
 	}
 }
 
 // Panels is the results panel: a plugin's table (plugintable.go), at the bottom unless moved. Its
 // closing lets the table go, and the keyboard goes back to the page. Then a panel for each card
 // plugin (pluginpanels.go).
-func (pl *plugins) Panels() []PanelSpec {
+func (pl *plugins) Panels() []feature.PanelSpec {
 	s := resultsPanelSpec()
-	s.Opened = func(c PanelHost) {
+	s.Opened = func(c feature.PanelHost) {
 		c.Set("App.resultsShown", true)
 		pl.bindResultsMenu()
 	}
-	s.Closed = func(c PanelHost) {
+	s.Closed = func(c feature.PanelHost) {
 		c.Set("App.resultsShown", false)
 		pl.resultsClosed()
 		c.Keep(c.RestoreKeyboardHome())
 	}
-	return append([]PanelSpec{s}, pl.cardSpecs()...)
+	return append([]feature.PanelSpec{s}, pl.cardSpecs()...)
 }
 
 // resultsPanelSpec is the results panel: at the bottom, 35% of the window tall and its full width
 // until the user sizes it, its size kept as every panel's is (panelsize.go).
-func resultsPanelSpec() PanelSpec {
-	return PanelSpec{ID: resultsPanel, View: resultsView, Priority: 70, Icon: "⌗",
-		Edge: func(prefs) string { return "bottom" }, Places: []string{"bottom"},
+func resultsPanelSpec() feature.PanelSpec {
+	return feature.PanelSpec{ID: resultsPanel, View: resultsView, Priority: 70, Icon: "⌗",
+		Edge: func(feature.PrefsView) string { return "bottom" }, Places: []string{"bottom"},
 		Size: [2]int{10, 90}, Length: [2]int{20, 100}, Default: func(string) (int, int) { return 35, 100 }}
 }
 
 // Keys is SPC p, the plugins' chooser, then a plugin's card in its place. It is the plugins' own
 // (views/PluginChooser.qml), its letters the user's and the plugins' (pluginpick.go, plugincmds.go),
 // so it is not a key card of the catalog's: Cards is none.
-func (*plugins) Keys() []Key {
-	return []Key{{Card: leader, Seq: "p", Show: "p", Does: "plugin commands", Run: "App.openPluginChooser()", Group: groupWindow}}
+func (*plugins) Keys() []feature.Key {
+	return []feature.Key{{Card: feature.Leader, Seq: "p", Show: "p", Does: "plugin commands", Run: "App.openPluginChooser()", Group: feature.GroupWindow}}
 }
-func (*plugins) Cards() []Card { return nil }
+func (*plugins) Cards() []feature.Card { return nil }
 
 // repaintCards paints each running card again: its picture or its cells, as Plugin pixels and image
 // previews now say. A picture is consulted at a paint (tuicore.ImageReporter), so a choice no paint
@@ -239,7 +258,7 @@ func (pl *plugins) repaintCards() {
 func (pl *plugins) PreferencesChanged() {
 	pl.repaintCards()
 	pl.refreshPlugins()
-	size, length := pl.c.Prefs().panelGeometry(resultsPanel, "bottom")
+	size, length := pl.c.Prefs().PanelGeometry(resultsPanel, "bottom")
 	pl.c.Set("App.resultsSize", size)
 	pl.c.Set("App.resultsLength", length)
 	pl.syncCards()
@@ -262,7 +281,7 @@ func (pl *plugins) LanguageChanged() {
 	}
 }
 
-// Stopped stops every running plugin, all at once, each within pluginGrace of being asked to close
+// Stopped stops every running plugin, all at once, each within the seams' pluginGrace of being asked to close
 // and pluginTermGrace of SIGTERM before SIGKILL (pluginRun.shutdown, whose waits carry their NOTE:):
 // quitting waits at most those two for a plugin that hangs, never on it.
 // An export not finished is cancelled first, its .part removed.
@@ -274,31 +293,31 @@ func (pl *plugins) Stopped() {
 // The page's lifecycle is the document feed's: a page shown, a pause in typing and a cursor move
 // each send the document once things rest (feedSoon). Its Version is the page's own (Page.Version),
 // so a shown page and an edit raise it and a move does not.
-func (pl *plugins) Shown(Page)  { pl.feedSoon() }
-func (pl *plugins) Edited(Page) { pl.feedSoonAfter(max(pluginFeedDelay-editPause, 0)) }
+func (pl *plugins) Shown(feature.Page)  { pl.feedSoon() }
+func (pl *plugins) Edited(feature.Page) { pl.feedSoonAfter(max(pl.seams.pluginFeed-editPause, 0)) }
 func (pl *plugins) Moved(int, int) {
 	pl.feedSoon()
 }
-func (*plugins) Reread(Page) {}
-func (*plugins) Closed()     {}
+func (*plugins) Reread(feature.Page) {}
+func (*plugins) Closed()             {}
 
 // pluginHost is what the plugins reach of the host: Core, and the services only a plugin needs. The
 // catalog and preference services are scoped: a plugin.* entry, a tui.plugin.* preference; anything
 // else is refused with ErrNotPluginEntry or ErrNotPluginPref.
 type pluginHost interface {
-	Core
+	feature.Core
 	// Attached reports whether the program runs: a plugin's dialog and the card's text need it
 	Attached() bool
 	// Overlay is where a dialog plugin's float attaches
-	Overlay() (*widget.OverlayHost, bool)
+	Overlay() (*widgetcore.OverlayHost, bool)
 	// HasCatalog reports whether the catalog is built (the registry is assembled)
 	HasCatalog() bool
-	PluginEntries() []*Entry                 // the catalog's plugin.* entries
-	AddPluginEntry(e Entry) error            // a plugin.* entry; ErrNotPluginEntry for any other
+	PluginEntries() []*feature.Entry         // the catalog's plugin.* entries
+	AddPluginEntry(e feature.Entry) error    // a plugin.* entry; ErrNotPluginEntry for any other
 	RemovePluginEntries()                    // every plugin.* entry
 	CommandsChanged()                        // F1 and the command line list the commands again
 	RunEntry(id string, args []string) error // a plugin's host.call of a catalog command
-	MenuRows() *menuRows                     // the menus' added rows: a manifest's [[menu]] joins them (menurows.go)
+	MenuRows() *feature.MenuRows             // the menus' added rows: a manifest's [[menu]] joins them (feature/menurows.go)
 	// SetPluginPref sets a tui.plugin.* preference, applied and stored; ErrNotPluginPref for any other
 	SetPluginPref(name, value string) error
 	// LaunchConsent runs start for the plugin name (title its label) whose manifest says start =
@@ -329,15 +348,15 @@ type pluginHost interface {
 	// panel is sized from it until the user sizes it
 	PageSize() (w, h int)
 	// TableCore is the table behind a cell-cursor TableView, by its id; nil when there is none
-	TableCore(id string) *widget.TableCore
+	TableCore(id string) *table.TableCore
 	// ResultsTable is the cell-cursor TableView's DataTable, by its id: its menu; nil when none
-	ResultsTable(id string) *widget.DataTable
+	ResultsTable(id string) *table.DataTable
 	// CopyText puts text on the clipboard, reporting whether there is one
 	CopyText(text string) bool
 	// SetEditorRegister makes a table yank available to the editor's p/P commands.
 	SetEditorRegister(text string)
 	// BindResultsCompleter installs the loaded table's field-name completion in the results bar.
-	BindResultsCompleter(widget.TextCompleter)
+	BindResultsCompleter(widgetcore.TextCompleter)
 	// InsertBlock puts text into the page at the cursor, on lines of its own: one undo step
 	InsertBlock(text string) error
 	// BrowseFolder is where a file dialog starts: the open file's folder, the workspace's, or home
@@ -357,17 +376,17 @@ var (
 
 // The host's pluginHost: core's, with these.
 
-func (c core) Attached() bool                          { return c.h.p != nil }
-func (c core) Overlay() (*widget.OverlayHost, bool)    { return c.h.p.Overlay() }
-func (c core) SurfaceBackend() tuicore.Backend         { return c.h.backend }
-func (c core) TerminalPictures() bool                  { return c.h.terminalPictures() }
-func (c core) HasCatalog() bool                        { return c.h.cat != nil }
-func (c core) CardPanelsChanged(undo func())           { c.h.cardPanelsChanged(undo) }
-func (c core) CommandsChanged()                        { c.h.commandsChanged() }
-func (c core) RunEntry(id string, args []string) error { return c.h.cat.run(id, args) }
-func (c core) Context() context.Context                { return c.h.ctx }
-func (c core) After(d time.Duration, fn func())        { c.h.after(d, fn) }
-func (c core) Theme() string                           { return c.h.theme }
+func (c core) Attached() bool                           { return c.h.p != nil }
+func (c core) Overlay() (*widgetcore.OverlayHost, bool) { return c.h.p.Overlay() }
+func (c core) SurfaceBackend() tuicore.Backend          { return c.h.backend }
+func (c core) TerminalPictures() bool                   { return c.h.terminalPictures() }
+func (c core) HasCatalog() bool                         { return c.h.cat != nil }
+func (c core) CardPanelsChanged(undo func())            { c.h.cardPanelsChanged(undo) }
+func (c core) CommandsChanged()                         { c.h.commandsChanged() }
+func (c core) RunEntry(id string, args []string) error  { return c.h.cat.Run(id, args) }
+func (c core) Context() context.Context                 { return c.h.ctx }
+func (c core) After(d time.Duration, fn func())         { c.h.after(d, fn) }
+func (c core) Theme() string                            { return c.h.theme }
 
 // ReadAbsolute and WriteAbsolute are a file anywhere on the daemon's disk, by its absolute path:
 // the host's readFile and writeFile (file.read, file.write) for a feature, as {content, version}.
@@ -376,16 +395,16 @@ func (c core) ReadAbsolute(ctx context.Context, path string) ([]byte, string, er
 	if err != nil {
 		return nil, "", err
 	}
-	m := asMap(res)
+	m := feature.AsMap(res)
 	b, _ := m["content"].([]byte)
-	return b, str(m, "version"), nil
+	return b, feature.Str(m, "version"), nil
 }
 func (c core) WriteAbsolute(ctx context.Context, path string, content []byte, version string) (string, error) {
 	res, err := c.h.writeFile(ctx, "", path, content, version, false)
 	if err != nil {
 		return "", err
 	}
-	return str(asMap(res), "version"), nil
+	return feature.Str(feature.AsMap(res), "version"), nil
 }
 
 // ThemeNames and ThemeLabels are the themes the window can wear: golib's and the user's.
@@ -394,7 +413,7 @@ func (c core) ThemeLabels() []string        { return c.h.themeLabels() }
 func (c core) NotifyOngoing(id, msg string) { c.h.notifyOngoing(id, msg) }
 func (c core) NotifyDone(id, msg string)    { c.h.notifyDone(id, msg) }
 func (c core) NotifyOngoingClick(id, msg string, onClick func()) {
-	c.h.post(widget.Toast{ID: id, Text: msg, Ongoing: true, OnClick: onClick})
+	c.h.post(widgetcore.Toast{ID: id, Text: msg, Ongoing: true, OnClick: onClick})
 }
 func (c core) NotifyAs(ns, id, msg string, ongoing bool) {
 	c.h.notifyAs(ns, noticeReq{id: id, text: msg, ongoing: ongoing})
@@ -417,14 +436,14 @@ func (c core) PageSize() (w, h int) {
 	return r.W, r.H
 }
 
-func (c core) TableCore(id string) *widget.TableCore {
+func (c core) TableCore(id string) *table.TableCore {
 	if t := c.ResultsTable(id); t != nil {
 		return t.Core()
 	}
 	return nil
 }
 
-func (c core) ResultsTable(id string) *widget.DataTable {
+func (c core) ResultsTable(id string) *table.DataTable {
 	if c.h.p == nil {
 		return nil
 	}
@@ -443,11 +462,11 @@ func (c core) SetEditorRegister(text string) {
 	}
 }
 
-func (c core) BindResultsCompleter(complete widget.TextCompleter) {
+func (c core) BindResultsCompleter(complete widgetcore.TextCompleter) {
 	if c.h.p == nil {
 		return
 	}
-	if input, ok := tuidecl.FindAs[*widget.TextInput](c.h.p, "resultsText"); ok {
+	if input, ok := tuidecl.FindAs[*widgetcore.TextInput](c.h.p, "resultsText"); ok {
 		input.SetCompleter(complete)
 	}
 }
@@ -462,12 +481,12 @@ func (c core) InsertBlock(text string) error {
 		return errors.New("no page is open")
 	}
 	if ed.ReadOnly() {
-		return widget.ErrReadOnly
+		return editor.ErrReadOnly
 	}
 	blank := func(ln int) bool { return strings.TrimSpace(ed.LineAt(ln)) == "" }
 	line, _ := ed.Line()
 	text = strings.TrimSuffix(text, "\n")
-	at := widget.TextPos{Line: line}
+	at := editor.TextPos{Line: line}
 	if blank(line) {
 		if line > 0 && !blank(line-1) {
 			text = "\n" + text
@@ -487,29 +506,29 @@ func (c core) InsertBlock(text string) error {
 
 func (c core) ThemeValues(name string) (map[string]string, error) { return c.h.themeValues(name) }
 
-func (c core) PluginEntries() []*Entry {
+func (c core) PluginEntries() []*feature.Entry {
 	if c.h.cat == nil {
 		return nil
 	}
-	var out []*Entry
-	for _, e := range c.h.cat.entries() {
-		if e.Source == SourcePlugin {
+	var out []*feature.Entry
+	for _, e := range c.h.cat.Entries() {
+		if e.Source == feature.SourcePlugin {
 			out = append(out, e)
 		}
 	}
 	return out
 }
 
-func (c core) AddPluginEntry(e Entry) error {
-	if e.Source != SourcePlugin || !strings.HasPrefix(e.ID, "plugin.") {
+func (c core) AddPluginEntry(e feature.Entry) error {
+	if e.Source != feature.SourcePlugin || !strings.HasPrefix(e.ID, "plugin.") {
 		return fmt.Errorf("%s: %w", e.ID, ErrNotPluginEntry)
 	}
-	return c.h.cat.add(e)
+	return c.h.cat.Add(e)
 }
 
 func (c core) RemovePluginEntries() {
 	for _, e := range c.PluginEntries() {
-		c.h.cat.remove(e.ID)
+		c.h.cat.Remove(e.ID)
 	}
 }
 

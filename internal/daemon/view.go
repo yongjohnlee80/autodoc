@@ -104,7 +104,7 @@ func (v *view) TodoModes() (graphOnly []string, todoSearch bool, excluded []stri
 	v.m.mu.Lock()
 	h := v.m.modes[v.s.id]
 	v.m.mu.Unlock()
-	excluded = v.m.todoExcluded(v.s.root, v.s.exclude)
+	excluded = v.m.todoExcluded(diskRoot(v.s.root, v.s.canon), v.s.exclude)
 	if h == nil {
 		return workspace.DefaultGraphOnly(), true, excluded
 	}

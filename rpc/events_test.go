@@ -2,7 +2,6 @@ package rpc
 
 import (
 	"context"
-	"net"
 	"path/filepath"
 	"testing"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // eventsServer serves no workspaces, with the store's preferences and event log.
@@ -20,8 +20,8 @@ func eventsServer(t *testing.T) (dial func(name string) (*golibrpc.Client, map[s
 	if err != nil {
 		t.Fatal(err)
 	}
-	sock := filepath.Join(t.TempDir(), "s.sock")
-	ln, err := net.Listen("unix", sock)
+	sock := ipc.ScratchAddr(t.TempDir(), "s.sock")
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +30,7 @@ func eventsServer(t *testing.T) (dial func(name string) (*golibrpc.Client, map[s
 	go func() { done <- srv.Run(ctx) }()
 	t.Cleanup(func() { cancel(); <-done; _ = db.Close() })
 	return func(name string) (*golibrpc.Client, map[string]any) {
-		cli, err := golibrpc.Dial(context.Background(), sock, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+		cli, err := golibrpc.Dial(context.Background(), sock, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -203,6 +203,9 @@ func (m *Manager) SetEndpointWith(ctx context.Context, credential, kind, locator
 	if !secretOK(secret) {
 		return 0, fmt.Errorf("%w: the secret is over %d bytes, or holds a control character or a space", ErrBadEndpoint, maxSecret)
 	}
+	if !m.wakesOn(kind) {
+		return 0, errNoWakeHere(kind)
+	}
 	canon, err := checkLocator(kind, locator, m.uid)
 	if err != nil {
 		return 0, err

@@ -11,6 +11,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // BUFFER.NEW — the catalog's buffer.new [name] [text]: a new buffer, shown, an untitled draft
@@ -19,7 +20,7 @@ import (
 // newBufferRun runs buffer.new with args through the catalog, as a key, autodoc.run or a plugin's
 // host.call does.
 func (r *running) newBufferRun(args ...string) error {
-	return onLoop(r, func() error { return r.h.cat.run("buffer.new", args) })
+	return onLoop(r, func() error { return r.h.cat.Run("buffer.new", args) })
 }
 
 // syntaxShown is the editor's syntax, as the page's highlighter has it.
@@ -264,7 +265,7 @@ func TestBufferNewWritesNothing(t *testing.T) {
 		aDirty       bool
 	}
 	s := onLoop(r, func() st {
-		return st{r.h.active, r.h.bufferOf(fileRef{"kb", "a.md"}), r.h.active.file.open, r.h.active.file.hint, a.buf.Value(), a.file.dirty}
+		return st{r.h.active, r.h.bufferOf(feature.FileRef{WS: "kb", Path: "a.md"}), r.h.active.file.open, r.h.active.file.hint, a.buf.Value(), a.file.dirty}
 	})
 	switch {
 	case s.active == a || s.file != a || s.open:

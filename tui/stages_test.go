@@ -11,6 +11,7 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // TestTheStageBoxes: a box shows only while its stage can run, and one that does not show is off;
@@ -106,7 +107,7 @@ func (s *stagesRecorder) record(method string, params []any) {
 	if method != "search.query" || len(params) < 3 {
 		return
 	}
-	stages, _ := asMap(params[2])["stages"].([]any)
+	stages, _ := feature.AsMap(params[2])["stages"].([]any)
 	s.mu.Lock()
 	s.sent = append(s.sent, stages)
 	s.mu.Unlock()

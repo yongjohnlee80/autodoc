@@ -13,34 +13,31 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/internal/proctree"
 	"github.com/yongjohnlee80/autodoc/plugin"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/style"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 )
 
 // A RUNNING PLUGIN — one started plugin's process: its dialog or service, the protocol both ways,
 // and its closing (plugins.go).
-
-// The deadlines of a plugin's life (variables, so a test can shorten them before it starts one).
-var (
-	pluginHandshake = 5 * time.Second // plugin.open to host.ready
-	pluginGrace     = 2 * time.Second // plugin.close to its exit, before SIGTERM
-	pluginTermGrace = 1 * time.Second // SIGTERM to its exit, before SIGKILL
-)
 
 // pluginRun is one plugin's process, its link and its dialog. Loop-owned unless marked.
 type pluginRun struct {
 	pl    *plugins
 	e     pluginEntry
 	cmd   *exec.Cmd
+	tree  *proctree.Tree // cmd's, and what it starts
 	link  *plugin.Link
 	ctx   context.Context
 	stop  context.CancelFunc
 	out   *outQueue // to the sender goroutine
 	log   *pluginLog
-	float *widget.Float // a modal dialog's; nil for a card, which is a panel, and a service
-	box   *widget.Box
+	float *widgetcore.Float // a modal dialog's; nil for a card, which is a panel, and a service
+	box   *widgetcore.Box
 	view  *pluginView // nil for a service, which has no surface
 
 	ready, closing bool
@@ -89,6 +86,11 @@ type pluginRun struct {
 // startPlugin starts e's process, its link and its surface, and sends plugin.open: a dialog's at
 // its first layout, a service's at once.
 func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
+	if what, ok := pl.folders.owner(e.dir); ok {
+		// NOTE: every start comes here (the menu, a feed, a command, a script): a run started now
+		// would run from a folder its removal or update is about to delete or move
+		return nil, fmt.Errorf("its folder is being %s; open it again once that is done", what)
+	}
 	host, ok := pl.c.Overlay()
 	if !ok && !e.m.Service() {
 		return nil, errors.New("the screen is not ready")
@@ -123,9 +125,9 @@ func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
 		return nil, err
 	}
 	log := openPluginLog(pl.pluginOpt.LogDir, e.m.Name)
-	cmd := exec.Command(e.m.Command[0], e.m.Command[1:]...)
+	cmd := exec.Command(procenv.Resolve(pl.seams.env, e.m.Command[0]), e.m.Command[1:]...)
 	cmd.Dir = e.dir
-	cmd.Env = append(ownEnviron(), fmt.Sprintf("AUTODOC_PLUGIN_PROTOCOL=%d", e.m.Protocol),
+	cmd.Env = append(feature.OwnEnviron(pl.seams.env), fmt.Sprintf("AUTODOC_PLUGIN_PROTOCOL=%d", e.m.Protocol),
 		"AUTODOC_PLUGIN_DIR="+e.dir, "AUTODOC_SOCKET="+pl.pluginOpt.Socket)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = toPlugin, fromPlugin, log
 	if surfaceChild != nil {
@@ -133,8 +135,8 @@ func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
 		cmd.ExtraFiles = []*os.File{surfaceChild}
 		cmd.Env = append(cmd.Env, plugin.SurfaceFDEnv+"=3")
 	}
-	cmd.SysProcAttr = pluginProcAttr()
-	err = cmd.Start()
+	// a tree of its own: its stop ends what it starts too
+	tree, err := proctree.StartTree(cmd)
 	toPlugin.Close() // the child's ends are the child's now
 	fromPlugin.Close()
 	if surfaceChild != nil {
@@ -148,9 +150,12 @@ func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
 		return nil, err
 	}
 
-	r := &pluginRun{pl: pl, e: e, cmd: cmd, log: log, out: newOutQueue(),
+	if why := tree.Contained(); why != nil {
+		log.note(why.Error() + ": its stop ends the plugin alone")
+	}
+	r := &pluginRun{pl: pl, e: e, cmd: cmd, tree: tree, log: log, out: newOutQueue(),
 		exited: make(chan struct{}), shutDone: make(chan struct{}),
-		handshake: pluginHandshake, grace: pluginGrace, termGrace: pluginTermGrace}
+		handshake: pl.seams.pluginHandshake, grace: pl.seams.pluginGrace, termGrace: pl.seams.pluginTermGrace}
 	r.ctx, r.stop = context.WithCancel(pl.c.Context())
 	if attachSurface != nil {
 		attachSurface(r)
@@ -164,7 +169,7 @@ func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
 	r.link, err = plugin.NewLink(r.ctx, plugin.FileConn(hostIn, hostOut), r.onNote)
 	if err != nil {
 		r.stop()
-		go r.shutdown()
+		pl.shutDown(r)
 		return nil, err
 	}
 	go r.sender()
@@ -181,13 +186,13 @@ func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
 		return r, nil
 	}
 	r.view = &pluginView{run: r, pl: pl, w: e.m.Dialog.Width, h: e.m.Dialog.Height.Rows, fill: e.m.Dialog.Height.Pct > 0}
-	r.box = widget.NewBox(r.view, widget.WithTitle(r.title(e.label())), widget.WithBorder(style.BorderRounded),
-		widget.WithStyle(style.New().Background(style.TokenPanel).Foreground(style.TokenForeground)))
-	opts := []widget.FloatOption{widget.WithModal(e.m.Modal()), widget.WithAnchor(pluginAnchors[pl.placement(e)])}
+	r.box = widgetcore.NewBox(r.view, widgetcore.WithTitle(r.title(e.label())), widgetcore.WithBorder(style.BorderRounded),
+		widgetcore.WithStyle(style.New().Background(style.TokenPanel).Foreground(style.TokenForeground)))
+	opts := []widgetcore.FloatOption{widgetcore.WithModal(e.m.Modal()), widgetcore.WithAnchor(pluginAnchors[pl.placement(e)])}
 	if pct := e.m.Dialog.Height.Pct; pct > 0 {
-		opts = append(opts, widget.WithSizeFraction(0, pct))
+		opts = append(opts, widgetcore.WithSizeFraction(0, pct))
 	}
-	r.float = widget.NewFloat(r.box, opts...)
+	r.float = widgetcore.NewFloat(r.box, opts...)
 	host.Attach(r.float)
 	r.float.Show()
 	return r, nil
@@ -259,7 +264,7 @@ func (r *pluginRun) show() {
 
 // placement is where e's dialog sits: the user's choice among its placements, or its first.
 func (pl *plugins) placement(e pluginEntry) string {
-	if p := pl.c.Prefs().pluginPlace[e.m.Name]; slices.Contains(e.m.Dialog.Placements, p) {
+	if p := asPrefs(pl.c.Prefs()).pluginPlace[e.m.Name]; slices.Contains(e.m.Dialog.Placements, p) {
 		return p
 	}
 	return e.m.Dialog.Placements[0]
@@ -458,7 +463,7 @@ func (r *pluginRun) exitedUnasked() {
 }
 
 // close closes the dialog at once and stops the plugin behind it: plugin.close, then SIGTERM after
-// pluginGrace, then SIGKILL after pluginTermGrace, to its process group. why, when set, is a
+// the seams' pluginGrace, then SIGKILL after pluginTermGrace, to its process group. why, when set, is a
 // failure (CloseFailure), a sentence naming the plugin in the UI's language: a toast says it, with
 // the last line the plugin wrote to its log; without one, it is a close as a dialog's (CloseClosed:
 // a modal Esc, its own host.close).
@@ -507,7 +512,7 @@ func (r *pluginRun) stopFor(reason, why string) {
 	if r.surface != nil {
 		r.surface.Close() // retires its buffers; each is destroyed at its last holder
 	}
-	go r.shutdown()
+	r.pl.shutDown(r)
 	if why != "" {
 		msg := why // the plugin's name and what became of it, a sentence
 		if last := r.log.last(); last != "" {
@@ -535,15 +540,16 @@ func (r *pluginRun) shutdown() {
 			// NOTE: a plugin is asked to close, then given grace to exit before SIGTERM, and termGrace
 			// more before SIGKILL: a graceful stop, bounded so a stuck plugin cannot hold the TUI open.
 		case <-time.After(r.grace):
-			signalGroup(r.cmd, false)
+			r.tree.Stop(false)
 			select {
 			case <-r.exited:
 			// NOTE: SIGTERM's grace, before SIGKILL ends a plugin that ignores it.
 			case <-time.After(r.termGrace):
-				signalGroup(r.cmd, true)
+				r.tree.Stop(true)
 				<-r.exited
 			}
 		}
+		r.tree.Close() // on Windows, what the plugin left running ends with its job
 		r.stop()
 		if r.link != nil {
 			_ = r.link.Close()
@@ -551,8 +557,91 @@ func (r *pluginRun) shutdown() {
 	})
 }
 
+// shutDown runs r's shutdown off the loop, r among pl.stopping until it is done.
+func (pl *plugins) shutDown(r *pluginRun) {
+	if pl.stopping == nil {
+		pl.stopping = map[*pluginRun]struct{}{}
+	}
+	pl.stopping[r] = struct{}{}
+	go func() {
+		r.shutdown()
+		pl.c.Post(func() { delete(pl.stopping, r) })
+	}()
+}
+
+// stoppingIn is the runs of the plugin in dir that are stopping: the one a removal or an update
+// just stopped, and any earlier run still in its close.
+func (pl *plugins) stoppingIn(dir string) []*pluginRun {
+	var runs []*pluginRun
+	for r := range pl.stopping {
+		if r.e.dir == dir {
+			runs = append(runs, r)
+		}
+	}
+	return runs
+}
+
+// pluginExitMargin is how long past a run's close deadlines its shutdown may take: the kill's
+// reaping.
+const pluginExitMargin = 2 * time.Second
+
+// awaitShutdown waits, off the loop, until every run in runs is shut down, its process gone: bounded
+// by the longest run's close deadlines and pluginExitMargin, so a process that outlives its kill
+// cannot hold a removal or an update for ever. An error says which run is still there; its folder
+// is to be left as it is.
+func awaitShutdown(runs []*pluginRun) error {
+	var bound time.Duration
+	for _, r := range runs {
+		bound = max(bound, r.grace+r.termGrace+pluginExitMargin)
+	}
+	// NOTE: each shutdown is itself bounded, but its last step waits on the kill's reaping, which
+	// nothing bounds: the deadline keeps a process that outlives its kill from holding the folder.
+	return awaitShutdownBy(runs, time.After(bound), bound)
+}
+
+// awaitShutdownBy is awaitShutdown's wait, until deadline fires. A run whose shutdown ended as the
+// deadline came is one that ended: select picks either of two ready cases.
+//
+// The deadline fires once: a channel of time.After holds one value, which the first select to take
+// it consumes. So its expiry is kept: once it has fired, every later run is only asked whether it
+// is done, never waited for (a wait on the drained channel would never end).
+func awaitShutdownBy(runs []*pluginRun, deadline <-chan time.Time, bound time.Duration) error {
+	expired := false
+	for _, r := range runs {
+		if !expired {
+			select {
+			case <-r.shutDone:
+				continue
+			case <-deadline:
+				expired = true
+			}
+		}
+		select {
+		case <-r.shutDone:
+		default:
+			return fmt.Errorf("%s did not exit within %s: its folder was left as it is", r.e.m.Name, bound)
+		}
+	}
+	return nil
+}
+
+// own marks dir as owned by a removal or an update ("removed", "updated") until the hold's release:
+// no run and no read starts in it meanwhile, and the hold's wait, on the operation's worker, waits
+// for the reads already in it. It is exclusive: when another removal or update owns dir already,
+// the hold is refused (!ok), says what that one is doing, and the caller does nothing (its release
+// would end the other's fence). On the loop.
+func (pl *plugins) own(dir, what string) *folderHold {
+	if ok, other := pl.folders.own(dir, what); !ok {
+		return &folderHold{other: other}
+	}
+	h := &folderHold{ok: true, fence: &pl.folders, dir: dir}
+	bound := pl.folderReadWait
+	h.waits = append(h.waits, func(ctx context.Context) error { return pl.folders.awaitReads(ctx, dir, bound) })
+	return h
+}
+
 // stopPlugins stops every open plugin and waits for them, as the TUI quits: bounded by the close's
-// deadlines, since they run at once.
+// deadlines, since they run at once. A run stopped before, still in its close, is waited for too.
 func (pl *plugins) stopPlugins() {
 	for _, r := range pl.running {
 		// the quit's stop transition, as stopFor's: fenced and its reason frozen before the
@@ -570,7 +659,10 @@ func (pl *plugins) stopPlugins() {
 	for _, r := range pl.running {
 		<-r.shutDone
 	}
-	pl.running = map[string]*pluginRun{}
+	for r := range pl.stopping {
+		<-r.shutDone
+	}
+	pl.running, pl.stopping = map[string]*pluginRun{}, nil
 }
 
 // acceptSession is a session slot's one writer, on the loop: a write from a run that is stopping, or
@@ -630,26 +722,26 @@ func (pl *plugins) acceptMenu(r *pluginRun, u plugin.MenuUpdate) {
 	if r.closing || pl.running[r.e.key()] != r {
 		return
 	}
-	row := pl.c.MenuRows().find("plugin:"+r.e.m.Name, fromManifest, u.ID)
+	row := pl.c.MenuRows().Find("plugin:"+r.e.m.Name, feature.FromManifest, u.ID)
 	if row == nil {
 		r.log.note("host.menu refused: no [[menu]] row " + strconv.Quote(u.ID))
 		return
 	}
 	if u.Title != nil {
 		t := *u.Title
-		row.pushed = &t
+		row.Pushed = &t
 	}
 	if u.Enabled != nil {
-		row.disabled = !*u.Enabled
+		row.Disabled = !*u.Enabled
 	}
 }
 
 // forgetMenu forgets what r pushed to its plugin's rows: a stopped plugin's rows show their manifest's
 // titles, enabled.
 func (pl *plugins) forgetMenu(r *pluginRun) {
-	for _, row := range pl.c.MenuRows().rows {
-		if row.owner == "plugin:"+r.e.m.Name && row.source == fromManifest {
-			row.pushed, row.disabled = nil, false
+	for _, row := range pl.c.MenuRows().Rows {
+		if row.Owner == "plugin:"+r.e.m.Name && row.Source == feature.FromManifest {
+			row.Pushed, row.Disabled = nil, false
 		}
 	}
 }

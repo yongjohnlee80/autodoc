@@ -2,7 +2,6 @@ package rpc
 
 import (
 	"context"
-	"net"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -21,6 +20,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // schemaServer serves one workspace, kb, whose files are checked against src.
@@ -51,7 +51,7 @@ func schemaServer(t *testing.T, src string) (*golibrpc.Client, *memfs.FS) {
 			return sch, SchemaStatus{Path: ".autodoc/schema.yaml", Active: true, Fields: len(sch.Fields)}
 		}})
 	sock := shortSocket(t) // a TempDir named after a long test passes macOS's socket-path limit
-	ln, err := net.Listen("unix", sock)
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func schemaServer(t *testing.T, src string) (*golibrpc.Client, *memfs.FS) {
 		<-done
 		cores.Wait()
 	})
-	cli, err := golibrpc.Dial(context.Background(), sock, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	cli, err := golibrpc.Dial(context.Background(), sock, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 	if err != nil {
 		t.Fatal(err)
 	}

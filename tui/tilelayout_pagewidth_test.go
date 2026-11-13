@@ -5,6 +5,7 @@ package tui
 import (
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
@@ -15,10 +16,10 @@ import (
 // page 143: the page keeps its width, and the agent takes the rest, beside it with no gap.
 func TestTheAgentTiledBesideThePageTakesWhatThePageLeaves(t *testing.T) {
 	agent, _ := fakeAgent(t)
-	_, r, _ := runAgentTUIWith(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron",
+	_, r, _ := runAgentTUIWith(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron",
 		map[string]string{layoutKey("agent"): layoutTiled, tileEdgeKey("agent"): "right"}, Options{})
 	r.s.Backend.InjectResize(220, 30)
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	width := onLoop(r, func() int { return r.h.pageWidth })
 	var page, ag tuicore.Rect
 	r.s.WaitFor(t, "the page at its width, the agent beside it to the screen's edge", func(string) bool {

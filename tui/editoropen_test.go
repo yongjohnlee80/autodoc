@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 )
@@ -18,7 +20,7 @@ import (
 func editorClient(t *testing.T, r *running, token string) func(verb string, params ...any) (any, *golibrpc.Error) {
 	t.Helper()
 	ctx := context.Background()
-	cli, err := golibrpc.Dial(ctx, onLoop(r, r.h.editorSocketPath), msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	cli, err := golibrpc.Dial(ctx, onLoop(r, r.h.editorSocketPath), msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +52,7 @@ func TestAnAgentOpensAFileByItsPath(t *testing.T) {
 	r.connected(t)
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
-	call := editorClient(t, r, onLoop(r, func() string { return r.h.agents.editorToken("zen") }))
+	call := editorClient(t, r, onLoop(r, func() string { return r.h.agents.EditorToken("zen") }))
 
 	res, re := call("editor.commands")
 	if re != nil {
@@ -84,7 +86,7 @@ func TestAnAgentOpensAFileByItsPath(t *testing.T) {
 		t.Fatalf("an ungranted editor.open opened %s", n.path)
 	}
 	r.s.WaitForText(t, "let the agent zen use commands?")
-	onLoop(r, func() bool { r.h.asker.accepted(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); return true })
 	r.s.WaitFor(t, "commands granted", func(string) bool {
 		return onLoop(r, func() bool { return r.h.prefs.luaGrants["agent:zen"]["commands"] })
 	})
@@ -122,14 +124,14 @@ func TestAnAgentOpensAFileByItsPath(t *testing.T) {
 // agent started in kb, the editor switched to notes, opens notes's file by its path there, and
 // editor.document says it is foreign to the agent.
 func TestAnAgentOpensARelativePathInTheEditorsWorkspace(t *testing.T) {
-	agent, _ := recordingAgent(t, true)
+	agent := hearingAgent(t, t.TempDir())
 	files := map[string][]string{"kb": {"a.md", "a\n"}, "notes": {"b.md", "b\n", "only.md", "notes only\n"}}
-	_, r, _ := runAgentTUIIn(t, t.TempDir(), []agentProfile{{Name: "zen", Command: shellQuote(agent), Codename: "zen"}}, "zen", nil,
+	_, r, _ := runSetupTUIIn(t, agentsFolder(t), []agents.AgentProfile{{Name: "zen", Command: agentCall(agent, "zen"), Codename: "zen"}}, "zen", nil,
 		Options{EditorDir: t.TempDir(), Workspace: "kb"}, files)
 	r.s.WaitFor(t, "kb entered", func(string) bool { return onLoop(r, func() bool { return r.h.ws == "kb" }) })
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
-	r.s.WaitForText(t, "ready")
-	call := editorClient(t, r, onLoop(r, func() string { return r.h.agents.editorToken("zen") }))
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
+	r.waitAgentStarted(t, "zen")
+	call := editorClient(t, r, onLoop(r, func() string { return r.h.agents.EditorToken("zen") }))
 	onLoop(r, func() bool {
 		r.h.prefs.luaGrants = map[string]map[string]bool{"agent:zen": {"commands": true, "editor.read": true}}
 		return true
@@ -154,10 +156,13 @@ func TestAnAgentOpensARelativePathInTheEditorsWorkspace(t *testing.T) {
 // of the workspace in use, refused when none is listed; empty refused.
 func TestOpenPathsResolve(t *testing.T) {
 	h := newHost(NewSession("unused", nil), Options{})
-	if got, err := h.resolveOpenPath("/x/../y/z.md"); err != nil || got != "/y/z.md" {
+	// an absolute path on this OS: "/x/../y/z.md" on Unix, on a drive on Windows
+	sep := string(filepath.Separator)
+	vol := filepath.VolumeName(t.TempDir()) + sep
+	if got, err := h.resolveOpenPath(vol + "x" + sep + ".." + sep + "y" + sep + "z.md"); err != nil || got != filepath.Join(vol, "y", "z.md") {
 		t.Errorf("an absolute path: %q %v", got, err)
 	}
-	if got, err := h.resolveOpenPath("~/notes/a b.md"); err != nil || got != filepath.Join(homeDir(), "notes", "a b.md") {
+	if got, err := h.resolveOpenPath("~/notes/a b.md"); err != nil || got != filepath.Join(homeDir(nil), "notes", "a b.md") {
 		t.Errorf("a ~/ path: %q %v", got, err)
 	}
 	if _, err := h.resolveOpenPath("notes/a.md"); err == nil || !strings.Contains(err.Error(), "absolute path") {
@@ -180,10 +185,10 @@ func TestALuaCommandNamedOpenIsListedAsOwningIt(t *testing.T) {
 	r.connected(t)
 	r.s.WaitFor(t, "the Lua command registered", func(string) bool {
 		return onLoop(r, func() bool {
-			return r.h.cat != nil && r.h.cat.names["open"] != "" && r.h.cat.names["open"] != "file.open_path"
+			return r.h.cat != nil && r.h.cat.Names["open"] != "" && r.h.cat.Names["open"] != "file.open_path"
 		})
 	})
-	call := editorClient(t, r, onLoop(r, func() string { return r.h.agents.editorToken("zen") }))
+	call := editorClient(t, r, onLoop(r, func() string { return r.h.agents.EditorToken("zen") }))
 	res, re := call("editor.commands")
 	if re != nil {
 		t.Fatalf("editor.commands: %v", re)

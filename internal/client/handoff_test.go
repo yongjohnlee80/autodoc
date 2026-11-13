@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -74,8 +75,9 @@ func TestTheSocketHasOneSpelling(t *testing.T) {
 	if a, b := socketID(filepath.Join(dir, "s.sock")), socketID(filepath.Join(link, "x", "..", "s.sock")); a != b {
 		t.Fatalf("one socket, two ids: %s, %s", a, b)
 	}
-	if got := socketID("/no/such/dir/../s.sock"); got != "/no/such/s.sock" {
-		t.Fatalf("an unresolvable directory: %s", got)
+	missing := filepath.Join(t.TempDir(), "no", "such") // absolute on any OS, and not there
+	if got, want := socketID(filepath.FromSlash(filepath.ToSlash(missing)+"/dir/../s.sock")), filepath.Join(missing, "s.sock"); got != want {
+		t.Fatalf("an unresolvable directory: %s, want %s", got, want)
 	}
 	state := t.TempDir()
 	if handoffPath(state, filepath.Join(dir, "s.sock")) != handoffPath(state, filepath.Join(link, "s.sock")) {
@@ -128,7 +130,7 @@ func TestWhichHandoffsHoldBack(t *testing.T) {
 // spawned and no ConnectError.
 func TestConnectWaitsOutARestart(t *testing.T) {
 	dir, state := shortDir(t), t.TempDir()
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	putHandoff(t, state, sock, handoff{PID: livePID(t), Deadline: time.Now().Add(20 * time.Second).UnixNano()})
 	var spawns atomic.Int32
 	s := handoffSession(sock, state, 300*time.Millisecond, 10*time.Second, &spawns)
@@ -149,7 +151,7 @@ func TestConnectWaitsOutARestart(t *testing.T) {
 // a cancelled ctx returns at once while held.
 func TestALapsedHandoffSpawnsOnce(t *testing.T) {
 	dir, state := shortDir(t), t.TempDir()
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	const window = 300 * time.Millisecond
 	putHandoff(t, state, sock, handoff{PID: livePID(t), Deadline: time.Now().Add(500 * time.Millisecond).UnixNano()})
 	var spawns atomic.Int32
@@ -186,7 +188,7 @@ func TestALapsedHandoffSpawnsOnce(t *testing.T) {
 // ends, hold it back for the cap, not twice, and then it spawns.
 func TestTheCapIsPerConnect(t *testing.T) {
 	dir, state := shortDir(t), t.TempDir()
-	sock := filepath.Join(dir, "s.sock")
+	sock := ipc.ScratchAddr(dir, "s.sock")
 	const capWait = 700 * time.Millisecond
 	putHandoff(t, state, sock, handoff{PID: livePID(t), Deadline: time.Now().Add(20 * time.Second).UnixNano()})
 	second := livePID(t)

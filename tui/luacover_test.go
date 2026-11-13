@@ -2,8 +2,7 @@ package tui
 
 import (
 	"errors"
-	"os"
-	"path/filepath"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"strings"
 	"testing"
 )
@@ -14,7 +13,7 @@ import (
 func TestLuaHostEdges(t *testing.T) {
 	s := &scripting{}
 	for _, e := range s.Catalog() {
-		if err := e.Run(Invocation{}); err == nil || !strings.Contains(err.Error(), "have not started") {
+		if err := e.Run(feature.Invocation{}); err == nil || !strings.Contains(err.Error(), "have not started") {
 			t.Errorf("%s before the scripts start: %v", e.ID, err)
 		}
 	}
@@ -28,29 +27,11 @@ func TestLuaHostEdges(t *testing.T) {
 	if err := h.reloadScripts(); err == nil || !strings.Contains(err.Error(), "no command catalog") {
 		t.Errorf("a reload with no catalog: %v", err)
 	}
-	if err := h.runFromLua("file.save", nil); !errors.Is(err, errUnknownCommand) {
+	if err := h.runFromLua("file.save", nil); !errors.Is(err, feature.ErrUnknownCommand) {
 		t.Errorf("autodoc.run with no catalog: %v", err)
 	}
 	if err := h.runFromLua("plugin.x.y", nil); err == nil || !strings.Contains(err.Error(), "plugin's command") {
 		t.Errorf("autodoc.run of a plugin's: %v", err)
-	}
-
-	dir := filepath.Join(t.TempDir(), "editor")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := privateDir(dir); err != nil {
-		t.Fatal(err)
-	}
-	if fi, _ := os.Stat(dir); fi.Mode().Perm() != 0o700 {
-		t.Fatalf("a wide folder was left %v", fi.Mode().Perm())
-	}
-	link := filepath.Join(t.TempDir(), "link")
-	if err := os.Symlink(dir, link); err != nil {
-		t.Fatal(err)
-	}
-	if err := privateDir(link); err == nil {
-		t.Fatal("a link was taken for the socket's folder")
 	}
 }
 

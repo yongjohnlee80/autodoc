@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/relations"
 	"github.com/yongjohnlee80/golib/highlight"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/style"
@@ -92,6 +93,7 @@ func themeStartedIn(t *testing.T, d *managedDaemon, name, keyword string) *runni
 	t.Helper()
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.connected(t)
+	r.ready(t) // the workspace entered, for the caller's open of a note in it
 	for deadline := time.Now().Add(20 * time.Second); ; {
 		if keywordFG(r) == keyword {
 			return r
@@ -190,11 +192,13 @@ func checkPage(t *testing.T, r *running, theme string) {
 // The page's text, heading, link, and a diagram's label and box carry the theme's own base, never
 // the terminal's: switched into the theme with the page open, and started in it.
 func TestThePagesTextCarriesItsThemesBase(t *testing.T) {
+	t.Parallel()
 	for _, theme := range pageThemes {
 		t.Run(theme, func(t *testing.T) {
 			d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "page.md", pageSource)}, tableInclude)
 			first := runTUI(t, NewSession(d.sock, nil), Options{})
 			first.connected(t)
+			first.ready(t) // the workspace entered: an open before it is no note of a workspace in use
 			onLoop(first, func() bool { first.h.openPath("page.md"); return true })
 			first.waitFile(t, "page.md")
 			kw := storeTheme(t, first, theme)
@@ -209,11 +213,11 @@ func TestThePagesTextCarriesItsThemesBase(t *testing.T) {
 }
 
 // openMindmap opens the cell Mindmap pane and answers it.
-func openMindmap(t *testing.T, r *running) *cellMindmap {
+func openMindmap(t *testing.T, r *running) *relations.CellMindmap {
 	t.Helper()
-	m := onLoop(r, func() *cellMindmap {
-		for _, f := range r.h.reg.features {
-			if m, ok := f.(*cellMindmap); ok {
+	m := onLoop(r, func() *relations.CellMindmap {
+		for _, f := range r.h.reg.Features {
+			if m, ok := f.(*relations.CellMindmap); ok {
 				return m
 			}
 		}
@@ -222,23 +226,23 @@ func openMindmap(t *testing.T, r *running) *cellMindmap {
 	if m == nil {
 		t.Fatal("a terminal host has no cell Mindmap registered")
 	}
-	onLoop(r, func() bool { m.toggle(); return true })
+	onLoop(r, func() bool { m.Toggle(); return true })
 	r.s.WaitFor(t, "the cell Mindmap open", func(string) bool {
-		return onLoop(r, func() bool { return m.open && m.view != nil })
+		return onLoop(r, func() bool { s := m.Snapshot(); return s.Open && s.Viewed })
 	})
 	return m
 }
 
 // checkMindmap is a box of the pane's map against the theme's base: its label and its outline.
-func checkMindmap(t *testing.T, r *running, m *cellMindmap, theme string) {
+func checkMindmap(t *testing.T, r *running, m *relations.CellMindmap, theme string) {
 	t.Helper()
 	settlesOnBase(t, r, theme, func(snap [][]tuicore.Cell) ([]probe, string) {
 		// the root's label, as the laid-out map has it: a title or a file's name
 		label := onLoop(r, func() string {
-			if m.cur == nil || len(m.cur.grid.Boxes) == 0 {
-				return ""
+			if boxes := m.Snapshot().Boxes; len(boxes) > 0 {
+				return boxes[0].Label
 			}
-			return m.cur.grid.Boxes[0].Label
+			return ""
 		})
 		if label == "" {
 			return nil, "the Mindmap's map"
@@ -253,11 +257,13 @@ func checkMindmap(t *testing.T, r *running, m *cellMindmap, theme string) {
 
 // The Mindmap pane's boxes carry the theme's base too, switched into it and started in it.
 func TestTheMindmapPanesBoxesCarryItsThemesBase(t *testing.T) {
+	t.Parallel()
 	for _, theme := range pageThemes {
 		t.Run(theme, func(t *testing.T) {
 			d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")}, tableInclude)
 			first := runTUI(t, NewSession(d.sock, nil), Options{})
 			first.connected(t)
+			first.ready(t) // the workspace entered: an open before it is no note of a workspace in use
 			onLoop(first, func() bool { first.h.openPath("a.md"); return true })
 			first.waitFile(t, "a.md")
 			m := openMindmap(t, first)

@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // probe loads src, which registers the command name, runs line, and returns what it notified.
-func probe(t *testing.T, e *Engine, core *widget.EditorCore, said *[]string, src, line string) []string {
+func probe(t *testing.T, e *Engine, core *editor.EditorCore, said *[]string, src, line string) []string {
 	t.Helper()
 	*said = nil
 	if err := e.Load("probe.lua", []byte(src)); err != nil {
@@ -41,7 +41,7 @@ end }`
 		t.Fatalf("Vim's keys: %q", got)
 	}
 
-	core = widget.NewEditorCore(widget.CoreInitialText("alpha beta\ngamma"), widget.CoreKeyset(widget.KeysetStandard))
+	core = editor.NewEditorCore(editor.CoreInitialText("alpha beta\ngamma"), editor.CoreKeyset(editor.KeysetStandard))
 	var plain []string
 	e = New(core, WithNotify(func(s string) { plain = append(plain, s) }))
 	t.Cleanup(e.Close)
@@ -159,7 +159,7 @@ end }`
 	}
 	cmd, _ := core.Commands().Lookup("hi")
 	*said = nil
-	if err := cmd.Run(widget.CommandContext{Bang: true}); err != nil || strings.Join(*said, "|") != "hello true " {
+	if err := cmd.Run(editor.CommandContext{Bang: true}); err != nil || strings.Join(*said, "|") != "hello true " {
 		t.Fatalf("run with no name: %v %q", err, *said)
 	}
 }

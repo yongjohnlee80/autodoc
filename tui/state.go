@@ -1,10 +1,12 @@
 package tui
 
 import (
-	"os"
+	"path/filepath"
 
-	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/internal/userdirs"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // THE APP SINGLETON'S STATE — what the document reads.
@@ -55,16 +57,16 @@ func (h *Host) state() map[string]any {
 		"App.syntaxDefinition":   "Markdown",
 
 		// the search picker
-		"App.hits":                  h.searchPick.list.Model(),
+		"App.hits":                  h.searchPick.List.Model(),
 		"App.hitsTitle":             h.tr("autodoc.text.state.hits"),
 		"App.searchPreviewTitle":    "",
 		"App.searchPreviewText":     "",
 		"App.searchPreviewRendered": false,
 		"App.searchPreviewAt":       0,
 		// the open picker
-		"App.pickerRows":          h.openPick.list.Model(),
+		"App.pickerRows":          h.openPick.List.Model(),
 		"App.openField":           "",
-		"App.bufferRows":          h.bufferPick.list.Model(),
+		"App.bufferRows":          h.bufferPick.List.Model(),
 		"App.buffersField":        "",
 		"App.buffersPreviewTitle": "",
 		"App.buffersPreviewText":  "",
@@ -77,7 +79,7 @@ func (h *Host) state() map[string]any {
 		"App.openPreviewText":     "",
 		"App.openPreviewAt":       0,
 		// the new-file picker
-		"App.newFiles":        h.newPick.list.Model(),
+		"App.newFiles":        h.newPick.List.Model(),
 		"App.newFilePath":     "",
 		"App.newPreviewTitle": "",
 		"App.newPreviewText":  "",
@@ -86,8 +88,8 @@ func (h *Host) state() map[string]any {
 		// the leader card
 
 		// the editor's preferences
-		"App.languages":     choices(languageLabels()...),
-		"App.themes":        choices(h.themeLabels()...),
+		"App.languages":     feature.Choices(languageLabels()...),
+		"App.themes":        feature.Choices(h.themeLabels()...),
 		"App.userThemes":    h.userThemeRows(),
 		"App.builtinThemes": h.builtinThemeRows(),
 		"App.prefsError":    "",
@@ -103,8 +105,8 @@ func (h *Host) state() map[string]any {
 		"App.vectorsRefusals": "",
 
 		// the workspace settings (settings.go): one dialog, Edit and Advanced, for an edit and an add
-		"App.home":                    homeDir(),
-		"App.browseFolder":            homeDir(),
+		"App.home":                    homeDir(h.seams.env),
+		"App.browseFolder":            homeDir(h.seams.env),
 		"App.settingsHelp":            "",
 		"App.settingsTab":             0,
 		"App.settingsAdding":          false,
@@ -168,9 +170,9 @@ func (h *Host) state() map[string]any {
 		"App.cellFonts":     h.cellFontModel,
 		"App.terminalFonts": h.termFontModel,
 		"App.proseFonts":    h.proseFontModel,
-		"App.fontSizes":     choices(fontSizeLabels()...),
-		"App.agentScales":   choices(percentLabels(agentScales)...),
-		"App.zoomSteps":     choices(zoomLabels()...),
+		"App.fontSizes":     feature.Choices(fontSizeLabels()...),
+		"App.agentScales":   feature.Choices(feature.PercentLabels(feature.AgentScales)...),
+		"App.zoomSteps":     feature.Choices(zoomLabels()...),
 		"App.cellFontIndex": 0, "App.proseFontIndex": 0, "App.terminalFontIndex": 0, "App.terminalLookNote": "",
 	}
 	for k, v := range h.cardState() {
@@ -207,30 +209,21 @@ func (h *Host) languageState() map[string]any {
 	}
 }
 
-// choices are a chooser's rows: each a label.
-func choices(labels ...string) *tuidecl.ListModel {
-	m := tuidecl.NewListModel("key", "label")
-	rows := make([]rowOf, len(labels))
-	for i, l := range labels {
-		rows[i] = rowOf{"key": l, "label": l}
-	}
-	m.Reset(rows)
-	return m
-}
-
-// homeDir is where the folder picker starts: the home directory, or the root.
-func homeDir() string {
-	if d, err := os.UserHomeDir(); err == nil {
+// homeDir is where the folder picker starts: the home directory (env's, nil for AutoDoc's own),
+// or, when no home is known, the root of the volume the temporary folder is on: "/" on Unix, a
+// drive's root on Windows (C:\), which the dialogs' drive source opens where it refuses "/".
+func homeDir(env procenv.Env) string {
+	if d, err := userdirs.Home(env); err == nil {
 		return d
 	}
-	return "/"
+	return filepath.VolumeName(userdirs.Temp(env)) + string(filepath.Separator)
 }
 
 // set publishes one source; a failure is kept for Run.
 func (h *Host) set(name string, v any) { h.record(h.p.Set(name, v)) }
 
 // setField is the host's form fields written as a feature's are (endpoints.go: setField).
-func (h *Host) setField(name, text string) { setField(core{h}, name, text) }
+func (h *Host) setField(name, text string) { feature.SetField(core{h}, name, text) }
 
 // setWhere is the status line's left: the editor's mode, then where the TUI is attached. While
 // Insert's (or Replace's) Ctrl+O runs its one Normal-mode command, the mode is (INSERT) or
@@ -239,9 +232,9 @@ func (h *Host) setWhere(where string) {
 	h.where = where
 	mode := h.core.Mode().String()
 	switch h.core.OneShotMode() {
-	case widget.ModeInsert:
+	case editor.ModeInsert:
 		mode = "(INSERT)"
-	case widget.ModeReplace:
+	case editor.ModeReplace:
 		mode = "(REPLACE)"
 	}
 	h.set("App.statusLeft", mode+"  "+where)

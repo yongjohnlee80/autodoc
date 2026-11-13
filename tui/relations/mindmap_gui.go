@@ -1,0 +1,434 @@
+//go:build gui
+
+package relations
+
+import (
+	"cmp"
+	"context"
+	"fmt"
+	"image/color"
+
+	"github.com/yongjohnlee80/gio/f32"
+	"github.com/yongjohnlee80/golib/gui"
+	guimermaid "github.com/yongjohnlee80/golib/gui/mermaid"
+	pm "github.com/yongjohnlee80/golib/parse/mermaid"
+	tuicore "github.com/yongjohnlee80/golib/tui"
+
+	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+)
+
+// THE MINDMAP — Relations › Mindmap: the page's document and the documents one link from it (d: two
+// links, and back), as a mind map drawn natively (golib gui/mermaid.LayDiagram), each document once,
+// under the one that reached it first. A click on a document opens it and keeps the keyboard here;
+// the map is rooted again at the page shown, only when one is (Shown). The wheel scrolls a tall map.
+
+// mind is one Mindmap build: everything derived from one graph.map answer, made off the loop and
+// never changed once installed.
+type mind struct {
+	root   feature.FileRef
+	m      relMap
+	laid   *guimermaid.Laid // laid out from mindmapModel(m, root, …): its ids "n<i>" index m.Nodes
+	groups *relGroups       // the groups it was laid out in; nil: none read yet
+	width  float32          // the width it was laid out for, in logical pixels
+}
+
+// mindmap is the Mindmap feature: its builds, fenced (load), and the view's scroll.
+type Mindmap struct {
+	c         feature.Core
+	seq       uint64
+	open      bool
+	page      feature.Page // the page shown, as Shown last said
+	cur       *mind        // the build shown; nil until one is installed
+	status    string       // what a load says, a catalog id statusArg fills; "" none
+	statusArg string       // fills status's %1
+	view      *mindView
+	scroll    float32 // how far down the map the view is, in logical pixels
+	asked     float32 // the width a relayout was last asked for
+	depth     int     // the links out from the root it shows: 1, or 2 (d toggles)
+	noKey     bool    // l hid the legend
+
+	store    *GraphStore
+	editor   *GroupEditor // the settings' groups
+	groups   *relGroups   // groupsWS's groups (graphstore_gui.go): each document's outline and colour
+	groupsWS string
+}
+
+func newMindmap(c feature.Core) *Mindmap {
+	m := &Mindmap{c: c, depth: 1}
+	m.editor = &GroupEditor{c: c, view: ViewMindmap, name: "mind", shapes: true, changed: m.groupsEdited,
+		ground: func() color.NRGBA { return m.palette().background }}
+	return m
+}
+
+// toggleDepth is d in the Mindmap: two links out, or one again, read afresh at the page shown.
+func (m *Mindmap) toggleDepth() {
+	m.depth = 3 - m.depth
+	m.Load()
+}
+
+func (*Mindmap) Name() string { return "mindmap" }
+
+func (m *Mindmap) Panels() []feature.PanelSpec {
+	return []feature.PanelSpec{{ID: MindmapPanelID, View: MindmapViewID, Priority: 71, Icon: "⎇",
+		Edge: func(feature.PrefsView) string { return "center" },
+		Opened: func(feature.PanelHost) {
+			m.open, m.depth = true, m.prefDepth() // it opens at the depth its settings choose
+			m.Load()
+		},
+		Closed: func(c feature.PanelHost) {
+			m.open = false
+			m.seq++ // a build under way is dropped
+			c.Keep(c.RestoreKeyboardHome())
+		}}}
+}
+
+func (m *Mindmap) State() map[string]any {
+	st := m.settingsState()
+	st["App.mindmapTitle"] = "Mindmap"
+	return st
+}
+
+func (m *Mindmap) Commands() map[string]feature.Command {
+	c := m.settingsCommands()
+	c["App.toggleMindmap"] = feature.None(m.Toggle)
+	return c
+}
+
+func (m *Mindmap) Catalog() []feature.Entry {
+	return []feature.Entry{feature.Builtin("mindmap.toggle", "the Mindmap", "App.toggleMindmap()", m.Toggle),
+		feature.Builtin("mindmap.settings", "the Mindmap's settings", "App.openMindmapSettings()", m.OpenSettings)}
+}
+
+func (m *Mindmap) Toggle() { m.c.TogglePanel(MindmapPanelID) }
+
+// Shown roots the map at the page shown, while it is open. A click whose open is cancelled, fails
+// or is overtaken shows no page, so it roots nothing.
+func (m *Mindmap) Shown(p feature.Page) {
+	m.page = p
+	if m.open {
+		m.Load()
+	}
+}
+
+// ThemeChanged lays the map out again in the theme's colours, while it is open: a build keeps the
+// colours it was laid out in.
+func (m *Mindmap) ThemeChanged() {
+	if m.open {
+		m.Load()
+	}
+}
+
+func (*Mindmap) Edited(feature.Page) {}
+func (*Mindmap) Moved(int, int)      {}
+func (*Mindmap) Reread(feature.Page) {}
+func (*Mindmap) Closed()             {}
+
+// load reads the page's document's neighbourhood and lays it out off the loop; on the loop it
+// installs the build whole, or drops it when a newer load, another page or the panel's closing
+// came first.
+func (m *Mindmap) Load() {
+	ref := m.page.Ref
+	tk := m.c.Ticket(&m.seq, feature.TicketFile)
+	if ref.Path == "" || ref.WS == "" || m.page.Outside {
+		m.cur, m.status = nil, "autodoc.text.mindmap_gui.open_a_workspace_s_document_to_see_its_mind_map"
+		m.title()
+		return
+	}
+	width, th, depth := m.width(), mindTheme(m.palette()), m.depth
+	var gs *relGroups
+	if m.groupsWS == ref.WS {
+		gs = m.groups
+	}
+	m.asked = width
+	m.status, m.statusArg = "autodoc.text.mindmap_gui.reading", ref.Path
+	m.title()
+	m.c.Go(func(ctx context.Context) any {
+		res, err := m.c.Call(ctx, "graph.map", ref.WS, map[string]any{"root": ref.Path, "depth": int64(depth)})
+		if err != nil {
+			return err
+		}
+		rm := decodeMap(res)
+		model := mindmapModel(rm, ref.Path, func(n mapNode) pm.MindShape {
+			if i := gs.ofOr(n); i >= 0 {
+				return gs.list[i].Shape
+			}
+			return pm.MindDefault
+		})
+		th.Tint = func(id string) (color.NRGBA, bool) { // a document's group's colour; else its branch's
+			if i, ok := rm.mindIndex(id); ok {
+				if k := gs.ofOr(rm.Nodes[i]); k >= 0 {
+					return gs.list[k].Colour, true
+				}
+			}
+			return color.NRGBA{}, false
+		}
+		if model == nil {
+			return fmt.Errorf("%s is not in its own map", ref.Path)
+		}
+		meas, release := gui.AcquireMeasurer(1)
+		defer release()
+		laid, err := guimermaid.LayDiagram(ctx, model, width, th, meas)
+		if err != nil {
+			return err
+		}
+		return &mind{root: ref, m: rm, laid: laid, width: width, groups: gs}
+	}, func(v any) {
+		if !tk.Current() || !m.open {
+			return
+		}
+		m.status = ""
+		switch v := v.(type) {
+		case *mind:
+			m.cur, m.scroll = v, 0
+			if m.groupsWS != v.root.WS {
+				m.readGroups(v.root.WS, v.m.Types) // laid out again in them once read
+			}
+		case error:
+			if feature.Code(v) == rpc.CodeNotFound {
+				m.cur, m.status, m.statusArg = nil, "autodoc.text.mindmap_gui.is_not_indexed_yet", ref.Path
+			} else {
+				m.c.Failed("Mindmap", v)
+			}
+		}
+		m.title()
+	})
+}
+
+// width is the width a build is laid out for: the view's, less its margins; a default before it
+// has one.
+func (m *Mindmap) width() float32 {
+	if m.view != nil && m.view.ctx != nil {
+		if w := m.view.pixels().W - 2*mindMargin; w > 0 {
+			return w
+		}
+	}
+	return 900
+}
+
+// palette is the map's colours: the page's theme (the document's colours, as the view's properties
+// bind them), or the theme its settings choose.
+func (m *Mindmap) palette() relPalette {
+	page := defaultPalette()
+	if m.view != nil {
+		page = m.view.pal
+	}
+	choice := cmp.Or(m.c.Prefs().Value(prefMindTheme), "page")
+	if ts, ok := m.c.(globeThemeSource); ok && choice != "page" {
+		if v, ok := viewThemeValues(choice, m.c.Prefs(), ts); ok {
+			return paletteOf(v, page)
+		}
+	}
+	return page
+}
+
+// mindTheme is the map's theme from the view's colours: nodes tinted by the accent, lines muted.
+func mindTheme(p relPalette) guimermaid.Theme {
+	return guimermaid.Theme{
+		Background:    p.background,
+		Text:          p.text,
+		Line:          mixNRGBA(p.background, p.text, 0.4),
+		NodeFill:      mixNRGBA(p.background, p.accent, 0.12),
+		NodeStroke:    mixNRGBA(p.background, p.accent, 0.7),
+		ClusterFill:   mixNRGBA(p.background, p.text, 0.04),
+		ClusterStroke: mixNRGBA(p.background, p.text, 0.3),
+		Font:          gui.Font{Size: 14},
+	}
+}
+
+// title says what the panel shows, in the UI's language, and redraws it.
+func (m *Mindmap) title() {
+	t := "Mindmap"
+	switch {
+	case m.status != "":
+		t += " · " + m.statusText()
+	case m.cur != nil:
+		t = m.c.Trf("autodoc.text.mindmap_gui.mindmap_documents_depth_d_depth_l_legend",
+			m.cur.root.Path, len(m.cur.m.Nodes), m.depth)
+	}
+	m.c.Set("App.mindmapTitle", t)
+	m.dirty()
+}
+
+// statusText is what a load says, in the UI's language; "" none.
+func (m *Mindmap) statusText() string {
+	if m.status == "" {
+		return ""
+	}
+	return m.c.Trf(m.status, m.statusArg)
+}
+
+// LanguageChanged composes again, in the UI's language, what the Mindmap keeps on screen: its
+// heading (and the legend, as the view is drawn again), its choosers' rows and its groups' note.
+func (m *Mindmap) LanguageChanged() {
+	names, labels := viewThemeChoices(m.c)
+	m.c.Set("App.mindThemes", feature.KeyedChoices(names, labels))
+	for _, src := range []string{"App.mindDepths", "App.mindShapeChoices"} {
+		m.c.Set(src, relationChoice(m.c, src))
+	}
+	if m.editor.ws != "" {
+		m.editor.show("")
+	}
+	m.title()
+}
+
+func (m *Mindmap) dirty() {
+	if m.view != nil && m.view.ctx != nil {
+		m.view.ctx.MarkDirty()
+	}
+}
+
+// mindMargin is the space round the map, in logical pixels.
+const mindMargin = 16
+
+// origin is where the map's top left is in the view: centred across, scrolled down.
+func (m *Mindmap) origin(view gui.Size) gui.Point {
+	if m.cur == nil {
+		return gui.Point{}
+	}
+	sz := m.cur.laid.Size()
+	return gui.Pt(max((view.W-sz.W)/2, mindMargin), mindMargin-m.scroll)
+}
+
+// click opens the document under the view point p, the keyboard kept here.
+func (m *Mindmap) click(p, at gui.Point) {
+	cur := m.cur
+	if cur == nil {
+		return
+	}
+	id, ok := cur.laid.NodeAt(gui.Pt(p.X-at.X, p.Y-at.Y))
+	if !ok {
+		return
+	}
+	if i, ok := cur.m.mindIndex(id); ok {
+		// hidden, not closed, as the GlobeMap is: the dock shows it again
+		// (docs/decisions/editor.md#dock-clicks-hide-and-show)
+		m.c.HidePanel(MindmapPanelID)
+		m.c.OpenRef(cur.root.WS, cur.m.Nodes[i].Path)
+	}
+}
+
+// mindView is the Mindmap's native view, in its panel.
+type mindView struct {
+	m     *Mindmap
+	pal   relPalette
+	ctx   *tuicore.Context
+	cells tuicore.Size
+}
+
+func (m *Mindmap) newView(p relPalette) tuicore.Component {
+	v := &mindView{m: m, pal: p}
+	m.view = v
+	return v
+}
+
+func (v *mindView) Init(ctx *tuicore.Context) { v.ctx = ctx }
+
+// Layout takes the panel; a width another than the build's lays the map out again, once asked.
+func (v *mindView) Layout(c tuicore.Constraints) tuicore.Size {
+	v.cells = c.Constrain(tuicore.Size{W: c.MaxW, H: c.MaxH})
+	m := v.m
+	if w := m.width(); m.open && m.cur != nil && w != m.cur.width && w != m.asked {
+		m.asked = w
+		m.c.Post(m.Load) // after the frame: a load sets what the frame reads
+	}
+	return v.cells
+}
+
+func (*mindView) Render(tuicore.Surface) {}
+func (*mindView) AcceptsFocus() bool     { return true }
+
+func (v *mindView) pixels() gui.Size {
+	cp := v.ctx.CellPixels()
+	return gui.Size{W: float32(v.cells.W) * cp.W, H: float32(v.cells.H) * cp.H}
+}
+
+func (v *mindView) HandleEvent(ev tuicore.Event) bool {
+	m := v.m
+	if k, ok := ev.(tuicore.KeyEvent); ok && k.Kind == tuicore.KeyPress {
+		switch k.Text {
+		case "d":
+			m.toggleDepth()
+		case "l":
+			m.noKey = !m.noKey
+			m.dirty()
+		default:
+			return false
+		}
+		return true
+	}
+	if _, ok := ev.(tuicore.KeyEvent); ok {
+		return false
+	}
+	e, ok := ev.(tuicore.MouseEvent)
+	if !ok {
+		return false
+	}
+	view := v.pixels()
+	cp := v.ctx.CellPixels()
+	p := gui.Pt((float32(e.X)+e.SubX)*cp.W, (float32(e.Y)+e.SubY)*cp.H)
+	switch e.Kind {
+	case tuicore.MousePress:
+		if e.Button == tuicore.MouseLeft {
+			v.ctx.RequestFocus()
+			m.click(p, m.origin(view))
+		}
+	case tuicore.MouseWheel:
+		if m.cur == nil {
+			return true
+		}
+		step := float32(48)
+		if e.Button == tuicore.WheelUp {
+			step = -step
+		}
+		most := max(m.cur.laid.Size().H+2*mindMargin-view.H, 0)
+		m.scroll = min(max(m.scroll+step, 0), most)
+		m.dirty()
+	}
+	return true
+}
+
+// NativeView draws the build as it is now, taken on the loop.
+func (v *mindView) NativeView() (any, bool) {
+	m := v.m
+	f := mindFrame{cur: m.cur, at: m.origin(v.pixels()), status: m.statusText(), pal: m.palette()}
+	if !m.noKey && m.cur != nil {
+		f.legend = legendIn(mindLegend(mindTheme(f.pal), m.cur.groups, m.cur.m), m.c.Trf)
+	}
+	return gui.ViewFunc(f.paint), true
+}
+
+// mindLegend is what the Mindmap's marks stand for: each group the map shows, its outline in its
+// colour (groupLegend), then any other document's box in its branch's tint. Its texts are English,
+// until legendIn puts them in the UI's language.
+func mindLegend(th guimermaid.Theme, gs *relGroups, m relMap) []legendRow {
+	rows := groupLegend(gs, m, func(g Group) func(gui.Canvas, gui.Rect) {
+		t := th
+		t.NodeFill, t.NodeStroke = mixNRGBA(th.NodeFill, g.Colour, 0.35), mixNRGBA(th.NodeStroke, g.Colour, 0.75)
+		return legendForm(g.Shape, t)
+	})
+	return append(rows, legendMsg(legendForm(pm.MindDefault, th), "autodoc.text.mindmap_gui.any_other_document"))
+}
+
+type mindFrame struct {
+	cur    *mind
+	at     gui.Point
+	status string
+	pal    relPalette
+	legend []legendRow // nil: hidden
+}
+
+func (f mindFrame) paint(c gui.Canvas) {
+	sz := c.Size()
+	c.FillRect(gui.Rect{W: sz.W, H: sz.H}, gui.Solid(f.pal.background))
+	if f.cur != nil {
+		c.PushTransform(f32.Affine2D{}.Offset(f32.Pt(f.at.X, f.at.Y)))
+		f.cur.laid.Paint(c)
+		c.Pop()
+	}
+	if f.status != "" {
+		t := c.Text().Layout(f.status, gui.Font{Size: 13}, sz.W-24)
+		c.DrawText(t, gui.Pt(12, 10), gui.Solid(f.pal.muted))
+	}
+	paintLegend(c, sz, f.pal, f.legend)
+}

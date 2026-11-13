@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/tui/crew"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/parse/qml"
 )
 
@@ -15,55 +17,57 @@ import (
 type fake struct {
 	name  string
 	state map[string]any
-	cmds  map[string]Command
+	cmds  map[string]feature.Command
 	heard []string
 	kinds []string
 }
 
-func (f *fake) Name() string                  { return f.name }
-func (f *fake) State() map[string]any         { return f.state }
-func (f *fake) Commands() map[string]Command  { return f.cmds }
-func (f *fake) Connected()                    { f.heard = append(f.heard, "connected") }
-func (f *fake) Entered(ws string)             { f.heard = append(f.heard, "entered "+ws) }
-func (f *fake) Kinds() []string               { return f.kinds }
-func (f *fake) Event(kind, ws, detail string) { f.heard = append(f.heard, kind+" "+ws+" "+detail) }
+func (f *fake) Name() string                         { return f.name }
+func (f *fake) State() map[string]any                { return f.state }
+func (f *fake) Commands() map[string]feature.Command { return f.cmds }
+func (f *fake) Connected()                           { f.heard = append(f.heard, "connected") }
+func (f *fake) Entered(ws string)                    { f.heard = append(f.heard, "entered "+ws) }
+func (f *fake) Kinds() []string                      { return f.kinds }
+func (f *fake) Event(kind, ws, detail string)        { f.heard = append(f.heard, kind+" "+ws+" "+detail) }
 
-var noop = none(func() {})
+var noop = feature.None(func() {})
 
 func TestTheRegistryMergesFeatures(t *testing.T) {
-	a := &fake{name: "a", state: map[string]any{"App.a": 1}, cmds: map[string]Command{"App.doA": noop}}
-	b := &fake{name: "b", state: map[string]any{"App.b": "x"}, cmds: map[string]Command{"App.doB": noop}, kinds: []string{"b.changed"}}
-	r, err := newRegistry(a, b)
+	t.Parallel()
+	a := &fake{name: "a", state: map[string]any{"App.a": 1}, cmds: map[string]feature.Command{"App.doA": noop}}
+	b := &fake{name: "b", state: map[string]any{"App.b": "x"}, cmds: map[string]feature.Command{"App.doB": noop}, kinds: []string{"b.changed"}}
+	r, err := feature.NewRegistry(a, b)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.state["App.a"] != 1 || r.state["App.b"] != "x" || r.handlers["App.doA"] == nil || r.handlers["App.doB"] == nil {
-		t.Errorf("merged %v %v", r.state, r.handlers)
+	if r.State["App.a"] != 1 || r.State["App.b"] != "x" || r.Handlers["App.doA"] == nil || r.Handlers["App.doB"] == nil {
+		t.Errorf("merged %v %v", r.State, r.Handlers)
 	}
-	r.connected()
-	r.entered("kb")
-	if !r.event("b.changed", "kb", "t1") || r.event("other", "", "") {
+	r.Connected()
+	r.Entered("kb")
+	if !r.Event("b.changed", "kb", "t1") || r.Event("other", "", "") {
 		t.Error("an event went to the wrong feature")
 	}
 	if got := strings.Join(b.heard, "|"); got != "connected|entered kb|b.changed kb t1" {
 		t.Errorf("b heard %q", got)
 	}
-	var none *registry
-	none.connected()
-	none.entered("kb")
-	if none.event("b.changed", "", "") {
+	var none *feature.Registry
+	none.Connected()
+	none.Entered("kb")
+	if none.Event("b.changed", "", "") {
 		t.Error("an absent registry heard an event")
 	}
 }
 
 func TestTheRegistryRefusesANameTwoFeaturesClaim(t *testing.T) {
+	t.Parallel()
 	for name, b := range map[string]*fake{
 		"a source":                    {name: "b", state: map[string]any{"App.a": 2}},
-		"a command":                   {name: "b", cmds: map[string]Command{"App.doA": noop}},
-		"a source named as a command": {name: "b", cmds: map[string]Command{"App.a": noop}},
+		"a command":                   {name: "b", cmds: map[string]feature.Command{"App.doA": noop}},
+		"a source named as a command": {name: "b", cmds: map[string]feature.Command{"App.a": noop}},
 	} {
-		a := &fake{name: "a", state: map[string]any{"App.a": 1}, cmds: map[string]Command{"App.doA": noop}}
-		if _, err := newRegistry(a, b); err == nil || !strings.Contains(err.Error(), "both a's and b's") {
+		a := &fake{name: "a", state: map[string]any{"App.a": 1}, cmds: map[string]feature.Command{"App.doA": noop}}
+		if _, err := feature.NewRegistry(a, b); err == nil || !strings.Contains(err.Error(), "both a's and b's") {
 			t.Errorf("%s claimed twice: %v", name, err)
 		}
 	}
@@ -72,12 +76,13 @@ func TestTheRegistryRefusesANameTwoFeaturesClaim(t *testing.T) {
 // TestTheLegacyFeatureIsTheWholeHost: the host's own state and commands are one feature, so the
 // program is what it was.
 func TestTheLegacyFeatureIsTheWholeHost(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
-	n := onLoop(r, func() [2]int { return [2]int{len(r.h.reg.state), len(r.h.reg.handlers)} })
+	n := onLoop(r, func() [2]int { return [2]int{len(r.h.reg.State), len(r.h.reg.Handlers)} })
 	want := onLoop(r, func() [2]int {
 		var w [2]int
-		for _, f := range r.h.reg.features {
+		for _, f := range r.h.reg.Features {
 			w[0] += len(f.State())
 			w[1] += len(f.Commands())
 		}
@@ -87,7 +92,7 @@ func TestTheLegacyFeatureIsTheWholeHost(t *testing.T) {
 		t.Errorf("the registry has %v sources and commands, its features %v", n, want)
 	}
 	for k := range onLoop(r, r.h.state) {
-		if _, ok := onLoop(r, func() map[string]any { return r.h.reg.state })[k]; !ok {
+		if _, ok := onLoop(r, func() map[string]any { return r.h.reg.State })[k]; !ok {
 			t.Errorf("the host's %s is not in the registry", k)
 		}
 	}
@@ -96,11 +101,12 @@ func TestTheLegacyFeatureIsTheWholeHost(t *testing.T) {
 // TestAFileTicketIsStaleWhenAnotherFileOpens: a file-scoped answer is stale once another file
 // opens; a workspace-scoped one is not. With no sequence, nothing newer makes either stale.
 func TestAFileTicketIsStaleWhenAnotherFileOpens(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	got := onLoop(r, func() [4]bool {
-		file, ws := r.h.ticket(nil, TicketFile), r.h.ticket(nil, TicketWorkspace)
-		r.h.ticket(nil, TicketFile) // no sequence: a later ticket supersedes nothing
+		file, ws := r.h.ticket(nil, feature.TicketFile), r.h.ticket(nil, feature.TicketWorkspace)
+		r.h.ticket(nil, feature.TicketFile) // no sequence: a later ticket supersedes nothing
 		before := [2]bool{file.Current(), ws.Current()}
 		r.h.file.gen++ // another file opened
 		defer func() { r.h.file.gen-- }()
@@ -114,15 +120,16 @@ func TestAFileTicketIsStaleWhenAnotherFileOpens(t *testing.T) {
 // TestATicketIsStaleAfterANewerOneOrAWorkspaceSwitch: the latest answer wins, and an answer asked
 // under another workspace never applies.
 func TestATicketIsStaleAfterANewerOneOrAWorkspaceSwitch(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	got := onLoop(r, func() [4]bool {
 		c := core{r.h}
 		var seq uint64
-		first := c.Ticket(&seq, TicketWorkspace)
-		second := c.Ticket(&seq, TicketWorkspace)
-		session := c.Ticket(new(uint64), TicketSession)
-		ws := c.Ticket(new(uint64), TicketWorkspace)
+		first := c.Ticket(&seq, feature.TicketWorkspace)
+		second := c.Ticket(&seq, feature.TicketWorkspace)
+		session := c.Ticket(new(uint64), feature.TicketSession)
+		ws := c.Ticket(new(uint64), feature.TicketWorkspace)
 		before := [2]bool{first.Current(), second.Current()}
 		r.h.epoch++ // a workspace switch
 		defer func() { r.h.epoch-- }()
@@ -135,6 +142,7 @@ func TestATicketIsStaleAfterANewerOneOrAWorkspaceSwitch(t *testing.T) {
 
 // TestCoreReachesTheHost: what a feature does through Core lands on the host.
 func TestCoreReachesTheHost(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.s.WaitFor(t, "kb entered", func(string) bool { return onLoop(r, func() bool { return r.h.ws == "kb" }) })
@@ -170,6 +178,7 @@ func coreKept(r *running) []error {
 // TestCoreOpensAFileByItsAbsolutePath: Core.OpenFile and Core.OpenAbsolute open the file at an
 // absolute path: one a workspace indexes as that workspace's, one outside every workspace as in none.
 func TestCoreOpensAFileByItsAbsolutePath(t *testing.T) {
+	t.Parallel()
 	r, kb, _, abs := runOutside(t)
 	c := core{r.h}
 	r.h.p.Post(func() { c.OpenFile(filepath.Join(kb, "a.md")) })
@@ -181,6 +190,7 @@ func TestCoreOpensAFileByItsAbsolutePath(t *testing.T) {
 // TestCoreAsksWhenTheCardIsFree: Core.AskWhenFree never displaces the question open: it waits,
 // the open one still asked and its callbacks not run, and is asked once that one is answered.
 func TestCoreAsksWhenTheCardIsFree(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	type seen struct {
@@ -192,13 +202,13 @@ func TestCoreAsksWhenTheCardIsFree(t *testing.T) {
 	got := onLoop(r, func() [3]seen {
 		c, a := core{r.h}, r.h.asker
 		var heard []string
-		q := func(name string) Question {
-			return Question{Title: name, OnYes: func() { heard = append(heard, name+":yes") }, OnCancel: func() { heard = append(heard, name+":cancel") }}
+		q := func(name string) feature.Question {
+			return feature.Question{Title: name, OnYes: func() { heard = append(heard, name+":yes") }, OnCancel: func() { heard = append(heard, name+":cancel") }}
 		}
 		at := func() seen {
-			s := seen{waiting: len(a.waiting), got: strings.Join(heard, " ")}
-			if a.pending {
-				s.shown = a.current.Title
+			s := seen{waiting: len(a.Waiting), got: strings.Join(heard, " ")}
+			if a.Pending {
+				s.shown = a.Current.Title
 			}
 			return s
 		}
@@ -206,9 +216,9 @@ func TestCoreAsksWhenTheCardIsFree(t *testing.T) {
 		c.AskWhenFree(q("free"))
 		var out [3]seen
 		out[0] = at()
-		a.accepted()
+		a.Accepted()
 		out[1] = at()
-		a.accepted()
+		a.Accepted()
 		out[2] = at()
 		return out
 	})
@@ -221,6 +231,7 @@ func TestCoreAsksWhenTheCardIsFree(t *testing.T) {
 // TestCoreFocusesTheWidgetNamed: Core.Focus gives the keyboard to the widget id, from wherever it
 // is; an id the layout has not is kept as an error, the keyboard left where it was.
 func TestCoreFocusesTheWidgetNamed(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	onLoop(r, func() bool { r.h.keep(r.h.p.Call("explorer", "open")); return true })
@@ -250,6 +261,7 @@ func TestCoreFocusesTheWidgetNamed(t *testing.T) {
 // TestCoreRingsTheTerminalsBell: in the terminal build Core.Bell rings the terminal's bell, once
 // for each ring.
 func TestCoreRingsTheTerminalsBell(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	before := r.s.Backend.Bells()
@@ -263,6 +275,7 @@ func TestCoreRingsTheTerminalsBell(t *testing.T) {
 // layout keeps that as an error, never passes over it; before the host has a layout at all, there
 // is nothing to set and nothing is wrong.
 func TestCoreSetTextSaysALayoutWithoutTheTextArea(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	before := len(coreKept(r))
@@ -274,7 +287,7 @@ func TestCoreSetTextSaysALayoutWithoutTheTextArea(t *testing.T) {
 
 	h := newHost(NewSession("unused", nil), Options{})
 	t.Cleanup(h.cancel)
-	core{h}.SetText(crewReplyText, "text") // no layout yet: must neither panic nor keep an error
+	core{h}.SetText(crew.ReplyTextID, "text") // no layout yet: must neither panic nor keep an error
 	if len(h.errs) != 0 {
 		t.Fatalf("SetText before a layout kept %v", h.errs)
 	}
@@ -283,6 +296,7 @@ func TestCoreSetTextSaysALayoutWithoutTheTextArea(t *testing.T) {
 // TestCoreSaysTheStoreItsDaemonServes: Core.StoreID is the store_id the daemon said at hello: the
 // identity of the store it serves.
 func TestCoreSaysTheStoreItsDaemonServes(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "autodoc.db")
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{storeAt: path})
 	r := attached(t, d)
@@ -298,37 +312,39 @@ func TestCoreSaysTheStoreItsDaemonServes(t *testing.T) {
 // pickFake is a feature with a picker of its own.
 type pickFake struct {
 	fake
-	picks map[string]picker
+	picks map[string]feature.Picker
 }
 
-func (f *pickFake) Picks() map[string]picker { return f.picks }
+func (f *pickFake) Picks() map[string]feature.Picker { return f.picks }
 
 // A feature's picker is reached by its name through the App.pick* commands the registry serves.
 func TestAFeaturesPickerIsReachedByName(t *testing.T) {
+	t.Parallel()
 	p := newTestPick()
-	r, err := newRegistry(&fake{name: "a"}, &pickFake{fake: fake{name: "b"}, picks: map[string]picker{"test": p}})
+	r, err := feature.NewRegistry(&fake{name: "a"}, &pickFake{fake: fake{name: "b"}, picks: map[string]feature.Picker{"test": p}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	str := func(s string) qml.SpecValue { return qml.SpecValue{Kind: qml.SpecValueString, Raw: s} }
 	num := func(s string) qml.SpecValue { return qml.SpecValue{Kind: qml.SpecValueNumber, Raw: s} }
-	if err := r.handlers["App.pickFilter"]([]qml.SpecValue{str("test"), str("notes")}); err != nil || len(p.shown()) != 2 {
-		t.Fatalf("App.pickFilter(\"test\", \"notes\"): %v, rows %v", err, p.shown())
+	if err := r.Handlers["App.pickFilter"]([]qml.SpecValue{str("test"), str("notes")}); err != nil || len(p.Shown()) != 2 {
+		t.Fatalf("App.pickFilter(\"test\", \"notes\"): %v, rows %v", err, p.Shown())
 	}
-	if err := r.handlers["App.pickChoose"]([]qml.SpecValue{str("test"), num("1")}); err != nil || !slices.Equal(p.chosen, []string{"notes/c.md"}) {
+	if err := r.Handlers["App.pickChoose"]([]qml.SpecValue{str("test"), num("1")}); err != nil || !slices.Equal(p.chosen, []string{"notes/c.md"}) {
 		t.Errorf("App.pickChoose(\"test\", 1): %v, chose %v", err, p.chosen)
 	}
 }
 
 // Two features naming a picker alike are refused when the registry is built.
 func TestTheRegistryRefusesAPickerTwoFeaturesName(t *testing.T) {
-	a := &pickFake{fake: fake{name: "a"}, picks: map[string]picker{"test": newTestPick()}}
-	b := &pickFake{fake: fake{name: "b"}, picks: map[string]picker{"test": newTestPick()}}
-	if _, err := newRegistry(a, b); err == nil || err.Error() != "tui: the picker test is both a's and b's" {
+	t.Parallel()
+	a := &pickFake{fake: fake{name: "a"}, picks: map[string]feature.Picker{"test": newTestPick()}}
+	b := &pickFake{fake: fake{name: "b"}, picks: map[string]feature.Picker{"test": newTestPick()}}
+	if _, err := feature.NewRegistry(a, b); err == nil || err.Error() != "tui: the picker test is both a's and b's" {
 		t.Errorf("a picker named twice: %v", err)
 	}
-	b.picks = map[string]picker{"other": newTestPick()}
-	if _, err := newRegistry(a, b); err != nil {
+	b.picks = map[string]feature.Picker{"other": newTestPick()}
+	if _, err := feature.NewRegistry(a, b); err != nil {
 		t.Errorf("two pickers named apart: %v", err)
 	}
 }

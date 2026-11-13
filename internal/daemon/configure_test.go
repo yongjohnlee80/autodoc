@@ -333,7 +333,19 @@ func TestConfigure_TheAbstractChunkRebuildsTheMarkdown(t *testing.T) {
 func TestConfigure_SaysWhatItCouldNotDo(t *testing.T) {
 	log := &lockedLog{}
 	m, db := openWith(t, Options{Databases: true, Log: logger.New(logger.WithWriter(log))})
-	kbWith(t, m, map[string]string{"a.md": "# A\n"}, "**/*.md")
+	// served through a link to its folder: the link is what goes below. The daemon holds a served
+	// root open while it serves it, which on Windows no removal gets past, so the folder stays and
+	// only the root's path stops leading to it
+	folder, root := t.TempDir(), filepath.Join(t.TempDir(), "kb")
+	if err := os.WriteFile(filepath.Join(folder, "a.md"), []byte("# A\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(folder, root); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Add(context.Background(), workspace.Spec{Name: "kb", Root: root, Include: []string{"**/*.md"}}); err != nil {
+		t.Fatal(err)
+	}
 	indexed(t, m, "kb", 1)
 	w, _ := m.Get("kb")
 
@@ -358,7 +370,7 @@ func TestConfigure_SaysWhatItCouldNotDo(t *testing.T) {
 		t.Errorf("the failed reindex is not in the log:\n%s", log.String())
 	}
 
-	if err := os.RemoveAll(w.Root()); err != nil {
+	if err := os.Remove(root); err != nil { // the link
 		t.Fatal(err)
 	}
 	if err := m.Configure(context.Background(), "kb", store.Changes{Include: ptr([]string{"**/*.txt"}), Exclude: ptr([]string{})}); !errors.Is(err, workspace.ErrNotADirectory) {

@@ -3,9 +3,10 @@ package rpc
 import (
 	"context"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -22,6 +23,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // THE WIRE GOLDENS: what every verb answers, as the encoder receives it, pinned per domain in
@@ -146,7 +148,7 @@ func (w *wireRec) call(verb string, params ...any) any {
 	if !ok {
 		w.t.Fatalf("no verb %s", verb)
 	}
-	out, err := w.srv.chain(v)(context.Background(), &golibrpc.Request{Method: verb, Params: params, Peer: unixPeer, Session: w.sess})
+	out, err := w.srv.chain(v)(context.Background(), &golibrpc.Request{Method: verb, Params: params, Peer: localPeer, Session: w.sess})
 	domain, _, _ := strings.Cut(verb, ".")
 	b := w.out[domain]
 	if b == nil {
@@ -163,9 +165,20 @@ func (w *wireRec) call(verb string, params ...any) any {
 	return out
 }
 
-// check compares each domain's record with its golden file.
-func (w *wireRec) check() {
+// check compares each domain's record with its golden file. Every golden must have a record, but
+// the domains named in skipped: a domain left unrecorded by mistake fails, not passes.
+func (w *wireRec) check(skipped ...string) {
 	w.t.Helper()
+	goldens, err := filepath.Glob(filepath.Join("testdata", "wire", "*.golden"))
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	for _, g := range goldens {
+		domain := strings.TrimSuffix(filepath.Base(g), ".golden")
+		if _, ok := w.out[domain]; !ok && !slices.Contains(skipped, domain) {
+			w.t.Errorf("%s has no record: its verbs weren't called", g)
+		}
+	}
 	for domain, b := range w.out {
 		golden := filepath.Join("testdata", "wire", domain+".golden")
 		if *update {
@@ -295,7 +308,7 @@ func wireServer(t *testing.T) (*Server, *golibrpc.Client, *memfs.FS) {
 	broken := Static(WorkspaceInfo{Name: "broken", Root: "/roots/broken", Err: errFixed})
 	files := memfs.New()
 	sock := shortSocket(t)
-	ln, err := net.Listen("unix", sock)
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -406,20 +419,23 @@ func TestWireGoldens(t *testing.T) {
 	w.call("doc.validate", "kb", "plan.md", []byte("---\ntitle: x\n---\n# X\n"))
 	w.call("doc.validate", "kb", "plan.md", "---\ntype: adr\n---\n")
 	written := w.call("doc.write", "kb", "new.md", []byte("# New\n"), "")
-	w.call("doc.write_raw", "kb", "new.md", []byte("# Newer\n"), written.(map[string]any)["version"])
+	w.call("doc.write_raw", "kb", "new.md", []byte("# Newer\n"), versionOf(t, "doc.write", written))
 	w.call("doc.rename", "kb", "new.md", "newer.md")
 	read := call(t, cli, "doc.read", "kb", "newer.md").(map[string]any)
 	w.call("doc.remove", "kb", "newer.md", "stale")
 	w.call("doc.remove", "kb", "newer.md", read["version"])
 
-	// file
-	fv := w.call("file.write", "/tmp/notes/a.md", "# A\n", "")
-	w.call("file.read", "/tmp/notes/a.md")
-	w.call("file.read_raw", "/tmp/notes/a.md")
-	w.call("file.write_raw", "/tmp/notes/a.md", []byte("# A2\n"), fv.(map[string]any)["version"])
-	w.call("file.read", "notes/a.md")
-	w.call("file.locate", "/roots/kb/plan.md")
-	w.call("file.locate", "/elsewhere/plan.md")
+	// file: the file verbs take this OS's paths, and their golden holds Unix ones, so it's recorded
+	// where those are absolute. The file verbs on Windows have their own cells (files_test.go).
+	if runtime.GOOS != "windows" {
+		fv := w.call("file.write", "/tmp/notes/a.md", "# A\n", "")
+		w.call("file.read", "/tmp/notes/a.md")
+		w.call("file.read_raw", "/tmp/notes/a.md")
+		w.call("file.write_raw", "/tmp/notes/a.md", []byte("# A2\n"), versionOf(t, "file.write", fv))
+		w.call("file.read", "notes/a.md")
+		w.call("file.locate", "/roots/kb/plan.md")
+		w.call("file.locate", "/elsewhere/plan.md")
+	}
 
 	// embedding
 	w.call("embedding.providers")
@@ -451,5 +467,20 @@ func TestWireGoldens(t *testing.T) {
 
 	// the events all of it logged
 	w.call("sys.events", int64(0), int64(100))
-	w.check()
+	if runtime.GOOS == "windows" {
+		w.check("file") // recorded on Unix only, above
+	} else {
+		w.check()
+	}
+}
+
+// versionOf is the version a recorded write answered, failing the test with the verb's name when the
+// write answered an error instead (its record says which), rather than a nil-map panic.
+func versionOf(t *testing.T, verb string, answer any) any {
+	t.Helper()
+	m, ok := answer.(map[string]any)
+	if !ok {
+		t.Fatalf("%s answered no result to take a version from: see its record", verb)
+	}
+	return m["version"]
 }

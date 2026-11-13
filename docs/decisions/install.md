@@ -21,8 +21,7 @@ archives aren't, as their bytes can change). It needs Go of the version `go.mod`
 and lists with the distro's install line, never installing them itself. `--build` answers yes, and
 `--yes` answers every question no.
 
-On Windows it says AutoDoc doesn't run there yet and installs nothing (exit 2): AutoDoc doesn't build
-for Windows today.
+On Windows it points at `install-autodoc.ps1` and installs nothing (exit 2); see [Windows](#windows).
 
 In the code: `scripts/install/install-autodoc.sh`, `.github/workflows/release.yml`
 
@@ -93,4 +92,36 @@ binary in its place with the same arguments. Unsaved work is asked about first, 
 Nothing is downloaded or replaced without the user's Update, and AutoDoc reads no output of
 update.sh: it trusts only the new binary's `--version`.
 
-In the code: `internal/install`, `tui/update.go`, `tui/startup.go`, `app/relaunch.go`
+Update is hidden while the start's look for a newer release is out, and when it found this is the
+latest. It stays when that look had no answer (offline, the preference off, a build that is not a
+release): AutoDoc can't say then that there is nothing to update to.
+
+Update is offered only to the record's own binary. Another build run while a script install exists
+(one built from source, a release candidate, a second copy) is a different file from the record's
+`bin`. Its Update would update the installed binary, not the one running, and the restart after it
+would start this one again, still asking. So About offers it no Update. The two are compared as
+files, so a link to the installed binary, or another spelling of its path, is the same binary. When
+either can't be read, the record decides, as before.
+
+On Windows, Update runs the record's `update.ps1` the same way, with PowerShell
+(`-NoProfile -ExecutionPolicy Bypass -File`). Windows has no exec, so the restart starts the new
+binary on the same console and handles, waits for it, and exits with its exit code. The old process
+stays until the new one ends, and whoever waits on it sees the new binary's exit code.
+
+In the code: `internal/install`, `tui/update.go`, `tui/system/startup.go`, `app/relaunch.go`,
+`internal/proctree` (`Replace`)
+
+## Windows
+
+On Windows, AutoDoc installs with `install-autodoc.ps1` and updates with `update.ps1`, the PowerShell forms of the two shell scripts. They run in Windows PowerShell 5.1 and in PowerShell 7, need no administrator rights, and keep the shell scripts' rules: the newest release (or `-Version`), checked against its sha256 before anything moves; the same exit codes; and `-Yes` answers every question no.
+
+- **Where it goes, per user:**
+  - the binary: `%LOCALAPPDATA%\Programs\AutoDoc\autodoc.exe` (`-Prefix` moves it);
+  - the install record and `update.ps1`: `%LOCALAPPDATA%\autodoc`, Windows' counterpart of `~/.local/state/autodoc`. The record has the same keys, `update` naming `update.ps1`;
+  - the launcher: a Start menu shortcut, `AutoDoc`, that runs `autodoc.exe --gui`, minimized. AutoDoc is one console-subsystem binary: with `--gui`, it gives up its console at startup when it is the only process attached, so the shortcut leaves no console window. Started from a shell, it keeps the console, so its output and exit code stay. Having given it up, AutoDoc writes what it would have said there, a failure to start or a crash included, to `%LOCALAPPDATA%\autodoc\gui-startup.log`, begun afresh each run.
+- **The swap:** a running `autodoc.exe` can't be replaced, but it can be renamed. The old binary moves aside, the new one takes its name in one move, and the old one is deleted when it no longer runs: then, or at the next install.
+- **The PATH:** changed only with `-AddToPath`; otherwise the script prints the command that would.
+- **Unsigned:** the build is unsigned, so the first run can show Windows' unknown-publisher warning.
+- **Updating:** `update.ps1` runs the newest release's `install-autodoc.ps1`, fetched and verified, so there's one install path, as on Linux and macOS.
+
+In the code: `scripts/install/install-autodoc.ps1`, `scripts/install/update.ps1`, `scripts/install/test/run.ps1`

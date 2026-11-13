@@ -14,10 +14,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // terminal_test.go: the terminal pane — SPC ` and Go › Terminal, a shell in the workspace's folder,
@@ -33,14 +36,13 @@ func runShellTUI(t *testing.T, prefs map[string]string) (*daemon, *running) {
 // runTUIWithShell is runShellTUI with shell as the user's shell.
 func runTUIWithShell(t *testing.T, shell string, prefs map[string]string) (*daemon, *running) {
 	t.Helper()
-	t.Setenv("SHELL", shell)
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("PS1", "$ ")
+	tuneEnv(t, "SHELL="+shell, "HOME="+t.TempDir(), "PS1=$ ")
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: prefs})
 	return d, attached(t, d)
 }
 
 func TestTerminalStoredLengthAppliesOnlyToItsEdge(t *testing.T) {
+	t.Parallel()
 	var p prefs
 	readPanelPrefs(&p, map[string]any{"tui.terminal.bottom.length": "60"})
 	if size, length := p.panelGeometry("terminal", "bottom"); size != 30 || length != 60 {
@@ -55,6 +57,7 @@ func TestTerminalStoredLengthAppliesOnlyToItsEdge(t *testing.T) {
 // shared geometry reader. Read a pre-existing preferences snapshot, not a
 // snapshot produced by the new setters.
 func TestTerminalExistingGeometryPreferencesReadBack(t *testing.T) {
+	t.Parallel()
 	p := prefsOf(map[string]any{
 		"tui.terminal.edge":          "left",
 		"tui.terminal.left.size":     "40",
@@ -79,47 +82,11 @@ func TestTerminalExistingGeometryPreferencesReadBack(t *testing.T) {
 	}
 }
 
-// shellTabs are the terminal panel's tabs, a snapshot taken on the loop.
-func (r *running) shellTabs() []widget.TerminalTab {
-	return onLoop(r, func() []widget.TerminalTab {
-		c, _ := r.h.p.Find("terminalView")
-		tabs, ok := tuidecl.TerminalTabsOf(c)
-		if !ok {
-			return nil
-		}
-		return tabs.Tabs()
-	})
-}
-
-// shellsRunning is how many of the terminal's shells run.
-func (r *running) shellsRunning() int {
-	n := 0
-	for _, tab := range r.shellTabs() {
-		if tab.Running {
-			n++
-		}
-	}
-	return n
-}
-
-func (r *running) termShown() bool {
-	return onLoop(r, func() bool { return r.h.panelOpen["terminal"] })
-}
-
-// frameAt is the row and column of the terminal's frame corner, -1s when it is not on screen.
-func frameAt(screen string) (row, column int) {
-	for y, l := range strings.Split(screen, "\n") {
-		if c := col(l, "┌ terminal"); c >= 0 {
-			return y, c
-		}
-	}
-	return -1, -1
-}
-
 func TestTheTerminalTogglesFromTheLeaderAndGivesTheKeyboardBack(t *testing.T) {
+	t.Parallel()
 	_, r := runShellTUI(t, nil)
 	// The tests' workspaces live in memory, not on this disk: the shell starts in the home folder.
-	root := os.Getenv("HOME")
+	root := onLoop(r, func() procenv.Env { return r.h.seams.env }).Get("HOME") // the program's own (runShellTUI's)
 
 	r.leader(t, '`')
 	r.s.WaitForText(t, "┌ terminal")
@@ -160,6 +127,7 @@ func TestTheTerminalTogglesFromTheLeaderAndGivesTheKeyboardBack(t *testing.T) {
 // The terminal is tiled here, so the page beside it never covers it: a toggle hides a panel it
 // sees whole wherever the keyboard is (docs/decisions/editor.md#a-toggle-raises-a-covered-panel).
 func TestTheTerminalGivesTheKeyboardBackToThePaneThatHadIt(t *testing.T) {
+	t.Parallel()
 	_, r := runShellTUI(t, map[string]string{layoutKey("terminal"): layoutTiled})
 	r.leader(t, 'e')
 	r.s.WaitFor(t, "the explorer's keyboard", func(string) bool { return r.focused("explorerTree") })
@@ -182,6 +150,7 @@ func TestTheTerminalGivesTheKeyboardBackToThePaneThatHadIt(t *testing.T) {
 }
 
 func TestTheTerminalsPlaceAndSizeFollowThePreferences(t *testing.T) {
+	t.Parallel()
 	d, r := runShellTUI(t, map[string]string{"tui.terminal.bottom.size": "50"})
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	// At the bottom, 50% high, of the 30 rows: its frame at row 15, the full width.
@@ -196,7 +165,10 @@ func TestTheTerminalsPlaceAndSizeFollowThePreferences(t *testing.T) {
 		row, c := frameAt(sc)
 		return row == 4 && c == 15
 	})
-	onLoop(r, func() bool { r.h.terminals.setTerminalSize(indexOf(percentLabels(termSizes), "40%")); return true })
+	onLoop(r, func() bool {
+		r.h.terminals.setTerminalSize(indexOf(feature.PercentLabels(feature.PanelSizes), "40%"))
+		return true
+	})
 	r.s.WaitFor(t, "the centre's size changed", func(sc string) bool {
 		row, _ := frameAt(sc)
 		return row == 9 // 12 of 30 rows, centred
@@ -234,6 +206,7 @@ func TestTheTerminalsPlaceAndSizeFollowThePreferences(t *testing.T) {
 // (the b below), and back, the program never getting Ctrl+T itself (^T); Esc in Normal mode hides
 // the pane.
 func TestCtrlTTogglesTheTerminalsModeAndEscIsTheProgramsInEitherKeymap(t *testing.T) {
+	t.Parallel()
 	_, r := runShellTUI(t, nil) // the Vim keymap, the default
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
@@ -269,11 +242,12 @@ func TestCtrlTTogglesTheTerminalsModeAndEscIsTheProgramsInEitherKeymap(t *testin
 // keyboard back on the page; exit 0 says nothing, a non-zero exit keeps a notice; SPC ` then starts a
 // fresh shell.
 func TestTheTerminalClosesWhenItsShellExits(t *testing.T) {
+	t.Parallel()
 	_, r := runShellTUI(t, nil)
 	exitNoticed := func(code string) bool {
 		return onLoop(r, func() bool {
-			for _, n := range r.h.noticeLog.items {
-				if strings.Contains(n.text, "shell exited ("+code+")") {
+			for _, n := range r.h.noticeLog.Items {
+				if strings.Contains(n.Text, "shell exited ("+code+")") {
 					return true
 				}
 			}
@@ -314,6 +288,7 @@ func TestTheTerminalClosesWhenItsShellExits(t *testing.T) {
 // A shell that forwards its hang-up to its jobs (bash and zsh do; dash, Ubuntu's /bin/sh, does not)
 // ends with them when AutoDoc quits.
 func TestQuittingHangsTheShellUpWithItsJobs(t *testing.T) {
+	t.Parallel()
 	bash, err := exec.LookPath("bash")
 	if err != nil {
 		t.Skip("no bash: the cell needs a shell that forwards its hang-up to its jobs")
@@ -348,18 +323,19 @@ func TestQuittingHangsTheShellUpWithItsJobs(t *testing.T) {
 }
 
 func TestTheShellStartsInTheWorkspacesFolderWhenThisMachineHasIt(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	if got := termDir(dir); got != dir {
+	home := t.TempDir()
+	env := procenv.Env(nil).With("HOME=" + home)
+	if got := termDir(env, dir); got != dir {
 		t.Errorf("termDir(%q) = %q, want the folder itself", dir, got)
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	if got := termDir("/no/such/workspace"); got != home {
+	if got := termDir(env, "/no/such/workspace"); got != home {
 		t.Errorf("termDir of a missing root = %q, want the home %q", got, home)
 	}
 	file := dir + "/a.md"
 	os.WriteFile(file, []byte("x"), 0o644)
-	if got := termDir(file); got != home {
+	if got := termDir(env, file); got != home {
 		t.Errorf("termDir of a file = %q, want the home %q", got, home)
 	}
 }
@@ -367,12 +343,13 @@ func TestTheShellStartsInTheWorkspacesFolderWhenThisMachineHasIt(t *testing.T) {
 // A shell that fails to start says so, and the terminal tries again: on the next open, once the
 // command works.
 func TestTheTerminalRetriesAShellThatFailedToStart(t *testing.T) {
+	t.Parallel()
 	_, r := runTUIWithShell(t, "/nonexistent/shell", nil)
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	r.s.WaitFor(t, "the failure noticed", func(string) bool {
 		return onLoop(r, func() bool {
-			for _, n := range r.h.noticeLog.items {
-				if strings.Contains(n.text, "could not start") {
+			for _, n := range r.h.noticeLog.Items {
+				if strings.Contains(n.Text, "could not start") {
 					return true
 				}
 			}
@@ -383,8 +360,11 @@ func TestTheTerminalRetriesAShellThatFailedToStart(t *testing.T) {
 		t.Fatalf("a shell that failed to start: tabs %+v", tabs)
 	}
 	// $SHELL is fixed; the next open drops the failed tab and starts a shell with it
-	t.Setenv("SHELL", "/bin/sh")
-	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true }) // hide
+	onLoop(r, func() bool {
+		r.h.seams.env = r.h.seams.env.With("SHELL=/bin/sh")
+		r.h.terminals.toggleTerminal()
+		return true
+	}) // hide
 	r.s.WaitFor(t, "hidden", func(string) bool { return !r.termShown() })
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true }) // open again
 	r.s.WaitFor(t, "the shell started on the retry", func(string) bool {
@@ -395,6 +375,7 @@ func TestTheTerminalRetriesAShellThatFailedToStart(t *testing.T) {
 
 // :terminal opens the terminal with the keyboard in it; again, with it open, it keeps it open.
 func TestTheTerminalCommandOpensTheTerminal(t *testing.T) {
+	t.Parallel()
 	_, r := runShellTUI(t, nil)
 	r.command(t, "terminal")
 	r.s.WaitForText(t, "┌ terminal")
@@ -421,17 +402,18 @@ func TestTheTerminalCommandOpensTheTerminal(t *testing.T) {
 // shell 2; an exit closes only its tab, the keyboard going to the next shell; Go to › selects a
 // tab; Close on the last leaves the panel open on its empty text, and SPC ` then starts a fresh one.
 func TestTheTerminalsShellsAreTabs(t *testing.T) {
+	t.Parallel()
 	_, r := runShellTUI(t, nil)
 	r.leader(t, '`')
 	r.s.WaitForText(t, "┌ terminal")
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
 	menu := func(id string) {
 		t.Helper()
-		rows, tab := onLoop(r, func() []widget.MenuItemModel {
+		rows, tab := onLoop(r, func() []widgetcore.MenuItemModel {
 			c, _ := r.h.p.Find("terminalView")
 			tabs, _ := tuidecl.TerminalTabsOf(c)
 			return r.h.terminals.tabRows(tabs.Active())
-		}), onLoop(r, func() widget.TerminalTabID {
+		}), onLoop(r, func() terminal.TerminalTabID {
 			c, _ := r.h.p.Find("terminalView")
 			tabs, _ := tuidecl.TerminalTabsOf(c)
 			return tabs.Active()
@@ -440,7 +422,7 @@ func TestTheTerminalsShellsAreTabs(t *testing.T) {
 		if !ok {
 			t.Fatalf("no row %s in %v", id, rowIDs(rows))
 		}
-		onLoop(r, func() bool { row.Action.(widget.TerminalTabsMenuAction).Run(tab); return true })
+		onLoop(r, func() bool { row.Action.(terminal.TerminalTabsMenuAction).Run(tab); return true })
 	}
 	labels := func() []string {
 		var out []string
@@ -502,10 +484,11 @@ func TestTheTerminalsShellsAreTabs(t *testing.T) {
 // shell's exit, and Close on a background tab's menu, leave the active shell selected with the
 // keyboard; only the active tab's going moves it.
 func TestABackgroundShellLeavingKeepsTheActiveOne(t *testing.T) {
+	t.Parallel()
 	_, r := runShellTUI(t, nil)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
-	tabsOf := func(fn func(*widget.TerminalTabs)) {
+	tabsOf := func(fn func(*terminal.TerminalTabs)) {
 		onLoop(r, func() bool {
 			c, _ := r.h.p.Find("terminalView")
 			tabs, _ := tuidecl.TerminalTabsOf(c)
@@ -513,12 +496,12 @@ func TestABackgroundShellLeavingKeepsTheActiveOne(t *testing.T) {
 			return true
 		})
 	}
-	active := func() (id widget.TerminalTabID) {
-		tabsOf(func(tabs *widget.TerminalTabs) { id = tabs.Active() })
+	active := func() (id terminal.TerminalTabID) {
+		tabsOf(func(tabs *terminal.TerminalTabs) { id = tabs.Active() })
 		return id
 	}
-	live := func() []widget.TerminalTabID {
-		var out []widget.TerminalTabID
+	live := func() []terminal.TerminalTabID {
+		var out []terminal.TerminalTabID
 		for _, tab := range r.shellTabs() {
 			if !tab.Closing {
 				out = append(out, tab.ID)
@@ -535,12 +518,12 @@ func TestABackgroundShellLeavingKeepsTheActiveOne(t *testing.T) {
 	}
 
 	// a background shell exits
-	tabsOf(func(tabs *widget.TerminalTabs) {
+	tabsOf(func(tabs *terminal.TerminalTabs) {
 		if err := tabs.SendText(b, "exit\r"); err != nil {
 			t.Error(err)
 		}
 	})
-	r.s.WaitFor(t, "the background shell gone", func(string) bool { return slices.Equal(live(), []widget.TerminalTabID{a, c}) })
+	r.s.WaitFor(t, "the background shell gone", func(string) bool { return slices.Equal(live(), []terminal.TerminalTabID{a, c}) })
 	if got := active(); got != c {
 		t.Fatalf("a background exit selected %s, want the active %s", got, c)
 	}
@@ -549,13 +532,13 @@ func TestABackgroundShellLeavingKeepsTheActiveOne(t *testing.T) {
 	r.s.WaitForText(t, "kept-43")
 
 	// Close on a background tab's menu
-	rows := onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows(a) })
+	rows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.terminals.tabRows(a) })
 	row, ok := menuRow(rows, "terminal.close")
 	if !ok {
 		t.Fatalf("no Close in %v", rowIDs(rows))
 	}
-	onLoop(r, func() bool { row.Action.(widget.TerminalTabsMenuAction).Run(a); return true })
-	r.s.WaitFor(t, "the background tab closed", func(string) bool { return slices.Equal(live(), []widget.TerminalTabID{c}) })
+	onLoop(r, func() bool { row.Action.(terminal.TerminalTabsMenuAction).Run(a); return true })
+	r.s.WaitFor(t, "the background tab closed", func(string) bool { return slices.Equal(live(), []terminal.TerminalTabID{c}) })
 	if got := active(); got != c {
 		t.Fatalf("a background Close selected %s, want the active %s", got, c)
 	}
@@ -565,6 +548,7 @@ func TestABackgroundShellLeavingKeepsTheActiveOne(t *testing.T) {
 // colours, the panel's strip staying the page's; a program's colour is raised against the theme's
 // background, not the page's; "the page's" follows the page, a theme switch included.
 func TestTheTerminalsThemeIsTheirsAlone(t *testing.T) {
+	t.Parallel()
 	_, r := runShellTUI(t, map[string]string{"tui.terminal.theme": "light"}) // on the dark page
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
@@ -617,6 +601,7 @@ func TestTheTerminalsThemeIsTheirsAlone(t *testing.T) {
 // The Preferences terminal theme's tooltip says the theme is the shells' and leaves a program's own
 // colours alone: the pointer resting on its label shows it.
 func TestTheTerminalThemeRowSaysWhatItColours(t *testing.T) {
+	t.Parallel()
 	_, r := runShellTUI(t, nil)
 	r.leader(t, ',')
 	r.s.WaitForText(t, "terminal theme")
@@ -634,20 +619,21 @@ func TestTheTerminalThemeRowSaysWhatItColours(t *testing.T) {
 // its shells running on, the same tabs; opening it again shows them, the same one active, and no
 // new shell. An empty panel's menu has Hide and Theme and font…, and no Close.
 func TestHideClosesThePanelAndKeepsTheShells(t *testing.T) {
+	t.Parallel()
 	_, r := runShellTUI(t, nil)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
 	onLoop(r, func() bool { r.h.terminals.newShell(); return true })
 	r.s.WaitFor(t, "two shells", func(string) bool { return r.shellsRunning() == 2 })
-	active := func() (id widget.TerminalTabID) {
-		return onLoop(r, func() widget.TerminalTabID {
+	active := func() (id terminal.TerminalTabID) {
+		return onLoop(r, func() terminal.TerminalTabID {
 			c, _ := r.h.p.Find("terminalView")
 			tabs, _ := tuidecl.TerminalTabsOf(c)
 			return tabs.Active()
 		})
 	}
 	before, was := r.shellTabs(), active()
-	rows := onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows(was) })
+	rows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.terminals.tabRows(was) })
 	row, ok := menuRow(rows, "tabs.hide")
 	if !ok || row.Label != "Hide" || row.Hotkey != 'd' {
 		t.Fatalf("no Hide (d) in %v", rowIDs(rows))
@@ -655,7 +641,7 @@ func TestHideClosesThePanelAndKeepsTheShells(t *testing.T) {
 	if _, ok := menuRow(rows, "tabs.look"); !ok {
 		t.Fatalf("no Theme and font… in %v", rowIDs(rows))
 	}
-	onLoop(r, func() bool { row.Action.(widget.TerminalTabsMenuAction).Run(was); return true })
+	onLoop(r, func() bool { row.Action.(terminal.TerminalTabsMenuAction).Run(was); return true })
 	r.s.WaitFor(t, "hidden", func(string) bool { return !r.termShown() })
 	after := r.shellTabs()
 	if len(after) != 2 || r.shellsRunning() != 2 || after[0].ID != before[0].ID || after[0].Generation != before[0].Generation || after[1].Generation != before[1].Generation {
@@ -666,7 +652,7 @@ func TestHideClosesThePanelAndKeepsTheShells(t *testing.T) {
 	if got := active(); got != was || r.shellsRunning() != 2 || len(r.shellTabs()) != 2 {
 		t.Fatalf("reopened on %s (want %s), %d running of %d", got, was, r.shellsRunning(), len(r.shellTabs()))
 	}
-	empty := onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows("") })
+	empty := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.terminals.tabRows("") })
 	if row, _ := menuRow(empty, "terminal.close"); row.Enabled {
 		t.Error("an empty panel's menu offers Close")
 	}
@@ -681,29 +667,30 @@ func TestHideClosesThePanelAndKeepsTheShells(t *testing.T) {
 // over the terminals' theme; a choice shows at once and is the one Preferences keeps; Esc puts back
 // what was chosen before, OK keeps the choice.
 func TestTheTerminalsLookDialogSetsTheSameSettings(t *testing.T) {
+	t.Parallel()
 	d, r := runShellTUI(t, nil)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
 	look := func() {
 		t.Helper()
-		rows := onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows("") })
+		rows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.terminals.tabRows("") })
 		row, ok := menuRow(rows, "tabs.look")
 		if !ok {
 			t.Fatalf("no Theme and font… in %v", rowIDs(rows))
 		}
-		onLoop(r, func() bool { row.Action.(widget.TerminalTabsMenuAction).Run(""); return true })
+		onLoop(r, func() bool { row.Action.(terminal.TerminalTabsMenuAction).Run(""); return true })
 		r.s.WaitForText(t, "the terminals' theme and font")
 	}
 	light := slices.Index(termThemes(), "light")
 	look()
 	r.s.WaitForText(t, "a terminal draws in its own") // the terminal UI: no font row
 	onLoop(r, func() bool { r.h.terminals.setTerminalTheme(light); return true })
-	storedPref(t, d, r, prefTermTheme, "light")
+	storedPref(t, d, r, feature.PrefTermTheme, "light")
 	r.keys(t, esc())
-	storedPref(t, d, r, prefTermTheme, "page") // Esc: what was chosen before
+	storedPref(t, d, r, feature.PrefTermTheme, "page") // Esc: what was chosen before
 	look()
 	onLoop(r, func() bool { r.h.terminals.setTerminalTheme(light); return true })
-	storedPref(t, d, r, prefTermTheme, "light")
+	storedPref(t, d, r, feature.PrefTermTheme, "light")
 	onLoop(r, func() bool { r.h.terminalLookKept(); r.h.closeDialog("terminalLook"); return true })
 	if got := onLoop(r, func() string { return r.h.prefs.termTheme }); got != "light" {
 		t.Errorf("OK kept %q", got)
@@ -714,18 +701,19 @@ func TestTheTerminalsLookDialogSetsTheSameSettings(t *testing.T) {
 // Drawer's own toggleMaximize), the row then reads Restore, and Restore puts the frame back; Hide
 // while maximized keeps the shells. The agents' menu maximizes the agent panel the same way.
 func TestMaximizeFromThePanelMenus(t *testing.T) {
+	t.Parallel()
 	_, r := runShellTUI(t, nil)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
 	row0, _ := frameAt(r.s.String())
 	maximize := func(want string) {
 		t.Helper()
-		rows := onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows("") })
+		rows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.terminals.tabRows("") })
 		row, ok := menuRow(rows, "tabs.maximize")
 		if !ok || row.Label != want {
 			t.Fatalf("the maximize row reads %q (want %q) in %v", row.Label, want, rowIDs(rows))
 		}
-		onLoop(r, func() bool { row.Action.(widget.TerminalTabsMenuAction).Run(""); return true })
+		onLoop(r, func() bool { row.Action.(terminal.TerminalTabsMenuAction).Run(""); return true })
 	}
 	maximize("Maximize")
 	r.s.WaitFor(t, "the terminal fills the dock area", func(sc string) bool { y, _ := frameAt(sc); return y >= 0 && y < row0 })
@@ -746,7 +734,7 @@ func TestMaximizeFromThePanelMenus(t *testing.T) {
 		t.Fatalf("reopened with %+v", r.shellTabs())
 	}
 
-	agentRows := onLoop(r, func() []widget.MenuItemModel { return r.h.agents.tabRows("") })
+	agentRows := onLoop(r, func() []widgetcore.MenuItemModel { return r.h.agents.TabRows("") })
 	if row, ok := menuRow(agentRows, "tabs.maximize"); !ok || row.Label != "Maximize" {
 		t.Fatalf("the agents' menu: %v", rowIDs(agentRows))
 	}
@@ -755,12 +743,13 @@ func TestMaximizeFromThePanelMenus(t *testing.T) {
 // TestF11AndSPCZToggleMaximize: F11 maximizes the terminal panel and restores it, from the page (the
 // terminal opened last); SPC z does the same; the tab menu's row follows, Maximize and Restore.
 func TestF11AndSPCZToggleMaximize(t *testing.T) {
+	t.Parallel()
 	_, r := runShellTUI(t, nil)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
 	maximized := func() bool { return onLoop(r, func() bool { return r.h.panelMax["terminal"] }) }
 	label := func() string {
-		row, _ := menuRow(onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows("") }), "tabs.maximize")
+		row, _ := menuRow(onLoop(r, func() []widgetcore.MenuItemModel { return r.h.terminals.tabRows("") }), "tabs.maximize")
 		return row.Label
 	}
 	f11 := tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyF11}
@@ -786,6 +775,7 @@ func TestF11AndSPCZToggleMaximize(t *testing.T) {
 // TestSPCZReachesTheNewestPanelStillOpen: the terminal opened, then the agents opened and hidden,
 // the keyboard on the page: SPC z maximizes the terminal, the newest of them still open.
 func TestSPCZReachesTheNewestPanelStillOpen(t *testing.T) {
+	t.Parallel()
 	_, r := runShellTUI(t, nil)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
@@ -802,6 +792,7 @@ func TestSPCZReachesTheNewestPanelStillOpen(t *testing.T) {
 // TestSPCZWithNoPanelOpenSaysWhatItMaximizes: neither the terminal nor the agents open, SPC z
 // maximizes nothing and says which panels it is for.
 func TestSPCZWithNoPanelOpenSaysWhatItMaximizes(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.leader(t, 'z')
@@ -818,6 +809,7 @@ func TestSPCZWithNoPanelOpenSaysWhatItMaximizes(t *testing.T) {
 // presses the keys) maximizes the agents, the panel with the keyboard, not the terminal opened
 // last. A Drawer's change that is not a maximize leaves Restore as it was.
 func TestMaximizePanelPrefersThePanelWithTheKeyboard(t *testing.T) {
+	t.Parallel()
 	_, r := runShellTUI(t, nil)
 	onLoop(r, func() bool { r.h.openDrawer("agent"); return true })
 	r.s.WaitFor(t, "the agents open", func(string) bool { return onLoop(r, func() bool { return r.h.panelOpen["agent"] }) })
@@ -840,6 +832,7 @@ func TestMaximizePanelPrefersThePanelWithTheKeyboard(t *testing.T) {
 // terminal panel and restores it (the panels' hostKeys leave it to the Window), and the shell
 // never gets it: it answers as before.
 func TestF11WorksWithTheKeyboardInTheShell(t *testing.T) {
+	t.Parallel()
 	_, r := runShellTUI(t, nil)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
@@ -856,19 +849,31 @@ func TestF11WorksWithTheKeyboardInTheShell(t *testing.T) {
 	r.s.WaitForText(t, "f11-never-sent-46")
 }
 
-func maximizedNow(maximized func() bool, want bool) func(string) bool {
-	return func(string) bool { return maximized() == want }
-}
-
-// clickMenuRow opens the open panel's ≡ menu with the pointer and clicks its row label.
-func clickMenuRow(t *testing.T, r *running, label string) {
+// clickMenuRow opens panel's ≡ menu with the pointer and clicks its row label. The ≡ is the one
+// drawn inside the panel's window: the page's row of tabs has its own.
+func clickMenuRow(t *testing.T, r *running, panel, label string) {
 	t.Helper()
 	click := func(x, y int) {
 		r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y},
 			tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x, Y: y})
 	}
-	r.s.WaitForText(t, "≡")
-	click(r.textAt("≡"))
+	var mx, my int
+	r.s.WaitFor(t, "the "+panel+" panel's ≡", func(screen string) bool {
+		at, on := screenRectOf(r, panel)
+		if !on {
+			return false
+		}
+		for y, line := range strings.Split(screen, "\n") {
+			for x, c := range []rune(line) {
+				if c == '≡' && x >= at.X && x < at.X+at.W && y >= at.Y && y < at.Y+at.H {
+					mx, my = x, y
+					return true
+				}
+			}
+		}
+		return false
+	})
+	click(mx, my)
 	r.s.WaitForText(t, label)
 	x, y := r.textAt(label)
 	click(x+1, y)
@@ -878,6 +883,7 @@ func clickMenuRow(t *testing.T, r *running, label string) {
 // the panel, and a click on Restore restores it; nothing is refused. (rc2: the click was refused,
 // the row running while its menu still held the input.)
 func TestAClickOnMaximizeInTheTerminalsMenu(t *testing.T) {
+	t.Parallel()
 	_, r := runShellTUI(t, nil)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
@@ -895,10 +901,10 @@ func clickMaximizeAndRestore(t *testing.T, r *running, panel string) {
 	// not where the frame before did (a bottom panel's strip moves up; a top panel's grows down)
 	r.s.WaitForText(t, "┌ "+panel)
 	docked := panelHeight(r.s.String(), panel)
-	clickMenuRow(t, r, "Maximize")
+	clickMenuRow(t, r, panel, "Maximize")
 	r.s.WaitFor(t, "the "+panel+" maximized by a click", maxed(true))
 	r.s.WaitFor(t, "the maximized "+panel+" drawn", func(sc string) bool { return panelHeight(sc, panel) > docked })
-	clickMenuRow(t, r, "Restore")
+	clickMenuRow(t, r, panel, "Restore")
 	r.s.WaitFor(t, "the "+panel+" restored by a click", maxed(false))
 	r.s.WaitFor(t, "the restored "+panel+" drawn", func(sc string) bool { return panelHeight(sc, panel) == docked })
 	if errs := onLoop(r, func() []error { r.h.mu.Lock(); defer r.h.mu.Unlock(); return append([]error(nil), r.h.errs...) }); len(errs) != 0 {
@@ -929,6 +935,7 @@ func panelHeight(screen, title string) int {
 // cannot maximize the panel: what was refused is kept and shown, naming the operation and the panel
 // (Maximize, docked; Restore, maximized), and the panel stays as it was.
 func TestARefusedMaximizeSaysWhatItRefused(t *testing.T) {
+	t.Parallel()
 	_, r := runShellTUI(t, nil)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })

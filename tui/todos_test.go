@@ -14,6 +14,8 @@ import (
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 
 	"github.com/yongjohnlee80/autodoc/core/todo"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/todos"
 )
 
 var kbTodos = todo.At{Workspace: "kb"}
@@ -56,7 +58,7 @@ func openTodos(t *testing.T, r *running, label string, n rune) {
 	r.keys(t, key(n))
 	tabRead(t, r, int(n-'1'))
 	// the key's own focus landed: a later focus the test gives is not taken back by it
-	table := todoTabs[n-'1'].table
+	table := todos.Tabs()[n-'1'].Table
 	if n == '5' {
 		table = "todoMonths"
 	}
@@ -72,14 +74,14 @@ func openTodos(t *testing.T, r *running, label string, n rune) {
 // coming, and a key of the store's (a) did nothing, under load (TestTabReadWaitsForTheStore).
 func tabRead(t testing.TB, r *running, tab int) {
 	t.Helper()
-	if tab == varsTab {
+	if tab == todos.VarsTab() {
 		r.s.WaitFor(t, "Variables read", func(string) bool {
-			return onLoop(r, func() bool { v := todosOf(r); return v.tab == tab && v.vars.Len() > 0 })
+			return onLoop(r, func() bool { v := todosOf(r).Snapshot(); return v.Tab == tab && v.Vars > 0 })
 		})
 		return
 	}
-	r.s.WaitFor(t, todoBuckets[tab].title+" read", func(string) bool {
-		return onLoop(r, func() bool { v := todosOf(r); return v.cur != nil && v.tab == tab && !v.stale[tab] })
+	r.s.WaitFor(t, todos.Tabs()[tab].Title+" read", func(string) bool {
+		return onLoop(r, func() bool { v := todosOf(r).Snapshot(); return v.HasStore && v.Tab == tab && !v.Stale[tab] })
 	})
 }
 
@@ -110,6 +112,7 @@ func listedIn(t *testing.T, d *daemon, bucket string) []todo.Task {
 // its note, and every write's key does nothing: no dialog, no notice, no error. SPC x again closes
 // the panel.
 func TestTodosShowsAReleasedStoreReadOnly(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, false, todo.Spec{Title: "Write the view", Priority: "high"})
 	r := attached(t, d)
@@ -127,7 +130,7 @@ func TestTodosShowsAReleasedStoreReadOnly(t *testing.T) {
 		}
 	}
 	if r.noticed("todos") || r.noticed("read-only") {
-		t.Errorf("a key on a read-only store was answered with a notice: %+v", onLoop(r, func() []notice { return r.h.noticeLog.items }))
+		t.Errorf("a key on a read-only store was answered with a notice: %+v", onLoop(r, func() []feature.Notice { return r.h.noticeLog.Items }))
 	}
 	r.leader(t, 'x')
 	r.s.WaitFor(t, "the panel closed", func(sc string) bool { return !strings.Contains(sc, "Write the view") })
@@ -140,10 +143,11 @@ func TestTodosShowsAReleasedStoreReadOnly(t *testing.T) {
 // by that write, marker and all. Nothing on the way is a notice or a toast: the view's reads of the
 // store not made yet answer it empty.
 func TestTodosAddsAFreshWorkspacesFirstTask(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.s.WaitFor(t, "kb entered", func(string) bool { return onLoop(r, func() bool { return r.h.ws == "kb" }) })
-	before := onLoop(r, func() int { return len(r.h.noticeLog.items) })
+	before := onLoop(r, func() int { return len(r.h.noticeLog.Items) })
 	r.leader(t, 'x')
 	r.s.WaitForText(t, "[ add ]")
 	if strings.Contains(r.s.String(), "read-only") {
@@ -178,11 +182,11 @@ func TestTodosAddsAFreshWorkspacesFirstTask(t *testing.T) {
 	}
 	// the history is newest first: what came since are its first entries. The add's own "added" is
 	// its answer, not something on the way.
-	since := onLoop(r, func() []notice { return slices.Clone(r.h.noticeLog.items[:len(r.h.noticeLog.items)-before]) })
+	since := onLoop(r, func() []feature.Notice { return slices.Clone(r.h.noticeLog.Items[:len(r.h.noticeLog.Items)-before]) })
 	answer := onLoop(r, func() string { return r.h.trf("autodoc.notice.todos.todos_added", added) })
 	for _, n := range since {
-		if n.text != answer {
-			t.Errorf("a notice from opening the view to after the add: %q (the add's answer is %q)", n.text, answer)
+		if n.Text != answer {
+			t.Errorf("a notice from opening the view to after the add: %q (the add's answer is %q)", n.Text, answer)
 		}
 	}
 }
@@ -192,6 +196,7 @@ func TestTodosAddsAFreshWorkspacesFirstTask(t *testing.T) {
 // that status showing with the cursor on it; d removes after asking. Each lands in the store. d is
 // the panel's alone: with the keyboard in the page it asks nothing.
 func TestTodosAddsChoosesAStatusAndRemoves(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true)
 	r := attached(t, d)
@@ -212,7 +217,7 @@ func TestTodosAddsChoosesAStatusAndRemoves(t *testing.T) {
 		chooseStatusOf(t, r, status)
 		r.s.WaitFor(t, status, func(string) bool { return len(listedIn(t, d, status)) == 1 })
 		r.s.WaitForText(t, "status: "+status) // the cursor followed the task to its tab
-		if got := onLoop(r, func() int { return todosOf(r).tab }); got != tabOf(status) {
+		if got := onLoop(r, func() int { return todosOf(r).Snapshot().Tab }); got != tabOfStatus(status) {
 			t.Fatalf("after %s the tab shown is %d", status, got)
 		}
 	}
@@ -233,6 +238,7 @@ func TestTodosAddsChoosesAStatusAndRemoves(t *testing.T) {
 // TestTodosStatusPickerArchivesATask: archived is one of s's statuses: the task is filed under its
 // month, as the daemon files it, and the Archived tab shows that month with the cursor on it.
 func TestTodosStatusPickerArchivesATask(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true, todo.Spec{Title: "Old news"})
 	r := attached(t, d)
@@ -248,6 +254,7 @@ func TestTodosStatusPickerArchivesATask(t *testing.T) {
 // TestTodosArchiveIsReadByMonth: Archived lists its months, and a month's tasks are read only once
 // it is opened.
 func TestTodosArchiveIsReadByMonth(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true, todo.Spec{Title: "Old and done", Status: "archived"}, todo.Spec{Title: "Still open"})
 	r := attached(t, d)
@@ -264,6 +271,7 @@ func TestTodosArchiveIsReadByMonth(t *testing.T) {
 // TestTodosRefreshesOnAnotherClientsChange: todos.changed from another client reads the tab shown
 // again, so the panel never shows a stale list.
 func TestTodosRefreshesOnAnotherClientsChange(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true)
 	r := attached(t, d)
@@ -272,13 +280,14 @@ func TestTodosRefreshesOnAnotherClientsChange(t *testing.T) {
 	if _, err := d.todos.Add(context.Background(), kbTodos, todo.Spec{Title: "From an agent"}, ""); err != nil {
 		t.Fatal(err)
 	}
-	onLoop(r, func() bool { return r.h.reg.event("todos.changed", "kb", "x") })
+	onLoop(r, func() bool { return r.h.reg.Event("todos.changed", "kb", "x") })
 	r.s.WaitForText(t, "From an agent")
 }
 
 // TestTodosStoreDropdownShowsOneStore: the dropdown shows the store shown alone; another chosen in
 // it (Enter opens it, ↓ and Enter choose) shows its own tasks, and the first's are gone.
 func TestTodosStoreDropdownShowsOneStore(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true, todo.Spec{Title: "A kb task"})
 	ctx := context.Background()
@@ -365,6 +374,7 @@ func panelFrame(sc string) (row, left, right int) {
 // Remove and Add, whole, and nothing else. A click on Status… opens the picker, and the task moves
 // to the status chosen, the cursor following it. A size the user gives the panel is kept, and wins.
 func TestTodosPanelOpensLargeWithOneActionRow(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true, todo.Spec{Title: "Ship it"})
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 80, 40)
@@ -440,8 +450,8 @@ func TestTodosPanelOpensLargeWithOneActionRow(t *testing.T) {
 	r.s.WaitFor(t, "moved on", func(string) bool { return len(listedIn(t, d, "in-progress")) == 1 })
 	r.s.WaitFor(t, "the cursor on the moved task", func(string) bool {
 		return onLoop(r, func() bool {
-			_, x := todosOf(r).cursor()
-			return str(x, "title") == "Ship it" && str(x, "status") == "in-progress"
+			x := todosOf(r).Snapshot().Cursor
+			return feature.Str(x, "title") == "Ship it" && feature.Str(x, "status") == "in-progress"
 		})
 	})
 	// the user's size, kept, wins: 40% of 80 columns, the whole height
@@ -459,6 +469,7 @@ func TestTodosPanelOpensLargeWithOneActionRow(t *testing.T) {
 // by default; as two drawers on one edge do, each opens over the page, the one opened later drawn
 // over the other, and Ctrl+l from either goes back to the page.
 func TestTodosSharesTheLeftEdgeWithTheExplorer(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true, todo.Spec{Title: "Ship it"})
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 100, 30)
@@ -489,9 +500,19 @@ func hoveredWithin(_ *running, c tuicore.Component) bool {
 }
 
 // todosOf is the running TUI's todos feature.
-func todosOf(r *running) *todos {
-	for _, f := range r.h.reg.features {
-		if v, ok := f.(*todos); ok {
+// tabOfStatus is the task tab whose tasks have status (todos.Tabs' Bucket).
+func tabOfStatus(status string) int {
+	for i, tab := range todos.Tabs() {
+		if tab.Bucket == status {
+			return i
+		}
+	}
+	return -1
+}
+
+func todosOf(r *running) *todos.Todos {
+	for _, f := range r.h.reg.Features {
+		if v, ok := f.(*todos.Todos); ok {
 			return v
 		}
 	}
@@ -502,6 +523,7 @@ func todosOf(r *running) *todos {
 // purpose, over the page as SPC's is; ? again closes it, and so does Esc; a key on it runs, the
 // card closing first. The panel holds no inline list of keys.
 func TestTodosQuestionMarkOpensTheKeysCard(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true)
 	r := attached(t, d)
@@ -547,10 +569,10 @@ func waitSaying(t testing.TB, r *running, text string) {
 // of the panel's views (or the editor) holds the keyboard.
 func todosState(r *running) string {
 	return onLoop(r, func() string {
-		v := todosOf(r)
+		v := todosOf(r).Snapshot()
 		store := "no store"
-		if v.cur != nil {
-			store = fmt.Sprintf("store %q released %v", v.cur.name, v.cur.released)
+		if v.HasStore {
+			store = fmt.Sprintf("store %q released %v", v.Store, v.Released)
 		}
 		dialog := "no dialog open"
 		if host, ok := r.h.p.Overlay(); ok {
@@ -559,8 +581,8 @@ func todosState(r *running) string {
 			}
 		}
 		ids := []string{"editor", "todoStore", "todoDetails", "todoMonths", "todoVarsTable"} // the tab view holds the tables: not it
-		for _, tab := range todoTabs {
-			ids = append(ids, tab.table)
+		for _, tab := range todos.Tabs() {
+			ids = append(ids, tab.Table)
 		}
 		var in []string
 		for _, id := range ids {
@@ -572,7 +594,7 @@ func todosState(r *running) string {
 		if len(in) > 0 {
 			keyboard = "the keyboard in " + strings.Join(in, ", ")
 		}
-		return fmt.Sprintf("tab %d; %s; %s; %s", v.tab, store, dialog, keyboard)
+		return fmt.Sprintf("tab %d; %s; %s; %s", v.Tab, store, dialog, keyboard)
 	})
 }
 
@@ -580,6 +602,7 @@ func todosState(r *running) string {
 // and whether it is released, the open dialog, and the view the keyboard is in, as they are (the
 // mutants: a field left out, or read from the wrong place).
 func TestTodosStateSaysWhatTheKeysRead(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true)
 	r := attached(t, d)
@@ -592,8 +615,12 @@ func TestTodosStateSaysWhatTheKeysRead(t *testing.T) {
 	if got, want := todosState(r), `^tab 1; store "[^"]+" released false; a dialog open, the keyboard in it true; `; !regexp.MustCompile(want).MatchString(got) {
 		t.Fatalf("the card open: %q, want %s", got, want)
 	}
-	onLoop(r, func() bool { todosOf(r).cur.released = true; return true }) // as todos.release leaves it
-	if got := todosState(r); !regexp.MustCompile(`; store "[^"]+" released true; `).MatchString(got) {
+	// a released store, as todos.release leaves it: the daemon gave the store back (seedTodos unclaimed)
+	released := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	seedTodos(t, released, false)
+	rr := attached(t, released)
+	openTodos(t, rr, "kb", '1')
+	if got := todosState(rr); !regexp.MustCompile(`; store "[^"]+" released true; `).MatchString(got) {
 		t.Fatalf("a released store: %q, want it said", got)
 	}
 
@@ -621,15 +648,16 @@ func TestTodosStateSaysWhatTheKeysRead(t *testing.T) {
 // then (the keys card cell's one red, in a loaded whole ./tui run). Put back in that state, the
 // panel holds tabRead until its store is shown again (the mutant: the store not waited for).
 func TestTabReadWaitsForTheStore(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true)
 	r := attached(t, d)
 	openTodos(t, r, "kb", '1')
-	var cur *todoStore
-	onLoop(r, func() bool { v := todosOf(r); cur, v.cur = v.cur, nil; return true }) // as the panel is before its store list answers
-	if onLoop(r, func() bool { return todosOf(r).stale[0] }) || cur == nil {
+	if onLoop(r, func() bool { v := todosOf(r).Snapshot(); return v.Stale[0] || !v.HasStore }) {
 		t.Fatal("fixture: the Open tab outdated, or no store was shown")
 	}
+	var restore func()
+	onLoop(r, func() bool { restore = todosOf(r).HideStoreForTest(); return true }) // as the panel is before its store list answers
 	rec := &fatalRecorder{TB: t, msg: make(chan string, 1)}
 	returned := make(chan struct{})
 	go func() { tabRead(rec, r, 0); close(returned) }()
@@ -640,7 +668,7 @@ func TestTabReadWaitsForTheStore(t *testing.T) {
 		t.Fatalf("tabRead failed before its wait was over: %s", msg)
 	case <-time.After(300 * time.Millisecond):
 	}
-	onLoop(r, func() bool { todosOf(r).cur = cur; return true }) // the store list's answer
+	onLoop(r, func() bool { restore(); return true }) // the store list's answer
 	select {
 	case <-returned:
 	case msg := <-rec.msg:
@@ -668,6 +696,7 @@ func (f *fatalRecorder) Fatalf(format string, args ...any) {
 // must never change the task being read. The details' read-only Editor lets the edit keys it refuses
 // (a d s i o) bubble. In the tab's table they still work, and on the action row's buttons too.
 func TestTodosKeysAreTheListsNotTheDetails(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true, todo.Spec{Title: "Read me"})
 	r := attached(t, d)
@@ -704,6 +733,7 @@ func TestTodosKeysAreTheListsNotTheDetails(t *testing.T) {
 // TestTodosTabKeysInThePanel: ] and [ step through the tabs, round (Variables last), 1–6 pick one, and a click on a
 // tab's title shows it: each read, the keyboard in its table.
 func TestTodosTabKeysInThePanel(t *testing.T) {
+	t.Parallel()
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true, todo.Spec{Title: "Ship it"}, todo.Spec{Title: "Later", Status: "deferred"})
 	r := attached(t, d)

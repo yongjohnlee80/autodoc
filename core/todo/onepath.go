@@ -3,7 +3,6 @@ package todo
 import (
 	"context"
 	"errors"
-	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -30,14 +29,14 @@ func (m *Manager) CreateOnce(ctx context.Context, abs string, content []byte, wr
 	if err != nil {
 		return "", "", err
 	}
-	abs = path.Clean(filepath.ToSlash(abs))
+	abs = paths.Slash(abs)
 	var rec StoreRecord
 	for _, r := range set.Stores {
 		if paths.Under(abs, r.Path) && len(r.Path) > len(rec.Path) {
 			rec = r // the innermost store
 		}
 	}
-	rel := strings.TrimPrefix(strings.TrimPrefix(abs, rec.Path), "/")
+	rel, _ := paths.Rel(rec.Path, abs)
 	if rec.ID == "" || !taskPlace(rel) {
 		return "", "", write()
 	}

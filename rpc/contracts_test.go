@@ -13,9 +13,16 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
-var unixPeer = &net.UnixAddr{Name: "/tmp/s.sock", Net: "unix"}
+// localPeer is a peer on the daemon's own network, so a process of this machine (ipc.IsLocal).
+var localPeer net.Addr = localAddr{}
+
+type localAddr struct{}
+
+func (localAddr) Network() string { return ipc.Network }
+func (localAddr) String() string  { return "a local peer" }
 
 // clientSession is a session after a hello as client.
 func clientSession(client string) *golibrpc.Session {
@@ -138,7 +145,7 @@ func TestArityIsTheContracts(t *testing.T) {
 	s := New(Fixed(), "v")
 	want := regexp.MustCompile(`^want (\d+)(?: to (\d+))? parameters, got 64$`)
 	for name, v := range s.verbs {
-		req := &golibrpc.Request{Method: name, Params: make([]any, 64), Peer: unixPeer, Session: &golibrpc.Session{}}
+		req := &golibrpc.Request{Method: name, Params: make([]any, 64), Peer: localPeer, Session: &golibrpc.Session{}}
 		_, err := v.h(context.Background(), req)
 		_, msg := wireError(err)
 		lo, hi := -1, -1

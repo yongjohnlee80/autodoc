@@ -6,15 +6,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
-	"runtime"
 	"runtime/debug"
 	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
@@ -35,39 +33,18 @@ import (
 // words. So a log never holds the page's text, what was typed, a preference or the environment.
 
 const (
-	crashKeep       = 20  // crash logs kept; the oldest go as a new one is written
-	crashMessageMax = 500 // characters of a panic's message a log and a notice keep
+	crashKeep       = 20                   // crash logs kept; the oldest go as a new one is written
+	crashMessageMax = feature.PanicTextMax // characters of a panic's message a log and a notice keep (feature/work.go)
 	lastFatalFile   = "last-fatal"
 )
 
 // crashSeq counts this process's crash logs, for their names.
 var crashSeq atomic.Uint64
 
-// namedPanic is a panic and the command it came out of, named on its way up to golib's boundary.
-type namedPanic struct {
-	name  string
-	value any
-}
-
-func (p namedPanic) String() string { return fmt.Sprint(p.value) }
-
-// renamePanic, deferred in a command, names a panic coming out of it and raises it again, its stack
-// kept, for golib's boundary to contain or not: a command does not contain its own panics, since
-// only golib knows whether going on is safe (its tree part way through a change). The innermost
-// name stays: a catalog entry run by an App.* command is the entry's.
-func renamePanic(name string) {
-	if rec := recover(); rec != nil {
-		if _, named := rec.(namedPanic); !named {
-			rec = namedPanic{name: name, value: rec}
-		}
-		panic(rec)
-	}
-}
-
 // panicSource is what failed and the panic itself: the command named on the way up, or fallback.
 func panicSource(rec any, fallback string) (string, any) {
-	if p, ok := rec.(namedPanic); ok {
-		return p.name, p.value
+	if p, ok := rec.(feature.NamedPanic); ok {
+		return p.Name, p.Value
 	}
 	return fallback, rec
 }
@@ -81,9 +58,9 @@ func (h *Host) contained(hp tuicore.HandlerPanic) {
 	name, value := panicSource(hp.Value, where)
 	path, err := h.writeCrash(crashReport{name: name, phase: hp.Phase, value: value, stack: hp.Stack})
 	if err != nil {
-		h.notify(h.trf("autodoc.notice.crash.failed_the_crash_log_could_not_be_written", name, panicText(value), err.Error()))
+		h.notify(h.trf("autodoc.notice.crash.failed_the_crash_log_could_not_be_written", name, feature.PanicText(value), err.Error()))
 	} else {
-		h.notify(h.trf("autodoc.notice.crash.failed_details_in", name, panicText(value), path))
+		h.notify(h.trf("autodoc.notice.crash.failed_details_in", name, feature.PanicText(value), path))
 	}
 }
 
@@ -93,19 +70,6 @@ type crashReport struct {
 	value       any
 	stack       []byte
 	fatal       bool
-}
-
-// panicText is what a log or a notice says of a panic's value: the runtime's own message (cut to
-// crashMessageMax characters), or only its type, its message withheld (crash.go's top).
-func panicText(v any) string {
-	if re, ok := v.(runtime.Error); ok && runtimeAuthored(v) {
-		s := re.Error()
-		if r := []rune(s); len(r) > crashMessageMax {
-			s = string(r[:crashMessageMax]) + "…"
-		}
-		return s
-	}
-	return fmt.Sprintf("a %T (its message withheld: it may hold the page's text or what was typed)", v)
 }
 
 // writeCrash writes r as a new crash log in the crash folder, keeping the newest crashKeep, and is
@@ -126,7 +90,7 @@ func (h *Host) writeCrash(r crashReport) (string, error) {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "AutoDoc crash report\n\nwhen:    %s\nautodoc: %s\ngolib:   %s\nended:   %s\n", now.Format(time.RFC3339), cmp.Or(h.aboutInfo.Version, "unknown"), golibVersion(), ended)
-	fmt.Fprintf(&b, "where:   %s (%s)\npanic:   %s\n\n%s\n", r.name, cmp.Or(r.phase, "the loop"), panicText(r.value), r.stack)
+	fmt.Fprintf(&b, "where:   %s (%s)\npanic:   %s\n\n%s\n", r.name, cmp.Or(r.phase, "the loop"), feature.PanicText(r.value), r.stack)
 	b.WriteString("\nThis log holds the panic's type, its message only when the Go runtime wrote it, and the stack:\n" +
 		"never the page's text, what was typed, a preference or the environment. To reproduce it for a\n" +
 		"report, run autodoc with --debug, which records the input and events to a file (that file does\n" +
@@ -207,59 +171,12 @@ func (h *Host) keepRecoverySafely() (err error) {
 	return h.keepRecovery()
 }
 
-// runtimeAuthored is whether the Go runtime itself raised v: its type is declared in package runtime
-// (an index out of range, a nil dereference, a failed type assertion). runtime.Error alone is an
-// open interface any type can implement, carrying whatever text it likes; no other package can
-// declare a type in runtime.
-func runtimeAuthored(v any) bool {
-	t := reflect.TypeOf(v)
-	for t != nil && t.Kind() == reflect.Pointer {
-		t = t.Elem()
-	}
-	return t != nil && t.PkgPath() == "runtime"
-}
-
-// errPanicked is a background job's panic, as the error its caller is handed.
-type errPanicked struct {
-	value any
-	path  string
-}
-
-func (e errPanicked) Error() string {
-	s := "it panicked: " + panicText(e.value)
-	if e.path != "" {
-		s += " — details in " + e.path
-	}
-	return s
-}
-
-// failed is a background answer carrying err, the failure its job ended in: err itself where the
-// answer is an error or any (a Core.Go answer), else the answer's own err field (answerOf, and every
-// struct a job answers with: TestEveryBackgroundAnswerCanCarryAFailure holds each do and coreDo to
-// one). The field is unexported, set through its address; its type is checked first. ok is false
-// for an answer with none, which that test keeps from being written.
-func failed[T any](err error) (v T, ok bool) {
-	if t, isT := any(err).(T); isT {
-		return t, true
-	}
-	rv := reflect.ValueOf(&v).Elem()
-	if rv.Kind() != reflect.Struct {
-		return v, false
-	}
-	f := rv.FieldByName("err")
-	if !f.IsValid() || f.Type() != reflect.TypeFor[error]() {
-		return v, false
-	}
-	reflect.NewAt(f.Type(), unsafe.Pointer(f.UnsafeAddr())).Elem().Set(reflect.ValueOf(&err).Elem())
-	return v, true
-}
-
 // backgroundPanicked is a background job's panic, on the loop: logged, and its caller handed the
 // failure (failed), so whatever waits on the answer ends as on any failure.
 func backgroundPanicked[T any](h *Host, rec any, stack []byte, then func(T)) {
 	path, _ := h.writeCrash(crashReport{name: "a background job", phase: "background", value: rec, stack: stack})
-	err := errPanicked{value: rec, path: path}
-	if v, ok := failed[T](err); ok {
+	err := feature.ErrPanicked{Value: rec, Path: path}
+	if v, ok := feature.Failed[T](err); ok {
 		then(v)
 		return
 	}

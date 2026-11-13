@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,12 +12,17 @@ import (
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
-	"github.com/yongjohnlee80/autodoc/internal/peercred"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
+
+// EnvEditorCredentialFile names the file holding an agent's editor token, which `autodoc --editor`
+// reads (the agents' own, agents.EnvEditorCredentialFile).
+const EnvEditorCredentialFile = agents.EnvEditorCredentialFile
 
 // THE EDITOR SOCKET (docs/decisions/crew.md#the-editor-socket): the page's functions as tools for
 // the agents this TUI starts. The TUI serves editor.* on a unix socket of its own,
@@ -74,40 +78,26 @@ type editorSocket struct {
 // nothing.
 const editorRequestWait = 10 * time.Second
 
-// startEditorSocket listens on <dir>/<pid>.sock and serves editor.* until the host stops. A
-// failure is said and the TUI runs on without it.
+// startEditorSocket listens at <dir>/<pid>.sock (on Windows, a pipe named for it) and serves
+// editor.* until the host stops. A failure is said and the TUI runs on without it.
 func (h *Host) startEditorSocket(dir string) {
 	if dir == "" {
 		return
 	}
-	path := filepath.Join(dir, fmt.Sprintf("%d.sock", os.Getpid()))
-	// the folder is the user's alone before anything listens in it (editorsocket_unix.go): the
-	// socket's own chmod after Listen is a second lock, not the first
-	err := privateDir(dir)
-	if err == nil {
-		_ = os.Remove(path)     // a socket left by a crash of an earlier run with this pid
-		sweepEditorSockets(dir) // and those of the other runs that were killed (editorsocket_unix.go)
-	}
-	var ln net.Listener
-	if err == nil {
-		ln, err = net.Listen("unix", path)
-	}
-	if err == nil {
-		err = os.Chmod(path, 0o600)
-	}
+	// the socket is the user's alone, and another user's process is closed unanswered, as at the
+	// daemon's: per OS, in listenEditor (editorsocket_unix.go, editorsocket_other.go)
+	ln, path, err := listenEditor(dir, fmt.Sprintf("%d.sock", os.Getpid()))
 	if err != nil {
 		h.p.Post(func() { h.failed(h.tr("autodoc.notice.editorsocket.the_editor_socket_for_agents"), err) })
 		return
 	}
-	// another user's process is closed unanswered, as at the daemon's socket; the folder already
-	// keeps it out, so this is the second lock
-	srv := golibrpc.New(msgpackrpc.New(nil), golibrpc.WithListener(peercred.Listener(ln, nil)))
+	srv := golibrpc.New(msgpackrpc.New(nil), golibrpc.WithListener(ln))
 	for verb, handler := range h.editorVerbs() {
 		srv.Handle(verb, handler)
 	}
 	ctx, cancel := context.WithCancel(h.ctx)
 	go func() { _ = srv.Run(ctx) }()
-	h.editorSock = &editorSocket{path: path, stop: func() { cancel(); _ = os.Remove(path) }}
+	h.editorSock = &editorSocket{path: path, stop: func() { cancel(); unlistenEditor(path) }}
 	h.editorSock.wait.Store(int64(editorRequestWait))
 }
 
@@ -188,13 +178,13 @@ func (a editorArgs) num(i int, what string, optional bool) (n int, given bool, e
 }
 
 // pos is params i and i+1 as a 1-based (line, col).
-func (a editorArgs) pos(i int) (widget.TextPos, error) {
+func (a editorArgs) pos(i int) (editor.TextPos, error) {
 	l, _, err := a.num(i, "a line", false)
 	if err != nil {
-		return widget.TextPos{}, err
+		return editor.TextPos{}, err
 	}
 	c, _, err := a.num(i+1, "a column", false)
-	return widget.TextPos{Line: l - 1, Col: c - 1}, err
+	return editor.TextPos{Line: l - 1, Col: c - 1}, err
 }
 
 // editorVerbs are the socket's handlers.
@@ -226,7 +216,7 @@ func (h *Host) agentOf(req *golibrpc.Request) (string, editorArgs, error) {
 	if len(req.Params) > 0 {
 		tok, _ = req.Params[0].(string)
 	}
-	agent := h.agents.agentOfToken(tok)
+	agent := h.agents.AgentOfToken(tok)
 	if agent == "" {
 		return "", nil, &golibrpc.Error{Code: codeEditorNotAgent,
 			Message: "param 1 is not an agent's token: only the agents AutoDoc started reach the page ($AUTODOC_EDITOR_TOKEN)"}
@@ -269,7 +259,7 @@ func (h *Host) ungranted(agent, capability string) error {
 
 // socketBuffer is the buffer a verb acts on: its optional trailing param i (a buffer number), or
 // the active buffer without it; and that buffer's editor (editorFor). An unknown number is refused.
-func (h *Host) socketBuffer(a editorArgs, i int) (*openBuffer, *widget.EditorCore, error) {
+func (h *Host) socketBuffer(a editorArgs, i int) (*openBuffer, *editor.EditorCore, error) {
 	n, given, err := a.num(i, "the buffer", true)
 	if err != nil {
 		return nil, nil, err
@@ -296,7 +286,7 @@ func (h *Host) editorBuffers(agent string, _ editorArgs) (any, error) {
 			if b.file.ws != "" {
 				row["workspace"] = b.file.ws
 			}
-			h.markForeign(agent, b.file.ws, row)
+			h.agents.MarkForeign(agent, b.file.ws, row)
 		}
 		out = append(out, row)
 	}
@@ -324,7 +314,7 @@ func (h *Host) editorDocument(agent string, a editorArgs) (any, error) {
 		case diskDeleted:
 			doc["disk"] = "deleted"
 		}
-		h.markForeign(agent, b.file.ws, doc)
+		h.agents.MarkForeign(agent, b.file.ws, doc)
 	}
 	if r, ok := c.Selection(); ok {
 		doc["selection"] = []any{r.From.Line + 1, r.From.Col + 1, r.To.Line + 1, r.To.Col + 1}
@@ -369,7 +359,7 @@ func (h *Host) editorFind(_ string, a editorArgs) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	var o widget.FindOptions
+	var o editor.FindOptions
 	if len(a) > 1 {
 		if m, ok := a[1].(map[string]any); ok {
 			o.IgnoreCase, _ = m["ignore_case"].(bool)
@@ -386,7 +376,7 @@ func (h *Host) editorFind(_ string, a editorArgs) (any, error) {
 // edit runs fn on buffer b's editor ed as one undo step, refused on a read-only buffer or one whose
 // text is not at the revision param rev gives (absent: whatever it is). A buffer not shown is told of
 // the edit as the shown one is by its textChanged (bufferEdited).
-func (h *Host) edit(a editorArgs, rev int, b *openBuffer, ed *widget.EditorCore, fn func(ed *widget.EditorCore) (widget.TextPos, error)) (any, error) {
+func (h *Host) edit(a editorArgs, rev int, b *openBuffer, ed *editor.EditorCore, fn func(ed *editor.EditorCore) (editor.TextPos, error)) (any, error) {
 	if want, given, err := a.num(rev, "the revision read", true); err != nil {
 		return nil, err
 	} else if given && uint64(want) != ed.Revision() {
@@ -399,13 +389,13 @@ func (h *Host) edit(a editorArgs, rev int, b *openBuffer, ed *widget.EditorCore,
 	if b != h.active {
 		defer h.bufferEdited(b)
 	}
-	var end widget.TextPos
+	var end editor.TextPos
 	err := ed.Batch(func() error {
 		var err error
 		end, err = fn(ed)
 		return err
 	})
-	if errors.Is(err, widget.ErrReadOnly) {
+	if errors.Is(err, editor.ErrReadOnly) {
 		return nil, &golibrpc.Error{Code: codeEditorReadOnly, Message: "the page is read-only"}
 	}
 	if err != nil {
@@ -427,7 +417,7 @@ func (h *Host) editorInsert(_ string, a editorArgs) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return h.edit(a, 3, b, ed, func(ed *widget.EditorCore) (widget.TextPos, error) { return ed.Insert(p, text) })
+	return h.edit(a, 3, b, ed, func(ed *editor.EditorCore) (editor.TextPos, error) { return ed.Insert(p, text) })
 }
 
 func (h *Host) editorReplace(_ string, a editorArgs) (any, error) {
@@ -447,8 +437,8 @@ func (h *Host) editorReplace(_ string, a editorArgs) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return h.edit(a, 5, b, ed, func(ed *widget.EditorCore) (widget.TextPos, error) {
-		return ed.Replace(widget.TextRange{From: from, To: to}, text)
+	return h.edit(a, 5, b, ed, func(ed *editor.EditorCore) (editor.TextPos, error) {
+		return ed.Replace(editor.TextRange{From: from, To: to}, text)
 	})
 }
 
@@ -465,8 +455,8 @@ func (h *Host) editorDelete(_ string, a editorArgs) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, err := h.edit(a, 4, b, ed, func(ed *widget.EditorCore) (widget.TextPos, error) {
-		return from, ed.Delete(widget.TextRange{From: from, To: to})
+	res, err := h.edit(a, 4, b, ed, func(ed *editor.EditorCore) (editor.TextPos, error) {
+		return from, ed.Delete(editor.TextRange{From: from, To: to})
 	})
 	if m, ok := res.(map[string]any); ok {
 		res = map[string]any{"revision": m["revision"]}
@@ -539,7 +529,7 @@ func (h *Host) editorAddCommand(ctx context.Context, req *golibrpc.Request) (any
 		if _, err := os.Stat(path); err == nil {
 			return false, &golibrpc.Error{Code: codeEditorRefused, Message: "lua/" + name + ".lua exists: it is the user's"}
 		}
-		h.ask(Question{
+		h.ask(feature.Question{
 			Title: h.trf("autodoc.question.editorsocket.let_the_agent_add_the_lua_command_file_lua", agent, name),
 			Text:  src,
 			Yes:   h.tr("autodoc.question.editorsocket.add_it"), No: h.tr("autodoc.question.editorsocket.no"),
@@ -577,7 +567,7 @@ func (h *Host) writeAgentScript(path, src string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	f, err := agents.NewAgentFile(path)
 	if err != nil {
 		return &golibrpc.Error{Code: codeEditorRefused, Message: "not written: " + err.Error()}
 	}

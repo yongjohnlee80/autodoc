@@ -6,14 +6,16 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/yongjohnlee80/autodoc/core/manifests"
+	"github.com/yongjohnlee80/autodoc/internal/localfs"
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
 
 	regindex "github.com/yongjohnlee80/autodoc/core/registry"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // LUA PACKAGES (M8): a package is a folder of the config's lua/, lua/<name>/, holding init.lua and
@@ -65,11 +67,8 @@ func (h *Host) loadPackages() []error {
 	if h.luaDir == "" {
 		return nil
 	}
-	entries, err := os.ReadDir(h.luaDir)
+	entries, err := localfs.ReadDirIfAny(h.luaDir) // no folder: nothing to load; a file there: its one error, on every OS
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
 		return []error{err}
 	}
 	var errs []error
@@ -82,14 +81,10 @@ func (h *Host) loadPackages() []error {
 		h.userPackages[en.Name()] = true
 		dir := filepath.Join(h.luaDir, en.Name())
 		// the package reads its own folder only, links included: os.Root refuses a path, or a
-		// link, that leads outside it. It stays open while the engine may require from it.
-		root, err := os.OpenRoot(dir)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("the Lua package %s: %w", en.Name(), err))
-			continue
-		}
-		h.luaRoots = append(h.luaRoots, root)
-		m, err := readPackageIn(root.FS(), dir)
+		// link, that leads outside it. Each read opens the folder and closes it again (packageFS):
+		// nothing holds it while the engine runs, so it can be moved or removed meanwhile.
+		pkg := packageFS(dir)
+		m, err := readPackageIn(pkg, dir)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("the Lua package %s: %w", en.Name(), err))
 			continue
@@ -98,7 +93,7 @@ func (h *Host) loadPackages() []error {
 		if len(m.Requires) > 0 {
 			grants.Request(m.Name, m.Requires)
 		}
-		if err := h.scripts.LoadPackage(m.Name, root.FS(), grants); err != nil {
+		if err := h.scripts.LoadPackage(m.Name, pkg, grants); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -111,7 +106,7 @@ func (h *Host) installPackage(url string) error {
 	url = strings.TrimSpace(url)
 	if isRegistryName(url) && h.luaDir != "" { // a name: the registry's package of that name
 		h.notify(h.trf("autodoc.notice.luapackages.looking_up_in_the_registry", url))
-		resolveRegistry(core{h}, regindex.KindLua, url, h.registryLoaded, func(repo string, err error) {
+		resolveRegistry(core{h}, h.seams.registry, regindex.KindLua, url, h.registryLoaded, func(repo string, err error) {
 			if err != nil {
 				h.notify(h.trf("autodoc.notice.luapackages.lua_install_not_installed", err.Error()))
 				return
@@ -128,28 +123,31 @@ func (h *Host) installPackage(url string) error {
 	case h.luaDir == "":
 		return errors.New("lua-install: no Lua folder")
 	}
-	if _, err := exec.LookPath("git"); err != nil {
+	if _, err := procenv.LookPath(h.seams.env, "git"); err != nil {
 		return errors.New("lua-install needs git")
 	}
-	dir, own := h.luaDir, h.cands.allocs
+	dir, own, src, env := h.luaDir, h.cands.allocs, h.seams.registry, h.seams.env
 	h.notify(h.trf("autodoc.notice.luapackages.cloning", url))
-	do(h, func(ctx context.Context) answerOf[*candidate] { return answered(stagePackage(ctx, dir, url, own)) }, func(r answerOf[*candidate]) {
-		if r.err == nil {
-			r.err = h.cands.begin(r.v, h.askPackage, h.hidePackage)
+	do(h, func(ctx context.Context) feature.AnswerOf[*candidate] {
+		return feature.Answered(stagePackage(ctx, env, src, dir, url, own))
+	}, func(r feature.AnswerOf[*candidate]) {
+		err := r.Err()
+		if err == nil {
+			err = h.cands.begin(r.Value, h.askPackage, h.hidePackage)
 		}
-		if r.err != nil {
-			h.notify(h.trf("autodoc.notice.luapackages.lua_install_not_installed", r.err.Error()))
+		if err != nil {
+			h.notify(h.trf("autodoc.notice.luapackages.lua_install_not_installed", err.Error()))
 			return
 		}
-		h.cands.show(r.v)
+		h.cands.show(r.Value)
 	})
 	return nil
 }
 
 // stagePackage stages url as a Lua package candidate in dir, refused when that package is
 // installed already.
-func stagePackage(ctx context.Context, dir, url string, own *allocs) (*candidate, error) {
-	stage, commit, err := cloneStage(ctx, dir, url, own)
+func stagePackage(ctx context.Context, env procenv.Env, src registrySource, dir, url string, own *allocs) (*candidate, error) {
+	stage, commit, err := cloneStage(ctx, env, dir, url, own)
 	if err != nil {
 		return nil, err
 	}
@@ -161,8 +159,8 @@ func stagePackage(ctx context.Context, dir, url string, own *allocs) (*candidate
 	if _, err := os.Stat(filepath.Join(dir, m.Name)); err == nil {
 		return fail(fmt.Errorf("%s is installed already: remove lua/%s first", m.Name, m.Name))
 	}
-	return &candidate{kind: regindex.KindLua, name: m.Name, repo: url, commit: commit, stage: stage,
-		entry: cachedEntry(regindex.KindLua, url), pkg: m}, nil
+	return &candidate{kind: regindex.KindLua, name: m.Name, repo: url, commit: commit, stage: stage, env: env,
+		entry: src.entry(regindex.KindLua, url), pkg: m}, nil
 }
 
 // packageRisk is the sentence every package card carries, in English (the card's is in the UI's
@@ -187,7 +185,7 @@ func (h *Host) askPackage(c *candidate) {
 		h.trf("autodoc.question.luapackages.requires", requires), audit,
 		h.tr("autodoc.question.luapackages.a_package_s_lua_runs_in_autodoc_held_to_what_you"),
 		h.tr("autodoc.text.candidate.audit_asks_your_agent_to_read_this_code_autodoc"))
-	h.ask(Question{
+	h.ask(feature.Question{
 		Title: h.trf("autodoc.question.luapackages.install_the_lua_package", m.Name),
 		Text:  text,
 		Yes:   h.tr("autodoc.question.luapackages.install"), No: h.tr("autodoc.question.luapackages.cancel"), Other: h.tr("autodoc.question.luapackages.audit"),
@@ -246,16 +244,11 @@ func (h *Host) loadPluginPackages() []error {
 			continue
 		}
 		dir := filepath.Join(e.dir, "lua")
-		root, err := os.OpenRoot(dir)
-		if err != nil {
-			continue // no lua/: the plugin has no package
+		pkg := packageFS(dir) // read as a user's package is: nothing holds the folder
+		if _, err := pkg.Stat("package.toml"); err != nil {
+			continue // no lua/, or no package in it: the plugin has none
 		}
-		if _, err := fs.Stat(root.FS(), "package.toml"); err != nil {
-			root.Close()
-			continue
-		}
-		h.luaRoots = append(h.luaRoots, root)
-		m, err := readPluginPackage(root.FS(), e.m.Name)
+		m, err := readPluginPackage(pkg, e.m.Name)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("the plugin %s's Lua package: %w", e.m.Name, err))
 			continue
@@ -270,7 +263,7 @@ func (h *Host) loadPluginPackages() []error {
 		if len(m.Requires) > 0 {
 			grants.Request(script, m.Requires)
 		}
-		if err := h.scripts.LoadPackage(script, root.FS(), grants); err != nil {
+		if err := h.scripts.LoadPackage(script, pkg, grants); err != nil {
 			delete(h.pluginPackages, script)
 			errs = append(errs, err)
 		}

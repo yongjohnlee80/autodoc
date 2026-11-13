@@ -3,6 +3,7 @@ package mailtest
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -42,12 +43,12 @@ func newClaudeFallbackRig(t *testing.T, h Harness) *fbRig {
 	return newKindFallbackRig(t, h, crew.KindClaude)
 }
 
-func newKindFallbackRig(t *testing.T, h Harness, kind string) *fbRig {
+func newKindFallbackRig(t *testing.T, h Harness, kind string, opts ...crew.Option) *fbRig {
 	r := &fbRig{t: t, kind: kind, ctx: context.Background(), clock: crewtest.NewClock(), run: "host-run", bell: &fireWaker{}}
 	r.st = h.New(t, r.clock.Now)
 	port := &lazyCrew{}
 	r.mm = mail.New(r.st.Mail, port)
-	r.cm = crew.New(r.st.Crew, crew.WithSessionEnder(r.mm))
+	r.cm = crew.New(r.st.Crew, append([]crew.Option{crew.WithSessionEnder(r.mm)}, opts...)...)
 	port.m = r.cm
 	if err := r.mm.EnsureReserved(r.ctx); err != nil {
 		t.Fatal(err)
@@ -435,6 +436,38 @@ func testAClaudeThatNeverStartedKeepsItsMailQueued(t *testing.T, h Harness) {
 	}
 	if jobs := r.st.Inspect.Jobs(); len(jobs) != 0 {
 		t.Fatalf("jobs %+v, want none", jobs)
+	}
+}
+
+// An agent its OS can't wake (crew.SocketWakes false: a Claude on Windows) registers no wake: the
+// endpoint its SessionStart hook sends is refused, saying the agent's mail waits, and the
+// addressbook says it has no wake on this OS. Its mail waits, queued, never falling back to a host
+// typing into it, however long; its next receive gets it: nothing is lost.
+func testMailWaitsForAnAgentItsOSCantWake(t *testing.T, h Harness) {
+	r := newKindFallbackRig(t, h, crew.KindClaude, crew.WithSocketWakes(false))
+	r.poll()
+	d := r.send()
+	loc := `{"socket":"/run/user/1000/cc-socks/g.sock","pid":7,"start":"b:n:7:1","session":"c"}`
+	if _, err := r.cm.SetEndpoint(r.ctx, r.credential, crew.KindClaude, loc); !errors.Is(err, crew.ErrBadEndpoint) || !strings.Contains(err.Error(), "mail waits") {
+		t.Fatalf("its endpoint: %v; want ErrBadEndpoint saying its mail waits", err)
+	}
+	l, err := r.cm.List(r.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := slices.IndexFunc(l, func(e crew.Entry) bool { return e.Codename == "gold" })
+	if i < 0 || l[i].Reachable || l[i].Why != crew.WhyNoWakeHere {
+		t.Fatalf("the addressbook: %+v; want gold unreachable, why %s", l, crew.WhyNoWakeHere)
+	}
+	for _, wait := range []time.Duration{30 * time.Second, fallbackWindow, time.Hour} {
+		r.clock.Advance(wait)
+		r.sweep()
+		if got := r.poll(); len(got) != 0 || r.delivery(d.ID).State != mail.Queued || r.told(mail.ChangeFallback) != 0 {
+			t.Fatalf("%v on: offered %+v, the delivery %+v, told %d; want it queued, no job", wait, got, r.delivery(d.ID), r.told(mail.ChangeFallback))
+		}
+	}
+	if got, err := r.mm.Receive(r.ctx, r.credential); err != nil || len(got.Items) != 1 || got.Items[0].Delivery.ID != d.ID {
+		t.Fatalf("its receive: %+v %v, want the waiting delivery", got, err)
 	}
 }
 

@@ -6,24 +6,26 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	lua "github.com/yuin/gopher-lua"
 )
 
 // menuAt is the right-click menu's added rows for ctx, as one open builds them.
-func (r *running) menuAt(ctx menuCtx) []widget.MenuItemModel {
-	return onLoop(r, func() []widget.MenuItemModel {
+func (r *running) menuAt(ctx feature.MenuCtx) []widgetcore.MenuItemModel {
+	return onLoop(r, func() []widgetcore.MenuItemModel {
 		s := r.h.luaFeature()
-		return s.rows.editorItems(s, ctx)
+		return editorMenuItems(&s.rows, s, ctx)
 	})
 }
 
 // labelsOf is items' labels, a submenu's rows as "Sub>Row", separators left out.
-func labelsOf(items []widget.MenuItemModel) []string {
+func labelsOf(items []widgetcore.MenuItemModel) []string {
 	var out []string
 	for _, it := range items {
 		switch {
-		case it.Kind == widget.ItemKindSeparator:
+		case it.Kind == widgetcore.ItemKindSeparator:
 		case len(it.Children) > 0:
 			for _, ch := range it.Children {
 				out = append(out, it.Label+">"+ch.Label)
@@ -50,18 +52,19 @@ func startMenu(t *testing.T, src string) *running {
 // A row shows only for a file its globs match (the base name), and only when its when answers true;
 // a folder's scope is when on ctx.path. Both are asked at every open.
 func TestAMenuRowShowsForItsFilesAndWhen(t *testing.T) {
+	t.Parallel()
 	r := startMenu(t, `whens = 0
 autodoc.menu{ where = "editor", files = {"*.sql"}, title = "&Run query", command = "mark q" }
 autodoc.menu{ where = "editor", when = function(ctx) whens = whens + 1; return ctx.selection end, title = "Selected", command = "mark s" }
 autodoc.menu{ where = "editor", when = function(ctx) return ctx.path:find("^notes/") ~= nil end, title = "Notes", command = "mark n" }`)
 	for _, c := range []struct {
-		ctx  menuCtx
+		ctx  feature.MenuCtx
 		want []string
 	}{
-		{menuCtx{path: "db/q.sql"}, []string{"Run query"}},
-		{menuCtx{path: "a.md", selection: true}, []string{"Selected"}},
-		{menuCtx{path: "notes/x.md"}, []string{"Notes"}},
-		{menuCtx{path: "q.sql.md"}, nil},
+		{feature.MenuCtx{Path: "db/q.sql"}, []string{"Run query"}},
+		{feature.MenuCtx{Path: "a.md", Selection: true}, []string{"Selected"}},
+		{feature.MenuCtx{Path: "notes/x.md"}, []string{"Notes"}},
+		{feature.MenuCtx{Path: "q.sql.md"}, nil},
 	} {
 		if got := labelsOf(r.menuAt(c.ctx)); !same(got, c.want) {
 			t.Errorf("%+v: %q; want %q", c.ctx, got, c.want)
@@ -91,6 +94,7 @@ func lua2num(r *running, name string) float64 {
 // "A B", two non-Latin names and two long names with one prefix are distinct, and every item id
 // in the menu is unique.
 func TestMenuRowsGroupUnderTheirExactSubmenu(t *testing.T) {
+	t.Parallel()
 	long := strings.Repeat("Long submenu name ", 4)
 	r := startMenu(t, `autodoc.menu{ where = "editor", menu = "Jupyter", title = "Run", command = "mark a" }
 autodoc.menu{ where = "editor", title = "Loose", command = "mark b" }
@@ -105,14 +109,14 @@ autodoc.menu{ where = "editor", menu = "`+long+`two", title = "L2", command = "m
 	}); err != nil {
 		t.Fatal(err)
 	}
-	items := r.menuAt(menuCtx{path: "a.md"})
+	items := r.menuAt(feature.MenuCtx{Path: "a.md"})
 	want := []string{"Jupyter>Run", "Jupyter>Clear", "Loose", "A-B>Dash", "A B>Space", "日本>Ja", "中文>Zh", long + "one>L1", long + "two>L2"}
 	if got := labelsOf(items); !same(got, want) {
 		t.Fatalf("the rows: %q; want %q", got, want)
 	}
-	ids := map[widget.ItemID]bool{}
-	var walk func([]widget.MenuItemModel)
-	walk = func(items []widget.MenuItemModel) {
+	ids := map[widgetcore.ItemID]bool{}
+	var walk func([]widgetcore.MenuItemModel)
+	walk = func(items []widgetcore.MenuItemModel) {
 		for _, it := range items {
 			if ids[it.ID] {
 				t.Errorf("item id %s twice", it.ID)
@@ -132,11 +136,12 @@ autodoc.menu{ where = "editor", menu = "`+long+`two", title = "L2", command = "m
 // A title function is answered at each open, its & the row's key. A script's title is its own: a
 // row titled as one of AutoDoc's own ("&Back") is never swapped for a catalog translation.
 func TestAMenuRowsTitleIsAnsweredAtEachOpenAndKeptAsWritten(t *testing.T) {
+	t.Parallel()
 	r := startMenu(t, `n = 0
 autodoc.menu{ where = "editor", title = function(ctx) n = n + 1; return "&Run " .. n end, command = "mark r" }
 autodoc.menu{ where = "editor", title = "&Back", command = "mark b" }`)
 	for i, want := range []string{"Run 1", "Run 2"} {
-		items := r.menuAt(menuCtx{path: "a.md"})
+		items := r.menuAt(feature.MenuCtx{Path: "a.md"})
 		if got := labelsOf(items); !same(got, []string{want, "Back"}) {
 			t.Fatalf("open %d: %q", i+1, got)
 		}
@@ -152,11 +157,12 @@ autodoc.menu{ where = "editor", title = "&Back", command = "mark b" }`)
 // The same id from the same script replaces its row, in its place. The old row's handle then
 // removes nothing; the replacement's removes it, once. Rows with no id are each new.
 func TestAMenuRowIsReplacedByItsIdAndRemovedByItsOwnHandle(t *testing.T) {
+	t.Parallel()
 	r := startMenu(t, `autodoc.menu{ where = "editor", title = "Before", command = "mark a" }
 one = autodoc.menu{ where = "editor", id = "x", title = "One", command = "mark b" }
 autodoc.menu{ where = "editor", title = "After", command = "mark c" }
 two = autodoc.menu{ where = "editor", id = "x", title = "Two", command = "mark d" }`)
-	at := menuCtx{path: "a.md"}
+	at := feature.MenuCtx{Path: "a.md"}
 	if got := labelsOf(r.menuAt(at)); !same(got, []string{"Before", "Two", "After"}) {
 		t.Fatalf("after the replace: %q", got)
 	}
@@ -182,11 +188,12 @@ autodoc.menu{ where = "editor", title = "Twin", command = "mark e" }`)
 // A when or a title that fails, or a title that isn't a string, is a notice, and the menu opens
 // with the other rows. A spec the menu can't take is the script's error.
 func TestAMenuRowsErrorsAreNoticedAndTheMenuStillOpens(t *testing.T) {
+	t.Parallel()
 	r := startMenu(t, `autodoc.menu{ where = "editor", when = function() error("no when") end, title = "W", command = "mark w" }
 autodoc.menu{ where = "editor", title = function() return 7 end, command = "mark t" }
 autodoc.menu{ where = "editor", title = "Fine", command = "mark f" }`)
 	r.clearNotices()
-	if got := labelsOf(r.menuAt(menuCtx{path: "a.md"})); !same(got, []string{"Fine"}) {
+	if got := labelsOf(r.menuAt(feature.MenuCtx{Path: "a.md"})); !same(got, []string{"Fine"}) {
 		t.Fatalf("the rows: %q", got)
 	}
 	r.waitNotice(t, "no when") // the open's first failure: one notice an open
@@ -194,7 +201,7 @@ autodoc.menu{ where = "editor", title = "Fine", command = "mark f" }`)
 	r.luaLoad(t, `autodoc.menu{ where = "editor", title = function() return 7 end, command = "mark t" }
 autodoc.menu{ where = "editor", title = "Fine", command = "mark f" }`)
 	r.clearNotices()
-	if got := labelsOf(r.menuAt(menuCtx{path: "a.md"})); !same(got, []string{"Fine"}) {
+	if got := labelsOf(r.menuAt(feature.MenuCtx{Path: "a.md"})); !same(got, []string{"Fine"}) {
 		t.Fatalf("the rows with a number for a title: %q", got)
 	}
 	r.waitNotice(t, "answered a number, not a string")
@@ -216,6 +223,7 @@ autodoc.menu{ where = "editor", title = "Fine", command = "mark f" }`)
 // command that spins (autodoc.run): the command inherits the budget's deadline, not the engine's
 // own two seconds.
 func TestTheMenuBudgetBoundsSlowRowsAndCommandsTheyRun(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct{ name, src string }{
 		{"spinning whens", `for i = 1, 8 do autodoc.menu{ where = "editor", when = function() while true do end end, title = "S" .. i, command = "mark s" } end`},
 		{"whens that run a spinning command", `autodoc.command{ name = "spin", run = function() while true do end end }
@@ -226,7 +234,7 @@ for i = 1, 8 do autodoc.menu{ where = "editor", when = function() autodoc.run("l
 autodoc.menu{ where = "editor", title = "Fine", command = "mark f" }`)
 			r.clearNotices()
 			start := time.Now()
-			got := labelsOf(r.menuAt(menuCtx{path: "a.md"}))
+			got := labelsOf(r.menuAt(feature.MenuCtx{Path: "a.md"}))
 			took := time.Since(start)
 			if !same(got, []string{"Fine"}) {
 				t.Fatalf("the rows: %q; want the fine one alone", got)
@@ -235,7 +243,7 @@ autodoc.menu{ where = "editor", title = "Fine", command = "mark f" }`)
 			if took > time.Second {
 				t.Fatalf("eight slow rows held the open %v; the documented budget is 200ms", took)
 			}
-			if n := onLoop(r, func() int { return len(r.h.noticeLog.items) }); n != 1 {
+			if n := onLoop(r, func() int { return len(r.h.noticeLog.Items) }); n != 1 {
 				t.Fatalf("%d notices for one open; want one", n)
 			}
 		})
@@ -245,10 +253,11 @@ autodoc.menu{ where = "editor", title = "Fine", command = "mark f" }`)
 // A when runs while the engine counts as running, so asking for a reload from inside one is refused
 // and the engine stays; once the open is over the engine isn't running.
 func TestAMenuRowsWhenCannotReloadTheScriptsUnderIt(t *testing.T) {
+	t.Parallel()
 	r := startMenu(t, `said = ""
 autodoc.menu{ where = "editor", when = function() local ok, err = autodoc.run("scripts.reload"); said = tostring(err); return true end, title = "R", command = "mark r" }`)
 	before := onLoop(r, func() any { return r.h.scripts })
-	r.menuAt(menuCtx{path: "a.md"})
+	r.menuAt(feature.MenuCtx{Path: "a.md"})
 	if said := onLoop(r, func() string { return lua.LVAsString(r.h.scripts.L.GetGlobal("said")) }); !strings.Contains(said, "not from inside a script") {
 		t.Fatalf("the reload a when asked for answered %q; want it refused", said)
 	}
@@ -262,6 +271,7 @@ autodoc.menu{ where = "editor", when = function() local ok, err = autodoc.run("s
 
 // A gated script's row needs commands when it runs, as its keys do.
 func TestAGatedScriptsRowNeedsCommandsWhenItRuns(t *testing.T) {
+	t.Parallel()
 	r := startMenu(t, ``)
 	if err := onLoop(r, func() error {
 		return r.h.loadGated("pkg", "pkg.lua", []byte(`autodoc.menu{ where = "editor", title = "Gated", command = "mark g" }`))
@@ -270,10 +280,10 @@ func TestAGatedScriptsRowNeedsCommandsWhenItRuns(t *testing.T) {
 	}
 	r.page("", 1, 1)
 	r.clearNotices()
-	items := r.menuAt(menuCtx{path: "a.md"})
+	items := r.menuAt(feature.MenuCtx{Path: "a.md"})
 	run := func() {
 		onLoop(r, func() bool {
-			items[1].Action.(widget.CoreMenuAction).Run(r.h.core)
+			items[1].Action.(editor.CoreMenuAction).Run(r.h.core)
 			return true
 		})
 	}
@@ -289,6 +299,7 @@ func TestAGatedScriptsRowNeedsCommandsWhenItRuns(t *testing.T) {
 // rows as it began, less those taken out or replaced, each once, so the menu's model is valid and it
 // opens; the replacement shows from the next open.
 func TestAWhenThatChangesTheRowsCannotBreakTheMenu(t *testing.T) {
+	t.Parallel()
 	r := startMenu(t, `changed = false
 autodoc.menu{ where = "editor", title = "A", command = "mark a", when = function()
   if not changed then
@@ -307,7 +318,7 @@ autodoc.menu{ where = "editor", id = "d", title = "D1", command = "mark d" }`)
 		onLoop(r, func() bool {
 			items := r.h.editorMenu(r.h.core)
 			labels = labelsOf(items[len(items)-len(want)-1:])
-			err = widget.NewMenu().SetModel(items)
+			err = widgetcore.NewMenu().SetModel(items)
 			return true
 		})
 		if !same(labels, want) || err != nil {
@@ -320,6 +331,7 @@ autodoc.menu{ where = "editor", id = "d", title = "D1", command = "mark d" }`)
 // it and whenever: its own, or a later row's after it was reached. A row put in another's place
 // shows from the next open.
 func TestARowWithdrawnAsTheMenuOpensDoesNotShowInIt(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		name, src  string
 		want, next []string
@@ -343,7 +355,7 @@ end }`, []string{"B"}, []string{"A2", "B"}},
 		t.Run(c.name, func(t *testing.T) {
 			r := startMenu(t, c.src)
 			for i, want := range [][]string{c.want, c.next} {
-				if got := labelsOf(r.menuAt(menuCtx{path: "a.md"})); !same(got, want) {
+				if got := labelsOf(r.menuAt(feature.MenuCtx{Path: "a.md"})); !same(got, want) {
 					t.Fatalf("open %d: %q; want %q", i+1, got, want)
 				}
 			}
@@ -355,6 +367,7 @@ end }`, []string{"B"}, []string{"A2", "B"}},
 // function never called in that open: the title may act, and it spends the open's budget (the
 // removed case is the one a review first tested).
 func TestARowItsWhenWithdrawsNeverRunsItsTitle(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct{ name, src string }{
 		{"removed", `titled = 0
 local row
@@ -370,7 +383,7 @@ autodoc.menu{ where = "editor", title = "Safe", command = "mark s" }`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			r := startMenu(t, c.src)
-			got := labelsOf(r.menuAt(menuCtx{path: "a.md"}))
+			got := labelsOf(r.menuAt(feature.MenuCtx{Path: "a.md"}))
 			n := onLoop(r, func() lua.LValue { return r.h.luaFeature().eng.L.GetGlobal("titled") })
 			if n != lua.LNumber(0) || slices.Contains(got, "Self") {
 				t.Fatalf("its title ran %v times; the menu %q", n, got)
@@ -382,11 +395,12 @@ autodoc.menu{ where = "editor", title = "Safe", command = "mark s" }`},
 // A removed row leaves no slot behind it in the registry's backing array, so nothing keeps its
 // functions alive.
 func TestARemovedRowLeavesNoSlotBehind(t *testing.T) {
-	var m menuRows
-	m.add(&addedRow{id: "a"})
-	b := m.add(&addedRow{id: "b"})
-	m.add(&addedRow{id: "c"})
-	if !m.remove(b) || len(m.rows) != 2 || m.rows[:3][2] != nil {
-		t.Fatalf("after removing b: %d rows, the vacated slot %v", len(m.rows), m.rows[:3][2])
+	t.Parallel()
+	var m feature.MenuRows
+	m.Add(&feature.AddedRow{ID: "a"})
+	b := m.Add(&feature.AddedRow{ID: "b"})
+	m.Add(&feature.AddedRow{ID: "c"})
+	if !m.Remove(b) || len(m.Rows) != 2 || m.Rows[:3][2] != nil {
+		t.Fatalf("after removing b: %d rows, the vacated slot %v", len(m.Rows), m.Rows[:3][2])
 	}
 }

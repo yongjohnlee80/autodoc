@@ -8,30 +8,54 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/internal/userdirs"
+	"github.com/yongjohnlee80/autodoc/internal/usershell"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/errs"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
 	"github.com/yongjohnlee80/golib/tui/pty"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // terminals owns shell startup and keyboard restoration. The host contributes
 // only its PanelHost services; none of this state is shared between programs.
 type terminals struct {
-	c       PanelHost
+	c       feature.PanelHost
 	restore bool
 	// startLua is a Lua shell's program (Host.startLuaShell, luashell.go); nil: no Lua shells
-	startLua func(pty.Cmd) (widget.TerminalProcess, error)
+	startLua func(pty.Cmd) (terminal.TerminalProcess, error)
 }
 
-// terminalRuntimeHost is the PanelHost with the terminal panel's tabs (terminalpanel.go).
+// terminalRuntimeHost is the PanelHost with the terminal panel's tabs (feature/terminalpanel.go).
 type terminalRuntimeHost interface {
-	PanelHost
-	Terminals(string) (TerminalPanel, error)
+	feature.PanelHost
+	Terminals(string) (feature.TerminalPanel, error)
 }
 
-func newTerminals(c PanelHost) *terminals { return &terminals{c: c, restore: true} }
-func (t *terminals) BindPanelHost(c PanelHost) error {
+func newTerminals(c feature.PanelHost) *terminals {
+	return &terminals{c: c, restore: true}
+}
+
+// inOwnEnv is config to run in the program's environment: a tab that names no program starts the
+// interactive shell (internal/usershell: $SHELL on Unix, PowerShell on Windows), and, when a test
+// gave the program an environment of its own, its variables go under the tab's own (golib's
+// terminal otherwise starts with the process's environment under the tab's).
+func (t *terminals) inOwnEnv(config feature.TerminalConfig) feature.TerminalConfig {
+	env := t.c.Env()
+	if config.Command == "" && config.Start == nil {
+		sh := usershell.Interactive(env)
+		config.Command, config.Args = sh[0], sh[1:]
+	}
+	if env == nil {
+		return config
+	}
+	config.Env = append(env.Environ(), config.Env...)
+	return config
+}
+func (t *terminals) BindPanelHost(c feature.PanelHost) error {
 	t.c = c
 	return nil
 }
@@ -39,55 +63,57 @@ func (*terminals) Name() string { return "terminals" }
 func (t *terminals) State() map[string]any {
 	st := map[string]any{
 		"App.terminalShown":   false,
-		"App.terminalEdges":   choices(termEdgeLabels...),
-		"App.terminalSizes":   choices(percentLabels(termSizes)...),
-		"App.terminalLengths": choices(percentLabels(termLengths)...),
+		"App.terminalEdges":   feature.Choices(termEdgeLabels...),
+		"App.terminalSizes":   feature.Choices(feature.PercentLabels(feature.PanelSizes)...),
+		"App.terminalLengths": feature.Choices(feature.PercentLabels(feature.PanelLengths)...),
 		"App.terminalThemes":  t.themeChooser(),
 	}
 	maps.Copy(st, t.lookState())
 	return st
 }
-func (t *terminals) Prefs() []PrefSpec { return terminalPrefRows(t) }
+func (t *terminals) Prefs() []feature.PrefSpec { return terminalPrefRows(t) }
 
-func (t *terminals) Catalog() []Entry {
-	open := builtin("terminal.open", "open the terminal", "App.openTerminal()", t.openTerminal)
+func (t *terminals) Catalog() []feature.Entry {
+	open := feature.Builtin("terminal.open", "open the terminal", "App.openTerminal()", t.openTerminal)
 	open.Verb, open.Aliases = "terminal", []string{"term"}
 	open.Help = "open the terminal (SPC `)"
-	return []Entry{
-		builtin("terminal.toggle", "the terminal", "App.toggleTerminal()", t.toggleTerminal),
+	return []feature.Entry{
+		feature.Builtin("terminal.toggle", "the terminal", "App.toggleTerminal()", t.toggleTerminal),
 		open,
 	}
 }
 
-func terminalPrefRows(t *terminals) []PrefSpec {
+func terminalPrefRows(t *terminals) []feature.PrefSpec {
 	row := choicePref(prefTermEdge, "bottom", termEdges, func(p *prefs) *string { return &p.termEdge }).
-		shows(terminalPreferenceState)
+		Shows(terminalPreferenceState)
 	names := termThemes()
 	if t != nil {
 		names = t.themeNames()
 	}
-	theme := choicePref(prefTermTheme, "page", names, func(p *prefs) *string { return &p.termTheme }).
-		shows(func(p prefs) map[string]any {
-			return map[string]any{"App.terminalThemeIndex": max(indexOf(names, cmp.Or(p.termTheme, "page")), 0)}
+	theme := choicePref(feature.PrefTermTheme, "page", names, func(p *prefs) *string { return &p.termTheme }).
+		Shows(func(p feature.PrefsView) map[string]any {
+			return map[string]any{"App.terminalThemeIndex": max(indexOf(names, cmp.Or(p.Value(feature.PrefTermTheme), "page")), 0)}
 		})
 	if t != nil {
-		row = row.then(func(prefs) { t.c.DockPanel("terminal") })
-		theme = theme.then(func(prefs) { t.showLook() })
+		row = row.Then(func(feature.PrefsView) { t.c.DockPanel("terminal") })
+		theme = theme.Then(func(feature.PrefsView) { t.showLook() })
 	}
-	return []PrefSpec{row, theme, panelKeysRow()}
+	return []feature.PrefSpec{row, theme, panelKeysRow()}
 }
 
 // PANEL KEYS WHILE TYPING (v0.3.1) — Ctrl+h/j/k/l move between panels from a terminal's or an
 // agent's input mode too. Their keys, as the map binds App.movePane, are the panels' host keys
-// (App.terminalHostKeys, keys.go), so the program never sees them; Ctrl+\ then one sends it to the
+// (App.terminalHostKeys, feature/keys.go), so the program never sees them; Ctrl+\ then one sends it to the
 // program (golib's escape prefix). Options › Terminal turns it off, and they are the program's again.
 // Arriving at either panel by one of them puts its tab in input mode, ready to type (panels.go).
 const prefTermPanelKeys = "tui.terminal.panel_keys"
 
 // panelKeysRow is the preference: on by default; the menu's check follows it.
-func panelKeysRow() PrefSpec {
+func panelKeysRow() feature.PrefSpec {
 	return boolPref(prefTermPanelKeys, true, func(p *prefs) *bool { return &p.termPanelKeys }).
-		shows(func(p prefs) map[string]any { return map[string]any{"App.terminalPanelKeys": p.termPanelKeys} })
+		Shows(func(p feature.PrefsView) map[string]any {
+			return map[string]any{"App.terminalPanelKeys": p.Value(prefTermPanelKeys) == "true"}
+		})
 }
 
 // THE TERMINALS' THEME — the colours the terminal's and the agents' shells are drawn in, on their
@@ -96,56 +122,30 @@ func panelKeysRow() PrefSpec {
 // the page's, and the minimum contrast raises a program's colours against the theme's background.
 // A program's own 16 colours (ls's, a prompt's) stay the program's: no theme recolours them.
 
-const prefTermTheme = "tui.terminal.theme"
-
 // termThemes are the choices, "page" first.
 func termThemes() []string {
-	names, _ := themeChoices(nil, []string{"page"}, nil)
+	names, _ := feature.ThemeChoices(nil, []string{"page"}, nil)
 	return names
 }
 
 func (t *terminals) themeNames() []string {
-	names, _ := themeChoices(t.c, []string{"page"}, nil)
+	names, _ := feature.ThemeChoices(t.c, []string{"page"}, nil)
 	return names
 }
 
 // themeChooser is the theme chooser's rows: the page's, in the UI's language, then every theme.
 func (t *terminals) themeChooser() *tuidecl.ListModel {
-	return keyedChoices(themeChoices(t.c, []string{"page"}, []string{t.c.Tr("autodoc.text.terminal.the_page_s")}))
+	return feature.KeyedChoices(feature.ThemeChoices(t.c, []string{"page"}, []string{t.c.Tr("autodoc.text.terminal.the_page_s")}))
 }
 
 // LanguageChanged composes the theme chooser's rows again, in the UI's language.
 func (t *terminals) LanguageChanged() { t.c.Set("App.terminalThemes", t.themeChooser()) }
 
-// keyedChoices is a chooser's rows: row i keyed keys[i] (a value, never translated), labelled
-// labels[i] (in the UI's language).
-func keyedChoices(keys, labels []string) *tuidecl.ListModel {
-	m := tuidecl.NewListModel("key", "label")
-	rows := make([]rowOf, len(keys))
-	for i, k := range keys {
-		rows[i] = rowOf{"key": k, "label": labels[i]}
-	}
-	m.Reset(rows)
-	return m
-}
-
-// themeChoices are a theme chooser's values and labels: lead's first (the page's, the terminals'),
-// then every theme the window can wear (c's ThemeNames and ThemeLabels), else golib's.
-func themeChoices(c any, lead, leadLabels []string) (names, labels []string) {
-	names, labels = slices.Clone(lead), slices.Clone(leadLabels)
-	n, ok1 := c.(interface{ ThemeNames() []string })
-	l, ok2 := c.(interface{ ThemeLabels() []string })
-	if ok1 && ok2 {
-		return append(names, n.ThemeNames()...), append(labels, l.ThemeLabels()...)
-	}
-	return append(names, themeNames...), append(labels, themeNames...)
-}
-
 // termLook is the theme the terminals are drawn in for p on a page drawn in page: its document's
 // text, background and cursor colours. One golib does not ship falls back to the page's, and a page
 // theme it does not ship (a layout of one's own) to its first.
-func termLook(p prefs, page string) map[string]any {
-	name := p.termTheme
+func termLook(p feature.PrefsView, page string) map[string]any {
+	name := feature.TermThemeOf(p)
 	if name == "" || name == "page" || !isTheme(name) {
 		name = page
 	}
@@ -160,38 +160,20 @@ func termLook(p prefs, page string) map[string]any {
 	}
 }
 
-// terminalThemeValues are the values of the theme the terminals are drawn in, for preferences p on
-// a page drawn in page: the one chosen, else the page's; one that can't be read falls back to the
-// page's. values reads a theme by name (the host's: golib's or the user's). false when neither reads.
-// The GlobeMap is drawn in it too (globemap_gui.go).
-func terminalThemeValues(p prefs, page string, values func(string) (map[string]string, error)) (map[string]string, bool) {
-	name := p.termTheme
-	if name == "" || name == "page" {
-		name = page
-	}
-	if v, err := values(name); err == nil {
-		return v, true
-	}
-	if v, err := values(page); err == nil {
-		return v, true
-	}
-	return nil, false
-}
-
 // lookState is the terminals' colours now.
 func (t *terminals) lookState() map[string]any {
 	page := ""
 	if c, ok := t.c.(interface{ PageTheme() string }); ok {
 		page = c.PageTheme()
 	}
-	var p prefs
+	var p feature.PrefsView
 	if t.c != nil {
 		p = t.c.Prefs()
 	}
 	if c, ok := t.c.(interface {
 		ThemeValues(string) (map[string]string, error)
 	}); ok {
-		if v, ok := terminalThemeValues(p, page, c.ThemeValues); ok {
+		if v, ok := feature.TerminalThemeValues(p, page, c.ThemeValues); ok {
 			return map[string]any{"App.terminalBase": v["document.base"], "App.terminalText": v["document.text"], "App.terminalCursor": v["document.cursor"]}
 		}
 	}
@@ -208,34 +190,34 @@ func (t *terminals) showLook() {
 // ThemeChanged is the page's theme switched (View › Theme): a terminal theme of the page's follows.
 func (t *terminals) ThemeChanged() { t.showLook() }
 
-func terminalPreferenceState(p prefs) map[string]any {
+func terminalPreferenceState(p feature.PrefsView) map[string]any {
 	st := termState(p)
-	size, length := p.panelGeometry("terminal", p.termEdge)
+	size, length := p.PanelGeometry("terminal", p.Value(prefTermEdge))
 	maps.Copy(st, map[string]any{
-		"App.terminalEdgeIndex":   indexOf(termEdges, p.termEdge),
-		"App.terminalSizeIndex":   nearest(termSizes, size),
-		"App.terminalLengthIndex": nearest(termLengths, length),
+		"App.terminalEdgeIndex":   indexOf(termEdges, p.Value(prefTermEdge)),
+		"App.terminalSizeIndex":   feature.Nearest(feature.PanelSizes, size),
+		"App.terminalLengthIndex": feature.Nearest(feature.PanelLengths, length),
 	})
 	return st
 }
-func (t *terminals) Commands() map[string]Command {
-	return map[string]Command{
-		"App.toggleTerminal":    none(t.toggleTerminal),
-		"App.stopAllShells":     none(t.stopAllShells),
-		"App.openTerminal":      none(t.openTerminal),
-		"App.setTerminalEdge":   oneNumber("a row", t.setTerminalEdge),
-		"App.setTerminalSize":   oneNumber("a row", t.setTerminalSize),
-		"App.setTerminalLength": oneNumber("a row", t.setTerminalLength),
-		"App.setTerminalTheme":  oneNumber("a row", t.setTerminalTheme),
+func (t *terminals) Commands() map[string]feature.Command {
+	return map[string]feature.Command{
+		"App.toggleTerminal":    feature.None(t.toggleTerminal),
+		"App.stopAllShells":     feature.None(t.stopAllShells),
+		"App.openTerminal":      feature.None(t.openTerminal),
+		"App.setTerminalEdge":   feature.OneNumber("a row", t.setTerminalEdge),
+		"App.setTerminalSize":   feature.OneNumber("a row", t.setTerminalSize),
+		"App.setTerminalLength": feature.OneNumber("a row", t.setTerminalLength),
+		"App.setTerminalTheme":  feature.OneNumber("a row", t.setTerminalTheme),
 	}
 }
-func (t *terminals) Panels() []PanelSpec {
+func (t *terminals) Panels() []feature.PanelSpec {
 	s := terminalPanelSpec()
-	s.Open = func(PanelHost) { t.openTerminalPanel() }
-	s.Close = func(PanelHost) { t.closeTerminalPanel() }
-	s.Opened = func(c PanelHost) { c.Set("App.terminalShown", true) }
-	s.Closed = func(PanelHost) { t.terminalPanelClosed() }
-	return []PanelSpec{s}
+	s.Open = func(feature.PanelHost) { t.openTerminalPanel() }
+	s.Close = func(feature.PanelHost) { t.closeTerminalPanel() }
+	s.Opened = func(c feature.PanelHost) { c.Set("App.terminalShown", true) }
+	s.Closed = func(feature.PanelHost) { t.terminalPanelClosed() }
+	return []feature.PanelSpec{s}
 }
 func (t *terminals) PreferencesChanged() {
 	for name, value := range termState(t.c.Prefs()) {
@@ -264,30 +246,6 @@ var termEdges = []string{"bottom", "top", "left", "right", "center"}
 
 var termEdgeLabels = []string{"bottom", "top", "left", "right", "centre"}
 
-// The choices the dialog offers for a size and a length, in percent, every tenth.
-var (
-	termSizes   = percents(10, 90, 10)
-	termLengths = percents(10, 100, 10)
-)
-
-// percentLabels are the choices as the dialog shows them.
-func percentLabels(ps []int) []string {
-	out := make([]string, len(ps))
-	for i, p := range ps {
-		out[i] = strconv.Itoa(p) + "%"
-	}
-	return out
-}
-
-// percents are lo to hi in steps of step.
-func percents(lo, hi, step int) []int {
-	var out []int
-	for p := lo; p <= hi; p += step {
-		out = append(out, p)
-	}
-	return out
-}
-
 // termDefault is the terminal's size and length at a place before the user sets them: a third of
 // the Window's height at the top or bottom, two fifths of its width at a side, both the full
 // length; 70 by 70 centred.
@@ -302,10 +260,10 @@ func termDefault(edge string) (size, length int) {
 }
 
 // termState is what the document reads of the terminal's preferences.
-func termState(p prefs) map[string]any {
-	size, length := p.panelGeometry("terminal", p.termEdge)
+func termState(p feature.PrefsView) map[string]any {
+	size, length := p.PanelGeometry("terminal", p.Value(prefTermEdge))
 	return map[string]any{
-		"App.terminalEdge":   p.termEdge,
+		"App.terminalEdge":   p.Value(prefTermEdge),
 		"App.terminalSize":   size,
 		"App.terminalLength": length,
 	}
@@ -314,21 +272,10 @@ func termState(p prefs) map[string]any {
 // syncTermDialog sets the Preferences dialog's terminal choosers.
 func (t *terminals) syncTermDialog() {
 	p := t.c.Prefs()
-	size, length := p.panelGeometry("terminal", p.termEdge)
-	t.c.Set("App.terminalEdgeIndex", indexOf(termEdges, p.termEdge))
-	t.c.Set("App.terminalSizeIndex", nearest(termSizes, size))
-	t.c.Set("App.terminalLengthIndex", nearest(termLengths, length))
-}
-
-// nearest is the row of the choice closest to v.
-func nearest(choices []int, v int) int {
-	best := 0
-	for i, c := range choices {
-		if abs(c-v) < abs(choices[best]-v) {
-			best = i
-		}
-	}
-	return best
+	size, length := p.PanelGeometry("terminal", p.Value(prefTermEdge))
+	t.c.Set("App.terminalEdgeIndex", indexOf(termEdges, p.Value(prefTermEdge)))
+	t.c.Set("App.terminalSizeIndex", feature.Nearest(feature.PanelSizes, size))
+	t.c.Set("App.terminalLengthIndex", feature.Nearest(feature.PanelLengths, length))
 }
 
 func abs(n int) int {
@@ -349,21 +296,21 @@ func (t *terminals) setTerminalEdge(i int) {
 // setTerminalSize and setTerminalLength set the size at the place the terminal opens from now, the
 // panels' one way.
 func (t *terminals) setTerminalSize(i int) {
-	if i >= 0 && i < len(termSizes) {
-		t.c.KeepPanelGeometry("terminal", "size", termSizes[i])
+	if i >= 0 && i < len(feature.PanelSizes) {
+		t.c.KeepPanelGeometry("terminal", "size", feature.PanelSizes[i])
 	}
 }
 
 // setTerminalTheme is the Preferences row: the terminals' theme, kept.
 func (t *terminals) setTerminalTheme(i int) {
 	if all := t.themeNames(); i >= 0 && i < len(all) {
-		t.c.SetPref(prefTermTheme, all[i])
+		t.c.SetPref(feature.PrefTermTheme, all[i])
 	}
 }
 
 func (t *terminals) setTerminalLength(i int) {
-	if i >= 0 && i < len(termLengths) {
-		t.c.KeepPanelGeometry("terminal", "length", termLengths[i])
+	if i >= 0 && i < len(feature.PanelLengths) {
+		t.c.KeepPanelGeometry("terminal", "length", feature.PanelLengths[i])
 	}
 }
 
@@ -401,9 +348,9 @@ func (t *terminals) openTerminalPanel() {
 	t.newShell()
 }
 
-// panel is the terminal's tabs, its strip's + and menu given (tabmenus.go): a rebuilt parent has
+// panel is the terminal's tabs, its strip's + and menu given (feature/tabmenus.go): a rebuilt parent has
 // none of the old one's, so every lookup gives them again.
-func (t *terminals) panel() (TerminalPanel, error) {
+func (t *terminals) panel() (feature.TerminalPanel, error) {
 	c, ok := t.c.(terminalRuntimeHost)
 	if !ok {
 		return nil, fmt.Errorf("the terminal has no tabs to run in: %w", errs.ErrPrecondition)
@@ -427,7 +374,7 @@ func (t *terminals) newLuaShell() {
 	if !t.c.PanelOpen("terminal") {
 		t.c.Keep(t.c.CallView("terminal", "open"))
 	}
-	t.startTab(luaShellLabel, TerminalConfig{Command: "lua", Start: t.startLua},
+	t.startTab(luaShellLabel, feature.TerminalConfig{Command: "lua", Start: t.startLua},
 		func(err error) string {
 			return t.c.Trf("autodoc.notice.terminal.the_terminal_could_not_add_a_lua_shell", err.Error())
 		},
@@ -438,8 +385,8 @@ func (t *terminals) newLuaShell() {
 
 // liveShell is a tab of panel neither closing nor failed to start: prefer if it is one, else the
 // first; "" for none.
-func liveShell(panel TerminalPanel, prefer widget.TerminalTabID) widget.TerminalTabID {
-	first := widget.TerminalTabID("")
+func liveShell(panel feature.TerminalPanel, prefer terminal.TerminalTabID) terminal.TerminalTabID {
+	first := terminal.TerminalTabID("")
 	for _, tab := range panel.Tabs() {
 		if tab.Closing || (!tab.Running && tab.StartError != nil) {
 			continue
@@ -460,9 +407,9 @@ func liveShell(panel TerminalPanel, prefer widget.TerminalTabID) widget.Terminal
 func (t *terminals) newShell() {
 	root := ""
 	if ws, ok := t.c.ActiveWorkspace(); ok {
-		root = ws.root
+		root = ws.Root
 	}
-	t.startTab(shellLabel, TerminalConfig{Dir: termDir(root)},
+	t.startTab(shellLabel, t.inOwnEnv(feature.TerminalConfig{Dir: termDir(t.c.Env(), root)}),
 		func(err error) string {
 			return t.c.Trf("autodoc.notice.terminal.the_terminal_could_not_add_a_shell", err.Error())
 		},
@@ -475,13 +422,13 @@ func (t *terminals) newShell() {
 // Select gives the tab's terminal the keyboard): a shell's and a Lua shell's. A tab that cannot be
 // added is the notice addFail makes of the error; one that fails to start says so, in its tab and in
 // the notice startFail makes.
-func (t *terminals) startTab(label func(TerminalPanel) string, config TerminalConfig, addFail, startFail func(error) string) {
+func (t *terminals) startTab(label func(feature.TerminalPanel) string, config feature.TerminalConfig, addFail, startFail func(error) string) {
 	panel, err := t.panel()
 	if err != nil {
 		t.c.Keep(err)
 		return
 	}
-	var id widget.TerminalTabID
+	var id terminal.TerminalTabID
 	config.Exited = func(code int) { t.shellExited(id, code) }
 	id, err = panel.Add(label(panel), config)
 	if err != nil {
@@ -495,7 +442,7 @@ func (t *terminals) startTab(label func(TerminalPanel) string, config TerminalCo
 }
 
 // shellLabel names a new shell's tab: shell, then shell 2, shell 3, …, the first not on panel.
-func shellLabel(panel TerminalPanel) string {
+func shellLabel(panel feature.TerminalPanel) string {
 	var labels []string
 	for _, tab := range panel.Tabs() {
 		labels = append(labels, tab.Label)
@@ -512,29 +459,29 @@ func shellLabel(panel TerminalPanel) string {
 }
 
 // tabRows are a shell tab's menu: the panel's Layout ›, Go to ›, New, Close.
-func (t *terminals) tabRows(id widget.TerminalTabID) []widget.MenuItemModel {
+func (t *terminals) tabRows(id terminal.TerminalTabID) []widgetcore.MenuItemModel {
 	panel, err := t.panel()
 	if err != nil {
 		return nil
 	}
-	closing := tabMenuRow("terminal.close", "Close", t.closeShell)
+	closing := feature.TabMenuRow("terminal.close", "Close", t.closeShell)
 	closing.Enabled = id != "" // an empty panel's menu has no shell to close
-	rows := append(layoutRows(t.c, "terminal", tabRowOf),
-		goToRows(panel, func(tab widget.TerminalTab) string { return tab.Label }, func(target widget.TerminalTabID) {
+	rows := append(layoutRows(t.c, "terminal", feature.TabRowOf),
+		feature.GoToRows(panel, func(tab terminal.TerminalTab) string { return tab.Label }, func(target terminal.TerminalTabID) {
 			t.c.Keep(panel.Select(target))
 		}),
-		tabMenuRow("terminal.new", "New", func(widget.TerminalTabID) { t.newShell() }))
+		feature.TabMenuRow("terminal.new", "New", func(terminal.TerminalTabID) { t.newShell() }))
 	if t.startLua != nil {
-		rows = append(rows, tabMenuRow("terminal.lua", "New &Lua shell", func(widget.TerminalTabID) { t.newLuaShell() }))
+		rows = append(rows, feature.TabMenuRow("terminal.lua", "New &Lua shell", func(terminal.TerminalTabID) { t.newLuaShell() }))
 	}
 	rows = append(rows, closing)
 	// Hide is SPC `'s own toggle (terminal.toggle): the panel closed, every shell running on
-	return append(rows, panelRows(t.c, "terminal", panel, id, t.toggleTerminal)...)
+	return append(rows, feature.PanelRows(t.c, "terminal", panel, id, t.toggleTerminal)...)
 }
 
 // closeShell is Close on a tab's menu: the shell hung up and its tab closed. The panel stays open,
 // on its next shell or its empty text; SPC ` then starts a fresh one.
-func (t *terminals) closeShell(id widget.TerminalTabID) {
+func (t *terminals) closeShell(id terminal.TerminalTabID) {
 	panel, err := t.panel()
 	if err != nil {
 		return
@@ -572,7 +519,7 @@ func (t *terminals) stopAllShells() {
 		stopAll()
 		return
 	}
-	t.c.Ask(Question{Title: t.c.Tr("autodoc.question.terminal.stop_the_shells_and_close_the_terminal"),
+	t.c.Ask(feature.Question{Title: t.c.Tr("autodoc.question.terminal.stop_the_shells_and_close_the_terminal"),
 		Text: t.c.Trf("autodoc.question.terminal.stop_every_shell_running_here", running),
 		Yes:  t.c.Tr("autodoc.question.terminal.yes_stop_them"), OnYes: stopAll})
 }
@@ -580,7 +527,7 @@ func (t *terminals) stopAllShells() {
 // replaceActive follows tab id's removal: the shell that was active stays so, and only when id
 // was the active one does the keyboard go to the next live shell. It reports whether a live shell
 // is left.
-func (t *terminals) replaceActive(panel TerminalPanel, id, active widget.TerminalTabID) bool {
+func (t *terminals) replaceActive(panel feature.TerminalPanel, id, active terminal.TerminalTabID) bool {
 	if id != active {
 		if keep := liveShell(panel, active); keep == active {
 			return true
@@ -630,12 +577,12 @@ func (t *terminals) openTerminal() {
 }
 
 // termDir is where the shell starts: the workspace's folder when this machine has it as a folder
-// (a daemon may serve a root only it can see), else the user's home.
-func termDir(root string) string {
+// (a daemon may serve a root only it can see), else the user's home (env's, nil for AutoDoc's own).
+func termDir(env procenv.Env, root string) string {
 	if fi, err := os.Stat(root); err == nil && fi.IsDir() {
 		return root
 	}
-	if home, err := os.UserHomeDir(); err == nil {
+	if home, err := userdirs.Home(env); err == nil {
 		return home
 	}
 	return ""
@@ -654,12 +601,12 @@ func (t *terminals) terminalClosed() {
 
 // keyboardPanes are the panes the keyboard can come back to from the terminal: the page, then the
 // panels that take it back.
-func keyboardPanes(specs []PanelSpec) []string {
+func keyboardPanes(specs []feature.PanelSpec) []string {
 	out := []string{"editor"}
 	for _, s := range specs {
 		if s.Keyboard {
 			out = append(out, s.View)
-			if v := s.focusView(); v != s.View { // a tabbed panel's other tab shown
+			if v := s.FocusView(); v != s.View { // a tabbed panel's other tab shown
 				out = append(out, v)
 			}
 		}
@@ -677,7 +624,7 @@ func (h *Host) paneHasKeyboard(id string) bool {
 // the keyboard to the topmost window still open, and the next open starts a fresh shell. A non-zero exit is kept
 // as a notice, as it may be an error. golib's Terminal says it in an App.Update, where closing the
 // drawer may move the keyboard.
-func (t *terminals) shellExited(id widget.TerminalTabID, code int) {
+func (t *terminals) shellExited(id terminal.TerminalTabID, code int) {
 	if code != 0 {
 		t.c.Notify(t.c.Trf("autodoc.notice.terminal.the_terminal_s_shell_exited", strconv.Itoa(code)))
 	}
@@ -695,4 +642,10 @@ func (t *terminals) shellExited(id widget.TerminalTabID, code int) {
 	if t.c.PanelOpen("terminal") {
 		t.c.TogglePanel("terminal")
 	}
+}
+
+func terminalPanelSpec() feature.PanelSpec {
+	return feature.PanelSpec{ID: "terminal", View: "terminalView", Priority: 30, Icon: "❯",
+		Edge: func(p feature.PrefsView) string { return p.Value(prefTermEdge) }, Places: slices.Clone(termEdges),
+		Size: [2]int{10, 90}, Length: [2]int{10, 100}, Default: termDefault}
 }

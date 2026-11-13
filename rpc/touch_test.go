@@ -2,7 +2,6 @@ package rpc
 
 import (
 	"context"
-	"net"
 	"path/filepath"
 	"testing"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // TestTheAPIsWritesAreIndexedAtOnce: a file written, renamed or removed through the API reaches the
@@ -34,8 +34,8 @@ func TestTheAPIsWritesAreIndexedAtOnce(t *testing.T) {
 	ix := index.New(index.NewStore(db, row.ID), fsys, index.WithMatch(md), index.WithBatching(0, 5*time.Millisecond))
 	ixDone := make(chan struct{})
 	go func() { _ = ix.Run(ctx); close(ixDone) }() // no follower: nothing else tells the indexer
-	sock := filepath.Join(t.TempDir(), "s.sock")
-	ln, err := net.Listen("unix", sock)
+	sock := ipc.ScratchAddr(t.TempDir(), "s.sock")
+	ln, err := ipc.Listen(sock, func(error) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestTheAPIsWritesAreIndexedAtOnce(t *testing.T) {
 		<-srvDone
 		<-ixDone // before the store closes
 	})
-	cli, err := golibrpc.Dial(ctx, sock, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	cli, err := golibrpc.Dial(ctx, sock, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 	if err != nil {
 		t.Fatal(err)
 	}

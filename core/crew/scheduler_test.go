@@ -192,6 +192,7 @@ func TestTheNoticeNamesItsSendersSafely(t *testing.T) {
 		{"counted ones say their number, not more", crew.MailViaCLI, []S{{"a", "", 1}, {"b", "", 1}, {"c", "", 1}, {"d", "", 1}}, true,
 			head + "1 from a, 1 from b, 1 from c, and 1 more" + cli},
 		{"no messages is skipped", crew.MailViaCLI, []S{{"a", "claude", 0}, {"b", "claude", 1}}, false, head + "1 from b (claude)" + cli},
+		{"a Junie sender is named by its kind", crew.MailViaCLI, []S{{"wanda", "junie", 1}}, false, head + "1 from wanda (junie)" + cli},
 		{"none printable but some counted", crew.MailViaCLI, []S{{"$HOME", "claude", 1}}, false, crew.WakeNotice},
 		{"none printable on MCP mail", crew.MailViaMCP, []S{{"/bin/sh", "claude", 1}}, false, crew.WakeNoticeMCP},
 	} {

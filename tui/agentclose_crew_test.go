@@ -3,13 +3,15 @@ package tui
 import (
 	"context"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 )
 
 // presenceOf is codename's crew session state in the window's scope, as crew.list has it ("" for
 // no row).
-func presenceOf(t *testing.T, a *agents, w *crewWindow, codename string) string {
+func presenceOf(t *testing.T, a *agents.Agents, w *crewWindow, codename string) string {
 	t.Helper()
-	scope, _, _ := a.crew.held()
+	scope, _, _ := crewOf(a).Held()
 	entries, err := w.d.m.List(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -31,18 +33,18 @@ func TestAnAgentTheWindowTakesAwayEndsItsCrewSession(t *testing.T) {
 	for _, how := range []string{"close", "restart", "stop all"} {
 		t.Run(how, func(t *testing.T) {
 			a, c, w := messagingRig(t)
-			before := a.instances["one"].session.ID
+			before := a.Snapshot().Instances["one"].Session.ID
 			if before == "" || presenceOf(t, a, w, "one") != "live" {
 				t.Fatalf("agent one has no live crew session: %q, %q", before, presenceOf(t, a, w, "one"))
 			}
 			asked := len(c.questions)
 			switch how {
 			case "close":
-				a.closeAgent("one")
+				a.CloseAgent("one")
 			case "restart":
-				a.restartAgent("one")
+				a.RestartAgent("one")
 			case "stop all":
-				a.stopAllAgents()
+				a.StopAllAgents()
 			}
 			if len(c.questions) != asked+1 {
 				t.Fatalf("%s of a running agent asked %d questions, want one", how, len(c.questions)-asked)
@@ -55,8 +57,8 @@ func TestAnAgentTheWindowTakesAwayEndsItsCrewSession(t *testing.T) {
 			got := presenceOf(t, a, w, "one")
 			switch how {
 			case "restart":
-				fresh := a.instances["one"]
-				if fresh == nil || fresh.session.ID == "" || fresh.session.ID == before || got != "live" {
+				fresh, ok := a.Snapshot().Instances["one"]
+				if !ok || fresh.Session.ID == "" || fresh.Session.ID == before || got != "live" {
 					t.Errorf("restart: the new instance %+v, presence %q; want a new live session, not %s", fresh, got, before)
 				}
 				if ended := w.d.sessionEnded(t, before); !ended {
@@ -77,9 +79,9 @@ func TestAnAgentTheWindowTakesAwayEndsItsCrewSession(t *testing.T) {
 // registered until the exit's answer comes, and then the new session is.
 func TestARestartRegistersAfterTheOldSessionsExit(t *testing.T) {
 	a, c, w := messagingRig(t)
-	before := a.instances["one"].session.ID
+	before := a.Snapshot().Instances["one"].Session.ID
 	registered := calledTimes(w, "crew.register")
-	a.restartAgent("one")
+	a.RestartAgent("one")
 	w.hold, w.late = true, true // calls run at once, their answers wait
 	callsBefore := len(w.calls)
 	c.questions[len(c.questions)-1].OnYes()
@@ -109,8 +111,8 @@ func TestARestartRegistersAfterTheOldSessionsExit(t *testing.T) {
 		}
 	}
 	settleMessaging(c, w)
-	fresh := a.instances["one"]
-	if calledTimes(w, "crew.register") != registered+1 || fresh == nil || fresh.session.ID == "" || fresh.session.ID == before ||
+	fresh, ok := a.Snapshot().Instances["one"]
+	if calledTimes(w, "crew.register") != registered+1 || !ok || fresh.Session.ID == "" || fresh.Session.ID == before ||
 		!w.d.sessionEnded(t, before) || presenceOf(t, a, w, "one") != "live" {
 		t.Fatalf("after the exit's answer: registers %d (want %d), instance %+v; the old session ended %v, presence %q",
 			calledTimes(w, "crew.register"), registered+1, fresh, w.d.sessionEnded(t, before), presenceOf(t, a, w, "one"))

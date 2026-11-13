@@ -174,7 +174,7 @@ func (t *todos) Commands() map[string]Command          { … } // its App.* comm
   list. Its handlers call `App.pickFilter`, `pickMove`, `pickChoose`, `pickAccept` and
   `pickCancel` with the `name`, and Go finds the picker by it. A feature offers its pickers by
   name from an optional `Picks()`; the registry merges them, refusing a name two features claim,
-  and serves the `App.pick*` commands over them. That Go side is a `pick[T]` (`tui/pick.go`):
+  and serves the `App.pick*` commands over them. That Go side is a `pick[T]` (`tui/feature/pick.go`):
   - it holds every item, and filters them into a `rows[T]`;
   - it previews the row under the cursor off the loop, the latest asked for winning;
   - `choose` runs once it has closed the dialog, and `cancel` when it is dismissed;

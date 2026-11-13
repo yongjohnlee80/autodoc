@@ -12,7 +12,8 @@ import (
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
+	"github.com/yongjohnlee80/golib/tui/widget/table"
 
 	"github.com/yongjohnlee80/autodoc/plugin"
 )
@@ -83,7 +84,7 @@ func (r *running) source(name string) string {
 }
 
 // resultsCore is the results' table core, on the loop only.
-func (r *running) resultsCore() *widget.TableCore { return r.h.plugins.c.TableCore(resultsView) }
+func (r *running) resultsCore() *table.TableCore { return r.h.plugins.c.TableCore(resultsView) }
 
 // shownColumn is field col of every loaded row, as the view shows them, in its order.
 func (r *running) shownColumn(col int) []string {
@@ -120,11 +121,12 @@ func kindsTUI(t *testing.T, mode string) (*running, string) {
 // reads it through its kinds (golib's TableKinds), so it sorts by them; a protocol-4 table is
 // shown through the model alone. The SDK's kind bytes are golib's.
 func TestKindsReachTheTableFromProtocolFive(t *testing.T) {
+	t.Parallel()
 	r, _ := kindsTUI(t, "tablestall")
 	got := onLoop(r, func() string {
 		m := r.h.plugins.results.model
 		_, shown := r.h.plugins.results.shown.(kindedResults)
-		_, viewKinds := r.resultsCore().Source().(widget.TableKinds)
+		_, viewKinds := r.resultsCore().Source().(table.TableKinds)
 		return fmt.Sprintf("kinded %v %q, shown with kinds %v, the view reads kinds %v, kind(1,1) %c", m.kinded, m.kinds, shown, viewKinds, m.kind(1, 1))
 	})
 	if want := fmt.Sprintf("kinded true %q, shown with kinds true, the view reads kinds true, kind(1,1) z", kindsOf); got != want {
@@ -135,14 +137,14 @@ func TestKindsReachTheTableFromProtocolFive(t *testing.T) {
 	got = onLoop(r, func() string {
 		m := r.h.plugins.results.model
 		_, shown := r.h.plugins.results.shown.(*resultsModel)
-		_, viewKinds := r.resultsCore().Source().(widget.TableKinds)
+		_, viewKinds := r.resultsCore().Source().(table.TableKinds)
 		return fmt.Sprintf("kinded %v %d, shown alone %v, the view reads kinds %v", m.kinded, len(m.kinds), shown, viewKinds)
 	})
 	if want := "kinded false 0, shown alone true, the view reads kinds false"; got != want {
 		t.Fatalf("a protocol-4 table: %s, want %s", got, want)
 	}
-	for b, k := range map[byte]widget.TableCellKind{plugin.KindText: widget.TableCellText, plugin.KindNull: widget.TableCellNull,
-		plugin.KindNumber: widget.TableCellNumber, plugin.KindBool: widget.TableCellBool, plugin.KindJSON: widget.TableCellJSON} {
+	for b, k := range map[byte]table.TableCellKind{plugin.KindText: table.TableCellText, plugin.KindNull: table.TableCellNull,
+		plugin.KindNumber: table.TableCellNumber, plugin.KindBool: table.TableCellBool, plugin.KindJSON: table.TableCellJSON} {
 		if b != byte(k) {
 			t.Errorf("the SDK's kind %q is golib's %q", b, byte(k))
 		}
@@ -153,6 +155,7 @@ func TestKindsReachTheTableFromProtocolFive(t *testing.T) {
 // of the table's fields is dropped, noted, and ends the table's rows there, the rows before it kept
 // as they were; a host.table whose kinds do not fit is refused, the table shown kept.
 func TestAKindsPageThatDoesNotFitIsDropped(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin5(t, dir, "kinds", "service", "kindsbad", tableManifest)
 	r, logs := pluginTUI(t, dir)
@@ -183,6 +186,7 @@ func TestAKindsPageThatDoesNotFitIsDropped(t *testing.T) {
 // says it covers the loaded rows; on a whole result the note is empty. The rows are numbered, the
 // gutter as wide as the last number.
 func TestTheSortIsInBuffer(t *testing.T) {
+	t.Parallel()
 	r, logs := kindsTUI(t, "tablestall")
 	if note := r.source("App.resultsViewNote"); note != "" {
 		t.Errorf("the note on a whole result: %q", note)
@@ -225,6 +229,7 @@ func TestTheSortIsInBuffer(t *testing.T) {
 // equal rows in the query's order. While a name is typed the line offers the fields it may be, a
 // shared one as its positions. The s key writes its sort back to the bar.
 func TestTheSortBarReadsTheFields(t *testing.T) {
+	t.Parallel()
 	r, _ := kindsTUI(t, "tablestall")
 	names := func(order ...int) []string {
 		out := make([]string, len(order))
@@ -258,14 +263,14 @@ func TestTheSortBarReadsTheFields(t *testing.T) {
 
 	onLoop(r, func() bool {
 		r.h.keep(r.h.p.Call(resultsView, "forceActiveFocus"))
-		r.resultsCore().SetCursor(widget.TablePos{Col: 1})
+		r.resultsCore().SetCursor(table.TablePos{Col: 1})
 		return true
 	})
 	r.keys(t, key('s'))
 	r.s.WaitFor(t, "s written to the bar", func(string) bool {
 		return r.source("App.resultsOrder") == "name ASC" && r.source("App.resultsClauseText") == "name ASC"
 	})
-	onLoop(r, func() bool { r.resultsCore().SetCursor(widget.TablePos{Col: 0}); return true })
+	onLoop(r, func() bool { r.resultsCore().SetCursor(table.TablePos{Col: 0}); return true })
 	r.keys(t, key('s'))
 	r.s.WaitFor(t, "a shared name's s written as its position", func(string) bool { return r.source("App.resultsOrder") == "1 ASC" })
 }
@@ -286,6 +291,7 @@ const wantJSON = `[
 // extension takes .json. A protocol-4 table's values are all strings. A failed write leaves no
 // .part.
 func TestJSONIsExact(t *testing.T) {
+	t.Parallel()
 	r, _ := kindsTUI(t, "tablestall")
 	out := t.TempDir()
 	onLoop(r, func() bool {
@@ -341,6 +347,7 @@ func TestJSONIsExact(t *testing.T) {
 // TestThePanelActsOnTheView: sorted by two keys, the loaded rows leave as shown: the CSV and JSON
 // exports, a V selection's copies as TSV, CSV, JSON and Markdown, and results.markdown.
 func TestThePanelActsOnTheView(t *testing.T) {
+	t.Parallel()
 	r, _ := kindsTUI(t, "tablestall")
 	order := []int{4, 1, 2, 0, 3}
 	var names []string
@@ -408,7 +415,7 @@ func TestThePanelActsOnTheView(t *testing.T) {
 	}
 	onLoop(r, func() bool {
 		r.h.editor.SetValue("")
-		r.h.core.SetCursor(widget.TextPos{})
+		r.h.core.SetCursor(editor.TextPos{})
 		r.h.plugins.insertResults()
 		return true
 	})
@@ -435,8 +442,9 @@ func markdownNames(text string) []string {
 // no line of more; JSON chosen, the save dialog's name ends .json and a name with no extension takes
 // it; results.csv opens the dialog on CSV again, and results.export keeps the last choice.
 func TestTheExportDialogSaysWhatItTakes(t *testing.T) {
+	t.Parallel()
 	r, _ := kindsTUI(t, "tablestall")
-	if err := onLoop(r, func() error { return r.h.cat.run("results.export", nil) }); err != nil {
+	if err := onLoop(r, func() error { return r.h.cat.Run("results.export", nil) }); err != nil {
 		t.Fatal(err)
 	}
 	r.s.WaitForText(t, "Export 5 loaded rows, as shown")
@@ -452,12 +460,12 @@ func TestTheExportDialogSaysWhatItTakes(t *testing.T) {
 	onLoop(r, func() bool { r.h.plugins.exportResults(path); return true })
 	r.waitNotice(t, "5 rows exported to "+path+".json")
 
-	if err := onLoop(r, func() error { return r.h.cat.run("results.csv", nil) }); err != nil {
+	if err := onLoop(r, func() error { return r.h.cat.Run("results.csv", nil) }); err != nil {
 		t.Fatal(err)
 	}
 	r.s.WaitFor(t, "results.csv on CSV", func(string) bool { return r.source("App.exportFormatIndex") == "0" })
 	onLoop(r, func() bool { r.h.closeDialog("exportResults"); r.h.plugins.exportFormatChosen(1); return true })
-	if err := onLoop(r, func() error { return r.h.cat.run("results.export", nil) }); err != nil {
+	if err := onLoop(r, func() error { return r.h.cat.Run("results.export", nil) }); err != nil {
 		t.Fatal(err)
 	}
 	r.s.WaitFor(t, "results.export on the last choice", func(string) bool { return r.source("App.exportFormatIndex") == "1" })
@@ -469,7 +477,7 @@ func (r *running) resultsMenuRow(t *testing.T, id string) {
 	found := onLoop(r, func() bool {
 		for _, row := range r.h.plugins.resultsMenuRows() {
 			if string(row.ID) == "results.menu."+id {
-				row.Action.(widget.CoreMenuAction).Run(nil)
+				row.Action.(editor.CoreMenuAction).Run(nil)
 				return true
 			}
 		}
@@ -485,11 +493,12 @@ func (r *running) resultsMenuRow(t *testing.T, id string) {
 // command: the copies, Select all, the sorts and Unsort, Export loaded rows… and Insert as
 // Markdown. A copy past the cap copies nothing and says to export.
 func TestTheMenuRowsRunTheirCommands(t *testing.T) {
+	t.Parallel()
 	r, _ := kindsTUI(t, "tablestall")
 	onLoop(r, func() bool {
 		tc := r.resultsCore()
-		tc.SetCursor(widget.TablePos{Row: 1})
-		tc.Select(widget.TableSelectRows, widget.TablePos{})
+		tc.SetCursor(table.TablePos{Row: 1})
+		tc.Select(table.TableSelectRows, table.TablePos{})
 		x := resultsGutter(tc) + tc.Width(0) + 2 + 1 // inside the name field
 		r.h.plugins.c.ResultsTable(resultsView).HandleEvent(tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseRight, X: x, Y: resultsHeaderRows + 2})
 		return true
@@ -501,7 +510,7 @@ func TestTheMenuRowsRunTheirCommands(t *testing.T) {
 		at, hit := r.h.plugins.c.ResultsTable(resultsView).MenuAt()
 		return fmt.Sprintf("open %v, selection %v %v to %v, at %v %v", r.h.plugins.c.ResultsTable(resultsView).Menu().IsOpen(),
 			tc.SelectionKind(), from, to, at, hit)
-	}); got != fmt.Sprintf("open true, selection %v {0 0} to {1 0}, at {2 1} %v", widget.TableSelectRows, widget.TableHitCell) {
+	}); got != fmt.Sprintf("open true, selection %v {0 0} to {1 0}, at {2 1} %v", table.TableSelectRows, table.TableHitCell) {
 		t.Fatalf("after the right press: %s", got)
 	}
 	r.resultsMenuRow(t, "sort_asc")
@@ -520,7 +529,7 @@ func TestTheMenuRowsRunTheirCommands(t *testing.T) {
 	if got := onLoop(r, func() string {
 		from, to, _ := r.resultsCore().Selection()
 		return fmt.Sprintf("%v %v %v", r.resultsCore().SelectionKind(), from.Row, to.Row)
-	}); got != fmt.Sprintf("%v 0 4", widget.TableSelectRows) {
+	}); got != fmt.Sprintf("%v 0 4", table.TableSelectRows) {
 		t.Errorf("Select all: %s", got)
 	}
 	r.resultsMenuRow(t, "export")
@@ -532,9 +541,7 @@ func TestTheMenuRowsRunTheirCommands(t *testing.T) {
 		t.Errorf("Insert as Markdown: %q", r.editorText())
 	}
 
-	limit := resultsCopyCap
-	resultsCopyCap = 64
-	t.Cleanup(func() { resultsCopyCap = limit })
+	onLoop(r, func() bool { r.h.seams.resultsCopyCap = 64; return true }) // read as a copy is made, on the loop
 	before := string(r.s.Backend.Clipboard())
 	for _, format := range []copyFormat{formatTSV, formatCSV, formatJSON, formatMarkdown} {
 		onLoop(r, func() bool { r.h.plugins.copyResults(format); return true })
@@ -549,6 +556,7 @@ func TestTheMenuRowsRunTheirCommands(t *testing.T) {
 // them, it is in the theme's inactive highlight (not the faint highlight a table has without it);
 // when the keys come back, the highlight again.
 func TestTheBlurredCursor(t *testing.T) {
+	t.Parallel()
 	r, _ := kindsTUI(t, "tablestall")
 	look := func(id string) string {
 		return onLoop(r, func() string {
@@ -583,6 +591,7 @@ func TestTheBlurredCursor(t *testing.T) {
 // text typed into its input and entered sorts the rows. Each clause keeps its own text as the
 // dropdown moves between them, and WHERE's Enter filters the rows the sort orders.
 func TestTheBarIsAClauseAndItsText(t *testing.T) {
+	t.Parallel()
 	r, _ := kindsTUI(t, "tablestall")
 	r.s.WaitForText(t, "ORDER BY")
 	read := func(id, prop string) string {

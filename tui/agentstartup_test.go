@@ -3,31 +3,28 @@ package tui
 import (
 	"context"
 	"errors"
+	"testing"
+
 	"slices"
 	"strings"
-	"testing"
 	"time"
-
-	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
 	"github.com/yongjohnlee80/autodoc/core/inbox"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 )
 
-// A crew Claude agent is past its startup once Claude Code ran its SessionStart hook, which
-// registers its endpoint; before that it may be showing its folder-trust question, whose default
-// is "No, exit". Its cells: claudeOne is crewAgents with one Claude agent, cl, started.
-const claudeOne = `[{"name":"Claude","command":"one","kind":"claude","codename":"cl"}]`
-
-func claudeRig(t *testing.T) (*agents, *identityHost, *crewWindow, *agentInstance) {
+func claudeRig(t *testing.T) (*agents.Agents, *identityHost, *crewWindow, *agents.AgentInstance) {
 	t.Helper()
 	a, c, w := crewAgents(t, claudeOne)
-	p, _ := a.profile("cl")
-	instance, err := a.startInstance(p)
-	if err != nil || !instance.running {
+	p, _ := a.Profile("cl")
+	instance, err := a.StartInstance(p)
+	if err != nil || !instance.State().Running {
 		t.Fatalf("start: %v", err)
 	}
-	a.promptsReported = func(string, bool) bool { return true }
+	seamsOf(a).agentPromptsReported = func(string, bool) bool { return true }
 	return a, c, w, instance
 }
 
@@ -56,6 +53,60 @@ func (d *crewDaemon) started(t *testing.T, codename string) {
 	}
 }
 
+// A Claude the crew can't vouch for is never typed into: when crew.list fails, or lists no session
+// of its codename in the window's scope (another scope's agent of that name says nothing), it isn't
+// known to have started, so nothing is pasted or pressed (the mutants: a failed list, or a row of
+// another scope, taken for started).
+func TestAClaudeTheCrewCantVouchForIsNotTypedInto(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		list func(w *crewWindow, scope string)
+	}{
+		{"crew.list fails", func(w *crewWindow, _ string) { w.down = map[string]int{"crew.list": 1} }},
+		{"only another scope's cl", func(w *crewWindow, _ string) {
+			w.crewList = func() (any, error) {
+				return []any{map[string]any{"scope": "autodoc:other", "codename": "cl", "reachable": true}}, nil
+			}
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			a, cw, w, _ := claudeRig(t)
+			scope, _, _ := crewOf(a).Held()
+			c.list(w, scope)
+			var heard []error
+			a.DeliverFallback("cl", "hello cl", func(err error) { heard = append(heard, err) })
+			settleMessaging(cw, w)
+			if len(cw.panel.pastes) != 0 || len(cw.panel.keys) != 0 || len(heard) != 1 || heard[0] == nil {
+				t.Fatalf("pasted %q, pressed %q, heard %v: want nothing typed, the delivery ended unsent", cw.panel.pastes, cw.panel.keys, heard)
+			}
+		})
+	}
+}
+
+// A window that holds no crew scope (lost with its connection) can't ask the crew whether its Claude
+// has started, nor mail it: the user's send types nothing, and ends unsent, saying why (the
+// mutants: no scope taken for started; the send queued with no scope to send from).
+func TestAWindowWithNoScopeTypesNothingIntoItsClaude(t *testing.T) {
+	a, c, w, _ := claudeRig(t)
+	crewOf(a).Stopped() // the scope released, as a quit releases it; the agent still runs, its session the agents' record of it
+	var heard []error
+	if err := a.SendText(feature.AgentRef{Codename: "cl"}, "hello cl", func(err error) { heard = append(heard, err) }); err != nil {
+		t.Fatal(err)
+	}
+	settleMessaging(c, w)
+	if len(c.panel.pastes) != 0 || len(c.panel.keys) != 0 {
+		t.Fatalf("pasted %q, pressed %q into a Claude with no scope to ask: want nothing", c.panel.pastes, c.panel.keys)
+	}
+	if len(heard) != 1 || !errors.Is(heard[0], agents.ErrDoorbellNotSent) {
+		t.Fatalf("heard %v: want the send ended unsent, no crew scope to mail it from", heard)
+	}
+}
+
+// A crew Claude agent is past its startup once Claude Code ran its SessionStart hook, which
+// registers its endpoint; before that it may be showing its folder-trust question, whose default
+// is "No, exit". Its cells: claudeOne is crewAgents with one Claude agent, cl, started.
+const claudeOne = `[{"name":"Claude","command":"one","kind":"claude","codename":"cl"}]`
+
 // notStartedNotices counts the notices that say codename hasn't finished starting in folder (not
 // the exit-before-start notice, which names its folder and the trust question too).
 func notStartedNotices(notes []string, name, folder string) int {
@@ -77,7 +128,7 @@ func TestNothingIsTypedIntoAClaudeThatHasntStarted(t *testing.T) {
 	a, c, w, instance := claudeRig(t)
 	var heard []error
 	for range 2 {
-		a.deliverFallback("cl", "hello cl", func(err error) { heard = append(heard, err) })
+		a.DeliverFallback("cl", "hello cl", func(err error) { heard = append(heard, err) })
 		settleMessaging(c, w)
 	}
 	if len(c.panel.pastes) != 0 || len(c.panel.keys) != 0 {
@@ -86,13 +137,13 @@ func TestNothingIsTypedIntoAClaudeThatHasntStarted(t *testing.T) {
 	if len(heard) != 2 || heard[0] == nil || heard[1] == nil {
 		t.Fatalf("the deliveries heard %v: want each ended unsent", heard)
 	}
-	if n := notStartedNotices(c.notes, "Claude", instance.dir); n != 1 {
-		t.Fatalf("notices %q: want one that Claude hasn't finished starting in %s, once over two deliveries", c.notes, instance.dir)
+	if n := notStartedNotices(c.notes, "Claude", instance.State().Dir); n != 1 {
+		t.Fatalf("notices %q: want one that Claude hasn't finished starting in %s, once over two deliveries", c.notes, instance.State().Dir)
 	}
 
 	w.d.started(t, "cl")
 	heard = nil
-	a.deliverFallback("cl", "hello cl", func(err error) { heard = append(heard, err) })
+	a.DeliverFallback("cl", "hello cl", func(err error) { heard = append(heard, err) })
 	settleMessaging(c, w)
 	if len(c.panel.pastes) != 1 || len(c.panel.keys) != 1 || len(heard) != 1 || heard[0] != nil {
 		t.Fatalf("started: pasted %q, pressed %q, heard %v; want it typed and sent", c.panel.pastes, c.panel.keys, heard)
@@ -114,7 +165,7 @@ func TestTheUsersSendToAClaudeThatHasntStartedWaitsAsMail(t *testing.T) {
 		return map[string]any{"message": "m"}, nil
 	}
 	var heard []error
-	if err := a.SendText(AgentRef{Codename: "cl"}, "hello cl", func(err error) { heard = append(heard, err) }); err != nil {
+	if err := a.SendText(feature.AgentRef{Codename: "cl"}, "hello cl", func(err error) { heard = append(heard, err) }); err != nil {
 		t.Fatal(err)
 	}
 	settleMessaging(c, w)
@@ -142,13 +193,13 @@ func TestAClaudeWhoseHostsLeaseLapsedIsNotTakenForStarted(t *testing.T) {
 		t.Fatalf("crew.list: %+v %v, want cl's host gone", es, err)
 	}
 	var heard []error
-	a.deliverFallback("cl", "hello cl", func(err error) { heard = append(heard, err) })
+	a.DeliverFallback("cl", "hello cl", func(err error) { heard = append(heard, err) })
 	settleMessaging(c, w)
 	if len(c.panel.pastes) != 0 || len(c.panel.keys) != 0 {
 		t.Fatalf("pasted %q, pressed %q into a Claude whose host's lease lapsed, with no endpoint: want nothing", c.panel.pastes, c.panel.keys)
 	}
-	if len(heard) != 1 || heard[0] == nil || instance.started != "" {
-		t.Fatalf("heard %v, kept as started %q: want it ended unsent, nothing kept", heard, instance.started)
+	if len(heard) != 1 || heard[0] == nil || instance.State().Started != "" {
+		t.Fatalf("heard %v, kept as started %q: want it ended unsent, nothing kept", heard, instance.State().Started)
 	}
 }
 
@@ -156,18 +207,18 @@ func TestAClaudeWhoseHostsLeaseLapsedIsNotTakenForStarted(t *testing.T) {
 // told of again.
 func TestTheNotStartedNoticeIsOncePerSession(t *testing.T) {
 	a, c, w, instance := claudeRig(t)
-	a.deliverFallback("cl", "one", func(error) {})
+	a.DeliverFallback("cl", "one", func(error) {})
 	settleMessaging(c, w)
-	c.panel.exit(instance.tab, 0)
+	c.panel.exit(instance.State().Tab, 0)
 	settleMessaging(c, w)
-	p, _ := a.profile("cl")
-	again, err := a.startInstance(p)
-	if err != nil || !again.running {
+	p, _ := a.Profile("cl")
+	again, err := a.StartInstance(p)
+	if err != nil || !again.State().Running {
 		t.Fatalf("the start again: %v", err)
 	}
-	a.deliverFallback("cl", "two", func(error) {})
+	a.DeliverFallback("cl", "two", func(error) {})
 	settleMessaging(c, w)
-	if n := notStartedNotices(c.notes, "Claude", again.dir); n != 2 {
+	if n := notStartedNotices(c.notes, "Claude", again.State().Dir); n != 2 {
 		t.Fatalf("notices %q: want one for each session, two", c.notes)
 	}
 }
@@ -176,7 +227,7 @@ func TestTheNotStartedNoticeIsOncePerSession(t *testing.T) {
 // is told so, with its exit code. One that had started and exits is told nothing of the kind.
 func TestAClaudeThatExitsBeforeItStartsIsToldWhy(t *testing.T) {
 	a, c, w, instance := claudeRig(t)
-	c.panel.exit(instance.tab, 3)
+	c.panel.exit(instance.State().Tab, 3)
 	settleMessaging(c, w)
 	declined := func() int {
 		n := 0
@@ -191,64 +242,15 @@ func TestAClaudeThatExitsBeforeItStartsIsToldWhy(t *testing.T) {
 		t.Fatalf("notices %q: want one that Claude exited (3) before it started, maybe declining its folder-trust question", c.notes)
 	}
 
-	p, _ := a.profile("cl")
-	again, err := a.startInstance(p)
-	if err != nil || !again.running {
+	p, _ := a.Profile("cl")
+	again, err := a.StartInstance(p)
+	if err != nil || !again.State().Running {
 		t.Fatalf("the start again: %v", err)
 	}
 	w.d.started(t, "cl")
-	c.panel.exit(again.tab, 3)
+	c.panel.exit(again.State().Tab, 3)
 	settleMessaging(c, w)
 	if declined() != 1 {
 		t.Fatalf("notices %q: a Claude that had started is told nothing of its folder-trust question", c.notes)
-	}
-}
-
-// A Claude the crew can't vouch for is never typed into: when crew.list fails, or lists no session
-// of its codename in the window's scope (another scope's agent of that name says nothing), it isn't
-// known to have started, so nothing is pasted or pressed (the mutants: a failed list, or a row of
-// another scope, taken for started).
-func TestAClaudeTheCrewCantVouchForIsNotTypedInto(t *testing.T) {
-	for _, c := range []struct {
-		name string
-		list func(w *crewWindow, scope string)
-	}{
-		{"crew.list fails", func(w *crewWindow, _ string) { w.down = map[string]int{"crew.list": 1} }},
-		{"only another scope's cl", func(w *crewWindow, _ string) {
-			w.crewList = func() (any, error) {
-				return []any{map[string]any{"scope": "autodoc:other", "codename": "cl", "reachable": true}}, nil
-			}
-		}},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			a, cw, w, _ := claudeRig(t)
-			scope, _, _ := a.crew.held()
-			c.list(w, scope)
-			var heard []error
-			a.deliverFallback("cl", "hello cl", func(err error) { heard = append(heard, err) })
-			settleMessaging(cw, w)
-			if len(cw.panel.pastes) != 0 || len(cw.panel.keys) != 0 || len(heard) != 1 || heard[0] == nil {
-				t.Fatalf("pasted %q, pressed %q, heard %v: want nothing typed, the delivery ended unsent", cw.panel.pastes, cw.panel.keys, heard)
-			}
-		})
-	}
-}
-
-// A window that holds no crew scope (lost with its connection) can't ask the crew whether its Claude
-// has started, nor mail it: the user's send types nothing, and ends unsent, saying why (the
-// mutants: no scope taken for started; the send queued with no scope to send from).
-func TestAWindowWithNoScopeTypesNothingIntoItsClaude(t *testing.T) {
-	a, c, w, _ := claudeRig(t)
-	a.crew.scope = "" // the scope lost; the agent's session is still the window's record of it
-	var heard []error
-	if err := a.SendText(AgentRef{Codename: "cl"}, "hello cl", func(err error) { heard = append(heard, err) }); err != nil {
-		t.Fatal(err)
-	}
-	settleMessaging(c, w)
-	if len(c.panel.pastes) != 0 || len(c.panel.keys) != 0 {
-		t.Fatalf("pasted %q, pressed %q into a Claude with no scope to ask: want nothing", c.panel.pastes, c.panel.keys)
-	}
-	if len(heard) != 1 || !errors.Is(heard[0], errDoorbellNotSent) {
-		t.Fatalf("heard %v: want the send ended unsent, no crew scope to mail it from", heard)
 	}
 }

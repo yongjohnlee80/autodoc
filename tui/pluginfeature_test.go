@@ -3,6 +3,7 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"slices"
 	"strings"
 	"testing"
@@ -13,13 +14,13 @@ import (
 // it closes, and a file kept as the draft when its workspace goes. The document is the page shown,
 // never the snapshot read on the way to it.
 func TestEveryPageShownRaisesTheFeedsVersionOnce(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "stats", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 60\nheight = 6\n[feed]\ndocument = true\n")
-	delay := pluginFeedDelay
-	pluginFeedDelay = time.Second // a slow (-race) runner's pause between two steps stays inside it
-	t.Cleanup(func() { pluginFeedDelay = delay })
+	const delay = time.Second
+	tune(t).pluginFeed = delay // a slow (-race) runner's pause between two steps stays inside it
 	r, logs := pluginTUI(t, dir)
-	time.Sleep(3 * pluginFeedDelay) // any feed the start scheduled has fired, to nobody
+	time.Sleep(3 * delay) // any feed the start scheduled has fired, to nobody
 	onLoop(r, func() bool { r.h.plugins.openPlugin("stats"); return true })
 	last := version(t, docsIn(waitSaid(t, logs, "stats", "doc "))[0])
 
@@ -28,7 +29,7 @@ func TestEveryPageShownRaisesTheFeedsVersionOnce(t *testing.T) {
 		n := len(docsIn(said(t, logs, "stats")))
 		onLoop(r, func() bool { do(); return true })
 		r.s.WaitFor(t, what+"'s document", func(string) bool { return len(docsIn(said(t, logs, "stats"))) > n })
-		time.Sleep(2 * pluginFeedDelay) // nothing more comes of it
+		time.Sleep(2 * delay) // nothing more comes of it
 		docs := docsIn(said(t, logs, "stats"))
 		if len(docs) != n+1 {
 			t.Fatalf("%s: %d documents, want one: %q", what, len(docs)-n, docs[n:])
@@ -48,9 +49,11 @@ func TestEveryPageShownRaisesTheFeedsVersionOnce(t *testing.T) {
 
 // A plugin started mid-typing, before the pause, is sent the text as it is, with its version.
 func TestAPluginStartedMidTypingHasTheTextAsItIs(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "stats", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 60\nheight = 6\n[feed]\ndocument = true\n")
 	r, logs := pluginTUI(t, dir)
+	r.ready(t) // the workspace entered first: entering it shows the draft as the page, the next version (enter → showPage)
 	want := onLoop(r, func() int {
 		r.h.editor.SetValue("typed just now\n")
 		r.h.edited() // typing: the pause has not come, the page's snapshot is the text before
@@ -65,16 +68,17 @@ func TestAPluginStartedMidTypingHasTheTextAsItIs(t *testing.T) {
 
 // pluginHost's catalog and preference services take the plugins' own and refuse anything else.
 func TestThePluginHostRefusesWhatIsNotThePlugins(t *testing.T) {
+	t.Parallel()
 	r := runTUI(t, NewSession("unused", nil), Options{})
 	onLoop(r, func() bool {
 		c := core{r.h}
-		if err := c.AddPluginEntry(Entry{ID: "file.sneaky", Source: SourcePlugin, Owner: "x", Title: "x", Run: noRun}); !errors.Is(err, ErrNotPluginEntry) {
+		if err := c.AddPluginEntry(feature.Entry{ID: "file.sneaky", Source: feature.SourcePlugin, Owner: "x", Title: "x", Run: noRun}); !errors.Is(err, ErrNotPluginEntry) {
 			t.Errorf("a file.* id: %v, want ErrNotPluginEntry", err)
 		}
-		if err := c.AddPluginEntry(Entry{ID: "plugin.x.y", Source: SourceBuiltin, Owner: "x", Title: "x", Run: noRun}); !errors.Is(err, ErrNotPluginEntry) {
+		if err := c.AddPluginEntry(feature.Entry{ID: "plugin.x.y", Source: feature.SourceBuiltin, Owner: "x", Title: "x", Run: noRun}); !errors.Is(err, ErrNotPluginEntry) {
 			t.Errorf("a plugin.* id from another source: %v, want ErrNotPluginEntry", err)
 		}
-		if err := c.AddPluginEntry(Entry{ID: "plugin.x.y", Source: SourcePlugin, Owner: "x", Title: "x: y", Run: noRun}); err != nil {
+		if err := c.AddPluginEntry(feature.Entry{ID: "plugin.x.y", Source: feature.SourcePlugin, Owner: "x", Title: "x: y", Run: noRun}); err != nil {
 			t.Errorf("a plugin's own entry was refused: %v", err)
 		}
 		if ids := slices.Collect(func(yield func(string) bool) {
@@ -87,7 +91,7 @@ func TestThePluginHostRefusesWhatIsNotThePlugins(t *testing.T) {
 			t.Errorf("the plugin entries: %v", ids)
 		}
 		c.RemovePluginEntries()
-		if len(c.PluginEntries()) != 0 || r.h.cat.lookup("file.open") == nil {
+		if len(c.PluginEntries()) != 0 || r.h.cat.Lookup("file.open") == nil {
 			t.Error("RemovePluginEntries left a plugin entry, or took another's")
 		}
 		if err := c.SetPluginPref("tui.theme", "dark"); !errors.Is(err, ErrNotPluginPref) {
@@ -110,13 +114,14 @@ func (s *stopsAndThemes) Stopped()      { s.stops++ }
 func (s *stopsAndThemes) ThemeChanged() { s.themes++ }
 
 func TestTheRegistryTellsStopsAndThemes(t *testing.T) {
+	t.Parallel()
 	f := &stopsAndThemes{fake: fake{name: "f"}}
-	r, err := newRegistry(f)
+	r, err := feature.NewRegistry(f)
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.themeChanged()
-	r.stopped()
+	r.ThemeChanged()
+	r.Stopped()
 	if f.stops != 1 || f.themes != 1 {
 		t.Fatalf("stopped %d, themes %d: want one each", f.stops, f.themes)
 	}

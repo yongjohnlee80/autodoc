@@ -6,17 +6,22 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/yongjohnlee80/golib/errs"
+
+	"github.com/yongjohnlee80/autodoc/internal/fileid"
+	"github.com/yongjohnlee80/autodoc/internal/filelock"
+
+	"github.com/yongjohnlee80/autodoc/internal/userperm"
 )
 
 // ErrBusy is a store another AutoDoc instance already serves: its lease is held.
 var ErrBusy = errs.Sentinel(errs.ErrPrecondition, "store: another instance serves this store")
 
-// acquireLease takes the single-instance lease on the store at path: an flock
-// on a sidecar named for the store's device and inode, beside it.
+// acquireLease takes the single-instance lease on the store at path: a file
+// lock (internal/filelock) on a sidecar named for the store's device and inode,
+// beside it.
 //
 // The lock names the DATABASE, not the spelling of the path: the store, a
 // symlink to it and a hardlink to it in its directory are one store. It is a
@@ -26,23 +31,19 @@ var ErrBusy = errs.Sentinel(errs.ErrPrecondition, "store: another instance serve
 // closing any descriptor to it would drop SQLite's fcntl locks; os.Stat reads
 // the inode without one. A missing store is created first (an empty file is a
 // valid empty SQLite database).
-func acquireLease(path string) (*os.File, error) {
+func acquireLease(path string) (filelock.Unlock, error) {
 	lockPath, err := leaseLockPath(path)
 	if err != nil {
 		return nil, err
 	}
-	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+	unlock, err := filelock.TryLock(lockPath)
+	if errors.Is(err, filelock.ErrHeld) {
+		return nil, fmt.Errorf("%w (%s)", ErrBusy, path)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("store: opening the lease file %s: %w", lockPath, err)
+		return nil, fmt.Errorf("store: the lease on %s: %w", path, err)
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		_ = f.Close()
-		if errors.Is(err, syscall.EWOULDBLOCK) {
-			return nil, fmt.Errorf("%w (%s)", ErrBusy, path)
-		}
-		return nil, fmt.Errorf("store: locking %s: %w", path, err)
-	}
-	return f, nil
+	return unlock, nil
 }
 
 func leaseLockPath(path string) (string, error) {
@@ -53,8 +54,8 @@ func leaseLockPath(path string) (string, error) {
 	return filepath.Join(dir, ".autodoc-lease-"+id), nil
 }
 
-// identity is the store at path's directory and identity, its device and inode, as the lease names
-// it: the store, a symlink to it and a hardlink to it are one store. A missing store is created when
+// identity is the store at path's directory and identity (internal/fileid: its device and inode on
+// Unix), as the lease names it: the store, a symlink to it and a hardlink to it are one store. A missing store is created when
 // create is set (the lease's case), and is an os.ErrNotExist otherwise (a client's: no daemon can
 // hold a store that is not there).
 func identity(path string, create bool) (dir, id string, err error) {
@@ -75,15 +76,11 @@ func identity(path string, create bool) (dir, id string, err error) {
 	if err != nil {
 		return "", "", fmt.Errorf("store: resolving %s: %w", abs, err)
 	}
-	fi, err := os.Stat(resolved)
+	id, err = fileid.ID(resolved)
 	if err != nil {
 		return "", "", fmt.Errorf("store: reading %s: %w", resolved, err)
 	}
-	st, ok := fi.Sys().(*syscall.Stat_t)
-	if !ok {
-		return "", "", fmt.Errorf("store: no inode for %s on this platform", resolved)
-	}
-	return filepath.Dir(resolved), fmt.Sprintf("%d-%d", st.Dev, st.Ino), nil
+	return filepath.Dir(resolved), id, nil
 }
 
 // Identity is the store at path's identity, its device and inode: the name its lease is taken
@@ -130,15 +127,11 @@ func WriteLeaseInfo(path string, li LeaseInfo) error {
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(dest), ".autodoc-lease-info-*")
+	tmp, err := userperm.CreatePrivateTemp(filepath.Dir(dest), ".autodoc-lease-info-*") // private from its creation
 	if err != nil {
 		return fmt.Errorf("store: writing the lease-info: %w", err)
 	}
 	defer os.Remove(tmp.Name())
-	if err := tmp.Chmod(0o600); err != nil {
-		_ = tmp.Close()
-		return err
-	}
 	if _, err := tmp.Write(data); err != nil {
 		_ = tmp.Close()
 		return err

@@ -10,10 +10,15 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/internal/userdirs"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 
 	"github.com/yongjohnlee80/autodoc"
 	regindex "github.com/yongjohnlee80/autodoc/core/registry"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/todos"
 )
 
 // ONE CANDIDATE PER INSTALL OR UPDATE
@@ -36,10 +41,11 @@ const (
 
 // candidate is one install or update. Its identity is immutable; only state moves, on the loop.
 type candidate struct {
-	kind, name, repo string // kind: regindex.KindPlugin or KindLua
-	commit           string // in full; the card shows its first seven
-	stage            string // the clone, at commit: what Install builds and moves in
-	update           bool   // replaces an installed plugin, which is never this candidate's to remove
+	kind, name, repo string      // kind: regindex.KindPlugin or KindLua
+	commit           string      // in full; the card shows its first seven
+	stage            string      // the clone, at commit: what Install builds and moves in
+	env              procenv.Env // the environment it was staged in (nil, AutoDoc's own): its git's and its build's
+	update           bool        // replaces an installed plugin, which is never this candidate's to remove
 	entry            *regindex.IndexEntry
 	m                manifest         // a plugin's manifest, as the stage holds it
 	pkg              packageManifest  // a Lua package's
@@ -64,20 +70,20 @@ const auditNote = "Audit asks your agent to read this code. AutoDoc can't stop t
 
 // candidates are the live candidates, by key, and Audit…'s picker of agents.
 type candidates struct {
-	c      Core
+	c      feature.Core
 	allocs *allocs // every stage and audit copy a worker made, until it is removed
 	ops    map[string]*candidate
 	onCard *candidate // the candidate whose card is up
-	pick   *pick[AgentEntry]
+	pick   *feature.Pick[feature.AgentEntry]
 	// auditing is the candidate whose agent picker is open
 	auditing *candidate
 }
 
-func newCandidates(c Core) *candidates {
+func newCandidates(c feature.Core) *candidates {
 	cs := &candidates{c: c, ops: map[string]*candidate{}, allocs: newAllocs()}
-	cs.pick = newAgentPick(c, "auditAgentPicker", "auditAgent", cs.auditWith)
-	cs.pick.scope = TicketLocal
-	cs.pick.cancel = cs.auditCancelled
+	cs.pick = todos.NewAgentPick(c, "auditAgentPicker", "auditAgent", cs.auditWith)
+	cs.pick.Scope = feature.TicketLocal
+	cs.pick.Cancel = cs.auditCancelled
 	return cs
 }
 
@@ -85,14 +91,16 @@ func (*candidates) Name() string { return "candidates" }
 
 func (cs *candidates) State() map[string]any {
 	return map[string]any{
-		"App.auditAgentRows": cs.pick.list.Model(), "App.auditAgentField": "", "App.auditAgentStatus": "agents",
+		"App.auditAgentRows": cs.pick.List.Model(), "App.auditAgentField": "", "App.auditAgentStatus": "agents",
 		"App.auditAgentPreviewTitle": "", "App.auditAgentPreviewText": "", "App.auditAgentPreviewAt": 0,
 	}
 }
 
-func (*candidates) Commands() map[string]Command { return nil }
+func (*candidates) Commands() map[string]feature.Command { return nil }
 
-func (cs *candidates) Picks() map[string]picker { return map[string]picker{"auditAgent": cs.pick} }
+func (cs *candidates) Picks() map[string]feature.Picker {
+	return map[string]feature.Picker{"auditAgent": cs.pick}
+}
 
 // Stopped removes every stage, audit copy and task file a candidate's worker made, the ones whose
 // answers never reached the loop included: the session ended. The loop has ended, so nothing is
@@ -294,15 +302,15 @@ func (cs *candidates) audit(c *candidate) {
 		if cs.auditing != c || c.state != opConfirming {
 			return
 		}
-		agents := defaultFirst(assignable(cs.c.AgentEntries()), cs.c.Prefs().Value(prefAgentDefaultCodename))
+		agents := defaultFirst(todos.Assignable(cs.c.AgentEntries()), cs.c.Prefs().Value(agents.PrefAgentDefaultCodename))
 		if len(agents) == 0 {
 			cs.auditing = nil
 			cs.c.Notify(cs.c.Tr("autodoc.notice.candidate.no_autodoc_agent_to_audit_with_add_one_in_system"))
 			cs.show(c)
 			return
 		}
-		cs.pick.setAll(agents)
-		cs.pick.open()
+		cs.pick.SetAll(agents)
+		cs.pick.Open()
 	})
 }
 
@@ -322,7 +330,7 @@ func (cs *candidates) auditCancelled() {
 // While the copy is made c is opCopying, which only this sets and only its answer (or c's end)
 // leaves: an old toast, a stale card's Install or Cancel and another Audit all refuse it, and the
 // answer moves c on only if c is still copying, the attempt it was made for.
-func (cs *candidates) auditWith(a AgentEntry) {
+func (cs *candidates) auditWith(a feature.AgentEntry) {
 	c := cs.auditing
 	cs.auditing = nil
 	if c == nil || c.state != opConfirming {
@@ -359,7 +367,7 @@ func (cs *candidates) auditWith(a AgentEntry) {
 // handOver gives the audit task to a through the window's agent messaging: done(nil) means sent (rung,
 // or typed and sent; docs/decisions/todos.md#a-message-to-an-agent-is-sent-never-left-for-enter),
 // never that the audit ran: the toast says so, and no more. A refusal ends the toast and reopens the card.
-func (cs *candidates) handOver(c *candidate, a AgentEntry, task string) {
+func (cs *candidates) handOver(c *candidate, a feature.AgentEntry, task string) {
 	cs.suspend(c, cs.c.Trf("autodoc.notice.candidate.audit_of_sent_click_to_install_or_cancel", c.name, a.Name))
 	failed := func(err error) {
 		if c.state != opSuspended {
@@ -367,33 +375,33 @@ func (cs *candidates) handOver(c *candidate, a AgentEntry, task string) {
 		}
 		why := err.Error()
 		switch {
-		case errors.Is(err, ErrAgentCancelled):
+		case errors.Is(err, agents.ErrAgentCancelled):
 			why = cs.c.Trf("autodoc.notice.candidate.you_didn_t_start", a.Name)
-		case errors.Is(err, widget.ErrTerminalPasteUnbracketed):
+		case errors.Is(err, terminal.ErrTerminalPasteUnbracketed):
 			why = cs.c.Tr("autodoc.notice.candidate.its_program_takes_no_bracketed_paste")
 		}
 		c.toasted = false
 		cs.c.NotifyDone(c.toastID(), cs.c.Trf("autodoc.notice.candidate.audit_of_not_delivered", c.name, why))
 		cs.show(c)
 	}
-	ref := TaskRef{Title: "Audit " + c.name + " at " + regindex.Short(c.commit), Path: task}
+	ref := feature.TaskRef{Title: "Audit " + c.name + " at " + regindex.Short(c.commit), Path: task}
 	done := func(err error) {
 		switch {
-		case errors.Is(err, ErrAgentTypedNotSent): // typed, left for the user's Enter (agentmessaging.go)
+		case errors.Is(err, agents.ErrAgentTypedNotSent): // typed, left for the user's Enter (agentmessaging.go)
 			cs.suspend(c, cs.c.Trf("autodoc.notice.candidate.audit_of_typed_into_input_click_to_install_or_cancel", c.name, a.Name))
 		case err != nil:
 			failed(err)
 		}
 	}
-	if err := cs.c.HandTask(AgentRef{Codename: a.Ref.Codename}, ref, "Audit the repository as the task file says. Read it; do not run or change it.", done); err != nil {
+	if err := cs.c.HandTask(feature.AgentRef{Codename: a.Ref.Codename}, ref, "Audit the repository as the task file says. Read it; do not run or change it.", done); err != nil {
 		failed(err)
 	}
 }
 
 // defaultFirst is agents with the default one first, the rest in their order.
-func defaultFirst(agents []AgentEntry, codename string) []AgentEntry {
-	if i := slices.IndexFunc(agents, func(e AgentEntry) bool { return e.Ref.Codename == codename }); i > 0 {
-		agents = append([]AgentEntry{agents[i]}, slices.Delete(slices.Clone(agents), i, i+1)...)
+func defaultFirst(agents []feature.AgentEntry, codename string) []feature.AgentEntry {
+	if i := slices.IndexFunc(agents, func(e feature.AgentEntry) bool { return e.Ref.Codename == codename }); i > 0 {
+		agents = append([]feature.AgentEntry{agents[i]}, slices.Delete(slices.Clone(agents), i, i+1)...)
 	}
 	return agents
 }
@@ -402,11 +410,12 @@ func defaultFirst(agents []AgentEntry, codename string) []AgentEntry {
 // its HEAD moved off c.commit. The audit copies are clones of their own, so an agent working in one
 // can't change the stage; this catches anything that touched the stage anyway.
 func pristine(ctx context.Context, c *candidate) error {
-	status, err := git(ctx, pluginCloneTimeout, c.stage, "status", "--porcelain=v1", "--ignored", "--untracked-files=all")
+	env := c.env
+	status, err := git(ctx, env, pluginCloneTimeout, c.stage, "status", "--porcelain=v1", "--ignored", "--untracked-files=all")
 	if err != nil {
 		return err
 	}
-	head, err := git(ctx, pluginCloneTimeout, c.stage, "rev-parse", "HEAD")
+	head, err := git(ctx, env, pluginCloneTimeout, c.stage, "rev-parse", "HEAD")
 	if err != nil {
 		return err
 	}
@@ -420,10 +429,11 @@ func pristine(ctx context.Context, c *candidate) error {
 // copy and, beside it (never in it), the task file. The root is held in own from the moment it
 // exists, so the session's end removes it even if this answer never reaches the loop.
 func auditCopy(ctx context.Context, c *candidate, own *allocs) (root, task string, err error) {
+	env := c.env
 	if err := pristine(ctx, c); err != nil {
 		return "", "", err
 	}
-	root, err = os.MkdirTemp("", "autodoc-audit-")
+	root, err = os.MkdirTemp(userdirs.Temp(env), "autodoc-audit-")
 	if err != nil {
 		return "", "", err
 	}
@@ -432,7 +442,7 @@ func auditCopy(ctx context.Context, c *candidate, own *allocs) (root, task strin
 		return fail(errSessionEnded)
 	}
 	dir := filepath.Join(root, c.name)
-	if _, err := git(ctx, pluginCloneTimeout, "", "clone", "--quiet", "--local", "--no-hardlinks", "--", c.stage, dir); err != nil {
+	if _, err := git(ctx, env, pluginCloneTimeout, "", "clone", "--quiet", "--local", "--no-hardlinks", "--", c.stage, dir); err != nil {
 		return fail(err)
 	}
 	task = filepath.Join(root, "audit-task.md")

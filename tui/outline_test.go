@@ -6,8 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 const guideFile = "# Guide\n\nintro\n\n## Setup\n\nsteps\n\n### Linux\n\napt\n\n## Usage\n\nrun\n"
@@ -64,7 +65,7 @@ func TestTheBreadcrumbFollowsTheCursorInTheRenderedView(t *testing.T) {
 	r.s.WaitFor(t, "the crumb under Later, its end shown", func(sc string) bool {
 		return strings.Contains(r.frameTitle(), "n.md › Guide › Later") && strings.Contains(sc, "Later 39")
 	})
-	if v := shownView(r); v != widget.ViewRendered {
+	if v := shownView(r); v != editor.ViewRendered {
 		t.Fatalf("G left the Rendered view: view %v", v)
 	}
 }
@@ -82,7 +83,7 @@ func TestTheOutlineFollowsUnsavedEdits(t *testing.T) {
 		r.h.edited()
 	})
 	r.s.WaitFor(t, "the note dirty", func(string) bool { return r.file().dirty })
-	r.h.p.Post(func() { r.h.outline.open() })
+	r.h.p.Post(func() { r.h.outline.Open() })
 	r.s.WaitForText(t, "headings (5 of 5)")
 	r.s.WaitForText(t, "Preface")
 	r.keys(t, decltest.Type("usage")...)
@@ -114,7 +115,7 @@ func TestYAMLAndTextBreadcrumbs(t *testing.T) {
 	r.s.WaitFor(t, "the key path", func(string) bool {
 		return strings.Contains(r.frameTitle(), "conf.yaml › server › database › host")
 	})
-	r.h.p.Post(func() { r.h.outline.open() })
+	r.h.p.Post(func() { r.h.outline.Open() })
 	r.waitNoticed(t, "has no headings to navigate: the breadcrumb shows its key path")
 
 	r.h.p.Post(func() { r.h.openPath("notes.txt") })
@@ -133,7 +134,7 @@ func TestTheTitleNeedsNoBreadcrumbFeature(t *testing.T) {
 		return onLoop(r, func() bool { return r.h.kinds.Readable("manual.pdf") })
 	})
 	onLoop(r, func() bool {
-		r.h.reg.features = slices.DeleteFunc(r.h.reg.features, func(f Feature) bool { return f.Name() == "outline" })
+		r.h.reg.Features = slices.DeleteFunc(r.h.reg.Features, func(f feature.Feature) bool { return f.Name() == "outline" })
 		return true
 	})
 	r.h.p.Post(func() { r.h.openPath("manual.pdf") })

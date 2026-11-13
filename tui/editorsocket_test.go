@@ -16,7 +16,9 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
-	"github.com/yongjohnlee80/autodoc/internal/peercred"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // TestAgentsReachThePageThroughTheEditorSocket: an agent's call is refused until the user allows
@@ -32,50 +34,57 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 	r.waitFile(t, "a.md")
 
 	path := onLoop(r, r.h.editorSocketPath)
-	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o600 || filepath.Dir(path) != sockDir {
-		t.Fatalf("the socket %s: %v %v", path, fi, err)
+	if want := ipc.AddrIn(sockDir, fmt.Sprintf("%d.sock", os.Getpid())); path != want {
+		t.Fatalf("the socket is at %s, want %s", path, want)
+	}
+	// a unix socket's lock is its 0600 in a private folder; a named pipe's is the access list
+	// ipc.Listen gives it, whose cells are internal/ipc's
+	if ipc.Network == "unix" {
+		if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o600 || filepath.Dir(path) != sockDir {
+			t.Fatalf("the socket %s: %v %v", path, fi, err)
+		}
 	}
 	env := strings.Join(onLoop(r, func() []string {
-		return r.h.agents.agentEnv(wsInfo{name: "kb"}, t.TempDir(), agentProfile{Codename: "zen"})
+		return r.h.agents.AgentEnv(feature.Workspace{Name: "kb"}, t.TempDir(), agents.AgentProfile{Codename: "zen"})
 	}), "\n")
 	if !strings.Contains(env, "AUTODOC_EDITOR="+path) || !strings.Contains(env, "AUTODOC_AGENT=zen") ||
 		!strings.Contains(env, "AUTODOC_EDITOR_TOKEN=") {
 		t.Fatalf("the agent's environment: %s", env)
 	}
-	if strings.Contains(env, EnvEditorCredentialFile) {
+	if strings.Contains(env, agents.EnvEditorCredentialFile) {
 		t.Fatalf("a Claude agent's environment names a token file: %s", env)
 	}
 	// a Codex agent's tool shells drop *TOKEN*: its token is a 0600 file of its own folder too, named
 	// by a variable Codex keeps
 	codexDir := t.TempDir()
 	cenv := onLoop(r, func() []string {
-		return r.h.agents.agentEnv(wsInfo{name: "kb"}, codexDir, agentProfile{Codename: "cx", Command: "codex"})
+		return r.h.agents.AgentEnv(feature.Workspace{Name: "kb"}, codexDir, agents.AgentProfile{Codename: "cx", Command: "codex"})
 	})
 	file := ""
 	for _, kv := range cenv {
-		if v, ok := strings.CutPrefix(kv, EnvEditorCredentialFile+"="); ok {
+		if v, ok := strings.CutPrefix(kv, agents.EnvEditorCredentialFile+"="); ok {
 			file = v
 		}
 	}
 	fi, ferr := os.Stat(file)
 	body, _ := os.ReadFile(file)
-	if file == "" || filepath.Dir(file) != codexDir || ferr != nil || fi.Mode().Perm() != 0o600 ||
-		string(body) != onLoop(r, func() string { return r.h.agents.editorToken("cx") }) {
+	if file == "" || filepath.Dir(file) != codexDir || ferr != nil || privateFile(file) != nil ||
+		string(body) != onLoop(r, func() string { return r.h.agents.EditorToken("cx") }) {
 		t.Fatalf("a Codex agent's token file %q (%v, %v, %q) in its environment %v", file, fi, ferr, body, cenv)
 	}
 	for _, w := range []string{"KEY", "SECRET", "TOKEN"} {
-		if strings.Contains(EnvEditorCredentialFile, w) {
-			t.Fatalf("%s holds %s, which Codex's shells filter", EnvEditorCredentialFile, w)
+		if strings.Contains(agents.EnvEditorCredentialFile, w) {
+			t.Fatalf("%s holds %s, which Codex's shells filter", agents.EnvEditorCredentialFile, w)
 		}
 	}
 
 	ctx := context.Background()
-	cli, err := golibrpc.Dial(ctx, path, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	cli, err := golibrpc.Dial(ctx, path, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer cli.Close()
-	token := onLoop(r, func() string { return r.h.agents.editorToken("zen") })
+	token := onLoop(r, func() string { return r.h.agents.EditorToken("zen") })
 	callAs := func(tok, verb string, params ...any) (map[string]any, *golibrpc.Error) {
 		t.Helper()
 		res, err := cli.Call(ctx, verb, append([]any{tok}, params...)...)
@@ -99,7 +108,7 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 		t.Fatalf("an ungranted read: %v", re)
 	}
 	r.s.WaitForText(t, "let the agent zen use editor.read?")
-	onLoop(r, func() bool { r.h.asker.accepted(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); return true })
 	r.s.WaitFor(t, "the read granted", func(string) bool {
 		return onLoop(r, func() bool { return r.h.prefs.luaGrants["agent:zen"]["editor.read"] })
 	})
@@ -127,7 +136,7 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 
 	// another agent, granted write, is known by its own token: zen naming it gets nothing of its
 	onLoop(r, func() bool {
-		r.h.agents.editorToken("other")
+		r.h.agents.EditorToken("other")
 		r.h.prefs.luaGrants["agent:other"] = map[string]bool{"editor.write": true, "commands": true}
 		r.h.prefs.luaGrants["agent:zen"]["editor.write"] = false
 		return true
@@ -178,7 +187,7 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 	}
 	ch := ask("hi", `autodoc.command{ name = "hi-agent", run = function(ed) ed:insert("from the agent") end }`)
 	r.s.WaitForText(t, "let the agent zen add the Lua command file hi.lua?")
-	onLoop(r, func() bool { r.h.asker.accepted(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); return true })
 	select {
 	case a := <-ch:
 		if a.re != nil || a.res["installed"] != true {
@@ -187,8 +196,8 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 	case <-time.After(20 * time.Second):
 		t.Fatal("add_command never answered")
 	}
-	if fi, err := os.Stat(filepath.Join(luaDir, "hi.lua")); err != nil || fi.Mode().Perm() != 0o600 {
-		t.Fatalf("lua/hi.lua: %v %v", fi, err)
+	if err := privateFile(filepath.Join(luaDir, "hi.lua")); err != nil {
+		t.Fatalf("lua/hi.lua: %v", err)
 	}
 	r.page("", 1, 1)
 	r.mustRun(t, "hi-agent")
@@ -212,7 +221,7 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(luaDir, "deep.lua"), []byte("-- the user's"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	onLoop(r, func() bool { r.h.asker.accepted(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); return true })
 	if a := <-ch; a.re == nil || a.re.Code != codeEditorRefused {
 		t.Fatalf("Yes over a file made meanwhile: %v %v", a.res, a.re)
 	}
@@ -229,7 +238,7 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 	r.s.WaitFor(t, "the second card", func(string) bool {
 		return strings.Contains(askText(r), `"two"`)
 	})
-	onLoop(r, func() bool { r.h.asker.accepted(); return true })
+	onLoop(r, func() bool { r.h.asker.Accepted(); return true })
 	if a := <-second; a.re != nil {
 		t.Fatalf("the second card's Yes: %v", a.re)
 	}
@@ -239,7 +248,7 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 
 	ch = ask("nope", `autodoc.notify("never")`)
 	r.s.WaitForText(t, "let the agent zen add the Lua command file nope.lua?")
-	onLoop(r, func() bool { r.h.asker.rejected(); return true })
+	onLoop(r, func() bool { r.h.asker.Rejected(); return true })
 	if a := <-ch; a.re == nil || a.re.Code != codeEditorRefused {
 		t.Fatalf("a refused add_command: %v %v", a.res, a.re)
 	}
@@ -260,9 +269,9 @@ func TestTheTokenRegistryIsTheLoops(t *testing.T) {
 	r := runTUI(t, NewSession(d.sock, nil), Options{EditorDir: t.TempDir()})
 	r.connected(t)
 	path := onLoop(r, r.h.editorSocketPath)
-	token := onLoop(r, func() string { return r.h.agents.editorToken("zen") })
+	token := onLoop(r, func() string { return r.h.agents.EditorToken("zen") })
 	ctx := context.Background()
-	cli, err := golibrpc.Dial(ctx, path, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	cli, err := golibrpc.Dial(ctx, path, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +280,7 @@ func TestTheTokenRegistryIsTheLoops(t *testing.T) {
 	go func() {
 		defer close(done)
 		for i := range 100 {
-			r.h.p.Post(func() { r.h.agents.editorToken(fmt.Sprintf("agent%d", i)) })
+			r.h.p.Post(func() { r.h.agents.EditorToken(fmt.Sprintf("agent%d", i)) })
 		}
 	}()
 	for range 100 {
@@ -283,7 +292,7 @@ func TestTheTokenRegistryIsTheLoops(t *testing.T) {
 }
 
 // TestTheEditorSocketServesOnlyItsUsersProcesses: the editor socket closes, unanswered, a
-// connection from another user's process (played: peercred.PlayUser), as the daemon's does; the
+// connection from another user's process (played: ipc.PlayUser), as the daemon's does; the
 // control, this user's, is answered.
 func TestTheEditorSocketServesOnlyItsUsersProcesses(t *testing.T) {
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
@@ -294,7 +303,7 @@ func TestTheEditorSocketServesOnlyItsUsersProcesses(t *testing.T) {
 	r.connected(t)
 	path := onLoop(r, r.h.editorSocketPath)
 
-	restore := peercred.PlayUser(os.Getuid() + 1)
+	restore := ipc.PlayUser(os.Getuid() + 1)
 	defer restore()
 	c, err := net.Dial("unix", path)
 	if err != nil {
@@ -309,7 +318,7 @@ func TestTheEditorSocketServesOnlyItsUsersProcesses(t *testing.T) {
 	restore()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	cli, err := golibrpc.Dial(ctx, path, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	cli, err := golibrpc.Dial(ctx, path, msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 	if err != nil {
 		t.Fatal(err)
 	}

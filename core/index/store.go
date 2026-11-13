@@ -46,9 +46,19 @@ func registeredVersion(ext, version string, tokens int) string {
 	return fmt.Sprintf("c%s@%s.s%d.t%d", ext, version, SchemaVersion, tokens)
 }
 
+// relationsVersion is the reading of a Markdown document's links and frontmatter relations that
+// document.indexer records (docs/decisions/search.md#indexer-identity-strings). A change of what the same bytes read as raises it, so every Markdown
+// document is read again on the next start, its file unchanged; its unchanged chunks and their
+// vectors are kept.
+//   - r1: the frontmatter relations read into links.
+//   - r2: an absolute ref and a $NAME ref are the workspace's by whole segments in the slash form,
+//     under the root as configured or where it leads on the disk; a drive's or a share's path is
+//     absolute; an external target is in the slash form on every OS.
+const relationsVersion = "r2"
+
 // docVersion is what document.indexer records for one path. Markdown files add the fingerprint of
 // the workspace's frontmatter schema, so a schema change rebuilds exactly the files it applies to;
-// ".r1", the frontmatter relations read into links; ".a1" while the abstract is a chunk of its
+// "."+relationsVersion, how its links and relations are read; ".a1" while the abstract is a chunk of its
 // own; and ".m1", its Mermaid diagrams checked (docs/decisions/search.md#diagrams-the-viewer-cant-draw).
 // Each rebuild keeps the unchanged chunks' vectors, which are keyed by text.
 func docVersion(base string, markdown bool, schemaFP string, abstract bool) string {
@@ -59,7 +69,7 @@ func docVersion(base string, markdown bool, schemaFP string, abstract bool) stri
 	if schemaFP != "" {
 		v += ".f" + schemaFP
 	}
-	v += ".r1"
+	v += "." + relationsVersion
 	if abstract {
 		v += ".a1"
 	}

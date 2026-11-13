@@ -1347,6 +1347,10 @@
         <source>This window lost its crew scope %1 while away; its agents now live under %2.</source>
         <translation>Esta janela perdeu seu escopo de equipe %1 enquanto estava ausente; seus agentes agora ficam em %2.</translation>
     </message>
+    <message id="autodoc.crew.names_kept">
+        <source>Agent folders from an earlier AutoDoc kept their old names, since their new ones were already there: %1</source>
+        <translation>Algumas pastas de agentes de um AutoDoc anterior mantiveram os nomes antigos, porque os novos já existiam: %1</translation>
+    </message>
     <message id="autodoc.crew.scope_unlisted">
         <source>This window's crew scope is held, but not listed for a successor: %1</source>
         <translation>O escopo de equipe desta janela está retido, mas não registrado para um sucessor: %1</translation>
@@ -3976,6 +3980,18 @@ O QUE UMA TECLA PRECISA
         <source>This &amp;machine</source>
         <translation>Esta &amp;máquina</translation>
     </message>
+    <message id="autodoc.main.title_bar">
+        <source>Title &amp;bar</source>
+        <translation>&amp;Barra de título</translation>
+    </message>
+    <message id="autodoc.main.title_bar_own">
+        <source>&amp;2. AutoDoc's own</source>
+        <translation>&amp;2. A própria do AutoDoc</translation>
+    </message>
+    <message id="autodoc.main.title_bar_system">
+        <source>&amp;1. The system's</source>
+        <translation>&amp;1. A do sistema</translation>
+    </message>
     <message id="autodoc.main.todos">
         <source>&amp;Todos</source>
         <translation>&amp;Tarefas</translation>
@@ -5428,6 +5444,14 @@ O QUE UMA TECLA PRECISA
         <source>theme: %1</source>
         <translation>tema: %1</translation>
     </message>
+    <message id="autodoc.notice.titlebar.from_the_next_start">
+        <source>the title bar changes at the next start: the window takes it as it opens</source>
+        <translation>a barra de título muda no próximo início: a janela a escolhe ao abrir</translation>
+    </message>
+    <message id="autodoc.notice.titlebar.no_title_bar_s">
+        <source>no title bar %1: system or own</source>
+        <translation>nenhuma barra de título %1: system ou own</translation>
+    </message>
     <message id="autodoc.notice.todomove.moved_to">
         <source>%1 moved to %2 with its task: the buffer follows it</source>
         <translation>%1 foi movido para %2 com sua tarefa: o buffer o acompanha</translation>
@@ -5471,6 +5495,10 @@ O QUE UMA TECLA PRECISA
     <message id="autodoc.notice.todos.todos_is_loaded_read_only_its_store_was_released">
         <source>todos: %1 is loaded, read-only: its store was released (todos.release)</source>
         <translation>tarefas: %1 está carregado, somente leitura: seu repositório foi liberado (todos.release)</translation>
+    </message>
+    <message id="autodoc.notice.todos.todos_the_store_of_is_not_listed">
+        <source>todos: the store of %1 isn't listed, so no other is shown in its place</source>
+        <translation>tarefas: o repositório de %1 não está na lista, então nenhum outro é mostrado no lugar dele</translation>
     </message>
     <message id="autodoc.notice.todos.todos_refreshed_moved_archived_rewritten">
         <source>todos: refreshed: %1 moved, %2 archived, %3 rewritten</source>
@@ -5533,8 +5561,8 @@ O QUE UMA TECLA PRECISA
         <translation>Atualizar: o install-autodoc.sh não instalou este AutoDoc; atualize-o do jeito que foi instalado</translation>
     </message>
     <message id="autodoc.notice.update.the_update_exited">
-        <source>Update: update.sh exited %1; its tab in the terminal panel says why</source>
-        <translation>Atualizar: o update.sh terminou com %1; a aba dele no painel do terminal diz por quê</translation>
+        <source>Update: %2 exited %1; its tab in the terminal panel says why</source>
+        <translation>Atualizar: o %2 terminou com %1; a aba dele no painel do terminal diz por quê</translation>
     </message>
     <message id="autodoc.notice.update.update">
         <source>Update</source>

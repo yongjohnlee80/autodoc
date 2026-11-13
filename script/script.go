@@ -84,7 +84,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -98,13 +98,13 @@ var ErrStale = errors.New("script: a callback of a replaced engine")
 // Engine is one Lua state registering into one editor's commands.
 type Engine struct {
 	L       *lua.LState
-	core    *widget.EditorCore
+	core    *editor.EditorCore
 	global  *lua.LTable
 	notify  func(string)
 	notices func(Notice) error
 	timeout time.Duration
 	// cur is the core the command running now edits; the editor object's methods reach it
-	cur *widget.EditorCore
+	cur *editor.EditorCore
 	// register takes command{…} in place of the editor's registry (SetRegistrar); loading is the
 	// file being loaded, which a registration names
 	register func(Registration) error
@@ -139,7 +139,7 @@ type Registration struct {
 	ID      string // the table's id; "lua.<name>" when it has none
 	Title   string // the table's title; its help, or its name, when it has none
 	File    string // the file whose loading declared it; "" for one declared later (a callback)
-	Command widget.Command
+	Command editor.Command
 }
 
 // Option configures an Engine under construction.
@@ -186,7 +186,7 @@ func WithClock(now func() time.Time, loc *time.Location) Option {
 }
 
 // New is an engine registering into core's commands.
-func New(core *widget.EditorCore, opts ...Option) *Engine {
+func New(core *editor.EditorCore, opts ...Option) *Engine {
 	cfg := config{global: "editor", timeout: DefaultTimeout, clock: time.Now, location: time.Local}
 	for _, o := range opts {
 		o(&cfg)
@@ -339,12 +339,12 @@ func (e *Engine) luaCommand(L *lua.LState) int {
 		L.ArgError(1, err.Error())
 		return 0
 	}
-	cmd := widget.Command{
+	cmd := editor.Command{
 		Name:     name,
 		Aliases:  aliases,
 		Args:     lua.LVAsString(spec.RawGetString("args")),
 		Help:     lua.LVAsString(spec.RawGetString("help")),
-		Run:      func(x widget.CommandContext) error { return e.runCommand(name, run, x) },
+		Run:      func(x editor.CommandContext) error { return e.runCommand(name, run, x) },
 		Complete: complete,
 	}
 	if e.register != nil {
@@ -374,7 +374,7 @@ func (e *Engine) luaCommand(L *lua.LState) int {
 
 // runCommand calls a script's run function for one command line, with the deadline: run(ed, args,
 // line, cmd), cmd the verb as typed (an alias, say) and its bang.
-func (e *Engine) runCommand(name string, run *lua.LFunction, x widget.CommandContext) error {
+func (e *Engine) runCommand(name string, run *lua.LFunction, x editor.CommandContext) error {
 	L := e.L
 	prev := e.cur
 	e.cur = cmp.Or(x.Core, e.core)
@@ -489,15 +489,15 @@ func (e *Engine) Answer(by time.Time, name string, fn *lua.LFunction, args ...lu
 // as they are; a function is called as complete(ed, word, args, cmd) on the loop, as run is
 // called, and answers a list of strings. A function's error, or an answer that is not a list, is
 // said through notify, and Tab then shows the command's arguments.
-func (e *Engine) completer(name string, v lua.LValue) (func(widget.CompleteContext) []string, error) {
+func (e *Engine) completer(name string, v lua.LValue) (func(editor.CompleteContext) []string, error) {
 	switch x := v.(type) {
 	case *lua.LNilType:
 		return nil, nil
 	case *lua.LTable:
 		fixed := stringList(x)
-		return func(widget.CompleteContext) []string { return fixed }, nil
+		return func(editor.CompleteContext) []string { return fixed }, nil
 	case *lua.LFunction:
-		return func(c widget.CompleteContext) []string {
+		return func(c editor.CompleteContext) []string {
 			L := e.L
 			prev := e.cur
 			e.cur = cmp.Or(c.Core, e.core)

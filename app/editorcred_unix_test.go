@@ -3,17 +3,20 @@
 package app
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/internal/userperm"
 )
 
 // The token file's checks are of the file opened, and the token is read from it: a file put in the
 // path's place between the open and the read is never read, whichever way round. A FIFO is refused
-// at once, never waited on, and a file longer than a token is refused.
+// at once, never waited on.
 func TestTheTokenFileReadIsTheFileChecked(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, body string, mode os.FileMode) string {
@@ -51,8 +54,8 @@ func TestTheTokenFileReadIsTheFileChecked(t *testing.T) {
 	open2 := write("open2", "tok-open\n", 0o644)
 	private := write("private", "tok-private\n", 0o600)
 	swapAfterOpen(open2, private)
-	if tok, err := readEditorCredential(open2); err == nil || !strings.Contains(err.Error(), "must be 0600") {
-		t.Fatalf("an open file swapped for a private one: %q %v, want refused (must be 0600)", tok, err)
+	if tok, err := readEditorCredential(open2); !errors.Is(err, userperm.ErrExposed) {
+		t.Fatalf("an open file swapped for a private one: %q %v, want refused (not private)", tok, err)
 	}
 	credentialOpened = func() {}
 
@@ -64,17 +67,11 @@ func TestTheTokenFileReadIsTheFileChecked(t *testing.T) {
 	go func() { _, err := readEditorCredential(fifo); done <- err }()
 	select {
 	case err := <-done:
-		if err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		if !errors.Is(err, userperm.ErrExposed) || !strings.Contains(err.Error(), "not a regular file") {
 			t.Fatalf("a FIFO: %v, want refused: not a regular file", err)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("a FIFO in the token file's place blocked the read")
 	}
 
-	if _, err := readEditorCredential(write("long", strings.Repeat("x", 257), 0o600)); err == nil || !strings.Contains(err.Error(), "not a token") {
-		t.Fatalf("257 bytes: %v, want refused", err)
-	}
-	if tok, err := readEditorCredential(write("full", strings.Repeat("y", 256), 0o600)); err != nil || len(tok) != 256 {
-		t.Fatalf("256 bytes: %d %v, want the token", len(tok), err)
-	}
 }

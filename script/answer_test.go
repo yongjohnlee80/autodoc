@@ -8,7 +8,7 @@ import (
 
 	lua "github.com/yuin/gopher-lua"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // fnOf is the Lua global name's function, as a script loaded it.
@@ -47,7 +47,7 @@ func TestAnswerAnswersAndCountsAsRunningWhileItDoes(t *testing.T) {
 	if len(during) != 2 || !during[0] || !during[1] {
 		t.Fatalf("Running inside the two answers: %v; want true, true", during)
 	}
-	other := New(widget.NewEditorCore())
+	other := New(editor.NewEditorCore())
 	t.Cleanup(other.Close)
 	if _, err := other.Answer(time.Time{}, "double", fnOf(t, e, "double"), lua.LNumber(1)); !errors.Is(err, ErrStale) {
 		t.Fatalf("another engine's function: %v; want ErrStale", err)
@@ -58,7 +58,7 @@ func TestAnswerAnswersAndCountsAsRunningWhileItDoes(t *testing.T) {
 // the function runs (through a host function, as autodoc.run does) inherits that deadline: it
 // stops at by too, not at the engine's own two seconds.
 func TestAnswerStopsAtItsDeadlineAndSoDoesACommandItRuns(t *testing.T) {
-	core := widget.NewEditorCore()
+	core := editor.NewEditorCore()
 	e := New(core, WithTimeout(2*time.Second))
 	t.Cleanup(e.Close)
 	e.L.SetGlobal("runit", e.L.NewFunction(func(L *lua.LState) int {

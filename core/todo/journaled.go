@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -353,25 +354,25 @@ func (m *Manager) MoveStore(ctx context.Context, at At, to string) (Resolved, er
 	if err != nil {
 		return Resolved{}, err
 	}
-	if !path.IsAbs(to) || path.Clean(to) != to || to == "/" {
+	to = filepath.ToSlash(to) // in the form core/todo keeps, still to be found clean
+	if !paths.IsAbs(to) || paths.Clean(to) != to || paths.IsRoot(to) {
 		return Resolved{}, fmt.Errorf("%w: %q is not a clean absolute path", ErrInvalid, to)
 	}
-	st, err := m.open(ctx, w)
+	st, err := m.openLocked(ctx, w)
 	if err != nil {
 		return Resolved{}, err
 	}
-	st.mu.Lock()
 	defer st.mu.Unlock()
 	if err := m.ready(ctx, st); err != nil {
 		return Resolved{}, err
 	}
-	parent, base := path.Split(to)
-	pfs, canonParent, err := m.disk.Open(ctx, path.Clean(parent))
+	parent, base := paths.Dir(to), path.Base(to)
+	pfs, canonParent, err := m.disk.Open(ctx, parent)
 	if err != nil {
 		return Resolved{}, fmt.Errorf("%w: %s's parent must be an existing directory: %w", ErrInvalid, to, err)
 	}
 	pfs.Close()
-	target := path.Join(canonParent, base)
+	target := paths.Join(canonParent, base)
 	if paths.Under(target, st.path) {
 		return Resolved{}, fmt.Errorf("%w: %s is inside the store", ErrInvalid, target)
 	}
@@ -393,6 +394,18 @@ func (m *Manager) MoveStore(ctx context.Context, at At, to string) (Resolved, er
 	if err != nil {
 		return Resolved{}, err
 	}
+	// the store's own directory is released before it moves: on Windows a directory held open is
+	// not renamed. Its entry stays until the move is over, so a use asked for meanwhile waits for
+	// this lock, then opens the store again at whichever path the move left it.
+	st.fsys.Close()
+	st.closed = true
+	defer func() { // before the store's lock goes (deferred earlier, so it runs later)
+		m.mu.Lock()
+		if m.stores[st.id] == st {
+			delete(m.stores, st.id)
+		}
+		m.mu.Unlock()
+	}()
 	if err := d.Rename(ctx, from, dest); err != nil {
 		if rerr := m.recoverMoves(ctx, st.id, true); rerr != nil {
 			logger.Warning(m.o.log, rerr, logger.Fields{"event": "todos.settle.failed", "store": st.id, "seq": c.Seq})
@@ -402,30 +415,26 @@ func (m *Manager) MoveStore(ctx context.Context, at At, to string) (Resolved, er
 	if err := m.j.Commit(ctx, c.Seq, Edit{Store: st.id, Repath: &Repath{From: st.path, To: target}}); err != nil {
 		return Resolved{}, err // the next open finishes it: the new path is there, the old one gone
 	}
-	m.mu.Lock()
-	st.fsys.Close()
-	delete(m.stores, st.id)
-	m.mu.Unlock()
 	return m.Resolve(ctx, at)
 }
 
 // commonDir is the deepest directory holding both a and b.
 func commonDir(a, b string) string {
-	as, bs := strings.Split(a, "/"), strings.Split(b, "/")
+	ra, xa := paths.Root(a)
+	rb, xb := paths.Root(b)
+	if ra != rb {
+		return "" // on two volumes: no directory holds both
+	}
+	as, bs := strings.Split(xa, "/"), strings.Split(xb, "/")
 	n := 0
 	for n < len(as)-1 && n < len(bs)-1 && as[n] == bs[n] {
 		n++
 	}
-	if d := strings.Join(as[:n], "/"); d != "" {
-		return d
-	}
-	return "/"
+	return paths.Join(ra, as[:n]...)
 }
 
 // rel is p relative to dir, which holds it.
 func rel(dir, p string) string {
-	if dir == "/" {
-		return strings.TrimPrefix(p, "/")
-	}
-	return strings.TrimPrefix(p, dir+"/")
+	r, _ := paths.Rel(dir, p)
+	return r
 }

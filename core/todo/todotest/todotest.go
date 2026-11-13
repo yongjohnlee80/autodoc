@@ -20,6 +20,7 @@ import (
 	"github.com/yongjohnlee80/golib/vfs"
 	"github.com/yongjohnlee80/golib/vfs/memfs"
 
+	"github.com/yongjohnlee80/autodoc/core/paths"
 	"github.com/yongjohnlee80/autodoc/core/todo"
 )
 
@@ -313,10 +314,31 @@ type Disk struct {
 	mu    sync.Mutex
 	fault func(op, name string) error
 	reads map[string]int
+	held  map[string]int // the directories opened and not yet closed, by path: a real disk's handles
+	// usedClosed counts the operations tried through a directory after its Close: each one fails, as
+	// it does on a real disk
+	usedClosed int
+	// windows is the rule its absolute paths follow (core/paths): Windows' (drives, shares) or Unix'
+	windows bool
 }
 
 // NewDisk is an empty disk.
-func NewDisk() *Disk { return &Disk{FS: memfs.New(), reads: map[string]int{}} }
+func NewDisk() *Disk { return NewDiskFor(paths.Windows) }
+
+// NewDiskFor is an empty disk whose absolute paths follow Windows' rule when windows is set
+// (C:/kb, //server/share/kb, and a rooted /kb), Unix' otherwise: either rule on any OS.
+func NewDiskFor(windows bool) *Disk {
+	return &Disk{FS: memfs.New(), reads: map[string]int{}, held: map[string]int{}, windows: windows}
+}
+
+// Held is each directory opened through the disk and not closed since, with how many times: on a
+// real disk each is a handle, and on Windows a directory held open can be neither removed nor
+// renamed.
+func (d *Disk) Held() map[string]int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return maps.Clone(d.held)
+}
 
 // SetFault installs a hook called before every operation through an opened directory, with the
 // operation ("stat", "readdir", "read", "write", "create", "remove", "rename", "mkdir") and the
@@ -367,37 +389,76 @@ func rel(abs string) string {
 	return "."
 }
 
+// key is abs, absolute under the disk's rule, as a path of its one tree, and abs cleaned in the
+// slash form. A volume is the tree's first element ("C:/kb" is C:/kb; a share's //server/share is
+// the one element \\server\share), so two volumes never share a path; a rooted path is as it was
+// ("/kb" is kb). ok is false for a path that is not absolute under the rule.
+func (d *Disk) key(abs string) (key, clean string, ok bool) {
+	root, r := paths.RootFor(abs, d.windows)
+	if root == "" {
+		return "", "", false
+	}
+	clean, key = root+r, r
+	if vol := strings.TrimSuffix(root, "/"); vol != "" {
+		key = strings.ReplaceAll(vol, "/", `\`)
+		if r != "" {
+			key += "/" + r
+		}
+	}
+	if key == "" {
+		key = "."
+	}
+	return key, clean, true
+}
+
+// tree is abs as a path of the disk's tree: key's, or for a path not absolute under the rule, the
+// path itself from the tree's top, as the helpers have always read one.
+func (d *Disk) tree(abs string) string {
+	if k, _, ok := d.key(abs); ok {
+		return k
+	}
+	return rel(abs)
+}
+
 func (d *Disk) Open(ctx context.Context, dir string) (vfs.FS, string, error) {
-	if !path.IsAbs(dir) {
+	key, clean, ok := d.key(dir)
+	if !ok {
 		return nil, "", fmt.Errorf("todotest: %q is not absolute", dir)
 	}
-	fi, err := d.FS.Stat(ctx, rel(dir))
+	fi, err := d.FS.Stat(ctx, key)
 	if err != nil {
 		return nil, "", err
 	}
 	if !fi.IsDir() {
 		return nil, "", &fs.PathError{Op: "open", Path: dir, Err: errors.New("not a directory")}
 	}
-	return &sub{d: d, prefix: rel(dir)}, path.Clean(dir), nil
+	d.mu.Lock()
+	d.held[clean]++
+	d.mu.Unlock()
+	return &sub{d: d, prefix: key, dir: clean}, clean, nil
 }
 
 // MkdirAll, WriteFile and ReadFile are test setup, past every fault.
 func (d *Disk) MkdirAll(abs string) {
-	if err := d.FS.MkdirAll(context.Background(), rel(abs)); err != nil {
+	if err := d.FS.MkdirAll(context.Background(), d.tree(abs)); err != nil {
 		panic(err)
 	}
 }
 
 func (d *Disk) WriteFile(abs string, content []byte) {
-	dir, _ := path.Split(abs)
-	d.MkdirAll(dir)
-	if _, err := d.FS.WriteFile(context.Background(), rel(abs), strings.NewReader(string(content))); err != nil {
+	key := d.tree(abs) // the path in the disk's tree, either form of abs read under its rule
+	if dir := path.Dir(key); dir != "." {
+		if err := d.FS.MkdirAll(context.Background(), dir); err != nil {
+			panic(err)
+		}
+	}
+	if _, err := d.FS.WriteFile(context.Background(), key, strings.NewReader(string(content))); err != nil {
 		panic(err)
 	}
 }
 
 func (d *Disk) ReadFile(abs string) ([]byte, error) {
-	r, err := d.FS.Open(context.Background(), rel(abs), 0)
+	r, err := d.FS.Open(context.Background(), d.tree(abs), 0)
 	if err != nil {
 		return nil, err
 	}
@@ -407,7 +468,7 @@ func (d *Disk) ReadFile(abs string) ([]byte, error) {
 
 // Version is a file's vfs version, or "" when it does not exist.
 func (d *Disk) Version(abs string) vfs.Version {
-	fi, err := d.FS.Stat(context.Background(), rel(abs))
+	fi, err := d.FS.Stat(context.Background(), d.tree(abs))
 	if err != nil {
 		return ""
 	}
@@ -418,6 +479,8 @@ func (d *Disk) Version(abs string) vfs.Version {
 type sub struct {
 	d      *Disk
 	prefix string
+	dir    string
+	closed bool // under d.mu: a second Close releases nothing more
 }
 
 var (
@@ -436,7 +499,14 @@ func (s *sub) full(name string) string {
 	return s.prefix + "/" + name
 }
 
-func (s *sub) abs(name string) string { return "/" + strings.TrimPrefix(s.full(name), ".") }
+// abs is name as the disk's absolute path: the directory's own, its volume kept ("/kb/x",
+// "C:/kb/x").
+func (s *sub) abs(name string) string {
+	if name == "." {
+		return s.dir
+	}
+	return strings.TrimSuffix(s.dir, "/") + "/" + name
+}
 
 func (s *sub) local(fi vfs.FileInfo) vfs.FileInfo {
 	switch {
@@ -453,7 +523,7 @@ func (s *sub) Stat(ctx context.Context, name string) (vfs.FileInfo, error) {
 	if err := vfs.CheckName("stat", name); err != nil {
 		return vfs.FileInfo{}, err
 	}
-	if err := s.d.check("stat", s.abs(name)); err != nil {
+	if err := s.check("stat", s.abs(name)); err != nil {
 		return vfs.FileInfo{}, err
 	}
 	fi, err := s.d.FS.Stat(ctx, s.full(name))
@@ -464,7 +534,7 @@ func (s *sub) ReadDir(ctx context.Context, name string) ([]vfs.FileInfo, error) 
 	if err := vfs.CheckName("readdir", name); err != nil {
 		return nil, err
 	}
-	if err := s.d.check("readdir", s.abs(name)); err != nil {
+	if err := s.check("readdir", s.abs(name)); err != nil {
 		return nil, err
 	}
 	out, err := s.d.FS.ReadDir(ctx, s.full(name))
@@ -478,14 +548,14 @@ func (s *sub) Open(ctx context.Context, name string, offset int64) (io.ReadClose
 	if err := vfs.CheckName("open", name); err != nil {
 		return nil, err
 	}
-	if err := s.d.check("read", s.abs(name)); err != nil {
+	if err := s.check("read", s.abs(name)); err != nil {
 		return nil, err
 	}
 	return s.d.FS.Open(ctx, s.full(name), offset)
 }
 
 func (s *sub) WriteFile(ctx context.Context, name string, r io.Reader, opts ...vfs.WriteOption) (vfs.FileInfo, error) {
-	if err := s.d.check("write", s.abs(name)); err != nil {
+	if err := s.check("write", s.abs(name)); err != nil {
 		return vfs.FileInfo{}, err
 	}
 	fi, err := s.d.FS.WriteFile(ctx, s.full(name), r, opts...)
@@ -493,7 +563,7 @@ func (s *sub) WriteFile(ctx context.Context, name string, r io.Reader, opts ...v
 }
 
 func (s *sub) WriteFileIf(ctx context.Context, name string, r io.Reader, want vfs.Version, opts ...vfs.WriteOption) (vfs.FileInfo, error) {
-	if err := s.d.check("write", s.abs(name)); err != nil {
+	if err := s.check("write", s.abs(name)); err != nil {
 		return vfs.FileInfo{}, err
 	}
 	fi, err := s.d.FS.WriteFileIf(ctx, s.full(name), r, want, opts...)
@@ -501,7 +571,7 @@ func (s *sub) WriteFileIf(ctx context.Context, name string, r io.Reader, want vf
 }
 
 func (s *sub) CreateExclusive(ctx context.Context, name string, r io.Reader, opts ...vfs.WriteOption) (vfs.FileInfo, error) {
-	if err := s.d.check("create", s.abs(name)); err != nil {
+	if err := s.check("create", s.abs(name)); err != nil {
 		return vfs.FileInfo{}, err
 	}
 	fi, err := s.d.FS.CreateExclusive(ctx, s.full(name), r, opts...)
@@ -512,45 +582,76 @@ func (s *sub) MkdirAll(ctx context.Context, name string) error {
 	if err := vfs.CheckName("mkdir", name); err != nil {
 		return err
 	}
-	if err := s.d.check("mkdir", s.abs(name)); err != nil {
+	if err := s.check("mkdir", s.abs(name)); err != nil {
 		return err
 	}
 	return s.d.FS.MkdirAll(ctx, s.full(name))
 }
 
 func (s *sub) Remove(ctx context.Context, name string) error {
-	if err := s.d.check("remove", s.abs(name)); err != nil {
+	if err := s.check("remove", s.abs(name)); err != nil {
 		return err
 	}
 	return s.d.FS.Remove(ctx, s.full(name))
 }
 
 func (s *sub) RemoveIf(ctx context.Context, name string, want vfs.Version) error {
-	if err := s.d.check("remove", s.abs(name)); err != nil {
+	if err := s.check("remove", s.abs(name)); err != nil {
 		return err
 	}
 	return s.d.FS.RemoveIf(ctx, s.full(name), want)
 }
 
 func (s *sub) RemoveAll(ctx context.Context, name string) error {
-	if err := s.d.check("remove", s.abs(name)); err != nil {
+	if err := s.check("remove", s.abs(name)); err != nil {
 		return err
 	}
 	return s.d.FS.RemoveAll(ctx, s.full(name))
 }
 
 func (s *sub) Rename(ctx context.Context, from, to string) error {
-	if err := s.d.check("rename", s.abs(from)); err != nil {
+	if err := s.check("rename", s.abs(from)); err != nil {
 		return err
 	}
 	return s.d.FS.Rename(ctx, s.full(from), s.full(to))
 }
 
 func (s *sub) RenameNoReplace(ctx context.Context, from, to string) error {
-	if err := s.d.check("rename", s.abs(from)); err != nil {
+	if err := s.check("rename", s.abs(from)); err != nil {
 		return err
 	}
 	return s.d.FS.RenameNoReplace(ctx, s.full(from), s.full(to))
 }
 
-func (s *sub) Close() error { return nil }
+// UsedClosed is how many operations were tried through a directory already closed: each failed.
+func (d *Disk) UsedClosed() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.usedClosed
+}
+
+// check refuses an operation through a closed directory, then runs the disk's fault hook.
+func (s *sub) check(op, name string) error {
+	s.d.mu.Lock()
+	closed := s.closed
+	if closed {
+		s.d.usedClosed++
+	}
+	s.d.mu.Unlock()
+	if closed {
+		return fmt.Errorf("todotest: %s %s: the directory was closed", op, name)
+	}
+	return s.d.check(op, name)
+}
+
+func (s *sub) Close() error {
+	s.d.mu.Lock()
+	defer s.d.mu.Unlock()
+	if !s.closed {
+		s.closed = true
+		if s.d.held[s.dir]--; s.d.held[s.dir] == 0 {
+			delete(s.d.held, s.dir)
+		}
+	}
+	return nil
+}

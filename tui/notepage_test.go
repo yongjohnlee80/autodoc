@@ -6,9 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 const notePageNote = "# Pantry\n\nSome **bold** words.\n\n| Item | Qty |\n| --- | ---: |\n| apple | 3 |\n\n" +
@@ -19,10 +20,10 @@ const notePageNote = "# Pantry\n\nSome **bold** words.\n\n| Item | Qty |\n| --- 
 // table file's table, kept from an earlier file) is drawn over it.
 func renderedByTheEditor(r *running) bool {
 	return onLoop(r, func() bool {
-		e := r.h.editor.(*widget.Editor)
-		_, md := e.Renderer().(*widget.MarkdownCellRenderer)
+		e := r.h.editor.(*editor.Editor)
+		_, md := e.Renderer().(*editor.MarkdownCellRenderer)
 		dv := e.DocumentView()
-		return md && (dv == nil || !dv.Visible()) && e.ShownView() == widget.ViewRendered
+		return md && (dv == nil || !dv.Visible()) && e.ShownView() == editor.ViewRendered
 	})
 }
 
@@ -32,6 +33,7 @@ func renderedByTheEditor(r *running) bool {
 // boxed, its mind map drawn, a diagram of a kind golib doesn't draw shown as its fence's source.
 // SPC is the app's leader there, Ctrl+T shows its text and back, and an edit is drawn at once.
 func TestATerminalNoteOpensRenderedByTheEditor(t *testing.T) {
+	t.Parallel()
 	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "pantry.md", notePageNote)}, tableInclude)
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.waitAttached(t, "kb")
@@ -42,7 +44,7 @@ func TestATerminalNoteOpensRenderedByTheEditor(t *testing.T) {
 	r.s.WaitFor(t, "the note Rendered by the editor", func(string) bool { return renderedByTheEditor(r) })
 	if same := onLoop(r, func() bool {
 		p := r.h.notePage()
-		return p != nil && p.md != nil && r.h.editor.(*widget.Editor).Renderer() == p.md
+		return p != nil && p.md != nil && r.h.editor.(*editor.Editor).Renderer() == p.md
 	}); !same {
 		t.Fatal("the editor's renderer is not the note page's")
 	}
@@ -65,7 +67,7 @@ func TestATerminalNoteOpensRenderedByTheEditor(t *testing.T) {
 	})
 
 	r.keys(t, ctrlT)
-	r.s.WaitFor(t, "the note's text after Ctrl+T", func(string) bool { return shownView(r) == widget.ViewRaw })
+	r.s.WaitFor(t, "the note's text after Ctrl+T", func(string) bool { return shownView(r) == editor.ViewRaw })
 	r.s.WaitForText(t, "**bold**")
 	r.keys(t, ctrlT)
 	r.s.WaitFor(t, "Rendered again", func(sc string) bool { return renderedByTheEditor(r) && !strings.Contains(sc, "**bold**") })
@@ -73,7 +75,7 @@ func TestATerminalNoteOpensRenderedByTheEditor(t *testing.T) {
 
 	// an edit while it is Rendered (an agent's, say): drawn at once, its markup hidden
 	onLoop(r, func() bool {
-		if _, err := r.h.core.Insert(widget.TextPos{}, "# Larder notes\n\n"); err != nil {
+		if _, err := r.h.core.Insert(editor.TextPos{}, "# Larder notes\n\n"); err != nil {
 			t.Error(err)
 		}
 		return true
@@ -87,6 +89,7 @@ func TestATerminalNoteOpensRenderedByTheEditor(t *testing.T) {
 // draw shows is the catalog's, its kind filled in (the page asks it at each layout, so a language
 // switch's relayout says it in the new language).
 func TestTheTerminalPagesDiagramNoticeIsTheCatalogs(t *testing.T) {
+	t.Parallel()
 	p := newCellNotePage(newHost(NewSession("unused", nil), Options{}))
 	if got := p.notice("flowchart"); got != "flowchart diagram: not drawn in the terminal (Raw shows its source)" {
 		t.Errorf("the English notice: %q", got)
@@ -99,6 +102,7 @@ func TestTheTerminalPagesDiagramNoticeIsTheCatalogs(t *testing.T) {
 // TestCtrlTKeepsTheCursorBetweenRenderedAndRaw: the cursor moved in a note's Rendered view, the view
 // following it, Ctrl+T opens Raw with the cursor where it was, and back.
 func TestCtrlTKeepsTheCursorBetweenRenderedAndRaw(t *testing.T) {
+	t.Parallel()
 	var note strings.Builder
 	for i := range 60 {
 		fmt.Fprintf(&note, "Paragraph %02d of the long note.\n\n", i)
@@ -108,11 +112,11 @@ func TestCtrlTKeepsTheCursorBetweenRenderedAndRaw(t *testing.T) {
 	r.s.WaitForText(t, "Paragraph 20")
 	r.keys(t, decltest.Ctrl('t'))
 	r.s.WaitFor(t, "Raw at the cursor", func(sc string) bool {
-		return shownView(r) == widget.ViewRaw && r.cursor() == [2]int{40, 3} && strings.Contains(sc, "Paragraph 20")
+		return shownView(r) == editor.ViewRaw && r.cursor() == [2]int{40, 3} && strings.Contains(sc, "Paragraph 20")
 	})
 	r.keys(t, decltest.Ctrl('t'))
 	r.s.WaitFor(t, "Rendered at the cursor", func(sc string) bool {
-		return shownView(r) == widget.ViewRendered && r.cursor() == [2]int{40, 3} && strings.Contains(sc, "Paragraph 20")
+		return shownView(r) == editor.ViewRendered && r.cursor() == [2]int{40, 3} && strings.Contains(sc, "Paragraph 20")
 	})
 }
 
@@ -120,6 +124,7 @@ func TestCtrlTKeepsTheCursorBetweenRenderedAndRaw(t *testing.T) {
 // (applyPrefs at start) tells the page nothing and makes none; the page made later is told, and
 // told again at the next change.
 func TestTheHTMLPageTakesALanguageBeforeItIsMade(t *testing.T) {
+	t.Parallel()
 	p := newCellNotePage(newHost(NewSession("unused", nil), Options{}))
 	p.LanguageChanged() // no page yet: it failed here, stopping the preferences' read
 	if p.view != nil {
@@ -134,13 +139,14 @@ func TestTheHTMLPageTakesALanguageBeforeItIsMade(t *testing.T) {
 // stopped the preferences' read); a note shown then is Rendered by the editor, a diagram it doesn't
 // draw its source, and a switch to English with it shown fails no handler either.
 func TestAStoredLanguageReachesTheStart(t *testing.T) {
+	t.Parallel()
 	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "history.md", "# History\n\n```mermaid\nkanban\n  Todo\n    [Write the docs]\n  Done\n    [Ship it]\n```\n")}, tableInclude)
 	first := runTUI(t, NewSession(d.sock, nil), Options{})
 	first.connected(t)
 	onLoop(first, func() bool { first.h.setLanguage("ko_KR"); return true }) // Options › Language
 	first.s.WaitFor(t, "the language stored", func(string) bool {
 		res, err := first.h.call(context.Background(), "preference.list")
-		return err == nil && asMap(res)[prefLanguage] == "ko_KR"
+		return err == nil && feature.AsMap(res)[prefLanguage] == "ko_KR"
 	})
 
 	dir := t.TempDir()
@@ -152,6 +158,7 @@ func TestAStoredLanguageReachesTheStart(t *testing.T) {
 	if logs := crashLogs(t, dir); len(logs) != 0 {
 		t.Fatalf("a start with a stored language crashed %d times:\n%s", len(logs), logs[0])
 	}
+	r.ready(t) // the workspace entered: an open before it is no note of a workspace in use
 	onLoop(r, func() bool { r.h.openPath("history.md"); return true })
 	// its toast is Korean now: the file is waited for, not its English "opened"
 	r.s.WaitFor(t, "history.md shown", func(string) bool { return onLoop(r, func() string { return r.h.file.path }) == "history.md" })
@@ -170,6 +177,7 @@ func TestAStoredLanguageReachesTheStart(t *testing.T) {
 // Rendered view, not said to be undrawn nor shown as their source: a flowchart's boxes and the line
 // between, and a pie's title, circle and legend (a note each: a pie is as tall as the view).
 func TestATerminalNoteDrawsAFlowchartAndAPie(t *testing.T) {
+	t.Parallel()
 	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t,
 		"flow.md", "# Flow\n\n```mermaid\nflowchart LR\n  Jar-->Shelf\n```\n",
 		"pets.md", "```mermaid\npie title Pets\n  \"Dogs\" : 386\n  \"Cats\" : 85\n```\n")}, tableInclude)
@@ -199,6 +207,7 @@ func TestATerminalNoteDrawsAFlowchartAndAPie(t *testing.T) {
 // TestTheLeaderWorksOverTheStartsRenderedNote: at start the untitled note is Rendered by the
 // editor; SPC is the app's over it, as over the text: SPC o opens the picker.
 func TestTheLeaderWorksOverTheStartsRenderedNote(t *testing.T) {
+	t.Parallel()
 	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")}, tableInclude)
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.connected(t)
@@ -221,30 +230,31 @@ func openRenderedNote(t *testing.T, note, title string) *running {
 	return r
 }
 
-func shownView(r *running) widget.EditorView {
-	return onLoop(r, func() widget.EditorView { return r.h.editor.(*widget.Editor).ShownView() })
+func shownView(r *running) editor.EditorView {
+	return onLoop(r, func() editor.EditorView { return r.h.editor.(*editor.Editor).ShownView() })
 }
 
 // asText takes the note shown from Rendered to its text (Ctrl+T), for a cell whose subject is the
 // text's own (its cursor, gutter, marks, wrap, motions): a note on a terminal opens Rendered.
 func (r *running) asText(t *testing.T) {
 	t.Helper()
-	r.s.WaitFor(t, "the note Rendered", func(string) bool { return shownView(r) == widget.ViewRendered })
+	r.s.WaitFor(t, "the note Rendered", func(string) bool { return shownView(r) == editor.ViewRendered })
 	r.keys(t, decltest.Ctrl('t'))
-	r.s.WaitFor(t, "the note's text", func(string) bool { return shownView(r) == widget.ViewRaw })
+	r.s.WaitFor(t, "the note's text", func(string) bool { return shownView(r) == editor.ViewRaw })
 }
 
 // TestTypingInAJustOpenedNoteEditsItInPlace: a note opens Rendered and is edited there: i, then the
 // typing and Esc, edit the note at the cursor, and the view stays Rendered.
 func TestTypingInAJustOpenedNoteEditsItInPlace(t *testing.T) {
+	t.Parallel()
 	r := openRenderedNote(t, "# Pantry\n\nshelf\n", "Pantry")
 	r.keys(t, key('i'))
 	r.keys(t, decltest.Type("xy")...)
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyEscape})
 	r.s.WaitFor(t, "the typing in the note, back in Normal", func(string) bool {
-		return strings.HasPrefix(r.editorText(), "xy# Pantry") && onLoop(r, r.h.core.Mode) == widget.ModeNormal
+		return strings.HasPrefix(r.editorText(), "xy# Pantry") && onLoop(r, r.h.core.Mode) == editor.ModeNormal
 	})
-	if v := shownView(r); v != widget.ViewRendered {
+	if v := shownView(r); v != editor.ViewRendered {
 		t.Fatalf("after typing the note shows view %v, want Rendered", v)
 	}
 }
@@ -252,6 +262,7 @@ func TestTypingInAJustOpenedNoteEditsItInPlace(t *testing.T) {
 // TestTheCommandLineOpensFromTheRenderedView: ':' in a note's Rendered view opens the command line,
 // as in its text.
 func TestTheCommandLineOpensFromTheRenderedView(t *testing.T) {
+	t.Parallel()
 	r := openRenderedNote(t, "# Pantry\n", "Pantry")
 	r.keys(t, key(':'))
 	r.s.WaitForText(t, "VIM Commands")
@@ -261,19 +272,20 @@ func TestTheCommandLineOpensFromTheRenderedView(t *testing.T) {
 // source, as in its text (a link's target counts too): "1 of 3", the cursor on the first match, and
 // the view stays Rendered; Ctrl+T to Raw and back keeps the count (docs/decisions/editor.md).
 func TestAFindInARenderedNoteCountsItsSource(t *testing.T) {
+	t.Parallel()
 	r := openRenderedNote(t, "# Birds\n\na kestrel, see [the hawk](kestrel.md), another kestrel\n", "Birds")
 	r.h.p.Post(func() { r.h.find.pending = findPage; r.h.startFind("kestrel") })
 	total := func() int { return onLoop(r, func() int { return r.h.find.total }) }
 	r.s.WaitFor(t, "found in the source, the cursor on the first", func(string) bool {
 		return total() == 3 && r.cursor() == [2]int{2, 2}
 	})
-	if v := shownView(r); v != widget.ViewRendered {
+	if v := shownView(r); v != editor.ViewRendered {
 		t.Fatalf("the find left the Rendered view: view %v", v)
 	}
 	r.keys(t, decltest.Ctrl('t'))
-	r.s.WaitFor(t, "counted in the text", func(string) bool { return shownView(r) == widget.ViewRaw && total() == 3 })
+	r.s.WaitFor(t, "counted in the text", func(string) bool { return shownView(r) == editor.ViewRaw && total() == 3 })
 	r.keys(t, decltest.Ctrl('t'))
-	r.s.WaitFor(t, "counted Rendered again", func(string) bool { return shownView(r) == widget.ViewRendered && total() == 3 })
+	r.s.WaitFor(t, "counted Rendered again", func(string) bool { return shownView(r) == editor.ViewRendered && total() == 3 })
 	r.h.p.Post(r.h.clearFind)
 	r.s.WaitFor(t, "cleared", func(string) bool { return onLoop(r, func() string { return r.h.find.query }) == "" })
 }
@@ -282,6 +294,7 @@ func TestAFindInARenderedNoteCountsItsSource(t *testing.T) {
 // link under the cursor, as in its text, not the first one shown: off a link it says so, and on the
 // second link it opens that one (docs/decisions/editor.md).
 func TestSPCjInTheRenderedViewFollowsTheLinkUnderTheCursor(t *testing.T) {
+	t.Parallel()
 	line := "second [[c]]"
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "# Links\n\nfirst [[b]]\n\n" + line + "\n", "b.md", "# B\n", "c.md", "# C\n"}})
 	r := attached(t, d)
@@ -303,6 +316,7 @@ func TestSPCjInTheRenderedViewFollowsTheLinkUnderTheCursor(t *testing.T) {
 // source has, a link's target, is found in place: the cursor on its match, the view still Rendered,
 // with no notice of a move to the text. A term in neither is not found (docs/decisions/editor.md).
 func TestAFindOnlyTheSourceHasIsFoundInTheRenderedView(t *testing.T) {
+	t.Parallel()
 	line := "a kestrel, see [the hawk](https://x.example/target), another kestrel"
 	r := openRenderedNote(t, "# Birds\n\n"+line+"\n", "Birds")
 	find := func(term string) {
@@ -311,17 +325,17 @@ func TestAFindOnlyTheSourceHasIsFoundInTheRenderedView(t *testing.T) {
 	}
 	find("zebra")
 	r.s.WaitForText(t, `find: no "zebra" in the page`)
-	if v := shownView(r); v != widget.ViewRendered {
+	if v := shownView(r); v != editor.ViewRendered {
 		t.Fatalf("a term in neither left the Rendered view: view %v", v)
 	}
 	find("x.example/target")
 	r.s.WaitFor(t, "the find on its match, Rendered", func(string) bool {
-		return shownView(r) == widget.ViewRendered && r.cursor() == [2]int{2, strings.Index(line, "x.example/target")} &&
+		return shownView(r) == editor.ViewRendered && r.cursor() == [2]int{2, strings.Index(line, "x.example/target")} &&
 			onLoop(r, func() int { return r.h.find.total }) == 1
 	})
 	moved := onLoop(r, func() bool {
-		for _, n := range r.h.noticeLog.items {
-			if strings.Contains(n.text, "is not on the page") {
+		for _, n := range r.h.noticeLog.Items {
+			if strings.Contains(n.Text, "is not on the page") {
 				return true
 			}
 		}
@@ -353,6 +367,7 @@ func braille(s string) bool {
 // categories and values and a line in Braille, never their spec's JSON; a spec outside golib's
 // subset is its fence's source.
 func TestATerminalNoteDrawsItsCharts(t *testing.T) {
+	t.Parallel()
 	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "charts.md", chartNote)}, tableInclude)
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 120, 60)
 	r.waitAttached(t, "kb")
@@ -374,6 +389,7 @@ func TestATerminalNoteDrawsItsCharts(t *testing.T) {
 // TestThePagesChartNoticeIsTheCatalogs: a vega-lite chart the terminal doesn't draw says so in the
 // catalog's words, its own sentence (a chart, not "a vega-lite diagram"); a Mermaid kind keeps its own.
 func TestThePagesChartNoticeIsTheCatalogs(t *testing.T) {
+	t.Parallel()
 	h := newHost(NewSession("unused", nil), Options{})
 	if got := h.pageNotice("vega-lite"); got != "vega-lite chart: not drawn in the terminal (Raw shows its source)" {
 		t.Errorf("the chart's notice: %q", got)
@@ -387,6 +403,7 @@ func TestThePagesChartNoticeIsTheCatalogs(t *testing.T) {
 // text file after a note and the editor no longer draws through it, so the text file is never laid
 // out as Markdown.
 func TestAnotherFileTakesTheNotesRendererOff(t *testing.T) {
+	t.Parallel()
 	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n\n**bold** words\n", "b.txt", "**plain** text\n")},
 		[]string{"**/*.md", "**/*.txt"})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
@@ -398,7 +415,7 @@ func TestAnotherFileTakesTheNotesRendererOff(t *testing.T) {
 	r.waitFile(t, "b.txt")
 	r.s.WaitFor(t, "b.txt drawn with no Markdown renderer", func(sc string) bool {
 		md := onLoop(r, func() bool {
-			_, md := r.h.editor.(*widget.Editor).Renderer().(*widget.MarkdownCellRenderer)
+			_, md := r.h.editor.(*editor.Editor).Renderer().(*editor.MarkdownCellRenderer)
 			return md
 		})
 		return !md && strings.Contains(sc, "**plain** text")

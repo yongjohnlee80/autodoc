@@ -3,6 +3,7 @@ package tui
 import (
 	"maps"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"github.com/yongjohnlee80/golib/tui/panelgeometry"
 )
 
@@ -16,7 +17,7 @@ func migrateLinksPanel(values map[string]any) map[string]any {
 		{panelgeometry.EdgeKey("links"), panelgeometry.EdgeKey("explorer")},
 		{panelgeometry.FloatKey("links"), panelgeometry.FloatKey("explorer")},
 	}
-	for _, edge := range edges {
+	for _, edge := range feature.Edges {
 		keys = append(keys,
 			[2]string{panelgeometry.SizeKey("links", edge), panelgeometry.SizeKey("explorer", edge)},
 			[2]string{panelgeometry.LengthKey("links", edge), panelgeometry.LengthKey("explorer", edge)})

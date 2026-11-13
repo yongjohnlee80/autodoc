@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,7 +22,7 @@ func TestAnOldFrontmatterAnswerKeepsTheNewerDiagnostics(t *testing.T) {
 	onLoop(r, func() bool {
 		r.h.fmGen++
 		r.h.showDiagnostics([]fmDiagnostic{{field: "type", line: 2, message: "newer text"}})
-		r.h.validateNow(Ticket{current: func() bool { close(checked); return false }})
+		r.h.validateNow(feature.NewTicket(func() bool { close(checked); return false }))
 		return true
 	})
 	select {
@@ -106,7 +107,7 @@ func TestAFileFromAnotherWorkspaceIsCheckedAgainstItsOwnSchema(t *testing.T) {
 	mu.Lock()
 	before := len(checkedIn)
 	mu.Unlock()
-	r.h.p.Post(func() { r.h.activate(r.h.bufferOf(fileRef{"finance", "memo.md"})) })
+	r.h.p.Post(func() { r.h.activate(r.h.bufferOf(feature.FileRef{WS: "finance", Path: "memo.md"})) })
 	r.waitOpen(t, "finance", "memo.md")
 	r.s.WaitFor(t, "the memo checked again", func(string) bool { mu.Lock(); defer mu.Unlock(); return len(checkedIn) > before })
 	ownShown("finance's diagnostic, security in use")

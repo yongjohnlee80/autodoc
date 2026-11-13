@@ -6,10 +6,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -62,7 +64,7 @@ func TestTheCodexWakerQueuesOnTheUsersOwnServer(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = ln.Close() })
 	waker := func(bin string) *crew.CodexWaker {
-		w := crew.NewCodexWaker(os.Getuid(), bin)
+		w := crew.NewCodexWaker(os.Getuid(), bin, ownedByUs)
 		w.SetRoots(root)
 		return w
 	}
@@ -154,5 +156,48 @@ func TestACodexLocatorNamesAThread(t *testing.T) {
 		if _, err := crew.CheckLocator("codex", loc(thread), uid); !errors.Is(err, crew.ErrBadEndpoint) {
 			t.Errorf("%s: %v, want ErrBadEndpoint", name, err)
 		}
+	}
+}
+
+// ownedByUs is the owner check a waker is given (AutoDoc gives it internal/fileowner.OwnedBy, which
+// the module may not import): the entry at path, a symlink not followed, is this process's user's.
+func ownedByUs(path string) error {
+	fi, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if st, ok := fi.Sys().(*syscall.Stat_t); !ok || int(st.Uid) != os.Getuid() {
+		return fmt.Errorf("%s is not this user's", path)
+	}
+	return nil
+}
+
+// The waker asks the owner check it was given about the server and its folder before every wake,
+// and a refusal stops the wake: the check is the caller's, the asking is the waker's.
+func TestCodexWakerAsksItsOwnerCheck(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Chmod(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	sock := filepath.Join(root, "s.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	var asked []string
+	refuse := func(path string) error { asked = append(asked, path); return errors.New("not the daemon's user's") }
+	bin, calls := fakeCodex(t, 0, "")
+	w := crew.NewCodexWaker(os.Getuid(), bin, refuse)
+	w.SetRoots(root)
+	err = w.Wake(context.Background(), codexEndpoint(t, sock, "019a-thread"), crew.WakeNotice)
+	if err == nil || !strings.Contains(err.Error(), "not the daemon's user's") {
+		t.Fatalf("a wake the owner check refuses: %v, want its refusal", err)
+	}
+	if len(asked) == 0 || asked[0] != sock {
+		t.Errorf("the owner check was asked about %v, want the server %s first", asked, sock)
+	}
+	if got, _ := os.ReadFile(calls); len(got) != 0 {
+		t.Errorf("codex ran although the owner check refused: %q", got)
 	}
 }

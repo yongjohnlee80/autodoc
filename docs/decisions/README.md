@@ -85,6 +85,7 @@ the code ever disagree, the code is right and the page is fixed.
 - [Where a variable's value comes from](todos.md#where-a-variables-value-comes-from)
 - [Which workspace a store belongs to](todos.md#which-workspace-a-store-belongs-to)
 - [Resolving refs in every document](todos.md#resolving-refs-in-every-document)
+- [A root is compared where the disk says it is](todos.md#a-root-is-compared-where-the-disk-says-it-is)
 - [Retiring $WORKSPACE](todos.md#retiring-workspace)
 - [Migrating store variable files](todos.md#migrating-store-variable-files)
 - [A CLI call says who runs it](todos.md#a-cli-call-says-who-runs-it)
@@ -207,6 +208,8 @@ the code ever disagree, the code is right and the page is fixed.
 - [Six languages](editor.md#six-languages)
 - [The documentation site](editor.md#the-documentation-site)
 - [Charts drawn as SVG](editor.md#charts-drawn-as-svg)
+- [The tui package's feature map](editor.md#the-tui-packages-feature-map)
+- [Line endings](editor.md#line-endings)
 
 ## [Neovim](neovim.md)
 
@@ -230,6 +233,11 @@ the code ever disagree, the code is right and the page is fixed.
 - [Nothing moves until everything is checked](install.md#nothing-moves-until-everything-is-checked)
 - [update.sh runs the newest installer](install.md#updatesh-runs-the-newest-installer)
 - [About's Update and the restart](install.md#abouts-update-and-the-restart)
+- [Windows](install.md#windows)
+
+## [Platforms](platforms.md)
+
+- [Each OS concern is one package](platforms.md#each-os-concern-is-one-package)
 
 ## [The enterprise search server](server.md)
 

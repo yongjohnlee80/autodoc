@@ -13,9 +13,10 @@ import (
 	"unicode/utf8"
 
 	"github.com/yongjohnlee80/golib/tui/pty"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 
 	"github.com/yongjohnlee80/autodoc/script"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // A LUA SHELL IN THE TERMINAL PANEL (docs/decisions/editor.md#a-lua-shell-in-the-terminal-panel) —
@@ -128,7 +129,7 @@ func newLuaShell(h *Host, post func(func())) *luaShell {
 
 // startLuaShell is a Lua shell tab's TerminalConfig.Start: a new shell each start (a tab started
 // again after its end is a new incarnation).
-func (h *Host) startLuaShell(pty.Cmd) (widget.TerminalProcess, error) {
+func (h *Host) startLuaShell(pty.Cmd) (terminal.TerminalProcess, error) {
 	s := newLuaShell(h, h.p.Post)
 	go s.run()
 	return s, nil
@@ -699,7 +700,7 @@ func tildeKey(params string) *shellKey {
 }
 
 // luaShellLabel names a new Lua shell's tab: lua, then lua 2, lua 3, …, the first not on panel.
-func luaShellLabel(panel TerminalPanel) string {
+func luaShellLabel(panel feature.TerminalPanel) string {
 	var labels []string
 	for _, tab := range panel.Tabs() {
 		labels = append(labels, tab.Label)

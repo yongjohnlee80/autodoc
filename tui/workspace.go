@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/workspace"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // THE WORKSPACES — the daemon's, the one in use, and the manager that lists them beside the
@@ -38,7 +39,7 @@ type autodocDir struct{ dir, relation, path string }
 
 func workspacePatterns(value any) []string {
 	var patterns []string
-	for _, item := range asList(value) {
+	for _, item := range feature.AsList(value) {
 		if pattern, ok := item.(string); ok {
 			patterns = append(patterns, pattern)
 		}
@@ -49,27 +50,27 @@ func workspacePatterns(value any) []string {
 // loadWorkspaces lists the daemon's workspaces and uses the current one if it is still served,
 // else the first that is.
 func (h *Host) loadWorkspaces() {
-	tk := h.ticket(nil, TicketWorkspace)
-	do(h, func(ctx context.Context) answerOf[[]wsInfo] {
+	tk := h.ticket(nil, feature.TicketWorkspace)
+	do(h, func(ctx context.Context) feature.AnswerOf[[]wsInfo] {
 		list, err := h.listWorkspaces(ctx)
-		return answered(list, err)
-	}, func(a answerOf[[]wsInfo]) {
+		return feature.Answered(list, err)
+	}, func(a feature.AnswerOf[[]wsInfo]) {
 		if !tk.Current() {
 			return
 		}
-		if a.err != nil {
-			h.failed(h.tr("autodoc.notice.workspace.workspaces"), a.err)
+		if a.Err() != nil {
+			h.failed(h.tr("autodoc.notice.workspace.workspaces"), a.Err())
 			return
 		}
 		pick := -1
-		for i, w := range a.v {
+		for i, w := range a.Value {
 			if w.state == "ready" && (pick < 0 || w.name == h.ws) {
 				pick = i
 			}
 		}
-		h.showWorkspaceRows(a.v)
-		h.noteTodoExcluded(a.v)
-		if h.ws != "" && (pick < 0 || a.v[pick].name != h.ws) {
+		h.showWorkspaceRows(a.Value)
+		h.noteTodoExcluded(a.Value)
+		if h.ws != "" && (pick < 0 || a.Value[pick].name != h.ws) {
 			h.keepDraftOnLeave() // the workspace in use is not served now: its unsaved text stays, as a draft
 		}
 		if pick < 0 {
@@ -80,8 +81,8 @@ func (h *Host) loadWorkspaces() {
 			h.notify(h.tr("autodoc.notice.workspace.no_workspace_go_manage_workspaces_adds_one"))
 			return
 		}
-		if a.v[pick].name != h.ws || !h.entered {
-			h.enter(a.v[pick].name)
+		if a.Value[pick].name != h.ws || !h.entered {
+			h.enter(a.Value[pick].name)
 		}
 	})
 }
@@ -92,7 +93,7 @@ func (h *Host) showWorkspaceRows(list []wsInfo) {
 	h.workspaces.Reset(list)
 	h.managed.Reset(list)
 	h.showManagerDetail()
-	h.reg.listed()
+	h.reg.Listed()
 }
 
 // workspaceLabel is a workspace's name, with its state when it is not ready.
@@ -104,13 +105,15 @@ func workspaceLabel(w wsInfo) string {
 }
 
 // workspaceRowOf is a workspace as the picker shows it; managedRowOf, as the manager does.
-func workspaceRowOf(_ int, w wsInfo) rowOf { return rowOf{"key": w.name, "label": workspaceLabel(w)} }
-func managedRowOf(_ int, w wsInfo) rowOf {
+func workspaceRowOf(_ int, w wsInfo) feature.RowOf {
+	return feature.RowOf{"key": w.name, "label": workspaceLabel(w)}
+}
+func managedRowOf(_ int, w wsInfo) feature.RowOf {
 	name := workspaceLabel(w)
 	if len(w.autodocDirs) > 0 { // its root holds or lies inside AutoDoc's own folders: its pane says which
 		name += " ⚠"
 	}
-	return rowOf{"key": w.name, "name": name, "root": w.root}
+	return feature.RowOf{"key": w.name, "name": name, "root": w.root}
 }
 
 func (h *Host) activeWorkspaceInfo() (wsInfo, bool) {
@@ -186,12 +189,12 @@ func (h *Host) enter(name string) {
 		h.searchCancel = nil
 	}
 	h.searchSeq++
-	h.searchPick.show(nil)
+	h.searchPick.Show(nil)
 	h.set("App.hitsTitle", h.trf("autodoc.text.workspace.hits_searching", name))
 	h.refreshSearch()
 	h.listFiles()
 	h.poll()
-	h.reg.entered(name)
+	h.reg.Entered(name)
 }
 
 // manageWorkspaces opens the manager over the store's workspaces: the list on the left, the
@@ -204,17 +207,17 @@ func (h *Host) manageWorkspaces() {
 	h.set("App.managerIndex", -1)
 	h.set("App.managerIndex", 0)
 	h.open("workspaceManager")
-	tk := h.ticket(nil, TicketWorkspace)
-	do(h, func(ctx context.Context) answerOf[bool] {
+	tk := h.ticket(nil, feature.TicketWorkspace)
+	do(h, func(ctx context.Context) feature.AnswerOf[bool] {
 		caps, err := h.call(ctx, "sys.capabilities")
-		on, _ := asMap(caps)["databases"].(bool)
-		return answered(err == nil && on, nil)
-	}, func(a answerOf[bool]) {
-		if a.err != nil {
-			h.failed(h.tr("autodoc.notice.workspace.the_backend_s_capabilities"), a.err) // it panicked: no databases, said
+		on, _ := feature.AsMap(caps)["databases"].(bool)
+		return feature.Answered(err == nil && on, nil)
+	}, func(a feature.AnswerOf[bool]) {
+		if a.Err() != nil {
+			h.failed(h.tr("autodoc.notice.workspace.the_backend_s_capabilities"), a.Err()) // it panicked: no databases, said
 		}
 		if tk.Current() {
-			h.databases = a.v
+			h.databases = a.Value
 			h.showManagerDetail()
 		}
 	})
@@ -230,12 +233,12 @@ func (h *Host) listWorkspaces(ctx context.Context) ([]wsInfo, error) {
 		return nil, err
 	}
 	var out []wsInfo
-	for _, w := range asList(res) {
-		m := asMap(w)
-		out = append(out, wsInfo{id: num(m, "id"), name: str(m, "name"), root: str(m, "root"), state: str(m, "state"), sectionTokens: num(m, "section_tokens"),
-			embeddingPolicy: str(m, "embedding_policy"), include: workspacePatterns(m["include"]), exclude: workspacePatterns(m["exclude"]),
+	for _, w := range feature.AsList(res) {
+		m := feature.AsMap(w)
+		out = append(out, wsInfo{id: feature.Num(m, "id"), name: feature.Str(m, "name"), root: feature.Str(m, "root"), state: feature.Str(m, "state"), sectionTokens: feature.Num(m, "section_tokens"),
+			embeddingPolicy: feature.Str(m, "embedding_policy"), include: workspacePatterns(m["include"]), exclude: workspacePatterns(m["exclude"]),
 			schema: readSchemaInfo(m["schema"]), textExtensions: workspacePatterns(m["text_extensions"]),
-			provider: str(m, "provider"), providerErr: str(m, "provider_error"), db: readDatabasesInfo(m["databases"]),
+			provider: feature.Str(m, "provider"), providerErr: feature.Str(m, "provider_error"), db: readDatabasesInfo(m["databases"]),
 			graphOnly: workspacePatterns(m["graph_only"]), todoExcluded: workspacePatterns(m["todo_excluded"]), autodocDirs: autodocDirsOf(m["autodoc_dirs"])})
 		w := &out[len(out)-1]
 		w.todoSearch, _ = m["todo_search"].(bool)
@@ -253,7 +256,7 @@ func (h *Host) listWorkspaces(ctx context.Context) ([]wsInfo, error) {
 // dialog opened or closed after it (open, closeDialog, the manager's own dismissal) supersedes it:
 // an answer arriving late never replaces what the user went to since.
 func (h *Host) withCurrent(name string, extra func(ctx context.Context) (any, error), fn func(w wsInfo, more any)) {
-	tk := h.ticket(&h.dialogSeq, TicketWorkspace)
+	tk := h.ticket(&h.dialogSeq, feature.TicketWorkspace)
 	type answer struct {
 		w     wsInfo
 		found bool
@@ -318,7 +321,7 @@ func (h *Host) startRemoveWorkspace(i int) {
 	if !ok {
 		return
 	}
-	h.ask(Question{Title: h.tr("autodoc.question.workspace.delete_the_workspace"), Text: h.trf("autodoc.question.workspace.delete_the_workspace_its_index_goes_the_files_se", w.name, w.root),
+	h.ask(feature.Question{Title: h.tr("autodoc.question.workspace.delete_the_workspace"), Text: h.trf("autodoc.question.workspace.delete_the_workspace_its_index_goes_the_files_se", w.name, w.root),
 		No: h.tr("autodoc.question.workspace.no_keep_it"), Yes: h.tr("autodoc.question.workspace.yes_delete_it"), OnYes: func() { h.removeWorkspaceConfirmed(w.name) }})
 }
 
@@ -382,9 +385,9 @@ func (h *Host) leaveWorkspace() {
 // autodocDirsOf reads workspace.list's autodoc_dirs; none from a daemon below protocol 49.
 func autodocDirsOf(v any) []autodocDir {
 	var out []autodocDir
-	for _, e := range asList(v) {
-		m := asMap(e)
-		out = append(out, autodocDir{dir: str(m, "dir"), relation: str(m, "relation"), path: str(m, "path")})
+	for _, e := range feature.AsList(v) {
+		m := feature.AsMap(e)
+		out = append(out, autodocDir{dir: feature.Str(m, "dir"), relation: feature.Str(m, "relation"), path: feature.Str(m, "path")})
 	}
 	return out
 }

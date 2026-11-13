@@ -12,9 +12,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	tuivegalite "github.com/yongjohnlee80/golib/tui/vegalite"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // luacard_test.go: autodoc.ui.card, its tick, and :usage (docs/decisions/editor.md#lua-cards,
@@ -289,7 +290,7 @@ func TestUsageShowsTablesAndChartsWhereDrawn(t *testing.T) {
 	}
 	r.s.WaitFor(t, "the charts in a terminal", func(string) bool { return strings.Count(text(), "```vega-lite") == 2 })
 	for _, spec := range vegaFences(text()) {
-		if _, err := tuivegalite.Lay(context.Background(), spec, cellMeasure{}, 60); err != nil {
+		if _, err := tuivegalite.Lay(context.Background(), spec, feature.CellMeasure{}, 60); err != nil {
 			t.Errorf("a terminal draws a chart of :usage as its notice: %v\n%s", err, spec)
 		}
 	}
@@ -346,12 +347,12 @@ end }`)
 		if !ok {
 			return false
 		}
-		e, ok := c.(*widget.Editor)
+		e, ok := c.(*editor.Editor)
 		if !ok {
 			return false
 		}
 		_, page := e.DocumentView().(*cardPageView)
-		return page && e.ShownView() == widget.ViewRendered
+		return page && e.ShownView() == editor.ViewRendered
 	})
 	if !page {
 		t.Fatal("the card's editor shows no page, Rendered")

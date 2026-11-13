@@ -29,7 +29,7 @@ Dialog {
     default property alias columns: list.data
     property alias footer: footerRow.data
     closeOnQ: true
-    keyScope: "autodoc.picker" // its keys' commands (tui/keys.go: dialogCommands)
+    keyScope: "autodoc.picker" // its keys' commands (tui/feature/keys.go: dialogCommands)
     maxWidthPercent: widthPercent
     maxHeightPercent: heightPercent
     dim: false

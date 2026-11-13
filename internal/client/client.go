@@ -12,7 +12,7 @@ import (
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
-	"github.com/yongjohnlee80/autodoc/internal/peercred"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -71,6 +71,11 @@ type Session struct {
 	// afterCall, when set (tests only), runs on the worker after each call, before its answer is
 	// handed back: the seam that holds an answer already read while the page moves on
 	afterCall func(method string)
+	// failCall, when set (tests only), answers a call with its error instead of sending it: the
+	// seam for a daemon that refuses one verb
+	failCall func(method string) error
+	// apart are the verbs sent on the polling connection (Apart, apart.go); read without mu
+	apart map[string]bool
 
 	mu      sync.Mutex
 	client  *golibrpc.Client
@@ -81,6 +86,15 @@ type Session struct {
 	token   string       // this connection's client token, as its hello said (events.go)
 	head    int64        // the event log's head when this connection said hello
 	storeID string       // the store the daemon serves, as its hello said
+	// instance is the daemon's run, and proto the protocol the primary was admitted at, as its
+	// hello said: what the polling connection's hello must say too
+	instance string
+	proto    int64
+	// poll is the polling connection (apart.go), dialed under primary generation pollGen;
+	// pollDialing closes when the dial of one in flight ends, nil when none is
+	poll        *golibrpc.Client
+	pollGen     uint64
+	pollDialing chan struct{}
 }
 
 // OlderServer is a daemon of an older protocol than this build's, as its probe said: a restart
@@ -219,15 +233,18 @@ func (s *Session) heldBack(since time.Time) bool {
 // handoff stands (heldBack), it only dials, the probe window suspended, and connects as soon as
 // that restart's daemon answers; once the handoff ends, dies, lapses or reaches this Connect's
 // cap, a full window starts, with the spawn allowed. ctx ends it at any point, and so does a socket
-// another user's process listens on (peercred.ErrOtherUser), at once.
+// another user's process listens on (ipc.ErrOtherUser), at once.
 func (s *Session) Connect(ctx context.Context) error {
 	s.mu.Lock()
-	old := s.client
+	old, oldPoll := s.client, s.takePoll()
 	s.client = nil
 	s.gen++
 	s.mu.Unlock()
 	if old != nil {
 		_ = old.Close()
+	}
+	if oldPoll != nil {
+		_ = oldPoll.Close()
 	}
 	if s.resolve != nil {
 		s.setAddr(s.resolve(ctx))
@@ -243,7 +260,7 @@ func (s *Session) Connect(ctx context.Context) error {
 		if err == nil {
 			break
 		}
-		if errors.Is(err, peercred.ErrOtherUser) {
+		if errors.Is(err, ipc.ErrOtherUser) {
 			return err // another user's process holds the socket: no wait or spawn makes it this user's
 		}
 		switch {
@@ -292,8 +309,11 @@ func (s *Session) Connect(ctx context.Context) error {
 	token, _ := m["client"].(string)
 	head, _ := m["events"].(int64)
 	storeID, _ := m["store_id"].(string)
+	instance, _ := m["instance"].(string)
+	proto, _ := m["protocol"].(int64)
 	s.mu.Lock()
 	s.client, s.version, s.pid, s.stale, s.token, s.head, s.storeID = cli, v, pid, nil, token, head, storeID
+	s.instance, s.proto = instance, proto
 	s.mu.Unlock()
 	return nil
 }
@@ -356,9 +376,9 @@ func (s *Session) mismatch(ctx context.Context) error {
 }
 
 // dial connects to the daemon's socket, refusing one another user's process listens on
-// (peercred.ErrOtherUser): every connection of the session's is dialled here.
+// (ipc.ErrOtherUser): every connection of the session's is dialled here.
 func (s *Session) dial(ctx context.Context) (*golibrpc.Client, error) {
-	return golibrpc.Dial(ctx, s.address(), msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"), golibrpc.WithConnDialer(peercred.Dial))
+	return golibrpc.Dial(ctx, s.address(), msgpackrpc.New(nil), golibrpc.ClientNetwork(ipc.Network), golibrpc.WithConnDialer(ipc.RPCDialer))
 }
 
 func (s *Session) probe(ctx context.Context) (OlderServer, error) {
@@ -412,7 +432,8 @@ func (s *Session) StopStale(ctx context.Context) error {
 	return err
 }
 
-// Call calls method on the connection there is now.
+// Call calls method on the connection there is now: a verb kept apart (Apart) on the polling
+// connection, every other on the primary.
 func (s *Session) Call(ctx context.Context, method string, params ...any) (any, error) {
 	s.mu.Lock()
 	cli := s.client
@@ -423,7 +444,18 @@ func (s *Session) Call(ctx context.Context, method string, params ...any) (any, 
 	if s.beforeCall != nil {
 		s.beforeCall(method, params)
 	}
-	res, err := cli.Call(ctx, method, params...)
+	if s.failCall != nil {
+		if err := s.failCall(method); err != nil {
+			return nil, err
+		}
+	}
+	var res any
+	var err error
+	if s.apart[method] {
+		res, err = s.callApart(ctx, method, params...)
+	} else {
+		res, err = cli.Call(ctx, method, params...)
+	}
 	if s.afterCall != nil {
 		s.afterCall(method)
 	}
@@ -491,14 +523,17 @@ func (s *Session) Done() <-chan struct{} {
 	return s.client.Done()
 }
 
-// Close ends the connection.
+// Close ends the connection, and the polling connection with it.
 func (s *Session) Close() {
 	s.mu.Lock()
-	cli := s.client
+	cli, poll := s.client, s.takePoll()
 	s.client = nil
 	s.gen++
 	s.mu.Unlock()
 	if cli != nil {
 		_ = cli.Close()
+	}
+	if poll != nil {
+		_ = poll.Close()
 	}
 }

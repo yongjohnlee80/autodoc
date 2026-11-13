@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -14,7 +13,10 @@ import (
 
 	"github.com/yongjohnlee80/autodoc"
 	"github.com/yongjohnlee80/autodoc/core/kbtype"
+	"github.com/yongjohnlee80/autodoc/internal/procenv"
+	"github.com/yongjohnlee80/autodoc/internal/userdirs"
 	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // KB TYPES — a workspace scaffolded from a KB type's git repo
@@ -50,12 +52,12 @@ const kbStageLimit = 16 << 20
 // kbTypeRows are the KB type field's rows: None, the types (the registry's, else the built-ins),
 // then Custom URL…. None's and Custom URL…'s labels are in the UI's language, their keys "" and
 // "custom".
-func (h *Host) kbTypeRows() []rowOf {
-	rows := []rowOf{{"key": "", "label": h.tr("autodoc.text.kbtype.none_an_existing_folder_or_a_coding_repo")}}
+func (h *Host) kbTypeRows() []feature.RowOf {
+	rows := []feature.RowOf{{"key": "", "label": h.tr("autodoc.text.kbtype.none_an_existing_folder_or_a_coding_repo")}}
 	for _, c := range h.kbTypeChoices() {
-		rows = append(rows, rowOf{"key": c.name, "label": c.title})
+		rows = append(rows, feature.RowOf{"key": c.name, "label": c.title})
 	}
-	return append(rows, rowOf{"key": "custom", "label": h.tr("autodoc.text.kbtype.custom_url")})
+	return append(rows, feature.RowOf{"key": "custom", "label": h.tr("autodoc.text.kbtype.custom_url")})
 }
 
 // stagedKBType is a type staged for the add dialog: its clone, read and validated.
@@ -68,7 +70,7 @@ type stagedKBType struct {
 // stageKBType clones url into a stage of its own and reads it as a KB type. It reuses the plugin
 // installer's git helper (plugininstall.go): no prompts, a timeout, a shallow clone. Nothing in the
 // clone runs. On any failure the stage is removed.
-func stageKBType(ctx context.Context, url string) stagedKBType {
+func stageKBType(ctx context.Context, env procenv.Env, url string) stagedKBType {
 	s := stagedKBType{url: url}
 	fail := func(err error) stagedKBType {
 		if s.stage != "" {
@@ -81,18 +83,18 @@ func stageKBType(ctx context.Context, url string) stagedKBType {
 	if !strings.HasPrefix(url, "https://") {
 		return fail(errors.New("a KB type is cloned over https:// only"))
 	}
-	if _, err := exec.LookPath("git"); err != nil {
+	if _, err := procenv.LookPath(env, "git"); err != nil {
 		return fail(errors.New("a KB type needs git"))
 	}
-	stage, err := os.MkdirTemp("", "autodoc-kbtype-")
+	stage, err := os.MkdirTemp(userdirs.Temp(env), "autodoc-kbtype-")
 	if err != nil {
 		return fail(err)
 	}
 	s.stage = stage
-	if _, err := git(ctx, pluginCloneTimeout, "", "clone", "--depth", "1", "--", url, stage); err != nil {
+	if _, err := git(ctx, env, pluginCloneTimeout, "", "clone", "--depth", "1", "--", url, stage); err != nil {
 		return fail(err)
 	}
-	if s.commit, err = git(ctx, pluginCloneTimeout, stage, "rev-parse", "HEAD"); err != nil {
+	if s.commit, err = git(ctx, env, pluginCloneTimeout, stage, "rev-parse", "HEAD"); err != nil {
 		return fail(err)
 	}
 	if size, err := dirSize(stage); err != nil {
@@ -124,12 +126,13 @@ func dirSize(dir string) (int64, error) {
 	return n, err
 }
 
-// stageKB stages url: stageKBType's clone, or a test's stager.
-func (h *Host) stageKB(ctx context.Context, url string) stagedKBType {
+// stageKB stages url in the program's environment env (read on the loop, as the worker is started):
+// stageKBType's clone, or a test's stager. Off the loop.
+func (h *Host) stageKB(ctx context.Context, env procenv.Env, url string) stagedKBType {
 	if h.kbStage != nil {
 		return h.kbStage(ctx, url)
 	}
-	return stageKBType(ctx, url)
+	return stageKBType(ctx, env, url)
 }
 
 // kbTypePicked is the KB type field's choice, row i of kbTypeRows.
@@ -173,9 +176,10 @@ func (h *Host) pickKBType(url string) {
 		h.set("App.kbTypeSummary", h.noneNoteText())
 		return
 	}
-	tk := h.ticket(&h.kbTypeSeq, TicketSession)
+	tk := h.ticket(&h.kbTypeSeq, feature.TicketSession)
 	h.set("App.kbTypeSummary", h.trf("autodoc.text.kbtype.staging", url))
-	do(h, func(ctx context.Context) stagedKBType { return h.stageKB(ctx, url) }, func(s stagedKBType) {
+	env := h.seams.env
+	do(h, func(ctx context.Context) stagedKBType { return h.stageKB(ctx, env, url) }, func(s stagedKBType) {
 		if !tk.Current() {
 			if s.stage != "" {
 				_ = os.RemoveAll(s.stage)
@@ -225,7 +229,7 @@ func (h *Host) keepForResume(ws string, s *stagedKBType) {
 
 // kbTypeSummary is what the field shows of a staged type: its folders and purposes, and the
 // settings it proposes.
-func kbTypeSummary(t wording, s *stagedKBType) string {
+func kbTypeSummary(t feature.Wording, s *stagedKBType) string {
 	var b strings.Builder
 	b.WriteString(t.Trf("autodoc.text.kbtype.at", s.t.Title, s.commit[:min(7, len(s.commit))]) + "\n")
 	width := 0
@@ -276,7 +280,7 @@ type kbApply struct {
 }
 
 // text is how far the apply got, in t's language.
-func (a kbApply) text(t wording) string {
+func (a kbApply) text(t feature.Wording) string {
 	s := t.Trf("autodoc.text.kbtype.created_kept", len(a.created), len(a.kept))
 	if len(a.updated) > 0 {
 		s += ", " + t.Trf("autodoc.text.kbtype.updated", len(a.updated))
@@ -315,10 +319,10 @@ func (h *Host) applyKBType(ctx context.Context, ws string, plan []kbtype.Write) 
 			files[i] = m
 		}
 		res, err := h.call(ctx, "workspace.scaffold", ws, files)
-		for _, r := range asList(res) {
-			m := asMap(r)
-			p := str(m, "path")
-			switch str(m, "outcome") {
+		for _, r := range feature.AsList(res) {
+			m := feature.AsMap(r)
+			p := feature.Str(m, "path")
+			switch feature.Str(m, "outcome") {
 			case rpc.ScaffoldCreated:
 				a.created = append(a.created, p)
 			case rpc.ScaffoldKept:
@@ -328,7 +332,7 @@ func (h *Host) applyKBType(ctx context.Context, ws string, plan []kbtype.Write) 
 			case rpc.ScaffoldSkipped:
 				a.skipped = append(a.skipped, p)
 			default:
-				a.refused = append(a.refused, p+": "+str(m, "error"))
+				a.refused = append(a.refused, p+": "+feature.Str(m, "error"))
 			}
 		}
 		if err != nil {
@@ -349,7 +353,7 @@ func (h *Host) kbPlan(s *stagedKBType) []kbtype.Write {
 
 // kbTypeApply is kbtype.apply: the KB type named (a built-in's name) or at a git URL, applied to
 // the active workspace. Create-only, so it also finishes an add whose type stopped part way.
-func (h *Host) kbTypeApply(x Invocation) error {
+func (h *Host) kbTypeApply(x feature.Invocation) error {
 	if len(x.Args) != 1 {
 		return errors.New("kbtype.apply: takes a KB type's name or git URL")
 	}
@@ -372,8 +376,9 @@ func (h *Host) kbTypeApply(x Invocation) error {
 		a   kbApply
 		err error
 	}
+	env := h.seams.env
 	do(h, func(ctx context.Context) answer {
-		s := h.stageKB(ctx, url)
+		s := h.stageKB(ctx, env, url)
 		if s.err != nil {
 			return answer{s: s, err: s.err}
 		}
@@ -385,7 +390,7 @@ func (h *Host) kbTypeApply(x Invocation) error {
 		case r.s.err != nil:
 			h.notifyDone("kbtype", h.trf("autodoc.notice.kbtype.not_a_kb_type", r.err.Error()))
 		case r.err != nil:
-			h.notifyDone("kbtype", h.trf("autodoc.notice.kbtype.stopped_part_way", ws.name, r.s.t.Title, r.a.text(core{h}), wireMessage(r.err)))
+			h.notifyDone("kbtype", h.trf("autodoc.notice.kbtype.stopped_part_way", ws.name, r.s.t.Title, r.a.text(core{h}), feature.WireMessage(r.err)))
 		default:
 			h.notifyDone("kbtype", h.trf("autodoc.notice.kbtype.applied", ws.name, r.s.t.Title, r.a.text(core{h})))
 		}

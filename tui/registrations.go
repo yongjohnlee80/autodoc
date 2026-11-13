@@ -9,6 +9,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // REGISTRATIONS — a build's chunkers and formats
@@ -23,31 +24,29 @@ import (
 // checkRegistrations asks the daemon just connected for its registrations, and takes its kinds. The
 // answer is the connection's, whichever workspace is entered meanwhile: a reconnect drops it.
 func (h *Host) checkRegistrations() {
-	tk := h.ticket(nil, TicketSession)
-	do(h, func(ctx context.Context) (answer answerOf[registrations.Tables]) {
+	tk := h.ticket(nil, feature.TicketSession)
+	do(h, func(ctx context.Context) feature.AnswerOf[registrations.Tables] {
 		caps, err := h.call(ctx, "sys.capabilities")
 		if err != nil {
-			answer.err = err
-			return
+			return feature.AnswerFailed[registrations.Tables](err)
 		}
-		answer.v, answer.err = rpc.RegistrationsOf(caps)
-		return
-	}, func(a answerOf[registrations.Tables]) {
+		return feature.Answered(rpc.RegistrationsOf(caps))
+	}, func(a feature.AnswerOf[registrations.Tables]) {
 		if !tk.Current() {
 			return
 		}
-		if a.err != nil {
+		if a.Err() != nil {
 			h.daemonTables, h.kinds = registrations.Tables{}, kind.Registrations{}
-			h.failed(h.tr("autodoc.notice.registrations.the_backend_s_registrations"), a.err)
+			h.failed(h.tr("autodoc.notice.registrations.the_backend_s_registrations"), a.Err())
 		} else {
-			h.daemonTables = a.v
-			h.kinds = kind.Registrations{Chunked: slices.Sorted(maps.Keys(a.v.Chunkers)), Derived: slices.Sorted(maps.Keys(a.v.Formats))}
+			h.daemonTables = a.Value
+			h.kinds = kind.Registrations{Chunked: slices.Sorted(maps.Keys(a.Value.Chunkers)), Derived: slices.Sorted(maps.Keys(a.Value.Formats))}
 			h.compareRegistrations()
 		}
 		if h.file.open {
 			h.readPage() // a page opened before they came, or under another build's, reads by them now
 			h.page.Kind = h.pageKind()
-			h.reg.reread(h.page)
+			h.reg.Reread(h.page)
 		}
 	})
 }

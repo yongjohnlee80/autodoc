@@ -86,7 +86,7 @@ All surfaces communicate with the daemon over a user-private Unix domain socket 
 2. **macOS only:** the per-user `$TMPDIR` → `$TMPDIR/autodoc.sock`.
 3. **Otherwise:** the default XDG state directory (`Server{}.StateDirPath()`) → `$XDG_STATE_HOME/autodoc/autodoc.sock` (else `~/.local/state/autodoc/autodoc.sock`; `server.state_dir` does not move the default socket).
 
-The socket is the daemon's only access control, so both ends check who is at the other end (`internal/peercred`):
+The socket is the daemon's only access control, so both ends check who is at the other end (`internal/ipc`):
 
 - The daemon binds only in a folder that is yours (or root's) and that neither its group nor others can write. A `server.socket` in a shared folder such as `/tmp` is refused, sticky bit or not: another user could bind that path first, and a client would talk to their process. Every default above passes.
 - The socket file is created `0600` by the bind itself, not narrowed by a `chmod` afterwards.
@@ -206,6 +206,7 @@ While `autodoc --serve` manages its own lifecycle automatically during normal us
 AutoDoc follows the XDG Base Directory Specification across Linux and macOS:
 
 - **Daemon Configuration (`$XDG_CONFIG_HOME/autodoc/config.toml`)**: Holds daemon-level `[server]` (`socket`, `state_dir`, `data_dir`), `[follow]` (`poll_interval`), `[embedding_queue]` (`max_inflight`) and `[log]` (`level`) settings (`core/config/config.go`). Workspace registrations and sealed embedding/reranker provider credentials live inside the SQLite store (`autodoc.db`) rather than in `config.toml`.
+- **Which config file**: `--config`'s, else `$AUTODOC_CONFIG`'s (an empty one is none; a relative path is the working directory's, as `--config`'s is), else the default above. An agent started from AutoDoc is given its window's config this way.
 - **Socket (`autodoc.sock`)**: The `0600` msgpack-RPC Unix domain socket, at `server.socket` if set, else `$XDG_RUNTIME_DIR/autodoc.sock`, else (macOS) `$TMPDIR/autodoc.sock`, else `$XDG_STATE_HOME/autodoc/autodoc.sock` (`~/.local/state/autodoc/autodoc.sock`; resolved via `Server{}.StateDirPath()`).
 - **State Directory (`server.state_dir`, else `$XDG_STATE_HOME/autodoc/`, else `~/.local/state/autodoc/`)**: Where the daemon's log lives.
 - **Store Directory (`server.data_dir`, else `$XDG_DATA_HOME/autodoc/`, else `~/.local/share/autodoc/`)**:

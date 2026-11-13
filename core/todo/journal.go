@@ -2,8 +2,10 @@ package todo
 
 import (
 	"context"
-	"strings"
+	"path"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/core/paths"
 )
 
 // Journal is the daemon's durable state for todos: each store's change log, its snapshot, its
@@ -161,13 +163,13 @@ func (s *Settings) ApplyRepath(store string, r Repath) {
 		s.Stores[store] = rec
 	}
 	for root, rr := range s.Roots {
-		if rr.Override == r.From || (rr.Override == "" && root+"/"+todoDir == r.From) {
+		if rr.Override == r.From || (rr.Override == "" && paths.Join(root, todoDir) == r.From) {
 			rr.Override = r.To
 			s.Roots[root] = rr
 		}
 	}
 	// the root whose default store moved, when the daemon had no record of it yet
-	if root, ok := strings.CutSuffix(r.From, "/"+todoDir); ok {
+	if root, ok := storeRootOf(r.From); ok {
 		if _, known := s.Roots[root]; !known {
 			if s.Roots == nil {
 				s.Roots = map[string]RootRecord{}
@@ -175,4 +177,18 @@ func (s *Settings) ApplyRepath(store string, r Repath) {
 			s.Roots[root] = RootRecord{Root: root, Override: r.To}
 		}
 	}
+}
+
+// storeRootOf is the root whose default store is p (<root>/.todo-list), paths.Join(root, todoDir)'s
+// exact inverse, a volume's root included: "/.todo-list" is "/"'s and "C:/.todo-list" "C:/"'s, never
+// "" or "C:", which name no folder a root can be. ok is false for any other path, an unclean
+// spelling of one included ("/a/.todo-list/", "/a//.todo-list"): a store's path is kept clean.
+func storeRootOf(p string) (root string, ok bool) {
+	if path.Base(p) != todoDir || !paths.IsAbs(p) {
+		return "", false
+	}
+	if root = paths.Dir(p); paths.Join(root, todoDir) != p {
+		return "", false
+	}
+	return root, true
 }

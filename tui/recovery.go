@@ -13,7 +13,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/autodoc/internal/userperm"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // RECOVERY — unsaved work kept when AutoDoc ends without being asked to: SIGTERM, SIGHUP, the
@@ -69,7 +71,9 @@ func recoveryFile(dir string, k recoveryKey) string {
 }
 
 // writeRecovery keeps r, replacing an older copy of the same document: a temporary file renamed
-// over it, so a reader never sees half a copy. The folder and the copy are the user's alone.
+// over it, so a reader never sees half a copy. The copy is the user's alone on every OS, from the
+// moment it exists (userperm). The folder is made 0700 where modes apply, and otherwise is the
+// caller's to choose, as userperm trusts the folder a private file lives in.
 func writeRecovery(dir string, r recovered) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
@@ -78,7 +82,7 @@ func writeRecovery(dir string, r recovered) error {
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(dir, ".recovery-*")
+	tmp, err := userperm.CreatePrivateTemp(dir, ".recovery-*") // the user's alone on every OS: an access list on Windows
 	if err != nil {
 		return err
 	}
@@ -233,8 +237,8 @@ func (h *Host) recovery(answer string) {
 //     copy stays for the next start.
 func (h *Host) restoreRecovered(r recovered) {
 	switch {
-	case r.Path != "" && h.bufferOf(fileRef{r.WS, r.Path}) != nil:
-		b := h.bufferOf(fileRef{r.WS, r.Path})
+	case r.Path != "" && h.bufferOf(feature.FileRef{WS: r.WS, Path: r.Path}) != nil:
+		b := h.bufferOf(feature.FileRef{WS: r.WS, Path: r.Path})
 		h.activate(b)
 		h.applyRecovered(b, r)
 		h.askRecoveryNext()
@@ -242,7 +246,7 @@ func (h *Host) restoreRecovered(r recovered) {
 		h.restoreAsDraft(r, "restore the kept draft")
 	default:
 		h.pendingRestore, h.restoreWaiting = &r, true
-		h.openRef(fileRef{r.WS, r.Path}, true, nil)
+		h.openRef(feature.FileRef{WS: r.WS, Path: r.Path}, true, nil)
 	}
 }
 
@@ -297,8 +301,8 @@ func (h *Host) restoreSettled() {
 // text is saved or discarded (settleRecovery).
 func (h *Host) applyRecovered(b *openBuffer, r recovered) {
 	ed := h.editorFor(b)
-	end := widget.TextPos{Line: ed.LineCount() - 1, Col: 1 << 30}
-	if _, err := ed.Replace(widget.TextRange{To: end}, r.Text); err != nil {
+	end := editor.TextPos{Line: ed.LineCount() - 1, Col: 1 << 30}
+	if _, err := ed.Replace(editor.TextRange{To: end}, r.Text); err != nil {
 		h.failed("could not restore "+r.Path, err)
 		return
 	}

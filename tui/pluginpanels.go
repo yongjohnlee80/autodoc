@@ -13,6 +13,7 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
 	"github.com/yongjohnlee80/autodoc/plugin"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // CARD PANELS — a card plugin (a dialog with [dialog] modal = false) is a docked panel of its own,
@@ -148,15 +149,15 @@ func (pl *plugins) cardWithoutPanel(e pluginEntry) bool {
 }
 
 // cardSpecs are the card panels' specs.
-func (pl *plugins) cardSpecs() []PanelSpec {
-	var out []PanelSpec
+func (pl *plugins) cardSpecs() []feature.PanelSpec {
+	var out []feature.PanelSpec
 	for i, c := range pl.fixCards() {
 		out = append(out, pl.cardSpec(c, 80+i))
 	}
 	return out
 }
 
-func (pl *plugins) cardSpec(c *cardPanel, priority int) PanelSpec {
+func (pl *plugins) cardSpec(c *cardPanel, priority int) feature.PanelSpec {
 	var places []string
 	for _, p := range c.entry.m.Dialog.Placements {
 		if edge := cardEdge(p); !slices.Contains(places, edge) {
@@ -164,13 +165,13 @@ func (pl *plugins) cardSpec(c *cardPanel, priority int) PanelSpec {
 		}
 	}
 	name := c.name
-	return PanelSpec{ID: cardPanelID(name), View: cardViewID(name), Priority: priority, Icon: "⧉",
+	return feature.PanelSpec{ID: cardPanelID(name), View: cardViewID(name), Priority: priority, Icon: "⧉",
 		Alive:  func() bool { return pl.running[name] != nil }, // a hidden card's plugin runs on
-		Edge:   func(p prefs) string { return pl.cardEdgeIn(p, name) },
+		Edge:   func(p feature.PrefsView) string { return pl.cardEdgeIn(p, name) },
 		Places: places, Size: [2]int{10, 90}, Length: [2]int{20, 100},
 		Default: func(edge string) (int, int) { return pl.cardDefault(name, edge) },
-		Opened:  func(PanelHost) { pl.cardOpened(name) },
-		Closed: func(h PanelHost) {
+		Opened:  func(feature.PanelHost) { pl.cardOpened(name) },
+		Closed: func(h feature.PanelHost) {
 			pl.cardClosed(name)
 			h.Keep(h.RestoreKeyboardHome())
 		}}
@@ -185,10 +186,10 @@ func (pl *plugins) cardEntry(name string) pluginEntry {
 }
 
 // cardEdgeIn is the edge the card's panel opens at under p: its placement's.
-func (pl *plugins) cardEdgeIn(p prefs, name string) string {
+func (pl *plugins) cardEdgeIn(p feature.PrefsView, name string) string {
 	e := pl.cardEntry(name)
 	place := e.m.Dialog.Placements[0]
-	if chosen := p.pluginPlace[name]; slices.Contains(e.m.Dialog.Placements, chosen) {
+	if chosen := asPrefs(p).pluginPlace[name]; slices.Contains(e.m.Dialog.Placements, chosen) {
 		place = chosen
 	}
 	return cardEdge(place)
@@ -226,7 +227,7 @@ func (pl *plugins) cardState() map[string]any {
 	for _, c := range pl.fixCards() {
 		id := cardPanelID(c.name)
 		edge := pl.cardEdgeIn(pl.c.Prefs(), c.name)
-		size, length := pl.c.Prefs().panelGeometry(id, edge)
+		size, length := pl.c.Prefs().PanelGeometry(id, edge)
 		st["App."+id+"Title"] = c.entry.label()
 		st["App."+id+"Edge"] = edge
 		st["App."+id+"Size"] = size
@@ -245,7 +246,7 @@ func (pl *plugins) syncCards() {
 func (pl *plugins) syncCard(name string) {
 	id := cardPanelID(name)
 	edge := pl.cardEdgeIn(pl.c.Prefs(), name)
-	size, length := pl.c.Prefs().panelGeometry(id, edge)
+	size, length := pl.c.Prefs().PanelGeometry(id, edge)
 	pl.c.Set("App."+id+"Edge", edge)
 	pl.c.Set("App."+id+"Size", size)
 	pl.c.Set("App."+id+"Length", length)
@@ -380,8 +381,10 @@ func (pl *plugins) cardType() tuidecl.Type {
 // every reload.
 type cardFS struct {
 	fs.FS
-	pl  *plugins
-	gui bool // the program runs as a window: the GUI's relation views are written in too
+	pl *plugins
+	// layout writes in what the program running as a window adds: the GUI's relation views and its
+	// own title bar (Host.windowLayout)
+	layout func([]byte) []byte
 }
 
 func (c cardFS) Open(name string) (fs.File, error) {
@@ -398,7 +401,7 @@ func (c cardFS) Open(name string) (fs.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	data := c.pl.withCardPanels(withRelationViews(src, c.gui))
+	data := c.pl.withCardPanels(c.layout(src))
 	return &memFile{Reader: bytes.NewReader(data), info: memInfo{FileInfo: info, size: int64(len(data))}}, nil
 }
 
@@ -442,12 +445,12 @@ func (h *Host) cardPanelsChanged(undo func()) {
 			h.failed("plugins", err)
 			h.plugins.refreshPlugins()
 		}
-		specs, commit, err := h.reg.panels.stage(core{h}, h.plugins, h.plugins.Panels())
+		specs, commit, err := stagePanels(h.reg.Panels, core{h}, h.plugins, h.plugins.Panels())
 		if err != nil {
 			refused(err)
 			return
 		}
-		cards := slices.DeleteFunc(slices.Clone(specs), func(s PanelSpec) bool { return !strings.HasPrefix(s.ID, cardPanelPrefix) })
+		cards := slices.DeleteFunc(slices.Clone(specs), func(s feature.PanelSpec) bool { return !strings.HasPrefix(s.ID, cardPanelPrefix) })
 		values := h.plugins.cardState()
 		maps.Copy(values, floatState(h.prefs.panelFloat, cards))
 		fresh := map[string]any{}
@@ -478,7 +481,7 @@ func (h *Host) cardPanelsChanged(undo func()) {
 		}
 		commit() // only now: the panel set, the dock and Arrange never name a card with no Drawer
 		h.layoutSrc = src
-		h.reloaded()
+		h.reloaded(src)
 		h.plugins.refreshPlugins()
 		h.loadPrefs() // an added card's kept tui.card_<name>.* geometry; applyPrefs sets the panel defs
 	})

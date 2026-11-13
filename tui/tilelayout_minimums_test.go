@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
@@ -101,7 +102,7 @@ func TestTheTerminalTiledAtItsLeastTakesTheKeyboard(t *testing.T) {
 // The agent's least: 27 columns at the right, its edge, and 6 rows at the bottom, SPC g each time.
 func TestTheAgentTiledAtItsLeastTakesTheKeyboard(t *testing.T) {
 	agent, _ := fakeAgent(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron")
 	spcG := func() { r.leader(t, 'g') }
 	atItsLeast(t, r, "agent", "right", 27, spcG)
 	closePanel(t, r, "agent")

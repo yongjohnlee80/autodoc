@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // GOING TO A WIDGET — :go, the Go-to picker (SPC Tab) and F6 / Shift+F6
@@ -20,12 +22,12 @@ import (
 
 // widgetTarget is one place :go, the Go-to picker and F6 reach.
 type widgetTarget struct {
-	name    string               // what :go takes: "editor", "autodb", "terminal/shell 2"
-	title   string               // what the picker shows, in English: "the editor", "AutoDB", "shell 2 (terminal)"
-	panel   string               // the panel's id; "" for the editor
-	tab     widget.TerminalTabID // a tab of the panel's TerminalTabs; "" for the panel itself
-	showTab func()               // shows a tabbed panel's tab (PanelSpec.GoTabs); nil for none
-	open    bool                 // the editor always; a panel by panelOpen; a tab by its panel's
+	name    string                 // what :go takes: "editor", "autodb", "terminal/shell 2"
+	title   string                 // what the picker shows, in English: "the editor", "AutoDB", "shell 2 (terminal)"
+	panel   string                 // the panel's id; "" for the editor
+	tab     terminal.TerminalTabID // a tab of the panel's TerminalTabs; "" for the panel itself
+	showTab func()                 // shows a tabbed panel's tab (PanelSpec.GoTabs); nil for none
+	open    bool                   // the editor always; a panel by panelOpen; a tab by its panel's
 	focused bool
 	// the picker's row in the UI's language (openWidgets)
 	label, state string
@@ -40,12 +42,12 @@ func (h *Host) widgets() []widgetTarget {
 	for _, s := range h.panelSpecs() {
 		name := h.widgetName(s.ID)
 		out = append(out, widgetTarget{name: name, title: h.panelTitleIn(inEnglish{}.Trf, s.ID), panel: s.ID,
-			open: h.panelOpen[s.ID], focused: h.within(s.focusView())})
+			open: h.panelOpen[s.ID], focused: h.within(s.FocusView())})
 		for tab, goName := range s.GoTabs { // the explorer's Links tab
 			if goName != "" {
 				out = append(out, widgetTarget{name: goName, title: goName + " (" + name + ")", panel: s.ID,
 					showTab: func() { s.ShowTab(tab) }, open: h.panelOpen[s.ID],
-					focused: h.within(s.focusView()) && s.Tab() == tab})
+					focused: h.within(s.FocusView()) && s.Tab() == tab})
 			}
 		}
 		if tabs, ok := h.tabsOf(s.View); ok { // the terminal's and the agent's
@@ -104,7 +106,7 @@ func (h *Host) within(id string) bool {
 }
 
 // tabsOf is view's TerminalTabs, when it is one.
-func (h *Host) tabsOf(view string) (*widget.TerminalTabs, bool) {
+func (h *Host) tabsOf(view string) (*terminal.TerminalTabs, bool) {
 	c, ok := h.p.Find(view)
 	if !ok {
 		return nil, false
@@ -143,7 +145,7 @@ func (h *Host) goTo(t widgetTarget) {
 			return
 		}
 	}
-	h.keep(h.p.Call(s.focusView(), "forceActiveFocus"))
+	h.keep(h.p.Call(s.FocusView(), "forceActiveFocus"))
 }
 
 // widgetNamed is the target arg names: the one named exactly, else the one whose name holds it.
@@ -167,17 +169,17 @@ func (h *Host) widgetNamed(arg string) (widgetTarget, error) {
 }
 
 // widgetEntries are :go, as a catalog entry: builtinEntries adds it beside bufferEntries.
-func (h *Host) widgetEntries() []Entry {
-	return []Entry{{ID: "widget.go", Title: "go to a widget", Verb: "go", Args: "<name>", Twin: "App.openWidgets()",
+func (h *Host) widgetEntries() []feature.Entry {
+	return []feature.Entry{{ID: "widget.go", Title: "go to a widget", Verb: "go", Args: "<name>", Twin: "App.openWidgets()",
 		Help: "put the keyboard on a widget: a panel opens if closed; Tab lists the names; alone, the Go-to picker",
-		Complete: func(widget.CompleteContext) []string {
+		Complete: func(editor.CompleteContext) []string {
 			var out []string
 			for _, t := range h.widgets() {
 				out = append(out, t.name)
 			}
 			return out
 		},
-		Run: func(x Invocation) error {
+		Run: func(x feature.Invocation) error {
 			if x.Line == "" {
 				h.openWidgets()
 				return nil
@@ -197,8 +199,8 @@ func (h *Host) widgetEntries() []Entry {
 
 // widgetRowOf is a target's row: its name and title, and "here", "open" or "closed", as
 // withRowText composed them.
-func widgetRowOf(_ int, t widgetTarget) rowOf {
-	return rowOf{"key": t.name, "label": t.label, "state": t.state}
+func widgetRowOf(_ int, t widgetTarget) feature.RowOf {
+	return feature.RowOf{"key": t.name, "label": t.label, "state": t.state}
 }
 
 // withRowText is t with its picker row composed in the UI's language: its name and title, and
@@ -225,8 +227,8 @@ func (h *Host) withRowText(t widgetTarget) widgetTarget {
 	return t
 }
 
-func newWidgetRows() *rows[widgetTarget] {
-	return newRows(tuidecl.NewListModel("key", "label", "state"), widgetRowOf)
+func newWidgetRows() *feature.Rows[widgetTarget] {
+	return feature.NewRows(tuidecl.NewListModel("key", "label", "state"), widgetRowOf)
 }
 
 // openWidgets is SPC Tab and :go alone: the picker over the targets now, its cursor on the focused one.

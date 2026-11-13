@@ -1,6 +1,9 @@
 package tui
 
-import "github.com/yongjohnlee80/golib/tui/widget"
+import (
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
+)
 
 // THE HTML PREVIEW IN A TERMINAL — File › Preview HTML on a terminal opens the same pane as a
 // window's (htmlpane.go), its HTMLView golib's cell view, the note page's (notepage.go): its
@@ -15,9 +18,9 @@ import "github.com/yongjohnlee80/golib/tui/widget"
 // htmlPaneCells is the pane's part as a feature: it hears the theme and the language change.
 type htmlPaneCells struct{ h *Host }
 
-func (*htmlPaneCells) Name() string                 { return "htmlpane-cells" }
-func (*htmlPaneCells) State() map[string]any        { return map[string]any{} }
-func (*htmlPaneCells) Commands() map[string]Command { return map[string]Command{} }
+func (*htmlPaneCells) Name() string                         { return "htmlpane-cells" }
+func (*htmlPaneCells) State() map[string]any                { return map[string]any{} }
+func (*htmlPaneCells) Commands() map[string]feature.Command { return map[string]feature.Command{} }
 
 // ThemeChanged gives an open pane the new theme's highlighting, and its page exported again in the
 // new theme.
@@ -46,8 +49,8 @@ func (h *Host) paneLooks() {
 	if !ok {
 		return
 	}
-	widget.WithSyntax(h.p.SourceLanguages(), h.p.SyntaxStyles())(v)
+	htmlview.WithSyntax(h.p.SourceLanguages(), h.p.SyntaxStyles())(v)
 	// the page's own words, a chart's and a diagram's (pageNotice): a note's page, a card's and the
 	// pane say the same
-	widget.WithDiagramNotice(h.pageNotice)(v)
+	htmlview.WithDiagramNotice(h.pageNotice)(v)
 }

@@ -9,8 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // suspendingAgent is an agent CLI as Claude Code is: its tty raw, it reads a key at a time, stops
@@ -44,8 +45,8 @@ done
 func runSuspendingAgent(t *testing.T) *running {
 	t.Helper()
 	agent := suspendingAgent(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
-	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron")
+	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	r.s.WaitForText(t, "ready")
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
@@ -101,8 +102,8 @@ end }`)
 	resumed := func() int {
 		return onLoop(r, func() int {
 			n := 0
-			for _, it := range r.h.noticeLog.items {
-				if strings.Contains(it.text, "resume heron true nil") {
+			for _, it := range r.h.noticeLog.Items {
+				if strings.Contains(it.Text, "resume heron true nil") {
 					n++
 				}
 			}
@@ -160,7 +161,7 @@ func TestPanelResumeOnAnExitedAgentKeepsWhy(t *testing.T) {
 	r := exitedAgent(t)
 	onLoop(r, func() bool { r.h.resumePanel(); return true })
 	errs := keptErrors(r)
-	if len(errs) != 1 || !errors.Is(errs[0], widget.ErrTerminalNotRunning) || !strings.HasPrefix(errs[0].Error(), "Resume the agent panel's tab: ") {
+	if len(errs) != 1 || !errors.Is(errs[0], terminal.ErrTerminalNotRunning) || !strings.HasPrefix(errs[0].Error(), "Resume the agent panel's tab: ") {
 		t.Fatalf("panel.resume on an exited agent kept %v, want why, naming the agent panel's tab", errs)
 	}
 }
@@ -168,7 +169,7 @@ func TestPanelResumeOnAnExitedAgentKeepsWhy(t *testing.T) {
 // panel.resume on an open panel with no tab says so in a notice, and keeps no error.
 func TestPanelResumeOnAnEmptyPanelIsANotice(t *testing.T) {
 	r := exitedAgent(t)
-	onLoop(r, func() bool { return r.h.agents.removeInstance("heron") == nil })
+	onLoop(r, func() bool { return r.h.agents.RemoveInstance("heron") == nil })
 	r.s.WaitFor(t, "its tab gone", func(string) bool {
 		return onLoop(r, func() bool { tabs, ok := r.h.tabsOf("agentView"); return ok && tabs.Active() == "" })
 	})

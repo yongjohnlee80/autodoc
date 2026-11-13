@@ -4,11 +4,12 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 func writeUserTheme(t *testing.T, file string, src []byte) {
@@ -58,7 +59,7 @@ func TestUserThemeLoadsReloadsFallsBackAndRecovers(t *testing.T) {
 	if got := onLoop(r, func() string { return r.h.terminals.lookState()["App.terminalBase"].(string) }); got != "#e6d9b9" {
 		t.Fatalf("terminal palette %s", got)
 	}
-	before := onLoop(r, func() widget.TextPos { return r.h.core.Cursor() })
+	before := onLoop(r, func() editor.TextPos { return r.h.core.Cursor() })
 	next := []byte(strings.Replace(string(src), "#010203", "#040506", 1))
 	writeUserTheme(t, file, next)
 	waitColour("#040506")
@@ -67,7 +68,7 @@ func TestUserThemeLoadsReloadsFallsBackAndRecovers(t *testing.T) {
 	if got := onLoop(r, func() string { return r.h.core.Value() }); got != "page text\n" {
 		t.Fatalf("document lost: %q", got)
 	}
-	if got := onLoop(r, func() widget.TextPos { return r.h.core.Cursor() }); got != before {
+	if got := onLoop(r, func() editor.TextPos { return r.h.core.Cursor() }); got != before {
 		t.Fatalf("cursor changed: %v -> %v", before, got)
 	}
 	writeUserTheme(t, file, next)
@@ -89,5 +90,15 @@ func TestInvalidUserThemeAtStartupDoesNotBreakTheScreen(t *testing.T) {
 	r.s.WaitFor(t, "default theme", func(string) bool { return onLoop(r, func() string { return r.h.theme }) == defaultTheme })
 	if len(r.h.themeCatalog.Problems) == 0 {
 		t.Fatal("no file/key diagnostics")
+	}
+}
+
+// A feature reads the themes the window can wear through its core: golib's, with no catalog of the
+// user's.
+func TestCoreNamesTheThemes(t *testing.T) {
+	var h Host
+	c := core{&h}
+	if !reflect.DeepEqual(c.ThemeNames(), h.themeNames()) || !reflect.DeepEqual(c.ThemeLabels(), h.themeLabels()) || len(c.ThemeNames()) == 0 {
+		t.Errorf("themes %q, labels %q", c.ThemeNames(), c.ThemeLabels())
 	}
 }

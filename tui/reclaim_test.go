@@ -1,6 +1,8 @@
 package tui
 
-import "testing"
+import (
+	"testing"
+)
 
 // TestTheDaemonsReclaimIsANotice (docs/decisions/store.md#the-start-sweep): what the daemon's start
 // sweep reclaimed, and what its compaction did or could not do, reach the TUI as notices.

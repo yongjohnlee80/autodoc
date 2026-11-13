@@ -1,16 +1,18 @@
 module github.com/yongjohnlee80/autodoc
 
-go 1.26.10
+go 1.26.11
 
 require (
 	github.com/BurntSushi/toml v1.6.0
+	github.com/Microsoft/go-winio v0.6.4
 	github.com/prometheus/common v0.67.2
 	github.com/yongjohnlee80/gio v0.1.6
-	github.com/yongjohnlee80/golib v0.8.40
-	github.com/yongjohnlee80/golib/gui v0.3.16
+	github.com/yongjohnlee80/golib v0.8.51
+	github.com/yongjohnlee80/golib/gui v0.3.19
 	github.com/yuin/gopher-lua v1.1.2
 	golang.org/x/image v0.45.0
 	golang.org/x/sys v0.49.0
+	golang.org/x/term v0.46.0
 	golang.org/x/text v0.42.0
 )
 
@@ -35,7 +37,6 @@ require (
 	golang.org/x/exp/shiny v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
-	golang.org/x/term v0.46.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	modernc.org/libc v1.79.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect

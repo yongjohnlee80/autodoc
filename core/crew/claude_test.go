@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -14,7 +13,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/crew"
 )
 
-// fakeClaude writes a "Claude Code" at dir/name that names each of events as the real binary does,
+// fakeClaude writes a "Claude Code" at dir/name (a program's name on this OS) that names each of events as the real binary does,
 // a quoted literal among other bytes.
 func fakeClaude(t *testing.T, dir, name string, events ...string) string {
 	t.Helper()
@@ -23,7 +22,7 @@ func fakeClaude(t *testing.T, dir, name string, events ...string) string {
 	for _, e := range events {
 		b.WriteString(`x="` + e + `";`)
 	}
-	path := filepath.Join(dir, name)
+	path := filepath.Join(dir, name+exeSuffix)
 	if err := os.WriteFile(path, []byte(b.String()), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +127,7 @@ func TestWhatAClaudeKnowsIsReadAgainWhenItChanges(t *testing.T) {
 // folder; a name on no folder of PATH is an error.
 func TestClaudeOfLooksUpLikeTheShell(t *testing.T) {
 	a, b, c, work := t.TempDir(), t.TempDir(), t.TempDir(), t.TempDir()
-	if err := os.Mkdir(filepath.Join(a, "claude"), 0o755); err != nil {
+	if err := os.Mkdir(filepath.Join(a, "claude"+exeSuffix), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(b, "claude"), nil, 0o644); err != nil {
@@ -139,7 +138,7 @@ func TestClaudeOfLooksUpLikeTheShell(t *testing.T) {
 		t.Fatalf("on PATH: %q, %v; want %q", got, err, want)
 	}
 	rel := fakeClaude(t, work, "my-claude", "SessionStart")
-	if got, _, err := crew.ClaudeOf("./my-claude", "", work, ""); err != nil || got != rel {
+	if got, _, err := crew.ClaudeOf("./my-claude"+exeSuffix, "", work, ""); err != nil || got != rel {
 		t.Fatalf("a relative path: %q, %v; want %q", got, err, rel)
 	}
 	if _, _, err := crew.ClaudeOf("claude", a, work, ""); err == nil {
@@ -147,19 +146,14 @@ func TestClaudeOfLooksUpLikeTheShell(t *testing.T) {
 	}
 }
 
-// fakeMise writes a mise at dir/mise whose `which claude`, run in work, answers tool.
+// fakeMise puts a mise at dir whose `which claude`, run in work, answers tool.
 func fakeMise(t *testing.T, dir, work, tool string) string {
 	t.Helper()
 	here, err := filepath.EvalSymlinks(work)
 	if err != nil {
 		t.Fatal(err)
 	}
-	mise := filepath.Join(dir, "mise")
-	script := "#!/bin/sh\n[ \"$1 $2\" = 'which claude' ] && [ \"$(pwd -P)\" = '" + here + "' ] && echo '" + tool + "'\n"
-	if err := os.WriteFile(mise, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	return mise
+	return newMise(t, dir, tool, "here", here)
 }
 
 // TestClaudeOfFollowsAMiseShim: a name whose file links to mise itself (a mise shim) is the tool
@@ -167,7 +161,7 @@ func fakeMise(t *testing.T, dir, work, tool string) string {
 func TestClaudeOfFollowsAMiseShim(t *testing.T) {
 	tools, shims, work := t.TempDir(), t.TempDir(), t.TempDir()
 	real := fakeClaude(t, tools, "claude", "SessionStart")
-	if err := os.Symlink(fakeMise(t, tools, work, real), filepath.Join(shims, "claude")); err != nil {
+	if err := os.Symlink(fakeMise(t, tools, work, real), filepath.Join(shims, "claude"+exeSuffix)); err != nil {
 		t.Fatal(err)
 	}
 	if got, _, err := crew.ClaudeOf("claude", shims, work, ""); err != nil || got != real {
@@ -180,7 +174,7 @@ func TestClaudeOfFollowsAMiseShim(t *testing.T) {
 // is on PATH, else the next file on PATH that reads as one. What it knows is the real binary's.
 func TestClaudeOfLooksPastAWrapper(t *testing.T) {
 	wrappers, tools, later, work := t.TempDir(), t.TempDir(), t.TempDir(), t.TempDir()
-	if err := os.WriteFile(filepath.Join(wrappers, "claude"), []byte("#!/bin/bash\nexec mise x claude -- claude \"$@\"\n"), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(wrappers, "claude"+scriptSuffix), []byte("#!/bin/bash\nexec mise x claude -- claude \"$@\"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	real := fakeClaude(t, later, "claude", everyClaudeEvent...)
@@ -194,31 +188,17 @@ func TestClaudeOfLooksPastAWrapper(t *testing.T) {
 	if got, _, err := crew.ClaudeOf("claude", wrappers+sep+later+sep+tools, work, ""); err != nil || got != miseTool {
 		t.Fatalf("a wrapper, with mise on PATH: %q, %v; want mise's tool %q before the later file", got, err, miseTool)
 	}
-	if _, _, err := crew.ClaudeOf("claude", wrappers, work, ""); err == nil || !strings.Contains(err.Error(), filepath.Join(wrappers, "claude")) {
+	if _, _, err := crew.ClaudeOf("claude", wrappers, work, ""); err == nil || !strings.Contains(err.Error(), filepath.Join(wrappers, "claude"+scriptSuffix)) {
 		t.Fatalf("a wrapper alone: %v; want an error naming the file tried", err)
 	}
 }
 
-// stalledMise writes a mise at dir/mise whose `which claude` sleeps for the seconds the file
-// dir/stall holds, while it exists, then answers tool; with no such file it answers at once. While
-// dir/fail exists it exits 1 instead.
+// stalledMise puts a mise at dir whose `which claude` sleeps for the seconds the file dir/stall
+// holds, while it exists, then answers tool; with no such file it answers at once. While dir/fail
+// exists it exits 1 instead.
 func stalledMise(t *testing.T, dir, tool string) string {
 	t.Helper()
-	sleep, err := exec.LookPath("sleep")
-	if err != nil {
-		t.Fatal(err)
-	}
-	mise := filepath.Join(dir, "mise")
-	script := "#!/bin/sh\n[ \"$1 $2\" = 'which claude' ] || exit 2\n" +
-		"[ -f '" + dir + "/fail' ] && exit 1\n" +
-		// the stall's seconds read by the shell itself: mise runs with the lookup's PATH alone, which
-		// holds no cat
-		"[ -f '" + dir + "/stall' ] && { read s < '" + dir + "/stall'; " + sleep + " \"$s\"; }\n" +
-		"echo '" + tool + "'\n"
-	if err := os.WriteFile(mise, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	return mise
+	return newMise(t, dir, tool)
 }
 
 // wrapperFirst writes a wrapper claude (as `exec mise x claude -- claude` is) into a folder of its
@@ -226,7 +206,7 @@ func stalledMise(t *testing.T, dir, tool string) string {
 func wrapperFirst(t *testing.T) string {
 	t.Helper()
 	w := t.TempDir()
-	if err := os.WriteFile(filepath.Join(w, "claude"), []byte("#!/bin/bash\nexec mise x claude -- claude \"$@\"\n"), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(w, "claude"+scriptSuffix), []byte("#!/bin/bash\nexec mise x claude -- claude \"$@\"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	return w
@@ -297,16 +277,10 @@ func TestClaudeOfTakesNothingInPlaceOfAMiseThatCantAnswer(t *testing.T) {
 // its still holding the output, is taken at its answer a second later, not held to the bound.
 func TestClaudeOfTakesAMiseAnswerWhoseChildKeepsTheOutput(t *testing.T) {
 	crew.SetClaudeFindTimeouts(t, 10*time.Second, 10*time.Second)
-	sleep, err := exec.LookPath("sleep")
-	if err != nil {
-		t.Fatal(err)
-	}
-	tools, work := t.TempDir(), t.TempDir()
+	// the child keeps mise running past the cell, in work: on Windows neither folder can go till it ends
+	tools, work := lingeringDir(t), lingeringDir(t)
 	tool := fakeClaude(t, tools, "claude-real", everyClaudeEvent...)
-	script := "#!/bin/sh\n" + sleep + " 8 &\necho '" + tool + "'\n"
-	if err := os.WriteFile(filepath.Join(tools, "mise"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	newMise(t, tools, tool, "linger", "8")
 	start := time.Now()
 	got, _, err := crew.ClaudeOf("claude", wrapperFirst(t)+string(os.PathListSeparator)+tools, work, "")
 	if err != nil || got != tool {
@@ -393,32 +367,32 @@ func TestWhatAClaudeKnowsIsKeptForTheNextRun(t *testing.T) {
 // the error is the program's, then claude's.
 func TestClaudeOfFindsTheClaudeAWrapperOfAnotherNameRuns(t *testing.T) {
 	bin, tools, later, work := t.TempDir(), t.TempDir(), t.TempDir(), t.TempDir()
-	wrapper := filepath.Join(bin, "claude_tui.sh")
+	wrapper := filepath.Join(bin, tuiWrapper)
 	if err := os.WriteFile(wrapper, []byte("#!/bin/bash\nexport CLAUDE_CONFIG_DIR=\"$HOME/.claude-work\"\nexec claude \"$@\"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte("#!/bin/bash\nexec mise x claude -- claude \"$@\"\n"), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(bin, "claude"+scriptSuffix), []byte("#!/bin/bash\nexec mise x claude -- claude \"$@\"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	tool := fakeClaude(t, tools, "claude-real", everyClaudeEvent...)
 	stalledMise(t, tools, tool) // answers `which claude` alone: `which claude_tui.sh` exits 2, as mise does for no tool
 	sep := string(os.PathListSeparator)
-	got, k, err := crew.ClaudeOf("claude_tui.sh", bin+sep+tools, work, "")
+	got, k, err := crew.ClaudeOf(tuiWrapper, bin+sep+tools, work, "")
 	if err != nil || got != tool || !k.Reports() {
 		t.Fatalf("claude_tui.sh, a claude wrapper beside it and mise's tool: %q, %v, %v; want mise's claude %q, with its prompt hooks", got, k, err, tool)
 	}
 	// no mise: the later claude on PATH that reads as one
 	alone := t.TempDir()
-	if err := os.WriteFile(filepath.Join(alone, "claude_tui.sh"), []byte("#!/bin/bash\nexec claude \"$@\"\n"), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(alone, tuiWrapper), []byte("#!/bin/bash\nexec claude \"$@\"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	real := fakeClaude(t, later, "claude", everyClaudeEvent...)
-	if got, _, err := crew.ClaudeOf("claude_tui.sh", alone+sep+later, work, ""); err != nil || got != real {
+	if got, _, err := crew.ClaudeOf(tuiWrapper, alone+sep+later, work, ""); err != nil || got != real {
 		t.Fatalf("claude_tui.sh, then a claude on PATH: %q, %v; want %q", got, err, real)
 	}
 	// no claude anywhere: the program's error, then claude's
-	_, _, err = crew.ClaudeOf("claude_tui.sh", alone, work, "")
-	if err == nil || !strings.Contains(err.Error(), filepath.Join(alone, "claude_tui.sh")) || !strings.Contains(err.Error(), "nor claude is not on the agent's PATH") {
+	_, _, err = crew.ClaudeOf(tuiWrapper, alone, work, "")
+	if err == nil || !strings.Contains(err.Error(), filepath.Join(alone, tuiWrapper)) || !strings.Contains(err.Error(), "nor claude is not on the agent's PATH") {
 		t.Fatalf("claude_tui.sh with no claude: %v; want the files tried, then that no claude is on PATH", err)
 	}
 }

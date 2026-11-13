@@ -10,6 +10,7 @@ import (
 	"io"
 	"maps"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -79,7 +80,7 @@ func WithClock(now func() time.Time) Option { return func(o *options) { o.now = 
 func WithLogger(l logger.Logger) Option { return func(o *options) { o.log = l } }
 
 // WithHome sets $HOME and what a leading ~ in a ref means.
-func WithHome(home string) Option { return func(o *options) { o.home = home } }
+func WithHome(home string) Option { return func(o *options) { o.home = paths.Slash(home) } }
 
 // WithEnv sets where a $VAR that is neither built in nor the user's is looked up last.
 func WithEnv(env func(string) string) Option { return func(o *options) { o.env = env } }
@@ -135,10 +136,36 @@ func New(roots Roots, disk Filesystems, journal Journal, opts ...Option) *Manage
 	for _, opt := range opts {
 		opt(&o)
 	}
+	if disk != nil {
+		disk = slashDisk{disk} // the disk's canonical paths in the form core/todo keeps (ospaths.go)
+	}
+	if roots != nil {
+		roots = canonRoots{Roots: roots, disk: disk} // each workspace's root as the disk resolves it
+	}
 	m := &Manager{roots: roots, disk: disk, o: o, stores: map[string]*store{}, blocked: map[string]string{},
 		movesSettled: map[string]bool{}}
 	m.j = watched{Journal: journal, m: m} // says when the stores or their variables change
 	return m
+}
+
+// Close releases the store directories the Manager holds open, one per store it has used: on
+// Windows a directory held open can be neither removed nor renamed, so whatever owns the Manager
+// closes it before those directories may go (a daemon as it stops, a test before its temporary
+// directory is removed). Each store's work in progress finishes first. A Manager used after Close
+// opens its stores again.
+func (m *Manager) Close() error {
+	m.mu.Lock()
+	open := slices.Collect(maps.Values(m.stores)) // left in place: an entry goes only under its store's lock
+	m.mu.Unlock()
+	var errs []error
+	for _, s := range open {
+		s.mu.Lock()
+		if !s.closed {
+			errs = append(errs, m.release(s))
+		}
+		s.mu.Unlock()
+	}
+	return errors.Join(errs...)
 }
 
 func (m *Manager) now() time.Time { return m.o.now() }
@@ -217,7 +244,7 @@ func (m *Manager) resolve(ctx context.Context, at At) (where, error) {
 			return w, fmt.Errorf("%w: %s", ErrNoWorkspace, at.Workspace)
 		}
 		raw, w.workspace = r, true
-	case !path.IsAbs(at.Root):
+	case !paths.IsAbs(at.Root):
 		return w, fmt.Errorf("%w: root %q is not an absolute path", ErrInvalid, at.Root)
 	}
 	fsys, canon, err := m.disk.Open(ctx, raw)
@@ -231,7 +258,7 @@ func (m *Manager) resolve(ctx context.Context, at At) (where, error) {
 	w.root = canon
 	if !w.workspace {
 		for _, name := range m.roots.Names() {
-			if r, ok := m.roots.Root(name); ok && (path.Clean(r) == canon || path.Clean(r) == path.Clean(raw)) {
+			if r, ok := m.roots.Root(name); ok && (r == canon || r == paths.Slash(raw)) {
 				w.workspace = true
 			}
 		}
@@ -241,14 +268,14 @@ func (m *Manager) resolve(ctx context.Context, at At) (where, error) {
 		return w, err
 	}
 	rr := st.Roots[canon]
-	storePath := canon + "/" + todoDir
+	storePath := paths.Join(canon, todoDir)
 	if rr.Override != "" {
 		storePath, w.override = rr.Override, rr.Override
 	} else if sf, c, err := m.disk.Open(ctx, storePath); err == nil {
 		storePath = c // a .todo-list that is a symlink resolves elsewhere, and is not writable
 		sf.Close()
 	}
-	w.writable = (w.override != "") || (storePath == canon+"/"+todoDir && (w.workspace || !rr.Registered.IsZero()))
+	w.writable = (w.override != "") || (storePath == paths.Join(canon, todoDir) && (w.workspace || !rr.Registered.IsZero()))
 	if rec, ok := st.storeByPath(storePath); ok {
 		w.rec = rec
 	} else if w.rec, err = m.newStore(ctx, storePath); err != nil {
@@ -297,7 +324,7 @@ func (m *Manager) Resolve(ctx context.Context, at At) (Resolved, error) {
 // Register enrolls a project root that is not an AutoDoc workspace, so its .todo-list is a
 // writable store. It writes no file, so it needs no claim. It reports whether the root was new.
 func (m *Manager) Register(ctx context.Context, root string) (bool, error) {
-	if !path.IsAbs(root) {
+	if !paths.IsAbs(root) {
 		return false, fmt.Errorf("%w: root %q is not an absolute path", ErrInvalid, root)
 	}
 	fsys, canon, err := m.disk.Open(ctx, root)
@@ -336,7 +363,7 @@ func (m *Manager) SetDir(ctx context.Context, at At, dir string) (Resolved, erro
 	}
 	canonDir := ""
 	if dir != "" {
-		if !path.IsAbs(dir) {
+		if !paths.IsAbs(dir) {
 			return Resolved{}, fmt.Errorf("%w: %q is not an absolute path", ErrInvalid, dir)
 		}
 		fsys, c, err := m.disk.Open(ctx, dir)
@@ -372,12 +399,14 @@ func (m *Manager) Open(ctx context.Context, at At, _ OpenOpts) (Opened, error) {
 	if err != nil {
 		return Opened{}, err
 	}
-	st, err := m.open(ctx, w)
+	st, err := m.openLocked(ctx, w)
 	if err != nil {
 		return Opened{}, err
 	}
-	m.touch(ctx, st.id)
-	return Opened{StoreID: st.id, Store: st.path}, nil
+	id, dir := st.id, st.path
+	st.mu.Unlock()
+	m.touch(ctx, id)
+	return Opened{StoreID: id, Store: dir}, nil
 }
 
 func (m *Manager) touch(ctx context.Context, id string) {
@@ -406,13 +435,13 @@ func (m *Manager) Stores(ctx context.Context) ([]StoreInfo, error) {
 			Roots: []string{}, KB: m.ownerOf(rec)}
 		for _, root := range slices.Sorted(maps.Keys(st.Roots)) {
 			rr := st.Roots[root]
-			if rr.Override == rec.Path || (rr.Override == "" && root+"/"+todoDir == rec.Path) {
+			if rr.Override == rec.Path || (rr.Override == "" && paths.Join(root, todoDir) == rec.Path) {
 				info.Roots = append(info.Roots, root)
 			}
 		}
 		// a <root>/.todo-list no root record names is its root's, unless that root's override took
 		// it elsewhere: then the record is what the move left behind, and no root reaches it
-		if root, ok := strings.CutSuffix(rec.Path, "/"+todoDir); ok && len(info.Roots) == 0 && st.Roots[root].Override == "" {
+		if root, ok := storeRootOf(rec.Path); ok && len(info.Roots) == 0 && st.Roots[root].Override == "" {
 			info.Roots = append(info.Roots, root)
 		}
 		out = append(out, info)
@@ -447,7 +476,8 @@ func (m *Manager) Claim(ctx context.Context, at At, opts ...ClaimOpts) error {
 		}
 		o.automatic = o.automatic || x.automatic
 	}
-	if o.LegacyWorkspace != "" && (!path.IsAbs(o.LegacyWorkspace) || path.Clean(o.LegacyWorkspace) != o.LegacyWorkspace) {
+	o.LegacyWorkspace = filepath.ToSlash(o.LegacyWorkspace) // in the form core/todo keeps, still to be found clean
+	if o.LegacyWorkspace != "" && (!paths.IsAbs(o.LegacyWorkspace) || paths.Clean(o.LegacyWorkspace) != o.LegacyWorkspace) {
 		return fmt.Errorf("%w: legacy_workspace %q is not a clean absolute path", ErrInvalid, o.LegacyWorkspace)
 	}
 	w, err := m.resolve(ctx, at)
@@ -497,14 +527,13 @@ func (m *Manager) Claim(ctx context.Context, at At, opts ...ClaimOpts) error {
 // buckets yet is left to Scaffold, which writes the marker; any other failure to open it is the
 // claim's.
 func (m *Manager) finishClaim(ctx context.Context, w where, o ClaimOpts) error {
-	st, err := m.open(ctx, w)
+	st, err := m.openLocked(ctx, w)
 	if errors.Is(err, ErrNotAStore) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	st.mu.Lock()
 	err = st.mark(ctx, m.now())
 	st.mu.Unlock()
 	if err != nil || o.LegacyWorkspace == "" {
@@ -519,7 +548,9 @@ func (m *Manager) finishClaim(ctx context.Context, w where, o ClaimOpts) error {
 			return err
 		}
 	}
-	st.mu.Lock()
+	if st, err = m.openLocked(ctx, w); err != nil {
+		return err
+	}
 	defer st.mu.Unlock()
 	if err := m.ready(ctx, st); err != nil {
 		return err
@@ -557,8 +588,7 @@ func (m *Manager) Release(ctx context.Context, at At) error {
 	if err != nil {
 		return err
 	}
-	if st, err := m.open(ctx, w); err == nil {
-		st.mu.Lock()
+	if st, err := m.openLocked(ctx, w); err == nil {
 		defer st.mu.Unlock()
 		return st.unmark(ctx)
 	}
@@ -616,8 +646,8 @@ func (m *Manager) Scaffold(ctx context.Context, at At) (Opened, error) {
 	made := false
 	fsys, _, err := m.disk.Open(ctx, w.rec.Path)
 	if errors.Is(err, vfs.ErrNotExist) {
-		parent, base := path.Split(w.rec.Path)
-		pfs, _, perr := m.disk.Open(ctx, path.Clean(parent))
+		parent, base := paths.Dir(w.rec.Path), path.Base(w.rec.Path)
+		pfs, _, perr := m.disk.Open(ctx, parent)
 		if perr != nil {
 			return Opened{}, fmt.Errorf("%w: the store's parent directory: %w", ErrNotAStore, perr)
 		}
@@ -643,11 +673,10 @@ func (m *Manager) Scaffold(ctx context.Context, at At) (Opened, error) {
 		}
 	}
 	fsys.Close()
-	st, err := m.open(ctx, w)
+	st, err := m.openLocked(ctx, w)
 	if err != nil {
 		return Opened{}, err
 	}
-	st.mu.Lock()
 	defer st.mu.Unlock()
 	if err := st.mark(ctx, m.now()); err != nil {
 		return Opened{}, err
@@ -658,20 +687,24 @@ func (m *Manager) Scaffold(ctx context.Context, at At) (Opened, error) {
 // withExists gives sc a stat, a small read and a listing of absolute paths, through the disk; done
 // releases them.
 func (m *Manager) withExists(ctx context.Context, sc scope) (scope, func()) {
-	var root vfs.FS
+	roots := map[string]vfs.FS{} // a volume's root each, opened at its first use: "/", "C:/", "//server/share/"
 	open := func(abs string) (vfs.FS, string, bool) {
-		if root == nil {
-			fsys, _, err := m.disk.Open(ctx, "/")
+		root, name := paths.Root(abs)
+		if root == "" {
+			return nil, "", false
+		}
+		fsys, ok := roots[root]
+		if !ok {
+			f, _, err := m.disk.Open(ctx, root)
 			if err != nil {
 				return nil, "", false
 			}
-			root = fsys
+			fsys, roots[root] = f, f
 		}
-		name := strings.TrimPrefix(path.Clean(abs), "/")
 		if name == "" {
 			name = "."
 		}
-		return root, name, true
+		return fsys, name, true
 	}
 	sc.exists = func(abs string) bool {
 		fsys, name, ok := open(abs)
@@ -714,8 +747,8 @@ func (m *Manager) withExists(ctx context.Context, sc scope) (scope, func()) {
 		return out
 	}
 	return sc, func() {
-		if root != nil {
-			root.Close()
+		for _, fsys := range roots {
+			fsys.Close()
 		}
 	}
 }

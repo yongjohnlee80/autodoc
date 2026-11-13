@@ -33,6 +33,8 @@ type fake struct {
 	hold chan struct{}
 	// wrap, when set, is the error answered once ctx ends while held (else ctx's own)
 	wrap func(error) error
+	// pause is how long each search takes before it answers
+	pause time.Duration
 
 	mu    sync.Mutex
 	asked []asked
@@ -47,6 +49,7 @@ func (f *fake) Search(ctx context.Context, scope search.Scope, r search.Request)
 	f.mu.Lock()
 	f.asked = append(f.asked, asked{scope, r})
 	f.mu.Unlock()
+	time.Sleep(f.pause)
 	if f.hold != nil {
 		select {
 		case <-f.hold:

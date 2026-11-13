@@ -3,10 +3,13 @@ package tui
 import (
 	"slices"
 
+	"github.com/yongjohnlee80/autodoc/tui/agents"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/panelgeometry"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // THE PANELS — the explorer, with its Explorer and Links tabs, and the others, drawers over the
@@ -15,74 +18,17 @@ import (
 // move between the page and the panels open at those edges, in Normal mode only: in Insert mode
 // they are the editor's.
 
-// PanelSpec is one drawer over the page: everything the host's panel code asks of it, in one place,
-// so a list of panels cannot disagree with another.
-type PanelSpec struct {
-	ID   string // the Drawer's id in the document
-	View string // what in it takes the keyboard
-	// Focus is what in it takes the keyboard now, where that changes: a tabbed panel's tab shown.
-	// nil: View.
-	Focus func() string
-	// Tab and ShowTab are a tabbed panel's tab shown and the way to show another, its view given the
-	// keyboard (togglePanelTab); nil: it has no tabs.
-	Tab     func() int
-	ShowTab func(tab int)
-	// GoTabs are :go names of its tabs, by tab, "" for none: the explorer's Links tab keeps the name
-	// its own drawer had, relations (widgets.go).
-	GoTabs []string
-	// Priority orders focus targets across features; ties keep contribution order.
-	Priority int
-	// Edge is the edge it opens from now, the place its dragged size and length are kept at; a panel
-	// with Places has one.
-	Edge func(p prefs) string
-	// Places are the edges whose dragged size and length preferences keep; nil: it sizes itself.
-	Places []string
-	// Size and Length are the percent bounds a kept size or length stays within, and Default is
-	// the geometry at a place before the user sets one. A panel with Places has both.
-	Size, Length [2]int
-	Default      func(edge string) (size, length int)
-	// Keyboard: the terminal hands the keyboard back to it.
-	Keyboard bool
-	// Open and Close are the panel's own way of opening and closing, where it has one; nil, and
-	// the drawer opens and its view takes the keyboard (openDrawer), or the drawer closes. A
-	// bespoke Open opens the drawer itself when its way decides to (the agent's opens only when
-	// an agent starts).
-	Open, Close func(PanelHost)
-	// Opened and Closed follow the drawer, however it was opened or closed (Escape inside one
-	// closes it): what it shows and where the keyboard goes. nil Closed: the editor.
-	Opened, Closed func(PanelHost)
-	// Icon is the panel's dock icon: one cell, East Asian Width neutral (dock.go)
-	Icon string
-	// Alive reports that the panel lives on with its drawer closed (a plugin card's running
-	// plugin); nil: only a TerminalTabs view's running tab keeps a closed panel in the dock
-	Alive func() bool
-}
-
-// focusView is what in s takes the keyboard now.
-func (s PanelSpec) focusView() string {
-	if s.Focus != nil {
-		return s.Focus()
-	}
-	return s.View
-}
-
-// geometry is s as golib's panel geometry check reads it: its id, the places it opens from and its
-// bounds (tui/panelgeometry, docs/decisions/plugins.md#shared-panels-and-their-geometry).
-func (s PanelSpec) geometry() panelgeometry.Spec {
-	return panelgeometry.Spec{ID: s.ID, Edges: s.Places, Size: s.Size, Length: s.Length}
-}
-
 // panelSpecs are this program's snapshotted Feature contributions.
-func (h *Host) panelSpecs() []PanelSpec {
-	if h.reg == nil || h.reg.panels == nil {
+func (h *Host) panelSpecs() []feature.PanelSpec {
+	if h.reg == nil || h.reg.Panels == nil {
 		return nil
 	}
-	return h.reg.panels.specs
+	return h.reg.Panels.Specs
 }
 
 // panelSpec is the panel id, or nil when there is no such panel.
-func (h *Host) panelSpec(id string) *PanelSpec {
-	return findPanel(h.panelSpecs(), id)
+func (h *Host) panelSpec(id string) *feature.PanelSpec {
+	return feature.FindPanel(h.panelSpecs(), id)
 }
 
 // panelIDs are the panels' ids.
@@ -97,7 +43,7 @@ func (h *Host) panelIDs() []string {
 // panelView is what in the panel id takes the keyboard now; "" for no such panel.
 func (h *Host) panelView(id string) string {
 	if s := h.panelSpec(id); s != nil {
-		return s.focusView()
+		return s.FocusView()
 	}
 	return ""
 }
@@ -115,6 +61,7 @@ func (h *Host) togglePanel(name string) {
 	}
 	if h.panelOpen[name] && (h.panelHidden(name) || h.panelCovered(name)) {
 		h.goTo(widgetTarget{panel: name})
+		h.raisePanel(name) // the keyboard may be in it already, where focusing it raises nothing
 		return
 	}
 	if h.panelOpen[name] {
@@ -148,6 +95,17 @@ func (h *Host) togglePanelTab(name string, tab int) {
 	s.ShowTab(tab)
 	if !shown || h.panelCovered(name) {
 		h.togglePanel(name) // shown on it, and to the front when covered
+	}
+}
+
+// raisePanel brings panel name above the panels and windows over it, the keyboard where it is
+// (golib's Drawer and FloatWindow Raise). A panel comes forward by itself when the keyboard enters
+// it; one that holds the keyboard already would not.
+func (h *Host) raisePanel(name string) {
+	if c, ok := h.p.Find(name); ok {
+		if r, ok := c.(interface{ Raise() }); ok {
+			r.Raise()
+		}
 	}
 }
 
@@ -229,7 +187,7 @@ func (h *Host) movePane(dir string) {
 	}
 	shown := h.shownWindows()
 	from := slices.IndexFunc(shown, h.hasKeyboard)
-	if from < 0 || shown[from].panel == "" && h.core.Mode() != widget.ModeNormal {
+	if from < 0 || shown[from].panel == "" && h.core.Mode() != editor.ModeNormal {
 		return
 	}
 	if to, ok := nextWindow(shown, from, step); ok {
@@ -251,8 +209,8 @@ func (h *Host) typeIn(panel string) {
 	}
 	if tabs, ok := tuidecl.TerminalTabsOf(c); ok {
 		if id := tabs.Active(); id != "" {
-			_ = tabs.Select(id)                        // the keyboard in the tab's terminal, not the panel around it
-			_ = tabs.SetMode(id, widget.TerminalInput) // Input needs no program: never refused
+			_ = tabs.Select(id)                          // the keyboard in the tab's terminal, not the panel around it
+			_ = tabs.SetMode(id, terminal.TerminalInput) // Input needs no program: never refused
 		}
 	}
 }
@@ -296,7 +254,7 @@ func (h *Host) windowView(panel string) string {
 	if panel == "" {
 		return "editor"
 	}
-	return h.panelSpec(panel).focusView()
+	return h.panelSpec(panel).FocusView()
 }
 
 // hasKeyboard reports whether the keyboard is in w.
@@ -322,13 +280,13 @@ func (h *Host) keyboardHome() string {
 		views = append(views, h.windowView(w.panel))
 	}
 	for i := len(layers) - 1; i >= 0; i-- {
-		layer, ok := layers[i].(widget.ContextOwner)
+		layer, ok := layers[i].(widgetcore.ContextOwner)
 		if !ok || layer.Context() == nil {
 			continue
 		}
 		for _, view := range views {
 			c, _ := h.p.Find(view)
-			if n, ok := c.(widget.ContextOwner); ok && n.Context() != nil && layer.Context().SubtreeContains(n.Context().ID()) {
+			if n, ok := c.(widgetcore.ContextOwner); ok && n.Context() != nil && layer.Context().SubtreeContains(n.Context().ID()) {
 				return view
 			}
 		}
@@ -349,7 +307,7 @@ func (h *Host) focusWindow(panel string) {
 		h.keep(h.p.Call(h.keyboardHome(), "forceActiveFocus"))
 		return
 	}
-	h.keep(h.p.Call(s.focusView(), "forceActiveFocus"))
+	h.keep(h.p.Call(s.FocusView(), "forceActiveFocus"))
 }
 
 // nextWindow is the window next to shown[from] a step away: of those whose centre lies that way,
@@ -384,4 +342,21 @@ func nextWindow(shown []placedWindow, from int, step tuicore.Point) (placedWindo
 		}
 	}
 	return best, found
+}
+
+func legacyPanelSpecs() []feature.PanelSpec {
+	return []feature.PanelSpec{
+		{ID: "htmlPane", View: "htmlView", Priority: 50, Icon: "⎙"},
+	}
+}
+
+func defaultPanelSpecs() []feature.PanelSpec {
+	return []feature.PanelSpec{
+		feature.ExplorerPanelSpec(),
+		terminalPanelSpec(), agents.AgentPanelSpec(), legacyPanelSpecs()[0],
+	}
+}
+
+func (l legacy) Panels() []feature.PanelSpec {
+	return legacyPanelSpecs()
 }

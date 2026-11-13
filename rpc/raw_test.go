@@ -2,7 +2,6 @@ package rpc
 
 import (
 	"context"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,12 +10,12 @@ import (
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
-	"github.com/yongjohnlee80/golib/vfs/local"
 	"github.com/yongjohnlee80/golib/vfs/memfs"
 
 	"github.com/yongjohnlee80/autodoc/core/derived"
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
+	"github.com/yongjohnlee80/autodoc/internal/ipc"
 )
 
 // rawRig is a daemon whose workspace kb holds page.html and manual.pdf, derived as a build derives
@@ -36,21 +35,16 @@ func rawRig(t *testing.T, network string, proto int64) *golibrpc.Client {
 			t.Fatal(err)
 		}
 	}
-	disk, err := local.New("/")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = disk.Close() })
 	addr := shortSocket(t)
 	if network == "tcp" {
 		addr = "127.0.0.1:0"
 	}
-	ln, err := net.Listen(network, addr)
+	ln, err := rigListen(network, addr)
 	if err != nil {
 		t.Fatal(err)
 	}
 	srv := New(Fixed(Static(WorkspaceInfo{Name: "kb", Root: "/roots/kb", Docs: docs.New(fsys, nil, opts...)})), "v-test",
-		WithListener(ln), WithFiles(docs.New(disk, nil, opts...)))
+		WithListener(ln), WithDisks(localDisks(t, opts...)))
 	rctx, cancel := context.WithCancel(ctx)
 	done := make(chan error, 1)
 	go func() { done <- srv.Run(rctx) }()
@@ -62,7 +56,7 @@ func rawRig(t *testing.T, network string, proto int64) *golibrpc.Client {
 			t.Error("the server did not stop")
 		}
 	})
-	cli, err := golibrpc.Dial(ctx, ln.Addr().String(), msgpackrpc.New(nil), golibrpc.ClientNetwork(network))
+	cli, err := golibrpc.Dial(ctx, ln.Addr().String(), msgpackrpc.New(nil), rigNetwork(network)...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +72,7 @@ func rawRig(t *testing.T, network string, proto int64) *golibrpc.Client {
 // file.read_raw and file.write_raw do the same outside every workspace. A PDF, ASCII though it is,
 // is refused raw and left as it was.
 func TestRawVerbsReadAndWriteAnHTMLFile(t *testing.T) {
-	cli := rawRig(t, "unix", Protocol)
+	cli := rawRig(t, ipc.Network, Protocol)
 	plain := call(t, cli, "doc.read", "kb", "page.html").(map[string]any)
 	if strings.Contains(string(plain["content"].([]byte)), "<h1>") {
 		t.Fatalf("doc.read of an HTML file gave its bytes: %q", plain["content"])
@@ -126,7 +120,7 @@ func TestRawVerbsReadAndWriteAnHTMLFile(t *testing.T) {
 // TestRawVerbsNeedProtocol19AndALocalPeer: a session below 19 does not have the four verbs; over
 // TCP, file.read_raw and file.write_raw are access denied, as file.read and file.write are.
 func TestRawVerbsNeedProtocol19AndALocalPeer(t *testing.T) {
-	old := rawRig(t, "unix", 18)
+	old := rawRig(t, ipc.Network, 18)
 	for _, v := range []string{"doc.read_raw", "doc.write_raw", "file.read_raw", "file.write_raw"} {
 		err := callErr(old, v, "kb", "page.html")
 		if code(err) != golibrpc.CodeMethodNotFound || !strings.Contains(err.Error(), "needs protocol 19") {

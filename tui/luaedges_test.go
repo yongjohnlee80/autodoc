@@ -5,15 +5,17 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // TestLuaGrantsOf: the preference's JSON is the grants; anything else is none.
 func TestLuaGrantsOf(t *testing.T) {
-	g := luaGrantsOf(`{"pkg":{"clipboard":true,"agents":false}}`)
+	g := feature.GrantsOf(`{"pkg":{"clipboard":true,"agents":false}}`)
 	if !g["pkg"]["clipboard"] || g["pkg"]["agents"] || len(g) != 1 {
 		t.Fatalf("%v", g)
 	}
-	if g := luaGrantsOf("not json"); g != nil {
+	if g := feature.GrantsOf("not json"); g != nil {
 		t.Fatalf("a broken preference gave %v", g)
 	}
 	if txt := luaGrantText(inEnglish{}.Trf, []string{"clipboard", "teleport"}); !strings.Contains(txt, "clipboard: read and write the clipboard") ||
@@ -83,7 +85,7 @@ autodoc.on("ping", function(ed) ed:insert("second ran") end)`)
 		return true
 	})
 	r.s.WaitForText(t, "install the Lua package x?")
-	onLoop(r, func() bool { r.h.asker.rejected(); return true })
+	onLoop(r, func() bool { r.h.asker.Rejected(); return true })
 	r.s.WaitFor(t, "the stage removed", func(string) bool { _, err := os.Stat(stage); return os.IsNotExist(err) })
 
 	if err := onLoop(r, func() error { return r.h.installPackage("https://example.invalid/x.git") }); err == nil ||

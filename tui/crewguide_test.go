@@ -12,17 +12,14 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/crew"
+	"github.com/yongjohnlee80/autodoc/tui/agents"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // The crew agent's guide and launch: an agent started under the window's crew scope is told its
 // CLI's crew and mail procedure, how it registers to be woken among it, and a crew OpenCode agent
 // loads AutoDoc's OpenCode plugin, which registers it. Without them only a Claude agent, whose
 // SessionStart hook registers it, was ever reachable.
-
-const crewKinds = `[{"name":"Codex","command":"codex","codename":"codex-one"},` +
-	`{"name":"Agy","command":"agy","codename":"agy-one"},` +
-	`{"name":"OpenCode","command":"opencode","codename":"opencode-one"},` +
-	`{"name":"Claude","command":"claude","codename":"claude-one"}]`
 
 // TestACrewAgentIsToldItsCLIsCrewProcedure: each CLI's agent's AGENTS.md and CLAUDE.md hold the crew
 // guide for its own kind (crew.GuideOf), its wake step included, as their first section, at most 25
@@ -31,16 +28,16 @@ func TestACrewAgentIsToldItsCLIsCrewProcedure(t *testing.T) {
 	for codename, kind := range map[string]string{"codex-one": "codex", "agy-one": "agy", "opencode-one": "opencode", "claude-one": "claude"} {
 		t.Run(kind, func(t *testing.T) {
 			a, c, _ := crewAgents(t, crewKinds)
-			p, _ := a.profile(codename)
-			instance, err := a.startInstance(p)
+			p, _ := a.Profile(codename)
+			instance, err := a.StartInstance(p)
 			if err == nil {
 				awaitStart(t, c, instance)
 			}
-			if err != nil || !instance.running {
+			if err != nil || !instance.State().Running {
 				t.Fatalf("start: %v", err)
 			}
-			dir := c.panel.configs[instance.tab].Dir
-			want := crew.GuideOfVia(kind, instance.setup.MailVia).Markdown // the mode its setup delivered
+			dir := c.panel.configs[instance.State().Tab].Dir
+			want := crew.GuideOfVia(kind, instance.State().Setup.MailVia).Markdown // the mode its setup delivered
 			for _, name := range []string{"AGENTS.md", "CLAUDE.md"} {
 				b, err := os.ReadFile(filepath.Join(dir, name))
 				if err != nil {
@@ -73,7 +70,7 @@ func TestACrewAgentIsToldItsCLIsCrewProcedure(t *testing.T) {
 		}
 	}
 	// outside a crew scope: no crew procedure
-	if g := agentGuide(wsInfo{name: "kb", root: "/kb"}, "/bin/autodoc", "", "/w/bin/autodoc", "", crew.MailViaCLI); strings.Contains(g, "## Mail and your crew") {
+	if g := agents.AgentGuide(feature.Workspace{Name: "kb", Root: "/kb"}, "/bin/autodoc", "", "/w/bin/autodoc", "", crew.MailViaCLI); strings.Contains(g, "## Mail and your crew") {
 		t.Fatal("an agent outside a crew scope is told the crew procedure")
 	}
 }
@@ -94,15 +91,15 @@ func TestACrewOpenCodeAgentLoadsTheAutoDocPlugin(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			a, c, _ := crewAgents(t, crewKinds)
-			a.setupRun = func(string, string, []string) (crew.Setup, error) { return tc.setup, tc.err }
-			p, _ := a.profile("opencode-one")
-			instance, err := a.startInstance(p)
+			seamsOf(a).agentSetupRun = func(string, string, []string) (crew.Setup, error) { return tc.setup, tc.err }
+			p, _ := a.Profile("opencode-one")
+			instance, err := a.StartInstance(p)
 			if err != nil {
 				t.Fatal(err)
 			}
 			awaitStart(t, c, instance)
-			if instance.running != tc.runs {
-				t.Fatalf("running %v, want %v (notes %v)", instance.running, tc.runs, c.notes)
+			if instance.State().Running != tc.runs {
+				t.Fatalf("running %v, want %v (notes %v)", instance.State().Running, tc.runs, c.notes)
 			}
 			if tc.runs {
 				if args, _, err := startedEnv(a, c, instance); err != nil || !slices.Contains(args, "OPENCODE_CONFIG_CONTENT="+v) {
@@ -120,13 +117,13 @@ func TestACrewOpenCodeAgentLoadsTheAutoDocPlugin(t *testing.T) {
 // is refused.
 func TestTheWindowAsksTheAgentsOwnCrewSetup(t *testing.T) {
 	rec, agentDir := t.TempDir(), t.TempDir()
-	bin := filepath.Join(rec, "autodoc")
-	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + shellQuote(filepath.Join(rec, "args")) + "\nenv > " + shellQuote(filepath.Join(rec, "env")) +
-		"\npwd > " + shellQuote(filepath.Join(rec, "pwd")) + "\necho '{\"argv\":[],\"env\":{},\"mail_via\":\"mcp\"}'\n"
-	if err := os.WriteFile(bin, []byte(script), 0o700); err != nil {
+	// the agent's own autodoc: this test binary, recording what it was given (setupRecorderEnv), so
+	// the cell runs on every OS
+	bin, err := os.Executable()
+	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := crewSetupOf(bin, "/c/autodoc.toml", crew.KindClaude, agentDir, []string{"PATH=/usr/bin:/bin", "ANTHROPIC_API_KEY=s3cr3t-value"})
+	s, err := agents.CrewSetupOf(bin, "/c/autodoc.toml", crew.KindClaude, agentDir, []string{"PATH=/usr/bin:/bin", "ANTHROPIC_API_KEY=s3cr3t-value", setupRecorderEnv + "=" + rec})
 	if err != nil || s.MailVia != crew.MailViaMCP {
 		t.Fatalf("crewSetupOf: %+v %v, want its answer, mail via MCP", s, err)
 	}
@@ -137,8 +134,12 @@ func TestTheWindowAsksTheAgentsOwnCrewSetup(t *testing.T) {
 		}
 		return string(b)
 	}
-	want := strings.Join([]string{"--config", "/c/autodoc.toml", "crew", "setup", "--kind", "claude", "--host", "window",
-		"--autodoc", shellQuote(filepath.Join(agentDir, "bin", "autodoc")), "--agent-dir", agentDir, "--mail-via", "mcp"}, "\n") + "\n"
+	args := []string{"--config", "/c/autodoc.toml", "crew", "setup", "--kind", "claude", "--host", "window",
+		"--autodoc", agents.ShellQuote(bin), "--agent-dir", agentDir} // the build by its path
+	if !agents.CanRunAgentServers {
+		args = append(args, "--no-agent-server") // where the window can't run an agent's own server (agents.CrewSetupArgs)
+	}
+	want := strings.Join(append(args, "--mail-via", "mcp"), "\n") + "\n"
 	if got := read("args"); got != want {
 		t.Errorf("its command line:\n%s\nwant\n%s", got, want)
 	}
@@ -148,10 +149,7 @@ func TestTheWindowAsksTheAgentsOwnCrewSetup(t *testing.T) {
 	if got := strings.TrimSpace(read("pwd")); got != agentDir {
 		t.Errorf("it ran in %q, want the agent's folder %q", got, agentDir)
 	}
-	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho 'something else'\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := crewSetupOf(bin, "", crew.KindClaude, agentDir, nil); err == nil {
+	if _, err := agents.CrewSetupOf(bin, "", crew.KindClaude, agentDir, []string{setupRecorderEnv + "=" + rec, setupAnswerEnv + "=other"}); err == nil {
 		t.Error("output that is no setup was taken")
 	}
 }
@@ -162,19 +160,19 @@ func TestTheWindowAsksTheAgentsOwnCrewSetup(t *testing.T) {
 func TestTwoAgentsOfOneKindAskTheirOwnSetup(t *testing.T) {
 	a, c, _ := crewAgents(t, `[{"name":"One","command":"opencode","codename":"oc-one"},{"name":"Two","command":"opencode","codename":"oc-two"}]`)
 	var dirs []string
-	a.setupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
+	seamsOf(a).agentSetupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
 		dirs = append(dirs, dir)
 		return crew.Setup{Env: map[string]string{"OPENCODE_CONFIG_CONTENT": `{"for":"` + filepath.Base(dir) + `"}`}}, nil
 	}
 	for _, codename := range []string{"oc-one", "oc-two"} {
-		p, _ := a.profile(codename)
-		instance, err := a.startInstance(p)
+		p, _ := a.Profile(codename)
+		instance, err := a.StartInstance(p)
 		if err != nil {
 			t.Fatal(err)
 		}
 		awaitStart(t, c, instance)
 		args, _, err := startedEnv(a, c, instance)
-		want := `OPENCODE_CONFIG_CONTENT={"for":"` + filepath.Base(instance.dir) + `"}`
+		want := `OPENCODE_CONFIG_CONTENT={"for":"` + filepath.Base(instance.State().Dir) + `"}`
 		if err != nil || !slices.Contains(args, want) {
 			t.Fatalf("%s's spawn: %v, args %v; want its own setup's %s", codename, err, args, want)
 		}
@@ -185,29 +183,62 @@ func TestTwoAgentsOfOneKindAskTheirOwnSetup(t *testing.T) {
 }
 
 // TestACrewClaudeAgentOnMCPMailStartsWithItsServer: a Claude agent whose setup delivers the crew MCP
-// server starts with it on its command line (--mcp-config); its folder's settings allow exactly the
+// server starts with it named on its command line (--mcp-config and crew.ClaudeMCPConfig's bare
+// name, never the JSON, never the folder, whose name holds a scope's encoded ":"), that file in the
+// launch's working folder, written private to this user over an earlier run's, holding the
+// server's command; its folder's settings allow exactly the
 // crew MCP tools, never a guide shell command (least privilege); its guide is the MCP form; and its
 // session is registered as reading its mail via MCP, which crew.list says.
 func TestACrewClaudeAgentOnMCPMailStartsWithItsServer(t *testing.T) {
 	a, c, w := crewAgents(t, crewKinds)
 	data := t.TempDir()
-	a.setupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
+	seamsOf(a).agentSetupRun = func(kind, dir string, environ []string) (crew.Setup, error) {
+		// an earlier run's file, readable by others: the start replaces it whole, private
+		if err := os.WriteFile(filepath.Join(dir, crew.ClaudeMCPConfig), []byte(`{"stale": true}`), 0o644); err != nil {
+			return crew.Setup{}, err
+		}
 		return crew.SetupFor(crew.SetupInput{Kind: kind, Host: crew.HostWindow, Env: map[string]string{"PATH": "/nonexistent"},
 			DataDir: data, Dir: dir, AgentDir: dir, Servers: []crew.MCPServer{{Name: crew.MCPServerName,
 				Command: []string{filepath.Join(dir, "bin", "autodoc"), "crew", "mcp"}, Tools: crew.MCPToolNames()}}}, "")
 	}
-	p, _ := a.profile("claude-one")
-	instance, err := a.startInstance(p)
+	p, _ := a.Profile("claude-one")
+	instance, err := a.StartInstance(p)
 	if err != nil {
 		t.Fatal(err)
 	}
 	awaitStart(t, c, instance)
 	cmd, _, err := startedCmd(a, c, instance)
 	args := cmd.Args
-	if err != nil || len(args) == 0 || !strings.Contains(args[len(args)-1], "--mcp-config") || strings.Contains(args[len(args)-1], "--strict-mcp-config") {
-		t.Fatalf("the spawn: %v, args %v; want --mcp-config on its command line, never --strict-mcp-config", err, args)
+	if err != nil || len(args) == 0 {
+		t.Fatalf("the spawn: %v, args %v", err, args)
 	}
-	b, err := os.ReadFile(filepath.Join(instance.dir, ".claude", "settings.json"))
+	// the folder's name holds the scope's ":" encoded (%3A), which a CLI's .cmd shim on Windows would
+	// read as its third argument: the command line names the file as the launch's working folder
+	// reaches it, its bare name, and never the folder (so the shell carries it on every OS)
+	line := args[len(args)-1]
+	if !strings.Contains(instance.State().Dir, "%") {
+		t.Fatalf("the agent's folder %s holds no encoded name: the cell's premise", instance.State().Dir)
+	}
+	if !strings.Contains(line, "--mcp-config") || strings.Contains(line, "--strict-mcp-config") || strings.Contains(line, "mcpServers") ||
+		!strings.Contains(line, crew.ClaudeMCPConfig) || strings.Contains(line, "%") {
+		t.Fatalf("the spawn's line %q: want --mcp-config naming %s by its bare name, never the folder, the JSON or --strict-mcp-config", line, crew.ClaudeMCPConfig)
+	}
+	// reached from where the program is launched, never re-derived: the file is in its working folder
+	config := filepath.Join(cmd.Dir, crew.ClaudeMCPConfig)
+	if err := privateFile(config); err != nil {
+		t.Errorf("the MCP config is not private to this user: %v", err)
+	}
+	var mcp struct {
+		Servers map[string]struct {
+			Command string   `json:"command"`
+			Args    []string `json:"args"`
+		} `json:"mcpServers"`
+	}
+	if b, err := os.ReadFile(config); err != nil || json.Unmarshal(b, &mcp) != nil || len(mcp.Servers) != 1 ||
+		mcp.Servers[crew.MCPServerName].Command != filepath.Join(instance.State().Dir, "bin", "autodoc") || !slices.Equal(mcp.Servers[crew.MCPServerName].Args, []string{"crew", "mcp"}) {
+		t.Errorf("the MCP config: %s %v; want the crew server alone, by the agent's autodoc, the earlier run's replaced", b, err)
+	}
+	b, err := os.ReadFile(filepath.Join(instance.State().Dir, ".claude", "settings.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +250,7 @@ func TestACrewClaudeAgentOnMCPMailStartsWithItsServer(t *testing.T) {
 	if err := json.Unmarshal(b, &settings); err != nil || !slices.Equal(settings.Permissions.Allow, crew.ClaudeMCPAllow()) {
 		t.Errorf("the folder's allow %q (%v), want exactly the crew MCP tools %q", settings.Permissions.Allow, err, crew.ClaudeMCPAllow())
 	}
-	g, err := os.ReadFile(filepath.Join(instance.dir, "AGENTS.md"))
+	g, err := os.ReadFile(filepath.Join(instance.State().Dir, "AGENTS.md"))
 	if err != nil || !strings.Contains(string(g), crew.GuideOfVia(crew.KindClaude, crew.MailViaMCP).Markdown) {
 		t.Errorf("the guide isn't the MCP form (%v)", err)
 	}
@@ -236,9 +267,9 @@ func TestACrewClaudeAgentOnMCPMailStartsWithItsServer(t *testing.T) {
 
 // awaitStart runs what the loop is posted until instance's crew start is answered: a crew start
 // continues when its setup and then its registration answer, which post from off the loop.
-func awaitStart(t *testing.T, c *identityHost, instance *agentInstance) {
+func awaitStart(t *testing.T, c *identityHost, instance *agents.AgentInstance) {
 	t.Helper()
-	for deadline := time.Now().Add(5 * time.Second); instance.starting; time.Sleep(time.Millisecond) {
+	for deadline := time.Now().Add(5 * time.Second); instance.State().Starting; time.Sleep(time.Millisecond) {
 		if time.Now().After(deadline) {
 			t.Fatal("the agent's start was never answered")
 		}

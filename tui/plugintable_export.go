@@ -13,8 +13,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/table"
 )
 
 // THE EXPORT — results.export (results.csv opens it on CSV): the rows loaded in the view, in the
@@ -37,12 +38,9 @@ const exportChunk = 1000
 // exportFormats are the export's formats, as its dialog's Format choice lists them.
 var exportFormats = []copyFormat{formatCSV, formatJSON}
 
-// exportWritten is told each chunk the writer has written, as it is written (a test holds the
-// writer here, so an export is still writing when AutoDoc quits); nil in AutoDoc.
-var exportWritten func(rows int)
-
 // resultsExport is an export at work.
 type resultsExport struct {
+	onWrite    func(rows int) // the seams' exportWritten: told each chunk written; nil in AutoDoc
 	path, part string
 	format     copyFormat
 	fields     []string
@@ -163,7 +161,7 @@ func (pl *plugins) exportResults(path string) {
 		path += "." + string(pl.exportFormat)
 	}
 	if _, err := os.Stat(path); err == nil {
-		pl.c.Ask(Question{Title: pl.c.Trf("autodoc.question.plugintable_export.replace", filepath.Base(path)),
+		pl.c.Ask(feature.Question{Title: pl.c.Trf("autodoc.question.plugintable_export.replace", filepath.Base(path)),
 			Text: pl.c.Trf("autodoc.question.plugintable_export.exists_export_the_results_over_it_it_is_replaced", path),
 			Yes:  pl.c.Tr("autodoc.question.plugintable_export.replace_2"), No: pl.c.Tr("autodoc.question.plugintable_export.cancel"), OnYes: func() { pl.beginExport(path) }})
 		return
@@ -213,7 +211,7 @@ func (pl *plugins) beginExport(path string) {
 		pl.c.Notify(pl.nothingIn("export"))
 		return
 	}
-	x := &resultsExport{path: path, part: path + ".part", format: pl.exportFormat, fields: fields, rows: rows, kinds: kinds,
+	x := &resultsExport{onWrite: pl.seams.exportWritten, path: path, part: path + ".part", format: pl.exportFormat, fields: fields, rows: rows, kinds: kinds,
 		partial: pl.results.partial(), steps: make(chan exportStep, 2), done: make(chan struct{})}
 	if _, loaded, on := pl.filtered(); on {
 		x.from = loaded
@@ -367,8 +365,8 @@ func (x *resultsExport) write(post func(func()), wrote func(*resultsExport, int)
 		}
 		rows += len(step.rows)
 		n := len(step.rows)
-		if exportWritten != nil {
-			exportWritten(rows)
+		if x.onWrite != nil {
+			x.onWrite(rows)
 		}
 		post(func() { wrote(x, n) })
 	}
@@ -493,7 +491,7 @@ func (j *jsonRows) writeSome(row []string, kinds string, keep []int) error {
 			b.WriteByte(',')
 		}
 		first = false
-		cell, kind := "", byte(widget.TableCellText)
+		cell, kind := "", byte(table.TableCellText)
 		if i < len(row) {
 			cell = row[i]
 		}
@@ -539,18 +537,18 @@ func (j *jsonRows) end() error {
 //   - JSON is the value itself when it parses, else a string;
 //   - text, and any other kind, is a string.
 func jsonValue(cell string, kind byte) string {
-	switch widget.TableCellKind(kind) {
-	case widget.TableCellNull:
+	switch table.TableCellKind(kind) {
+	case table.TableCellNull:
 		return "null"
-	case widget.TableCellNumber:
+	case table.TableCellNumber:
 		if jsonNumber(cell) {
 			return cell
 		}
-	case widget.TableCellBool:
+	case table.TableCellBool:
 		if b, err := strconv.ParseBool(cell); err == nil {
 			return strconv.FormatBool(b)
 		}
-	case widget.TableCellJSON:
+	case table.TableCellJSON:
 		var out bytes.Buffer
 		if json.Valid([]byte(cell)) && json.Compact(&out, []byte(cell)) == nil {
 			return out.String()

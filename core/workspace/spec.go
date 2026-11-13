@@ -37,12 +37,23 @@ const TodoPattern = "**/.todo-list/**"
 // DefaultGraphOnly is the graph_only list a workspace has until it sets its own: a fresh slice.
 func DefaultGraphOnly() []string { return []string{TodoPattern} }
 
+// ValidName is nil for a name a workspace may have, else an ErrInvalidSpec saying why: not empty,
+// not "." or "..", with no path separator ("/" or a backslash, on every OS) and no surrounding
+// space. It is the name rule Normalize applies, for a check of a name alone (a rename): it reads
+// no root, so it answers the same on every OS.
+func ValidName(name string) error {
+	if name == "" || strings.ContainsAny(name, `/\`) || name == "." || name == ".." || strings.TrimSpace(name) != name {
+		return fmt.Errorf("%w: workspace name %q: a name is required, without a path separator or surrounding space", ErrInvalidSpec, name)
+	}
+	return nil
+}
+
 // Normalize checks a workspace before it is added, and fills its defaults: a name that is not
 // empty and holds no path separator; a root that is absolute after "~/" is expanded; and patterns
 // that are valid (none: the defaults).
 func Normalize(s Spec) (Spec, error) {
-	if s.Name == "" || strings.ContainsAny(s.Name, `/\`) || s.Name == "." || s.Name == ".." || strings.TrimSpace(s.Name) != s.Name {
-		return s, fmt.Errorf("%w: workspace name %q: a name is required, without a path separator or surrounding space", ErrInvalidSpec, s.Name)
+	if err := ValidName(s.Name); err != nil {
+		return s, err
 	}
 	root, err := paths.ExpandHome(s.Root)
 	if err != nil {

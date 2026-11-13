@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/tui/widget/editor"
 )
 
 // TestLineHunksTurnOneTextIntoTheOther: for random texts, the hunks applied from the last up, each
@@ -28,7 +28,7 @@ func TestLineHunksTurnOneTextIntoTheOther(t *testing.T) {
 	}
 	for i := 0; i < 3000; i++ {
 		before, after := text(), text()
-		ed := widget.NewEditorCore(widget.CoreInitialText(before))
+		ed := editor.NewEditorCore(editor.CoreInitialText(before))
 		old, now := ed.Lines(), strings.Split(after, "\n")
 		hunks := lineHunks(old, now)
 		for j := len(hunks) - 1; j >= 0; j-- {

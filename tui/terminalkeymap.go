@@ -1,6 +1,9 @@
 package tui
 
-import tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+import (
+	"github.com/yongjohnlee80/autodoc/tui/feature"
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+)
 
 // TERMINALS FOR A USER WHO NEVER LEARNT VIM — under the text editor's keymap the terminal and agent
 // panels' shells never stay in normal mode unasked, where i would be needed to type again: the
@@ -15,9 +18,9 @@ var terminalPanels = []string{"terminalView", "agentView"}
 // under "text", neither under "vim". A rebuilt panel gets them again (reloaded). And the keys their
 // programs never see, the panel moves among them while p says so (tui.terminal.panel_keys).
 func (h *Host) applyTerminalKeymap(p prefs) {
-	h.keys.panelKeys = p.termPanelKeys
+	h.keys.PanelKeys = p.termPanelKeys
 	if h.p != nil {
-		h.keep(h.p.SetMany(h.keys.terminalKeys()))
+		h.keep(h.p.SetMany(h.keys.TerminalKeys()))
 	}
 	text := p.keymap == "text"
 	hint := ""
@@ -41,7 +44,7 @@ func (h *Host) applyTerminalKeymap(p prefs) {
 // normalModeHint is how to get back to typing from normal mode: the mode key as the keymap binds it
 // now, or i alone when a scheme unbinds it.
 func (h *Host) normalModeHint() string {
-	if keys := h.keys.keysValue(terminalModeID); len(keys) > 0 {
+	if keys := h.keys.KeysValue(feature.TerminalModeID); len(keys) > 0 {
 		return h.trf("autodoc.notice.terminal.normal_mode_hint", keys[0])
 	}
 	return h.tr("autodoc.notice.terminal.normal_mode_hint_i")

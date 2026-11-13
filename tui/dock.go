@@ -4,8 +4,10 @@ import (
 	"slices"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
+	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
+	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
 
 // THE DOCK — the menu bar's corner (docs/decisions/editor.md#the-dock-of-open-widgets): one icon
@@ -40,12 +42,12 @@ func (h *Host) dockTargets() []widgetTarget {
 
 // panelAlive reports that s's panel lives on with its drawer closed: its own Alive says so, or its
 // view is a TerminalTabs with a tab running (the terminal's shells, the agents' instances).
-func (h *Host) panelAlive(s PanelSpec) bool {
+func (h *Host) panelAlive(s feature.PanelSpec) bool {
 	if s.Alive != nil && s.Alive() {
 		return true
 	}
 	if tabs, ok := h.tabsOf(s.View); ok {
-		return slices.ContainsFunc(tabs.Tabs(), func(t widget.TerminalTab) bool { return t.Running })
+		return slices.ContainsFunc(tabs.Tabs(), func(t terminal.TerminalTab) bool { return t.Running })
 	}
 	return false
 }
@@ -53,7 +55,7 @@ func (h *Host) panelAlive(s PanelSpec) bool {
 // dockRowOf is a widget's dock row: key its :go name, its icon, its title for the tooltip; hidden
 // while its panel is in the dock and not shown (hiddenInDock: minimized, or closed and running on, as
 // the terminal's and the agents' hide leaves them), which dims its icon; flash while it lights.
-func (h *Host) dockRowOf(_ int, t widgetTarget) rowOf {
+func (h *Host) dockRowOf(_ int, t widgetTarget) feature.RowOf {
 	icon, title := editorIcon, t.title
 	if s := h.panelSpec(t.panel); s != nil {
 		icon = s.Icon
@@ -61,13 +63,13 @@ func (h *Host) dockRowOf(_ int, t widgetTarget) rowOf {
 	if title == "" {
 		title = t.name
 	}
-	return rowOf{"key": t.name, "icon": icon, "title": title, "hidden": t.panel != "" && h.hiddenInDock(t.panel),
+	return feature.RowOf{"key": t.name, "icon": icon, "title": title, "hidden": t.panel != "" && h.hiddenInDock(t.panel),
 		"flash": t.panel != "" && h.dockFlashLit(t.panel)}
 }
 
 // newDockRows is App.dock's model.
-func (h *Host) newDockRows() *rows[widgetTarget] {
-	return newRows(tuidecl.NewListModel("key", "icon", "title", "hidden", "flash"), h.dockRowOf)
+func (h *Host) newDockRows() *feature.Rows[widgetTarget] {
+	return feature.NewRows(tuidecl.NewListModel("key", "icon", "title", "hidden", "flash"), h.dockRowOf)
 }
 
 // A HIDE FLASHES ITS ICON: a panel hidden into the dock, however (the dock's
@@ -85,10 +87,6 @@ const (
 // dockFlash is one hide's flash of a panel's icon: the step it is at.
 type dockFlash struct{ step int }
 
-// flashed, when a test sets it, hears each step of a flash on the loop: the panel, and its icon lit
-// or not.
-var flashed func(id string, lit bool)
-
 // flashDock starts panel id's flash, over any under way: the older one's steps find it replaced.
 func (h *Host) flashDock(id string) {
 	if h.dockFlash == nil {
@@ -97,8 +95,8 @@ func (h *Host) flashDock(id string) {
 	f := &dockFlash{}
 	h.dockFlash[id] = f
 	h.refreshDock()
-	if flashed != nil {
-		flashed(id, h.dockFlashLit(id))
+	if h.seams.flashed != nil {
+		h.seams.flashed(id, h.dockFlashLit(id))
 	}
 	h.after(dockFlashStep, func() { h.flashNext(id, f) })
 }
@@ -116,8 +114,8 @@ func (h *Host) flashNext(id string, f *dockFlash) {
 		h.after(dockFlashStep, func() { h.flashNext(id, f) })
 	}
 	h.refreshDock()
-	if flashed != nil {
-		flashed(id, h.dockFlashLit(id))
+	if h.seams.flashed != nil {
+		h.seams.flashed(id, h.dockFlashLit(id))
 	}
 }
 
@@ -175,6 +173,7 @@ func (h *Host) goDock(key string) {
 		h.focusEditor()
 	default: // closed, hidden, or covered by a window over it: there, in front
 		h.goTo(t)
+		h.raisePanel(t.panel)
 	}
 }
 
@@ -219,7 +218,7 @@ func (h *Host) editorMinimized() bool { return h.panelHidden("editorWindow") }
 // panelHidden reports whether panel id is hidden by the dock: open, minimized.
 func (h *Host) panelHidden(id string) bool {
 	c, ok := h.p.Find(id)
-	w, isWindow := c.(interface{ WindowBehavior() *widget.WindowCore })
+	w, isWindow := c.(interface{ WindowBehavior() *widgetcore.WindowCore })
 	return ok && isWindow && w.WindowBehavior() != nil && w.WindowBehavior().State().Minimized
 }
 
@@ -235,7 +234,7 @@ func (h *Host) panelCovered(id string) bool {
 // any other way. After the editor's icon hid them every open panel is hidden, so an open panel
 // shown, or one it hid closed, means a panel was shown or closed since: its next click hides.
 func (h *Host) panelsHiddenChanged() {
-	shown := slices.ContainsFunc(h.panelSpecs(), func(s PanelSpec) bool { return h.panelOpen[s.ID] && !h.panelHidden(s.ID) })
+	shown := slices.ContainsFunc(h.panelSpecs(), func(s feature.PanelSpec) bool { return h.panelOpen[s.ID] && !h.panelHidden(s.ID) })
 	if shown || slices.ContainsFunc(h.dockHidden, func(id string) bool { return !h.panelOpen[id] }) {
 		h.dockHidden = nil
 	}
