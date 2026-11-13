@@ -4384,6 +4384,10 @@ O QUE UMA TECLA PRECISA
         <source>saved %1, but it could not be read back: %2 — reload before saving again</source>
         <translation>%1 salvo, mas não pôde ser relido: %2 — recarregue antes de salvar de novo</translation>
     </message>
+    <message id="autodoc.notice.files.saved_but_the_disk_differs_from_what_was_written">
+        <source>saved %1, but the disk differs from what was written — reload before saving again</source>
+        <translation>%1 salvo, mas o disco difere do que foi escrito — recarregue antes de salvar de novo</translation>
+    </message>
     <message id="autodoc.notice.files.saved_the_draft_as">
         <source>saved the draft as %1</source>
         <translation>rascunho salvo como %1</translation>
