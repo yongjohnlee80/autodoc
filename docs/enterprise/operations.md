@@ -206,7 +206,7 @@ SELECT scope, holder, holder_info, epoch, lease_until FROM <schema>.rag_writer_l
 - **Taking a tenant over by hand,** for a holder you know is gone or must stop, is one statement:
   the release's own, without its holder check. It clears the holder and moves the epoch, so the
   holder's next renew and next write both find the lease lost (it exits 1), and a standby claims
-  it at its next poll:
+  it at its next poll after any write the holder already has open has ended:
 
   ```sql
   UPDATE <schema>.rag_writer_lease SET holder = '', epoch = epoch + 1, lease_until = clock_timestamp()

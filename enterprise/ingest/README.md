@@ -11,8 +11,8 @@ src, err := ingest.Load("views/track.view", []string{"label_id"})
 rep, err := src.CheckOrder(ctx, business, time.Now()) // against the live source, read-only
 
 st, _ := pgstore.New(store, "music")             // store: a pool opened WithSchema
-in := ingest.New(st, "music", src, business, locks, ingest.Options{Schema: "autodoc_search"})
-err = in.Run(ctx) // until ctx ends; ErrLockLost if the tenant's lock is lost
+in := ingest.New(st, "music", src, business, store, ingest.Options{}) // store also holds the lease
+err = in.Run(ctx) // until ctx ends; ErrLockLost if the tenant's lease is lost
 ```
 
 ## API
