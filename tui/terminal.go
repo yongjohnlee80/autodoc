@@ -378,13 +378,15 @@ func (t *terminals) newLuaShell() {
 	if !t.c.PanelOpen("terminal") {
 		t.c.Keep(t.c.CallView("terminal", "open"))
 	}
+	// started on the loop: a Lua shell is this process's own, with no program to spawn, and it is
+	// made of loop state (its banner in the UI's language, startLuaShell)
 	t.startTab(luaShellLabel, feature.TerminalConfig{Command: "lua", Start: t.startLua},
 		func(err error) string {
 			return t.c.Trf("autodoc.notice.terminal.the_terminal_could_not_add_a_lua_shell", err.Error())
 		},
 		func(err error) string {
 			return t.c.Trf("autodoc.notice.terminal.the_lua_shell_could_not_start", err.Error())
-		})
+		}, false)
 }
 
 // liveShell is a tab of panel neither closing nor failed to start: prefer if it is one, else the
@@ -423,14 +425,16 @@ func (t *terminals) newShell() {
 		},
 		func(err error) string {
 			return t.c.Trf("autodoc.notice.terminal.the_terminal_could_not_start_spc_or_enter_in_it", err.Error())
-		})
+		}, true)
 }
 
 // startTab adds a tab named by label running config, starts it and gives it the keyboard (golib's
 // Select gives the tab's terminal the keyboard): a shell's and a Lua shell's. A tab that cannot be
 // added is the notice addFail makes of the error; one that fails to start says so, in its tab and in
-// the notice startFail makes.
-func (t *terminals) startTab(label func(feature.TerminalPanel) string, config feature.TerminalConfig, addFail, startFail func(error) string) {
+// the notice startFail makes. offLoop starts it off the UI loop (StartAsync), for a program the OS
+// spawns, slowly on Windows; its config.Start then must read no loop state. Otherwise it starts
+// on the loop, as a Lua shell does.
+func (t *terminals) startTab(label func(feature.TerminalPanel) string, config feature.TerminalConfig, addFail, startFail func(error) string, offLoop bool) {
 	panel, err := t.panel()
 	if err != nil {
 		t.c.Keep(err)
@@ -444,11 +448,19 @@ func (t *terminals) startTab(label func(feature.TerminalPanel) string, config fe
 		t.c.Notify(addFail(err))
 		return
 	}
+	if !offLoop {
+		if err := panel.Start(id); err != nil {
+			t.c.Notify(startFail(err))
+		}
+		t.c.Keep(panel.Select(id))
+		return
+	}
 	// started off the loop: the tab opens at once, saying it is starting, and the window goes on
-	// drawing and taking keys while the shell spawns (a good part of a second on Windows). A start
-	// the tab's close overtook says nothing: the tab is gone.
+	// drawing and taking keys while the shell spawns (a good part of a second on Windows). Its
+	// config.Start then runs on the starter's goroutine, so it reads no loop state. A start the
+	// tab's close overtook, or the program's quit, says nothing: the tab is gone, or going.
 	panel.StartAsync(id, func(err error) {
-		if err != nil && !errors.Is(err, terminal.ErrTerminalStartCancelled) {
+		if err != nil && !errors.Is(err, terminal.ErrTerminalStartCancelled) && !errors.Is(err, terminal.ErrTerminalShutdown) {
 			t.c.Notify(startFail(err))
 		}
 	})
