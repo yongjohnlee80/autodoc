@@ -852,6 +852,7 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 	}
 	b.saving = true
 	b.saves++
+	serial := b.saves // this save among b's: a later one is under way when b.saves has moved on
 	settled := func() {
 		b.saving = false
 		if b.recheck {
@@ -893,7 +894,7 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 			// a stale answer is not applied to b, which keeps its unsaved marker, but the status line,
 			// which said "saving p…", says what became of the save, or it would seem under way for ever
 			if slices.Contains(h.buffers, b) { // b closed: nothing left to say it of
-				h.saveLost(p, committed, landed, a.readErr, h.session.Gen() != sess, b.file.gen != gen)
+				h.saveLost(p, committed, landed, a.readErr, h.session.Gen() != sess, b.file.gen != gen, b.saves == serial)
 			}
 			return
 		}
@@ -958,14 +959,15 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 // was written; else saved, but not read back (readErr) or differing on disk, and to reload before
 // saving again. A write that did not land says why it was dropped, the connection renewed
 // (renewed) or the buffer read again from disk (reread), and to save it again. A save that landed
-// whole asks nothing of the user: it takes the status line only while that still says "saving
-// p…", so a newer word there (the read again's "opened p") stays; the notice says it either way.
-func (h *Host) saveLost(p string, committed, landed bool, readErr error, renewed, reread bool) {
+// whole asks nothing of the user: it takes the status line only while that still says its own
+// "saving p…" (latest: no later save of the buffer has begun, whose words those would be), so a
+// newer word there (the read again's "opened p") stays; the notice says it either way.
+func (h *Host) saveLost(p string, committed, landed bool, readErr error, renewed, reread, latest bool) {
 	var msg string
 	switch {
 	case landed:
 		msg = h.trf("autodoc.notice.files.saved", p)
-		if h.said != h.trf("autodoc.notice.files.saving", p) {
+		if !latest || h.said != h.trf("autodoc.notice.files.saving", p) {
 			h.notify(msg)
 			return
 		}

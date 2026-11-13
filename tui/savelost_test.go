@@ -297,3 +297,23 @@ func TestALandedSaveOvertakenByAReadAgainKeepsTheNewerStatus(t *testing.T) {
 		t.Fatal("no notice says the save landed")
 	}
 }
+
+// TestALandedSaveBehindALaterOneLeavesItsSavingStatus: the status line says "saving a.md…", but
+// for a later save of the buffer than the one whose landed answer comes stale: that answer leaves
+// the later save's words where they are, and says it was saved by the notice alone.
+func TestALandedSaveBehindALaterOneLeavesItsSavingStatus(t *testing.T) {
+	t.Parallel()
+	r := runTUI(t, NewSession("unused", nil), Options{})
+	saving := onLoop(r, func() string {
+		msg := r.h.trf("autodoc.notice.files.saving", "a.md")
+		r.h.say(msg) // the later save's
+		r.h.saveLost("a.md", true, true, nil, true, false, false)
+		return msg
+	})
+	if s := onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.status"); return v.Raw }); s != saving {
+		t.Fatalf("the status says %q, want the later save's %q kept", s, saving)
+	}
+	if !r.noticed("saved a.md") {
+		t.Fatal("no notice says the earlier save landed")
+	}
+}
