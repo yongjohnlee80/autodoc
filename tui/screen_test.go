@@ -85,7 +85,9 @@ func (r *running) waitWithin(t *testing.T, what string, d time.Duration, cond fu
 	t.Helper()
 	for deadline := time.Now().Add(d); !cond(); time.Sleep(5 * time.Millisecond) {
 		if time.Now().After(deadline) {
-			t.Fatalf("%s never appeared within %s:\n%s", what, d, r.s.String())
+			// SCRATCH (never merged): the status line whole, which the screen elides at its width
+			st := onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.status"); return v.Raw })
+			t.Fatalf("%s never appeared within %s; App.status %q:\n%s", what, d, st, r.s.String())
 		}
 	}
 }
