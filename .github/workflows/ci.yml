@@ -254,7 +254,16 @@ jobs:
           # for Windows, so a neutral test can't come to lean on a helper in a Unix-tagged file
           go vet ./...
           mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
-          go test -count=1 -timeout 20m "${pkgs[@]}"
+          # SCRATCH (never merged): all of ./tui at -parallel 16, four times; a failing run's gated-cell lines and save trace
+          R=0
+          for n in 1 2 3 4; do
+            go test -count=1 -parallel 16 -timeout 60m ./tui/ > "$RUNNER_TEMP/p16-$n.log" 2>&1 && rc=0 || rc=$?
+            echo "== -parallel 16 run $n rc=$rc"; grep -E -- '^(FAIL|ok)\s+github.com/yongjohnlee80/autodoc/tui\s|^--- FAIL|^    --- FAIL' "$RUNNER_TEMP/p16-$n.log" || true
+            grep -E -A3 -- '--- FAIL: TestAGatedSave' "$RUNNER_TEMP/p16-$n.log" | grep -E 'FAIL|App.status|_test\.go:[0-9]+:' | cut -c1-400 || true
+            if grep -q -- '--- FAIL: TestAGatedSave' "$RUNNER_TEMP/p16-$n.log"; then echo "== save trace"; grep -E '^SAVETRACE' "$RUNNER_TEMP/p16-$n.log" | cut -c1-400 | tail -60; fi
+            [ $rc = 0 ] || R=1
+          done
+          [ $R = 0 ]
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
