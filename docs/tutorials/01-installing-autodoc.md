@@ -2,7 +2,9 @@
 
 AutoDoc is one program, `autodoc`.
 
-## The install script (recommended)
+The recommended way is a one-line install script: one for Linux and macOS, another for Windows.
+
+## On Linux and macOS
 
 On Linux and macOS, one line installs AutoDoc with its window:
 
@@ -46,7 +48,6 @@ It changes your `PATH` only when asked (`-AddToPath`); otherwise it prints the c
 - mise: `mise use -g github:yongjohnlee80/autodoc`
 - Go: `go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` (without `-tags gui`, the terminal UI only)
 - A release archive from the project's Releases page
-- Windows: WSL2, then the Linux install script
 
 These are updated the way they were installed (`brew upgrade`, `mise upgrade`, `go install` again), so **Help › About** offers no Update for them. Servers, containers and building from source: [Reference, Chapter 2](../reference/02-quickstart-and-workspaces.md).
 
