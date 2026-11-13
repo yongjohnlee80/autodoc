@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	tuicore "github.com/yongjohnlee80/golib/tui"
+	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/pty"
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
@@ -47,6 +49,16 @@ func (s *heldShell) spawnOut(t *testing.T) {
 	}
 }
 
+// typed is what the first program spawned has been sent, "" before there is one.
+func (s *heldShell) typed() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.procs) == 0 {
+		return ""
+	}
+	return s.procs[0].typed()
+}
+
 // closedOnce waits for the one program spawned to be closed, once.
 func (s *heldShell) closedOnce(t *testing.T) {
 	t.Helper()
@@ -66,18 +78,33 @@ func (s *heldShell) closedOnce(t *testing.T) {
 	}
 }
 
-// pipeShell is a program that writes nothing until closed, its Close counted.
+// pipeShell is a program that writes nothing until closed, its Close counted and what it is sent
+// kept (typed).
 type pipeShell struct {
 	r      *io.PipeReader
 	w      *io.PipeWriter
 	closes atomic.Int32
 	done   chan struct{}
 	once   sync.Once
+	mu     sync.Mutex
+	got    []byte
 }
 
-func (p *pipeShell) Read(b []byte) (int, error)  { return p.r.Read(b) }
-func (p *pipeShell) Write(b []byte) (int, error) { return len(b), nil }
-func (p *pipeShell) Resize(int, int) error       { return nil }
+func (p *pipeShell) Read(b []byte) (int, error) { return p.r.Read(b) }
+func (p *pipeShell) Write(b []byte) (int, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.got = append(p.got, b...)
+	return len(b), nil
+}
+
+// typed is what the program has been sent.
+func (p *pipeShell) typed() string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return string(p.got)
+}
+func (p *pipeShell) Resize(int, int) error { return nil }
 func (p *pipeShell) Close() error {
 	p.closes.Add(1)
 	p.once.Do(func() { p.w.Close(); close(p.done) })
@@ -98,7 +125,9 @@ func shellTUI(t *testing.T, s *heldShell) *running {
 
 // TestAShellTabOpensAtOnceWhileItsShellStarts: opening the terminal panel draws its first tab at
 // once, saying it is starting, while the shell's spawn is still out; the window goes on taking
-// keys meanwhile (the panel hides and shows again), and the shell runs once its spawn returns.
+// keys meanwhile, and the shell runs once its spawn returns. The keys typed in the tab are the
+// shell's then, as once it runs, but for those a terminal keeps for the window: F11 maximizes the
+// panel and restores it, and a SPC reaches the shell once it runs.
 func TestAShellTabOpensAtOnceWhileItsShellStarts(t *testing.T) {
 	t.Parallel()
 	s := newHeldShell()
@@ -106,15 +135,19 @@ func TestAShellTabOpensAtOnceWhileItsShellStarts(t *testing.T) {
 	r.leader(t, '`') // the panel, and its first shell
 	s.spawnOut(t)
 	r.s.WaitForText(t, "[starting…]")
-	r.leader(t, '`') // a key the window takes while the spawn is out: the panel hides
-	r.s.WaitFor(t, "the panel hidden while the shell starts", func(string) bool { return !r.termShown() })
-	r.leader(t, '`')
-	r.s.WaitFor(t, "the panel shown again", func(string) bool { return r.termShown() })
+	maximized := func() bool { return onLoop(r, func() bool { return r.h.panelMax["terminal"] }) }
+	f11 := tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyF11}
+	r.keys(t, f11) // a key the window takes while the spawn is out
+	r.s.WaitFor(t, "the panel maximized while the shell starts", func(string) bool { return maximized() })
+	r.keys(t, f11)
+	r.s.WaitFor(t, "the panel restored", func(string) bool { return !maximized() })
+	r.keys(t, key(' ')) // SPC, typed while the spawn is out: the shell's, as once it runs
 	if n := r.shellsRunning(); n != 0 {
 		t.Fatalf("%d shells running before the spawn returned", n)
 	}
 	s.free()
 	r.waitWithin(t, "the shell running", daemonWait, func() bool { return r.shellsRunning() == 1 })
+	r.waitWithin(t, "the shell reading the SPC", daemonWait, func() bool { return s.typed() == " " })
 }
 
 // TestAShellTabClosedWhileStartingLeavesNoShell: a tab closed while its shell's spawn is out is
@@ -174,4 +207,18 @@ func TestALuaShellStartsOnTheLoop(t *testing.T) {
 			return false
 		})
 	})
+}
+
+// TestAShellTabTakesWhatIsTypedWhileItsShellStarts: keys typed into a shell tab while its shell's
+// spawn is out are the shell's, never the window's: once the shell runs it reads them, in order.
+func TestAShellTabTakesWhatIsTypedWhileItsShellStarts(t *testing.T) {
+	t.Parallel()
+	s := newHeldShell()
+	r := shellTUI(t, s)
+	r.leader(t, '`')
+	s.spawnOut(t)
+	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	r.keys(t, decltest.Type("echo hi\r")...)
+	s.free()
+	r.waitWithin(t, "the shell reading what was typed", daemonWait, func() bool { return s.typed() == "echo hi\r" })
 }
