@@ -178,6 +178,6 @@ func wireErr(err error) error {
 // and neither is access denied, which a client reads as a call this peer may not make (a remote
 // daemon's file.*, a gated script past its bounds).
 var (
-	errFileInUse = &golibrpc.Error{Code: CodeFileRefused, Message: "the file is in use by another program: try again in a moment"}
+	errFileInUse = &golibrpc.Error{Code: golibrpc.CodeAccessDenied, Message: "the file is in use by another program: try again in a moment"}
 	errOSRefused = &golibrpc.Error{Code: CodeFileRefused, Message: "the operating system refused access to the file"}
 )
