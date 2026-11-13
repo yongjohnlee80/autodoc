@@ -178,8 +178,10 @@ func (s *Store) SetPolicy(ctx context.Context, p Policy) error {
 	if err := CheckAccessFields(p.AccessFields); err != nil {
 		return err
 	}
-	err := s.rw.policy.DAO(dao.WithQueryContext(ctx)).Set(pTenant, s.tenant).
-		Set(pAccess, slices.Clone(p.AccessFields)).Set(pView, p.View).Upsert()
+	err := dao.RunTx(ctx, func(tx *dao.Transaction) error {
+		return s.rw.policy.On(tx, dao.WithQueryContext(ctx)).Set(pTenant, s.tenant).
+			Set(pAccess, slices.Clone(p.AccessFields)).Set(pView, p.View).Upsert()
+	})
 	if err != nil {
 		return fmt.Errorf("pgstore: set policy: %w", err)
 	}

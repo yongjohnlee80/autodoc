@@ -19,6 +19,7 @@ import (
 	"github.com/yongjohnlee80/golib/dao/postgres"
 	"github.com/yongjohnlee80/golib/logger"
 
+	"github.com/yongjohnlee80/autodoc/core/pglease"
 	"github.com/yongjohnlee80/autodoc/core/pgstore"
 	"github.com/yongjohnlee80/autodoc/enterprise/api"
 	"github.com/yongjohnlee80/autodoc/enterprise/config"
@@ -34,7 +35,7 @@ import (
 //
 // Otherwise it logs to stderr, and its subsystems start in serverSteps' order, each pushing how to
 // stop what it started: they stop in reverse when ctx ends (SIGTERM) or an ingester fails (a lost
-// lock), the embedding worker first, then the ingesters, releasing their tenants' locks, and the
+// lease), the embedding worker first, then the ingesters, releasing their tenants' leases, and the
 // pools last. level, when not "", is --log-level, over the file's [log] level.
 func runServer(ctx context.Context, path string, check bool, level logger.Severity, stdout, stderr io.Writer, version string) error {
 	cfg, err := config.Load(path)
@@ -75,13 +76,14 @@ type server struct {
 	log     logger.Logger
 	stops   stack
 
-	// store is pgstore's pool, every connection in the configured schema; business reads the
-	// views on the role's own search_path; locks holds one pinned connection per tenant's lock.
-	store, business, locks dao.DataConn
+	// store is pgstore's pool, every connection in the configured schema, which holds the tenants'
+	// writer leases too; business reads the views on the role's own search_path.
+	store, business dao.DataConn
 	// failed carries the first ingester, or the HTTP server, that stopped with an error
 	failed chan error
 	// ingesters are the sources' ingesters, in the configuration's order: the embedding worker
-	// writes a tenant only while its ingester holds the tenant's lock.
+	// writes a tenant only while its ingester holds the tenant's lease, through the ingester's
+	// fenced Store.
 	ingesters []*ingest.Ingester
 	// worker is the embedding worker once it has started, which an ingester's commit wakes; nil
 	// before, when a commit has nothing to wake (the worker's first round reads what it wrote).
@@ -125,13 +127,12 @@ func (s *server) openPostgres() error {
 		return conn, nil
 	}
 	var err error
-	if s.store, err = open(pgstore.WithSchema(s.cfg.Postgres.Schema)); err != nil {
+	// a writer's transaction left idle twice a lease's length is ended, so a hung one's fence
+	// never keeps a standby from its tenant
+	if s.store, err = open(pgstore.WithSchema(s.cfg.Postgres.Schema), pglease.WriterSession(ingest.DefaultLeaseTTL)); err != nil {
 		return err
 	}
-	if s.business, err = open(); err != nil {
-		return err
-	}
-	s.locks, err = open(postgres.MaxOpenConns(len(s.sources)))
+	s.business, err = open()
 	return err
 }
 
@@ -190,7 +191,7 @@ func (s *server) setPolicies() error {
 }
 
 // startIngesters runs one ingester per source until the server stops. The first that fails stops
-// the server; stopping cancels them all and waits for each to release its lock.
+// the server; stopping cancels them all and waits for each to release its lease.
 func (s *server) startIngesters() error {
 	ctx, cancel := context.WithCancel(s.ctx)
 	var wg sync.WaitGroup
@@ -203,7 +204,7 @@ func (s *server) startIngesters() error {
 		if err != nil {
 			return err
 		}
-		in := ingest.New(st, src.Tenant, s.sources[i], s.business, s.locks, ingest.Options{Schema: s.cfg.Postgres.Schema,
+		in := ingest.New(st, src.Tenant, s.sources[i], s.business, s.store, ingest.Options{
 			Refresh: src.Refresh, RefreshRetry: src.RefreshRetry, Interval: src.Interval, Lag: lagOf(src.Lag), Log: s.log, Committed: s.wakeEmbedder, Locked: s.wakeEmbedder})
 		s.ingesters = append(s.ingesters, in)
 		wg.Add(1)
@@ -223,11 +224,8 @@ func (s *server) startIngesters() error {
 func (s *server) startEmbedder() error {
 	tenants := make([]embedder.Tenant, len(s.ingesters))
 	for i, in := range s.ingesters {
-		st, err := s.tenantStore(in.Tenant())
-		if err != nil {
-			return err
-		}
-		tenants[i] = embedder.Tenant{Name: in.Tenant(), Store: st, Confirm: in.Confirm}
+		// the ingester's Store: every write of the worker's to the tenant is fenced on its lease
+		tenants[i] = embedder.Tenant{Name: in.Tenant(), Store: in.Store(), Confirm: in.Confirm}
 	}
 	w := embedder.New(providerOf(s.cfg.Embedding), tenants, embedder.WithSlots(s.cfg.Embedding.Slots), embedder.WithLogger(s.log))
 	ctx, cancel := context.WithCancel(s.ctx)
@@ -245,7 +243,7 @@ func (s *server) startEmbedder() error {
 }
 
 // wakeEmbedder wakes the embedding worker after an ingester's commit, and when an ingester takes
-// its tenant's lock: the worker leaves a tenant alone until it is this server's.
+// its tenant's lease: the worker leaves a tenant alone until it is this server's.
 func (s *server) wakeEmbedder() {
 	if w := s.worker.Load(); w != nil {
 		w.Wake()

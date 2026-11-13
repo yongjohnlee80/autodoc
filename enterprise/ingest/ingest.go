@@ -14,6 +14,7 @@ import (
 	"github.com/yongjohnlee80/golib/logger"
 
 	"github.com/yongjohnlee80/autodoc/core/clock"
+	"github.com/yongjohnlee80/autodoc/core/pglease"
 	"github.com/yongjohnlee80/autodoc/core/pgstore"
 	"github.com/yongjohnlee80/autodoc/enterprise/opcode"
 )
@@ -24,6 +25,7 @@ const (
 	DefaultRefreshRetry = 15 * time.Minute
 	DefaultInterval     = time.Minute
 	DefaultLag          = time.Minute
+	DefaultLeaseTTL     = 30 * time.Second
 	DefaultPingEvery    = 10 * time.Second
 	DefaultLockPoll     = 5 * time.Second
 )
@@ -36,12 +38,13 @@ const RetryLimit = 1000
 const countCap = 10000
 
 var (
-	// ErrLockLost is the tenant's writer lock gone from under its ingester: its connection closed
-	// or was killed. The ingester stops writing at once (a page it was writing is rolled back) and
-	// Run returns it, so the process exits non-zero and its supervisor restarts it to take the lock
-	// again; it never goes on writing unlocked. It is pgstore.ErrWriterLost.
+	// ErrLockLost is the tenant's writer lease gone from under its ingester: taken over after it
+	// expired, or not renewed in time. The ingester stops writing at once (a page it was writing is
+	// rolled back, its fence failing) and Run returns it, so the process exits non-zero and its
+	// supervisor restarts it to take the lease again; it never goes on writing without it. It is
+	// pgstore.ErrWriterLost.
 	ErrLockLost = pgstore.ErrWriterLost
-	// ErrNotLocked is a write asked of an ingester that does not hold its tenant's lock.
+	// ErrNotLocked is a write asked of an ingester that does not hold its tenant's lease.
 	ErrNotLocked = errs.Sentinel(errs.ErrPrecondition, "ingest: the tenant's writer lock is not held")
 	// ErrOrder is a page whose rows break the view's contract: not in (updated_at, id) order, or
 	// outside the cursor and upto_ts the page was asked for. Nothing of the page is written: a
@@ -54,9 +57,6 @@ var (
 
 // Options configure an Ingester. A zero duration is its default.
 type Options struct {
-	// Schema is the schema the tenant's store lives in: with the tenant, it keys the writer lock,
-	// so two servers on one schema and tenant never write at once. Required.
-	Schema string
 	// Refresh is how often Run reads every row again (DefaultRefresh).
 	Refresh time.Duration
 	// RefreshRetry is how soon Run tries a refresh again after one that failed or could not read
@@ -69,9 +69,12 @@ type Options struct {
 	// than this could commit a row behind the cursor, which only the next refresh would read.
 	// A negative Lag is none.
 	Lag time.Duration
-	// PingEvery is how often Run confirms it still holds the writer lock (DefaultPingEvery).
+	// LeaseTTL is the writer lease's length (DefaultLeaseTTL): a standby takes the tenant over this
+	// long after the holder's last renew, when the holder stopped without releasing it.
+	LeaseTTL time.Duration
+	// PingEvery is how often Run renews the writer lease (DefaultPingEvery, at most LeaseTTL/3).
 	PingEvery time.Duration
-	// LockPoll is how often Acquire tries a lock another server holds (DefaultLockPoll).
+	// LockPoll is how often Acquire tries a lease another server holds (DefaultLockPoll).
 	LockPoll time.Duration
 	// Log receives each run's summary and every failure. nil: none.
 	Log logger.Logger
@@ -84,7 +87,7 @@ type Options struct {
 	// chunks a page wrote are embedded without waiting for the worker's own poll. It runs on the
 	// ingester's goroutine and must not block.
 	Committed func()
-	// Locked, when set, is called once the writer lock is taken: the tenant is this server's now,
+	// Locked, when set, is called once the writer lease is taken: the tenant is this server's now,
 	// and the embedding worker, which leaves a tenant alone until then, may begin on it without
 	// waiting for its poll (a pass that finds nothing new commits nothing to wake it). Like
 	// Committed, it runs on the ingester's goroutine and must not block.
@@ -92,26 +95,28 @@ type Options struct {
 }
 
 // Ingester indexes one source into its tenant: the only writer of the tenant while it holds the
-// tenant's lock. Pass reads the rows changed since the cursor, Refresh reads every row and deletes
+// tenant's writer lease. Pass reads the rows changed since the cursor, Refresh reads every row and deletes
 // the documents of rows gone, and Run does both on their schedules.
 //
 // Every write is a pgstore.Batch, one per page of the view: its documents and its quarantined and
-// released rows commit together, after the writer lock is confirmed. A pass's page commits its
+// released rows commit together, each batch's transaction fenced on the writer lease (its first
+// statement confirms the lease and holds it against a takeover until the batch ends). A pass's page commits its
 // cursor with them; a refresh moves the cursor only when it finishes, in the batch that records it.
 // A crash replays at most the page it interrupted, and writing a page again changes nothing.
 //
 // An Ingester belongs to one goroutine; Run's own ping goroutine is the exception, and it only
-// checks the lock, as Confirm does from any goroutine.
+// renews the lease, which Confirm and the fence read from any goroutine.
 type Ingester struct {
-	st       *pgstore.Store
+	st       *pgstore.Store // the tenant's store, fenced on the lease (Store.Fenced)
 	tenant   string
 	src      *Source
 	business dao.DataConn
-	locks    dao.DataConn
+	leases   dao.DataConn
 	o        Options
-	// lock is the writer lock while it is held, nil otherwise. It is atomic because Confirm reads
-	// it from another goroutine (the embedding worker's) while this one takes and releases it.
-	lock atomic.Pointer[pgstore.WriterLock]
+	// lock is the writer lease while it is held, nil otherwise. It is atomic because Confirm and
+	// the fence read it from another goroutine (the embedding worker's) while this one takes and
+	// releases it.
+	lock atomic.Pointer[pgstore.Writer]
 	// state is the last pass's and refresh's outcome (State), and waiting whether Acquire waits for
 	// another server's lock: an operator's status reads them from another goroutine
 	state   atomic.Pointer[State]
@@ -124,19 +129,21 @@ type Ingester struct {
 var beforeCommit func() error
 
 // New is an ingester of src into st, the store of tenant. business is the database the view
-// reads, on the role's own search_path; locks is a pool of its own for the writer lock, which
-// pins one of its connections for as long as the lock is held.
-func New(st *pgstore.Store, tenant string, src *Source, business, locks dao.DataConn, o Options) *Ingester {
+// reads, on the role's own search_path; leases is the store's pool, whose schema holds the
+// writer lease's table. Every write the ingester makes through st, and through Store (the
+// embedding worker's), is fenced on the lease.
+func New(st *pgstore.Store, tenant string, src *Source, business, leases dao.DataConn, o Options) *Ingester {
 	for _, d := range []struct {
 		v   *time.Duration
 		def time.Duration
 	}{{&o.Refresh, DefaultRefresh}, {&o.RefreshRetry, DefaultRefreshRetry}, {&o.Interval, DefaultInterval},
-		{&o.Lag, DefaultLag}, {&o.PingEvery, DefaultPingEvery}, {&o.LockPoll, DefaultLockPoll}} {
+		{&o.Lag, DefaultLag}, {&o.LeaseTTL, DefaultLeaseTTL}, {&o.PingEvery, DefaultPingEvery}, {&o.LockPoll, DefaultLockPoll}} {
 		if *d.v == 0 {
 			*d.v = d.def
 		}
 	}
 	o.RefreshRetry = min(o.RefreshRetry, o.Refresh)
+	o.PingEvery = min(o.PingEvery, pgstore.RenewEvery(o.LeaseTTL))
 	if o.Lag < 0 {
 		o.Lag = 0
 	}
@@ -146,21 +153,36 @@ func New(st *pgstore.Store, tenant string, src *Source, business, locks dao.Data
 	if o.Now == nil {
 		o.Now = func(ctx context.Context) (time.Time, error) { return pgstore.Now(ctx, business) }
 	}
-	return &Ingester{st: st, tenant: tenant, src: src, business: business, locks: locks, o: o}
+	in := &Ingester{tenant: tenant, src: src, business: business, leases: leases, o: o}
+	in.st = st.Fenced(in.fence)
+	return in
 }
+
+// fence is the ingester's Store's fence: every write transaction confirms the lease first.
+func (in *Ingester) fence(ctx context.Context, q dao.Querier) error {
+	l := in.lock.Load()
+	if l == nil {
+		return ErrNotLocked
+	}
+	return l.Fence(ctx, q)
+}
+
+// Store is the tenant's store, every write of it fenced on the ingester's lease: the one the
+// embedding worker, the tenant's other writer in this process, writes through.
+func (in *Ingester) Store() *pgstore.Store { return in.st }
 
 // Tenant is the tenant the ingester writes.
 func (in *Ingester) Tenant() string { return in.tenant }
 
-// Acquire takes the tenant's writer lock, waiting while another server holds it, until ctx ends.
+// Acquire takes the tenant's writer lease, waiting while another server holds it, until ctx ends.
 func (in *Ingester) Acquire(ctx context.Context) error {
 	if in.lock.Load() != nil {
 		return nil
 	}
 	defer in.waiting.Store(false)
-	l, err := pgstore.AcquireWriter(ctx, in.locks, in.o.Schema, in.tenant, in.o.LockPoll, func(holder int64) {
+	l, err := pgstore.AcquireWriter(ctx, in.leases, in.tenant, in.o.LeaseTTL, in.o.LockPoll, func(h pglease.Holder) {
 		in.waiting.Store(true)
-		logger.Notice(in.o.Log, fmt.Sprintf("tenant %s: waiting for its writer lock, held by backend %d (another server)", in.tenant, holder))
+		logger.Notice(in.o.Log, fmt.Sprintf("tenant %s: waiting for its writer lease, held by %s (%s; another server)", in.tenant, h.ID, h.Info))
 	})
 	if err != nil {
 		return err
@@ -172,25 +194,25 @@ func (in *Ingester) Acquire(ctx context.Context) error {
 	return nil
 }
 
-// Release lets go of the writer lock.
+// Release lets go of the writer lease.
 func (in *Ingester) Release() {
 	if l := in.lock.Swap(nil); l != nil {
 		l.Release()
 	}
 }
 
-// Confirm reports whether the ingester holds its tenant's writer lock now: nil when it does and
-// the lock answers as this session's; ErrNotLocked while it waits for the lock (another server
-// holds it) or after it let go; ErrLockLost when the lock was lost. It is for another writer of
-// the tenant in the same process, the embedding worker, which writes only while the tenant is
-// this server's, and confirms it before each of its writes as the ingester does before each
-// commit. Unlike the ingester's other methods it may be called from any goroutine.
-func (in *Ingester) Confirm(ctx context.Context) error {
+// Confirm reports whether the ingester holds its tenant's writer lease, as it knows it with no
+// I/O: nil when it does; ErrNotLocked while it waits for the lease (another server holds it) or
+// after it let go; ErrLockLost when the lease was lost. It is for another writer of the tenant in
+// the same process, the embedding worker, which leaves the tenant alone unless it is this
+// server's; its writes go through Store, and so are fenced in the database as the ingester's
+// are. Unlike the ingester's other methods it may be called from any goroutine.
+func (in *Ingester) Confirm(_ context.Context) error {
 	l := in.lock.Load()
 	if l == nil {
 		return ErrNotLocked
 	}
-	return l.Check(ctx)
+	return l.Check()
 }
 
 // Stats are what one Pass or Refresh did.
@@ -591,8 +613,9 @@ func (in *Ingester) apply(ctx context.Context, b *pgstore.Batch, r row, st *Stat
 	return true, b.Release(ctx, r.id)
 }
 
-// commit commits b once the writer lock is confirmed held, and rolls it back otherwise: a server
-// that lost its lock writes nothing more.
+// commit commits b, whose transaction confirmed the writer lease as its first statement (the
+// fence) and holds it against a takeover; a lease this process knows lost rolls b back first. A
+// server that lost its lease writes nothing more.
 func (in *Ingester) commit(ctx context.Context, b *pgstore.Batch) error {
 	if beforeCommit != nil {
 		if err := beforeCommit(); err != nil {
@@ -600,7 +623,7 @@ func (in *Ingester) commit(ctx context.Context, b *pgstore.Batch) error {
 			return err
 		}
 	}
-	if err := in.lock.Load().Check(ctx); err != nil {
+	if err := in.lock.Load().Check(); err != nil {
 		_ = b.Rollback()
 		return err
 	}
@@ -660,7 +683,7 @@ type Outcome struct {
 }
 
 // State is what an ingester shows an operator (enterprise/ops): whether it holds its tenant's
-// writer lock or waits for another server's, and how its last pass and refresh ended. It is
+// writer lease or waits for another server's, and how its last pass and refresh ended. It is
 // published whole after each change, and safe to read from any goroutine.
 type State struct {
 	Locked, Waiting       bool
@@ -717,11 +740,11 @@ func (in *Ingester) count(ctx context.Context, st *Stats) {
 	}
 }
 
-// Run holds the tenant's writer lock and indexes on schedule until ctx ends: a refresh when the
+// Run holds the tenant's writer lease and indexes on schedule until ctx ends: a refresh when the
 // last complete one is older than Refresh (or there was none), else a pass, every Interval. A failed
 // pass is logged and tried again at the next tick; a refresh that failed or was not complete is
-// logged and tried again RefreshRetry later. It confirms the lock every PingEvery; a lost lock stops
-// it at once with ErrLockLost. It returns nil when ctx ends, with the lock released.
+// logged and tried again RefreshRetry later. It renews the lease every PingEvery; a lost lease stops
+// it at once with ErrLockLost. It returns nil when ctx ends, with the lease released.
 func (in *Ingester) Run(ctx context.Context) error {
 	if err := in.Acquire(ctx); err != nil {
 		// a wait ended by ctx is a clean stop: ctx's error, or its deadline passed, which Acquire
@@ -752,12 +775,14 @@ func (in *Ingester) Run(ctx context.Context) error {
 	return nil
 }
 
-// ping confirms the lock every PingEvery, and cancels the run with the loss.
+// ping renews the writer lease every PingEvery, and cancels the run with its loss: taken over (the
+// renew matched no row), or not renewed for most of its length (Check's silence rule), the
+// database unreachable meanwhile.
 func (in *Ingester) ping(ctx context.Context, cancel context.CancelCauseFunc) {
-	// NOTE: polled, because nothing can announce it: a session killed, or a connection dropped by
-	// the network, tells no one until the connection is next used. A ping every PingEvery bounds
-	// how long a server that lost its lock goes on believing it holds it; every commit confirms
-	// the lock as well, so no write lands in that window.
+	// NOTE: a renew failing for another reason (a timeout, a connection dropped) is not a loss by
+	// itself: the next one may land. Only the lease's own silence rule decides, by the monotonic
+	// clock, and it fires before the database's lease_until passes, so no standby can hold the
+	// tenant while this server still believes it does. Every write is fenced in the database too.
 	t := time.NewTicker(in.o.PingEvery)
 	defer t.Stop()
 	for {
@@ -765,7 +790,13 @@ func (in *Ingester) ping(ctx context.Context, cancel context.CancelCauseFunc) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			if err := in.lock.Load().Check(ctx); errors.Is(err, ErrLockLost) {
+			l := in.lock.Load()
+			err := l.Renew(ctx)
+			if err != nil && !errors.Is(err, ErrLockLost) && ctx.Err() == nil {
+				logger.Warning(in.o.Log, err, "tenant "+in.tenant+": renewing its writer lease")
+				err = l.Check()
+			}
+			if errors.Is(err, ErrLockLost) {
 				logger.Error(in.o.Log, err, "tenant "+in.tenant+": stopping")
 				cancel(err)
 				return

@@ -25,12 +25,30 @@ In the code: `app/server.go`, `enterprise/config/`
 Each `[[source]]` names one `.view` file and its own tenant. Sources refresh, re-cut and delete on
 their own schedules, so sharing a tenant would let one view's refresh delete another's rows.
 
-One writer per tenant is held by a PostgreSQL advisory lock, taken on a dedicated connection the
-ingester keeps for its whole life, outside the pool. Losing that connection stops the ingester and
-exits the server non-zero, so its supervisor restarts it; it never goes on writing unlocked. The
-embedder writes a tenant only while its ingester confirms the lock.
+One writer per tenant is held by a lease: a row of `rag_writer_lease` in the server's schema,
+claimed and renewed in transactions, never an advisory lock or any other session state, so a
+dropped or recycled connection loses nothing.
 
-In the code: `enterprise/ingest/`, `core/pgstore/writer.go`
+- **Every write is fenced in its own transaction.** Its first statement confirms the lease (this
+  holder, this epoch, not expired by the database's clock) and holds the row `FOR KEY SHARE` until
+  the write ends. The embedding worker writes through the ingester's fenced store, so its writes
+  are fenced the same way.
+- **The holder's renew is never held up by its own writes.** A renew is a plain `UPDATE` of
+  columns no unique index holds, which `FOR KEY SHARE` lets through, so a write longer than the
+  lease keeps it.
+- **A takeover waits for every open write.** A claim takes the row `FOR UPDATE NOWAIT`, which a
+  fence refuses: no other server takes the tenant while a write of the holder's is open, and a
+  claimer never queues on the row. An upsert claim would lock the row only as a renew does and
+  take the lease over mid-write, so a claim is never one.
+- **Only an expired or released lease is taken over,** at the next epoch. A stopping server
+  releases its leases, so a standby takes them at its next poll; a crashed one's are taken a lease's
+  length (30 seconds) after its last renew.
+- **A holder that cannot renew stops by its own clock** before the database's lease runs out. A
+  lease lost, taken over or not renewed in time, stops the ingester and exits the server non-zero,
+  so its supervisor restarts it; it never goes on writing without the lease.
+- Every time is the database's `clock_timestamp()`; no host's clock is compared with another's.
+
+In the code: `core/pglease/`, `core/pgstore/writer.go`, `enterprise/ingest/`
 
 ## Incremental passes and full refreshes
 
@@ -39,7 +57,9 @@ A source is read two ways, both needing only `SELECT` on the business tables:
 - **An incremental pass**, every interval, reads rows past the tenant's `(updated_at, id)` cursor,
   up to `now() − lag` (a minute by default), so a business transaction still open cannot commit a
   row behind the cursor. Each page and the new cursor commit in one transaction, so a crash replays
-  at most one page.
+  at most one page. The lag must exceed the source's longest writing transaction. A pass is not read
+  in one snapshot, and need not be: the row it could miss is one committed later than the lag after
+  the `updated_at` it carries, which is commit order, not read consistency.
 - **A full refresh**, on its schedule, renders every row and compares each document's version (a
   hash of the body, title, tags, facets and source id), so a change the view's `updated_at` missed is
   still caught. Paths the view no longer returns are deleted only after a complete, successful

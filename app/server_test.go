@@ -224,40 +224,29 @@ func (f *serverFixture) vectors(model string) string {
 	return f.scalar(`SELECT count(*)::text FROM ` + f.schema + `.rag_embedding WHERE model = '` + model + `'`)
 }
 
-// ownLocks selects the advisory locks held in the fixture's database: pg_locks shows the whole
-// server's, other databases' included.
-const ownLocks = `FROM pg_locks WHERE locktype = 'advisory' AND granted
-	AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`
-
-// locks is how many advisory locks are held in the fixture's database.
-func (f *serverFixture) locks() string {
-	return f.scalar(`SELECT count(*)::text ` + ownLocks)
+// leasesHeld is how many writer leases of the fixture's schema are held now, by the database's
+// clock: a holder named and its lease not past.
+func (f *serverFixture) leasesHeld() string {
+	return f.scalar(`SELECT count(*)::text FROM ` + f.schema + `.rag_writer_lease WHERE holder <> '' AND lease_until > clock_timestamp()`)
 }
 
-// locksReleased fails unless the fixture's database holds no advisory lock within the bound, and
-// then says who holds them. The server has closed its own sessions by the time run returns, but
-// Postgres lets a session's advisory locks go as its backend finishes exiting, after the client has
-// gone: a read straight after could see the lock still granted to a dying backend.
-func (f *serverFixture) locksReleased(when string) {
+// leasesReleased fails unless no writer lease of the fixture's schema is held, and then says
+// which: the server releases each tenant's lease in a statement of its own as it stops, so the
+// row says so the moment the server has returned.
+func (f *serverFixture) leasesReleased(when string) {
 	f.t.Helper()
-	deadline := time.Now().Add(15 * time.Second)
-	for f.locks() != "0" {
-		if time.Now().After(deadline) {
-			f.t.Errorf("%s advisory locks held 15 s %s: %s", f.locks(), when, f.lockHolders())
-			return
-		}
-		time.Sleep(50 * time.Millisecond)
+	if n := f.leasesHeld(); n != "0" {
+		f.t.Errorf("%s writer leases held %s: %s", n, when, f.scalar(`SELECT coalesce(string_agg(scope || ' ' || holder || ' ' ||
+			coalesce(holder_info, '') || ' until ' || lease_until::text, '; '), 'none') FROM `+f.schema+`.rag_writer_lease WHERE holder <> ''`))
 	}
 }
 
-// lockHolders are the backends holding the fixture database's advisory locks, each with its state,
-// type, start and last query: a live session (a lock never released) reads apart from a dying one.
-func (f *serverFixture) lockHolders() string {
-	return f.scalar(`SELECT coalesce(string_agg(l.pid::text || ' ' || coalesce(a.backend_type, '?') || ' ' ||
-		coalesce(a.state, '?') || ' since ' || coalesce(a.backend_start::text, '?') || ' query ' ||
-		left(regexp_replace(coalesce(a.query, ''), '\s+', ' ', 'g'), 80), '; '), 'none')
-		FROM pg_locks l LEFT JOIN pg_stat_activity a ON a.pid = l.pid
-		WHERE l.locktype = 'advisory' AND l.granted AND l.database = (SELECT oid FROM pg_database WHERE datname = current_database())`)
+// takeOver makes the tenants' leases another server's, as a standby's claim of an expired lease
+// does: the next epoch, another holder, live for an hour.
+func (f *serverFixture) takeOver() {
+	f.t.Helper()
+	f.exec(`UPDATE ` + f.schema + `.rag_writer_lease SET holder = 'another server', epoch = epoch + 1,
+		lease_until = clock_timestamp() + interval '1 hour'`)
 }
 
 func (f *serverFixture) waitFor(what string, cond func() bool) {
@@ -301,7 +290,6 @@ func (f *serverFixture) serve(ctx context.Context, args ...string) (<-chan int, 
 }
 
 // started waits for the server to say it serves: every step has started, the migrations committed.
-// (The migrations hold an advisory lock of their own while they run, so a lock held is no sign.)
 func (f *serverFixture) started(stderr *syncBuffer) {
 	f.t.Helper()
 	f.waitFor("the server serving", func() bool { return strings.Contains(stderr.String(), "serving enterprise search") })
@@ -405,17 +393,17 @@ type errorString string
 func (e errorString) Error() string { return string(e) }
 
 // The server's whole life, in process: it creates its schema and every pgstore table there and none
-// in public, records the tenant's policy, indexes the source, and holds the tenant's lock; when its
-// context ends it stops in reverse, releasing the lock, and exits 0. Run again and its lock's
-// connection killed, it stops and exits 1. The mutant, named here: the migrations run before the
-// schema is created (the tables land in public).
+// in public, records the tenant's policy, indexes the source, and holds the tenant's writer lease;
+// when its context ends it stops in reverse, releasing the lease, and exits 0. Run again and its
+// lease taken over by another server, it stops and exits 1. The mutant, named here: the
+// migrations run before the schema is created (the tables land in public).
 func TestTheServerIndexesItsSourcesAndStopsInReverse(t *testing.T) {
 	f := newServerFixture(t, serverView)
 	ctx, cancel := context.WithCancel(f.ctx)
 	done, stderr := f.serve(ctx)
 	f.started(stderr)
 	tables := f.scalar(`SELECT coalesce(string_agg(table_name, ',' ORDER BY table_name), '') FROM information_schema.tables WHERE table_schema = '` + f.schema + `'`)
-	if tables != "autodoc_schema,rag_ann_builder,rag_ann_index,rag_chunk,rag_cursor,rag_document,rag_embedding,rag_ingest_error,rag_link,rag_meta,rag_tenant_policy" {
+	if tables != "autodoc_schema,rag_ann_builder,rag_ann_index,rag_chunk,rag_cursor,rag_document,rag_embedding,rag_ingest_error,rag_link,rag_meta,rag_tenant_policy,rag_writer_lease" {
 		t.Errorf("the schema's tables: %s", tables)
 	}
 	if public := f.scalar(`SELECT count(*)::text FROM information_schema.tables WHERE table_schema = 'public'
@@ -435,8 +423,8 @@ func TestTheServerIndexesItsSourcesAndStopsInReverse(t *testing.T) {
 	if p, err := st.Policy(f.ctx); err != nil || !slices.Equal(p.AccessFields, []string{"label_id"}) || p.View != "track" {
 		t.Errorf("the tenant's policy: %+v, %v", p, err)
 	}
-	if got := f.locks(); got != "1" {
-		t.Errorf("%s advisory locks held while serving, want the tenant's", got)
+	if got := f.leasesHeld(); got != "1" {
+		t.Errorf("%s writer leases held while serving, want the tenant's", got)
 	}
 	// a row added while it serves is indexed at its next pass
 	f.exec(`INSERT INTO track VALUES (3, 'A', 'osprey song', now() - interval '1 minute')`)
@@ -445,21 +433,18 @@ func TestTheServerIndexesItsSourcesAndStopsInReverse(t *testing.T) {
 	if code := exitOf(t, done, stderr); code != 0 {
 		t.Fatalf("--server exited %d: %s", code, stderr)
 	}
-	f.locksReleased("after the server stopped")
+	f.leasesReleased("after the server stopped")
 	if !strings.Contains(stderr.String(), "serving enterprise search: 1 sources in schema "+f.schema) {
 		t.Errorf("the server said %s", stderr)
 	}
 
-	// again, and its lock's connection is killed: it stops, non-zero
+	// again, and its lease taken over by another server: it stops, non-zero
 	done, stderr = f.serve(f.ctx)
 	f.started(stderr)
-	// NOTE: pg_locks shows the lock granted as soon as pg_try_advisory_lock runs, before the take's
-	// transaction commits; a kill in that window fails the take itself ("take the writer lock"),
-	// not a lock held. A row indexed is written under the lock, so the take had returned.
 	f.exec(`INSERT INTO track VALUES (4, 'A', 'heron song', now() - interval '1 minute')`)
-	f.waitFor("the lock taken and a row written under it", func() bool { return f.locks() == "1" && f.documents() == "4" })
-	f.exec(`SELECT pg_terminate_backend(pid) ` + ownLocks)
-	// a row to write: the next pass's commit confirms the lock first, sooner than the ping
+	f.waitFor("the lease taken and a row written under it", func() bool { return f.leasesHeld() == "1" && f.documents() == "4" })
+	f.takeOver()
+	// a row to write: the next pass's fence finds the lease another's, sooner than the renew
 	f.exec(`INSERT INTO track VALUES (5, 'A', 'tern song', now() - interval '1 minute')`)
 	if code := exitOf(t, done, stderr); code != 1 || !strings.Contains(stderr.String(), "writer lock was lost") {
 		t.Fatalf("--server after its lock was lost: exit %d: %s", code, stderr)
@@ -524,7 +509,7 @@ func TestSIGTERMStopsTheServer(t *testing.T) {
 		_ = cmd.Process.Kill()
 		t.Fatalf("--server did not stop on SIGTERM: %s", out.String())
 	}
-	f.locksReleased("after SIGTERM")
+	f.leasesReleased("after SIGTERM")
 }
 
 // The server embeds its tenant centrally: every distinct text gets a vector under the configured

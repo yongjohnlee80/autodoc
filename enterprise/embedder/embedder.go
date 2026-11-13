@@ -57,8 +57,8 @@ type Tenant struct {
 	Name  string
 	Store Store
 	// Confirm answers nil while this process may write the tenant: the server's ingester holds the
-	// tenant's writer lock (ingest.Ingester.Confirm). The worker confirms it before each of its
-	// writes, and leaves a tenant it is not confirmed for alone, so a second server waiting for
+	// tenant's writer lease (ingest.Ingester.Confirm). The worker confirms it before each of its
+	// writes, which the ingester's fenced Store confirms again in the database, and leaves a tenant it is not confirmed for alone, so a second server waiting for
 	// the tenant never switches its model or writes its vectors. nil: always this process's.
 	Confirm func(ctx context.Context) error
 }

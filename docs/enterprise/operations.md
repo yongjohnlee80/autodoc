@@ -21,7 +21,7 @@ curl -s http://127.0.0.1:8730/v1/health
 | Check | ok | degraded | failing |
 |---|---|---|---|
 | `database` | a ping answers within 2s | | it doesn't |
-| `tenants` | every tenant's writer lock is held | a lock is held by another server (this one is a standby) | |
+| `tenants` | every tenant's writer lease is held | a lease is held by another server (this one is a standby) | |
 | `embedding` | the provider is up | it's down or failing: searches answer by words meanwhile | |
 
 - **`status`:**
@@ -81,7 +81,7 @@ curl -s http://127.0.0.1:8730/v1/status -H "Authorization: Bearer $AUTODOC_OPS_T
 | Code | Meaning |
 |---|---|
 | `database` | the index's database failed |
-| `lock_lost` | the tenant's writer lock was lost (the server exits, and its supervisor restarts it) |
+| `lock_lost` | the tenant's writer lease was lost: taken over, or not renewed in time (the server exits, and its supervisor restarts it) |
 | `view` | the view's query failed on your database: a table, a column, a permission |
 | `order` | the view's rows aren't in `(updated_at, id)` order ([views](views.md)) |
 | `provider_unreachable` | the embedding provider doesn't answer |
@@ -188,9 +188,31 @@ journalctl -u autodoc-server -f
 ```
 
 - **Secrets live in `server.env`** (0600), never in `server.toml`.
-- **A refused configuration (exit 2) isn't restarted,** because restarting can't mend it. Exit 1 (the database lost, a writer lock lost) is restarted after 5 seconds.
-- **On stop:** SIGTERM drains the API's requests (35s at most), then releases the writer locks. The stop timeout is 60s.
+- **A refused configuration (exit 2) isn't restarted,** because restarting can't mend it. Exit 1 (the database lost, a writer lease lost) is restarted after 5 seconds.
+- **On stop:** SIGTERM drains the API's requests (35s at most), then releases the writer leases, so a standby takes them at its next poll. The stop timeout is 60s.
 - **The unit runs as a dynamic user,** with the system read-only to it.
+
+### Writer leases
+
+Each tenant's writer is a row of `rag_writer_lease` in the server's schema: who holds it
+(`holder_info` names the host, the process id and its start), its epoch, and until when.
+
+```sql
+SELECT scope, holder, holder_info, epoch, lease_until FROM <schema>.rag_writer_lease;
+```
+
+- **A standby** waits while the lease is held, and takes it over when its holder releases it (a
+  clean stop) or 30 seconds after the holder's last renew (a crash, or a host cut off).
+- **Taking a tenant over by hand,** for a holder you know is gone, is one statement; the holder, if
+  it is still running, finds its lease lost at its next write and exits 1:
+
+  ```sql
+  UPDATE <schema>.rag_writer_lease SET lease_until = clock_timestamp() WHERE scope = 'tenant:<name>';
+  ```
+- **The `lag` of a source** must be longer than the longest transaction that writes its rows: a
+  row committed later than `lag` after its `updated_at` is passed over by the incremental passes and
+  found only by the next refresh. Find your longest with `SELECT max(clock_timestamp() - xact_start)
+  FROM pg_stat_activity WHERE state <> 'idle'` on the business database, under load.
 
 ## A container
 

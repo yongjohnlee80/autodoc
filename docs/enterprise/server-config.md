@@ -82,12 +82,13 @@ when it is missing, then applies its migrations there. Your tables are never wri
 | `ann_ef_construction` | `200` | How wide each model's HNSW index is built (pgvector's `ef_construction`). It decides recall more than any search setting: at pgvector's default of 64, a tenant sharing the index found 0.938 to 0.990 of its exact top ten across 20 builds, and 8 of those builds were below 0.95; at 200, 0.994 to 1.000. A wider build takes longer. | outside 4 to 1000, or below twice `ann_m` |
 | `ann_m` | `16` | The links each node of the index keeps (pgvector's `m`). 32 did no better than 16 at an ef_construction of 200. | outside 2 to 100 |
 
-The server opens three connection pools on the DSN:
+The server opens two connection pools on the DSN:
 
 - the index's, where every connection's `search_path` is `schema, public` (pgvector is usually
-  installed in `public`);
-- the one your views run on, with the role's own `search_path`, so a view runs as it does in `psql`;
-- one pinned connection per source, which holds that tenant's writer lock.
+  installed in `public`), and where each tenant's writer lease is a row of `rag_writer_lease`. Its
+  connections end a transaction left idle for a minute, so a hung writer never keeps a standby
+  from its tenant;
+- the one your views run on, with the role's own `search_path`, so a view runs as it does in `psql`.
 
 **Approximate semantic search.** The server builds one HNSW index per embedding model, in the
 background, one index at a time across every server on the database.
@@ -228,7 +229,7 @@ Each source is one `.view` file, indexed into a tenant of its own. There must be
 
 | Field | Default | Meaning | Refused when |
 |---|---|---|---|
-| `tenant` | (required) | The tenant the source is indexed into. It keys every index row, names the source in the log, and keys its writer lock. | missing; not letters, digits, `.`, `_` and `-` starting with a letter or digit, at most 64; another source has it |
+| `tenant` | (required) | The tenant the source is indexed into. It keys every index row, names the source in the log, and keys its writer lease. | missing; not letters, digits, `.`, `_` and `-` starting with a letter or digit, at most 64; another source has it |
 | `view` | (required) | The `.view` file, relative to this file. | missing; the view is refused ([its rules](views.md)) |
 | `interval` | `1m` | How often the rows changed since the cursor are read. | under `1s` |
 | `refresh` | `24h` | How often every row is read again: content changes the rows' `updated_at` missed are written, and the documents of rows gone are deleted. | shorter than `interval` |
@@ -244,5 +245,5 @@ policy, which search reads: a tenant can never be searched unscoped.
 | Code | When |
 |---|---|
 | 0 | stopped by SIGINT or SIGTERM, with every lock released; or `--check` found nothing wrong |
-| 1 | the file can't be read; the database can't be reached; a tenant's writer lock was lost (restart it: it waits for the lock and takes it again) |
+| 1 | the file can't be read; the database can't be reached; a tenant's writer lease was lost (restart it: it waits for the lease and takes it again) |
 | 2 | the configuration or a view is refused, the field named; `--check` refused a view's order, or the embedding provider refused the key or has no such model |
