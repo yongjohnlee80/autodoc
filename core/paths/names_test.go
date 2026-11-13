@@ -11,8 +11,8 @@ import (
 
 // names are names from data as the crew has them: scopes, codenames, and the bytes Name escapes.
 var names = []string{
-	"autodoc:0123456789abcdef", "autovim:plugins", "nvim:Proj", "zen-2", "kimmy-vision", "Gold", "a_b.c",
-	"jarvis@autovim:plugins", "100%", "a b", "con", "x.", "", "a/b", `a\b`, "日本", strings.Repeat("Long:", 80),
+	"autodoc:0123456789abcdef", "autovim:plugins", "nvim:Proj", "zen-2", "scout-7", "Gold", "a_b.c",
+	"scout@autovim:plugins", "100%", "a b", "con", "x.", "", "a/b", `a\b`, "日本", strings.Repeat("Long:", 80),
 }
 
 // A name is one element by its OS's rule: a scope's ':' as it is on Linux and macOS, "@3A" on
@@ -24,7 +24,7 @@ func TestANameIsWrittenByItsOSsRule(t *testing.T) {
 		{"autovim:plugins", "autovim:plugins", "autovim@3Aplugins"},
 		{"zen-2", "zen-2", "zen-2"},
 		{"Gold", "@47old", "@47old"},
-		{"jarvis@autovim:plugins", "jarvis@40autovim:plugins", "jarvis@40autovim@3Aplugins"},
+		{"scout@autovim:plugins", "scout@40autovim:plugins", "scout@40autovim@3Aplugins"},
 		{"100%", "100@25", "100@25"},
 		{"", "@_", "@_"},
 		{"con", "@63on", "@63on"},
@@ -124,7 +124,7 @@ func TestAnEarlierBuildsNameIsRead(t *testing.T) {
 // An agent's folder, made by Name in a real directory, is found again from its path as a program
 // that percent-decodes its working directory (opencode) has it, on this OS.
 func TestAFolderByNameIsFoundFromAPercentDecodedPath(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "kb", Name("autodoc:0123456789abcdef"), Name("notis-lucis-caelum"))
+	dir := filepath.Join(t.TempDir(), "kb", Name("autodoc:0123456789abcdef"), Name("scout-7"))
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatalf("an agent's folder by Name: %v", err)
 	}
