@@ -75,6 +75,7 @@ type Host struct {
 	prefRows []feature.PrefSpec // every preference declared, the host's and the features' (feature/prefspec.go)
 	keys     feature.Keyset     // the keys and their cards, the host's and the features' (feature/keys.go)
 	started  bool               // the first preferences were applied: the program has started (applyPrefs)
+	said     string             // what the status line says now (say): a late answer reads it before it speaks
 	editor   editorWidget       // main.qml's Editor, terminal or native (editor.go)
 	core     *editor.EditorCore // its core: the text, the cursor and the modes
 	gui      bool               // in a window (Options.GUI): the theme kept is gui.theme

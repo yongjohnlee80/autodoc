@@ -274,3 +274,26 @@ func TestASaveWhoseBufferClosedSaysNothing(t *testing.T) {
 		t.Fatalf("the status says %q: a save whose buffer was closed spoke for it", s)
 	}
 }
+
+// TestALandedSaveOvertakenByAReadAgainKeepsTheNewerStatus: a save that landed whole, its answer
+// arriving after the note was read again, leaves the read's "opened a.md" on the status line, a
+// newer word than "saving a.md…" was, and says it was saved by the notice alone.
+func TestALandedSaveOvertakenByAReadAgainKeepsTheNewerStatus(t *testing.T) {
+	t.Parallel()
+	w := newHeldWrite("a.md")
+	r := editedNote(t, w)
+	b := onLoop(r, func() *openBuffer { return r.h.active })
+	w.after.Store(true)
+	r.h.p.Post(r.h.save)
+	w.waitHeld(t) // written: its answer is held
+	r.h.p.Post(func() { r.h.load(r.h.file.ws, r.h.file.path, nil) })
+	r.waitStatus(t, "opened a.md")
+	w.free()
+	r.waitWithin(t, "the save settled", daemonWait, func() bool { return !onLoop(r, func() bool { return b.saving }) })
+	if s := onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.status"); return v.Raw }); s != "opened a.md" {
+		t.Fatalf("the status says %q, want the read again's opened a.md kept", s)
+	}
+	if !r.noticed("saved a.md") {
+		t.Fatal("no notice says the save landed")
+	}
+}
