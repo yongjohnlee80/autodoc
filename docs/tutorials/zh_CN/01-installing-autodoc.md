@@ -2,7 +2,9 @@
 
 AutoDoc 是一个程序：`autodoc`。
 
-## 安装脚本（推荐）
+推荐使用安装脚本，只需一行命令：Linux 和 macOS 用一个，Windows 用另一个。
+
+## 在 Linux 和 macOS 上
 
 在 Linux 和 macOS 上，一行命令即可安装带窗口的 AutoDoc：
 
@@ -46,7 +48,6 @@ irm https://github.com/yongjohnlee80/autodoc/releases/latest/download/install-au
 - mise：`mise use -g github:yongjohnlee80/autodoc`
 - Go：`go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest`（不带 `-tags gui` 时只有终端界面）
 - 项目 Releases 页面上的发布包
-- Windows：先安装 WSL2，再用 Linux 的安装脚本
 
 这些方式按安装时的方式更新（`brew upgrade`、`mise upgrade`、再次 `go install`），所以 **帮助 › 关于** 不会为它们提供更新。服务器、容器以及从源码构建：见 [参考手册，第 2 章](../../reference/02-quickstart-and-workspaces.md)。
 

@@ -2,7 +2,9 @@
 
 AutoDoc es un solo programa, `autodoc`.
 
-## El script de instalación (recomendado)
+La forma recomendada es un script de instalación, de una sola línea: uno para Linux y macOS y otro para Windows.
+
+## En Linux y macOS
 
 En Linux y macOS, una sola línea instala AutoDoc con su ventana:
 
@@ -46,7 +48,6 @@ Solo cambia tu `PATH` si se lo pides (`-AddToPath`); si no, muestra el comando q
 - mise: `mise use -g github:yongjohnlee80/autodoc`
 - Go: `go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` (sin `-tags gui`, solo la interfaz de terminal)
 - Un archivo comprimido de la página de Releases del proyecto
-- Windows: WSL2 y, después, el script de instalación de Linux
 
 Estas se actualizan de la misma forma en que se instalaron (`brew upgrade`, `mise upgrade`, `go install` otra vez), así que **Ayuda › Acerca de** no ofrece Actualizar para ellas. Servidores, contenedores y compilar desde el código fuente: [Referencia, capítulo 2](../../reference/02-quickstart-and-workspaces.md).
 

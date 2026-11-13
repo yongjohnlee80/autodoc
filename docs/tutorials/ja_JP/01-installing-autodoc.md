@@ -2,7 +2,9 @@
 
 AutoDoc は `autodoc` という 1 つのプログラムです。
 
-## インストールスクリプト (おすすめ)
+おすすめはインストールスクリプトで、1 行で済みます。Linux と macOS 用と、Windows 用があります。
+
+## Linux と macOS では
 
 Linux と macOS では、次の 1 行でウィンドウ版の AutoDoc がインストールされます。
 
@@ -46,7 +48,6 @@ irm https://github.com/yongjohnlee80/autodoc/releases/latest/download/install-au
 - mise: `mise use -g github:yongjohnlee80/autodoc`
 - Go: `go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` (`-tags gui` なしではターミナル版のみ)
 - プロジェクトの Releases ページのリリースアーカイブ
-- Windows: WSL2 を入れてから、Linux のインストールスクリプト
 
 これらはインストールしたときと同じ方法で更新します (`brew upgrade`、`mise upgrade`、もう一度 `go install`)。そのため **ヘルプ › バージョン情報** に更新ボタンは出ません。サーバー、コンテナ、ソースからのビルドについては [リファレンス 第 2 章](../../reference/02-quickstart-and-workspaces.md) を参照してください。
 

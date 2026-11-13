@@ -4,16 +4,48 @@
 
 **A document knowledge base you and your AI agents work in together.**
 
-AutoDoc keeps a folder of Markdown files as they are, and gives them an editor, search by words and
-by meaning, the links between them, and room for AI agents to work beside you. It runs in your
-terminal (`autodoc --ui`) or in a window of its own (`autodoc --gui`).
-
 [Documentation](https://yongjohnlee80.github.io/autodoc/) ·
 [Tutorials](docs/tutorials/README.md) ·
 [Reference](docs/reference/README.md) ·
 [Install](#quick-start)
 
+## Quick start
+
+1. **Install it.** On Linux and macOS:
+
+   ```sh
+   curl -fsSL https://github.com/yongjohnlee80/autodoc/releases/latest/download/install-autodoc.sh | sh
+   ```
+
+   It installs AutoDoc with its window as `~/.local/bin/autodoc`, for you alone (no `sudo`),
+   checksum-verified, with a launcher in your applications. AutoDoc then updates itself from
+   **Help › About › Update**. On Windows, in PowerShell:
+
+   ```powershell
+   irm https://github.com/yongjohnlee80/autodoc/releases/latest/download/install-autodoc.ps1 | iex
+   ```
+
+   It installs AutoDoc for you alone, with no administrator rights, and **Help › About › Update**
+   keeps it current there too. Under WSL2, the Linux line works as well.
+
+   Other ways: Homebrew (`brew install yongjohnlee80/tap/autodoc`), mise
+   (`mise use -g github:yongjohnlee80/autodoc`), `go install -tags gui
+   github.com/yongjohnlee80/autodoc/cmd/autodoc@latest`, or a
+   [release archive](https://github.com/yongjohnlee80/autodoc/releases/latest).
+2. **Start it.** `autodoc --gui` opens the window; `autodoc --ui` runs in your terminal. Either
+   starts AutoDoc's background service when it isn't running.
+3. **Add your notes.** **Go › Manage workspaces…** (SPC W), then **Add…**: a short name, and the
+   folder your Markdown lives in. Then search it with **Ctrl+G**.
+
+The [tutorials](docs/tutorials/README.md) go on from there, a few minutes each. Every way to install
+it, servers, containers and building from source included, is in
+[Reference, Chapter 2](docs/reference/02-quickstart-and-workspaces.md).
+
 ## What it is for
+
+AutoDoc keeps a folder of Markdown files as they are, and gives them an editor, search by words and
+by meaning, the links between them, and room for AI agents to work beside you. It runs in your
+terminal (`autodoc --ui`) or in a window of its own (`autodoc --gui`).
 
 ### 1. Find it fast: one search, for you and your agents
 
@@ -151,38 +183,6 @@ workspace.
 - **An editor for reading and writing.** A page centred on the screen, Vim or ordinary keys,
   diagrams, charts and tables drawn in place.
 - **Built to be extended.** Lua for your own commands, and plugins for whole new tools.
-
-## Quick start
-
-1. **Install it.** On Linux and macOS:
-
-   ```sh
-   curl -fsSL https://github.com/yongjohnlee80/autodoc/releases/latest/download/install-autodoc.sh | sh
-   ```
-
-   It installs AutoDoc with its window as `~/.local/bin/autodoc`, for you alone (no `sudo`),
-   checksum-verified, with a launcher in your applications. AutoDoc then updates itself from
-   **Help › About › Update**. On Windows, in PowerShell:
-
-   ```powershell
-   irm https://github.com/yongjohnlee80/autodoc/releases/latest/download/install-autodoc.ps1 | iex
-   ```
-
-   It installs AutoDoc for you alone, with no administrator rights, and **Help › About › Update**
-   keeps it current there too. Under WSL2, the Linux line works as well.
-
-   Other ways: Homebrew (`brew install yongjohnlee80/tap/autodoc`), mise
-   (`mise use -g github:yongjohnlee80/autodoc`), `go install -tags gui
-   github.com/yongjohnlee80/autodoc/cmd/autodoc@latest`, or a
-   [release archive](https://github.com/yongjohnlee80/autodoc/releases/latest).
-2. **Start it.** `autodoc --gui` opens the window; `autodoc --ui` runs in your terminal. Either
-   starts AutoDoc's background service when it isn't running.
-3. **Add your notes.** **Go › Manage workspaces…** (SPC W), then **Add…**: a short name, and the
-   folder your Markdown lives in. Then search it with **Ctrl+G**.
-
-The [tutorials](docs/tutorials/README.md) go on from there, a few minutes each. Every way to install
-it, servers, containers and building from source included, is in
-[Reference, Chapter 2](docs/reference/02-quickstart-and-workspaces.md).
 
 ## Learn more
 
