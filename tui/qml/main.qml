@@ -1049,6 +1049,7 @@ Window {
     Recovery { id: recoveryDialog }
     OpenHTML { id: openHTML }
     FileConflict { id: fileConflict }
+    // ---- the conflict's Compare (a terminal's) ----
     WorkspacePicker { id: workspacePicker }
     WorkspaceManager { id: workspaceManager }
     WorkspaceSettings { id: workspaceSettings }

@@ -1615,6 +1615,10 @@
         <source>&amp;Overwrite</source>
         <translation>上書き(&amp;o)</translation>
     </message>
+    <message id="autodoc.dialog.fileConflict.compare">
+        <source>&amp;Compare</source>
+        <translation>比較(&amp;c)</translation>
+    </message>
     <message id="autodoc.dialog.fileConflict.reload">
         <source>&amp;Reload</source>
         <translation>再読み込み(&amp;r)</translation>
@@ -8499,6 +8503,58 @@ Revoked, its next use of %2 is refused, and asks you again by a card.</source>
     <message id="autodoc.cmd.agents.permissions.help">
         <source>agent permissions: what each agent and package was granted</source>
         <translation>エージェントの権限: 各エージェントとパッケージに許可したもの</translation>
+    </message>
+    <message id="autodoc.text.compare.on_disk">
+        <source>On disk</source>
+        <translation>ディスク上</translation>
+    </message>
+    <message id="autodoc.text.compare.your_unsaved_edits">
+        <source>Your unsaved edits</source>
+        <translation>未保存の編集</translation>
+    </message>
+    <message id="autodoc.text.compare.title">
+        <source>Compare %1 with the disk</source>
+        <translation>%1 をディスクと比較</translation>
+    </message>
+    <message id="autodoc.text.compare.is_gone_from_disk">
+        <source>%1 is gone from disk</source>
+        <translation>%1 はディスクにありません</translation>
+    </message>
+    <message id="autodoc.text.compare.is_no_longer_open">
+        <source>%1 is no longer open</source>
+        <translation>%1 はもう開かれていません</translation>
+    </message>
+    <message id="autodoc.text.compare.the_buffer_changed_reload">
+        <source>The buffer changed since the merge was loaded: reload it</source>
+        <translation>マージを読み込んだ後にバッファーが変更されました: 再読み込みしてください</translation>
+    </message>
+    <message id="autodoc.text.compare.nothing_to_merge">
+        <source>Nothing to merge</source>
+        <translation>マージするものはありません</translation>
+    </message>
+    <message id="autodoc.text.compare.the_disk_holds_your_text">
+        <source>%1 on disk holds your buffer's text. Take the disk's version, the buffer then saved?</source>
+        <translation>ディスク上の %1 はバッファーと同じテキストです。ディスクの版を採用し、バッファーを保存済みにしますか?</translation>
+    </message>
+    <message id="autodoc.text.compare.take_the_disk_s_version">
+        <source>&amp;Take the disk's version</source>
+        <translation>ディスクの版を採用(&amp;t)</translation>
+    </message>
+    <message id="autodoc.text.compare.keep_editing">
+        <source>&amp;Keep editing</source>
+        <translation>編集を続ける(&amp;k)</translation>
+    </message>
+    <message id="autodoc.notice.compare.read">
+        <source>read %1 to compare</source>
+        <translation>比較のために %1 を読み込む</translation>
+    </message>
+    <message id="autodoc.notice.compare.took_the_disk_s_version">
+        <source>took the disk's version of %1: saved</source>
+        <translation>%1 のディスクの版を採用しました: 保存済み</translation>
+    </message>
+    <message id="autodoc.notice.compare.merged">
+        <source>merged %1 with the disk: unsaved, u brings your text back</source>
+        <translation>%1 をディスクとマージしました: 未保存、u で元のテキストに戻せます</translation>
     </message>
 </context>
 </TS>

@@ -1615,6 +1615,10 @@
         <source>&amp;Overwrite</source>
         <translation>S&amp;obrescrever</translation>
     </message>
+    <message id="autodoc.dialog.fileConflict.compare">
+        <source>&amp;Compare</source>
+        <translation>&amp;Comparar</translation>
+    </message>
     <message id="autodoc.dialog.fileConflict.reload">
         <source>&amp;Reload</source>
         <translation>&amp;Recarregar</translation>
@@ -8503,6 +8507,58 @@ Revogado, o próximo uso de %2 é recusado e pergunta a você de novo com um car
     <message id="autodoc.cmd.agents.permissions.help">
         <source>agent permissions: what each agent and package was granted</source>
         <translation>permissões dos agentes: o que foi concedido a cada agente e pacote</translation>
+    </message>
+    <message id="autodoc.text.compare.on_disk">
+        <source>On disk</source>
+        <translation>No disco</translation>
+    </message>
+    <message id="autodoc.text.compare.your_unsaved_edits">
+        <source>Your unsaved edits</source>
+        <translation>Suas edições não salvas</translation>
+    </message>
+    <message id="autodoc.text.compare.title">
+        <source>Compare %1 with the disk</source>
+        <translation>Comparar %1 com o disco</translation>
+    </message>
+    <message id="autodoc.text.compare.is_gone_from_disk">
+        <source>%1 is gone from disk</source>
+        <translation>%1 não está mais no disco</translation>
+    </message>
+    <message id="autodoc.text.compare.is_no_longer_open">
+        <source>%1 is no longer open</source>
+        <translation>%1 não está mais aberto</translation>
+    </message>
+    <message id="autodoc.text.compare.the_buffer_changed_reload">
+        <source>The buffer changed since the merge was loaded: reload it</source>
+        <translation>O buffer mudou desde que a mesclagem foi carregada: recarregue-a</translation>
+    </message>
+    <message id="autodoc.text.compare.nothing_to_merge">
+        <source>Nothing to merge</source>
+        <translation>Nada para mesclar</translation>
+    </message>
+    <message id="autodoc.text.compare.the_disk_holds_your_text">
+        <source>%1 on disk holds your buffer's text. Take the disk's version, the buffer then saved?</source>
+        <translation>%1 no disco tem o texto do seu buffer. Usar a versão do disco e dar o buffer como salvo?</translation>
+    </message>
+    <message id="autodoc.text.compare.take_the_disk_s_version">
+        <source>&amp;Take the disk's version</source>
+        <translation>Usar a versão do disco(&amp;t)</translation>
+    </message>
+    <message id="autodoc.text.compare.keep_editing">
+        <source>&amp;Keep editing</source>
+        <translation>Continuar editando(&amp;k)</translation>
+    </message>
+    <message id="autodoc.notice.compare.read">
+        <source>read %1 to compare</source>
+        <translation>ler %1 para comparar</translation>
+    </message>
+    <message id="autodoc.notice.compare.took_the_disk_s_version">
+        <source>took the disk's version of %1: saved</source>
+        <translation>versão do disco de %1 usada: salvo</translation>
+    </message>
+    <message id="autodoc.notice.compare.merged">
+        <source>merged %1 with the disk: unsaved, u brings your text back</source>
+        <translation>%1 mesclado com o disco: não salvo, u traz seu texto de volta</translation>
     </message>
 </context>
 </TS>

@@ -170,6 +170,26 @@ or `disk: "deleted"`.
 
 In the code: `tui/diskwatch.go`, `tui/buffers.go`
 
+### Compare: the disk's text and the buffer's, merged
+
+In a terminal, the question's fourth answer, Compare, merges the two texts in a three-pane view:
+the disk's at the left, the buffer's at the right, the result between them. Changes on one side are
+taken from it; a conflict is resolved by hand or left, and a conflict left keeps the buffer's own
+lines. Apply puts the result in the buffer as one undo step, unsaved, at the disk's version, so the
+next save writes over that version, and a disk that moved again since is a conflict again. A disk
+holding the buffer's own text has nothing to merge: Compare offers to take its version instead.
+
+The common ancestor is the text the buffer last agreed with on disk: the editor keeps it (`base`)
+when the file is read, saved or reloaded, as the editor holds it (LF), up to 4 MiB. Without it (a
+draft named under a path, a file gone and made again, a larger file, a restart) the two texts are
+merged alone, every difference a conflict. The daemon keeps no file's text at an older version; a
+verb reading one (a read at a version, from the store's history) would let a restart keep the
+ancestor too, and is left for later.
+
+A window has no Compare yet: its toolkit's merge view comes next, and the answer with it.
+
+In the code: `tui/compare.go`
+
 ## A task's file follows its task
 
 A todo store keeps each task in the folder of its status (`open/`, `in-progress/`, `deferred/`,

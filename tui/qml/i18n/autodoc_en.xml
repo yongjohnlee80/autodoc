@@ -1699,6 +1699,10 @@
         <source>export the loaded rows to</source>
         <translation>export the loaded rows to</translation>
     </message>
+    <message id="autodoc.dialog.fileConflict.compare">
+        <source>&amp;Compare</source>
+        <translation>&amp;Compare</translation>
+    </message>
     <message id="autodoc.dialog.fileConflict.file_changed_on_disk">
         <source>file changed on disk</source>
         <translation>file changed on disk</translation>
@@ -4363,6 +4367,18 @@ WHAT A KEY NEEDS
         <source>This Vega-Lite chart isn't supported in AutoDoc yet. Its source is in the Raw view, or in its .chart.json file.</source>
         <translation>This Vega-Lite chart isn't supported in AutoDoc yet. Its source is in the Raw view, or in its .chart.json file.</translation>
     </message>
+    <message id="autodoc.notice.compare.merged">
+        <source>merged %1 with the disk: unsaved, u brings your text back</source>
+        <translation>merged %1 with the disk: unsaved, u brings your text back</translation>
+    </message>
+    <message id="autodoc.notice.compare.read">
+        <source>read %1 to compare</source>
+        <translation>read %1 to compare</translation>
+    </message>
+    <message id="autodoc.notice.compare.took_the_disk_s_version">
+        <source>took the disk's version of %1: saved</source>
+        <translation>took the disk's version of %1: saved</translation>
+    </message>
     <message id="autodoc.notice.contextmenu.the_right_click_menu_opens_where_the_cursor_is_o">
         <source>the right-click menu opens where the cursor is on the screen: scroll it into view</source>
         <translation>the right-click menu opens where the cursor is on the screen: scroll it into view</translation>
@@ -6472,6 +6488,46 @@ Revoked, its next use of %2 is refused, and asks you again by a card.</translati
     <message id="autodoc.text.candidate.audit_asks_your_agent_to_read_this_code_autodoc">
         <source>Audit asks your agent to read this code. AutoDoc can't stop the agent from running code or changing files: pick an agent you trust, and watch its tab.</source>
         <translation>Audit asks your agent to read this code. AutoDoc can't stop the agent from running code or changing files: pick an agent you trust, and watch its tab.</translation>
+    </message>
+    <message id="autodoc.text.compare.is_gone_from_disk">
+        <source>%1 is gone from disk</source>
+        <translation>%1 is gone from disk</translation>
+    </message>
+    <message id="autodoc.text.compare.is_no_longer_open">
+        <source>%1 is no longer open</source>
+        <translation>%1 is no longer open</translation>
+    </message>
+    <message id="autodoc.text.compare.keep_editing">
+        <source>&amp;Keep editing</source>
+        <translation>&amp;Keep editing</translation>
+    </message>
+    <message id="autodoc.text.compare.nothing_to_merge">
+        <source>Nothing to merge</source>
+        <translation>Nothing to merge</translation>
+    </message>
+    <message id="autodoc.text.compare.on_disk">
+        <source>On disk</source>
+        <translation>On disk</translation>
+    </message>
+    <message id="autodoc.text.compare.take_the_disk_s_version">
+        <source>&amp;Take the disk's version</source>
+        <translation>&amp;Take the disk's version</translation>
+    </message>
+    <message id="autodoc.text.compare.the_buffer_changed_reload">
+        <source>The buffer changed since the merge was loaded: reload it</source>
+        <translation>The buffer changed since the merge was loaded: reload it</translation>
+    </message>
+    <message id="autodoc.text.compare.the_disk_holds_your_text">
+        <source>%1 on disk holds your buffer's text. Take the disk's version, the buffer then saved?</source>
+        <translation>%1 on disk holds your buffer's text. Take the disk's version, the buffer then saved?</translation>
+    </message>
+    <message id="autodoc.text.compare.title">
+        <source>Compare %1 with the disk</source>
+        <translation>Compare %1 with the disk</translation>
+    </message>
+    <message id="autodoc.text.compare.your_unsaved_edits">
+        <source>Your unsaved edits</source>
+        <translation>Your unsaved edits</translation>
     </message>
     <message id="autodoc.text.crew_bridges.count">
         <source>%1 helper(s), %2 orphaned. The daemon ends an orphan that stays one for 10 minutes.</source>

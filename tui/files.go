@@ -79,7 +79,31 @@ type openedFile struct {
 	// crlf is a file that uses CRLF line breaks, as it was read (lineendings.go): it is written back
 	// with them. false, the default, writes LF.
 	crlf bool
+	// base is the text the buffer last agreed with on disk, at version, as the editor holds it (LF):
+	// read, written, or reloaded. Compare merges with it as the common ancestor (compare.go). baseOK
+	// is false where the version moved without the text being held (a draft named, a file gone), or
+	// the text is over compareBaseMax: Compare then merges the two sides alone.
+	base   string
+	baseOK bool
 }
+
+// compareBaseMax is the largest text kept as a buffer's base: past it, Compare merges two-way.
+const compareBaseMax = 4 << 20
+
+// setAgreed records that the buffer agrees with the disk at version, whose text is text (as the
+// editor holds it): the one writer of the version and its base together, so a later Compare never
+// merges against a base of another version.
+func (n *openedFile) setAgreed(version, text string) {
+	n.version = version
+	if len(text) > compareBaseMax {
+		n.dropBase()
+		return
+	}
+	n.base, n.baseOK = text, true
+}
+
+// dropBase forgets the base: the version moved, or will, without its text held.
+func (n *openedFile) dropBase() { n.base, n.baseOK = "", false }
 
 // untitled is the draft's name wherever a file's path would show (the kit's, feature.Untitled).
 const untitled = feature.Untitled
@@ -497,9 +521,13 @@ func (h *Host) show(b *openBuffer, ws, p, content, version string, raw bool) {
 // derived document, and so read-only, is set here for any buffer: a headless editor's edits are
 // refused as the widget's are (editorFor).
 func (h *Host) adopt(b *openBuffer, ws, p, version string, raw bool, content *string) {
-	b.file.ws, b.file.path, b.file.version, b.file.open, b.file.dirty = ws, p, version, true, content == nil
+	b.file.ws, b.file.path, b.file.open, b.file.dirty = ws, p, true, content == nil
 	if content != nil {
 		b.file.crlf = usesCRLF(*content) // a draft written under p (nil) keeps its own
+		b.file.setAgreed(version, asEditorText(*content))
+	} else {
+		b.file.version = version // a draft written under p: what was written is not held here
+		b.file.dropBase()
 	}
 	b.file.hint = "" // a draft named: its path is its name now
 	b.file.raw = raw
@@ -687,6 +715,7 @@ func (h *Host) recheckBuffer(b *openBuffer) {
 				return
 			}
 			b.file.version = "" // gone: a save writes it anew
+			b.file.dropBase()
 			h.guard(b, h.askBefore(ask), func() { h.dropBuffer(b) })
 		case a.err != nil:
 			h.failed(h.trf("autodoc.notice.files.check", p), a.err)
@@ -734,6 +763,7 @@ func (h *Host) edited() {
 	h.fmGen++
 	h.pageSoon()
 	h.syncPageWidth()         // a line count with another number of digits widens the gutter
+	h.compareSaw(h.active)    // an open Compare of the buffer hears the edit (compare.go)
 	h.changeSoonFor(h.active) // a script's change handlers, after the pause (luaevents.go)
 }
 
@@ -901,7 +931,8 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 		}
 		switch {
 		case landed:
-			b.file.version = a.version
+			// what was written is what is on disk at a.version: its text the base
+			b.file.setAgreed(a.version, content)
 			b.file.disk, b.file.diskVersion, b.file.diskAsked = diskSame, "", "" // what is on disk is what was written
 			// typing during the save leaves the file unsaved: what is on disk is what was written
 			newer := b.buf.Value() != content
@@ -998,6 +1029,10 @@ func (h *Host) conflict(answer string) {
 		h.reloadShown()
 	case "overwrite":
 		h.overwrite()
+	case "compare":
+		// the disk's text and the buffer's merged, the buffer's edits kept where they conflict:
+		// the result goes in the buffer, unsaved (compare.go)
+		h.compare()
 	default:
 		h.notify(h.tr("autodoc.notice.files.kept_your_changes_the_disk_s_version_is_newer"))
 	}

@@ -82,6 +82,9 @@ type Host struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 
+	// comparing is the conflict's Compare open now, or nil (compare.go)
+	comparing *compareSource
+
 	// todoNoted are the workspaces' todo_excluded already said this session, by name and patterns
 	todoNoted map[string]bool
 
