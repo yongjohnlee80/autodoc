@@ -18,7 +18,8 @@ import (
 // one package beside core/store that owns dao declarations — and its every statement carries its
 // tenant, the same rule this test holds the rest of the tree to. core/pglease is exempt too: it is
 // the stores' writer lease, a row each store keeps in its own database (pgstore's, and core/store's
-// on PostgreSQL), and its statements read and write that row alone, by its scope.
+// on PostgreSQL), and its statements read and write that row alone, by its scope, in the one table
+// its caller names, which it checks is a plain identifier before any I/O.
 func TestNoDataAccessOutsideTheStore(t *testing.T) {
 	root := filepath.Join("..", "..")
 	forbidden := []string{

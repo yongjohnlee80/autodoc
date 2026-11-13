@@ -3,6 +3,8 @@ package pglease
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -332,5 +334,66 @@ func TestOptionsAreChecked(t *testing.T) {
 		if _, err := Claim(context.Background(), nil, o); err == nil {
 			t.Errorf("Claim with %+v: no error", o)
 		}
+	}
+}
+
+// manualTakeover is the statement docs/enterprise/operations.md gives an operator for taking a
+// tenant over by hand, read from the doc itself and pointed at the cell's table and scope.
+func manualTakeover(t *testing.T, scope string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("..", "..", "docs", "enterprise", "operations.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := string(b)
+	i := strings.Index(doc, "**Taking a tenant over by hand,**")
+	if i < 0 {
+		t.Fatal("operations.md has no manual takeover")
+	}
+	block := doc[i:]
+	start := strings.Index(block, "```sql")
+	end := strings.Index(block[start+len("```sql"):], "```")
+	if start < 0 || end < 0 {
+		t.Fatal("operations.md's manual takeover has no sql block")
+	}
+	sql := strings.Join(strings.Fields(block[start+len("```sql"):start+len("```sql")+end]), " ")
+	if !strings.Contains(sql, "<schema>.rag_writer_lease") || !strings.Contains(sql, "'tenant:<name>'") {
+		t.Fatalf("the manual takeover no longer names <schema>.rag_writer_lease and 'tenant:<name>': %s", sql)
+	}
+	sql = strings.ReplaceAll(sql, "<schema>.rag_writer_lease", table)
+	return strings.ReplaceAll(sql, "'tenant:<name>'", "'"+scope+"'")
+}
+
+// The operations doc's manual takeover, run as it is written, stops a live holder: a write it has
+// open finishes (the statement doesn't wait for it), its next renew and its next fence answer
+// ErrLost, and a standby claims at its next poll. The mutant, named here: a takeover that only
+// expires the lease (the holder's renew revives it, and its fences pass again).
+func TestTheDocumentedManualTakeoverStopsALiveHolder(t *testing.T) {
+	conn := scratch(t)
+	a := claim(t, conn, "t")
+	commit := openWrite(t, conn, a, "open at the takeover")
+	ctx, cancel := context.WithTimeout(context.Background(), ttl)
+	_, err := conn.ExecContext(ctx, manualTakeover(t, "t"))
+	cancel()
+	if err != nil {
+		t.Fatalf("the documented takeover, with a write open: %v", err)
+	}
+	if err := commit(); err != nil {
+		t.Errorf("the write open at the takeover: %v, want it to finish", err)
+	}
+	if err := a.Renew(context.Background()); !errors.Is(err, ErrLost) {
+		t.Errorf("the holder's renew after the takeover: %v, want ErrLost", err)
+	}
+	tx, err := dao.BeginConnTx(context.Background(), conn, dao.TxOptions{Isolation: dao.TxReadCommitted})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = tx.Rollback() })
+	if err := a.Fence(context.Background(), tx); !errors.Is(err, ErrLost) {
+		t.Errorf("the holder's next write's fence: %v, want ErrLost", err)
+	}
+	b := claim(t, conn, "t")
+	if b.Epoch() <= a.Epoch() {
+		t.Errorf("the standby's epoch %d, want past %d", b.Epoch(), a.Epoch())
 	}
 }

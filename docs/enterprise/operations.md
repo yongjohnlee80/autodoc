@@ -203,12 +203,19 @@ SELECT scope, holder, holder_info, epoch, lease_until FROM <schema>.rag_writer_l
 
 - **A standby** waits while the lease is held, and takes it over when its holder releases it (a
   clean stop) or 30 seconds after the holder's last renew (a crash, or a host cut off).
-- **Taking a tenant over by hand,** for a holder you know is gone, is one statement; the holder, if
-  it is still running, finds its lease lost at its next write and exits 1:
+- **Taking a tenant over by hand,** for a holder you know is gone or must stop, is one statement:
+  the release's own, without its holder check. It clears the holder and moves the epoch, so the
+  holder's next renew and next write both find the lease lost (it exits 1), and a standby claims
+  it at its next poll:
 
   ```sql
-  UPDATE <schema>.rag_writer_lease SET lease_until = clock_timestamp() WHERE scope = 'tenant:<name>';
+  UPDATE <schema>.rag_writer_lease SET holder = '', epoch = epoch + 1, lease_until = clock_timestamp()
+   WHERE scope = 'tenant:<name>';
   ```
+
+  A write the holder already has open still finishes: the statement doesn't wait for it. Only the
+  holder's next transaction is refused. Setting `lease_until` alone is not a takeover: a live
+  holder's next renew extends it again.
 - **The `lag` of a source** must be longer than the longest transaction that writes its rows: a
   row committed later than `lag` after its `updated_at` is passed over by the incremental passes and
   found only by the next refresh. Find your longest with `SELECT max(clock_timestamp() - xact_start)

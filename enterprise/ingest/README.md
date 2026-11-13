@@ -26,25 +26,28 @@ err = in.Run(ctx) // until ctx ends; ErrLockLost if the tenant's lock is lost
   resumes it at its page boundaries and between rows sharing a timestamp, refusing a view whose
   order isn't its cursor's. `OrderReport` says what it confirmed and could not exercise
   (`CheckRows`, `CheckProbes`).
-- **The ingester:** `New(store, tenant, source, business, locks, Options)`.
-  - `Acquire` and `Release` hold the tenant's writer lock, on a pinned connection of `locks`.
-    `Confirm` says, from any goroutine, whether the lock is held now (`ErrNotLocked`,
-    `ErrLockLost`): the embedding worker writes the tenant only while it is.
+- **The ingester:** `New(store, tenant, source, business, leases, Options)`, where `leases` is the
+  store's pool, whose schema holds the writer lease's table.
+  - `Acquire` and `Release` hold the tenant's writer lease (a row of `rag_writer_lease`).
+    `Confirm` says, from any goroutine and with no I/O, whether the lease is held now
+    (`ErrNotLocked`, `ErrLockLost`): the embedding worker writes the tenant only while it is, and
+    through `Store()`, the ingester's fenced store.
   - `Pass` reads the rows past the cursor; `Refresh` reads every row, then deletes the documents of
     rows gone; `Run` does both on schedule. Each returns `Stats`.
-  - `Options`: `Schema` (required), `Refresh`, `RefreshRetry` (how soon a failed or incomplete
-    refresh is tried again), `Interval`, `Lag`, `PingEvery`, `LockPoll`, `Log`, `Now` (the
-    source's clock), `Clock` (the time a refresh records and Run schedules by), and `Committed`
-    and `Locked` (called after each commit and once the lock is taken: the embedding worker's
-    wakes).
+  - `Options`: `Refresh`, `RefreshRetry` (how soon a failed or incomplete refresh is tried
+    again), `Interval`, `Lag`, `LeaseTTL` (the lease's length), `PingEvery` (how often Run renews
+    it, at most a third of the lease), `LockPoll`, `Log`, `Now` (the source's clock), `Clock` (the
+    time a refresh records and Run schedules by), and `Committed` and `Locked` (called after each
+    commit and once the lease is taken: the embedding worker's wakes).
 - **Errors:** `ErrLockLost`, `ErrNotLocked`, `ErrOrder`, `ErrStalled`; `RetryLimit`; the fields
   every row carries, `FieldID`, `FieldUpdatedAt`, `FieldTitle`, `FieldTags`; `CutVersion`.
 
 ## What it guarantees
 
-- **One writer per tenant.** The lock is a session advisory lock on a connection pinned for the
-  ingester's life, outside the pool, confirmed before every commit and every `PingEvery`. A lost
-  lock writes nothing more and stops `Run` with `ErrLockLost`.
+- **One writer per tenant.** The writer lease is a row claimed and renewed in transactions
+  (`core/pglease`). Every write transaction confirms it as its first statement and holds it against
+  a takeover until the write ends; `Run` renews it every `PingEvery`. A lost lease writes nothing
+  more and stops `Run` with `ErrLockLost`.
 - **A crash in a pass replays at most one page.** A pass commits each page's documents, quarantined
   rows and cursor in one transaction. A refresh commits its pages' documents without the cursor and
   moves the cursor once, when it finishes, so the cursor is never committed ahead of its documents.

@@ -128,7 +128,8 @@ func (s *server) openPostgres() error {
 	}
 	var err error
 	// a writer's transaction left idle twice a lease's length is ended, so a hung one's fence
-	// never keeps a standby from its tenant
+	// never keeps a standby from its tenant. The ingesters' leases are DefaultLeaseTTL long (their
+	// Options leave LeaseTTL at its default): a configurable length changes both together
 	if s.store, err = open(pgstore.WithSchema(s.cfg.Postgres.Schema), pglease.WriterSession(ingest.DefaultLeaseTTL)); err != nil {
 		return err
 	}

@@ -110,7 +110,9 @@ func (c fencedConn) Begin(ctx context.Context) (dao.TxConn, error) {
 // Fenced is s for a tenant's writer: the same Store, every write transaction of it beginning with
 // f, which confirms the writer's lease inside the transaction (core/pglease) and fails it when the
 // lease is not the writer's. Every write method runs in a transaction, so every write is fenced;
-// reads are not. s itself is unchanged.
+// reads are not, and nor are the ANN builder's index writes, which go through the ANN's own
+// connection: an index is the server's, shared by every tenant, never one writer's. s itself is
+// unchanged.
 func (s *Store) Fenced(f Fence) *Store {
 	c := *s
 	c.rw = newSchemas(fencedConn{committedConn{s.conn}, f})
