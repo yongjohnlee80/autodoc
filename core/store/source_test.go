@@ -16,7 +16,9 @@ import (
 //
 // core/pgstore is exempt: it is a store itself — a search.Store over a destination database, the
 // one package beside core/store that owns dao declarations — and its every statement carries its
-// tenant, the same rule this test holds the rest of the tree to.
+// tenant, the same rule this test holds the rest of the tree to. core/pglease is exempt too: it is
+// the stores' writer lease, a row each store keeps in its own database (pgstore's, and core/store's
+// on PostgreSQL), and its statements read and write that row alone, by its scope.
 func TestNoDataAccessOutsideTheStore(t *testing.T) {
 	root := filepath.Join("..", "..")
 	forbidden := []string{
@@ -43,7 +45,8 @@ func TestNoDataAccessOutsideTheStore(t *testing.T) {
 			if filepath.ToSlash(path) == filepath.ToSlash(skip) {
 				return filepath.SkipDir
 			}
-			if filepath.ToSlash(path) == filepath.ToSlash(filepath.Join(root, "core", "pgstore")) {
+			if filepath.ToSlash(path) == filepath.ToSlash(filepath.Join(root, "core", "pgstore")) ||
+				filepath.ToSlash(path) == filepath.ToSlash(filepath.Join(root, "core", "pglease")) {
 				return filepath.SkipDir
 			}
 			return nil
