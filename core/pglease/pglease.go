@@ -34,6 +34,8 @@ import (
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/dao/postgres"
 	"github.com/yongjohnlee80/golib/errs"
+
+	"github.com/yongjohnlee80/autodoc/core/clock"
 )
 
 // ErrHeld is a lease another holder has, or a claim refused while a write or another claim holds
@@ -219,6 +221,11 @@ func (l *Lease) peek(ctx context.Context) (Holder, error) {
 func Acquire(ctx context.Context, conn dao.DataConn, o Options, poll time.Duration, waiting func(Holder)) (*Lease, error) {
 	told := false
 	for {
+		// a deadline already past ends the wait, though ctx's own timer has not yet fired: a pool
+		// connection does not bound a statement by a deadline the context has not yet acted on
+		if err := ended(ctx); err != nil {
+			return nil, err
+		}
 		l, err := Claim(ctx, conn, o)
 		var held *HeldError
 		switch {
@@ -234,14 +241,24 @@ func Acquire(ctx context.Context, conn dao.DataConn, o Options, poll time.Durati
 			waiting(held.Holder)
 			told = true
 		}
-		t := time.NewTimer(poll)
-		select {
-		case <-ctx.Done():
-			t.Stop()
+		// NOTE: polled, not waited on. Nothing tells a standby when the holder releases the lease
+		// or stops renewing it, so a claim every poll keeps its takeover prompt.
+		if !clock.Sleep(ctx, poll) {
 			return nil, ctx.Err()
-		case <-t.C:
 		}
 	}
+}
+
+// ended is ctx's error once it has ended, counting a deadline that has passed though ctx's own
+// timer has not yet fired.
+func ended(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if d, ok := ctx.Deadline(); ok && !time.Now().Before(d) {
+		return context.DeadlineExceeded
+	}
+	return nil
 }
 
 // ID is this holder's id, as the row's holder column says it.
