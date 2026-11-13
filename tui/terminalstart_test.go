@@ -141,3 +141,37 @@ func TestAShellTabClosedWhileStartingLeavesNoShell(t *testing.T) {
 		t.Fatalf("%d shells running after their tab was closed while starting", n)
 	}
 }
+
+// TestALuaShellStartsOnTheLoop: a Lua shell's tab starts on the UI loop, its shell made of loop
+// state (its banner in the UI's language), so a language applied on the loop while it opens
+// races nothing. Started off the loop, the shell read the language as the loop changed it (-race).
+func TestALuaShellStartsOnTheLoop(t *testing.T) {
+	t.Parallel()
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	onLoop(r, func() bool {
+		r.h.terminals.newLuaShell()
+		for i := range 400 {
+			lang := "en"
+			if i%2 == 0 {
+				lang = "es"
+			}
+			r.h.p.App().ApplyLanguage(lang)
+		}
+		return true
+	})
+	r.waitWithin(t, "the Lua shell running", daemonWait, func() bool {
+		return onLoop(r, func() bool {
+			panel, err := r.h.terminals.panel()
+			if err != nil {
+				return false
+			}
+			for _, tab := range panel.Tabs() {
+				if tab.Running {
+					return true
+				}
+			}
+			return false
+		})
+	})
+}
