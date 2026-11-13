@@ -181,6 +181,7 @@ func (h *Host) bufferEdited(b *openBuffer) {
 		}
 		h.syncBuffers()
 	}
+	h.compareSaw(b) // an open Compare of b hears the edit (compare.go)
 	h.changeSoonFor(b)
 }
 

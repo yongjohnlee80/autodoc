@@ -56,9 +56,10 @@ func withTitleBar(src []byte, own bool) []byte {
 }
 
 // windowLayout is src with what the program running as a window writes into it: the GUI's relation
-// views (relationmap.go), and its own title bar when the window opened without the system's.
+// views (relationmap.go), and its own title bar when the window opened without the system's; and,
+// running in a terminal, the conflict's Compare (compare.go).
 func (h *Host) windowLayout(src []byte) []byte {
-	return withTitleBar(withRelationViews(src, h.gui), h.gui && h.titleBar)
+	return withTitleBar(withCompare(withRelationViews(src, h.gui), h.gui), h.gui && h.titleBar)
 }
 
 // mirrorTitleBar writes v to the state directory's mirror, as mirrorRenderer does: for the next

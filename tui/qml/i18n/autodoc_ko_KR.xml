@@ -1615,6 +1615,10 @@
         <source>&amp;Overwrite</source>
         <translation>덮어쓰기(&amp;o)</translation>
     </message>
+    <message id="autodoc.dialog.fileConflict.compare">
+        <source>&amp;Compare</source>
+        <translation>비교(&amp;c)</translation>
+    </message>
     <message id="autodoc.dialog.fileConflict.reload">
         <source>&amp;Reload</source>
         <translation>다시 불러오기(&amp;r)</translation>
@@ -8495,6 +8499,58 @@ Revoked, its next use of %2 is refused, and asks you again by a card.</source>
     <message id="autodoc.cmd.agents.permissions.help">
         <source>agent permissions: what each agent and package was granted</source>
         <translation>에이전트 권한: 각 에이전트와 패키지에 허용한 것</translation>
+    </message>
+    <message id="autodoc.text.compare.on_disk">
+        <source>On disk</source>
+        <translation>디스크</translation>
+    </message>
+    <message id="autodoc.text.compare.your_unsaved_edits">
+        <source>Your unsaved edits</source>
+        <translation>저장하지 않은 편집</translation>
+    </message>
+    <message id="autodoc.text.compare.title">
+        <source>Compare %1 with the disk</source>
+        <translation>%1을(를) 디스크와 비교</translation>
+    </message>
+    <message id="autodoc.text.compare.is_gone_from_disk">
+        <source>%1 is gone from disk</source>
+        <translation>%1이(가) 디스크에 없습니다</translation>
+    </message>
+    <message id="autodoc.text.compare.is_no_longer_open">
+        <source>%1 is no longer open</source>
+        <translation>%1이(가) 더 이상 열려 있지 않습니다</translation>
+    </message>
+    <message id="autodoc.text.compare.the_buffer_changed_reload">
+        <source>The buffer changed since the merge was loaded: reload it</source>
+        <translation>병합을 불러온 뒤 버퍼가 바뀌었습니다: 다시 불러오세요</translation>
+    </message>
+    <message id="autodoc.text.compare.nothing_to_merge">
+        <source>Nothing to merge</source>
+        <translation>병합할 내용이 없습니다</translation>
+    </message>
+    <message id="autodoc.text.compare.the_disk_holds_your_text">
+        <source>%1 on disk holds your buffer's text. Take the disk's version, the buffer then saved?</source>
+        <translation>디스크의 %1에 버퍼와 같은 텍스트가 있습니다. 디스크의 버전을 받아 버퍼를 저장된 상태로 할까요?</translation>
+    </message>
+    <message id="autodoc.text.compare.take_the_disk_s_version">
+        <source>&amp;Take the disk's version</source>
+        <translation>디스크 버전 받기(&amp;t)</translation>
+    </message>
+    <message id="autodoc.text.compare.keep_editing">
+        <source>&amp;Keep editing</source>
+        <translation>계속 편집(&amp;k)</translation>
+    </message>
+    <message id="autodoc.notice.compare.read">
+        <source>read %1 to compare</source>
+        <translation>비교하려고 %1 읽기</translation>
+    </message>
+    <message id="autodoc.notice.compare.took_the_disk_s_version">
+        <source>took the disk's version of %1: saved</source>
+        <translation>%1의 디스크 버전을 받았습니다: 저장됨</translation>
+    </message>
+    <message id="autodoc.notice.compare.merged">
+        <source>merged %1 with the disk: unsaved, u brings your text back</source>
+        <translation>%1을(를) 디스크와 병합했습니다: 저장 안 됨, u로 원래 텍스트를 되돌립니다</translation>
     </message>
 </context>
 </TS>
