@@ -448,7 +448,7 @@ func TestAMisorderedPageWritesNothing(t *testing.T) {
 // Writing needs the lock: an ingester that has not acquired it, or has released it, refuses.
 func TestWritingNeedsTheLock(t *testing.T) {
 	f := newFixture(t)
-	in := New(f.st, f.tenant, f.source(nil), f.business, f.open("locks", ""), Options{Schema: f.schema})
+	in := New(f.st, f.tenant, f.source(nil), f.business, f.leases("leases", ""), Options{})
 	if _, err := in.Pass(f.ctx); !errors.Is(err, ErrNotLocked) {
 		t.Errorf("Pass unlocked: %v", err)
 	}
@@ -484,7 +484,7 @@ func TestRunLogsTheQuarantine(t *testing.T) {
 		return false
 	}
 	ctx, cancel := context.WithCancel(f.ctx)
-	in := New(f.st, f.tenant, f.source(nil), f.business, f.open("locks", ""), Options{Schema: f.schema, Interval: 20 * time.Millisecond, Lag: -1, Log: log})
+	in := New(f.st, f.tenant, f.source(nil), f.business, f.leases("leases", ""), Options{Interval: 20 * time.Millisecond, Lag: -1, Log: log})
 	done := make(chan error, 1)
 	go func() { done <- in.Run(ctx) }()
 	// stopped before its lock pool closes, should the test fail: a pool waits for its pinned lock

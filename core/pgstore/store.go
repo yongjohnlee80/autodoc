@@ -40,9 +40,10 @@ var ErrNoTenant = errs.Sentinel(errs.ErrInvalidArgument, "pgstore: no tenant")
 // A Store is safe for concurrent use.
 type Store struct {
 	tenant string
-	rw     schemas // writes: every transaction READ COMMITTED
-	ro     schemas // views: every transaction REPEATABLE READ, READ ONLY
-	ann    *ANN    // the server's approximate search (WithANN); nil is exact only
+	conn   dao.DataConn // the pool every schema runs on (Fenced builds its own over it)
+	rw     schemas      // writes: every transaction READ COMMITTED
+	ro     schemas      // views: every transaction REPEATABLE READ, READ ONLY
+	ann    *ANN         // the server's approximate search (WithANN); nil is exact only
 }
 
 // Option configures a Store at New.
@@ -58,7 +59,7 @@ func New(conn dao.DataConn, tenant string, opts ...Option) (*Store, error) {
 	if tenant == "" {
 		return nil, ErrNoTenant
 	}
-	s := &Store{tenant: tenant, rw: newSchemas(committedConn{conn}), ro: newSchemas(snapshotConn{conn})}
+	s := &Store{tenant: tenant, conn: conn, rw: newSchemas(committedConn{conn}), ro: newSchemas(snapshotConn{conn})}
 	for _, o := range opts {
 		o(s)
 	}
@@ -82,6 +83,38 @@ type committedConn struct{ dao.DataConn }
 
 func (c committedConn) Begin(ctx context.Context) (dao.TxConn, error) {
 	return dao.BeginConnTx(ctx, c.DataConn, dao.TxOptions{Isolation: dao.TxReadCommitted})
+}
+
+// Fence is a fenced Store's first statement in each of its write transactions (Fenced): q is the
+// transaction, and an error rolls it back before anything is written.
+type Fence func(ctx context.Context, q dao.Querier) error
+
+// fencedConn is committedConn whose every transaction begins with its fence.
+type fencedConn struct {
+	committedConn
+	fence Fence
+}
+
+func (c fencedConn) Begin(ctx context.Context) (dao.TxConn, error) {
+	tx, err := c.committedConn.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.fence(ctx, tx); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	return tx, nil
+}
+
+// Fenced is s for a tenant's writer: the same Store, every write transaction of it beginning with
+// f, which confirms the writer's lease inside the transaction (core/pglease) and fails it when the
+// lease is not the writer's. Every write method runs in a transaction, so every write is fenced;
+// reads are not. s itself is unchanged.
+func (s *Store) Fenced(f Fence) *Store {
+	c := *s
+	c.rw = newSchemas(fencedConn{committedConn{s.conn}, f})
+	return &c
 }
 
 // View runs fn in one View: one REPEATABLE READ, READ ONLY transaction, so every retriever and
@@ -508,12 +541,16 @@ func (s *Store) Embed(ctx context.Context, model string, vecs []Embedding) error
 	if len(vecs) == 0 {
 		return nil
 	}
-	b := s.rw.emb.DAO(dao.WithQueryContext(ctx)).Batch().ForceInsert().SkipConflicts()
-	for _, e := range vecs {
-		h := e.TextHash
-		b.AddRow(&embRow{Tenant: s.tenant, Model: model, TextHash: h[:], Vec: e.Vec})
-	}
-	if err := b.Flush(); err != nil {
+	// in a transaction, as every write is, so a fenced Store's (Fenced) is fenced
+	err := dao.RunTx(ctx, func(tx *dao.Transaction) error {
+		b := s.rw.emb.On(tx, dao.WithQueryContext(ctx)).Batch().ForceInsert().SkipConflicts()
+		for _, e := range vecs {
+			h := e.TextHash
+			b.AddRow(&embRow{Tenant: s.tenant, Model: model, TextHash: h[:], Vec: e.Vec})
+		}
+		return b.Flush()
+	})
+	if err != nil {
 		return fmt.Errorf("pgstore: embed: %w", err)
 	}
 	return nil
@@ -583,7 +620,10 @@ func (s *Store) MarkReady(ctx context.Context, path, model string) (bool, error)
 
 // Delete removes the document at path, with its chunks and links. A path not stored is no error.
 func (s *Store) Delete(ctx context.Context, path string) error {
-	if err := s.rw.doc.DAO(dao.WithQueryContext(ctx)).With(dTenant, s.tenant).With(dPath, path).Delete(); err != nil {
+	err := dao.RunTx(ctx, func(tx *dao.Transaction) error {
+		return s.rw.doc.On(tx, dao.WithQueryContext(ctx)).With(dTenant, s.tenant).With(dPath, path).Delete()
+	})
+	if err != nil {
 		return fmt.Errorf("pgstore: delete %s: %w", path, err)
 	}
 	return nil
@@ -631,7 +671,9 @@ func (s *Store) Drop(ctx context.Context) error {
 // model, and SemanticState is StateSwitching while target is set and differs from active. Which
 // documents are ready under the new active model is the caller's to mark again.
 func (s *Store) SetModels(ctx context.Context, active, target string) error {
-	err := s.rw.meta.DAO(dao.WithQueryContext(ctx)).Set(mTenant, s.tenant).Set(mActive, active).Set(mTarget, target).Upsert()
+	err := dao.RunTx(ctx, func(tx *dao.Transaction) error {
+		return s.rw.meta.On(tx, dao.WithQueryContext(ctx)).Set(mTenant, s.tenant).Set(mActive, active).Set(mTarget, target).Upsert()
+	})
 	if err != nil {
 		return fmt.Errorf("pgstore: set models: %w", err)
 	}

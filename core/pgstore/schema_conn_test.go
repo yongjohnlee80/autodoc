@@ -112,7 +112,7 @@ func TestWithSchemaPutsEveryTableInItOnEveryConnection(t *testing.T) {
 
 	// the catalog, read from a connection of the default search_path, outside the schema's pool
 	for q, want := range map[string]string{
-		"SELECT string_agg(table_name, ',' ORDER BY table_name) FROM information_schema.tables WHERE table_schema = '" + schema + "'":                                   "autodoc_schema,rag_ann_builder,rag_ann_index,rag_chunk,rag_cursor,rag_document,rag_embedding,rag_ingest_error,rag_link,rag_meta,rag_tenant_policy",
+		"SELECT string_agg(table_name, ',' ORDER BY table_name) FROM information_schema.tables WHERE table_schema = '" + schema + "'":                                   "autodoc_schema,rag_ann_builder,rag_ann_index,rag_chunk,rag_cursor,rag_document,rag_embedding,rag_ingest_error,rag_link,rag_meta,rag_tenant_policy,rag_writer_lease",
 		"SELECT count(*)::text FROM information_schema.tables WHERE table_schema = 'public' AND (table_name LIKE 'rag!_%' ESCAPE '!' OR table_name = 'autodoc_schema')": "0",
 		"SELECT n.nspname FROM pg_ts_config c JOIN pg_namespace n ON n.oid = c.cfgnamespace WHERE c.cfgname = 'rag_english'":                                            schema,
 	} {
@@ -211,19 +211,11 @@ func TestASchemaOfItsOwnNeedsNoCreateOnTheDatabase(t *testing.T) {
 	if err := Migrate(ctx, conn); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	if got := scalar(t, owner, "SELECT count(*)::text FROM information_schema.tables WHERE table_schema = '"+schema+"'"); got != "11" {
-		t.Errorf("%s tables in the schema, want 11", got)
+	if got := scalar(t, owner, "SELECT count(*)::text FROM information_schema.tables WHERE table_schema = '"+schema+"'"); got != "12" {
+		t.Errorf("%s tables in the schema, want 12", got)
 	}
 	// a schema it may not create is still refused, as PostgreSQL says
 	if err := EnsureSchema(ctx, conn, "other_"+randHex(t)); err == nil || !strings.Contains(err.Error(), "permission denied") {
 		t.Errorf("EnsureSchema of a schema the role may not create: %v", err)
-	}
-}
-
-// A writer lock's key depends on the schema and the tenant alone, and is never negative.
-func TestTheWriterKey(t *testing.T) {
-	a, b, c := WriterKey("s", "t"), WriterKey("s", "u"), WriterKey("r", "t")
-	if a == b || a == c || a != WriterKey("s", "t") || a < 0 || b < 0 || c < 0 {
-		t.Errorf("keys %d %d %d", a, b, c)
 	}
 }

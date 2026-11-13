@@ -125,7 +125,7 @@ func WriteMetrics(w io.Writer, s Snapshot, totals HTTPTotals) error {
 			sample(b, "autodoc_tenant_cursor_lag_seconds", labels("tenant", t.Tenant), float64(*t.Cursor.LagSeconds))
 		}
 	}
-	family(b, "autodoc_tenant_lock_held", "gauge", "Whether this server holds the tenant's writer lock.")
+	family(b, "autodoc_tenant_lock_held", "gauge", "Whether this server holds the tenant's writer lease.")
 	for _, t := range tenants {
 		sample(b, "autodoc_tenant_lock_held", labels("tenant", t.Tenant), boolValue(t.Lock == "held"))
 	}

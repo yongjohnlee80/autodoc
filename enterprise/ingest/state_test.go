@@ -19,7 +19,7 @@ func TestAnIngesterPublishesItsState(t *testing.T) {
 	f := newFixture(t)
 	f.track(1, "A", "good", 1)
 	ctx, cancel := context.WithCancel(f.ctx)
-	in := New(f.st, f.tenant, f.source(nil), f.business, f.open("locks", ""), Options{Schema: f.schema, Interval: 20 * time.Millisecond, Lag: -1})
+	in := New(f.st, f.tenant, f.source(nil), f.business, f.leases("leases", ""), Options{Interval: 20 * time.Millisecond, Lag: -1})
 	if st := in.State(); st.Locked || st.Waiting || !st.LastPass.At.IsZero() || !st.LastRefresh.At.IsZero() {
 		t.Fatalf("before it runs: %+v", st)
 	}
@@ -39,7 +39,7 @@ func TestAnIngesterPublishesItsState(t *testing.T) {
 	f.exec(`ALTER TABLE track_gone RENAME TO track`)
 	waitFor(t, 5*time.Second, "the view answering again", func() bool { return in.State().LastPass.Error == opcode.None })
 
-	second := New(f.st, f.tenant, f.source(nil), f.business, f.open("locks2", ""), Options{Schema: f.schema, Interval: 20 * time.Millisecond, Lag: -1, LockPoll: 20 * time.Millisecond})
+	second := New(f.st, f.tenant, f.source(nil), f.business, f.leases("leases2", ""), Options{Interval: 20 * time.Millisecond, Lag: -1, LockPoll: 20 * time.Millisecond})
 	ctx2, cancel2 := context.WithCancel(f.ctx)
 	done2 := make(chan error, 1)
 	go func() { done2 <- second.Run(ctx2) }()

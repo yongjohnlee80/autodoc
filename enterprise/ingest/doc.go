@@ -15,24 +15,25 @@
 //
 // # Ingesting
 //
-// An Ingester is the only writer of its tenant: it holds the tenant's advisory lock on a pinned
-// connection of its own, and confirms it before every commit. Pass reads the rows past the
+// An Ingester is the only writer of its tenant: it holds the tenant's writer lease (a row of
+// pgstore's rag_writer_lease, renewed every PingEvery), and every write of its Store confirms the
+// lease inside its own transaction. Pass reads the rows past the
 // tenant's cursor, page by page, each page one pgstore.Batch with its documents, its quarantined
 // rows and the cursor; Refresh reads every row, writes the documents whose content changed, and
 // deletes the documents of rows gone, only after a scan that read every row. A row that fails
 // (a missing field, a render error) is quarantined and retried on every pass, never skipped.
 //
-//	in := ingest.New(store, "music", src, business, locks, ingest.Options{Schema: "autodoc_search"})
-//	err := in.Run(ctx) // until ctx ends; ErrLockLost if the lock is lost
+//	in := ingest.New(store, "music", src, business, pool, ingest.Options{})
+//	err := in.Run(ctx) // until ctx ends; ErrLockLost if the lease is lost
 //
 // A caller with its own schedule calls Acquire, then Pass and Refresh, then Release.
 //
-// Another writer of the tenant in the same process, the embedding worker, writes only while
-// Confirm says the ingester holds the lock; Options.Locked and Options.Committed wake it when the
-// lock is taken and after each commit.
+// Another writer of the tenant in the same process, the embedding worker, writes through Store,
+// the ingester's fenced Store, and only while Confirm says the ingester holds the lease;
+// Options.Locked and Options.Committed wake it when the lease is taken and after each commit.
 //
 // Concurrency: a Source is immutable and safe for concurrent use. An Ingester belongs to one
 // goroutine: Acquire, Pass, Refresh, Run and Release are called from it alone; Confirm may be
-// called from any goroutine. Run starts one goroutine of its own, which only checks the lock, and
+// called from any goroutine. Run starts one goroutine of its own, which only renews the lease, and
 // waits for it before returning.
 package ingest

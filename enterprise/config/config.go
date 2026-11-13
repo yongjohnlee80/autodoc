@@ -439,7 +439,7 @@ func (v *validator) embedding(f file) Embedding {
 }
 
 // tenantName is a tenant as a source names it: it is a key in every pgstore table, a log label and
-// part of the writer lock's key.
+// its writer lease's scope.
 var tenantName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
 func (v *validator) sources(f file) []Source {
