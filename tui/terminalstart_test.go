@@ -222,3 +222,26 @@ func TestAShellTabTakesWhatIsTypedWhileItsShellStarts(t *testing.T) {
 	s.free()
 	r.waitWithin(t, "the shell reading what was typed", daemonWait, func() bool { return s.typed() == "echo hi\r" })
 }
+
+// TestTheModeKeyLeavesAStartingShellTab: Ctrl+T and Esc typed into a shell tab while its shell's
+// spawn is out leave it as they leave a running shell: the mode key takes the tab to Normal mode
+// and the Esc hides the pane, and the shell, once it runs, reads neither.
+func TestTheModeKeyLeavesAStartingShellTab(t *testing.T) {
+	t.Parallel()
+	s := newHeldShell()
+	r := shellTUI(t, s)
+	r.leader(t, '`')
+	s.spawnOut(t)
+	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	r.keys(t, ctrlKey('t'), esc())
+	r.s.WaitFor(t, "the pane hidden while the shell starts", func(string) bool { return !r.termShown() })
+	if n := r.shellsRunning(); n != 0 {
+		t.Fatalf("%d shells running before the spawn returned", n)
+	}
+	s.free()
+	r.waitWithin(t, "the shell running", daemonWait, func() bool { return r.shellsRunning() == 1 })
+	time.Sleep(100 * time.Millisecond) // anything kept for the shell is written as it lands
+	if got := s.typed(); got != "" {
+		t.Fatalf("the shell read %q: the mode key and Esc are the window's while it starts", got)
+	}
+}
