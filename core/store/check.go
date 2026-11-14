@@ -97,6 +97,9 @@ var ErrDamaged = errs.Sentinel(errs.ErrPrecondition, "store: the store is damage
 // daemon finishes in the background for a store that opened Unverified. SQLite saying the file is
 // damaged is in the report, as what was found.
 func (s *Store) QuickCheck(ctx context.Context) (CheckReport, error) {
+	if err := s.sqliteOnly(); err != nil {
+		return CheckReport{}, err
+	}
 	found, err := checkPragma(ctx, s.r, "quick_check")
 	if d := damaged(s.path, err); d != nil {
 		return d.Report, nil
@@ -159,6 +162,9 @@ func (s *Store) Unverified() bool { return s.unverified }
 // MarkDamaged writes the mark that a check found the store damaged (<store>.damaged, the report as
 // JSON, 0600): every start refuses the store until a whole check finds it sound (ClearDamaged).
 func (s *Store) MarkDamaged(r CheckReport) error {
+	if err := s.sqliteOnly(); err != nil {
+		return err
+	}
 	b, err := json.Marshal(r)
 	if err != nil {
 		return err
@@ -168,6 +174,9 @@ func (s *Store) MarkDamaged(r CheckReport) error {
 
 // Marked reports whether the store carries the damage mark.
 func (s *Store) Marked() bool {
+	if s.pg != nil {
+		return false // no file to mark
+	}
 	_, err := os.Stat(s.path + damagedSuffix)
 	return err == nil
 }
@@ -176,6 +185,9 @@ func (s *Store) Marked() bool {
 // sound (no integrity or foreign-key problem; unopened secrets are not damage to the file), and for
 // nothing else. A store with no mark is no error.
 func (s *Store) ClearDamaged() error {
+	if err := s.sqliteOnly(); err != nil {
+		return nil
+	}
 	if err := os.Remove(s.path + damagedSuffix); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
@@ -198,6 +210,9 @@ func markedDamaged(path string) error {
 
 // Check is the whole check: integrity_check, foreign_key_check and the sealed secrets.
 func (s *Store) Check(ctx context.Context) (CheckReport, error) {
+	if err := s.sqliteOnly(); err != nil {
+		return CheckReport{}, err
+	}
 	var r CheckReport
 	var err error
 	if r.Integrity, err = checkPragma(ctx, s.r, "integrity_check"); err != nil {
