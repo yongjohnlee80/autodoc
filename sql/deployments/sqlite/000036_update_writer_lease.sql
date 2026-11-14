@@ -1,0 +1,3 @@
+-- 000036: nothing on SQLite. A store on PostgreSQL keeps its writer lease in a table of this name
+-- (docs/decisions/store.md#the-store-on-postgresql); a SQLite store's single instance is its file's
+-- lock, beside the store, as it was.

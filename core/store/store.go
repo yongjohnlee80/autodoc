@@ -30,6 +30,8 @@ type Store struct {
 	// quick_check did not finish in it, which the daemon finishes on a reader (check.go)
 	checkWait  time.Duration
 	unverified bool
+	// pg is a store on PostgreSQL's own (postgres.go), nil for a SQLite store
+	pg *pgStore
 }
 
 // Option configures a Store.
@@ -167,6 +169,9 @@ func (s *Store) Path() string { return s.path }
 // Close closes the store and releases its lease.
 func (s *Store) Close() error {
 	err := errors.Join(s.r.Close(), s.w.Close())
+	if s.pg != nil {
+		err = errors.Join(err, s.pg.close())
+	}
 	if s.lease != nil {
 		err = errors.Join(err, s.lease())
 		s.lease = nil

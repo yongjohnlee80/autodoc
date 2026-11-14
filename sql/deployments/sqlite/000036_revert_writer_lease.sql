@@ -1,0 +1,1 @@
+-- Undoes 000036_update_writer_lease.sql: nothing on SQLite.

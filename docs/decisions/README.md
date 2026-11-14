@@ -8,6 +8,7 @@ the code ever disagree, the code is right and the page is fixed.
 ## [The store](store.md)
 
 - [A PostgreSQL engine for the store](store.md#a-postgresql-engine-for-the-store)
+- [The store on PostgreSQL](store.md#the-store-on-postgresql)
 - [Workspace settings saved together](store.md#workspace-settings-saved-together)
 - [Databases attach to a workspace](store.md#databases-attach-to-a-workspace)
 - [A keyslot seals the store's secrets](store.md#a-keyslot-seals-the-stores-secrets)

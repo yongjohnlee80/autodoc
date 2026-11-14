@@ -751,6 +751,7 @@ func TestThePostgresScriptsMakeSQLitesSchema(t *testing.T) {
 	}
 	delete(got["chunk"], "tsv") // FTS5's stand-in, named above
 	delete(got, deploy.DefaultLedger)
+	delete(got, "writer_lease") // 000036: PostgreSQL's writer lease, where SQLite has its file's lock
 	for n, cols := range want {
 		g, ok := got[n]
 		if !ok {

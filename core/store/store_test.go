@@ -13,8 +13,13 @@ import (
 	"github.com/yongjohnlee80/golib/dao/sqlite"
 )
 
+// openStore is a fresh store, on SQLite, or on a scratch PostgreSQL database when
+// AUTODOC_TEST_STORE_ENGINE is "postgres".
 func openStore(t *testing.T) *Store {
 	t.Helper()
+	if os.Getenv(storeEngineEnv) == EngineOfPostgres {
+		return openPG(t, pgLocation(t))
+	}
 	s, err := Open(context.Background(), filepath.Join(t.TempDir(), "autodoc.db"))
 	if err != nil {
 		t.Fatal(err)

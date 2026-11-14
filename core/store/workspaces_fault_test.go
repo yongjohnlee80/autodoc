@@ -12,6 +12,7 @@ import (
 // written is not reported missing (ErrNoWorkspace), and a provider deleted under its workspace
 // reads as the daemon's.
 func TestWorkspaceSettingsSurfaceAStorageFailure(t *testing.T) {
+	sqliteOnly(t, "it breaks a row on a second SQLite connection to the store's file")
 	ctx := context.Background()
 	s := openStore(t)
 	w, err := s.AddWorkspace(ctx, "kb", "/kb", []string{"*.md"}, nil)
