@@ -76,8 +76,9 @@ const leaseTableDDL = `CREATE TABLE IF NOT EXISTS writer_lease (
     holder_info text
 )`
 
-// leaseTTL is a PostgreSQL store's writer lease length.
-const leaseTTL = pglease.DefaultTTL
+// leaseTTL is a PostgreSQL store's writer lease length: a variable, so a cell can stand for a first
+// start longer than a shorter one.
+var leaseTTL = pglease.DefaultTTL
 
 var plainSchema = regexp.MustCompile(`^[a-z_][a-z0-9_]{0,62}$`)
 

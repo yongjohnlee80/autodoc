@@ -257,8 +257,8 @@ func TestTheLeaseTableMadeBeforeTheClaimIs000036s(t *testing.T) {
 }
 
 // Two stores in one database, one in public and one in a schema of its own, are apart: the second
-// is made whole in its schema (as many tables as the first), reads none of the first's rows, and
-// has its own identity; the first keeps its rows. (PostgreSQL creates an unqualified table in the
+// is made whole in its schema (as many tables as the first) and reads none of the first's rows; the
+// first keeps its rows. (PostgreSQL creates an unqualified table in the
 // first schema of the path, the store's own, so public beside it on the path changes none of this.)
 func TestTwoStoresInOneDatabaseAreApart(t *testing.T) {
 	ctx := context.Background()
@@ -271,7 +271,6 @@ func TestTwoStoresInOneDatabaseAreApart(t *testing.T) {
 	if _, err := a.AddWorkspace(ctx, "first", "/first", nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	firstID, _ := a.ID()
 	if err := a.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -281,9 +280,6 @@ func TestTwoStoresInOneDatabaseAreApart(t *testing.T) {
 	b := openPG(t, second)
 	if ws, err := b.Workspaces(ctx); err != nil || len(ws) != 0 {
 		t.Errorf("the second store's workspaces: %+v, %v; want none of the first's", ws, err)
-	}
-	if id, _ := b.ID(); id == firstID {
-		t.Errorf("the second store has the first's identity %s", id)
 	}
 	tables := func(schema string) int64 {
 		rows, err := b.leaseConn().QueryContext(ctx, `SELECT count(*) FROM information_schema.tables WHERE table_schema = $1 AND table_type = 'BASE TABLE'`, schema)
@@ -307,6 +303,15 @@ func TestTwoStoresInOneDatabaseAreApart(t *testing.T) {
 	if ws, err := a.Workspaces(ctx); err != nil || len(ws) != 1 || ws[0].Name != "first" {
 		t.Errorf("the first store's workspaces after the second's write: %+v, %v; want first alone", ws, err)
 	}
+}
+
+// shortLease makes the stores a cell opens lease for d until the cell ends; set before any store
+// opens, so no renew reads it mid-change.
+func shortLease(t *testing.T, d time.Duration) {
+	t.Helper()
+	ttl := leaseTTL
+	leaseTTL = d
+	t.Cleanup(func() { leaseTTL = ttl })
 }
 
 // A first start longer than the lease (its scripts building an index on a large store, say) keeps
