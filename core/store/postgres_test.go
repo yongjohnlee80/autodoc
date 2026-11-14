@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/golib/dao/postgres"
+
 	"github.com/yongjohnlee80/autodoc/core/pglease"
 	"github.com/yongjohnlee80/autodoc/core/pgstore/pgtest"
 )
@@ -161,5 +163,95 @@ func TestALocationIsCheckedBeforeAnyIO(t *testing.T) {
 	}
 	if _, err := os.Stat(key); err == nil {
 		t.Error("a refused location made its key file")
+	}
+}
+
+// A read transaction of a store on PostgreSQL sees one commit, as a SQLite one does: a write that
+// commits between two of its reads is not in the second. The mutant, named here: the readers'
+// transactions at PostgreSQL's default, READ COMMITTED (the second read sees the write).
+func TestAReadOfAStoreOnPostgresSeesOneCommit(t *testing.T) {
+	ctx := context.Background()
+	s := openPG(t, pgLocation(t))
+	tx, err := s.r.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	count := func() int64 {
+		t.Helper()
+		rows, err := tx.QueryContext(ctx, `SELECT count(*) FROM workspace`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		var n int64
+		if rows.Next() {
+			if err := rows.Scan(&n); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return n
+	}
+	before := count()
+	if _, err := s.AddWorkspace(ctx, "meanwhile", "/meanwhile", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if after := count(); after != before {
+		t.Errorf("one read transaction saw %d workspaces, then %d: a commit between its reads", before, after)
+	}
+}
+
+// A process that finds a store on PostgreSQL another's leaves it as it found it: the lease is
+// claimed before the scripts, so a fresh database whose lease another holds is refused with no
+// script applied (no ledger). The mutant, named here: the scripts applied before the claim (a newer
+// build beside an older daemon would migrate the store under it).
+func TestAStoreOnPostgresHeldByAnotherIsLeftAsItWas(t *testing.T) {
+	ctx := context.Background()
+	loc := pgLocation(t)
+	admin, err := postgres.Open(ctx, loc.DSN, postgres.MaxOpenConns(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer admin.Close()
+	for _, q := range []string{`CREATE SCHEMA ` + loc.Schema, `SET search_path TO ` + loc.Schema, leaseTableDDL,
+		`INSERT INTO ` + LeaseTable + ` VALUES ('` + LeaseScope + `', 'another', 1, clock_timestamp() + interval '1 hour', NULL, NULL, 'a newer one')`} {
+		if _, err := admin.ExecContext(ctx, q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	if _, err := OpenAt(ctx, loc); !errors.Is(err, ErrBusy) {
+		t.Fatalf("an open of a store another holds: %v, want ErrBusy", err)
+	}
+	rows, err := admin.QueryContext(ctx, `SELECT count(*) FROM information_schema.tables WHERE table_schema = $1 AND table_name <> $2`, loc.Schema, LeaseTable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var n int64
+	if rows.Next() {
+		_ = rows.Scan(&n)
+	}
+	if n != 0 {
+		t.Errorf("%d tables were made in a store another holds, want none (no script applied)", n)
+	}
+}
+
+// The lease's table made before the claim is 000036's own: the two statements are the same text.
+func TestTheLeaseTableMadeBeforeTheClaimIs000036s(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "sql", "deployments", "postgres", "000036_update_writer_lease.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stmt []string
+	for _, line := range strings.Split(string(b), "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(line), "--") {
+			stmt = append(stmt, line)
+		}
+	}
+	norm := func(s string) string {
+		return strings.Join(strings.Fields(strings.TrimSuffix(strings.TrimSpace(s), ";")), " ")
+	}
+	if got, want := norm(leaseTableDDL), norm(strings.Join(stmt, "\n")); got != want {
+		t.Errorf("leaseTableDDL:\n%s\n000036:\n%s", got, want)
 	}
 }
