@@ -430,7 +430,11 @@ func (h *Host) askDiskOnEnter(b *openBuffer) {
 		return
 	}
 	b.file.diskAsked = b.file.diskVersion
-	h.set("App.conflictQuestion", h.trf("autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_kee", b.file.name()))
+	q := "autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_kee"
+	if !h.gui { // a terminal's question offers Compare too (compare.go)
+		q = "autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_compare"
+	}
+	h.set("App.conflictQuestion", h.trf(q, b.file.name()))
 	h.open("fileConflict")
 }
 

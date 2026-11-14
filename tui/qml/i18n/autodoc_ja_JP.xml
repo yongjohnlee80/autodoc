@@ -8556,5 +8556,17 @@ Revoked, its next use of %2 is refused, and asks you again by a card.</source>
         <source>merged %1 with the disk: unsaved, u brings your text back</source>
         <translation>%1 をディスクとマージしました: 未保存、u で元のテキストに戻せます</translation>
     </message>
+    <message id="autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_compare">
+        <source>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), overwrite it with yours, or compare the two and merge them?</source>
+        <translation>%1 は未保存の変更があるうちにディスク上で変更されました。編集を続けるか、ディスク上のバージョンを再読み込みするか (u でテキストを戻せます)、自分の内容で上書きするか、両方を比較してマージしますか?</translation>
+    </message>
+    <message id="autodoc.text.files.changed_on_disk_since_you_opened_it_compare">
+        <source>%1 changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), overwrite it with yours, or compare the two and merge them?</source>
+        <translation>%1 は開いた後にディスク上で変更されました。編集を続けるか、ディスク上のバージョンを再読み込みするか (u でテキストを戻せます)、自分の内容で上書きするか、両方を比較してマージしますか?</translation>
+    </message>
+    <message id="autodoc.text.compare.the_merge_was_closed">
+        <source>The merge was closed before it was applied</source>
+        <translation>適用する前にマージが閉じられました</translation>
+    </message>
 </context>
 </TS>
