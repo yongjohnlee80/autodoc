@@ -16,14 +16,36 @@ both engines, or as a comment on the engine it has no work on, saying why.
 - The translation: integer keys become `bigint` identities, `BLOB` becomes `bytea`, text is
   `COLLATE "C"` (byte order, as SQLite compares, which path ranges rely on), and FTS5's
   `chunk_fts` becomes `chunk.tsv`, a generated, weighted `tsvector` with a GIN index.
-- SQLite stays every AutoDoc's default. PostgreSQL is the server component's first. Opening the
-  store on PostgreSQL, searching it, sharing it between processes and copying a SQLite store into
-  it are later steps.
+- SQLite stays every AutoDoc's default. PostgreSQL is the server component's first. Searching the
+  store on PostgreSQL and copying a SQLite store into it are later steps; opening it is below.
 - A parity test applies the PostgreSQL scripts and requires SQLite's tables with the same columns
-  each; `chunk.tsv` is the one named difference.
+  each. Two differences are named: `chunk.tsv`, and the `writer_lease` table PostgreSQL alone has.
 
 In the code: `sql/deployments/deployments.go`, `sql/deployments/postgres/`,
 `sql/deployments/deployments_test.go`
+
+## The store on PostgreSQL
+
+`store.OpenAt` opens a store at a `Location`: a SQLite file, as `Open` does, or a PostgreSQL
+database and schema. On PostgreSQL:
+
+- **One writer connection, as on SQLite,** so the store's writes keep the order they have there,
+  and a pool of readers, read-only by session. The schema is made when it is missing, and the
+  PostgreSQL scripts applied in it.
+- **A writer lease in place of the file's lock.** The store claims a row of `writer_lease` (scope
+  `store`, script 000036) on a pool of its own, so a renew never waits for the writer's one
+  connection. A lease another process holds is `ErrBusy`, naming the holder: one process serves a
+  store, as on SQLite. Every write transaction confirms the lease as its first statement and holds
+  it until the write ends, and the store renews it every third of its length. The lease is the one
+  the server's tenants hold ([server decisions](server.md#a-tenant-per-source-one-writer-each)).
+- **The key is a file the location names,** since there is no store file to keep it beside.
+- **What only a SQLite file has is refused,** `ErrNotSQLite`: the quick and whole checks, the
+  damaged mark, vacuuming, compaction and the write-ahead log's checkpoint.
+
+Lifting the one writer connection would need each write path's order checked against PostgreSQL's
+`READ COMMITTED`, where SQLite's single writer gives it for free.
+
+In the code: `core/store/postgres.go`, `sql/deployments/postgres/000036_update_writer_lease.sql`
 
 ## Workspace settings saved together
 
