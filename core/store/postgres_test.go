@@ -25,6 +25,15 @@ func pgLocation(t *testing.T) Location {
 		KeyFile: filepath.Join(t.TempDir(), "store.key")}
 }
 
+// sqliteOnly skips a cell of what only a SQLite store's file has (why says what), when openStore
+// opens its stores on PostgreSQL.
+func sqliteOnly(t *testing.T, why string) {
+	t.Helper()
+	if os.Getenv(storeEngineEnv) == EngineOfPostgres {
+		t.Skip("a SQLite store's own: " + why)
+	}
+}
+
 func openPG(t *testing.T, loc Location) *Store {
 	t.Helper()
 	s, err := OpenAt(context.Background(), loc)
