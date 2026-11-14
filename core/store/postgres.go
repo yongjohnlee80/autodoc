@@ -59,6 +59,19 @@ const (
 	LeaseScope = "store"
 )
 
+// leaseTableDDL is 000036's statement, run before the lease is claimed (openPostgres): a store not
+// yet at 000036 has its lease's table made, and one at it is left as it is. A cell holds the two
+// texts equal.
+const leaseTableDDL = `CREATE TABLE IF NOT EXISTS writer_lease (
+    scope       text COLLATE "C" PRIMARY KEY,
+    holder      text NOT NULL,
+    epoch       bigint NOT NULL,
+    lease_until timestamptz NOT NULL,
+    claimed_at  timestamptz,
+    renewed_at  timestamptz,
+    holder_info text
+)`
+
 // leaseTTL is a PostgreSQL store's writer lease length.
 const leaseTTL = pglease.DefaultTTL
 
@@ -126,19 +139,17 @@ func openPostgres(ctx context.Context, loc Location, opts ...Option) (*Store, er
 	if _, err := admin.ExecContext(ctx, `CREATE SCHEMA IF NOT EXISTS "`+loc.Schema+`"`); err != nil {
 		return fail(fmt.Errorf("store: the schema %s: %w", loc.Schema, err))
 	}
-	w, err := open("w", postgres.MaxOpenConns(1), inSchema, pglease.WriterSession(leaseTTL))
-	if err != nil {
-		return fail(err)
-	}
-	st, err := deployments.Runner().Apply(ctx, w)
-	if err != nil {
-		return fail(fmt.Errorf("store: the schema in %s: %w", loc.Schema, err))
-	}
+	// the lease before the scripts: a process that finds the store another's (a newer build beside an
+	// older daemon) leaves its schema as it is. The lease's table is made first when missing, with
+	// 000036's own statement, so a store not yet at 000036 can be claimed too.
 	// NOTE: a pool of its own, of two: a renew must never wait for the writer's one connection,
 	// which a write holds for its length
 	leases, err := open("lease", postgres.MaxOpenConns(2), inSchema, pglease.WriterSession(leaseTTL))
 	if err != nil {
 		return fail(err)
+	}
+	if _, err := leases.ExecContext(ctx, leaseTableDDL); err != nil {
+		return fail(fmt.Errorf("store: the writer lease's table: %w", err))
 	}
 	lease, err := pglease.Claim(ctx, leases, pglease.Options{Table: LeaseTable, Scope: LeaseScope, TTL: leaseTTL, Info: "store=" + loc.Schema})
 	var held *pglease.HeldError
@@ -148,16 +159,28 @@ func openPostgres(ctx context.Context, loc Location, opts ...Option) (*Store, er
 	if err != nil {
 		return fail(err)
 	}
+	release := func() { _ = lease.Release(context.Background()) }
+	w, err := open("w", postgres.MaxOpenConns(1), inSchema, pglease.WriterSession(leaseTTL))
+	if err != nil {
+		release()
+		return fail(err)
+	}
+	st, err := deployments.Runner().Apply(ctx, w)
+	if err != nil {
+		release()
+		return fail(fmt.Errorf("store: the schema in %s: %w", loc.Schema, err))
+	}
 	r, err := open("r", inSchema, readOnly)
 	if err != nil {
-		_ = lease.Release(context.Background())
+		release()
 		return fail(err)
 	}
 	_ = admin.Close()
 	runCtx, stop := context.WithCancel(context.Background())
 	pg := &pgStore{loc: loc, leases: leases, lease: lease, stop: stop, done: make(chan struct{})}
 	fenced := fencedConn{DataConn: w, fence: lease.Fence}
-	s := &Store{w: fenced, r: r, wt: newTables(fenced), rt: newTables(r), status: st,
+	snap := snapshotConn{DataConn: r}
+	s := &Store{w: fenced, r: snap, wt: newTables(fenced), rt: newTables(snap), status: st,
 		keys: &keyslot{path: loc.KeyFile}, pg: pg}
 	for _, opt := range opts {
 		opt(s)
@@ -193,6 +216,15 @@ func (pg *pgStore) close() error {
 		err = errors.Join(pg.lease.Release(ctx), pg.leases.Close())
 	})
 	return err
+}
+
+// snapshotConn is the readers of a store on PostgreSQL: each of their transactions is REPEATABLE
+// READ and READ ONLY, so every read of one Store.Read sees one commit, as a SQLite read transaction
+// (a WAL snapshot) does; PostgreSQL's default, READ COMMITTED, would read each statement afresh.
+type snapshotConn struct{ dao.DataConn }
+
+func (c snapshotConn) Begin(ctx context.Context) (dao.TxConn, error) {
+	return dao.BeginConnTx(ctx, c.DataConn, dao.TxOptions{Access: dao.TxReadOnly, Isolation: dao.TxRepeatableRead})
 }
 
 // fencedConn is the writer of a store on PostgreSQL: each of its transactions begins with the
