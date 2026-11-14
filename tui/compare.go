@@ -166,9 +166,17 @@ func (s *compareSource) Load(ctx context.Context) (merge.Input, error) {
 // Apply puts result in the buffer, on the loop, as one undo step, unsaved, at the disk's version
 // the merge was loaded at: the disk's text that version held becomes the buffer's base. A buffer
 // changed since the load is refused, the view offering to load again: the result would drop that
-// change.
+// change. One closed, or a wait given up, before the loop runs it puts nothing in.
 func (s *compareSource) Apply(ctx context.Context, result string) error {
 	_, err := onLoopWait(ctx, s.h, func() (struct{}, error) {
+		// the view closed (Escape, Cancel) or gave up waiting before the loop came to this: the
+		// result is not put in
+		if s.detached.Load() {
+			return struct{}{}, errors.New(s.h.tr("autodoc.text.compare.the_merge_was_closed"))
+		}
+		if err := ctx.Err(); err != nil {
+			return struct{}{}, err
+		}
 		s.mu.Lock()
 		at := s.load
 		s.mu.Unlock()
@@ -184,7 +192,11 @@ func (s *compareSource) Apply(ctx context.Context, result string) error {
 			return struct{}{}, err
 		}
 		b.file.setAgreed(at.version, at.left)
-		b.file.disk, b.file.diskVersion, b.file.diskAsked = diskSame, "", ""
+		// in step with the disk only if the disk is still the version merged: one that moved after
+		// the load keeps its badge, and the next save asks again
+		if b.file.disk == diskSame || b.file.diskVersion == at.version {
+			b.file.disk, b.file.diskVersion, b.file.diskAsked = diskSame, "", ""
+		}
 		s.detached.Store(true) // the view closes: nothing more to tell it
 		s.h.syncBuffers()
 		return struct{}{}, nil

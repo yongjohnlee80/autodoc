@@ -8552,5 +8552,17 @@ Revoked, its next use of %2 is refused, and asks you again by a card.</source>
         <source>merged %1 with the disk: unsaved, u brings your text back</source>
         <translation>%1을(를) 디스크와 병합했습니다: 저장 안 됨, u로 원래 텍스트를 되돌립니다</translation>
     </message>
+    <message id="autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_compare">
+        <source>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), overwrite it with yours, or compare the two and merge them?</source>
+        <translation>저장하지 않은 변경 사항이 있는 동안 %1이(가) 디스크에서 변경되었습니다. 계속 편집할까요, 디스크 버전을 다시 불러올까요(u로 내 텍스트 되돌리기), 내 버전으로 덮어쓸까요, 아니면 둘을 비교해 병합할까요?</translation>
+    </message>
+    <message id="autodoc.text.files.changed_on_disk_since_you_opened_it_compare">
+        <source>%1 changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), overwrite it with yours, or compare the two and merge them?</source>
+        <translation>연 뒤에 %1이(가) 디스크에서 변경되었습니다. 계속 편집할까요, 디스크 버전을 다시 불러올까요(u로 내 텍스트 되돌리기), 내 버전으로 덮어쓸까요, 아니면 둘을 비교해 병합할까요?</translation>
+    </message>
+    <message id="autodoc.text.compare.the_merge_was_closed">
+        <source>The merge was closed before it was applied</source>
+        <translation>적용하기 전에 병합이 닫혔습니다</translation>
+    </message>
 </context>
 </TS>

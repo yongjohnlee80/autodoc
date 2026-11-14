@@ -6521,6 +6521,10 @@ Revoked, its next use of %2 is refused, and asks you again by a card.</translati
         <source>%1 on disk holds your buffer's text. Take the disk's version, the buffer then saved?</source>
         <translation>%1 on disk holds your buffer's text. Take the disk's version, the buffer then saved?</translation>
     </message>
+    <message id="autodoc.text.compare.the_merge_was_closed">
+        <source>The merge was closed before it was applied</source>
+        <translation>The merge was closed before it was applied</translation>
+    </message>
     <message id="autodoc.text.compare.title">
         <source>Compare %1 with the disk</source>
         <translation>Compare %1 with the disk</translation>
@@ -6572,6 +6576,10 @@ Revoked, its next use of %2 is refused, and asks you again by a card.</translati
     <message id="autodoc.text.crew_bridges.unsupported">
         <source>Crew Bridges reads the crew's processes on Linux only for now: on this system, find and end them by hand (ps, kill). The daemon reclaims none here.</source>
         <translation>Crew Bridges reads the crew's processes on Linux only for now: on this system, find and end them by hand (ps, kill). The daemon reclaims none here.</translation>
+    </message>
+    <message id="autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_compare">
+        <source>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), overwrite it with yours, or compare the two and merge them?</source>
+        <translation>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), overwrite it with yours, or compare the two and merge them?</translation>
     </message>
     <message id="autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_kee">
         <source>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</source>
@@ -6744,6 +6752,10 @@ Revoked, its next use of %2 is refused, and asks you again by a card.</translati
     <message id="autodoc.text.files.changed_on_disk">
         <source>changed on disk</source>
         <translation>changed on disk</translation>
+    </message>
+    <message id="autodoc.text.files.changed_on_disk_since_you_opened_it_compare">
+        <source>%1 changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), overwrite it with yours, or compare the two and merge them?</source>
+        <translation>%1 changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), overwrite it with yours, or compare the two and merge them?</translation>
     </message>
     <message id="autodoc.text.files.changed_on_disk_since_you_opened_it_keep_editing">
         <source>%1 changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</source>

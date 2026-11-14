@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -58,7 +59,13 @@ func conflicted(t *testing.T, disk string) (*running, string) {
 // its buttons.
 func onWideDisk(t *testing.T) (*running, string) {
 	t.Helper()
-	root := fileDir(t, "a.md", "one\ntwo\nthree\n", "b.md", "bbb\n")
+	return onWideDiskWith(t, "one\ntwo\nthree\n")
+}
+
+// onWideDiskWith is onWideDisk, a.md holding a.
+func onWideDiskWith(t *testing.T, a string) (*running, string) {
+	t.Helper()
+	root := fileDir(t, "a.md", a, "b.md", "bbb\n")
 	d := startManaged(t, map[string]string{"alpha": root})
 	r := runTUISized(t, NewSession(d.sock, nil), Options{Workspace: "alpha"}, 200, 50)
 	r.waitAttached(t, "alpha")
@@ -74,6 +81,14 @@ func (r *running) compareOpen(t *testing.T) *mergeview.MergeView {
 	v := r.compareView(t)
 	r.s.WaitFor(t, "the merge loaded", func(string) bool { return onLoop(r, func() bool { return v.Model() != nil }) })
 	return v
+}
+
+// compareGone waits for the Compare to close after an Apply: its dialog gone, so a key typed next
+// is the editor's.
+func (r *running) compareGone(t *testing.T) {
+	t.Helper()
+	r.s.WaitFor(t, "the Compare closed", func(string) bool { return onLoop(r, func() bool { return r.h.comparing == nil }) })
+	r.s.WaitFor(t, "its dialog gone", func(s string) bool { return !strings.Contains(s, "Compare a.md with the disk") })
 }
 
 // TestCompareKeepsTheBuffersLinesInAConflictLeft: the disk's change elsewhere merged in, the
@@ -277,4 +292,83 @@ func TestACompareNoticeNeverWaits(t *testing.T) {
 	if len(s.Changed()) != 1 {
 		t.Fatalf("%d notices held, want the one slot full", len(s.Changed()))
 	}
+}
+
+// TestAnApplyPostedAsTheCompareClosesPutsNothingIn: an Apply the loop comes to after the view was
+// closed (Escape, Cancel) puts nothing in the buffer: the question is back, the buffer as it was.
+func TestAnApplyPostedAsTheCompareClosesPutsNothingIn(t *testing.T) {
+	t.Parallel()
+	r, _ := conflicted(t, "ONE\ntwo\nthree\n")
+	r.compareOpen(t)
+	s := onLoop(r, func() *compareSource { return r.h.comparing })
+	errc := make(chan error, 1)
+	onLoop(r, func() bool {
+		go func() { errc <- s.Apply(context.Background(), "applied\n") }()
+		time.Sleep(100 * time.Millisecond) // the Apply is posted behind this turn of the loop
+		r.h.compareDone(false)
+		return true
+	})
+	if err := <-errc; err == nil {
+		t.Fatal("an Apply run after the Compare closed was taken")
+	}
+	if got := r.editorText(); got != "one\ntwo\nTHREE mine\n" {
+		t.Fatalf("the buffer after a closed Compare's Apply: %q, want it as it was", got)
+	}
+}
+
+// TestAnApplyAfterTheDiskMovedAgainKeepsItsBadge: the disk moving again after the merge was loaded,
+// an Apply from that merge leaves the file badged changed on disk, and its save asks again.
+func TestAnApplyAfterTheDiskMovedAgainKeepsItsBadge(t *testing.T) {
+	t.Parallel()
+	r, root := conflicted(t, "ONE\ntwo\nthree\n")
+	v := r.compareOpen(t)
+	was := onLoop(r, func() string { return r.h.active.file.diskVersion })
+	rewrite(t, root, "a.md", "ONE\ntwo\nthree\nlater\n")
+	r.s.WaitFor(t, "the newer version seen", func(string) bool {
+		return onLoop(r, func() string { return r.h.active.file.diskVersion }) != was
+	})
+	onLoop(r, func() bool { v.Merge(); v.Apply(); return true })
+	r.s.WaitFor(t, "the merge in the buffer", func(string) bool { return r.editorText() == "ONE\ntwo\nTHREE mine\n" })
+	if d := diskOf(r, "a.md"); d != diskChanged {
+		t.Fatalf("after an Apply of an older merge: disk %v, want it still badged changed", d)
+	}
+	r.compareGone(t)
+	r.keys(t, decltest.Ctrl('s'))
+	r.s.WaitForText(t, "changed on disk since you opened it")
+}
+
+// TestCompareMergesACRLFFile: a file with CRLF line breaks, one line changed on disk and another in
+// the buffer, merges without a conflict (both sides compared as the editor holds them) and is
+// written back with CRLF throughout.
+func TestCompareMergesACRLFFile(t *testing.T) {
+	t.Parallel()
+	r, root := onWideDiskWith(t, "one\r\ntwo\r\nthree\r\n")
+	r.openOnDisk(t, "a.md")
+	onLoop(r, func() bool {
+		_, _ = r.h.core.Replace(editor.TextRange{From: editor.TextPos{Line: 2}, To: editor.TextPos{Line: 2, Col: 5}}, "THREE mine")
+		return true
+	})
+	r.s.WaitFor(t, "the edit, unsaved", func(string) bool { return r.file().dirty })
+	rewrite(t, root, "a.md", "ONE\r\ntwo\r\nthree\r\n")
+	r.s.WaitFor(t, "a.md badged", func(string) bool { return diskOf(r, "a.md") == diskChanged })
+	r.openOnDisk(t, "b.md")
+	r.openByPicker(t, "a.md")
+	r.s.WaitForText(t, "while it had unsaved changes")
+	v := r.compareOpen(t)
+	if c := onLoop(r, func() [2]int { a, b := v.Counts(); return [2]int{a, b} }); c != [2]int{2, 0} {
+		t.Fatalf("the CRLF merge: counts %v, want the disk's and the buffer's changes, no conflict", c)
+	}
+	onLoop(r, func() bool { v.Merge(); v.Apply(); return true })
+	r.s.WaitFor(t, "the merge in the buffer", func(string) bool { return r.editorText() == "ONE\ntwo\nTHREE mine\n" })
+	// the disk's text kept as the base in the editor's form (LF), as every other base is
+	if f := r.file(); f.base != "ONE\ntwo\nthree\n" {
+		t.Fatalf("the base after the CRLF merge: %q, want the disk's text with LF", f.base)
+	}
+	r.compareGone(t)
+	r.keys(t, decltest.Ctrl('s'))
+	want := "ONE\r\ntwo\r\nTHREE mine\r\n"
+	r.s.WaitFor(t, "the save on disk", func(string) bool {
+		b, _ := os.ReadFile(filepath.Join(root, "a.md"))
+		return string(b) == want
+	})
 }
