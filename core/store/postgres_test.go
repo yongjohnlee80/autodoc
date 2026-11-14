@@ -255,3 +255,123 @@ func TestTheLeaseTableMadeBeforeTheClaimIs000036s(t *testing.T) {
 		t.Errorf("leaseTableDDL:\n%s\n000036:\n%s", got, want)
 	}
 }
+
+// Two stores in one database, one in public and one in a schema of its own, are apart: the second
+// is made whole in its schema (as many tables as the first), reads none of the first's rows, and
+// has its own identity; the first keeps its rows. (PostgreSQL creates an unqualified table in the
+// first schema of the path, the store's own, so public beside it on the path changes none of this.)
+func TestTwoStoresInOneDatabaseAreApart(t *testing.T) {
+	ctx := context.Background()
+	first := pgLocation(t)
+	first.Schema = "public"
+	a, err := OpenAt(ctx, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.AddWorkspace(ctx, "first", "/first", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	firstID, _ := a.ID()
+	if err := a.Close(); err != nil {
+		t.Fatal(err)
+	}
+	second := first
+	second.Schema = "second_store"
+	second.KeyFile = filepath.Join(t.TempDir(), "second.key")
+	b := openPG(t, second)
+	if ws, err := b.Workspaces(ctx); err != nil || len(ws) != 0 {
+		t.Errorf("the second store's workspaces: %+v, %v; want none of the first's", ws, err)
+	}
+	if id, _ := b.ID(); id == firstID {
+		t.Errorf("the second store has the first's identity %s", id)
+	}
+	tables := func(schema string) int64 {
+		rows, err := b.leaseConn().QueryContext(ctx, `SELECT count(*) FROM information_schema.tables WHERE table_schema = $1 AND table_type = 'BASE TABLE'`, schema)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		var n int64
+		if rows.Next() {
+			_ = rows.Scan(&n)
+		}
+		return n
+	}
+	if p, s := tables("public"), tables("second_store"); s != p || s < 30 {
+		t.Errorf("tables: %d in public, %d in second_store; want the second made whole in its own schema", p, s)
+	}
+	if _, err := b.AddWorkspace(ctx, "second", "/second", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	a = openPG(t, first)
+	if ws, err := a.Workspaces(ctx); err != nil || len(ws) != 1 || ws[0].Name != "first" {
+		t.Errorf("the first store's workspaces after the second's write: %+v, %v; want first alone", ws, err)
+	}
+}
+
+// A first start longer than the lease (its scripts building an index on a large store, say) keeps
+// the lease: it is renewed from the claim on, so a second process opening the store meanwhile is
+// refused, and the store writes once open. The mutant, named here: the renew started only after the
+// scripts (the lease expires under them, and the second process takes the store).
+func TestALongFirstStartKeepsItsLease(t *testing.T) {
+	shortLease(t, 2*time.Second)
+	ctx := context.Background()
+	loc := pgLocation(t)
+	standby := make(chan error, 1)
+	beforeScripts = func() {
+		beforeScripts = nil
+		time.Sleep(3 * time.Second) // past the lease's length
+		s, err := OpenAt(ctx, loc)
+		if err == nil {
+			_ = s.Close()
+		}
+		standby <- err
+	}
+	t.Cleanup(func() { beforeScripts = nil })
+	s := openPG(t, loc)
+	if err := <-standby; !errors.Is(err, ErrBusy) {
+		t.Errorf("a second open during the first start's scripts: %v, want ErrBusy", err)
+	}
+	if _, err := s.AddWorkspace(ctx, "after", "/after", nil, nil); err != nil {
+		t.Errorf("a write once the long first start opened: %v", err)
+	}
+}
+
+// The first start's scripts are fenced as every write is: a lease taken over between the claim and
+// the scripts fails them, the open with them, and nothing of the store's schema is made. The mutant,
+// named here: the scripts run on the bare writer (they migrate a store another process now holds).
+func TestTheFirstStartsScriptsAreFenced(t *testing.T) {
+	ctx := context.Background()
+	loc := pgLocation(t)
+	admin, err := postgres.Open(ctx, loc.DSN, postgres.MaxOpenConns(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer admin.Close()
+	beforeScripts = func() {
+		beforeScripts = nil
+		if _, err := admin.ExecContext(ctx, `UPDATE `+loc.Schema+`.`+LeaseTable+` SET holder = '', epoch = epoch + 1,
+			lease_until = clock_timestamp() WHERE scope = '`+LeaseScope+`'`); err != nil {
+			t.Error(err)
+		}
+	}
+	t.Cleanup(func() { beforeScripts = nil })
+	if s, err := OpenAt(ctx, loc); !errors.Is(err, pglease.ErrLost) {
+		if err == nil {
+			_ = s.Close()
+		}
+		t.Fatalf("an open whose lease was taken before its scripts: %v, want the lease lost", err)
+	}
+	rows, err := admin.QueryContext(ctx, `SELECT count(*) FROM information_schema.tables WHERE table_schema = $1 AND table_name <> $2`, loc.Schema, LeaseTable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var n int64
+	if rows.Next() {
+		_ = rows.Scan(&n)
+	}
+	if n != 0 {
+		t.Errorf("%d tables made by scripts whose lease was taken over, want none", n)
+	}
+}

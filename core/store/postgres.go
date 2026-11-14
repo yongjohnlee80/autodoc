@@ -59,6 +59,10 @@ const (
 	LeaseScope = "store"
 )
 
+// beforeScripts runs between the lease's claim and the scripts: nil in production, set by a cell
+// that stands for a long first start or takes the lease over in that window.
+var beforeScripts func()
+
 // leaseTableDDL is 000036's statement, run before the lease is claimed (openPostgres): a store not
 // yet at 000036 has its lease's table made, and one at it is left as it is. A cell holds the two
 // texts equal.
@@ -159,13 +163,24 @@ func openPostgres(ctx context.Context, loc Location, opts ...Option) (*Store, er
 	if err != nil {
 		return fail(err)
 	}
-	release := func() { _ = lease.Release(context.Background()) }
+	// the lease is the store's from here: renewed at once, so a long first start (scripts building
+	// an index on a large store) never outlasts it, and closed with every failure after this
+	runCtx, stop := context.WithCancel(context.Background())
+	pg := &pgStore{loc: loc, leases: leases, lease: lease, stop: stop, done: make(chan struct{})}
+	go pg.renew(runCtx)
+	release := func() { _ = pg.close() }
 	w, err := open("w", postgres.MaxOpenConns(1), inSchema, pglease.WriterSession(leaseTTL))
 	if err != nil {
 		release()
 		return fail(err)
 	}
-	st, err := deployments.Runner().Apply(ctx, w)
+	fenced := fencedConn{DataConn: w, fence: lease.Fence}
+	if beforeScripts != nil {
+		beforeScripts()
+	}
+	// the scripts through the fenced writer: their one transaction confirms the lease first and
+	// holds it against a takeover until it commits
+	st, err := deployments.Runner().Apply(ctx, fenced)
 	if err != nil {
 		release()
 		return fail(fmt.Errorf("store: the schema in %s: %w", loc.Schema, err))
@@ -176,16 +191,12 @@ func openPostgres(ctx context.Context, loc Location, opts ...Option) (*Store, er
 		return fail(err)
 	}
 	_ = admin.Close()
-	runCtx, stop := context.WithCancel(context.Background())
-	pg := &pgStore{loc: loc, leases: leases, lease: lease, stop: stop, done: make(chan struct{})}
-	fenced := fencedConn{DataConn: w, fence: lease.Fence}
 	snap := snapshotConn{DataConn: r}
 	s := &Store{w: fenced, r: snap, wt: newTables(fenced), rt: newTables(snap), status: st,
 		keys: &keyslot{path: loc.KeyFile}, pg: pg}
 	for _, opt := range opts {
 		opt(s)
 	}
-	go pg.renew(runCtx)
 	return s, nil
 }
 
