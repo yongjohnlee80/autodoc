@@ -6110,10 +6110,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>Audit asks your agent to read this code. AutoDoc can't stop the agent from running code or changing files: pick an agent you trust, and watch its tab.</source>
         <translation>감사는 에이전트에게 이 코드를 읽도록 요청합니다. AutoDoc은 에이전트가 코드를 실행하거나 파일을 바꾸는 것을 막을 수 없습니다: 신뢰하는 에이전트를 고르고, 그 탭을 지켜보세요.</translation>
     </message>
-    <message id="autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_kee">
-        <source>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</source>
-        <translation>저장하지 않은 변경 사항이 있는 동안 %1이(가) 디스크에서 변경되었습니다. 계속 편집할까요, 디스크 버전을 다시 불러올까요(u로 내 텍스트 되돌리기), 아니면 내 버전으로 덮어쓸까요?</translation>
-    </message>
     <message id="autodoc.text.files.a_name_is_required">
         <source>a name is required</source>
         <translation>이름이 필요합니다</translation>
@@ -6125,10 +6121,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
     <message id="autodoc.text.files.changed_on_disk">
         <source>changed on disk</source>
         <translation>디스크에서 변경됨</translation>
-    </message>
-    <message id="autodoc.text.files.changed_on_disk_since_you_opened_it_keep_editing">
-        <source>%1 changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</source>
-        <translation>연 뒤에 %1이(가) 디스크에서 변경되었습니다. 계속 편집할까요, 디스크 버전을 다시 불러올까요(u로 내 텍스트 되돌리기), 아니면 내 버전으로 덮어쓸까요?</translation>
     </message>
     <message id="autodoc.text.files.deleted_on_disk">
         <source>deleted on disk</source>

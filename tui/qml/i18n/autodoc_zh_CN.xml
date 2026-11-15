@@ -6103,10 +6103,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>Audit asks your agent to read this code. AutoDoc can't stop the agent from running code or changing files: pick an agent you trust, and watch its tab.</source>
         <translation>“审计”会让你的智能体阅读这段代码。AutoDoc 无法阻止智能体运行代码或修改文件：请选择你信任的智能体，并留意其标签页。</translation>
     </message>
-    <message id="autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_kee">
-        <source>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</source>
-        <translation>%1 有未保存的更改时在磁盘上被修改。继续编辑、重新加载磁盘版本(按 u 可恢复你的文本)，还是用你的版本覆盖它？</translation>
-    </message>
     <message id="autodoc.text.files.a_name_is_required">
         <source>a name is required</source>
         <translation>名称为必填项</translation>
@@ -6118,10 +6114,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
     <message id="autodoc.text.files.changed_on_disk">
         <source>changed on disk</source>
         <translation>已在磁盘上更改</translation>
-    </message>
-    <message id="autodoc.text.files.changed_on_disk_since_you_opened_it_keep_editing">
-        <source>%1 changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</source>
-        <translation>%1 在你打开后已在磁盘上被修改。继续编辑、重新加载磁盘版本(按 u 可恢复你的文本)，还是用你的版本覆盖它？</translation>
     </message>
     <message id="autodoc.text.files.deleted_on_disk">
         <source>deleted on disk</source>
