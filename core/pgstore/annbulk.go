@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/dao/postgres"
 )
 
-// A MODEL'S FIRST BUILD WAITS FOR ITS BULK LOAD (docs/decisions/server.md#a-models-index-waits-for-its-bulk-load).
+// A MODEL'S INDEX WAITS FOR ITS BULK LOAD (docs/decisions/server.md#a-models-index-waits-for-its-bulk-load).
 // Inserting into a model whose HNSW index is built costs several times more than into one without
 // (ef_construction 200: 159 inserts a second against 500 at 1M rows), so a tenant's first import
 // of its model would pay it throughout. A wanted index is therefore not built while a tenant whose
@@ -19,10 +20,11 @@ import (
 // deferred whatever the backlog. Searches answer exactly meanwhile, as they do while any index is
 // wanted. The backlog is counted only while an index is wanted, capped at DeferBacklog: a full
 // backlog stops after that many rows, a drained one reads 000003's partial index of the unready
-// documents.
+// documents. A backlog that cannot be counted holds every wanted model for that tick (Tick).
 //
-// A model whose index is built already, and a model only a tenant's target (a switch's fill), are
-// not deferred: their inserts pay the index's cost.
+// Deferred: a wanted index, its first build or a rebuild after its index went missing. Not
+// deferred: a model whose index is ready, a model only a tenant's target (a switch's fill), and a
+// failed build's retry (due on its own backoff): their inserts pay the index's cost.
 
 // deferredPrefix begins a deferred index row's error: the reason ANNStatus reports while it waits.
 const deferredPrefix = "deferred: "
@@ -47,7 +49,7 @@ func (a *ANN) unreadyBacklog(ctx context.Context, tenant string, limit int) (int
 	return int(n), nil
 }
 
-// deferrals is the wanted models whose first build waits for a tenant's bulk load, each with its
+// deferrals is the wanted models whose build waits for a tenant's bulk load, each with its
 // reason and deadline: a deadline already recorded (next_at) is kept, a new one is DeferMax from
 // now. A model past its deadline builds, whatever the backlog.
 func (a *ANN) deferrals(ctx context.Context) (map[string]deferral, error) {
@@ -55,7 +57,7 @@ func (a *ANN) deferrals(ctx context.Context) (map[string]deferral, error) {
 	if a.cfg.DeferBacklog <= 0 {
 		return out, nil
 	}
-	wanted, err := a.rwIndex.DAO(a.opts(ctx)...).With(aiState, annWanted).Select(aiModel, aiNextAt)
+	wanted, err := a.rwIndex.DAO(a.opts(ctx)...).With(aiState, annWanted).Select(aiModel, aiNextAt, aiError)
 	if err != nil || len(wanted) == 0 {
 		return out, err
 	}
@@ -65,8 +67,10 @@ func (a *ANN) deferrals(ctx context.Context) (map[string]deferral, error) {
 	}
 	now := a.now()
 	for _, w := range wanted {
+		// the deadline holdDeferred recorded with its reason; a next_at without one (a retry's
+		// backoff, left on a row wanted again) is no deferral's, and a new one starts
 		deadline := now.Add(a.cfg.DeferMax)
-		if w.NextAt != nil {
+		if w.NextAt != nil && strings.HasPrefix(w.Error, deferredPrefix) {
 			deadline = *w.NextAt
 		}
 		if !now.Before(deadline) {
@@ -108,7 +112,7 @@ func (a *ANN) holdDeferred(ctx context.Context, held map[string]deferral) error 
 			case waits && r.Error != d.reason:
 				err = a.rwIndex.On(tx, a.opts(ctx)...).With(aiModel, r.Model).
 					Set(aiError, d.reason).Set(aiNextAt, d.deadline).Set(aiUpdated, a.now()).Update()
-			case !waits && len(r.Error) >= len(deferredPrefix) && r.Error[:len(deferredPrefix)] == deferredPrefix:
+			case !waits && strings.HasPrefix(r.Error, deferredPrefix):
 				err = a.rwIndex.On(tx, a.opts(ctx)...).With(aiModel, r.Model).
 					Set(aiError, "").Set(aiUpdated, a.now()).Update()
 			}

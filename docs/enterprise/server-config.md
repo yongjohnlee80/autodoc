@@ -81,8 +81,8 @@ when it is missing, then applies its migrations there. Your tables are never wri
 | `ann_scan_mem_multiplier` | `2` | The memory one approximate search's scan may use, as a multiple of `work_mem` (pgvector's `hnsw.scan_mem_multiplier`). | outside 1 to 1000 |
 | `ann_ef_construction` | `200` | How wide each model's HNSW index is built (pgvector's `ef_construction`). It decides recall more than any search setting: at pgvector's default of 64, a tenant sharing the index found 0.938 to 0.990 of its exact top ten across 20 builds, and 8 of those builds were below 0.95; at 200, 0.994 to 1.000. A wider build takes longer. | outside 4 to 1000, or below twice `ann_m` |
 | `ann_m` | `16` | The links each node of the index keeps (pgvector's `m`). 32 did no better than 16 at an ef_construction of 200. | outside 2 to 100 |
-| `ann_defer_backlog` | `2000` | A model's first index waits while a tenant whose active model it is has this many documents or more not yet ready (its bulk load under way), so the load's inserts don't pay the index's cost. 0 never waits. | below 0 |
-| `ann_defer_max` | `"24h"` | The longest a model's first index waits for a bulk load: past it, the index is built whatever the backlog. | not a duration, or 0 or less |
+| `ann_defer_backlog` | `2000` | A model's wanted index waits while a tenant whose active model it is has this many documents or more not yet ready (its bulk load under way), so the load's inserts don't pay the index's cost. 0 never waits. | below 0 |
+| `ann_defer_max` | `"24h"` | The longest a model's wanted index waits for a bulk load: past it, the index is built whatever the backlog. | not a duration, or 0 or less |
 | `ann_maintenance_work_mem` | `"512MB"` | The memory the session building an index may use (PostgreSQL's `maintenance_work_mem`, for that session only). A parallel build keeps it in the database's shared memory (`/dev/shm`): give a database in a container `--shm-size` at least this, or the build falls back to running without parallel workers, and the server logs a warning saying so. | not a size in kB (1024 or more), MB or GB |
 
 The server opens two connection pools on the DSN:

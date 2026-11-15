@@ -122,20 +122,25 @@ func (a *ANN) Tick(ctx context.Context) error {
 	if err := a.retire(ctx); err != nil {
 		errs = append(errs, fmt.Errorf("retiring: %w", err))
 	}
-	// a model's first build waits for its tenants' bulk loads (annbulk.go)
+	// a wanted model's build waits for its tenants' bulk loads (annbulk.go); a backlog that cannot be
+	// counted holds every wanted model this tick, so a load is never paid for because a count failed
 	held, err := a.deferrals(ctx)
+	holdWanted := err != nil
 	if err != nil {
 		errs = append(errs, fmt.Errorf("the bulk loads: %w", err))
 	} else if err := a.holdDeferred(ctx, held); err != nil {
 		errs = append(errs, fmt.Errorf("deferring: %w", err))
 	}
-	job, err := a.claimSkipping(ctx, held)
+	job, err := a.claimSkipping(ctx, held, holdWanted)
 	if err != nil {
 		errs = append(errs, fmt.Errorf("claiming: %w", err))
 	} else if job != nil {
-		if err := a.build(ctx, *job); err != nil && !errors.Is(err, errFenced) {
+		err := a.build(ctx, *job)
+		serially := a.builtSerially.Swap(false) // this build's alone, whatever became of it
+		switch {
+		case err != nil && !errors.Is(err, errFenced):
 			errs = append(errs, fmt.Errorf("building %s: %w", job.model, err))
-		} else if a.builtSerially.Swap(false) {
+		case err == nil && serially:
 			errs = append(errs, fmt.Errorf("building %s: %w", job.model, ErrBuiltSerially))
 		}
 	}
@@ -184,11 +189,12 @@ func (a *ANN) wantNamed(ctx context.Context) error {
 // claim takes the builder row for one wanted index, or a failed one whose retry is due, when the
 // row is free: a new generation, this run as owner, a lease, the model's row building. nil is
 // nothing to do (the row busy, or nothing wanted).
-func (a *ANN) claim(ctx context.Context) (*annJob, error) { return a.claimSkipping(ctx, nil) }
+func (a *ANN) claim(ctx context.Context) (*annJob, error) { return a.claimSkipping(ctx, nil, false) }
 
 // claimSkipping is claim, a wanted index whose model is in held (its first build deferred for a
-// bulk load) left wanted.
-func (a *ANN) claimSkipping(ctx context.Context, held map[string]deferral) (*annJob, error) {
+// bulk load) left wanted, and every wanted index left so when holdWanted (the backlogs could not be
+// counted): a due failed or replacing row is still claimed.
+func (a *ANN) claimSkipping(ctx context.Context, held map[string]deferral, holdWanted bool) (*annJob, error) {
 	var job *annJob
 	err := dao.RunTx(ctx, func(tx *dao.Transaction) error {
 		b, err := a.builderRow(ctx, tx)
@@ -197,10 +203,13 @@ func (a *ANN) claimSkipping(ctx context.Context, held map[string]deferral) (*ann
 		}
 		now := a.now()
 		// a failed index, or one replacing (which serves meanwhile), is due once its backoff ends
-		due := dao.Or(dao.Eq(qcol(tANNIndex, string(aiState)), annWanted),
-			dao.And(dao.In(qcol(tANNIndex, string(aiState)), []any{annFailed, annReplacing}),
-				dao.Lt(qcol(tANNIndex, string(aiAttempts)), annMaxAttempts),
-				dao.Or(dao.IsNull(qcol(tANNIndex, string(aiNextAt))), dao.Lte(qcol(tANNIndex, string(aiNextAt)), now))))
+		retryDue := dao.And(dao.In(qcol(tANNIndex, string(aiState)), []any{annFailed, annReplacing}),
+			dao.Lt(qcol(tANNIndex, string(aiAttempts)), annMaxAttempts),
+			dao.Or(dao.IsNull(qcol(tANNIndex, string(aiNextAt))), dao.Lte(qcol(tANNIndex, string(aiNextAt)), now)))
+		due := dao.Or(dao.Eq(qcol(tANNIndex, string(aiState)), annWanted), retryDue)
+		if holdWanted {
+			due = retryDue
+		}
 		if len(held) > 0 {
 			skip := make([]any, 0, len(held))
 			for m := range held {

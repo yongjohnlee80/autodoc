@@ -126,9 +126,12 @@ index built costs several times what inserting into one without does, so a tenan
 would pay that cost on every embedding if the index were built as soon as the tenant named the
 model.
 
-- A model's first index waits while a tenant whose active model it is has `ann_defer_backlog`
-  (2,000) or more documents not yet ready. It is built, concurrently, once every such tenant's
-  backlog falls below that, or `ann_defer_max` (24 h) after it first waited, whatever the backlog.
+- A model's index waits, whenever it is wanted, while a tenant whose active model it is has
+  `ann_defer_backlog` (2,000) or more documents not yet ready: its first build, and a rebuild after
+  its index went missing. It is built, concurrently, once every such tenant's backlog falls below
+  that, or `ann_defer_max` (24 h) after it first waited, whatever the backlog.
+- A backlog that can't be counted holds every wanted model for that tick, and the builder reports
+  the error: a load never pays the index's cost because a count failed.
 - The backlog is counted only while a model's index is wanted, capped at `ann_defer_backlog`: at a
   full backlog the count stops after that many rows, and once drained it reads the partial index
   of unready documents, so it stays cheap whether a load is under way or done.
@@ -151,5 +154,7 @@ Known limits:
   tenant's searches.
 - A model that is only a tenant's target (the fill of a model switch) doesn't hold the build back:
   the backlog counted is the active model's.
+- A failed build's retry isn't held: it is due on its own backoff, so a retry during a load pays
+  the per-insert cost.
 
 In the code: `core/pgstore/annbulk.go`, `core/pgstore/annbuild.go`
