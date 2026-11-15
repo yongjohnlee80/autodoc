@@ -4,7 +4,6 @@ import (
 	"context"
 	"embed"
 	"errors"
-	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -21,21 +20,18 @@ import (
 // Apply puts the result in the buffer as one undo step, unsaved, at the disk's version: the next
 // save writes over that version, and a disk that moved again since is a conflict again.
 //
-// The dialog is a terminal's: golib's MergeView has no window's yet, so it is written into
-// main.qml only when the program does not run as a window, and the conflict offers it only then.
+// The dialog is written into main.qml in a terminal and in a window alike: a window draws golib's
+// MergeView in cells, as every type its native style does not replace.
 
 // compareMarker is where the Compare dialog is written into main.qml.
-const compareMarker = "    // ---- the conflict's Compare (a terminal's) ----\n"
+const compareMarker = "    // ---- the conflict's Compare ----\n"
 
 //go:embed qmlcompare/*.qml
 var compareDialogFS embed.FS
 
-// withCompare is src with the Compare dialog written in after its marker, when the program does not
-// run as a window; src as it is otherwise, or where the marker is missing (a test's own layout).
-func withCompare(src []byte, gui bool) []byte {
-	if gui {
-		return src
-	}
+// withCompare is src with the Compare dialog written in after its marker; src as it is where the
+// marker is missing (a test's own layout).
+func withCompare(src []byte) []byte {
 	b, err := compareDialogFS.ReadFile("qmlcompare/Compare.qml")
 	if err != nil {
 		panic("tui: embedded Compare.qml: " + err.Error())
@@ -149,10 +145,10 @@ func (s *compareSource) Load(ctx context.Context) (merge.Input, error) {
 	s.mu.Lock()
 	s.load = compareLoad{version: r.version, left: left, rev: v.rev, ok: true}
 	s.mu.Unlock()
-	mine := merge.Origin{Kind: merge.Buffer, Location: v.name, Revision: fmt.Sprint(v.rev), Label: v.mine}
+	mine := merge.Origin{Kind: merge.Buffer, Location: v.name, Label: v.mine} // no revision: the buffer's and the disk's are the store's own ids, no reader's
 	in := merge.Input{
 		Left: left, Right: v.text,
-		LeftFrom:   merge.Origin{Kind: merge.File, Location: v.path, Revision: r.version, Label: v.disk},
+		LeftFrom:   merge.Origin{Kind: merge.File, Location: v.path, Label: v.disk},
 		RightFrom:  mine,
 		ResultTo:   mine,
 		ResultSide: merge.Right, // the buffer: what a conflict left unresolved keeps is the user's own

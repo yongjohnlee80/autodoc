@@ -6114,10 +6114,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>Audit asks your agent to read this code. AutoDoc can't stop the agent from running code or changing files: pick an agent you trust, and watch its tab.</source>
         <translation>監査 は、エージェントにこのコードを読ませます。AutoDoc はエージェントによるコードの実行やファイルの変更を止められません: 信頼できるエージェントを選び、そのタブを見守ってください。</translation>
     </message>
-    <message id="autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_kee">
-        <source>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</source>
-        <translation>%1 は未保存の変更があるうちにディスク上で変更されました。編集を続けるか、ディスク上のバージョンを再読み込みするか (u でテキストを戻せます)、自分の内容で上書きしますか?</translation>
-    </message>
     <message id="autodoc.text.files.a_name_is_required">
         <source>a name is required</source>
         <translation>名前が必要です</translation>
@@ -6129,10 +6125,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
     <message id="autodoc.text.files.changed_on_disk">
         <source>changed on disk</source>
         <translation>ディスク上で変更済み</translation>
-    </message>
-    <message id="autodoc.text.files.changed_on_disk_since_you_opened_it_keep_editing">
-        <source>%1 changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</source>
-        <translation>%1 は開いた後にディスク上で変更されました。編集を続けるか、ディスク上のバージョンを再読み込みするか (u でテキストを戻せます)、自分の内容で上書きしますか?</translation>
     </message>
     <message id="autodoc.text.files.deleted_on_disk">
         <source>deleted on disk</source>

@@ -6118,10 +6118,6 @@ Em uma nova aba do terminal, em %2. Digite ali qualquer senha: o agente não vê
         <source>Audit asks your agent to read this code. AutoDoc can't stop the agent from running code or changing files: pick an agent you trust, and watch its tab.</source>
         <translation>Auditar pede ao seu agente que leia este código. O AutoDoc não pode impedir o agente de executar código ou alterar arquivos: escolha um agente em que você confia, e acompanhe a aba dele.</translation>
     </message>
-    <message id="autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_kee">
-        <source>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</source>
-        <translation>%1 mudou no disco enquanto tinha alterações não salvas. Continuar editando, recarregar a versão do disco (u traz seu texto de volta) ou sobrescrevê-la com a sua?</translation>
-    </message>
     <message id="autodoc.text.files.a_name_is_required">
         <source>a name is required</source>
         <translation>um nome é obrigatório</translation>
@@ -6133,10 +6129,6 @@ Em uma nova aba do terminal, em %2. Digite ali qualquer senha: o agente não vê
     <message id="autodoc.text.files.changed_on_disk">
         <source>changed on disk</source>
         <translation>alterado no disco</translation>
-    </message>
-    <message id="autodoc.text.files.changed_on_disk_since_you_opened_it_keep_editing">
-        <source>%1 changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</source>
-        <translation>%1 mudou no disco desde que você o abriu. Continuar editando, recarregar a versão do disco (u traz seu texto de volta) ou sobrescrevê-la com a sua?</translation>
     </message>
     <message id="autodoc.text.files.deleted_on_disk">
         <source>deleted on disk</source>

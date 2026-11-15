@@ -172,7 +172,7 @@ In the code: `tui/diskwatch.go`, `tui/buffers.go`
 
 ### Compare: the disk's text and the buffer's, merged
 
-In a terminal, the question's fourth answer, Compare, merges the two texts in a three-pane view:
+The question's fourth answer, Compare, merges the two texts in a three-pane view:
 the disk's at the left, the buffer's at the right, the result between them. Changes on one side are
 taken from it; a conflict is resolved by hand or left, and a conflict left keeps the buffer's own
 lines. Apply puts the result in the buffer as one undo step, unsaved, at the disk's version, so the
@@ -186,7 +186,8 @@ merged alone, every difference a conflict. The daemon keeps no file's text at an
 verb reading one (a read at a version, from the store's history) would let a restart keep the
 ancestor too, and is left for later.
 
-A window has no Compare yet: its toolkit's merge view comes next, and the answer with it.
+A window offers Compare as a terminal does. Its merge view is drawn in cells, as every view its
+native look does not replace, so its panes are the terminal's editors for now.
 
 In the code: `tui/compare.go`
 

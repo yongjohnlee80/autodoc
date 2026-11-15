@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,7 +39,13 @@ func (r *running) compareView(t *testing.T) *mergeview.MergeView {
 // writes disk text over it, and shows it again, asked keep / reload / overwrite / compare.
 func conflicted(t *testing.T, disk string) (*running, string) {
 	t.Helper()
-	r, root := onWideDisk(t)
+	return conflictedAs(t, disk, Options{})
+}
+
+// conflictedAs is conflicted, the program run with opt (Options.GUI: as a window).
+func conflictedAs(t *testing.T, disk string, opt Options) (*running, string) {
+	t.Helper()
+	r, root := onWideDiskAs(t, "one\ntwo\nthree\n", opt)
 	r.openOnDisk(t, "a.md")
 	onLoop(r, func() bool {
 		_, _ = r.h.core.Replace(editor.TextRange{From: editor.TextPos{Line: 2}, To: editor.TextPos{Line: 2, Col: 5}}, "THREE mine")
@@ -65,9 +70,16 @@ func onWideDisk(t *testing.T) (*running, string) {
 // onWideDiskWith is onWideDisk, a.md holding a.
 func onWideDiskWith(t *testing.T, a string) (*running, string) {
 	t.Helper()
+	return onWideDiskAs(t, a, Options{})
+}
+
+// onWideDiskAs is onWideDiskWith, the program run with opt; its Workspace is alpha.
+func onWideDiskAs(t *testing.T, a string, opt Options) (*running, string) {
+	t.Helper()
 	root := fileDir(t, "a.md", a, "b.md", "bbb\n")
 	d := startManaged(t, map[string]string{"alpha": root})
-	r := runTUISized(t, NewSession(d.sock, nil), Options{Workspace: "alpha"}, 200, 50)
+	opt.Workspace = "alpha"
+	r := runTUISized(t, NewSession(d.sock, nil), opt, 200, 50)
 	r.waitAttached(t, "alpha")
 	r.prefsIn(t)
 	return r, root
@@ -229,34 +241,15 @@ func TestTheSaveConflictOffersCompare(t *testing.T) {
 	r.s.WaitForText(t, "Compare")
 }
 
-// TestOnlyATerminalsLayoutHasTheCompare: the Compare dialog is written into main.qml for a terminal
-// alone; the window's layout and the autodoc.dialogs components, which every build parses, never
-// name the MergeView a window's toolkit lacks.
-func TestOnlyATerminalsLayoutHasTheCompare(t *testing.T) {
+// TestBothLayoutsHaveTheCompare: the Compare dialog is written into main.qml for a terminal and a
+// window alike.
+func TestBothLayoutsHaveTheCompare(t *testing.T) {
 	t.Parallel()
-	src := layout
-	if got := string(withCompare(src, true)); strings.Contains(got, "MergeView") {
-		t.Fatal("the window's layout names MergeView")
-	}
-	if got := string(withCompare(src, false)); !strings.Contains(got, "MergeView") || !strings.Contains(got, "id: compareView") {
-		t.Fatal("the terminal's layout has no Compare")
-	}
-	err := fs.WalkDir(qmlFiles, ".", func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".qml") {
-			return err
-		}
-		b, _ := fs.ReadFile(qmlFiles, p)
-		if strings.Contains(string(b), "MergeView") {
-			t.Errorf("%s names MergeView: every build parses it", p)
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
+	if got := string(withCompare(layout)); !strings.Contains(got, "MergeView") || !strings.Contains(got, "id: compareView") {
+		t.Fatal("the layout has no Compare")
 	}
 }
 
-// TestABaseOverTheBoundIsNotKept: a text past compareBaseMax keeps no base (Compare merges two-way);
 // one within keeps it, set with its version.
 func TestABaseOverTheBoundIsNotKept(t *testing.T) {
 	t.Parallel()
