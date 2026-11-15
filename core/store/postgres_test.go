@@ -1,3 +1,5 @@
+//go:build server
+
 package store
 
 import (
@@ -15,35 +17,12 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/pgstore/pgtest"
 )
 
-// storeEngineEnv picks the engine openStore opens a store on: "postgres" for a scratch PostgreSQL
-// database (AUTODOC_TEST_PGURL), SQLite otherwise.
-const storeEngineEnv = "AUTODOC_TEST_STORE_ENGINE"
-
 // pgLocation is a fresh PostgreSQL store's location: a scratch database, a schema in it, and a key
 // file of the test's own.
 func pgLocation(t *testing.T) Location {
 	t.Helper()
 	return Location{Engine: EngineOfPostgres, DSN: pgtest.ScratchURL(t), Schema: "autodoc_store",
 		KeyFile: filepath.Join(t.TempDir(), "store.key")}
-}
-
-// sqliteOnly skips a cell of what only a SQLite store's file has (why says what), when openStore
-// opens its stores on PostgreSQL.
-func sqliteOnly(t *testing.T, why string) {
-	t.Helper()
-	if os.Getenv(storeEngineEnv) == EngineOfPostgres {
-		t.Skip("a SQLite store's own: " + why)
-	}
-}
-
-func openPG(t *testing.T, loc Location) *Store {
-	t.Helper()
-	s, err := OpenAt(context.Background(), loc)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
-	return s
 }
 
 // A store on PostgreSQL opens, applies its scripts, writes and reads, and opens again with what it

@@ -41,11 +41,16 @@ database and schema. On PostgreSQL:
 - **The key is a file the location names,** since there is no store file to keep it beside.
 - **What only a SQLite file has is refused,** `ErrNotSQLite`: the quick and whole checks, the
   damaged mark, vacuuming, compaction and the write-ahead log's checkpoint.
+- **It is the server build's.** The PostgreSQL store, its driver and its lease build only with
+  `-tags server`, as the rest of the server does, so the desktop builds carry no PostgreSQL code.
+  Without the tag, `OpenAt` of a PostgreSQL location answers `ErrNoPostgresInThisBuild`, naming the
+  server build.
 
 Lifting the one writer connection would need each write path's order checked against PostgreSQL's
 `READ COMMITTED`, where SQLite's single writer gives it for free.
 
-In the code: `core/store/postgres.go`, `sql/deployments/postgres/000036_update_writer_lease.sql`
+In the code: `core/store/postgres.go` (server build), `core/store/location.go`,
+`sql/deployments/postgres/000036_update_writer_lease.sql`
 
 ## Workspace settings saved together
 
