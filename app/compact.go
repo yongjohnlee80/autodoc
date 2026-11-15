@@ -22,6 +22,9 @@ func runCompact(ctx context.Context, configPath string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if e.Config.Store.Postgres() {
+		return fmt.Errorf("%w: --compact compacts a SQLite store's file; a store on PostgreSQL is vacuumed by its database server", store.ErrNotSQLite)
+	}
 	storePath, err := e.Store()
 	if err != nil {
 		return err

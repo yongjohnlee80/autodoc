@@ -334,7 +334,7 @@ setting leaves every setting as it was, and the dialog opens again as it was typ
 
 ### Daemon Configuration (`config.toml`)
 
-Because workspaces and sealed provider keys live in the SQLite store (`core/config/config.go` explicitly rejects unknown keys or legacy `[[workspace]]` / `[embedding]` sections so typos are caught at startup), `~/.config/autodoc/config.toml` is reserved strictly for daemon-level `[server]`, `[follow]`, `[embedding_queue]`, `[log]` and `[mail]` settings:
+Because workspaces and sealed provider keys live in the SQLite store (`core/config/config.go` explicitly rejects unknown keys or legacy `[[workspace]]` / `[embedding]` sections so typos are caught at startup), `~/.config/autodoc/config.toml` is reserved strictly for daemon-level `[server]`, `[follow]`, `[embedding_queue]`, `[log]`, `[mail]` and `[store]` settings:
 
 ```toml
 # $XDG_CONFIG_HOME/autodoc/config.toml
@@ -354,9 +354,33 @@ level = ""                  # the least severe record logged; "" (the default) l
 
 [mail]
 keep_handled = "720h"       # handled crew mail is deleted this long after it was handled; at least 24h
+
+[store]
+engine = "sqlite"           # "sqlite" (the default: autodoc.db in data_dir) or "postgres"
 ```
 
 A missing file is every default.
+
+`[store]` puts the store in a PostgreSQL database instead of the SQLite file. It is the server
+build's (`-tags server`): the desktop builds carry no PostgreSQL store, and refuse
+`engine = "postgres"` when they load the config, naming the server build.
+
+```toml
+[store]
+engine   = "postgres"
+dsn_env  = "AUTODOC_STORE_DSN"   # the environment variable holding the DSN, never the DSN itself
+schema   = "autodoc"             # made when missing
+key_file = ""                    # default: store.key in data_dir; it seals the store's secrets
+```
+
+The daemon reads the DSN from the variable `dsn_env` names when it starts. It holds the store's
+writer lease there, so a second daemon on the same database and schema waits, and takes over when
+the first stops (at once) or is killed (30 seconds after its last renew). Clients never read the
+database: they reach the daemon on the configured socket, and refuse one that says it serves
+another store. `autodoc --check-store` and `--compact` are a SQLite store's, and refuse a store on
+PostgreSQL: its database server checks and vacuums it. Search works as on SQLite: lexical search
+uses PostgreSQL's full-text search, and semantic search scans the store's vectors in the daemon's
+memory, as it does on SQLite.
 
 `[mail] keep_handled` is how long the crew's mail is kept once it was handled: acked, read,
 answered, dismissed or expired. The daemon deletes older handled mail once when it starts and then

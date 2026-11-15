@@ -60,6 +60,9 @@ type Session struct {
 	// storePath, when set, is the store this session must find served: a daemon that answers with
 	// another store's id is refused (StoreMismatchError)
 	storePath string
+	// pgSchema, when set, is the schema of the store on PostgreSQL this session must find served:
+	// the daemon on the configured socket must say that engine and schema (ForPaths)
+	pgSchema string
 	// stateDir, when set, is where restart handoffs are kept (handoff.go); self is this process;
 	// handoffCap bounds how long one Connect waits on handoffs in all, on its own clock
 	stateDir   string
@@ -180,8 +183,24 @@ func (s *Session) ForStore(configured, storePath string) *Session {
 	return s.UseResolver(configured, func(ctx context.Context) string { return endpoint.Holder(ctx, storePath, configured) })
 }
 
-// checkStore refuses a daemon that serves another store than the session's (ForStore).
+// ForPaths is ForStore for the store p names: a SQLite file's, or a store on PostgreSQL, whose
+// daemon is the one on the configured socket, matched by the engine and schema its hello says
+// (docs/decisions/store.md#the-daemon-on-postgresql).
+func (s *Session) ForPaths(p endpoint.Paths) *Session {
+	if p.Postgres() {
+		s.pgSchema = p.Schema
+		return s.UseResolver(p.Socket, func(context.Context) string { return p.Socket })
+	}
+	return s.ForStore(p.Socket, p.Store)
+}
+
+// checkStore refuses a daemon that serves another store than the session's (ForStore, ForPaths).
 func (s *Session) checkStore(hello map[string]any) error {
+	if s.pgSchema != "" {
+		engine, _ := hello["engine"].(string)
+		schema, _ := hello["schema"].(string)
+		return endpoint.CheckPostgresStore(s.address(), s.pgSchema, engine, schema)
+	}
 	if s.storePath == "" {
 		return nil
 	}

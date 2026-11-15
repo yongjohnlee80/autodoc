@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -28,7 +29,30 @@ type Config struct {
 	EmbeddingQueue EmbeddingQueue `toml:"embedding_queue"`
 	Log            Log            `toml:"log"`
 	Mail           Mail           `toml:"mail"`
+	Store          Store          `toml:"store"`
 }
+
+// Store configures where the daemon's store is (docs/decisions/store.md#the-daemon-on-postgresql):
+// a SQLite file, the default (autodoc.db in server.data_dir), or a PostgreSQL database.
+type Store struct {
+	// Engine is "sqlite" (the default, "" too) or "postgres".
+	Engine string `toml:"engine"`
+	// DSNEnv names the environment variable a PostgreSQL store's DSN is read from: the DSN itself,
+	// which holds a password, is never written in the file.
+	DSNEnv string `toml:"dsn_env"`
+	// Schema is the schema a PostgreSQL store's tables live in, made when missing.
+	Schema string `toml:"schema"`
+	// KeyFile is a PostgreSQL store's key, which seals its secrets; "" is store.key in the data
+	// directory, where a SQLite store's file would be.
+	KeyFile string `toml:"key_file"`
+}
+
+// StoreKeyName is a PostgreSQL store's key file's name in the data directory, when store.key_file
+// is not set.
+const StoreKeyName = "store.key"
+
+// Postgres reports whether the store is on PostgreSQL.
+func (s Store) Postgres() bool { return s.Engine == "postgres" }
 
 // Mail configures crew mail's retention (docs/decisions/crew.md#handled-mail-is-kept-for-a-window).
 type Mail struct {
@@ -178,6 +202,32 @@ func (c *Config) normalize() error {
 		if _, err := ParseLogLevel(c.Log.Level); err != nil {
 			return fmt.Errorf("%w: log.level %w", ErrInvalid, err)
 		}
+	}
+	return c.Store.check()
+}
+
+// storeSchema is a schema name a PostgreSQL store may have: a plain identifier, not pg_.
+var storeSchema = regexp.MustCompile(`^[a-z_][a-z0-9_]{0,62}$`)
+
+// check refuses a [store] the daemon could not open, naming the field.
+func (s *Store) check() error {
+	switch s.Engine {
+	case "", "sqlite":
+		if s.DSNEnv != "" || s.Schema != "" || s.KeyFile != "" {
+			return fmt.Errorf("%w: store.dsn_env, store.schema and store.key_file are a PostgreSQL store's: set store.engine = \"postgres\", or remove them", ErrInvalid)
+		}
+		return nil
+	case "postgres":
+	default:
+		return fmt.Errorf("%w: store.engine must be \"sqlite\" or \"postgres\" (it is %q)", ErrInvalid, s.Engine)
+	}
+	switch {
+	case s.DSNEnv == "":
+		return fmt.Errorf("%w: store.dsn_env must name the environment variable holding the PostgreSQL store's DSN", ErrInvalid)
+	case !storeSchema.MatchString(s.Schema) || strings.HasPrefix(s.Schema, "pg_"):
+		return fmt.Errorf("%w: store.schema must be a plain name (lowercase letters, digits and _, not starting with a digit or pg_), it is %q", ErrInvalid, s.Schema)
+	case !postgresStoreBuild:
+		return fmt.Errorf("%w: store.engine = \"postgres\" needs the server build (-tags server): this build has no PostgreSQL store", ErrInvalid)
 	}
 	return nil
 }

@@ -85,6 +85,11 @@ func TestLoadRejects(t *testing.T) {
 		{"an unknown log level", "[log]\nlevel = \"loud\"\n", `log.level "loud": want debug, info, notice, warning, error or critical`},
 		{"an [embedding] section", "[embedding]\nprovider = \"ollama\"\nmodel = \"m\"\n", "kept in the store"},
 		{"handled mail kept under a day", "[mail]\nkeep_handled = \"12h\"\n", "mail.keep_handled must be at least 24h"},
+		{"an unknown store engine", "[store]\nengine = \"oracle\"\n", `store.engine must be "sqlite" or "postgres"`},
+		{"a PostgreSQL store with no DSN variable", "[store]\nengine = \"postgres\"\nschema = \"autodoc\"\n", "store.dsn_env must name"},
+		{"a PostgreSQL store's schema not plain", "[store]\nengine = \"postgres\"\ndsn_env = \"D\"\nschema = \"Auto-Doc\"\n", "store.schema must be a plain name"},
+		{"a PostgreSQL store's schema in pg_", "[store]\nengine = \"postgres\"\ndsn_env = \"D\"\nschema = \"pg_x\"\n", "store.schema must be a plain name"},
+		{"a SQLite store with PostgreSQL's settings", "[store]\ndsn_env = \"D\"\n", "are a PostgreSQL store's"},
 	} {
 		_, err := load(t, c.body)
 		if !errors.Is(err, config.ErrInvalid) || !strings.Contains(err.Error(), c.want) {

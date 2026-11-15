@@ -37,6 +37,9 @@ func runCheckStore(ctx context.Context, configPath string, out io.Writer) error 
 	if err != nil {
 		return err
 	}
+	if e.Config.Store.Postgres() {
+		return fmt.Errorf("%w: --check-store checks a SQLite store's file; a store on PostgreSQL is its database server's to check", store.ErrNotSQLite)
+	}
 	storePath, err := e.Store()
 	if err != nil {
 		return err

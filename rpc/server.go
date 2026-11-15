@@ -413,7 +413,9 @@ type Server struct {
 	log          logger.Logger
 	version      string
 	instance     string
-	storeID      string // the store's identity (store.Identity), "" when not set
+	storeID      string // the store's identity (store.Store.ID), "" when not set
+	storeEngine  string // "postgres" for a store on PostgreSQL, "" for a SQLite store
+	storeSchema  string // a store on PostgreSQL's schema
 	setters      setters
 	modelContext modelContexter // the embeddings', when they read a model's context window
 	verbs        map[string]verb
@@ -441,6 +443,8 @@ type options struct {
 	taskFiles   TaskFiles
 	profiler    *profiling.Profiler
 	storeID     string
+	storeEngine string
+	storeSchema string
 	modules     []module.Module
 	ownDirs     []workspace.OwnDir
 }
@@ -468,6 +472,13 @@ func WithOwnDirs(dirs []workspace.OwnDir) Option { return func(o *options) { o.o
 // WithStoreID reports the store's identity (store.Identity) in sys.hello and its probe, so a client
 // that found this daemon through the store's lease-info can check it serves that store.
 func WithStoreID(id string) Option { return func(o *options) { o.storeID = id } }
+
+// WithStoreLocation is where the store is, for a store on PostgreSQL: its engine ("postgres") and
+// schema, which sys.hello says beside store_id, so a client matches the daemon on its socket to the
+// store its own config names without reading the database. A SQLite store says neither.
+func WithStoreLocation(engine, schema string) Option {
+	return func(o *options) { o.storeEngine, o.storeSchema = engine, schema }
+}
 
 // WithProfiler lets sys.profile start and stop p, the daemon's own monitor (--profile's).
 func WithProfiler(p *profiling.Profiler) Option { return func(o *options) { o.profiler = p } }
@@ -497,7 +508,7 @@ func New(workspaces Workspaces, version string, opts ...Option) *Server {
 	var id [8]byte
 	_, _ = rand.Read(id[:])
 	s := &Server{workspaces: workspaces, preferences: o.preferences, embeddings: o.embeddings, rankers: o.rankers, events: o.events, checker: o.checker, log: o.log,
-		version: version, instance: hex.EncodeToString(id[:]), reg: o.reg, disks: o.disks, guard: o.guard, taskFiles: o.taskFiles, profiler: o.profiler, storeID: o.storeID, setters: settersOf(workspaces), ownDirs: workspace.CanonicalDirs(o.ownDirs),
+		version: version, instance: hex.EncodeToString(id[:]), reg: o.reg, disks: o.disks, guard: o.guard, taskFiles: o.taskFiles, profiler: o.profiler, storeID: o.storeID, storeEngine: o.storeEngine, storeSchema: o.storeSchema, setters: settersOf(workspaces), ownDirs: workspace.CanonicalDirs(o.ownDirs),
 		modelContext: modelContextOf(o.embeddings), setup: setupOf(o.embeddings),
 		verbs: map[string]verb{}, legacy: map[string]verb{}, stop: make(chan struct{})}
 	ropts := []golibrpc.Option{golibrpc.WithLogger(o.log), golibrpc.MaxMessageBytes(MaxMessage), golibrpc.WithGate(s.gate)}

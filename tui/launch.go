@@ -128,12 +128,12 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 	if err := e.MakeStateDir(); err != nil {
 		return err
 	}
-	configPath, stateDir, sock, storePath := e.ConfigPath, p.StateDir, p.Socket, p.Store
+	configPath, stateDir, sock := e.ConfigPath, p.StateDir, p.Socket
 	spawn := o.Spawn
 	if spawn == nil {
 		spawn = client.SpawnServe
 	}
-	session := NewSession(sock, func() (string, error) { return spawn(configPath, stateDir) }).UseHandoffs(stateDir).ForStore(sock, storePath)
+	session := NewSession(sock, func() (string, error) { return spawn(configPath, stateDir) }).UseHandoffs(stateDir).ForPaths(p)
 	workspace, last := o.Workspace, filepath.Join(stateDir, "last-workspace")
 	if workspace != "" {
 		if err := checkWorkspace(ctx, session, workspace); err != nil {

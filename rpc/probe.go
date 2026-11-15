@@ -30,6 +30,8 @@ type ProbeInfo struct {
 	Protocol    int64 // the daemon's own protocol
 	MinProtocol int64 // the oldest it serves; equal to Protocol for a daemon before ranges
 	StoreID     string
+	Engine      string // a store on PostgreSQL's: "postgres"; "" for a SQLite store
+	Schema      string // and its schema
 	Instance    string
 	Addr        string
 	PID         int64 // the daemon's process; 0 when its hello names none
@@ -85,6 +87,8 @@ func Probe(ctx context.Context, network, addr string) (ProbeInfo, error) {
 		info.MinProtocol = mp
 	}
 	info.StoreID, _ = result["store_id"].(string)
+	info.Engine, _ = result["engine"].(string)
+	info.Schema, _ = result["schema"].(string)
 	info.Instance, _ = result["instance"].(string)
 	info.Addr, _ = result["addr"].(string)
 	info.PID, _ = result["pid"].(int64)

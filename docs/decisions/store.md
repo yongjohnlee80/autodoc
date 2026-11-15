@@ -75,6 +75,38 @@ The match, the rank and the snippet bind the same query, through dao's `Match`, 
 
 In the code: `core/index/tables.go` (`fullTextOn`), `core/index/engine.go`
 
+## The daemon on PostgreSQL
+
+`[store] engine = "postgres"` has the daemon open its store on PostgreSQL ([the store on
+PostgreSQL](#the-store-on-postgresql)), the DSN read from the variable `dsn_env` names, never
+written in the config. It is the server build's alone: a build without the server tag refuses it
+when the config loads, after the fields' own checks, naming the server build. Four things a SQLite
+store ties to its file have their own answer:
+
+- **The store's identity** is a random id written once into a one-row `store_identity` table
+  (script 000037) and read at every open; the daemon reports it as `store_id`. A hash of the DSN
+  would name one store twice when it is spelt two ways, and would put a value made from a secret in
+  a reported field.
+- **Finding the daemon:** a client never reads the database, so it never needs its credentials. It
+  reaches the daemon on its configured socket, and the daemon's `sys.hello` says its `engine` and
+  `schema`; a client whose config names another store refuses it, naming both. There is no
+  lease-info file, having no folder to keep it beside; `store_id` is reported, for operators, and
+  gates nothing.
+- **A restart** waits out its predecessor's lease, at a poll, for at most the lease's length:
+  released by a clean stop, the store opens within a poll; held by a daemon that was killed, once
+  the lease expires. The first wait is logged with its holder.
+- **The embedding's cache and setup** keep the daemon's own data directory, wherever the store is.
+  `--check-store` and `--compact` refuse a store on PostgreSQL (`ErrNotSQLite`), and the daemon's
+  start-up compaction leaves it to PostgreSQL's vacuum.
+- **Search** is the store's own on either engine. Lexical search is PostgreSQL's full-text search
+  ([search on PostgreSQL](#search-on-postgresql)). Semantic search is the same as on SQLite: the
+  vectors are the store's `embedding` rows, read through the store and scanned by the daemon in its
+  memory (1-bit codes, then an exact rerank), not pgvector; it is measured on SQLite only, and the
+  setup reports no free space for a store with no folder.
+
+In the code: `app/serve.go` (openPostgresStore), `internal/endpoint` (WithStore, StoreLocation,
+CheckPostgresStore), `internal/client` (ForPaths), `core/store/postgres.go` (OpenAtWaiting, ID)
+
 ## Workspace settings saved together
 
 A workspace's settings are edited in one dialog with two tabs. Edit is what the workspace is and

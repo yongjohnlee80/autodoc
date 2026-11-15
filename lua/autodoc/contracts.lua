@@ -882,8 +882,8 @@ return {
       params = {
         { name = "info", type = "map", optional = true }
       },
-      result = "{protocol, server_protocol, min_protocol, server, version, instance, pid, addr, store_id, client, events}",
-      doc = "Opens the session at the protocol it declares. protocol is the session's, server_protocol and min_protocol the range the daemon serves, store_id the store's identity, client this connection's token, events the event log's head.",
+      result = "{protocol, server_protocol, min_protocol, server, version, instance, pid, addr, store_id, engine, schema, client, events}",
+      doc = "Opens the session at the protocol it declares. protocol is the session's, server_protocol and min_protocol the range the daemon serves, store_id the store's identity, engine and schema a store on PostgreSQL's (absent for a SQLite store), client this connection's token, events the event log's head.",
     },
     ["sys.profile"] = {
       since = 32, scope = "local-peer", audience = "internal",
