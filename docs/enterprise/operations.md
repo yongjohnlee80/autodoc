@@ -153,9 +153,36 @@ So at a million embeddings, ingest with the index in place is about a third as f
 64. A deployment that values ingest over recall can set a lower `ann_ef_construction`. Changing it
 rebuilds each model's index while the old one keeps serving.
 
-**A large initial import pays the per-insert cost.** A model's index is built as soon as a tenant
-names the model, before most of its embeddings are written, so every embedding of the import goes
-into an existing index. There is no path yet to build the index after a bulk load.
+**A model's first index waits for a tenant's bulk load.** While a tenant whose active model it is
+has `postgres.ann_defer_backlog` (2,000) or more documents not yet ready, the model's index is not
+built, so the import's embeddings are written without paying the index's per-insert cost. Searches
+are exact meanwhile, and the status says `ann-building` with the reason and the time it will be
+built by. The index is built once the backlog drains, or `postgres.ann_defer_max` (24 h) after it
+first waited, whatever the backlog. A model whose index is built already doesn't wait: a large
+import into it still pays the per-insert cost.
+
+Measured with `TestANN_BulkLoadMeasure` (PostgreSQL 18, pgvector 0.8.7, 16-dimension embeddings,
+2 CPUs, `--shm-size 1g`): a tenant's documents written first, not ready, then their embeddings in
+batches of 20,000, each marking its documents ready.
+
+| | 200,000 documents | | 1,000,000 documents | |
+|---|---|---|---|---|
+| | index built first | deferred | index built first | deferred |
+| import until the index is ready | 5 min 20 s | 51 s | 1 h 21 min | 14 min 39 s |
+| embeddings written per second | 624 | 3,938 | 206 | 1,138 |
+| recall@10 afterwards | 1.000 | 0.990 | 0.999 | 0.998 |
+
+The deferred times include building the index after the load. The backlog is counted only while a
+model's index is wanted: at a full backlog the count stops at `ann_defer_backlog` rows (under 1 ms),
+and once drained it reads the partial index of unready documents (0.03 ms at 1,000,000) or, before
+the table's statistics catch up, scans it once (26 ms at 200,000).
+
+**Give the database's container shared memory for the build.** The building session uses
+`postgres.ann_maintenance_work_mem` (512 MB), and a parallel build keeps it in the database's
+`/dev/shm`. Docker gives a container 64 MB by default, so run PostgreSQL with `--shm-size` at
+least `ann_maintenance_work_mem` (`--shm-size 1g` for the default; `shm_size: 1g` in Compose).
+With less, the build runs out of shared memory, and the server builds the index again without
+parallel workers (slower) and logs a warning saying so.
 
 ## Behind a proxy
 

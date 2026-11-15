@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -38,6 +39,15 @@ type ANNConfig struct {
 	// M and EfConstruction are the index's build parameters (pgvector's m and ef_construction; 0
 	// is pgvector's default, 16 and 64). An index built with others is replaced while it serves.
 	M, EfConstruction int
+	// DeferBacklog and DeferMax defer a model's first build while a tenant bulk-loads it: a wanted
+	// index is not built while a tenant whose active model it is has DeferBacklog or more documents
+	// not yet ready (its backfill under way), until DeferMax after it was first deferred; inserts
+	// into a model whose index is built cost several times more. 0 DeferBacklog never defers.
+	DeferBacklog int
+	DeferMax     time.Duration
+	// MaintenanceWorkMem is the builder's session's maintenance_work_mem (a PostgreSQL size, "512MB"),
+	// so a large model's index builds in memory; "" leaves the database's own.
+	MaintenanceWorkMem string
 }
 
 // DefaultANNConfig is the server's defaults: approximate from 50,000 embeddings of a model, a
@@ -55,7 +65,8 @@ type ANNConfig struct {
 // 20 builds, 8 of them below 0.95, and no ef_search, scan budget or scan order moved it, since the
 // graph left whole regions unreachable; at 200, 0.994 to 1.000 over 5. m 32 did no better than 16.
 func DefaultANNConfig() ANNConfig {
-	return ANNConfig{Threshold: 50000, MaxScanTuples: 1000, ScanMemMultiplier: 2, EfConstruction: 200}
+	return ANNConfig{Threshold: 50000, MaxScanTuples: 1000, ScanMemMultiplier: 2, EfConstruction: 200,
+		DeferBacklog: 2000, DeferMax: 24 * time.Hour, MaintenanceWorkMem: "512MB"}
 }
 
 // annType is the vector type a model's index casts its embeddings to, from its fingerprint's
@@ -234,6 +245,8 @@ type ANN struct {
 
 	hook    dao.Hook    // the builder's statements, observed; nil in production
 	checked atomic.Bool // the ready indexes' definitions were checked once this run (verifyReady)
+	// builtSerially is a build that fell back to no parallel workers (createIndex), which Tick says
+	builtSerially atomic.Bool
 
 	// leaseFor and renewEvery are a claim's lease and how often a build renews it (annLease,
 	// annRenew; variables so a cell can shorten them)
@@ -325,6 +338,9 @@ func (a *ANN) Status(ctx context.Context) ([]ANNStatus, error) {
 			s.Mode, s.Reason = ModeANN, replacingReason(r.Error)
 		case annWanted, annBuilding:
 			s.Mode = ModeANNBuilding
+			if r.State == annWanted && strings.HasPrefix(r.Error, deferredPrefix) {
+				s.Reason = r.Error // why searches stay exact meanwhile
+			}
 		case annFailed:
 			s.Mode, s.Reason = ModeANNFailed, r.Error
 		default:

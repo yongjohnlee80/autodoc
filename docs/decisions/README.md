@@ -249,3 +249,4 @@ the code ever disagree, the code is right and the page is fixed.
 - [Access is a separate predicate](server.md#access-is-a-separate-predicate)
 - [An HTTP API with a token per client](server.md#an-http-api-with-a-token-per-client)
 - [Operator health, status and metrics](server.md#operator-health-status-and-metrics)
+- [A model's index waits for its bulk load](server.md#a-models-index-waits-for-its-bulk-load)
