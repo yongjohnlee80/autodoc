@@ -153,7 +153,7 @@ So at a million embeddings, ingest with the index in place is about a third as f
 64. A deployment that values ingest over recall can set a lower `ann_ef_construction`. Changing it
 rebuilds each model's index while the old one keeps serving.
 
-**A model's first index waits for a tenant's bulk load.** While a tenant whose active model it is
+**A model's index waits for a tenant's bulk load.** While a tenant whose active model it is
 has `postgres.ann_defer_backlog` (2,000) or more documents not yet ready, the model's index is not
 built, so the import's embeddings are written without paying the index's per-insert cost. Searches
 are exact meanwhile, and the status says `ann-building` with the reason and the time it will be

@@ -117,6 +117,61 @@ func TestANNBulk_AFirstBuildWaitsForTheBulkLoad(t *testing.T) {
 	}
 }
 
+// A backlog that cannot be counted holds every wanted model that tick, the error reported: a load is
+// never paid for because its count failed. Once the count works again, the full backlog defers it.
+func TestANNBulk_AFailedCountHoldsTheBuild(t *testing.T) {
+	conn, a := annSetup(t, bulkConfig())
+	model := annModel(annDims)
+	annCorpus(t, conn, "t", model, 500, annDims, 0.51)
+	unready(t, conn, "t", 300)
+	ctx := context.Background()
+	_ = a.Want(ctx, model)
+	if _, err := conn.ExecContext(ctx, "ALTER TABLE rag_document RENAME TO rag_document_away"); err != nil {
+		t.Fatal(err)
+	}
+	err := a.Tick(ctx)
+	if _, rerr := conn.ExecContext(ctx, "ALTER TABLE rag_document_away RENAME TO rag_document"); rerr != nil {
+		t.Fatal(rerr)
+	}
+	if err == nil || !strings.Contains(err.Error(), "the bulk loads") {
+		t.Fatalf("the tick with no count: %v; want the bulk loads' error", err)
+	}
+	if r := indexOf(t, a, model); r.State != annWanted || indexState(t, conn, model).Exists {
+		t.Fatalf("with the count failing: %s, index %+v; want wanted, no index", r.State, indexState(t, conn, model))
+	}
+	if err := a.Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if r := indexOf(t, a, model); r.State != annWanted || !strings.HasPrefix(r.Error, deferredPrefix) {
+		t.Fatalf("with the count back: %s %q; want deferred", r.State, r.Error)
+	}
+}
+
+// A next_at with no deferral's reason (a retry's backoff left on a row wanted again) is no deadline:
+// a full backlog defers the build, from a deadline of its own.
+func TestANNBulk_AStaleNextAtIsNoDeadline(t *testing.T) {
+	conn, a := annSetup(t, bulkConfig())
+	model := annModel(annDims)
+	annCorpus(t, conn, "t", model, 500, annDims, 0.52)
+	unready(t, conn, "t", 300)
+	ctx := context.Background()
+	_ = a.Want(ctx, model)
+	if _, err := conn.ExecContext(ctx, "UPDATE rag_ann_index SET next_at = now() - interval '1 hour', error = ''"); err != nil {
+		t.Fatal(err)
+	}
+	before := time.Now()
+	if err := a.Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	r := indexOf(t, a, model)
+	if r.State != annWanted || indexState(t, conn, model).Exists {
+		t.Fatalf("a stale next_at under a full backlog: %s; want deferred, no index", r.State)
+	}
+	if r.NextAt == nil || r.NextAt.Before(before.Add(a.cfg.DeferMax-time.Minute)) {
+		t.Fatalf("the deadline %v; want a new one, DeferMax from now", r.NextAt)
+	}
+}
+
 // A load that never drains: past its deadline the index is built whatever the backlog.
 func TestANNBulk_DeferMaxBuildsAnyway(t *testing.T) {
 	conn, a := annSetup(t, bulkConfig())
