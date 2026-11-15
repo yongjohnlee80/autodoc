@@ -521,3 +521,13 @@ func explainPhase(ctx context.Context, b *testing.B, dsn string, cases []lmCase)
 }
 
 var _ dao.DataConn
+
+// mustDB is the database name a URL DSN names.
+func mustDB(b testing.TB, dsn string) string {
+	b.Helper()
+	u, err := url.Parse(dsn)
+	if err != nil {
+		b.Fatal(err)
+	}
+	return u.Path[1:]
+}
