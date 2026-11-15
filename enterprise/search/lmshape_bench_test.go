@@ -277,7 +277,23 @@ func BenchmarkLMShape(b *testing.B) {
 	n := lmEnvInt("AUTODOC_BENCH_DOCS", 56000)
 	nl := lmEnvInt("AUTODOC_BENCH_LABELS", 200)
 	c := newLMCorpus(n, nl)
-	small, large := nl-1, 0
+	// the cases' labels are the largest and the smallest that hold a document: with few documents
+	// over many labels, the Zipf tail is empty, and a case on an empty label would have no query
+	small, large := -1, -1
+	for k := range c.byLabel {
+		if len(c.byLabel[k]) == 0 {
+			continue
+		}
+		if large < 0 || len(c.byLabel[k]) > len(c.byLabel[large]) {
+			large = k
+		}
+		if small < 0 || len(c.byLabel[k]) < len(c.byLabel[small]) {
+			small = k
+		}
+	}
+	if small < 0 || small == large {
+		b.Fatalf("AUTODOC_BENCH_DOCS=%d over AUTODOC_BENCH_LABELS=%d leaves fewer than two labels with documents: give it more documents or fewer labels", n, nl)
+	}
 	b.Logf("corpus: %d documents, %d labels; label %s has %d documents (largest), %s has %d (smallest)",
 		n, nl, c.labels[large], len(c.byLabel[large]), c.labels[small], len(c.byLabel[small]))
 
