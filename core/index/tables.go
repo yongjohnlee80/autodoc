@@ -1,6 +1,8 @@
 package index
 
 import (
+	"fmt"
+
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/search"
 	"github.com/yongjohnlee80/golib/search/query"
@@ -156,16 +158,21 @@ type fullText struct {
 	all, any func([]search.Term) (string, error)
 }
 
-// fullTextOn is the full-text search the engine of d has: FTS5 where the dialect is a dao.FullTexter
-// (SQLite), else the tsvector column (PostgreSQL). Lexical scores are the engine's own: BM25 on
-// one, ts_rank_cd on the other, comparable only within one store.
+// fullTextOn is the full-text search of d's engine, by its name: FTS5 on SQLite, the tsvector
+// column on PostgreSQL. Lexical scores are the engine's own: BM25 on one, ts_rank_cd on the other,
+// comparable only within one store. Another engine has none declared, and a store on it is a
+// mistake in the code (OpenAt opens these two alone): it panics while the store declares its
+// tables, rather than speaking one engine's query syntax to another.
 func fullTextOn(d dao.Dialect) fullText {
-	if dao.SupportsFullText(d) {
+	switch d.Name() {
+	case dao.DialectSQLite:
 		return fullText{ix: ChunkFTS, join: true, weights: []float64{10, 5, 5, 1, 0},
 			all: func(ts []search.Term) (string, error) { return query.FTS5(ts), nil },
 			any: func(ts []search.Term) (string, error) { return query.FTS5Any(ts), nil }}
+	case dao.DialectPostgres:
+		return fullText{ix: ChunkTSV, weights: []float64{1, 0.5, 0.5, 0.1}, all: query.TSQuery, any: query.TSQueryAny}
 	}
-	return fullText{ix: ChunkTSV, weights: []float64{1, 0.5, 0.5, 0.1}, all: query.TSQuery, any: query.TSQueryAny}
+	panic(fmt.Sprintf("index: no full-text search is declared for the %s engine", d.Name()))
 }
 
 // snippetMarks are a chunk's Snippet's: the matched terms between HighlightStart and HighlightEnd,
