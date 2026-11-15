@@ -971,11 +971,7 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 		case feature.Code(a.err) == rpc.CodeConflict, feature.Code(a.err) == rpc.CodeCommitted:
 			h.activate(b) // the conflict is b's: its answers act on the buffer shown
 			b.file.saveAuth = who
-			q := "autodoc.text.files.changed_on_disk_since_you_opened_it_keep_editing"
-			if !h.gui { // a terminal's question offers Compare too (compare.go)
-				q = "autodoc.text.files.changed_on_disk_since_you_opened_it_compare"
-			}
-			h.set("App.conflictQuestion", h.trf(q, p))
+			h.set("App.conflictQuestion", h.trf("autodoc.text.files.changed_on_disk_since_you_opened_it_compare", p))
 			h.open("fileConflict")
 		case feature.Code(a.err) == rpc.CodeNotFound:
 			h.markDisk(b, diskDeleted, "") // the next save creates it again

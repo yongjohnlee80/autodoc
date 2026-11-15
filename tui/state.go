@@ -157,7 +157,6 @@ func (h *Host) state() map[string]any {
 		"App.htmlOpenQuestion": "",
 		"App.conflictQuestion": "",
 		"App.compareTitle":     "",
-		"App.canCompare":       !h.gui, // a terminal's Compare (compare.go): a window has none yet
 		"App.quitQuestion":     "The file has unsaved changes. Quit, and lose them?",
 		"App.workspaces":       h.workspaces.Model(),
 

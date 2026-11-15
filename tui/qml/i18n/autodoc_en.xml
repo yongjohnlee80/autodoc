@@ -6581,10 +6581,6 @@ Revoked, its next use of %2 is refused, and asks you again by a card.</translati
         <source>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), overwrite it with yours, or compare the two and merge them?</source>
         <translation>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), overwrite it with yours, or compare the two and merge them?</translation>
     </message>
-    <message id="autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_kee">
-        <source>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</source>
-        <translation>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</translation>
-    </message>
     <message id="autodoc.text.embedsetup.about">
         <source>about %1</source>
         <translation>about %1</translation>
@@ -6756,10 +6752,6 @@ Revoked, its next use of %2 is refused, and asks you again by a card.</translati
     <message id="autodoc.text.files.changed_on_disk_since_you_opened_it_compare">
         <source>%1 changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), overwrite it with yours, or compare the two and merge them?</source>
         <translation>%1 changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), overwrite it with yours, or compare the two and merge them?</translation>
-    </message>
-    <message id="autodoc.text.files.changed_on_disk_since_you_opened_it_keep_editing">
-        <source>%1 changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</source>
-        <translation>%1 changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</translation>
     </message>
     <message id="autodoc.text.files.deleted_on_disk">
         <source>deleted on disk</source>
