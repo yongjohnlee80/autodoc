@@ -255,7 +255,9 @@ func TestCatalogMarkdown(t *testing.T) {
 
 // TestInvalidParamsNameTheirVerbs: every invalid-params message of publicErrs names the verbs that
 // answer it, each an exact registered verb or a "domain.*" with at least one verb, so a filtered
-// catalog can list exactly a verb's own.
+// catalog can list exactly a verb's own. It holds the names to verbs that exist, not to verbs that
+// can reach the error: that each named verb does return it is the table's author's to trace, and
+// TestAFilteredCatalogListsItsVerbsInvalidParams holds a few verbs' sets exactly.
 func TestInvalidParamsNameTheirVerbs(t *testing.T) {
 	s := New(Fixed(), "v")
 	verbs := s.Verbs()

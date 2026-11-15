@@ -137,9 +137,13 @@ var publicErrs = []module.PublicError{
 	{Err: docs.ErrNotEligible, Code: golibrpc.CodeInvalidParams, Message: "not a file of this workspace",
 		Verbs: []string{"doc.read", "doc.read_raw", "doc.write", "doc.write_raw", "doc.outline", "doc.rename", "doc.remove"}},
 	{Err: docs.ErrTooLarge, Code: golibrpc.CodeInvalidParams, Message: "the document is over the size limit",
-		Verbs: []string{"doc.read", "doc.read_raw", "doc.write", "doc.write_raw", "doc.outline", "doc.validate", "file.read", "file.read_raw", "file.write", "file.write_raw"}},
+		Verbs: []string{"doc.read", "doc.read_raw", "doc.write", "doc.write_raw", "doc.outline", "doc.validate", "file.read", "file.read_raw", "file.write", "file.write_raw",
+			// a task's file is written through the workspace's documents, and a task's text can be over the limit
+			"todos.add", "todos.update", "todos.status", "todos.assign"}},
 	{Err: vfs.ErrInvalidName, Code: golibrpc.CodeInvalidParams, Message: "not a valid path in the workspace",
-		Verbs: []string{"doc.read", "doc.read_raw", "doc.write", "doc.write_raw", "doc.outline", "doc.rename", "doc.remove"}},
+		Verbs: []string{"doc.read", "doc.read_raw", "doc.write", "doc.write_raw", "doc.outline", "doc.rename", "doc.remove",
+			// a task's file, named from its title, is written through the workspace's documents
+			"todos.add", "todos.update", "todos.status", "todos.assign"}},
 	{Err: index.ErrUnknownMode, Code: golibrpc.CodeInvalidParams, Message: "unknown search mode",
 		Verbs: []string{"search.query"}},
 	{Err: index.ErrNoRetriever, Code: golibrpc.CodeInvalidParams, Message: "search stages must include lexical or semantic: a ranker only re-orders what they find",
