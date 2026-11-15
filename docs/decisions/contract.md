@@ -92,6 +92,12 @@ else is derived from the contracts: registration and the protocol gate, the even
 mapping, `sys.contracts`, `autodoc --contracts`, AGENTS.md's tables and the Lua namespaces. A UI
 feature is a `Feature` that sees a narrow `Core`, never the host.
 
+A verb may always answer invalid params, so its contract lists the code without the message. Each
+invalid-params message in the error table names the verbs that answer it (exact verb names, or
+`domain.*` for a domain every verb of which can), and a filtered catalog (`autodoc --contracts doc.read`,
+`search.*`) lists the messages of the verbs it selects and no others. The whole catalog lists every
+message, and a guard test holds each name to a registered verb.
+
 This gives AutoDoc one place per verb instead of a handful of hand-kept copies that drift apart. The
 convention itself is described in [architecture.md §4](../architecture.md#4-the-convention).
 
