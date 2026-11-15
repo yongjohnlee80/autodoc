@@ -40,6 +40,8 @@ type env struct {
 	raw dao.DataConn
 	// hook, when set before open, observes every statement the indexer's store runs.
 	hook dao.Hook
+	// loc, when set, is the store's location on PostgreSQL (newEnvOnPostgres); raw is then nil.
+	loc *store.Location
 }
 
 func newEnv(t testing.TB, opts options) *env {
@@ -146,7 +148,13 @@ func (e *env) open(opts options) {
 	}
 	ctx0 := context.Background()
 	path := filepath.Join(e.dir, "autodoc.db")
-	db, err := store.Open(ctx0, path)
+	var db *store.Store
+	var err error
+	if e.loc != nil {
+		db, err = store.OpenAt(ctx0, *e.loc)
+	} else {
+		db, err = store.Open(ctx0, path)
+	}
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -157,7 +165,7 @@ func (e *env) open(opts options) {
 		}
 		e.ws = w.ID
 	}
-	if e.raw == nil {
+	if e.raw == nil && e.loc == nil {
 		// several connections: a test may hold a read transaction open while it reads more
 		raw, err := sqlite.OpenNamed(ctx0, "raw:"+path, "file:"+path+"?_pragma=busy_timeout(5000)", sqlite.MaxOpenConns(4))
 		if err != nil {
