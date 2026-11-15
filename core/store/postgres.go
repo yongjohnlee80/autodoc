@@ -101,7 +101,10 @@ type pgStore struct {
 	lease  *pglease.Lease
 	stop   context.CancelFunc
 	done   chan struct{}
-	once   sync.Once
+	// started is whether the renew runs (startRenew): close waits for it only then, so a failure
+	// before it started never waits on a goroutine that does not exist
+	started bool
+	once    sync.Once
 }
 
 func openPostgres(ctx context.Context, loc Location, opts ...Option) (*Store, error) {
@@ -168,7 +171,7 @@ func openPostgres(ctx context.Context, loc Location, opts ...Option) (*Store, er
 	// an index on a large store) never outlasts it, and closed with every failure after this
 	runCtx, stop := context.WithCancel(context.Background())
 	pg := &pgStore{loc: loc, leases: leases, lease: lease, stop: stop, done: make(chan struct{})}
-	go pg.renew(runCtx)
+	pg.startRenew(runCtx)
 	release := func() { _ = pg.close() }
 	w, err := open("w", postgres.MaxOpenConns(1), inSchema, pglease.WriterSession(leaseTTL))
 	if err != nil {
@@ -201,6 +204,12 @@ func openPostgres(ctx context.Context, loc Location, opts ...Option) (*Store, er
 	return s, nil
 }
 
+// startRenew starts the lease's renew, once.
+func (pg *pgStore) startRenew(ctx context.Context) {
+	pg.started = true
+	go pg.renew(ctx)
+}
+
 // renew renews the store's lease every third of its length until the store closes.
 func (pg *pgStore) renew(ctx context.Context) {
 	defer close(pg.done)
@@ -222,7 +231,9 @@ func (pg *pgStore) close() error {
 	var err error
 	pg.once.Do(func() {
 		pg.stop()
-		<-pg.done
+		if pg.started {
+			<-pg.done
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		err = errors.Join(pg.lease.Release(ctx), pg.leases.Close())
