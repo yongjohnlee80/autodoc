@@ -26,8 +26,13 @@ import (
 // deferred: a model whose index is ready, a model only a tenant's target (a switch's fill), and a
 // failed build's retry (due on its own backoff): their inserts pay the index's cost.
 
-// deferredPrefix begins a deferred index row's error: the reason ANNStatus reports while it waits.
+// deferredPrefix begins a deferred index row's error: the reason ANNStatus reports while it waits,
+// and the mark that its next_at is the deferral's deadline.
 const deferredPrefix = "deferred: "
+
+// deferredDone is a deferred row's reason once it waits no more: its backlog drained or its deadline
+// passed, the mark kept (holdDeferred).
+const deferredDone = deferredPrefix + "no longer waiting: builds when the builder is free"
 
 // deferral is why a wanted model's build waits, and until when at most.
 type deferral struct {
@@ -95,8 +100,11 @@ func (a *ANN) deferrals(ctx context.Context) (map[string]deferral, error) {
 	return out, nil
 }
 
-// holdDeferred records each deferred model's reason and deadline on its row, and clears the
-// reason of a wanted model no longer deferred, under the builder row as every D5 transaction.
+// holdDeferred records each deferred model's reason and deadline on its row, under the builder row
+// as every D5 transaction. A wanted model no longer deferred (its backlog drained, or its deadline
+// passed) keeps the deferral's mark and its next_at, its reason saying it builds when the builder is
+// free: its deadline stays the deadline until the row leaves wanted (built, failed or retired), so a
+// tick that cannot claim it (the builder busy, another model first) never starts a new one.
 func (a *ANN) holdDeferred(ctx context.Context, held map[string]deferral) error {
 	return dao.RunTx(ctx, func(tx *dao.Transaction) error {
 		if _, err := a.builderRow(ctx, tx); err != nil {
@@ -112,9 +120,9 @@ func (a *ANN) holdDeferred(ctx context.Context, held map[string]deferral) error 
 			case waits && r.Error != d.reason:
 				err = a.rwIndex.On(tx, a.opts(ctx)...).With(aiModel, r.Model).
 					Set(aiError, d.reason).Set(aiNextAt, d.deadline).Set(aiUpdated, a.now()).Update()
-			case !waits && strings.HasPrefix(r.Error, deferredPrefix):
+			case !waits && strings.HasPrefix(r.Error, deferredPrefix) && r.Error != deferredDone:
 				err = a.rwIndex.On(tx, a.opts(ctx)...).With(aiModel, r.Model).
-					Set(aiError, "").Set(aiUpdated, a.now()).Update()
+					Set(aiError, deferredDone).Set(aiUpdated, a.now()).Update()
 			}
 			if err != nil {
 				return err
