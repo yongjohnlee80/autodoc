@@ -57,8 +57,8 @@ In the code: `core/store/postgres.go` (server build), `core/store/location.go`,
 A store on PostgreSQL searches the same chunks with the engine's own full-text search:
 
 - **The index is a column.** `chunk.tsv` is a generated tsvector under `autodoc_english`, title at
-  class A, breadcrumb B, tags C and body D, with a GIN index. Nothing is joined, where SQLite joins
-  its FTS5 table.
+  class A, breadcrumb B, tags C and body D, with a GIN index. Nothing extra is joined, where SQLite
+  joins its FTS5 table.
 - **A query's words become a tsquery,** every word required (`&`) or, for the fallback, any one
   (`|`). The text is words only, as on SQLite: no operator a user types is read as syntax.
 - **Matches rank by `ts_rank_cd`,** weighting title over breadcrumb and tags over body in the same
