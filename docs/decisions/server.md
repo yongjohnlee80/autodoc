@@ -118,3 +118,38 @@ In the code: `enterprise/api/api.go`, `enterprise/config/config.go`
   a container example.
 
 In the code: `enterprise/ops/ops.go`, `enterprise/opcode/`, `app/server_health.go`
+
+## A model's index waits for its bulk load
+
+Each embedding model has one HNSW index, shared by every tenant. Inserting into a model with its
+index built costs several times what inserting into one without does, so a tenant's first import
+would pay that cost on every embedding if the index were built as soon as the tenant named the
+model.
+
+- A model's first index waits while a tenant whose active model it is has `ann_defer_backlog`
+  (2,000) or more documents not yet ready. It is built, concurrently, once every such tenant's
+  backlog falls below that, or `ann_defer_max` (24 h) after it first waited, whatever the backlog.
+- The backlog is counted only while a model's index is wanted, capped at `ann_defer_backlog`: at a
+  full backlog the count stops after that many rows, and once drained it reads the partial index
+  of unready documents, so it stays cheap whether a load is under way or done.
+- Semantic search is exact while the index waits, as it is while any index is wanted. The status
+  says `ann-building` with the reason and the time it will be built by.
+- Measured at 1,000,000 documents, the import reaches a ready index in 14 min 39 s, the build
+  included, against 1 h 21 min with the index built first; recall is the same
+  ([operations](../enterprise/operations.md#the-approximate-searchs-index-what-it-costs)).
+- The session that builds an index sets its own `maintenance_work_mem`
+  (`ann_maintenance_work_mem`, 512 MB). A parallel build keeps that memory in the database's
+  `/dev/shm`. When that runs out (SQLSTATE 53100), the half-built index is dropped and the build
+  runs again without parallel workers, and the server logs a warning that the database's
+  container needs a larger `--shm-size`.
+
+Known limits:
+
+- A model whose index is built already doesn't wait: a tenant importing into it pays the index's
+  cost: 206 embeddings a second at 1,000,000, against 1,138 for a deferred import, its build
+  included. Dropping and rebuilding a shared index for one tenant's load would slow every other
+  tenant's searches.
+- A model that is only a tenant's target (the fill of a model switch) doesn't hold the build back:
+  the backlog counted is the active model's.
+
+In the code: `core/pgstore/annbulk.go`, `core/pgstore/annbuild.go`

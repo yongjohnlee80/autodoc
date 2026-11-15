@@ -73,7 +73,8 @@ type Postgres struct {
 	// Schema is the schema pgstore's tables live in, created when missing.
 	Schema string
 	// ANN is the approximate semantic search's settings (ann_threshold, ann_max_scan_tuples,
-	// ann_scan_mem_multiplier, ann_m, ann_ef_construction), pgstore's defaults for any not set.
+	// ann_scan_mem_multiplier, ann_m, ann_ef_construction, ann_defer_backlog, ann_defer_max,
+	// ann_maintenance_work_mem), pgstore's defaults for any not set.
 	ANN pgstore.ANNConfig
 }
 
@@ -218,6 +219,10 @@ type file struct {
 		ANNScanMemMultiplier *float64 `toml:"ann_scan_mem_multiplier"`
 		ANNEfConstruction    *int     `toml:"ann_ef_construction"`
 		ANNM                 *int     `toml:"ann_m"`
+		// a model's first build waits for its bulk load, and the builder's memory
+		ANNDeferBacklog       *int      `toml:"ann_defer_backlog"`
+		ANNDeferMax           *duration `toml:"ann_defer_max"`
+		ANNMaintenanceWorkMem *string   `toml:"ann_maintenance_work_mem"`
 	} `toml:"postgres"`
 	Embedding *struct {
 		Provider string `toml:"provider"`
@@ -394,8 +399,30 @@ func (v *validator) postgres(f file) Postgres {
 		}
 		p.ANN.EfConstruction = *n
 	}
+	if n := f.Postgres.ANNDeferBacklog; n != nil {
+		if *n < 0 {
+			v.refuse("postgres.ann_defer_backlog", "%d: 0 (never defer) or more documents not yet ready", *n)
+		}
+		p.ANN.DeferBacklog = *n
+	}
+	if d := f.Postgres.ANNDeferMax; d != nil {
+		if d.Duration <= 0 {
+			v.refuse("postgres.ann_defer_max", "%s: a positive duration (\"24h\")", d.Duration)
+		}
+		p.ANN.DeferMax = d.Duration
+	}
+	if m := f.Postgres.ANNMaintenanceWorkMem; m != nil {
+		if !pgSize.MatchString(*m) {
+			v.refuse("postgres.ann_maintenance_work_mem", "%q: a PostgreSQL size from 1MB, in kB, MB or GB (\"512MB\")", *m)
+		}
+		p.ANN.MaintenanceWorkMem = *m
+	}
 	return p
 }
+
+// pgSize is a PostgreSQL memory size the builder's maintenance_work_mem takes: a whole number of
+// kB (at least 1024), MB or GB.
+var pgSize = regexp.MustCompile(`^(102[4-9]|10[3-9][0-9]|1[1-9][0-9]{2}|[2-9][0-9]{3}|[1-9][0-9]{4,})kB$|^[1-9][0-9]*(MB|GB)$`)
 
 func (v *validator) embedding(f file) Embedding {
 	if f.Embedding == nil {
