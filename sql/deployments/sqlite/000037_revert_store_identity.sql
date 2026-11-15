@@ -1,0 +1,1 @@
+-- Undoes 000037_update_store_identity.sql: nothing on SQLite.

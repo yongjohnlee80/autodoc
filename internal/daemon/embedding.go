@@ -93,8 +93,8 @@ func NewEmbedding(db *store.Store, ws *Workspaces, log logger.Logger) *Embedding
 	}
 	e := &Embedding{db: db, ws: ws, log: log, client: &http.Client{}, pending: map[int64][]store.CallRecord{}, done: make(chan struct{}),
 		born: time.Now()}
-	if db != nil {
-		e.dataDir = filepath.Dir(db.Path())
+	if db != nil && db.Path() != "" {
+		e.dataDir = filepath.Dir(db.Path()) // a store on PostgreSQL has no folder of its own: no free space to report
 	}
 	if ws != nil {
 		ws.SetProviderBuilder(e.buildByName) // a workspace's own provider is set up as the daemon's is

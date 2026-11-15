@@ -284,13 +284,13 @@ func TestTwoStoresInOneDatabaseAreApart(t *testing.T) {
 	}
 }
 
-// shortLease makes the stores a cell opens lease for d until the cell ends; set before any store
+// shortLease makes the stores a cell opens lease for d, polled every d/4, until the cell ends; set before any store
 // opens, so no renew reads it mid-change.
 func shortLease(t *testing.T, d time.Duration) {
 	t.Helper()
-	ttl := leaseTTL
-	leaseTTL = d
-	t.Cleanup(func() { leaseTTL = ttl })
+	ttl, poll := leaseTTL, busyPoll
+	leaseTTL, busyPoll = d, d/4
+	t.Cleanup(func() { leaseTTL, busyPoll = ttl, poll })
 }
 
 // A first start longer than the lease (its scripts building an index on a large store, say) keeps
@@ -357,5 +357,103 @@ func TestTheFirstStartsScriptsAreFenced(t *testing.T) {
 	}
 	if n != 0 {
 		t.Errorf("%d tables made by scripts whose lease was taken over, want none", n)
+	}
+}
+
+// A store on PostgreSQL has one identity, written at its first open and read back at every open
+// after; another store, in another schema, has another. The mutant, named here: an identity drawn
+// at every open (the daemon would report a new store_id at each start).
+func TestAStoreOnPostgresHasOneIdentity(t *testing.T) {
+	ctx := context.Background()
+	loc := pgLocation(t)
+	s, err := OpenAt(ctx, loc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := s.ID()
+	if err != nil || len(first) != 32 {
+		t.Fatalf("the store's identity: %q, %v", first, err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if again, err := openPG(t, loc).ID(); err != nil || again != first {
+		t.Errorf("the identity after a reopen: %q, %v; want %q", again, err, first)
+	}
+	other := loc
+	other.Schema = "another_store"
+	if id, err := openPG(t, other).ID(); err != nil || id == first {
+		t.Errorf("another schema's store has the identity %q, %v; want its own", id, err)
+	}
+}
+
+// A daemon restarting waits for its predecessor's lease: released (a clean stop), it opens within a
+// poll of the release, told once who held it. The mutant, named here: OpenAtWaiting not waiting
+// (a restart beside a stopping daemon fails ErrBusy).
+func TestOpenAtWaitingTakesAStoreItsHolderReleases(t *testing.T) {
+	shortLease(t, 4*time.Second)
+	ctx := context.Background()
+	loc := pgLocation(t)
+	held, err := OpenAt(ctx, loc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	told := make(chan error, 4)
+	got := make(chan error, 1)
+	go func() {
+		s, err := OpenAtWaiting(ctx, loc, func(err error) { told <- err })
+		if err == nil {
+			t.Cleanup(func() { _ = s.Close() })
+		}
+		got <- err
+	}()
+	select {
+	case err := <-told:
+		if !errors.Is(err, ErrBusy) || !strings.Contains(err.Error(), "store=autodoc_store") {
+			t.Errorf("the wait was told %v, want ErrBusy naming the holder", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("OpenAtWaiting never said it waits")
+	}
+	released := time.Now()
+	if err := held.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-got:
+		if err != nil {
+			t.Fatalf("the waiting open: %v", err)
+		}
+		if waited := time.Since(released); waited > 2*busyPoll {
+			t.Errorf("the waiting open took %s after the release, want within a poll (%s)", waited, busyPoll)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the waiting open never opened the released store")
+	}
+	if len(told) != 0 {
+		t.Errorf("the wait was told %d more times, want once", len(told))
+	}
+}
+
+// A daemon restarting after its predecessor was killed (the lease left held, never renewed) takes
+// the store once the lease's length has passed, and no sooner.
+func TestOpenAtWaitingTakesAKilledHoldersStoreAtItsTTL(t *testing.T) {
+	shortLease(t, 3*time.Second)
+	ctx := context.Background()
+	loc := pgLocation(t)
+	s := openPG(t, loc)
+	// the holder killed: its row another holder's, live for a lease, that nothing renews or releases
+	if _, err := s.leaseConn().ExecContext(ctx, `UPDATE `+LeaseTable+` SET holder = 'killed', epoch = epoch + 1,
+		lease_until = clock_timestamp() + interval '3 seconds' WHERE scope = '`+LeaseScope+`'`); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	n, err := OpenAtWaiting(ctx, loc, nil)
+	if err != nil {
+		t.Fatalf("the open after the holder was killed: %v", err)
+	}
+	t.Cleanup(func() { _ = n.Close() })
+	if waited := time.Since(start); waited < 2*time.Second || waited > 3*time.Second+2*busyPoll {
+		t.Errorf("the open took the killed holder's store after %s, want at its lease's end (3 s)", waited)
 	}
 }

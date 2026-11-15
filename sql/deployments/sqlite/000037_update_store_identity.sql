@@ -1,0 +1,3 @@
+-- 000037: nothing on SQLite. A store on PostgreSQL keeps its identity in a table of this name
+-- (docs/decisions/store.md#the-daemon-on-postgresql); a SQLite store's is its file's device and
+-- inode (store.Identity), as it was.

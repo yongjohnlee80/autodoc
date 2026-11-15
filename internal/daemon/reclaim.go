@@ -151,6 +151,9 @@ func (m *Workspaces) sweepOrphansOne(ctx context.Context, id int64, name string)
 // convert compacts a store not yet in incremental auto-vacuum mode, once.
 func (m *Workspaces) convert(ctx context.Context) {
 	mode, err := m.db.AutoVacuum(ctx)
+	if errors.Is(err, store.ErrNotSQLite) {
+		return // a store on PostgreSQL: PostgreSQL vacuums its own
+	}
 	if err != nil {
 		logger.Warning(m.opts.Log, err, logger.Fields{"event": "store.compact.failed"})
 		return

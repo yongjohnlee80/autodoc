@@ -55,11 +55,11 @@ func (r restarter) run(ctx context.Context, e *endpoint.Endpoints, out io.Writer
 	if err != nil {
 		return err
 	}
-	session := client.NewSession(p.Socket, r.spawn).UseHandoffs(p.StateDir).ForStore(p.Socket, p.Store)
+	session := client.NewSession(p.Socket, r.spawn).UseHandoffs(p.StateDir).ForPaths(p)
 	defer session.Close()
 
-	addr := endpoint.Holder(ctx, p.Store, p.Socket)
-	info, perr := endpoint.Probe(ctx, addr, p.Store)
+	addr := endpoint.HolderOf(ctx, p)
+	info, perr := endpoint.ProbePaths(ctx, addr, p)
 	var mismatch *client.StoreMismatchError
 	if errors.As(perr, &mismatch) {
 		return perr

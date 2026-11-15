@@ -4,6 +4,8 @@ package store
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"regexp"
@@ -58,6 +60,7 @@ var plainSchema = regexp.MustCompile(`^[a-z_][a-z0-9_]{0,62}$`)
 // pgStore is what a store on PostgreSQL holds beside a Store's own: its pools and its lease.
 type pgStore struct {
 	loc    Location
+	id     string // store_identity's id: what the daemon reports as store_id
 	leases dao.DataConn
 	lease  *pglease.Lease
 	stop   context.CancelFunc
@@ -150,6 +153,12 @@ func openPostgres(ctx context.Context, loc Location, opts ...Option) (*Store, er
 		release()
 		return fail(fmt.Errorf("store: the schema in %s: %w", loc.Schema, err))
 	}
+	id, err := storeIdentity(ctx, fenced)
+	if err != nil {
+		release()
+		return fail(err)
+	}
+	pg.id = id
 	r, err := open("r", inSchema, readOnly)
 	if err != nil {
 		release()
@@ -238,4 +247,42 @@ func (s *Store) leaseConn() dao.DataConn {
 		return nil
 	}
 	return s.pg.leases
+}
+
+// storeIdentity is the store's id (000037): written once, at random, by the first open that finds
+// none, and read back by every open after; two opens racing to write it keep one. It runs in one
+// transaction of w, the store's fenced writer, so it is written only under the store's lease.
+func storeIdentity(ctx context.Context, w dao.DataConn) (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	tx, err := w.Begin(ctx)
+	if err != nil {
+		return "", fmt.Errorf("store: its identity: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `INSERT INTO store_identity (id) VALUES ($1) ON CONFLICT DO NOTHING`, hex.EncodeToString(b)); err != nil {
+		return "", fmt.Errorf("store: its identity: %w", err)
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM store_identity`)
+	if err != nil {
+		return "", fmt.Errorf("store: its identity: %w", err)
+	}
+	var id string
+	if rows.Next() {
+		err = rows.Scan(&id)
+	} else if err = rows.Err(); err == nil {
+		err = errors.New("no row")
+	}
+	if cerr := rows.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return "", fmt.Errorf("store: its identity: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return "", fmt.Errorf("store: its identity: %w", err)
+	}
+	return id, nil
 }

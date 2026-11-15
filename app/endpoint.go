@@ -32,12 +32,13 @@ func runPrintEndpoint(ctx context.Context, configPath string, ensure bool, out i
 	if err != nil {
 		return err
 	}
-	addr := endpoint.Holder(ctx, storePath, sock)
+	p := e.WithStore(endpoint.Paths{Socket: sock, Store: storePath})
+	addr := endpoint.HolderOf(ctx, p)
 	if !ensure {
 		// what answers on the socket must be this store's daemon: a config that changed its
 		// data_dir but kept its socket would otherwise send its client to the old store
 		var mismatch *client.StoreMismatchError
-		if _, err := endpoint.Probe(ctx, addr, storePath); errors.As(err, &mismatch) {
+		if _, err := endpoint.ProbePaths(ctx, addr, p); errors.As(err, &mismatch) {
 			return err
 		}
 	}
@@ -47,7 +48,7 @@ func runPrintEndpoint(ctx context.Context, configPath string, ensure bool, out i
 			return err
 		}
 		session := client.NewSession(sock, func() (string, error) { return client.SpawnServe(e.ConfigPath, stateDir) }).As(rpc.CLIName).
-			UseHandoffs(stateDir).ForStore(sock, storePath)
+			UseHandoffs(stateDir).ForPaths(p)
 		var mismatch *client.MismatchError
 		if err := session.Connect(ctx); err != nil && !errors.As(err, &mismatch) && session.Stale() == nil {
 			return err
