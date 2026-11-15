@@ -173,13 +173,16 @@ func (v Verb) EventsOf(ctx context.Context, params []any, result any) []Event {
 
 // PublicError is an error a client may see. The code is its identity on the wire and the message is
 // all of it that crosses; Name and Next are for people, in --contracts and AGENTS.md. errors.Is
-// decides, and the first match in a module's list wins.
+// decides, and the first match in a module's list wins. Verbs names the verbs that answer the
+// error, for a code every verb may answer (invalid params): exact verb names, or "domain.*" for a
+// domain every verb of which can. A filtered catalog lists the message only for a verb it selects.
 type PublicError struct {
-	Err     error  `json:"-"`
-	Code    int64  `json:"code"`
-	Name    string `json:"name"` // "todos.stale"
-	Message string `json:"message"`
-	Next    string `json:"next,omitempty"` // what the client does next
+	Err     error    `json:"-"`
+	Code    int64    `json:"code"`
+	Name    string   `json:"name"` // "todos.stale"
+	Message string   `json:"message"`
+	Next    string   `json:"next,omitempty"`  // what the client does next
+	Verbs   []string `json:"verbs,omitempty"` // the verbs that answer it, where the code is every verb's
 }
 
 // Module is one feature's verbs and errors. Name, Verbs and Errors do no I/O and work on a Module
