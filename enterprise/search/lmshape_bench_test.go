@@ -7,11 +7,11 @@ import (
 	"math/rand/v2"
 	"net/url"
 	"os"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -379,27 +379,30 @@ func BenchmarkLMShape(b *testing.B) {
 	}
 	runParallel := func(b *testing.B, s *Searcher, cs lmCase, workers int) {
 		one(b, s, cs, 0)
-		gmp := runtime.GOMAXPROCS(min(runtime.GOMAXPROCS(0), workers))
-		defer runtime.GOMAXPROCS(gmp)
-		b.SetParallelism((workers + runtime.GOMAXPROCS(0) - 1) / runtime.GOMAXPROCS(0))
+		// exactly workers searchers, whatever GOMAXPROCS is: RunParallel starts a multiple of
+		// GOMAXPROCS goroutines, so 8 asked on 3 CPUs would be 9. They share b.N operations.
 		var pmu sync.Mutex
 		var durs []time.Duration
-		var next int
+		var left atomic.Int64
+		left.Store(int64(b.N))
+		var wg sync.WaitGroup
 		b.ResetTimer()
-		b.RunParallel(func(pb *testing.PB) {
-			pmu.Lock()
-			i := next
-			next += 977
-			pmu.Unlock()
-			var mine []time.Duration
-			for pb.Next() {
-				mine = append(mine, one(b, s, cs, i))
-				i++
-			}
-			pmu.Lock()
-			durs = append(durs, mine...)
-			pmu.Unlock()
-		})
+		for w := range workers {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				i := w * 977
+				var mine []time.Duration
+				for left.Add(-1) >= 0 {
+					mine = append(mine, one(b, s, cs, i))
+					i++
+				}
+				pmu.Lock()
+				durs = append(durs, mine...)
+				pmu.Unlock()
+			}()
+		}
+		wg.Wait()
 		b.StopTimer()
 		reportLatency(b, durs)
 	}
