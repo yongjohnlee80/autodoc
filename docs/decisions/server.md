@@ -129,7 +129,10 @@ model.
 - A model's index waits, whenever it is wanted, while a tenant whose active model it is has
   `ann_defer_backlog` (2,000) or more documents not yet ready: its first build, and a rebuild after
   its index went missing. It is built, concurrently, once every such tenant's backlog falls below
-  that, or `ann_defer_max` (24 h) after it first waited, whatever the backlog.
+  that, or `ann_defer_max` (24 h) after it first waited, whatever the backlog. That deadline is
+  kept until the index leaves wanted, so a tick that can't claim it (the builder busy with another
+  build) never starts a new one, and a backlog that drains and fills again waits only for the rest
+  of it.
 - A backlog that can't be counted holds every wanted model for that tick, and the builder reports
   the error: a load never pays the index's cost because a count failed.
 - The backlog is counted only while a model's index is wanted, capped at `ann_defer_backlog`: at a

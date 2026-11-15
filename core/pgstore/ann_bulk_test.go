@@ -147,6 +147,55 @@ func TestANNBulk_AFailedCountHoldsTheBuild(t *testing.T) {
 	}
 }
 
+// A deadline that passes while another build holds the builder row stays the deadline: the row,
+// still wanted under a full backlog, is not deferred again on the busy ticks (next_at as it was, its
+// mark kept), and builds once the builder is free.
+func TestANNBulk_APassedDeadlineIsKeptWhileTheBuilderIsBusy(t *testing.T) {
+	conn, a := annSetup(t, bulkConfig())
+	model := annModel(annDims)
+	annCorpus(t, conn, "t", model, 500, annDims, 0.53)
+	unready(t, conn, "t", 300)
+	ctx := context.Background()
+	_ = a.Want(ctx, model)
+	if err := a.Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if r := indexOf(t, a, model); r.State != annWanted || !strings.HasPrefix(r.Error, deferredPrefix) {
+		t.Fatalf("precondition: %s %q, want deferred", r.State, r.Error)
+	}
+	for _, q := range []string{
+		"UPDATE rag_ann_index SET next_at = now() - interval '1 minute'",
+		// another server's build of another model holds the builder row
+		"UPDATE rag_ann_builder SET model = 'test|other||8', owner = 'another-server', generation = generation + 1, lease_until = now() + interval '1 hour'",
+	} {
+		if _, err := conn.ExecContext(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	passed := *indexOf(t, a, model).NextAt
+	for i := 1; i <= 3; i++ {
+		if err := a.Tick(ctx); err != nil {
+			t.Fatal(err)
+		}
+		r := indexOf(t, a, model)
+		if r.State != annWanted || r.NextAt == nil || !r.NextAt.Equal(passed) || r.Error != deferredDone {
+			t.Fatalf("busy tick %d: %s, next_at %v (want %v kept), error %q (want %q)", i, r.State, r.NextAt, passed, r.Error, deferredDone)
+		}
+	}
+	if s := statusOf(t, a, model); s.Reason != deferredDone {
+		t.Errorf("the status while it waits for the builder: %+v", s)
+	}
+	if _, err := conn.ExecContext(ctx, "UPDATE rag_ann_builder SET model = NULL, owner = '', backend_pid = NULL, backend_start = NULL, backend_token = '', lease_until = NULL"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if r := indexOf(t, a, model); r.State != annReady || !indexState(t, conn, model).Valid || r.Error != "" || r.NextAt != nil {
+		t.Fatalf("with the builder free: %s %q %v; want built", r.State, r.Error, r.NextAt)
+	}
+}
+
 // A next_at with no deferral's reason (a retry's backoff left on a row wanted again) is no deadline:
 // a full backlog defers the build, from a deadline of its own.
 func TestANNBulk_AStaleNextAtIsNoDeadline(t *testing.T) {
