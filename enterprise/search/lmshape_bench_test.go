@@ -287,7 +287,9 @@ func BenchmarkLMShape(b *testing.B) {
 		if large < 0 || len(c.byLabel[k]) > len(c.byLabel[large]) {
 			large = k
 		}
-		if small < 0 || len(c.byLabel[k]) < len(c.byLabel[small]) {
+		// <=: of labels of one size the last is the small one and the first the large one, so two
+		// labels that hold as many documents as each other are still two labels
+		if small < 0 || len(c.byLabel[k]) <= len(c.byLabel[small]) {
 			small = k
 		}
 	}
