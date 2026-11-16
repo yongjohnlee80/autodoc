@@ -158,7 +158,7 @@ func TestAuditHandsAFreshCopyAndItsToastReopensTheCard(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r.clickText(t, "audit of echo sent")
+	r.clickToast(t, "audit of echo sent", func() bool { return r.card() != nil })
 	r.question(t)
 	if r.card() != c {
 		t.Fatal("the toast reopened another candidate")
@@ -173,7 +173,10 @@ func TestAuditHandsAFreshCopyAndItsToastReopensTheCard(t *testing.T) {
 		t.Fatalf("the second audit's copy %s is not fresh beside the first's %s", copy2, copy1)
 	}
 
-	r.clickText(t, "audit of echo sent")
+	if r.card() != nil {
+		t.Fatal("the card stayed up while the second audit was handed over")
+	}
+	r.clickToast(t, "audit of echo sent", func() bool { return r.card() != nil })
 	r.question(t)
 	r.keys(t, key('y'))
 	r.waitNotice(t, "added echo at "+full[:7])
