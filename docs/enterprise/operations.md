@@ -70,7 +70,7 @@ curl -s http://127.0.0.1:8730/v1/status -H "Authorization: Bearer $AUTODOC_OPS_T
 | `lock` | `held`; `waiting` (another server holds the tenant: a standby); `none` |
 | `cursor.lag_seconds` | how far the index is behind your data, on the database's clock. It grows when passes fail or can't keep up. |
 | `last_pass`, `last_refresh` | when each last ran, what it read and wrote, and its error code. `complete` is false for a refresh that couldn't read every row (it deletes nothing then; see [views](views.md)). |
-| `refresh_due` | why a refresh runs at once rather than on its schedule, until it completes: `facets` while its last refresh wrote another facet declaration than the source's ([server-config](server-config.md#sourcefacets-what-a-search-may-filter-on-optional)). Absent otherwise. |
+| `refresh_due` | why a refresh runs at once rather than on its schedule, until it completes: `facets` while its last refresh wrote another facet declaration than the source's. In a mixed fleet, one server on the old declaration and one on the new, each refreshes the tenant when it takes the lease, until every server has the same configuration: right, but a cost to roll out quickly ([server-config](server-config.md#sourcefacets-what-a-search-may-filter-on-optional)). Absent otherwise. |
 | `quarantine` | rows that failed to render and wait to be fixed in your data (the log names them) |
 | `documents` | the tenant's documents, and how many can be found by meaning |
 | `models.semantic` | `ready`, `partial` (embedding), `switching` (a model change filling; searches answer by words), or `off` |
