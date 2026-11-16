@@ -785,7 +785,9 @@ func TestTheCodexProbeCutsOffAChildHoldingItsOutputAtOnce(t *testing.T) {
 // not what that Codex is: once the same Codex answers, the next setup reads it and gives it
 // --no-daemon.
 func TestSetupForCodexWithNoFolderNeverKeepsAFailedProbe(t *testing.T) {
-	crew.SetCodexProbeTimeout(t, 300*time.Millisecond)
+	// a time a test binary's start fits in (the stand-in is one), -race and Windows included; the
+	// hanging --help sleeps 5 s, past it
+	crew.SetCodexProbeTimeout(t, 3*time.Second)
 	for name, failing := range map[string]string{"fails": "fail", "hangs": "hang"} {
 		// its --version answers throughout: the failed --help is of a Codex the probe can name
 		bin := newCodex(t, codexPlays{"version", "0.163.0", "help", codexNewerHelp})
