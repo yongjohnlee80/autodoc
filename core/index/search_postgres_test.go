@@ -147,9 +147,10 @@ func TestSearchOnPostgresKeepsToItsWorkspace(t *testing.T) {
 }
 
 // ChunkTSV against the catalog: the generated column's expression gives each of the declaration's
-// columns its class, in the declaration's order, under its configuration. The rank's weights are
-// positional over Columns, so a script that reclassifies a column, or a declaration out of step with
-// the scripts, would mis-weight the rank silently; this cell fails instead.
+// columns its class, under its configuration, compared column by column by name (a tsvector's
+// weights follow the classes, not the order the expression lists the columns in). A script that
+// reclassifies a column, or a declaration out of step with the scripts, would mis-weight the rank
+// silently; this cell fails instead.
 func TestChunkTSVIsTheCatalogs(t *testing.T) {
 	e := newEnvOnPostgres(t, options{})
 	ctx := context.Background()
