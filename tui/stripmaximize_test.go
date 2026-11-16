@@ -76,7 +76,7 @@ func TestTheTerminalsStripMaximizesAndRestores(t *testing.T) {
 
 func TestTheAgentsStripMaximizesAndRestores(t *testing.T) {
 	agent, _ := fakeAgent(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "fake", Command: agents.ShellQuote(agent)}}, "fake")
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "fake", Command: agentCall(agent)}}, "fake")
 	r.leader(t, 'g')
 	r.s.WaitForText(t, "started")
 	stripMaximizes(t, r, "agent")

@@ -291,7 +291,7 @@ func (r *running) instruct(t *testing.T, title, text string) {
 func TestAPageIsHandedOverByItsPathNeverItsText(t *testing.T) {
 	t.Parallel()
 	agent, report := recordingAgent(t, true)
-	_, r, _ := runAgentTUIIn(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron",
+	_, r, _ := runSetupTUIIn(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron",
 		nil, Options{}, map[string][]string{"kb": {"a.md", "a\n", "plan.md", "the-saved-page-text\n"}})
 	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })

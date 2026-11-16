@@ -47,7 +47,7 @@ func TestAnAgentRetriedWhileStartedAgainReadsNoLiveState(t *testing.T) {
 		return pty.Start(c)
 	})
 	profiles := []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}
-	_, r, _ := runAgentTUIWith(t, t.TempDir(), profiles, "heron", nil, Options{seams: s})
+	_, r, _ := runSetupTUI(t, t.TempDir(), profiles, "heron", nil, Options{seams: s})
 	r.leader(t, 'g')
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
 	starting := 0

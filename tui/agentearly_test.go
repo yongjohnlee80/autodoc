@@ -19,7 +19,7 @@ func TestAnAgentTabTakesWhatIsTypedWhileItsCLIStarts(t *testing.T) {
 	sm := seamsWithEnv(t, nil)
 	sm.setAgentSpawn(s.start)
 	profiles := []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}
-	_, r, _ := runAgentTUIWith(t, t.TempDir(), profiles, "heron", nil, Options{seams: sm})
+	_, r, _ := runSetupTUI(t, t.TempDir(), profiles, "heron", nil, Options{seams: sm})
 	t.Cleanup(s.free)
 	r.leader(t, 'g')
 	s.spawnOut(t)
