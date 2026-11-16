@@ -44,7 +44,7 @@ func storedPref(t *testing.T, d *daemon, r *running, name, want string) {
 // the store keeps each as percentages of the Window, and a TUI attached after opens them there
 // (docs/decisions/editor.md#fonts-zoom-and-floating-panels). No corner grip is drawn.
 func TestADraggedPanelFloatsWhereItIsLeft(t *testing.T) {
-	d, r := runShellTUI(t, nil)
+	d, r := runLineShellTUI(t, nil)
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	r.s.WaitFor(t, "the terminal 30% high", func(sc string) bool { row, _ := frameAt(sc); return row == 21 })
 	if strings.Contains(r.s.String(), "□") {
@@ -72,7 +72,7 @@ func TestADraggedPanelFloatsWhereItIsLeft(t *testing.T) {
 // TestArrangingAPanelIsOneChange: SPC L's steps move the panel at once and store nothing; Escape
 // puts it back where it was, still open; Enter keeps the steps, written once.
 func TestArrangingAPanelIsOneChange(t *testing.T) {
-	d, r := runShellTUI(t, nil)
+	d, r := runLineShellTUI(t, nil)
 	onLoop(r, func() bool { r.h.togglePanel("explorer"); return true })
 	var row0, col0 int
 	r.s.WaitFor(t, "the explorer", func(sc string) bool { row0, col0 = panelAt(sc, "explorer"); return row0 >= 0 })
@@ -106,7 +106,7 @@ func TestArrangingAPanelIsOneChange(t *testing.T) {
 // TestResetAndANewEdgeDockThePanels: Go › Reset panel layout forgets every floating panel, and a
 // new edge in Preferences forgets that panel's.
 func TestResetAndANewEdgeDockThePanels(t *testing.T) {
-	d, r := runShellTUI(t, map[string]string{"tui.explorer.float": "50,25,30,50", "tui.todos.float": "10,10,30,50", "tui.terminal.float": "0,50,100,30"})
+	d, r := runLineShellTUI(t, map[string]string{"tui.explorer.float": "50,25,30,50", "tui.todos.float": "10,10,30,50", "tui.terminal.float": "0,50,100,30"})
 	onLoop(r, func() bool { r.h.togglePanel("explorer"); return true })
 	r.s.WaitFor(t, "the explorer floating mid-screen", func(sc string) bool { _, c := panelAt(sc, "explorer"); return c >= 45 })
 	onLoop(r, func() bool { r.h.choosePrefNamed(feature.PrefExplorer, 1); return true }) // right
@@ -177,7 +177,7 @@ func TestArrangingMovesAPanelOnAWideScreen(t *testing.T) {
 // TestTheTerminalOpensAtItsStoredSize: a size kept for the terminal's edge (Preferences, or a drag
 // before panels floated) is read when a TUI attaches, and the terminal opens at it, docked.
 func TestTheTerminalOpensAtItsStoredSize(t *testing.T) {
-	_, r := runShellTUI(t, map[string]string{"tui.terminal.bottom.size": "50"})
+	_, r := runLineShellTUI(t, map[string]string{"tui.terminal.bottom.size": "50"})
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	r.s.WaitFor(t, "the terminal 50% high", func(sc string) bool { row, _ := frameAt(sc); return row == 15 })
 }
