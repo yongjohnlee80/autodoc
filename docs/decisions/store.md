@@ -92,7 +92,13 @@ store ties to its file have their own answer:
   reaches the daemon on its configured socket, and the daemon's `sys.hello` says its `engine` and
   `schema`; a client whose config names another store refuses it, naming both. There is no
   lease-info file, having no folder to keep it beside; `store_id` is reported, for operators, and
-  gates nothing.
+  gates nothing. A client matches by engine and schema alone, so two databases that use one schema
+  name are one store to it: a config whose DSN moved to another database while the old daemon still
+  serves the socket reaches the old one. Give each database its own schema or socket, or stop the
+  old daemon before the move. A client that starts the daemon reaches it while it waits out a
+  killed predecessor's lease: the daemon binds its socket first, and the client's hello waits. The
+  client is silent for that wait, up to the lease's length and a poll; the daemon's log names the
+  holder at its first refusal.
 - **A restart** waits out its predecessor's lease, at a poll, for at most the lease's length:
   released by a clean stop, the store opens within a poll; held by a daemon that was killed, once
   the lease expires. The first wait is logged with its holder.
