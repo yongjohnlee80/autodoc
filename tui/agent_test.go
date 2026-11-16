@@ -4,7 +4,6 @@ package tui
 
 import (
 	"context"
-	"maps"
 	"os"
 	"path/filepath"
 	"strings"
