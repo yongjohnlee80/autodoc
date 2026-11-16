@@ -199,10 +199,10 @@ func (a *At) DecodeParam(v any) error {
 		r, _ := x["root"].(string)
 		*a = At{Root: r}
 	default:
-		return fmt.Errorf("%w: at: a workspace name or {root = \"/abs/path\"}", ErrInvalid)
+		return fmt.Errorf("%w: at: a workspace name or {root = <an absolute path>}", ErrInvalid)
 	}
 	if a.Workspace == "" && a.Root == "" {
-		return fmt.Errorf("%w: at: a workspace name or {root = \"/abs/path\"}", ErrInvalid)
+		return fmt.Errorf("%w: at: a workspace name or {root = <an absolute path>}", ErrInvalid)
 	}
 	return nil
 }

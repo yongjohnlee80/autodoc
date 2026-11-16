@@ -100,13 +100,23 @@ message, and a guard test holds each name to a registered verb.
 
 A module's public error crosses as its code and its catalog message. An entry may also send its
 detail (`PublicError.Detail`): the error's own text after the catalog's, on one line and at most
-400 bytes, as `<message>: <detail>`, so a caller told `todos.invalid` learns which value. An entry
-sends it only when every place that wraps the error says nothing but the caller's own input and
-the module's rules: no host path the caller didn't give, no other workspace's name, no secret.
-The rest send the message alone. The code stays the contract, and the catalog's message stays
-the prefix, so anything matching on either is unchanged. Today these entries send their detail:
-`todos.invalid`, `todos.stale`, `todos.not_found`, `todos.exists`, `mail.no_recipient`,
-`mail.too_large` and `inbox.too_large`.
+400 bytes, as `<message>: <detail>`, so a caller told `todos.invalid` learns which value. The code
+stays the contract, and the catalog's message stays the prefix, so anything matching on either is
+unchanged.
+
+- **An entry sends its detail only when everything its detail can print is the caller's to
+  see:** the caller's own input and the module's rules, never a host path the caller didn't give,
+  another tenant's data or a secret. That means reading every place that wraps the error, and
+  what each `%v` or `%w` after it can print.
+- **A filesystem's error wrapped beside it** (an `*fs.PathError` or `*os.LinkError`, which name
+  the path they were given) ends the detail where its text begins. A refused task-file write
+  sends the file's store-relative name, not the disk's own error.
+- **A detail that still names an absolute path is not sent**, so the rule holds against a wrap
+  site written after it.
+- **These entries send their detail today:** `todos.invalid`, `todos.stale`, `todos.not_found`,
+  `todos.exists`, `mail.no_recipient`, `mail.ambiguous`, `mail.too_large` and `inbox.too_large`.
+  `mail.ambiguous` names other scopes' addresses, which its Next already tells the caller to
+  choose between, and which `crew.list` shows the caller anyway.
 
 This gives AutoDoc one place per verb instead of a handful of hand-kept copies that drift apart. The
 convention itself is described in [architecture.md §4](../architecture.md#4-the-convention).

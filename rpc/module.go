@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -164,9 +167,12 @@ func moduleErr(err error, errs []module.PublicError) error {
 const maxDetail = 400
 
 // detailOf is err's detail as a client may see it, for an error e marks Detail: the text after
-// e.Err's own in err's, on one line (line breaks and tabs as spaces), at most maxDetail bytes,
-// cut at a character with "…". "" when e does not send its detail, or err says nothing beyond
-// e.Err (or not after it).
+// e.Err's own in err's, up to where a filesystem's error wrapped beside it begins (an
+// *fs.PathError or *os.LinkError names the path it was given, which may be the host's), on one
+// line (line breaks and tabs as spaces), at most maxDetail bytes, cut at a character with "…".
+// A detail that still holds an absolute path is not sent: the rule an entry's Detail promises is
+// held against a wrap site written after it. "" when e does not send its detail, or err says
+// nothing of its own beyond e.Err. The log keeps err whole.
 func detailOf(err error, e module.PublicError) string {
 	if !e.Detail {
 		return ""
@@ -176,8 +182,18 @@ func detailOf(err error, e module.PublicError) string {
 	if i < 0 {
 		return ""
 	}
-	d := strings.TrimSpace(strings.TrimPrefix(s[i+len(own):], ":"))
+	rest := s[i+len(own):]
+	for _, t := range causes(err, e.Err) {
+		if j := strings.Index(rest, t); t != "" && j >= 0 {
+			rest = rest[:j]
+		}
+	}
+	d := strings.TrimSpace(strings.TrimPrefix(rest, ":"))
+	d = strings.TrimSpace(strings.TrimSuffix(d, ":"))
 	d = strings.Join(strings.Fields(d), " ")
+	if absPath.MatchString(d) {
+		return ""
+	}
 	if len(d) > maxDetail {
 		cut := maxDetail
 		for cut > 0 && !utf8.RuneStart(d[cut]) {
@@ -225,3 +241,39 @@ func unlistedRefusal(err error, listed bool) error {
 type unmapped struct{ err error }
 
 func (e unmapped) Error() string { return e.err.Error() }
+
+// absPath finds an absolute path in a detail: a Unix one, a word starting with '/' and holding
+// more than the slash, or a Windows one, a drive letter, a colon and a separator.
+var absPath = regexp.MustCompile(`(^|[\s'"(=\[])(/[^\s'"/][^\s'"]*|[A-Za-z]:[\\/])`)
+
+// causes are the texts of the filesystem's errors wrapped in err beside own (an *fs.PathError or
+// *os.LinkError, each with what it wraps), own and what own wraps aside.
+func causes(err, own error) []string {
+	var out []string
+	var walk func(e error)
+	walk = func(e error) {
+		if e == nil || e == own {
+			return
+		}
+		var pe *fs.PathError
+		var le *os.LinkError
+		switch x := e.(type) {
+		case *fs.PathError, *os.LinkError:
+			out = append(out, x.Error())
+			return
+		}
+		if !errors.As(e, &pe) && !errors.As(e, &le) {
+			return // nothing of the filesystem's below
+		}
+		switch u := e.(type) {
+		case interface{ Unwrap() []error }:
+			for _, x := range u.Unwrap() {
+				walk(x)
+			}
+		case interface{ Unwrap() error }:
+			walk(u.Unwrap())
+		}
+	}
+	walk(err)
+	return out
+}
