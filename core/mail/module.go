@@ -27,7 +27,7 @@ func (m *Manager) Errors() []module.PublicError {
 		{Err: ErrNoRecipient, Code: CodeNoRecipient, Name: "mail.no_recipient", Message: "an address names no active profile or live session",
 			Next: "crew.list the addressbook, and send to a name it shows", Detail: true},
 		{Err: ErrAmbiguous, Code: CodeAmbiguous, Name: "mail.ambiguous", Message: "a bare name more than one other scope has a profile of",
-			Next: "send to the one meant by name@scope, as the error names them"},
+			Next: "send to the one meant by name@scope, as the error names them", Detail: true},
 		{Err: ErrKeyReused, Code: CodeKeyReused, Name: "mail.key_reused", Message: "the key already names another message",
 			Next: "a retry sends the same content; new content takes a new key"},
 		{Err: ErrTooLarge, Code: CodeTooLarge, Name: "mail.too_large", Message: "the body is past 64 KiB",
