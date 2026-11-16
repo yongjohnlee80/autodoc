@@ -517,7 +517,8 @@ func (h *Host) show(b *openBuffer, ws, p, content, version string, raw bool) {
 }
 
 // adopt makes b the buffer of p, at version: with content, its text, clean (show); with nil, b keeps
-// its own text, unsaved (a draft written under p while it was edited further). Whether p is a
+// its own text, unsaved (a draft written under p while it was edited further, or a task's file
+// moved), and its base only if version is the one it had. Whether p is a
 // derived document, and so read-only, is set here for any buffer: a headless editor's edits are
 // refused as the widget's are (editorFor).
 func (h *Host) adopt(b *openBuffer, ws, p, version string, raw bool, content *string) {
@@ -525,8 +526,11 @@ func (h *Host) adopt(b *openBuffer, ws, p, version string, raw bool, content *st
 	if content != nil {
 		b.file.crlf = usesCRLF(*content) // a draft written under p (nil) keeps its own
 		b.file.setAgreed(version, asEditorText(*content))
-	} else {
-		b.file.version = version // a draft written under p: what was written is not held here
+	} else if version != b.file.version {
+		// a draft written under p: the base goes with the version it was of, and the caller, which
+		// knows what it wrote, sets the new one (setAgreed). At the same version (a task's file
+		// moved), the base is still that version's text, and stays.
+		b.file.version = version
 		b.file.dropBase()
 	}
 	b.file.hint = "" // a draft named: its path is its name now
@@ -1140,6 +1144,7 @@ func (h *Host) createFile(name string) {
 			// and keeps the newer text, unsaved, and the copies it came from; what the save guarded
 			// (a close, a quit) would drop that text: ask again, over b
 			h.adopt(b, a.at.ws, a.at.path, a.version, raw, nil)
+			b.file.setAgreed(a.version, content) // what was written: a later Compare merges against it
 			if ds.then == nil {
 				h.notify(h.trf("autodoc.notice.files.saved_the_draft_as_it_changed_again_while_it_was", name))
 				return

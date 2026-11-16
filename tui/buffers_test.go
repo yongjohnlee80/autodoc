@@ -706,6 +706,10 @@ func TestADraftEditedWhileItIsNamedKeepsTheEdit(t *testing.T) {
 	if got := d.read(t, "kb", "kept.md"); got != "draft text" {
 		t.Fatalf("kept.md: %q", got)
 	}
+	// what was written is the base: a Compare after the disk moves merges three ways
+	if f := r.file(); !f.baseOK || f.base != "draft text" || f.version == "" {
+		t.Fatalf("the base after the write: %q (kept %v) at version %q; want what was written, at its version", f.base, f.baseOK, f.version)
+	}
 }
 
 // TestAQuitThatSavesADraftEditedMeanwhileAsksAgain: Save in the quit question names the draft; an
