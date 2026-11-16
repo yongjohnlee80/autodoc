@@ -25,3 +25,16 @@ func TestADaemonForAnotherStoreIsRefusedNamingBoth(t *testing.T) {
 		}
 	}
 }
+
+// A store's name in a message is a SQLite store's file, or the PostgreSQL store in its schema: never
+// the default file path a config on PostgreSQL still carries.
+func TestAStoresNameIsItsEngines(t *testing.T) {
+	sq := Paths{Store: "/data/autodoc.db"}
+	pg := Paths{Store: "/data/autodoc.db", Engine: store.EngineOfPostgres, Schema: "autodoc"}
+	if got := sq.StoreName(); got != "/data/autodoc.db" {
+		t.Errorf("a SQLite store's name: %q", got)
+	}
+	if got := pg.StoreName(); got != "the PostgreSQL store in schema autodoc" {
+		t.Errorf("a PostgreSQL store's name: %q", got)
+	}
+}

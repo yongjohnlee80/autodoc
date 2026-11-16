@@ -86,7 +86,8 @@ store ties to its file have their own answer:
 - **The store's identity** is a random id written once into a one-row `store_identity` table
   (script 000037) and read at every open; the daemon reports it as `store_id`. A hash of the DSN
   would name one store twice when it is spelt two ways, and would put a value made from a secret in
-  a reported field.
+  a reported field. A database copied whole (a dump restored elsewhere) keeps its `store_id`, as it
+  keeps every other row.
 - **Finding the daemon:** a client never reads the database, so it never needs its credentials. It
   reaches the daemon on its configured socket, and the daemon's `sys.hello` says its `engine` and
   `schema`; a client whose config names another store refuses it, naming both. There is no

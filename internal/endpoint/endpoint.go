@@ -44,6 +44,18 @@ type Paths struct {
 // Postgres reports whether p's store is on PostgreSQL.
 func (p Paths) Postgres() bool { return p.Engine == store.EngineOfPostgres }
 
+// StoreName is p's store as a message names it: a SQLite store's file, or the PostgreSQL store in
+// its schema (never its DSN).
+func (p Paths) StoreName() string {
+	if p.Postgres() {
+		return postgresStoreName(p.Schema)
+	}
+	return p.Store
+}
+
+// postgresStoreName names the store on PostgreSQL in schema.
+func postgresStoreName(schema string) string { return "the PostgreSQL store in schema " + schema }
+
 // WithStore is p with the config's [store] engine and schema.
 func (e *Endpoints) WithStore(p Paths) Paths {
 	if e.Config.Store.Postgres() {
@@ -262,9 +274,9 @@ func CheckPostgresStore(addr, schema, engine, served string) error {
 	}
 	as := "a SQLite store"
 	if engine == store.EngineOfPostgres {
-		as = "the PostgreSQL store in schema " + served
+		as = postgresStoreName(served)
 	}
-	return &StoreMismatchError{Addr: addr, StorePath: "the PostgreSQL store in schema " + schema, ServedAs: as}
+	return &StoreMismatchError{Addr: addr, StorePath: postgresStoreName(schema), ServedAs: as}
 }
 
 // Probe asks the daemon at addr who it is (rpc.Probe), refusing one that serves another store than
