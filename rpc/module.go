@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/yongjohnlee80/golib/logger"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
@@ -148,10 +150,42 @@ func moduleErr(err error, errs []module.PublicError) error {
 	}
 	for _, e := range errs {
 		if errors.Is(err, e.Err) {
-			return &golibrpc.Error{Code: e.Code, Message: e.Message}
+			msg := e.Message
+			if d := detailOf(err, e); d != "" {
+				msg += ": " + d
+			}
+			return &golibrpc.Error{Code: e.Code, Message: msg}
 		}
 	}
 	return err
+}
+
+// maxDetail is the most of an error's detail that crosses, in bytes.
+const maxDetail = 400
+
+// detailOf is err's detail as a client may see it, for an error e marks Detail: the text after
+// e.Err's own in err's, on one line (line breaks and tabs as spaces), at most maxDetail bytes,
+// cut at a character with "…". "" when e does not send its detail, or err says nothing beyond
+// e.Err (or not after it).
+func detailOf(err error, e module.PublicError) string {
+	if !e.Detail {
+		return ""
+	}
+	s, own := err.Error(), e.Err.Error()
+	i := strings.Index(s, own)
+	if i < 0 {
+		return ""
+	}
+	d := strings.TrimSpace(strings.TrimPrefix(s[i+len(own):], ":"))
+	d = strings.Join(strings.Fields(d), " ")
+	if len(d) > maxDetail {
+		cut := maxDetail
+		for cut > 0 && !utf8.RuneStart(d[cut]) {
+			cut--
+		}
+		d = d[:cut] + "…"
+	}
+	return d
 }
 
 // wired carries a verb's result as the wire does: a struct by its json tags, a hand-built map as it
