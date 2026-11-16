@@ -16,6 +16,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -233,6 +234,14 @@ type (
 		Tags   []string            `json:"tags"`
 		Paths  []string            `json:"paths"`
 		Facets map[string][]string `json:"facets"`
+		Ranges map[string]bounds   `json:"ranges"`
+	}
+	// bounds are a range's: each a number or a string (a date, or a number written as text)
+	bounds struct {
+		Gt  bound `json:"gt"`
+		Gte bound `json:"gte"`
+		Lt  bound `json:"lt"`
+		Lte bound `json:"lte"`
 	}
 	response struct {
 		Tenant        string `json:"tenant"`
@@ -385,7 +394,7 @@ func (h *Handler) answer(ctx context.Context, w http.ResponseWriter, r *http.Req
 		}
 	}
 	res, err := s.Search(ctx, search.Scope(req.Scope), search.Request{Query: req.Query, Mode: gsearch.Mode(req.Mode), Limit: req.Limit, Group: req.Group,
-		Filter: gsearch.Filter{Tags: req.Filter.Tags, Paths: req.Filter.Paths, Facets: req.Filter.Facets}})
+		Filter: gsearch.Filter{Tags: req.Filter.Tags, Paths: req.Filter.Paths, Facets: req.Filter.Facets}, Ranges: req.Filter.ranges()})
 	if err != nil {
 		e := failed(ctx, err)
 		e.client, e.tenant = a.client, a.tenant
@@ -563,6 +572,10 @@ func failed(ctx context.Context, err error) answer {
 		return refuse(http.StatusBadRequest, "protected_facet", err.Error())
 	case errors.Is(err, search.ErrUnknownFacet):
 		return refuse(http.StatusBadRequest, "unknown_facet", err.Error())
+	case errors.Is(err, search.ErrFacetType):
+		return refuse(http.StatusBadRequest, "facet_type", err.Error())
+	case errors.Is(err, search.ErrFilter):
+		return refuse(http.StatusBadRequest, "bad_filter", err.Error())
 	case errors.Is(err, search.ErrLimit):
 		return refuse(http.StatusBadRequest, "bad_limit", err.Error())
 	case errors.Is(err, search.ErrGroup):
@@ -586,4 +599,40 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// bound is one of a range's bounds as the body gives it: a JSON number (kept as its digits) or a
+// string, as text; absent or null is "".
+type bound string
+
+func (b *bound) UnmarshalJSON(data []byte) error {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	var v any
+	if err := dec.Decode(&v); err != nil {
+		return err
+	}
+	switch v := v.(type) {
+	case nil:
+		*b = ""
+	case string:
+		*b = bound(v)
+	case json.Number:
+		*b = bound(v.String())
+	default:
+		return errors.New("a range's bound is a number or a string")
+	}
+	return nil
+}
+
+// ranges are the body's ranges as the library takes them; nil for none.
+func (f filter) ranges() map[string]search.Range {
+	if len(f.Ranges) == 0 {
+		return nil
+	}
+	out := make(map[string]search.Range, len(f.Ranges))
+	for field, b := range f.Ranges {
+		out[field] = search.Range{Gt: string(b.Gt), Gte: string(b.Gte), Lt: string(b.Lt), Lte: string(b.Lte)}
+	}
+	return out
 }

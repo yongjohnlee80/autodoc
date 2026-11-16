@@ -8,10 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"text/template"
 	"text/template/parse"
@@ -65,6 +67,7 @@ type Source struct {
 	digest   string // the file's SHA-256, its first 12 hex digits
 	export   *template.Template
 	access   []string
+	facets   map[string]string // declared: name → pgstore.FacetKeyword, FacetNumber or FacetDate
 	markdown bool
 }
 
@@ -81,7 +84,15 @@ var placeholder = regexp.MustCompile(`\$([0-9]+)`)
 //     actions only, so a document's path is known from its id before its body renders.
 //
 // The order of the rows can only be checked against a database: CheckOrder does it.
-func Load(path string, access []string) (*Source, error) {
+func Load(path string, access []string) (*Source, error) { return LoadDeclared(path, access, nil) }
+
+// LoadDeclared is Load for a source that declares facets beside its access fields, name → type
+// (pgstore.FacetKeyword, FacetNumber or FacetDate): each row's value for each is kept with its
+// document, which a search filters on. A declaration pgstore.CheckFacets refuses is an error.
+func LoadDeclared(path string, access []string, facets map[string]string) (*Source, error) {
+	if err := pgstore.CheckFacets(access, facets); err != nil {
+		return nil, &ViewError{Path: path, Reason: strings.TrimPrefix(err.Error(), "pgstore: ")}
+	}
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return nil, &ViewError{Path: path, Reason: err.Error()}
@@ -121,7 +132,7 @@ func Load(path string, access []string) (*Source, error) {
 	}
 	sum := sha256.Sum256(src)
 	return &Source{path: path, v: v, digest: hex.EncodeToString(sum[:])[:12], export: export,
-		access: slices.Clone(access), markdown: v.Format() == view.FormatMarkdown}, nil
+		access: slices.Clone(access), facets: maps.Clone(facets), markdown: v.Format() == view.FormatMarkdown}, nil
 }
 
 // idOnly compiles an export template that prints the row's id and nothing else of the row: literal
@@ -167,6 +178,9 @@ func (s *Source) File() string { return s.path }
 
 // Access are the tenant's access fields, which every row must carry.
 func (s *Source) Access() []string { return slices.Clone(s.access) }
+
+// Facets are the source's declared facets, name → type; nil when it declares none.
+func (s *Source) Facets() map[string]string { return maps.Clone(s.facets) }
 
 // Indexer is the identity every document of the source is cut under: the view's name, its file's
 // digest, and how its rows are chunked. An edit of the view changes it, so the next refresh cuts
@@ -282,6 +296,31 @@ func (s *Source) document(r row, path string) (pgstore.Document, error) {
 		}
 		facets[f] = vals
 	}
+	var typed map[string][]float64
+	for _, f := range sortedKeys(s.facets) {
+		vals, err := facetValues(m[f])
+		if err != nil {
+			return pgstore.Document{}, fmt.Errorf("the facet %s %w", f, err)
+		}
+		if len(vals) == 0 {
+			continue // a missing key, a null or an empty list: no value
+		}
+		typ := s.facets[f]
+		if typ == pgstore.FacetKeyword {
+			facets[f] = vals
+			continue
+		}
+		nums := make([]float64, len(vals))
+		for i, v := range vals {
+			if nums[i], err = pgstore.TypedValue(typ, v); err != nil {
+				return pgstore.Document{}, fmt.Errorf("the facet %s: %w", f, err)
+			}
+		}
+		if typed == nil {
+			typed = map[string][]float64{}
+		}
+		typed[f] = nums
+	}
 	title, err := text(m[FieldTitle])
 	if err != nil {
 		return pgstore.Document{}, fmt.Errorf("the title %w", err)
@@ -296,7 +335,7 @@ func (s *Source) document(r row, path string) (pgstore.Document, error) {
 	if err != nil {
 		return pgstore.Document{}, fmt.Errorf("render: %w", err)
 	}
-	d := pgstore.Document{Path: path, Indexer: s.Indexer(), Facets: facets, SourceID: r.id}
+	d := pgstore.Document{Path: path, Indexer: s.Indexer(), Facets: facets, Values: typed, SourceID: r.id}
 	if s.markdown {
 		doc := kind.ParseMarkdown([]byte(body))
 		meta := chunk.ReadMeta(doc, path)
@@ -348,6 +387,18 @@ func contentHash(body string, d pgstore.Document) string {
 		part("")
 	}
 	part(d.SourceID)
+	// the typed values, only when there are any: a document of a source that declares none hashes
+	// as it did before facets were typed, so the upgrade writes none of them again
+	if len(d.Values) > 0 {
+		part("values")
+		for _, f := range sortedKeys(d.Values) {
+			part(f)
+			for _, v := range d.Values[f] {
+				part(strconv.FormatFloat(v, 'g', -1, 64))
+			}
+			part("")
+		}
+	}
 	return hex.EncodeToString(h.Sum(nil))[:12]
 }
 
@@ -371,6 +422,27 @@ func values(v any) ([]string, error) {
 			return nil, errors.New("has an empty value")
 		}
 		out = append(out, s)
+	}
+	return out, nil
+}
+
+// facetValues reads a declared facet's value: a scalar (string, number or boolean) or a list of
+// them, as text. A missing key, a null and an empty list are none; an empty string in it is not a
+// value and is left out.
+func facetValues(v any) ([]string, error) {
+	list, isList := v.([]any)
+	if !isList {
+		list = []any{v}
+	}
+	var out []string
+	for _, item := range list {
+		s, err := text(item)
+		if err != nil {
+			return nil, err
+		}
+		if s != "" {
+			out = append(out, s)
+		}
 	}
 	return out, nil
 }

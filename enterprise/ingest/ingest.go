@@ -83,6 +83,10 @@ type Options struct {
 	Now func(ctx context.Context) (time.Time, error)
 	// Clock is the time a refresh records and Run schedules refreshes by. nil: time.Now.
 	Clock clock.Clock
+	// RefreshWhy, when set, is why the tenant's refresh is due at once, not on its schedule
+	// (RefreshFacets): State says it until a refresh completes. The refresh is due because the
+	// tenant's last one was forgotten (pgstore's ReplacePolicy), not because of this field.
+	RefreshWhy string
 	// Committed, when set, is called after each batch commits: the embedding worker's wake, so the
 	// chunks a page wrote are embedded without waiting for the worker's own poll. It runs on the
 	// ingester's goroutine and must not block.
@@ -121,7 +125,14 @@ type Ingester struct {
 	// another server's lock: an operator's status reads them from another goroutine
 	state   atomic.Pointer[State]
 	waiting atomic.Bool
+	// refreshed says a complete refresh ran since the ingester started: Options.RefreshWhy is
+	// answered
+	refreshed atomic.Bool
 }
+
+// RefreshFacets is Options.RefreshWhy for a tenant whose declared facets changed: its documents
+// keep their facets' values, and each is written again with the new declaration's.
+const RefreshFacets = "facets"
 
 // beforeCommit, when set, runs before each commit and fails it with its error: a test's way to
 // stop the process between a page's writes and its commit, as a crash would. It is nil in
@@ -491,6 +502,7 @@ func (in *Ingester) Refresh(ctx context.Context) (Stats, error) {
 		st.Complete = false
 		return st, err
 	}
+	in.refreshed.Store(true) // Options.RefreshWhy is answered
 	in.count(ctx, &st)
 	return st, nil
 }
@@ -688,6 +700,9 @@ type Outcome struct {
 type State struct {
 	Locked, Waiting       bool
 	LastPass, LastRefresh Outcome
+	// RefreshDue is why a refresh is due before its schedule (Options.RefreshWhy), until one
+	// completes; "" for none.
+	RefreshDue string
 }
 
 // State is the ingester's state now.
@@ -698,6 +713,9 @@ func (in *Ingester) State() State {
 	}
 	st.Locked = in.lock.Load() != nil
 	st.Waiting = !st.Locked && in.waiting.Load()
+	if !in.refreshed.Load() {
+		st.RefreshDue = in.o.RefreshWhy
+	}
 	return st
 }
 

@@ -26,6 +26,7 @@ type View struct {
 	s      *Store
 	tx     *dao.Transaction
 	access []dao.Predicate // ViewWithin's; nil is unscoped
+	ranges []dao.Predicate // Within's: typed facets' ranges, ANDed beside the filter
 
 	mu   sync.Mutex
 	seen map[int64]bool // the documents handed out as candidates (CandidateSourceIDs)
@@ -102,10 +103,11 @@ func (v *View) plain(ctx context.Context) []dao.QueryOption {
 	return []dao.QueryOption{dao.WithQueryContext(ctx)}
 }
 
-// where is a retrieval's predicates over the document: the filter's, and the View's access ANDed
-// beside them, never merged into the filter's facets (where a query's own facet would OR with it).
+// where is a retrieval's predicates over the document: the filter's, the View's ranges (Within),
+// and its access, each ANDed beside the others, never merged into the filter's facets (where a
+// query's own facet would OR with it).
 func (v *View) where(f search.Filter) []dao.Predicate {
-	return append(filters(f), v.access...)
+	return append(append(filters(f), v.ranges...), v.access...)
 }
 
 var (

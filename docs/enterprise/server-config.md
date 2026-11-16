@@ -243,8 +243,42 @@ Each source is one `.view` file, indexed into a tenant of its own. There must be
 | `lag` | `1m` | How far behind the database's clock a pass reads. A transaction open longer than this could commit a row behind the cursor, which only the next refresh would read. `"0s"` is none. | negative |
 | `access` | (required) | The row fields every search of the tenant must be scoped by: say, `["label_id"]`. Each row must carry every one. | missing or empty; a name empty, repeated or containing `=` |
 
-When the server starts it records each tenant's access fields and view name as the tenant's
-policy, which search reads: a tenant can never be searched unscoped.
+When the server starts it records each tenant's access fields, view name and declared facets as
+the tenant's policy, which search reads: a tenant can never be searched unscoped.
+
+### `[source.facets]`: what a search may filter on (optional)
+
+```toml
+[[source]]
+tenant = "releases"
+view   = "views/release.view"
+access = ["label_id"]
+[source.facets]
+status    = "keyword"
+territory = "keyword"
+released  = "date"
+bpm       = "number"
+```
+
+Each name is a row field, and each value is its type:
+
+| Type | A row's value | A search filters it by |
+|---|---|---|
+| `keyword` | a string, number or boolean, or a list of them, kept as given (case included) | `filter.facets`: equality, values ORed, fields ANDed |
+| `number` | a JSON number, or a string that parses as one (NaN and infinities refused) | `filter.ranges`: `gt`, `gte`, `lt`, `lte` |
+| `date` | `YYYY-MM-DD` (midnight UTC) or RFC 3339, or a list of them | `filter.ranges`, as for a number |
+
+- A missing key, a `null`, an empty list or an empty string is no value. A value that doesn't
+  parse as its type is the row's error, naming the facet: the row is quarantined, as any row that
+  can't be indexed is.
+- **Refused when the file loads** (exit 2), naming the source and the facet: a name that is an
+  access field (in any case), `tags`, `path` or `title`; a name that isn't a plain identifier
+  (letters, digits and `_`, not starting with a digit); a type other than the three.
+- **A changed declaration refreshes the tenant at once** when the server starts with it. A
+  record's facet values are kept with its document, and a pass reads only changed rows. The
+  status shows `"refresh_due": "facets"` until the refresh completes, and searches answer from
+  the documents as they were until then: a filter on a value a document doesn't have yet doesn't
+  match it. The refresh embeds nothing again, since the records' text is unchanged.
 
 ## Exit codes
 

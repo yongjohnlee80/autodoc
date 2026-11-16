@@ -403,7 +403,7 @@ func TestTheServerIndexesItsSourcesAndStopsInReverse(t *testing.T) {
 	done, stderr := f.serve(ctx)
 	f.started(stderr)
 	tables := f.scalar(`SELECT coalesce(string_agg(table_name, ',' ORDER BY table_name), '') FROM information_schema.tables WHERE table_schema = '` + f.schema + `'`)
-	if tables != "autodoc_schema,rag_ann_builder,rag_ann_index,rag_chunk,rag_cursor,rag_document,rag_embedding,rag_ingest_error,rag_link,rag_meta,rag_tenant_policy,rag_writer_lease" {
+	if tables != "autodoc_schema,rag_ann_builder,rag_ann_index,rag_chunk,rag_cursor,rag_document,rag_document_value,rag_embedding,rag_ingest_error,rag_link,rag_meta,rag_tenant_policy,rag_writer_lease" {
 		t.Errorf("the schema's tables: %s", tables)
 	}
 	if public := f.scalar(`SELECT count(*)::text FROM information_schema.tables WHERE table_schema = 'public'
