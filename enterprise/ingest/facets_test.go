@@ -1,10 +1,12 @@
 package ingest
 
 import (
+	"context"
 	"errors"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/pgstore"
 )
@@ -95,12 +97,16 @@ func TestARowsDeclaredFacetsBecomeItsDocuments(t *testing.T) {
 	}
 }
 
-// A changed declaration refreshes the source at once: the policy replaced with new facets forgets
-// the tenant's last refresh, the ingester says why until its refresh completes, and the refresh
-// writes every document again with its values. Its chunks' texts are unchanged, so every one keeps
-// its vector: nothing is pending for the embedding worker, which calls no provider. The mutant,
-// named here: a declaration change not forgetting the refresh (the next one waits its schedule).
-func TestAChangedDeclarationRefreshesTheSourceWithoutEmbedding(t *testing.T) {
+// A refresh is due while the tenant's last complete refresh wrote another facet declaration than
+// the source's: a fact of the store, so it holds whichever server changed the configuration. In the
+// sequence of a rolling restart (the policy given the new declaration, then a server still on the
+// old one completes its refresh), the next ingester of the new declaration finds it due, and says
+// so; after a restart before its refresh completes, still; after its refresh, no longer, nor after
+// another restart. The refresh writes every document again with its values, and their texts keep
+// their vectors: nothing is pending for the embedding worker, which calls no provider. The
+// mutants, named here: the refresh not recording its declaration (due again after it); due read
+// from the policy's change rather than the store (the old server's refresh answers it).
+func TestARefreshIsDueWhileTheLastWroteAnotherDeclaration(t *testing.T) {
 	f := newFixture(t)
 	f.exec(`ALTER TABLE track ADD COLUMN bpm int`)
 	view := writeView(t, strings.Replace(trackView, "'lyric', t.lyric,", "'lyric', t.lyric, 'bpm', t.bpm,", 1))
@@ -111,50 +117,59 @@ func TestAChangedDeclarationRefreshesTheSourceWithoutEmbedding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.st.SetPolicy(f.ctx, pgstore.Policy{AccessFields: []string{"label_id"}, View: before.Name()}); err != nil {
-		t.Fatal(err)
-	}
-	in := f.ingester(before, Options{}, "")
-	if _, err := in.Refresh(f.ctx); err != nil {
-		t.Fatal(err)
-	}
-	const model = "test|embed||4"
-	if err := in.Store().SetModels(f.ctx, model, ""); err != nil {
-		t.Fatal(err)
-	}
-	texts, _, err := in.Store().Pending(f.ctx, pgstore.PendingQuery{Model: model, Unready: true, Limit: 100})
-	if err != nil || len(texts) == 0 {
-		t.Fatalf("the first pass's texts: %d, %v", len(texts), err)
-	}
-	for _, x := range texts {
-		if err := in.Store().Embed(f.ctx, model, []pgstore.Embedding{{TextHash: x.TextHash, Vec: []float32{1, 0, 0, 0}}}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	in.Release()
-
 	after, err := LoadDeclared(view, []string{"label_id"}, map[string]string{"bpm": pgstore.FacetNumber})
 	if err != nil {
 		t.Fatal(err)
 	}
-	changed, err := f.st.ReplacePolicy(f.ctx, pgstore.Policy{AccessFields: []string{"label_id"}, View: after.Name(), Facets: after.Facets()})
-	if err != nil || !changed {
-		t.Fatalf("the new declaration: changed %v, %v", changed, err)
+	policy := func(src *Source) {
+		t.Helper()
+		if err := f.st.SetPolicy(f.ctx, pgstore.Policy{AccessFields: []string{"label_id"}, View: src.Name(), Facets: src.Facets()}); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if r, err := f.st.Refreshed(f.ctx); err != nil || !r.Finished.IsZero() {
-		t.Fatalf("the last refresh after the declaration changed: %+v, %v; want none, so one is due at once", r, err)
+	refresh := func(in *Ingester, written int) {
+		t.Helper()
+		if st, err := in.Refresh(f.ctx); err != nil || !st.Complete || st.Written != written {
+			t.Fatalf("the refresh: %+v, %v; want complete, %d written", st, err, written)
+		}
 	}
-	in = f.ingester(after, Options{RefreshWhy: RefreshFacets}, "")
-	if why := in.State().RefreshDue; why != RefreshFacets {
-		t.Fatalf("the status before the refresh: refresh due %q; want %q", why, RefreshFacets)
+	due := func(in *Ingester, want string, when string) {
+		t.Helper()
+		if got := in.State().RefreshDue; got != want {
+			t.Fatalf("%s: refresh due %q; want %q", when, got, want)
+		}
 	}
-	st, err := in.Refresh(f.ctx)
-	if err != nil || !st.Complete || st.Written != 2 {
-		t.Fatalf("the refresh: %+v, %v; want complete, both documents written", st, err)
+
+	policy(before)
+	old := f.ingester(before, Options{}, "")
+	due(old, "", "the old declaration, never refreshed")
+	refresh(old, 2)
+	const model = "test|embed||4"
+	if err := old.Store().SetModels(f.ctx, model, ""); err != nil {
+		t.Fatal(err)
 	}
-	if why := in.State().RefreshDue; why != "" {
-		t.Errorf("the status after the refresh: refresh due %q; want none", why)
+	texts, _, err := old.Store().Pending(f.ctx, pgstore.PendingQuery{Model: model, Unready: true, Limit: 100})
+	if err != nil || len(texts) == 0 {
+		t.Fatalf("the first refresh's texts: %d, %v", len(texts), err)
 	}
+	for _, x := range texts {
+		if err := old.Store().Embed(f.ctx, model, []pgstore.Embedding{{TextHash: x.TextHash, Vec: []float32{1, 0, 0, 0}}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// a server restarts with the new declaration while the old one, holding the lease, refreshes
+	policy(after)
+	refresh(old, 0) // the old declaration's refresh completes after the change: it writes nothing new
+	old.Release()
+
+	in := f.ingester(after, Options{}, "")
+	due(in, RefreshFacets, "the new declaration after the old server's refresh")
+	in.Release()
+	in = f.ingester(after, Options{}, "")
+	due(in, RefreshFacets, "a restart before the refresh completed")
+	refresh(in, 2)
+	due(in, "", "after the refresh")
 	if got := f.scalar(f.store, `SELECT string_agg(d.path || ':' || v.field || '=' || v.value::text, ',' ORDER BY d.path)
 		FROM rag_document_value v JOIN rag_document d ON d.tenant = v.tenant AND d.id = v.doc_id WHERE v.tenant = $1`, f.tenant); got != "track/1.md:bpm=101,track/2.md:bpm=102" {
 		t.Errorf("the values after the refresh: %s", got)
@@ -162,4 +177,41 @@ func TestAChangedDeclarationRefreshesTheSourceWithoutEmbedding(t *testing.T) {
 	if texts, _, err := in.Store().Pending(f.ctx, pgstore.PendingQuery{Model: model, Unready: true, Limit: 100}); err != nil || len(texts) != 0 {
 		t.Errorf("texts pending after the refresh: %d, %v; want none (no provider call)", len(texts), err)
 	}
+	in.Release()
+	in = f.ingester(after, Options{}, "")
+	due(in, "", "a restart after the refresh")
+}
+
+// Run refreshes at once while a refresh is due for the declaration, though its schedule says the
+// last one is recent. The mutant, named here: the schedule alone deciding (no refresh within the
+// wait).
+func TestRunRefreshesAtOnceForADeclaration(t *testing.T) {
+	f := newFixture(t)
+	f.exec(`ALTER TABLE track ADD COLUMN bpm int`)
+	view := writeView(t, strings.Replace(trackView, "'lyric', t.lyric,", "'lyric', t.lyric, 'bpm', t.bpm,", 1))
+	f.track(1, "A", "One", 1)
+	f.exec(`UPDATE track SET bpm = 120`)
+	before, err := Load(view, []string{"label_id"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 12, 9, 0, 0, 0, time.UTC)
+	o := Options{Interval: 20 * time.Millisecond, Refresh: time.Hour, Clock: func() time.Time { return now }}
+	old := f.ingester(before, o, "")
+	if _, err := old.Refresh(f.ctx); err != nil { // refreshed now: the next is an hour away
+		t.Fatal(err)
+	}
+	old.Release()
+	after, err := LoadDeclared(view, []string{"label_id"}, map[string]string{"bpm": pgstore.FacetNumber})
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := f.ingester(after, o, "")
+	ctx, cancel := context.WithCancel(f.ctx)
+	done := make(chan error, 1)
+	go func() { done <- in.Run(ctx) }()
+	t.Cleanup(func() { cancel(); <-done })
+	waitFor(t, 5*time.Second, "the refresh for the new declaration", func() bool {
+		return in.State().RefreshDue == "" && !in.State().LastRefresh.At.IsZero()
+	})
 }

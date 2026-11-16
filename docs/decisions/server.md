@@ -115,9 +115,15 @@ it:
 
 The values are replaced with their document, in its put's transaction, and go with it through
 the foreign key. They are part of the document's content hash, so a changed value writes it again.
-A changed declaration forgets the tenant's last refresh in the policy's own transaction, so the
-next start refreshes the source at once and every document gets the new declaration's values. The
-refresh embeds nothing again: embeddings are keyed by the text, and the text is unchanged.
+
+A complete refresh records the declaration it wrote its documents with (`rag_cursor.refresh_facets`).
+While that differs from the source's declaration, a refresh is due at once and the status says
+`refresh_due: "facets"`. Because the record is the store's, a change holds whichever server
+loaded the new configuration: in a rolling restart, a server still on the old declaration may
+complete a refresh after the change, and that refresh records the old declaration, so the next
+ingester of the new one still finds the refresh due. The refresh embeds nothing again: embeddings
+are keyed by the text, and the text is unchanged. A changed view is different: its documents are
+cut again at the next scheduled refresh, not at once.
 
 A request with ranges and no words is listed by the search package itself, since golib's engine
 lists only what its own filter narrows. The approximate path's small-scope count reads the same

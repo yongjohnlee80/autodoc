@@ -19,3 +19,10 @@ CREATE INDEX rag_document_value_doc ON rag_document_value (tenant, doc_id);
 -- its access fields: a search reads them in the snapshot that reads the access
 -- policy. '{}' declares none, as every policy recorded before this script has.
 ALTER TABLE rag_tenant_policy ADD COLUMN facets jsonb NOT NULL DEFAULT '{}';
+
+-- The declaration the tenant's last complete refresh wrote its documents with
+-- (pgstore's FacetsDigest; '' is none, as every refresh before this script
+-- wrote). A refresh is due at once while it differs from the declaration the
+-- ingester indexes with: the values are kept with the documents, and a pass
+-- rewrites only the rows that changed.
+ALTER TABLE rag_cursor ADD COLUMN refresh_facets text NOT NULL DEFAULT '';

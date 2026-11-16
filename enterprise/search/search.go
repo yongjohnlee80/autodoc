@@ -356,8 +356,22 @@ func checkRequest(p pgstore.Policy, scope map[string][]string, r Request) ([]pgs
 			return nil, fmt.Errorf("%w: %s is a %s facet: filter it by a range", ErrFacetType, f, typ)
 		case len(r.Filter.Facets[f]) == 0:
 			return nil, fmt.Errorf("%w: the facet %s has no value", ErrFilter, f)
-		case len(r.Filter.Facets[f]) > MaxFacetValues:
-			return nil, fmt.Errorf("%w: the facet %s has %d values (at most %d)", ErrFilter, f, len(r.Filter.Facets[f]), MaxFacetValues)
+		}
+	}
+	// a keyword facet's values are the filter's and the query's name:value words for it together,
+	// as the engine merges them: the bound holds for both
+	values := map[string]int{}
+	for f, vals := range r.Filter.Facets {
+		values[f] = len(vals)
+	}
+	for _, w := range strings.Fields(r.Query) {
+		if m := facetToken.FindStringSubmatch(w); m != nil && p.Facets[m[1]] == pgstore.FacetKeyword {
+			values[m[1]]++
+		}
+	}
+	for f, n := range values {
+		if n > MaxFacetValues {
+			return nil, fmt.Errorf("%w: the facet %s has %d values, the filter's and the query's (at most %d)", ErrFilter, f, n, MaxFacetValues)
 		}
 	}
 	if len(r.Ranges) > MaxRanges {

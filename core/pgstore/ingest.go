@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -35,10 +34,11 @@ type Cursor struct {
 // IsZero says the cursor has not moved: no pass has committed a page, and no refresh has finished.
 func (c Cursor) IsZero() bool { return c.UpdatedAt.IsZero() && c.ID == "" }
 
-// Refresh is a tenant's last full refresh: when it started and when it finished. The zero Refresh
-// is none recorded.
+// Refresh is a tenant's last full refresh: when it started and when it finished, and the facet
+// declaration it wrote its documents with (FacetsDigest). The zero Refresh is none recorded.
 type Refresh struct {
 	Started, Finished time.Time
+	Facets            string
 }
 
 // IngestError is a quarantined source row: its id in the source, why it failed last, when it first
@@ -89,7 +89,7 @@ func (b *Batch) SetCursor(ctx context.Context, c Cursor) error {
 // is.
 func (b *Batch) SetRefreshed(ctx context.Context, r Refresh) error {
 	err := b.s.rw.cursor.On(b.tx, dao.WithQueryContext(ctx)).
-		Set(kTenant, b.s.tenant).Set(kStarted, &r.Started).Set(kFinished, &r.Finished).Upsert()
+		Set(kTenant, b.s.tenant).Set(kStarted, &r.Started).Set(kFinished, &r.Finished).Set(kFacets, r.Facets).Upsert()
 	if err != nil {
 		return fmt.Errorf("pgstore: set refreshed: %w", err)
 	}
@@ -140,14 +140,14 @@ func (s *Store) Cursor(ctx context.Context) (Cursor, error) {
 
 // Refreshed is the tenant's last recorded full refresh; the zero Refresh when none is.
 func (s *Store) Refreshed(ctx context.Context) (Refresh, error) {
-	r, err := s.rw.cursor.DAO(dao.WithQueryContext(ctx)).With(kTenant, s.tenant).Get(kStarted, kFinished)
+	r, err := s.rw.cursor.DAO(dao.WithQueryContext(ctx)).With(kTenant, s.tenant).Get(kStarted, kFinished, kFacets)
 	switch {
 	case errors.Is(err, dao.ErrNoRows):
 		return Refresh{}, nil
 	case err != nil:
 		return Refresh{}, fmt.Errorf("pgstore: refreshed: %w", err)
 	}
-	var out Refresh
+	out := Refresh{Facets: r.RefreshFacets}
 	if r.RefreshStarted != nil {
 		out.Started = *r.RefreshStarted
 	}
@@ -176,59 +176,28 @@ func (s *Store) Quarantined(ctx context.Context, limit int) ([]IngestError, erro
 	return out, nil
 }
 
-// SetPolicy records the tenant's access policy, replacing any it had (ReplacePolicy).
+// SetPolicy records the tenant's access policy, replacing any it had. A policy with no access
+// field is refused (ErrNoAccess): there is no policy that turns access checking off. One whose
+// facets CheckFacets refuses is ErrFacetDecl.
 func (s *Store) SetPolicy(ctx context.Context, p Policy) error {
-	_, err := s.ReplacePolicy(ctx, p)
-	return err
-}
-
-// ReplacePolicy records the tenant's access policy, replacing any it had, and reports whether it
-// replaced one whose declared facets differ. Then, in the same transaction, the tenant's last
-// refresh is forgotten (Refreshed is zero), so its ingester refreshes at once: the facets'
-// values are kept with the documents, and an incremental pass would give the new declaration only
-// to the rows it reads. Forgotten with the policy, the refresh is due until one completes, even
-// across a restart.
-//
-// A policy with no access field is refused (ErrNoAccess): there is no policy that turns access
-// checking off. One whose facets CheckFacets refuses is ErrFacetDecl.
-func (s *Store) ReplacePolicy(ctx context.Context, p Policy) (facetsChanged bool, err error) {
 	if err := CheckAccessFields(p.AccessFields); err != nil {
-		return false, err
+		return err
 	}
 	if err := CheckFacets(p.AccessFields, p.Facets); err != nil {
-		return false, err
+		return err
 	}
 	facets, err := facetsJSON(p.Facets)
 	if err != nil {
-		return false, fmt.Errorf("pgstore: set policy: %w", err)
+		return fmt.Errorf("pgstore: set policy: %w", err)
 	}
 	err = dao.RunTx(ctx, func(tx *dao.Transaction) error {
-		old, err := s.rw.policy.On(tx, dao.WithQueryContext(ctx)).With(pTenant, s.tenant).Get(pFacets)
-		switch {
-		case errors.Is(err, dao.ErrNoRows):
-		case err != nil:
-			return err
-		default:
-			was, err := facetsOf(old.Facets)
-			if err != nil {
-				return err
-			}
-			facetsChanged = !maps.Equal(was, p.Facets) && (len(was) > 0 || len(p.Facets) > 0)
-		}
-		if err := s.rw.policy.On(tx, dao.WithQueryContext(ctx)).Set(pTenant, s.tenant).
-			Set(pAccess, slices.Clone(p.AccessFields)).Set(pView, p.View).Set(pFacets, facets).Upsert(); err != nil {
-			return err
-		}
-		if !facetsChanged {
-			return nil
-		}
-		return s.rw.cursor.On(tx, dao.WithQueryContext(ctx)).With(kTenant, s.tenant).
-			Set(kStarted, (*time.Time)(nil)).Set(kFinished, (*time.Time)(nil)).Update()
+		return s.rw.policy.On(tx, dao.WithQueryContext(ctx)).Set(pTenant, s.tenant).
+			Set(pAccess, slices.Clone(p.AccessFields)).Set(pView, p.View).Set(pFacets, facets).Upsert()
 	})
 	if err != nil {
-		return false, fmt.Errorf("pgstore: set policy: %w", err)
+		return fmt.Errorf("pgstore: set policy: %w", err)
 	}
-	return facetsChanged, nil
+	return nil
 }
 
 // Policy is the tenant's access policy: ErrNoPolicy when none is recorded.
