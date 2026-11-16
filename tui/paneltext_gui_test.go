@@ -17,7 +17,7 @@ import (
 // panel without them gets them at the next apply.
 func TestTheShellsTextIsAViewOfItsOwnInTheGUI(t *testing.T) {
 	agent, _ := fakeAgent(t)
-	_, r, _ := runSetupTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "fake", Command: agentCall(agent)}}, "fake",
+	_, r, _ := runSetupTUI(t, agentsFolder(t), []agents.AgentProfile{{Name: "fake", Command: agentCall(agent)}}, "fake",
 		map[string]string{"tui.agent.text.scale": "80"}, Options{GUI: true, Fonts: &fakeFonts{}})
 	tabs := onLoop(r, func() *terminal.TerminalTabs {
 		c, _ := r.h.p.Find("agentView")
