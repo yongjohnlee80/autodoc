@@ -1,5 +1,3 @@
-//go:build linux || darwin
-
 package tui
 
 import (
@@ -18,8 +16,8 @@ func TestAnAgentTabTakesWhatIsTypedWhileItsCLIStarts(t *testing.T) {
 	s := newHeldShell()
 	sm := seamsWithEnv(t, nil)
 	sm.setAgentSpawn(s.start)
-	profiles := []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}
-	_, r, _ := runSetupTUI(t, t.TempDir(), profiles, "heron", nil, Options{seams: sm})
+	profiles := []agents.AgentProfile{{Name: "heron", Command: agentCall(agent), Codename: "heron"}}
+	_, r, _ := runSetupTUI(t, agentsFolder(t), profiles, "heron", nil, Options{seams: sm})
 	t.Cleanup(s.free)
 	r.leader(t, 'g')
 	s.spawnOut(t)

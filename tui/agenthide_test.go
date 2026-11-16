@@ -1,5 +1,3 @@
-//go:build linux || darwin
-
 package tui
 
 import (
@@ -14,7 +12,7 @@ import (
 // (SPC g's own toggle), the agent running on, the same incarnation; opening it again shows its tab.
 func TestHideClosesTheAgentPanelAndKeepsTheAgents(t *testing.T) {
 	agent, _ := fakeAgent(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron")
+	_, r, _ := runAgentTUI(t, agentsFolder(t), []agents.AgentProfile{{Name: "heron", Command: agentCall(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	shown := func() bool { return onLoop(r, func() bool { return r.h.panelOpen["agent"] }) }
@@ -58,7 +56,7 @@ func TestHideClosesTheAgentPanelAndKeepsTheAgents(t *testing.T) {
 // is refused.
 func TestAClickOnMaximizeInTheAgentsMenu(t *testing.T) {
 	agent, _ := fakeAgent(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron")
+	_, r, _ := runAgentTUI(t, agentsFolder(t), []agents.AgentProfile{{Name: "heron", Command: agentCall(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	r.s.WaitFor(t, "the agents' panel open", func(string) bool { return onLoop(r, func() bool { return r.h.panelOpen["agent"] }) })
