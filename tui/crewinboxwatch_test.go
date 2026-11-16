@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -82,3 +83,18 @@ func (w *watchingInbox) Verbs() []module.Verb {
 // replyOpen is whether screen shows the reply dialog open on the request titled title: its title in
 // the dialog's own border (the request's toast says the same words between bars).
 func replyOpen(screen, title string) bool { return strings.Contains(screen, "┌ "+title+" ─") }
+
+// inboxListed is whether screen's Inbox dialog lists a request row for each subject: a line holding
+// the row's KIND and the subject. A request's toast says the subject too ("from asks: subject"), so
+// a subject on the screen alone is no sign the dialog's rows have come.
+func inboxListed(screen string, subjects ...string) bool {
+	lines := strings.Split(screen, "\n")
+	for _, subject := range subjects {
+		if !slices.ContainsFunc(lines, func(l string) bool {
+			return strings.Contains(l, "request ") && strings.Contains(l, subject) && !strings.Contains(l, " asks: ")
+		}) {
+			return false
+		}
+	}
+	return true
+}
