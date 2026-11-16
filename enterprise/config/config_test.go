@@ -201,6 +201,7 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 		{"ann ef_construction under twice m", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_m = 40\nann_ef_construction = 79"), "postgres.ann_ef_construction", "at least twice m (40)"},
 		{"ann ef_construction under twice the default m", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_ef_construction = 31"), "postgres.ann_ef_construction", "at least twice m (16)"},
 		{"ann exact scope docs below 0", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_exact_scope_docs = -1"), "postgres.ann_exact_scope_docs", "0 (always try the index) to 100000"},
+		{"ann exact scope docs over 100000", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_exact_scope_docs = 100001"), "postgres.ann_exact_scope_docs", "0 (always try the index) to 100000"},
 		{"ann defer backlog below 0", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_defer_backlog = -1"), "postgres.ann_defer_backlog", "0 (never defer) or more"},
 		{"ann defer max 0", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_defer_max = \"0s\""), "postgres.ann_defer_max", "a positive duration"},
 		{"ann defer max not a duration", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_defer_max = \"a day\""), "(file)", "duration"},

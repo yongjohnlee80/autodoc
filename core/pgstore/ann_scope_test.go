@@ -155,3 +155,74 @@ func TestAScopedViewPlansForItsArguments(t *testing.T) {
 		t.Errorf("a View with no scope sent %d settings statements; want none", len(open))
 	}
 }
+
+// A View's own access counts as the scope with no filter at all, which is a label's search: access
+// admitting at most ExactScopeDocs documents is answered exactly, the index untried, and access
+// admitting one more, or ten times as many, tries the index. The label "small" is on the corpus's
+// 200 "rare" documents and "mid" on its 2,000 "tenth" ones.
+func TestANN_AViewsAccessAloneIsASmallScope(t *testing.T) {
+	ctx := context.Background()
+	cfg := DefaultANNConfig()
+	cfg.Threshold, cfg.ExactScopeDocs = 1000, 200
+	conn, built := annSetup(t, cfg)
+	model := annModel(annDims)
+	annCorpus(t, conn, "t", model, 20000, annDims, 0.4)
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, q := range []string{
+		`UPDATE rag_document SET facets = CASE WHEN 'rare' = ANY(tags) THEN ARRAY['label_id=small', 'label_id=mid'] ELSE ARRAY['label_id=mid'] END
+		  WHERE tenant = 't' AND 'tenth' = ANY(tags)`,
+		`ANALYZE rag_document`,
+	} {
+		if _, err := tx.ExecContext(ctx, q); err != nil {
+			t.Fatalf("labels %q: %v", strings.Fields(q)[0], err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	buildFor(t, built, model)
+	exact, _ := New(conn, "t")
+	at, _ := New(conn, "t", WithANN(built))
+	under := cfg
+	under.ExactScopeDocs = 199
+	past, _ := New(conn, "t", WithANN(NewANN(conn, under, "access-below")))
+	q := queryVecs(t, conn, "t", model, 1)[0]
+
+	within := func(st *Store, label string) (int, []int64) {
+		t.Helper()
+		h := &annRan{}
+		withViewHook(t, h)
+		var out []search.Candidate[int64]
+		err := st.ViewWithin(ctx, map[string][]string{"label_id": {label}}, func(v *View) error {
+			var err error
+			out, err = v.Semantic(ctx, model, q, search.Filter{}, 10)
+			return err
+		})
+		viewHook = nil
+		if err != nil {
+			t.Fatal(err)
+		}
+		return h.cand, docsOf(out)
+	}
+	_, want := within(exact, "small")
+	if len(want) != 10 {
+		t.Fatalf("the exact answer within the small label: %d documents; want 10", len(want))
+	}
+	scoped, underfill := built.scopedOf(model).Load(), built.underfillOf(model).Load()
+	if cand, got := within(at, "small"); cand != 0 || !slices.Equal(got, want) {
+		t.Fatalf("access to 200 documents at a bound of 200: %d candidate stages, %v; want none and the exact answer %v", cand, got, want)
+	}
+	if d, u := built.scopedOf(model).Load()-scoped, built.underfillOf(model).Load()-underfill; d != 1 || u != 0 {
+		t.Fatalf("the small-scope count rose by %d and the underfill count by %d; want 1 and 0", d, u)
+	}
+	if cand, _ := within(past, "small"); cand != 1 {
+		t.Fatalf("access to 200 documents at a bound of 199: %d candidate stages; want the index tried", cand)
+	}
+	if cand, _ := within(at, "mid"); cand != 1 || built.scopedOf(model).Load()-scoped != 1 {
+		t.Fatalf("access to 2,000 documents at a bound of 200: %d candidate stages, the small-scope count at %d; want the index tried, and no count", cand, built.scopedOf(model).Load()-scoped)
+	}
+}

@@ -219,9 +219,9 @@ type file struct {
 		ANNScanMemMultiplier *float64 `toml:"ann_scan_mem_multiplier"`
 		ANNEfConstruction    *int     `toml:"ann_ef_construction"`
 		ANNM                 *int     `toml:"ann_m"`
-		// a model's first build waits for its bulk load, and the builder's memory
 		// a filtered search admitting at most this many documents is answered exactly, index untried
-		ANNExactScopeDocs     *int      `toml:"ann_exact_scope_docs"`
+		ANNExactScopeDocs *int `toml:"ann_exact_scope_docs"`
+		// a model's first build waits for its bulk load, and the builder's memory
 		ANNDeferBacklog       *int      `toml:"ann_defer_backlog"`
 		ANNDeferMax           *duration `toml:"ann_defer_max"`
 		ANNMaintenanceWorkMem *string   `toml:"ann_maintenance_work_mem"`
