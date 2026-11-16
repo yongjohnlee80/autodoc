@@ -369,8 +369,8 @@ func checkRequest(p pgstore.Policy, scope map[string][]string, r Request) ([]pgs
 			values[m[1]]++
 		}
 	}
-	for f, n := range values {
-		if n > MaxFacetValues {
+	for _, f := range sortedKeys(values) { // the first over the bound in name order, whatever the map's
+		if n := values[f]; n > MaxFacetValues {
 			return nil, fmt.Errorf("%w: the facet %s has %d values, the filter's and the query's (at most %d)", ErrFilter, f, n, MaxFacetValues)
 		}
 	}
