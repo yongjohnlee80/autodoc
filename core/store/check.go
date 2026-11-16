@@ -290,40 +290,69 @@ type sealed struct {
 // secretsCheck is each sealed secret the store's key does not open: every one, when the key file
 // is gone (which the check never makes).
 func (s *Store) secretsCheck(ctx context.Context) ([]string, error) {
-	var all []sealed
-	err := s.Read(ctx, func(tx *Tx) error {
-		conns, err := tx.t.connections.On(tx.tx).Select()
-		if err != nil {
-			return err
-		}
-		for _, c := range conns {
-			all = append(all, sealed{fmt.Sprintf("workspace %d's %s connection", c.WorkspaceID, c.Role), c.DSN, dsnAAD(c.WorkspaceID, c.Role)})
-		}
-		ps, err := s.providers().on(tx).Select()
-		if err != nil {
-			return err
-		}
-		for _, p := range ps {
-			if len(p.APIKey) > 0 {
-				all = append(all, sealed{fmt.Sprintf("embedding provider %q's API key", p.Name), p.APIKey, s.providers().aad(p.ID)})
-			}
-		}
-		rs, err := s.rankers().on(tx).Select()
-		if err != nil {
-			return err
-		}
-		for _, r := range rs {
-			if len(r.APIKey) > 0 {
-				all = append(all, sealed{fmt.Sprintf("ranker %q's API key", r.Name), r.APIKey, s.rankers().aad(r.ID)})
-			}
-		}
-		return nil
-	})
-	if err != nil || len(all) == 0 {
+	tx, err := s.r.Begin(ctx)
+	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = tx.Rollback() }()
+	all, err := s.sealedIn(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	return openEach(s.keys.path, all)
+}
+
+// sealedIn is every sealed secret q reads: each workspace connection's DSN, and each embedding
+// provider's and ranker's API key.
+func (s *Store) sealedIn(ctx context.Context, q dao.Querier) ([]sealed, error) {
+	var all []sealed
+	err := eachRow(ctx, q, `SELECT workspace_id, role, dsn FROM workspace_connection ORDER BY workspace_id, role`, func(scan func(...any) error) error {
+		var ws int64
+		var role string
+		var dsn []byte
+		if err := scan(&ws, &role, &dsn); err != nil {
+			return err
+		}
+		all = append(all, sealed{fmt.Sprintf("workspace %d's %s connection", ws, role), dsn, dsnAAD(ws, role)})
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, m := range []struct {
+		table, what string
+		aad         func(int64) string
+	}{
+		{"embedding_provider", "embedding provider", s.providers().aad},
+		{"ranker", "ranker", s.rankers().aad},
+	} {
+		err := eachRow(ctx, q, `SELECT id, name, api_key FROM `+m.table+` WHERE api_key IS NOT NULL ORDER BY id`, func(scan func(...any) error) error {
+			var id int64
+			var name string
+			var key []byte
+			if err := scan(&id, &name, &key); err != nil {
+				return err
+			}
+			if len(key) > 0 {
+				all = append(all, sealed{fmt.Sprintf("%s %q's API key", m.what, name), key, m.aad(id)})
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return all, nil
+}
+
+// openEach is each of all that the key at keyPath does not open; every one, naming the key's
+// problem, when the key is missing, exposed or the wrong size.
+func openEach(keyPath string, all []sealed) ([]string, error) {
+	if len(all) == 0 {
+		return nil, nil
+	}
 	var found []string
-	key, problem, err := readKeyForCheck(s.keys.path)
+	key, problem, err := readKeyForCheck(keyPath)
 	if err != nil {
 		return nil, err
 	}
@@ -343,6 +372,25 @@ func (s *Store) secretsCheck(ctx context.Context) ([]string, error) {
 		}
 	}
 	return found, nil
+}
+
+// eachRow runs query on q and calls row with each row's Scan.
+func eachRow(ctx context.Context, q dao.Querier, query string, row func(scan func(...any) error) error, args ...any) error {
+	rows, err := q.QueryContext(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		if err := row(rows.Scan); err != nil {
+			_ = rows.Close()
+			return err
+		}
+	}
+	err = rows.Err()
+	if cerr := rows.Close(); err == nil {
+		err = cerr
+	}
+	return err
 }
 
 // readKeyForCheck reads the store's key file afresh for a check, never the key the store keeps in

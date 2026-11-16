@@ -108,6 +108,54 @@ store ties to its file have their own answer:
 In the code: `app/serve.go` (openPostgresStore), `internal/endpoint` (WithStore, StoreLocation,
 CheckPostgresStore), `internal/client` (ForPaths), `core/store/postgres.go` (OpenAtWaiting, ID)
 
+## Copying a SQLite store into PostgreSQL
+
+`autodoc --copy-store-from <file.db>` copies a SQLite store into the config's store on PostgreSQL
+(the server build), all or nothing.
+
+- **Both stores are held** for the whole copy. The destination's writer lease is held, and so is
+  the source's writer, so a daemon serving either one refuses the copy. Opening the file applies
+  this build's scripts to it, as any start of this build would; the command says which ones before
+  it copies anything. The two stores must then name the same applied scripts.
+- **The destination must be empty.** There is no merge.
+- **What is copied:**
+  - every table both stores have, with the columns read from PostgreSQL's catalog and checked
+    against SQLite's;
+  - parents before the tables that reference them.
+
+  `chunk.tsv` is generated as each row lands. Left out:
+  - FTS5's tables and `sqlite_sequence`;
+  - each store's ledger of scripts;
+  - the writer lease;
+  - `store_identity`.
+- **Values.** A value that does not fit its column is refused. Examples: text in an integer column,
+  or text with a NUL byte or invalid UTF-8. Every such value is listed from one pass (table, column,
+  row key; the first 50, then a count), and nothing is committed.
+- **Ids and high-waters.** Rows keep their ids. Each identity sequence is set to the larger of its
+  column's highest id and SQLite's `sqlite_sequence`. An AUTOINCREMENT table (event, todo_change,
+  inbox_change) therefore never reuses a seq it gave out before deleting the rows above it.
+- **The copy is a new store.** It keeps the `store_id` its own first open wrote. A copy that kept
+  the file's id would make two stores answer to one name while the file still exists. A dump and
+  restore of the database is not a copy, and keeps its id.
+- **The key.** Sealed secrets are copied as their bytes, so the destination's `key_file` must hold
+  the file's key.
+  - If the destination has no key file, the file's key is written there, private to the user.
+  - If it has the same key, the copy goes ahead.
+  - If it has another key, the copy is refused before any row moves.
+
+  The key's bytes are never printed or logged.
+- **One transaction.**
+  - The source is read from one snapshot. The destination is written in one fenced transaction,
+    streamed through COPY in batches of at most 10,000 rows or 8 MB.
+  - Before the commit, each table's row count must equal the file's and every sealed secret must
+    open with the destination's key. The lease is then fenced again: the lease renews on its own
+    connection throughout, and a copy that outlasted it is rolled back.
+  - The transaction stays busy throughout, as its batches go. The writer's session ends a
+    transaction left idle for twice the lease's length; that, too, rolls the copy back.
+  - After the commit, the copied tables are analyzed, so the first searches plan with statistics.
+
+In the code: `core/store/copy.go` (CopySQLite), `app/copystore.go`
+
 ## Workspace settings saved together
 
 A workspace's settings are edited in one dialog with two tabs. Edit is what the workspace is and

@@ -240,6 +240,11 @@ func (c fencedConn) Begin(ctx context.Context) (dao.TxConn, error) {
 	return tx, nil
 }
 
+// fence confirms, in q's transaction, that the store's lease is still this process's and unexpired,
+// and holds it against a takeover until that transaction ends: what every write transaction's
+// Begin runs, run again by a long one (the copy) just before it commits.
+func (pg *pgStore) fence(ctx context.Context, q dao.Querier) error { return pg.lease.Fence(ctx, q) }
+
 // leaseConn is a store on PostgreSQL's lease pool, for a cell that reaches the lease's row; nil for
 // a SQLite store.
 func (s *Store) leaseConn() dao.DataConn {
