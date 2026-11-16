@@ -105,7 +105,8 @@ sends it only when every place that wraps the error says nothing but the caller'
 the module's rules: no host path the caller didn't give, no other workspace's name, no secret.
 The rest send the message alone. The code stays the contract, and the catalog's message stays
 the prefix, so anything matching on either is unchanged. Today these entries send their detail:
-`todos.invalid`, `mail.no_recipient`, `mail.too_large` and `inbox.too_large`.
+`todos.invalid`, `todos.stale`, `todos.not_found`, `todos.exists`, `mail.no_recipient`,
+`mail.too_large` and `inbox.too_large`.
 
 This gives AutoDoc one place per verb instead of a handful of hand-kept copies that drift apart. The
 convention itself is described in [architecture.md §4](../architecture.md#4-the-convention).
