@@ -69,7 +69,7 @@ func TestHAndLSwitchBuffers(t *testing.T) {
 // TestHAndLStayOutOfTheTerminal: with the keyboard in the terminal, L is the shell's, and the
 // buffer stays.
 func TestHAndLStayOutOfTheTerminal(t *testing.T) {
-	_, r := runShellTUI(t, nil)
+	_, r := runLineShellTUI(t, nil)
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
 	onLoop(r, func() bool { r.h.newEmptyBuffer(); return true })
