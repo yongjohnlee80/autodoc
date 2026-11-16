@@ -208,15 +208,8 @@ func TestAToastClickedOpensTheNotificationsHistory(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{"tui.toast.seconds": "10"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.connected(t)
-	var x, y = -1, -1
-	for i, row := range strings.Split(r.s.String(), "\n") {
-		if j := strings.Index(row, "connected — autodoc v-test"); j >= 0 {
-			x, y = len([]rune(row[:j])), i
-		}
-	}
-	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y},
-		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x, Y: y})
-	r.s.WaitFor(t, "the history open", func(string) bool { return onLoop(r, func() bool { return r.h.noticeLog.Shown }) })
+	// another toast coming or going moves this one: clicked until the history is open
+	r.clickToast(t, "connected — autodoc v-test", func() bool { return onLoop(r, func() bool { return r.h.noticeLog.Shown }) })
 	r.s.WaitForText(t, "TIME")
 }
 
