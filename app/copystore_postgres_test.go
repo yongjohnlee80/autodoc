@@ -5,6 +5,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -19,8 +20,9 @@ import (
 
 // --copy-store-from copies a SQLite store into the config's store on PostgreSQL, and a daemon on
 // that config then serves the copy's workspaces. It is refused while the file is held (its daemon
-// serving it), and for a config whose store is SQLite. The report names each table and ends with
-// what the copy did not do.
+// serving it), and for a config whose store is SQLite; a destination with rows is refused before
+// the file is opened, so the file is left as it was. The report names each table and ends with
+// what the copy did not do. The mutant, named here: the file opened before the destination.
 func TestCopyStoreFromFillsTheStoreADaemonThenServes(t *testing.T) {
 	skipOnPipes(t)
 	ctx := context.Background()
@@ -56,6 +58,17 @@ func TestCopyStoreFromFillsTheStoreADaemonThenServes(t *testing.T) {
 			t.Errorf("the report does not say %q:\n%s", want, out.String())
 		}
 	}
+
+	// a second copy into the now-full destination is refused for it before the file is opened:
+	// the file held as a daemon would hold it, the refusal is still the destination's
+	held, err = store.Open(ctx, file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runCopyStore(ctx, cfg, file, &bytes.Buffer{}); !errors.Is(err, store.ErrCopyNotEmpty) {
+		t.Errorf("a copy into a destination with rows, its file held: %v, want ErrCopyNotEmpty before the file is opened", err)
+	}
+	_ = held.Close()
 
 	start(t, cfg, sock)
 	cli := dial(t, sock)
