@@ -67,7 +67,7 @@ func TestMigration000004AddsTheSourceIDOverAPopulatedSchema(t *testing.T) {
 		t.Errorf("a batch's Put again stored %q, want 43", got)
 	}
 
-	for _, n := range []int{8, 7, 6, 5, 4} { // the latest first, down to 000004
+	for _, n := range []int{9, 8, 7, 6, 5, 4} { // the latest first, down to 000004
 		if _, err := deploy.New(migrations, deploy.Ledger(Ledger)).Revert(ctx, conn, n); err != nil {
 			t.Fatalf("reverting %06d: %v", n, err)
 		}

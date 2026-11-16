@@ -328,8 +328,25 @@ func (in *Ingester) Pass(ctx context.Context) (Stats, error) {
 		}
 		cur = next
 	}
+	if st.Written >= mergeAfter {
+		in.merge(ctx)
+	}
 	in.count(ctx, &st)
 	return st, nil
+}
+
+// mergeAfter is how many documents a pass writes before it merges the text index's pending list
+// (a variable, so a cell can lower it): a load, such as a new tenant's first pass. A refresh that
+// wrote any merges too.
+var mergeAfter = 1000
+
+// merge merges the text index's pending list (pgstore's MergePending), which every lexical search
+// reads whole until it is merged. A failure is logged: the list stays until the next merge or
+// VACUUM, and searches are only slower meanwhile.
+func (in *Ingester) merge(ctx context.Context) {
+	if _, err := in.st.MergePending(ctx); err != nil && ctx.Err() == nil {
+		logger.Warning(in.o.Log, err, "tenant "+in.tenant+": merging the text index's pending list")
+	}
 }
 
 // retry reads the view from its start for the quarantined rows, as Pass says.
@@ -519,6 +536,9 @@ func (in *Ingester) Refresh(ctx context.Context) (Stats, error) {
 		return st, err
 	}
 	in.facetsDue.Store(false) // this refresh wrote the source's declaration (finish)
+	if st.Written > 0 {
+		in.merge(ctx)
+	}
 	in.count(ctx, &st)
 	return st, nil
 }
