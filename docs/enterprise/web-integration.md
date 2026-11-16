@@ -159,7 +159,7 @@ A source declares the row fields a search may filter on, each with a type, in it
   - Matching is exact, case included: send a value as the record holds it. Tags alone are
     lowercased.
   - A query word `status:released` is the same filter, for a declared keyword facet.
-  - At most 64 values per field.
+  - At most 64 values per field, its query words included.
 - **`ranges`** filter number and date facets: `gt`, `gte`, `lt` and `lte`, at least one per
   field, at most 16 fields.
   - A bound is a number, or a string read as the facet's values are: a number from a decimal, a

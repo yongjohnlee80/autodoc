@@ -196,6 +196,7 @@ func TestEveryFacetRefusalIsNamed(t *testing.T) {
 		{"a facet with no value", Request{Query: "x", Filter: gsearch.Filter{Facets: map[string][]string{"status": {}}}}, ErrFilter, "status"},
 		{"too many values", Request{Query: "x", Filter: gsearch.Filter{Facets: map[string][]string{"status": many(MaxFacetValues + 1)}}}, ErrFilter, "at most 64"},
 		{"too many ranges", Request{Query: "x", Ranges: ranges}, ErrFilter, "at most 16"},
+		{"too many values with the query's words", Request{Query: "x status:extra", Filter: gsearch.Filter{Facets: map[string][]string{"status": many(MaxFacetValues)}}}, ErrFilter, "the filter's and the query's"},
 		{"a range with no bound", Request{Query: "x", Ranges: map[string]Range{"bpm": {}}}, ErrFilter, "bpm"},
 		{"crossed bounds", Request{Query: "x", Ranges: map[string]Range{"bpm": {Gt: "130", Lt: "120"}}}, ErrFilter, "bpm"},
 	} {
