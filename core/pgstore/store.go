@@ -238,16 +238,22 @@ func accessPredicates(access map[string][]string) ([]dao.Predicate, error) {
 		fields = append(fields, f)
 	}
 	slices.Sort(fields)
-	facets := dao.ArrayOp("facet", qcol(tDoc, string(dFacets)))
 	preds := make([]dao.Predicate, 0, len(fields))
 	for _, f := range fields {
-		ors := make([]dao.Predicate, 0, len(access[f]))
-		for _, v := range access[f] {
-			ors = append(ors, facets.Predicate(f+"="+v))
-		}
-		preds = append(preds, dao.Or(ors...))
+		preds = append(preds, anyFacet(f, access[f]))
 	}
 	return preds, nil
+}
+
+// anyFacet is "the document has one of field's vals": the facets array overlapping the field=value
+// pairs, which the GIN index on facets answers. The membership form (pair = ANY(facets)) reads the
+// same rows but no index: every scoped read then scanned the tenant's documents.
+func anyFacet(field string, vals []string) dao.Predicate {
+	pairs := make([]string, len(vals))
+	for i, v := range vals {
+		pairs[i] = field + "=" + v
+	}
+	return dao.Raw(qcol(tDoc, string(dFacets))+" && ?", pairs)
 }
 
 var _ search.Store[int64, *View] = (*Store)(nil)
@@ -778,22 +784,21 @@ func pathFilter(col string, paths []string) dao.Predicate {
 // ORed, facet values ORed within a field and fields ANDed.
 func filters(f search.Filter) []dao.Predicate {
 	var ps []dao.Predicate
-	tags := dao.ArrayOp("tag", qcol(tDoc, string(dTags)))
-	for _, t := range f.Tags {
-		ps = append(ps, tags.Predicate(t))
+	if len(f.Tags) > 0 { // every tag: the array containing them all, which the GIN index on tags answers
+		ps = append(ps, dao.Raw(qcol(tDoc, string(dTags))+" @> ?", slices.Clone(f.Tags)))
 	}
 	if p := pathFilter(qcol(tDoc, string(dPath)), f.Paths); p != nil {
 		ps = append(ps, p)
 	}
-	facets := dao.ArrayOp("facet", qcol(tDoc, string(dFacets)))
+	fields := make([]string, 0, len(f.Facets))
 	for field, vals := range f.Facets {
-		var ors []dao.Predicate
-		for _, v := range vals {
-			ors = append(ors, facets.Predicate(field+"="+v))
+		if len(vals) > 0 {
+			fields = append(fields, field)
 		}
-		if len(ors) > 0 {
-			ps = append(ps, dao.Or(ors...))
-		}
+	}
+	slices.Sort(fields) // one statement text per filter shape, whatever the map's order
+	for _, field := range fields {
+		ps = append(ps, anyFacet(field, f.Facets[field]))
 	}
 	return ps
 }

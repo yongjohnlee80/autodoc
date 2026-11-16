@@ -25,9 +25,10 @@ PostgreSQL with the `vector` extension available (the migration creates it).
 - **Semantic:** an exact scan ordered by `dao.Distance(…, dao.Cosine)` over documents ready under
   the active model; `search.ErrModelChanged` for another model; `StateSwitching` while a target
   model fills, `StatePartial` while a document is not ready.
-- **Filters** in the same WHERE, before rank and limit: tags ANDed (`ArrayOp`), paths ORed and
+- **Filters** in the same WHERE, before rank and limit: tags ANDed (`tags @> …`, the GIN index's), paths ORed and
   literal (`dao.HasPrefix`, so `%`, `_`, `\` and `!` match themselves), facet values ORed within a
-  field and ANDed across fields. Paths compare byte by byte.
+  field (`facets && …`, the GIN index's) and ANDed across fields. A scoped View plans each statement
+  for its own arguments, since a scope's cost turns on how many documents it admits. Paths compare byte by byte.
 - **Writer:** `Put` replaces a document's chunks and links in one transaction and bumps its
   generation, storing the source `Version` and the `Indexer` identity verbatim and each chunk's
   `Embed` text; `Embed` stores vectors; `MarkReady` marks a document ready when every chunk has a

@@ -183,6 +183,9 @@ type statements struct {
 }
 
 func (s *statements) BeforeExec(_ context.Context, q *dao.QueryInfo) error {
+	if q.Op == dao.OpLocalSettings || q.Op == dao.OpLocalRestore {
+		return nil // a scoped View's plan setting around each statement, not a statement of its own
+	}
 	s.got = append(s.got, dao.QueryInfo{Op: q.Op, Table: q.Table, SQL: q.SQL, Args: slices.Clone(q.Args)})
 	return nil
 }
@@ -237,11 +240,11 @@ func TestScopedSignalsFilterLinksBySourceInSQL(t *testing.T) {
 	if !strings.Contains(q.SQL, join) {
 		t.Errorf("the in-link query does not join the linking document:\n%s", q.SQL)
 	}
-	if n := strings.Count(q.SQL, "= ANY(rag_document.facets)"); n != 3 {
-		t.Errorf("the in-link query tests the linking document's facets %d times, want 3 (A, B, US):\n%s", n, q.SQL)
+	if n := strings.Count(q.SQL, "rag_document.facets && "); n != 2 {
+		t.Errorf("the in-link query tests the linking document's facets %d times, want 2 (label_id's A or B, territory's US):\n%s", n, q.SQL)
 	}
-	for _, want := range []string{"label_id=A", "label_id=B", "territory=US"} {
-		if !slices.Contains(q.Args, any(want)) {
+	for _, want := range [][]string{{"label_id=A", "label_id=B"}, {"territory=US"}} {
+		if !slices.ContainsFunc(q.Args, func(a any) bool { got, _ := a.([]string); return slices.Equal(got, want) }) {
 			t.Errorf("the in-link query does not bind %q: %v", want, q.Args)
 		}
 	}

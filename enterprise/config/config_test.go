@@ -157,13 +157,13 @@ func TestTheSearchAndMetricsSettingsLoad(t *testing.T) {
 	if s.Postgres.ANN != pgstore.DefaultANNConfig() || s.Metrics.Enabled {
 		t.Errorf("unset: ANN %+v, metrics %+v; want pgstore's defaults and none", s.Postgres.ANN, s.Metrics)
 	}
-	src := strings.Replace(good, `schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_threshold = 1\nann_max_scan_tuples = 2147483647\nann_scan_mem_multiplier = 1000\nann_m = 8\nann_ef_construction = 16\nann_defer_backlog = 0\nann_defer_max = \"90m\"\nann_maintenance_work_mem = \"2048kB\"", 1)
+	src := strings.Replace(good, `schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_threshold = 1\nann_max_scan_tuples = 2147483647\nann_scan_mem_multiplier = 1000\nann_m = 8\nann_ef_construction = 16\nann_exact_scope_docs = 250\nann_defer_backlog = 0\nann_defer_max = \"90m\"\nann_maintenance_work_mem = \"2048kB\"", 1)
 	src = strings.Replace(src, `listen = "127.0.0.1:8730"`, "", 1)
 	src = strings.Replace(src, "[[source]]", "[[http.operator]]\nname = \"ops\"\ntoken_env = \"TEST_OPS_TOKEN\"\ntenants = [\"*\"]\n\n[[source]]", 1) + "\n[metrics]\nenabled = true\n"
 	if s, err = load(t, src); err != nil {
 		t.Fatal(err)
 	}
-	if want := (pgstore.ANNConfig{Threshold: 1, MaxScanTuples: 2147483647, ScanMemMultiplier: 1000, M: 8, EfConstruction: 16, DeferBacklog: 0, DeferMax: 90 * time.Minute, MaintenanceWorkMem: "2048kB"}); s.Postgres.ANN != want {
+	if want := (pgstore.ANNConfig{Threshold: 1, MaxScanTuples: 2147483647, ScanMemMultiplier: 1000, M: 8, EfConstruction: 16, ExactScopeDocs: 250, DeferBacklog: 0, DeferMax: 90 * time.Minute, MaintenanceWorkMem: "2048kB"}); s.Postgres.ANN != want {
 		t.Errorf("ANN %+v, want %+v", s.Postgres.ANN, want)
 	}
 	if s.HTTP.Listen != config.DefaultListen || !s.Metrics.Enabled {
@@ -200,6 +200,7 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 		{"ann ef_construction 1001", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_ef_construction = 1001"), "postgres.ann_ef_construction", "4 to 1000"},
 		{"ann ef_construction under twice m", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_m = 40\nann_ef_construction = 79"), "postgres.ann_ef_construction", "at least twice m (40)"},
 		{"ann ef_construction under twice the default m", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_ef_construction = 31"), "postgres.ann_ef_construction", "at least twice m (16)"},
+		{"ann exact scope docs below 0", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_exact_scope_docs = -1"), "postgres.ann_exact_scope_docs", "0 (always try the index) to 100000"},
 		{"ann defer backlog below 0", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_defer_backlog = -1"), "postgres.ann_defer_backlog", "0 (never defer) or more"},
 		{"ann defer max 0", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_defer_max = \"0s\""), "postgres.ann_defer_max", "a positive duration"},
 		{"ann defer max not a duration", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_defer_max = \"a day\""), "(file)", "duration"},

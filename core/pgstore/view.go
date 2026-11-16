@@ -78,8 +78,23 @@ func (v *View) CandidateSourceIDs(ctx context.Context) (map[string]string, error
 // effect on the rows.
 var viewHook dao.Hook
 
-// opts are the query options of every statement a View runs: its context, and viewHook when set.
+// opts are the query options of every statement a View runs: its context, viewHook when set, and,
+// in a scoped View, a plan made for the statement's own arguments (plan_cache_mode =
+// force_custom_plan, for the statement alone). A scoped retrieval's cost turns on how many
+// documents its scope admits, which the planner reads from the facets it is given: a plan kept for
+// any arguments guesses one selectivity for every scope, and drove a search of all of a tenant's
+// labels from the document table, 168,000 chunks one by one, in 1.3 s.
 func (v *View) opts(ctx context.Context) []dao.QueryOption {
+	o := v.plain(ctx)
+	if len(v.access) > 0 {
+		o = append(o, dao.WithLocalSettings(postgres.PlanCacheMode("force_custom_plan")))
+	}
+	return o
+}
+
+// plain are opts without the plan setting, for a statement that brings its own settings (the
+// candidate stage's).
+func (v *View) plain(ctx context.Context) []dao.QueryOption {
 	if viewHook != nil {
 		return []dao.QueryOption{dao.WithQueryContext(ctx), dao.WithHooks(viewHook)}
 	}

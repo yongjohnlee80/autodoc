@@ -250,6 +250,7 @@ func TestANN_Recall(t *testing.T) {
 	}
 	cfg := DefaultANNConfig()
 	cfg.Threshold = 1000
+	cfg.ExactScopeDocs = 0 // the index's own recall: every search tries it, a 1% filter's too
 	conn, a := annSetup(t, cfg)
 	model := annModel(annDims)
 	annCorpus(t, conn, "big", model, 100000, annDims, 0.1)
@@ -345,6 +346,7 @@ func TestANN_Recall(t *testing.T) {
 func TestANN_FillAndFallback(t *testing.T) {
 	cfg := DefaultANNConfig()
 	cfg.Threshold, cfg.MaxScanTuples = 1000, 200
+	cfg.ExactScopeDocs = 0 // the 1% filter's 200 documents are tried through the index, whose budget runs out
 	conn, built := annSetup(t, cfg)
 	model := annModel(annDims)
 	annCorpus(t, conn, "t", model, 20000, annDims, 0.4)
