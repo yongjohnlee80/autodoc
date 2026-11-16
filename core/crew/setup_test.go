@@ -219,10 +219,11 @@ func TestOpenCodeWithAllowKeepsTheAgentsOwnPermission(t *testing.T) {
 // added (its cwd is the user's project); and the launch prompt that runs the bridge alone. Its
 // prompts are reported (the bridge), and nothing goes in its env.
 func TestSetupForAgyGivesItsMailAsMCPTools(t *testing.T) {
+	a, p := rooted("a"), rooted("p") // absolute on every OS
 	servers := []crew.MCPServer{{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"},
 		Env: map[string]string{"AUTODOC_CREW_CONTEXT": "/c/ctx"}, Tools: []string{"mail_receive", "mail_ack"}}}
 	for _, host := range []string{crew.HostWindow, crew.HostNvim} {
-		s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindAgy, Host: host, AgentDir: "/a", Dir: "/p", Servers: servers,
+		s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindAgy, Host: host, AgentDir: a, Dir: p, Servers: servers,
 			Env: map[string]string{"PATH": "/x", "SECRET": "s3"}}, "")
 		if err != nil {
 			t.Fatal(err)
@@ -243,7 +244,7 @@ func TestSetupForAgyGivesItsMailAsMCPTools(t *testing.T) {
 		}
 		want := []string{"--settings", "", "-i", crew.AgyLaunchPrompt}
 		if host == crew.HostNvim {
-			want = []string{"--settings", "", "--add-dir", "/a", "-i", crew.AgyLaunchPrompt}
+			want = []string{"--settings", "", "--add-dir", a, "-i", crew.AgyLaunchPrompt}
 		}
 		if len(s.Argv) != len(want) {
 			t.Fatalf("%s: argv %q, want the shape %q", host, s.Argv, want)
@@ -263,9 +264,9 @@ func TestSetupForAgyGivesItsMailAsMCPTools(t *testing.T) {
 			t.Fatal(err)
 		}
 		rules := []string{"command(autodoc crew bridge --agy)", "command(autodoc --contracts)", "mcp(autodoc/mail_receive)", "mcp(autodoc/mail_ack)"}
-		trusted := []string{"/a"} // the window's working folder is the agent's folder
+		trusted := []string{a} // the window's working folder is the agent's folder
 		if host == crew.HostNvim {
-			trusted = []string{"/a", "/p"} // Neovim's is the user's project, the agent's folder added
+			trusted = []string{a, p} // Neovim's is the user's project, the agent's folder added
 		}
 		if !slices.Equal(settings.Permissions.Allow, rules) || !slices.Equal(s.Allow, rules) || !slices.Equal(settings.Trusted, trusted) {
 			t.Errorf("%s: --settings %s (Allow %q), want exactly %q and %q trusted", host, s.Argv[1], s.Allow, rules, trusted)
@@ -275,7 +276,7 @@ func TestSetupForAgyGivesItsMailAsMCPTools(t *testing.T) {
 		}
 	}
 	// the crew's own server has no env of its own (it inherits the agent's): its config says none
-	s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindAgy, Host: crew.HostWindow, AgentDir: "/a",
+	s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindAgy, Host: crew.HostWindow, AgentDir: a,
 		Servers: []crew.MCPServer{{Name: "autodoc", Command: []string{"/x/autodoc", "crew", "mcp"}, Tools: []string{"mail_receive"}}}}, "")
 	if err != nil || len(s.FolderFiles) != 2 || s.FolderFiles[0].Path != ".agents/mcp_config.json" || strings.Contains(s.FolderFiles[0].Content, `"env"`) {
 		t.Errorf("a server with no env: %+v %v, want its config without an env", s.FolderFiles, err)
@@ -296,8 +297,9 @@ func TestSetupForAgyGivesItsMailAsMCPTools(t *testing.T) {
 // relative or missing one adds nothing, and nothing is ever trusted beyond the session's --settings.
 func TestSetupForAgyTrustsNeovimsWorkingFolderOnlyWhenItIsAPath(t *testing.T) {
 	servers := []crew.MCPServer{{Name: "autodoc", Command: []string{"autodoc", "crew", "mcp"}, Tools: []string{"mail_receive"}}}
-	for dir, want := range map[string][]string{"": {"/a"}, "p": {"/a"}, "/a": {"/a"}, "/p": {"/a", "/p"}} {
-		s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindAgy, Host: crew.HostNvim, AgentDir: "/a", Dir: dir, Servers: servers}, "")
+	a, p := rooted("a"), rooted("p") // absolute on every OS
+	for dir, want := range map[string][]string{"": {a}, "p": {a}, a: {a}, p: {a, p}} {
+		s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindAgy, Host: crew.HostNvim, AgentDir: a, Dir: dir, Servers: servers}, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -772,7 +774,7 @@ func TestTheCodexProbeCutsOffAChildHoldingItsOutputAtOnce(t *testing.T) {
 	crew.SetCodexProbeTimeout(t, 4*time.Second)
 	bin := newCodex(t, codexPlays{"version", "0.163.0", "hold", ""})
 	start := time.Now()
-	s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostNvim, Env: map[string]string{"PATH": bin}, Dir: t.TempDir()}, "")
+	s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostNvim, Env: map[string]string{"PATH": bin}, Dir: lingeringDir(t)}, "")
 	if err == nil || !strings.Contains(err.Error(), "--no-daemon") {
 		t.Errorf("%+v %v; want the start refused, naming --no-daemon", s, err)
 	}
@@ -906,4 +908,9 @@ func TestSetupForJunieGivesItsMailAsMCPTools(t *testing.T) {
 		strings.Contains(g, "autodoc mail receive") {
 		t.Errorf("Junie's MCP guide:\n%s\nwant the tools, the no-waker step, and no mail command", g)
 	}
+}
+
+// rooted is name in the file system's root: an absolute path on every OS (/a; C:\a on Windows).
+func rooted(name string) string {
+	return filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), name)
 }
