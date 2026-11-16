@@ -122,6 +122,10 @@ func TestAModifiedTaskFollowsItsMoveAndAsks(t *testing.T) {
 	t.Parallel()
 	r, root, m, task := onTodoDisk(t)
 	from, to := ".todo-list/"+task.Path, ".todo-list/deferred/"+task.ID+".md"
+	opened, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(from)))
+	if err != nil {
+		t.Fatal(err)
+	}
 	r.typeInEditor(t, "X")
 	r.waitTyped(t)
 	if _, err := m.Status(context.Background(), alphaTodos, task.ID, task.Rev, "deferred"); err != nil {
@@ -130,6 +134,11 @@ func TestAModifiedTaskFollowsItsMoveAndAsks(t *testing.T) {
 	r.s.WaitFor(t, "the buffer on "+to, func(string) bool { return r.file().path == to })
 	if f := r.file(); !f.dirty || f.disk != diskChanged || !strings.HasPrefix(r.editorText(), "X") {
 		t.Fatalf("after the move: dirty %v, disk %v, text %q; want the edits kept, badged changed", f.dirty, f.disk, r.editorText())
+	}
+	// the text opened is still the base: a Compare merges the move's status line and the edits
+	// three ways
+	if f := r.file(); !f.baseOK || f.base != asEditorText(string(opened)) {
+		t.Fatalf("the base after the move: %q (kept %v); want the text opened, %q", f.base, f.baseOK, opened)
 	}
 	waitNoticed(t, r, from+" moved to "+to)
 	r.keys(t, decltest.Ctrl('s'))
