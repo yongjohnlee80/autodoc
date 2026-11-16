@@ -97,7 +97,7 @@ func TestATextUsersNormalModeSaysHowToGetBack(t *testing.T) {
 // says how to get back.
 func TestATextUsersAgentNormalModeSaysHowToGetBack(t *testing.T) {
 	agent, _ := fakeAgent(t)
-	_, r, _ := runAgentTUIWith(t, t.TempDir(), []agents.AgentProfile{{Name: "fake", Command: agents.ShellQuote(agent)}}, "fake",
+	_, r, _ := runSetupTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "fake", Command: agents.ShellQuote(agent)}}, "fake",
 		map[string]string{prefKeymap: "text"}, Options{})
 	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true }) // SPC g: the text editor's keys have no SPC
 	r.s.WaitForText(t, "agent · fake")
