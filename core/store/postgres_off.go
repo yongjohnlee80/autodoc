@@ -5,6 +5,8 @@ package store
 import (
 	"context"
 	"time"
+
+	"github.com/yongjohnlee80/golib/dao"
 )
 
 // pgStore is a store on PostgreSQL's own state; a build without the server tag has none, so a
@@ -19,6 +21,9 @@ type pgStore struct {
 var leaseTTL time.Duration
 
 func (pg *pgStore) close() error { return nil }
+
+// fence is ErrNoPostgresInThisBuild: there is no lease without the server build.
+func (pg *pgStore) fence(context.Context, dao.Querier) error { return ErrNoPostgresInThisBuild }
 
 // openPostgres is ErrNoPostgresInThisBuild: the PostgreSQL store is the server build's.
 func openPostgres(context.Context, Location, ...Option) (*Store, error) {

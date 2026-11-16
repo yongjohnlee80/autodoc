@@ -385,6 +385,22 @@ PostgreSQL: its database server checks and vacuums it. Search works as on SQLite
 uses PostgreSQL's full-text search, and semantic search scans the store's vectors in the daemon's
 memory, as it does on SQLite.
 
+To move an existing SQLite store onto PostgreSQL:
+
+1. Back up the store's file (`autodoc.db` in the data directory) and its key (`autodoc.db.key`).
+   The copy applies this build's scripts to the file, as an upgrade would.
+2. Stop the daemon serving it: `autodoc --call sys.shutdown`.
+3. Set `[store]` as above, and export the variable `dsn_env` names.
+4. Run `autodoc --copy-store-from <data dir>/autodoc.db`. It copies into an empty schema, in one
+   transaction, and keeps every id. It prints each table's rows, then what it did not do: the file
+   is left as it was, apart from those scripts, and no daemon was started. A value that does not
+   fit PostgreSQL's column (text with a NUL byte, say) is listed with its table, column and row,
+   and nothing is copied.
+5. Start the daemon. It serves the copy, under a `store_id` of its own.
+
+The store's key goes with it: the copy writes the file's key to `key_file` when there is none
+there, and refuses a `key_file` holding another key.
+
 `[mail] keep_handled` is how long the crew's mail is kept once it was handled: acked, read,
 answered, dismissed or expired. The daemon deletes older handled mail once when it starts and then
 once a day, with the Inbox's history behind it. An unread report or an open request is kept
