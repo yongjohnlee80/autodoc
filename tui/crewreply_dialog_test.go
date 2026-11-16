@@ -28,8 +28,10 @@ func TestANewRequestDoesNotKeepAnotherRequestsAnswer(t *testing.T) {
 	r.connected(t)
 	r.s.WaitForText(t, "agent-b asks: question-B") // the toasts: the window's crew inbox holds both open
 	onLoop(r, func() bool { r.h.runEntry("crew.inbox"); return true })
-	r.s.WaitFor(t, "the inbox drawn", func(sc string) bool {
-		return strings.Contains(sc, "Inbox — All") && strings.Contains(sc, "question-A") && strings.Contains(sc, "question-B")
+	// the dialog's rows, not only its title: the toasts say both subjects already, and a Reply on a
+	// row not listed yet does nothing
+	r.s.WaitFor(t, "the inbox's rows drawn", func(sc string) bool {
+		return strings.Contains(sc, "Inbox — All") && inboxListed(sc, "question-A", "question-B")
 	})
 	reply := func(row string) {
 		t.Helper()
