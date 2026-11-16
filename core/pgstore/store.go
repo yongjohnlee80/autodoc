@@ -668,6 +668,9 @@ func (s *Store) Drop(ctx context.Context) error {
 		}
 		return nil
 	})
+	if s.ann != nil {
+		s.ann.forget(s.tenant) // a drop that failed forgets too: a probe costs only a read
+	}
 	if err != nil {
 		return fmt.Errorf("pgstore: drop: %w", err)
 	}
@@ -750,6 +753,9 @@ func (s *Store) ReclaimModels(ctx context.Context) (int, error) {
 			n = len(rows)
 			return nil
 		})
+		if n > 0 && s.ann != nil {
+			s.ann.forget(s.tenant) // what the approximate search remembers of its embeddings
+		}
 		if err != nil {
 			return total, fmt.Errorf("pgstore: reclaiming models: %w", err)
 		}

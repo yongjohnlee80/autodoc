@@ -322,7 +322,10 @@ func BenchmarkLMShape(b *testing.B) {
 	chunks := c.seed(ctx, b, st)
 	seedTime := time.Since(t0)
 	b.Logf("seeded %d documents, %d chunks, %d-d vectors in %s", n, chunks, lmDims, seedTime.Round(time.Second))
-	if _, err := conn.ExecContext(ctx, "ANALYZE"); err != nil {
+	// VACUUM, not ANALYZE alone: the steady state a server reaches once autovacuum has run. Right
+	// after a bulk load the GIN indexes still hold their pending lists, which every scoped search
+	// then reads whole (a small label's hybrid search took 11.7 ms, against 5.8 after a VACUUM).
+	if _, err := conn.ExecContext(ctx, "VACUUM (ANALYZE)"); err != nil {
 		b.Fatal(err)
 	}
 
