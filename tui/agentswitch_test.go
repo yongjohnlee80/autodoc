@@ -32,7 +32,7 @@ func TestAnAgentIsToldOfAWorkspaceSwitch(t *testing.T) {
 	agent, report := recordingAgent(t, true)
 	dir := t.TempDir()
 	files := map[string][]string{"kb": {"a.md", "a\n"}, "notes": {"b.md", "b\n"}}
-	_, r, _ := runAgentTUIIn(t, dir, []agents.AgentProfile{{Name: "zen", Command: agents.ShellQuote(agent), Codename: "zen"}}, "zen", nil,
+	_, r, _ := runSetupTUIIn(t, dir, []agents.AgentProfile{{Name: "zen", Command: agents.ShellQuote(agent), Codename: "zen"}}, "zen", nil,
 		Options{EditorDir: t.TempDir(), Workspace: "kb"}, files)
 	r.s.WaitFor(t, "kb entered", func(string) bool { return onLoop(r, func() bool { return r.h.ws == "kb" }) })
 	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })

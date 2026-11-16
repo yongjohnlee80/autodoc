@@ -29,7 +29,7 @@ func TestTheVimQuestionIsATrueFirstRunsFirstCard(t *testing.T) {
 	seams := tune(t)
 	looked, look := 0, seams.lookAgentCLI
 	seams.lookAgentCLI = func(c string) (string, error) { looked++; return look(c) }
-	d, r, _ := runAgentTUIWith(t, t.TempDir(), nil, "", map[string]string{system.PrefAboutAt: "true"}, Options{})
+	d, r, _ := runSetupTUI(t, t.TempDir(), nil, "", map[string]string{system.PrefAboutAt: "true"}, Options{})
 	r.s.WaitForText(t, "Do you use Vim?")
 	if sc := r.s.String(); strings.Contains(sc, "Set up an AI agent?") || strings.Contains(sc, "about autodoc") {
 		t.Fatalf("another card opened beside the Vim question:\n%s", sc)
@@ -48,13 +48,13 @@ func TestTheVimQuestionIsATrueFirstRunsFirstCard(t *testing.T) {
 // Yes (y) keeps Vim's keys, stored, so the question is not asked again; Escape is No's.
 func TestTheVimQuestionsYesAndEscape(t *testing.T) {
 	offeringVimQuestion(t)
-	d, r, _ := runAgentTUIWith(t, t.TempDir(), nil, "", nil, Options{})
+	d, r, _ := runSetupTUI(t, t.TempDir(), nil, "", nil, Options{})
 	r.s.WaitForText(t, "Do you use Vim?")
 	r.keys(t, key('y')) // &Yes, Vim's keys
 	storedPref(t, d, r, prefKeymap, "vim")
 	r.s.WaitFor(t, "the card closed", func(sc string) bool { return !strings.Contains(sc, "Do you use Vim?") })
 
-	d, r, _ = runAgentTUIWith(t, t.TempDir(), nil, "", nil, Options{})
+	d, r, _ = runSetupTUI(t, t.TempDir(), nil, "", nil, Options{})
 	r.s.WaitForText(t, "Do you use Vim?")
 	r.keys(t, esc())
 	storedPref(t, d, r, prefKeymap, "text")
@@ -73,7 +73,7 @@ func TestTheVimQuestionIsNotAskedOfAnExistingUser(t *testing.T) {
 		if name == "a profile" {
 			profiles = []agents.AgentProfile{{Name: "Mine", Command: "true", Codename: "mine"}}
 		}
-		_, r, _ := runAgentTUIWith(t, t.TempDir(), profiles, "", prefs, Options{})
+		_, r, _ := runSetupTUI(t, t.TempDir(), profiles, "", prefs, Options{})
 		r.s.WaitForText(t, "about autodoc")
 		if strings.Contains(r.s.String(), "Do you use Vim?") {
 			t.Errorf("%s: the Vim question was asked", name)

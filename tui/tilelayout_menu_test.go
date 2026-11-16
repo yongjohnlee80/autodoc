@@ -105,7 +105,7 @@ func TestLayoutIsRightAboveGoToOnTheBufferAndShellMenus(t *testing.T) {
 // The agent's tabs have Layout › right above Go to ›, Float as stored.
 func TestLayoutIsRightAboveGoToOnTheAgentsMenu(t *testing.T) {
 	agent, _ := fakeAgent(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron")
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agentCall(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	tab := onLoop(r, func() terminal.TerminalTabID { return r.h.agents.Snapshot().Instances["heron"].Tab })
