@@ -92,8 +92,9 @@ func (v *View) opts(ctx context.Context) []dao.QueryOption {
 	return o
 }
 
-// plain are opts without the plan setting, for a statement that brings its own settings (the
-// candidate stage's).
+// plain are opts without the plan setting, for the candidate stage, which brings its own settings
+// and whose plan is the vector index's order under any scope: a scope small enough to be read
+// through its own indexes instead is answered before the stage runs (smallScope).
 func (v *View) plain(ctx context.Context) []dao.QueryOption {
 	if viewHook != nil {
 		return []dao.QueryOption{dao.WithQueryContext(ctx), dao.WithHooks(viewHook)}
