@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/tui/explorer"
+	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
 
 // recent_test.go: File › Recent files… (SPC r) — the files opened, newest first, across
@@ -112,8 +113,20 @@ func TestTheRecentListFollowsTheFilesOfAWorkspaceJustEntered(t *testing.T) {
 	onLoop(r, func() bool { r.h.openIn("notes", "c.md"); return true })
 	r.waitFile(t, "c.md")
 	d.waitRecentStored(t, `[{"workspace":"notes","path":"c.md"},{"workspace":"kb","path":"b.md"},{"workspace":"kb","path":"a.md"}]`)
-	// notes in use, its files not listed yet: as just after entering it
-	onLoop(r, func() bool { r.h.resetFiles(); r.h.recent.Open(); return true })
+	// notes in use, its files not listed yet: as just after entering it. Entering asked for two
+	// listings: its own, and the one its first progress poll asks (that poll counts as moved,
+	// progress.go). Either landing after the reset would list c.md before "2" was drawn, so the cell
+	// waits for that poll's answer, notes' indexing idle, then takes a new listing ticket as entering
+	// does, which leaves any listing asked before it outdated.
+	r.waitWithin(t, "notes' first progress poll answered", daemonWait, func() bool {
+		return onLoop(r, func() bool { return r.h.prog.polled && r.h.prog.ws == "notes" && !r.h.prog.busy })
+	})
+	onLoop(r, func() bool {
+		r.h.ticket(&r.h.listSeq, feature.TicketWorkspace)
+		r.h.resetFiles()
+		r.h.recent.Open()
+		return true
+	})
 	r.s.WaitForText(t, "2 recent files, the newest first") // kb's two; c.md waits for notes' files
 	onLoop(r, func() bool { r.h.listFiles(); return true })
 	r.s.WaitForText(t, "3 recent files, the newest first")
