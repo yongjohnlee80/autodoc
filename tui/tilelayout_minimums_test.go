@@ -15,24 +15,6 @@ import (
 // holds). Each is tiled at a 5% tile, under its least, on the edge given, so the least is what it
 // gets: across a left or right edge its columns, across a top or bottom one its rows.
 
-// screenRectOf is where window id is drawn; false while it is not on screen.
-func screenRectOf(r *running, id string) (tuicore.Rect, bool) {
-	type placed struct {
-		at tuicore.Rect
-		on bool
-	}
-	p := onLoop(r, func() placed {
-		c, _ := r.h.p.Find(id)
-		w, ok := c.(interface{ ScreenRect() (tuicore.Rect, bool) })
-		if !ok {
-			return placed{}
-		}
-		at, on := w.ScreenRect()
-		return placed{at, on}
-	})
-	return p.at, p.on
-}
-
 // atItsLeast tiles panel at edge at a 5% tile, opens it as open does, and wants it tiled at least
 // cells across the edge, the keyboard in its view. The page takes the keyboard first, so the open
 // is what brings it into the panel.
