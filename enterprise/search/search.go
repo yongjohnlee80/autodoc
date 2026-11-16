@@ -21,6 +21,7 @@ import (
 	"github.com/yongjohnlee80/golib/errs"
 	gsearch "github.com/yongjohnlee80/golib/search"
 	"github.com/yongjohnlee80/golib/search/embed"
+	"github.com/yongjohnlee80/golib/search/query"
 	"github.com/yongjohnlee80/golib/search/vector"
 
 	"github.com/yongjohnlee80/autodoc/core/pgstore"
@@ -35,12 +36,34 @@ type Scope map[string][]string
 type Request struct {
 	Query string
 	Mode  gsearch.Mode // "" is auto: hybrid when vectors can answer, else by words
-	// Filter narrows by tags and path prefixes. Its Facets must be empty: a tenant keeps no facet
-	// but its access fields, and those are the scope's alone (ErrProtectedFacet, ErrUnknownFacet).
+	// Filter narrows by tags, path prefixes and keyword facets. Its Facets name the tenant's
+	// declared keyword facets only: values ORed within a field, fields ANDed, each value matched
+	// exactly, case included (at most MaxFacetValues per field). An access field is the scope's
+	// alone (ErrProtectedFacet); an undeclared field is ErrUnknownFacet; a number or a date facet
+	// is a range's (ErrFacetType). A query word name:value for a declared keyword facet is merged
+	// into them.
 	Filter gsearch.Filter
+	// Ranges narrow by the tenant's declared number and date facets, by field, ANDed with each
+	// other and with the filter (at most MaxRanges).
+	Ranges map[string]Range
 	Limit  int    // 0 is the default (20); above the most (200) is refused
 	Group  string // "" or "chunk" (default), or "document": the best chunk per export path
 }
+
+// Range is a filter on a number or a date facet: a document has a value within every bound given,
+// Gt and Lt exclusive, Gte and Lte inclusive; "" is no bound, and at least one is required. A
+// bound is read as the facet's values are: a number as a decimal (NaN and the infinities
+// refused), a date as YYYY-MM-DD (midnight UTC) or RFC 3339. A list value matches when any of its
+// values is within the bounds.
+type Range struct {
+	Gt, Gte, Lt, Lte string
+}
+
+// The bounds on a request's filter.
+const (
+	MaxRanges      = 16 // ranges per request
+	MaxFacetValues = 64 // values per keyword facet
+)
 
 // Result is a search's answer: golib's, each hit with the source row it was rendered from.
 type Result struct {
@@ -65,9 +88,14 @@ var (
 	// ErrProtectedFacet is a query or a filter that names an access field: access is the scope's
 	// alone, and a facet could widen it.
 	ErrProtectedFacet = errs.Sentinel(errs.ErrInvalidArgument, "search: the query or the filter names an access field")
-	// ErrUnknownFacet is a filter facet on a field the tenant does not keep: it keeps no facet but
-	// its access fields.
+	// ErrUnknownFacet is a filter facet or a range on a field the tenant does not declare.
 	ErrUnknownFacet = errs.Sentinel(errs.ErrInvalidArgument, "search: the tenant keeps no such facet")
+	// ErrFacetType is a filter on a facet of another type: a range on a keyword, equality on a
+	// number or a date, or a bound that is not a value of its facet's type.
+	ErrFacetType = errs.Sentinel(errs.ErrInvalidArgument, "search: the filter does not fit the facet's type")
+	// ErrFilter is a filter past its bounds (MaxRanges, MaxFacetValues), a keyword facet with no
+	// value, or a range with no bound or with a low bound above its high one.
+	ErrFilter = errs.Sentinel(errs.ErrInvalidArgument, "search: the filter is out of bounds")
 	// ErrLimit is a limit below zero or above the most.
 	ErrLimit = errs.Sentinel(errs.ErrInvalidArgument, "search: the limit is out of range")
 	// ErrGroup is a grouping mode other than the default chunks or one best chunk per document.
@@ -111,6 +139,7 @@ type Searcher struct {
 	st     *pgstore.Store
 	eng    *gsearch.Engine[int64, *pgstore.View]
 	docEng *gsearch.Engine[int64, *pgstore.View]
+	def    int
 	max    int
 }
 
@@ -140,7 +169,7 @@ func Open(ctx context.Context, conn dao.DataConn, tenant string, qe gsearch.Quer
 		eopts = append(eopts, gsearch.WithQueryEmbedder(qe))
 	}
 	return &Searcher{st: st, eng: gsearch.NewEngine[int64, *pgstore.View](scoped{st}, eopts...),
-		docEng: gsearch.NewEngine[int64, *pgstore.View](scoped{st}, append(eopts, gsearch.WithPerDocument(1))...), max: o.max}, nil
+		docEng: gsearch.NewEngine[int64, *pgstore.View](scoped{st}, append(eopts, gsearch.WithPerDocument(1))...), def: o.def, max: o.max}, nil
 }
 
 // Search answers r within scope.
@@ -156,7 +185,9 @@ func (s *Searcher) Search(ctx context.Context, scope Scope, r Request) (Result, 
 	if r.Group != "" && r.Group != "chunk" && r.Group != "document" {
 		return Result{}, fmt.Errorf("%w: %q", ErrGroup, r.Group)
 	}
-	check := func(p pgstore.Policy, access map[string][]string) error { return checkRequest(p, access, r) }
+	check := func(p pgstore.Policy, access map[string][]string) ([]pgstore.Range, error) {
+		return checkRequest(p, access, r)
+	}
 	p, err := s.st.Policy(ctx)
 	if err != nil {
 		return Result{}, err
@@ -164,7 +195,7 @@ func (s *Searcher) Search(ctx context.Context, scope Scope, r Request) (Result, 
 	if err := refusal(pgstore.CheckScope(p, scope)); err != nil {
 		return Result{}, err
 	}
-	if err := check(p, scope); err != nil {
+	if _, err := check(p, scope); err != nil {
 		return Result{}, err
 	}
 	c := &call{scope: scope, check: check}
@@ -172,8 +203,20 @@ func (s *Searcher) Search(ctx context.Context, scope Scope, r Request) (Result, 
 	if r.Group == "document" {
 		eng = s.docEng
 	}
-	res, err := eng.Search(context.WithValue(ctx, callKey{}, c), gsearch.Query{Text: r.Query, Mode: r.Mode, Limit: r.Limit, Filter: r.Filter})
-	if err != nil {
+	q := gsearch.Query{Text: r.Query, Mode: r.Mode, Limit: r.Limit, Filter: r.Filter}
+	if kw := keywords(p.Facets); len(kw) > 0 {
+		q.Fields = kw
+	}
+	ctx = context.WithValue(ctx, callKey{}, c)
+	var res gsearch.Result
+	if f, listed, err := rangesAlone(q, r); err != nil {
+		return Result{}, refusal(err)
+	} else if listed {
+		res, err = s.list(ctx, f, r.Limit)
+		if err != nil {
+			return Result{}, refusal(err)
+		}
+	} else if res, err = eng.Search(ctx, q); err != nil {
 		return Result{}, refusal(err)
 	}
 	out := Result{Hits: make([]Hit, 0, len(res.Hits)), ModeUsed: res.ModeUsed, Semantic: res.Semantic, SemanticError: res.SemanticError}
@@ -189,44 +232,208 @@ func (s *Searcher) Search(ctx context.Context, scope Scope, r Request) (Result, 
 	return out, nil
 }
 
-// refusal is err with the store's refusal of a scope (pgstore.ErrNoAccess) said as ErrScope.
+// rangesAlone reports whether r is answered by its filters alone, ranges among them: it has
+// ranges and no word to search for. golib's engine lists only the documents its own filter
+// narrows to, and never sees the ranges, which narrow the view. f is the filter to list by: q's,
+// with the query's name:value words for declared keyword facets joined to its facets.
+func rangesAlone(q gsearch.Query, r Request) (f gsearch.Filter, listed bool, err error) {
+	if len(r.Ranges) == 0 {
+		return gsearch.Filter{}, false, nil
+	}
+	text, facets, err := query.Facets(q.Text, q.Filter.Facets, q.Fields)
+	if err != nil {
+		return gsearch.Filter{}, false, err
+	}
+	f = q.Filter
+	f.Facets = facets
+	terms, _ := query.Terms(text)
+	return f, len(terms) == 0, nil
+}
+
+// list answers a request of filters alone, as golib's engine lists one (ModeFacet): the documents
+// the filter, the ranges and the scope admit, in path order, each as its first chunk, at most
+// limit (0 is the Searcher's default). A query's name:value words for declared keyword facets
+// join the filter, as the engine reads them.
+func (s *Searcher) list(ctx context.Context, f gsearch.Filter, limit int) (gsearch.Result, error) {
+	if limit <= 0 {
+		limit = s.def
+	}
+	res := gsearch.Result{Hits: []gsearch.Hit{}, ModeUsed: gsearch.ModeFacet, Semantic: gsearch.StateOff}
+	err := scoped{s.st}.View(ctx, func(v *pgstore.View) error {
+		cands, err := v.List(ctx, f, limit)
+		for _, c := range cands {
+			res.Hits = append(res.Hits, gsearch.Hit{Path: c.Path, Breadcrumb: c.Breadcrumb, Snippet: c.Snippet, Generation: c.Generation,
+				ByteStart: c.ByteStart, ByteEnd: c.ByteEnd, Via: []string{"facet"}, Score: 1, Relevance: 1})
+		}
+		return err
+	})
+	return res, err
+}
+
+// refusal is err with the store's and the engine's refusals said as this package's: a scope
+// (pgstore.ErrNoAccess) as ErrScope, a range (pgstore.ErrRange) as ErrFilter, and the engine's
+// facet refusals (a query's facets read against a declaration that changed since the request was
+// checked) as ErrUnknownFacet and ErrFacetType.
 func refusal(err error) error {
-	if err != nil && errors.Is(err, pgstore.ErrNoAccess) && !errors.Is(err, ErrScope) {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, pgstore.ErrNoAccess) && !errors.Is(err, ErrScope):
 		return fmt.Errorf("%w: %w", ErrScope, err)
+	case errors.Is(err, pgstore.ErrRange) && !errors.Is(err, ErrFilter):
+		return fmt.Errorf("%w: %w", ErrFilter, err)
+	case errors.Is(err, query.ErrUnknownFacet) && !errors.Is(err, ErrUnknownFacet):
+		return fmt.Errorf("%w: %w", ErrUnknownFacet, err)
+	case errors.Is(err, query.ErrFacetValue) && !errors.Is(err, ErrFacetType):
+		return fmt.Errorf("%w: %w", ErrFacetType, err)
 	}
 	return err
+}
+
+// keywordFields declares a tenant's keyword facets to golib's engine: a query's name:value word for
+// one is a filter on it, its value as typed.
+type keywordFields map[string]bool
+
+func (k keywordFields) Declared(field string) bool { return k[field] }
+
+func (k keywordFields) FacetValue(_, text string) (string, error) { return text, nil }
+
+// keywords are facets' keyword fields; nil when there are none.
+func keywords(facets map[string]string) keywordFields {
+	var out keywordFields
+	for name, typ := range facets {
+		if typ == pgstore.FacetKeyword {
+			if out == nil {
+				out = keywordFields{}
+			}
+			out[name] = true
+		}
+	}
+	return out
 }
 
 // facetToken is a query word golib's engine could read as a facet: field:value.
 var facetToken = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_.-]*):(\S+)$`)
 
-// checkRequest is what the policy refuses beyond the scope's shape, which pgstore holds: a "*"
-// among the scope's values (it belongs to a client's grants, not to a search), an access field
-// named by the filter's facets or by a field:value word of the query, and any other facet, which
-// the tenant does not keep. A field:value word of another field is a word: the engine declares no
-// facet for an enterprise tenant. Field names are
-// compared regardless of case, so no spelling of an access field passes.
-func checkRequest(p pgstore.Policy, scope map[string][]string, r Request) error {
+// checkRequest is what the policy refuses beyond the scope's shape, which pgstore holds, and the
+// request's ranges as the store takes them. It refuses:
+//
+//   - a "*" among the scope's values: it belongs to a client's grants, not to a search;
+//   - an access field named by the filter's facets, by a range, or by a field:value word of the
+//     query (ErrProtectedFacet). Field names are compared regardless of case, so no spelling of an
+//     access field passes;
+//   - a facet or a range on a field the tenant does not declare (ErrUnknownFacet, naming the ones
+//     it does);
+//   - equality on a number or a date facet, a range on a keyword one, or a bound that is not a
+//     value of its facet's type (ErrFacetType);
+//   - more than MaxRanges ranges, more than MaxFacetValues values of one facet, a facet with no
+//     value, a range with no bound or a low bound above its high one (ErrFilter).
+//
+// A field:value word of a field that is not declared is a word.
+func checkRequest(p pgstore.Policy, scope map[string][]string, r Request) ([]pgstore.Range, error) {
 	for f, vals := range scope {
 		if slices.Contains(vals, "*") {
-			return fmt.Errorf("%w: %q is not a value of %s", ErrScope, "*", f)
+			return nil, fmt.Errorf("%w: %q is not a value of %s", ErrScope, "*", f)
 		}
 	}
 	access := func(field string) bool {
 		return slices.ContainsFunc(p.AccessFields, func(a string) bool { return strings.EqualFold(a, field) })
 	}
-	for f := range r.Filter.Facets {
-		if access(f) {
-			return fmt.Errorf("%w: the filter's facet %s", ErrProtectedFacet, f)
+	unknown := func(field string) error {
+		if len(p.Facets) == 0 {
+			return fmt.Errorf("%w: %s (the tenant declares no facet: filter by tags or paths)", ErrUnknownFacet, field)
 		}
-		return fmt.Errorf("%w: %s (filter by tags or paths)", ErrUnknownFacet, f)
+		return fmt.Errorf("%w: %s (the tenant's facets: %s)", ErrUnknownFacet, field, declared(p.Facets))
+	}
+	for _, f := range sortedKeys(r.Filter.Facets) {
+		typ, ok := p.Facets[f]
+		switch {
+		case access(f):
+			return nil, fmt.Errorf("%w: the filter's facet %s", ErrProtectedFacet, f)
+		case !ok:
+			return nil, unknown(f)
+		case typ != pgstore.FacetKeyword:
+			return nil, fmt.Errorf("%w: %s is a %s facet: filter it by a range", ErrFacetType, f, typ)
+		case len(r.Filter.Facets[f]) == 0:
+			return nil, fmt.Errorf("%w: the facet %s has no value", ErrFilter, f)
+		case len(r.Filter.Facets[f]) > MaxFacetValues:
+			return nil, fmt.Errorf("%w: the facet %s has %d values (at most %d)", ErrFilter, f, len(r.Filter.Facets[f]), MaxFacetValues)
+		}
+	}
+	if len(r.Ranges) > MaxRanges {
+		return nil, fmt.Errorf("%w: %d ranges (at most %d)", ErrFilter, len(r.Ranges), MaxRanges)
+	}
+	ranges := make([]pgstore.Range, 0, len(r.Ranges))
+	for _, f := range sortedKeys(r.Ranges) {
+		typ, ok := p.Facets[f]
+		switch {
+		case access(f):
+			return nil, fmt.Errorf("%w: the range on %s", ErrProtectedFacet, f)
+		case !ok:
+			return nil, unknown(f)
+		case typ == pgstore.FacetKeyword:
+			return nil, fmt.Errorf("%w: %s is a keyword facet: filter it by its values", ErrFacetType, f)
+		}
+		pr, err := storeRange(f, typ, r.Ranges[f])
+		if err != nil {
+			return nil, err
+		}
+		ranges = append(ranges, pr)
 	}
 	for _, w := range strings.Fields(r.Query) {
 		if m := facetToken.FindStringSubmatch(w); m != nil && access(m[1]) {
-			return fmt.Errorf("%w: the query's %s", ErrProtectedFacet, w)
+			return nil, fmt.Errorf("%w: the query's %s", ErrProtectedFacet, w)
 		}
 	}
-	return nil
+	return ranges, nil
+}
+
+// storeRange is the range on field, a facet of typ, as the store takes it: each bound read as the
+// facet's values are.
+func storeRange(field, typ string, r Range) (pgstore.Range, error) {
+	out := pgstore.Range{Field: field}
+	for _, b := range []struct {
+		text string
+		to   **float64
+	}{{r.Gt, &out.Gt}, {r.Gte, &out.Gte}, {r.Lt, &out.Lt}, {r.Lte, &out.Lte}} {
+		if b.text == "" {
+			continue
+		}
+		v, err := pgstore.TypedValue(typ, b.text)
+		if err != nil {
+			return pgstore.Range{}, fmt.Errorf("%w: the range on %s: %w", ErrFacetType, field, err)
+		}
+		*b.to = &v
+	}
+	if out.Gt == nil && out.Gte == nil && out.Lt == nil && out.Lte == nil {
+		return pgstore.Range{}, fmt.Errorf("%w: the range on %s has no bound (gt, gte, lt or lte)", ErrFilter, field)
+	}
+	for _, lo := range []*float64{out.Gt, out.Gte} {
+		for _, hi := range []*float64{out.Lt, out.Lte} {
+			if lo != nil && hi != nil && *lo > *hi {
+				return pgstore.Range{}, fmt.Errorf("%w: the range on %s has its low bound above its high one", ErrFilter, field)
+			}
+		}
+	}
+	return out, nil
+}
+
+// declared is facets' names and types, for a refusal: "bpm (number), status (keyword)".
+func declared(facets map[string]string) string {
+	parts := make([]string, 0, len(facets))
+	for _, name := range sortedKeys(facets) {
+		parts = append(parts, name+" ("+facets[name]+")")
+	}
+	return strings.Join(parts, ", ")
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	slices.Sort(out)
+	return out
 }
 
 // callKey keys a Search's call on the context its engine runs with.
@@ -236,7 +443,7 @@ type callKey struct{}
 // and the hits' source ids, read in the view the hits came from. Each Search has its own.
 type call struct {
 	scope Scope
-	check func(pgstore.Policy, map[string][]string) error
+	check func(pgstore.Policy, map[string][]string) ([]pgstore.Range, error)
 	ids   map[string]string
 }
 
@@ -249,7 +456,18 @@ func (s scoped) View(ctx context.Context, fn func(v *pgstore.View) error) error 
 	if c == nil {
 		return fmt.Errorf("%w: a view asked for without a search's scope", ErrScope)
 	}
-	return s.st.ViewPolicy(ctx, c.scope, c.check, func(v *pgstore.View) error {
+	// the ranges are read against the policy of the view's own snapshot, where the request is
+	// checked again, and narrow the view before anything of it is read
+	var ranges []pgstore.Range
+	check := func(p pgstore.Policy, access map[string][]string) error {
+		var err error
+		ranges, err = c.check(p, access)
+		return err
+	}
+	return s.st.ViewPolicy(ctx, c.scope, check, func(v *pgstore.View) error {
+		if err := v.Within(ranges); err != nil {
+			return refusal(err)
+		}
 		if err := fn(v); err != nil {
 			return err
 		}

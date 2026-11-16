@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -48,10 +49,13 @@ type IngestError struct {
 }
 
 // Policy is a tenant's access policy: the document facet fields every scoped read must be given
-// values for (ViewWithin), and the view the tenant is indexed from.
+// values for (ViewWithin), and the view the tenant is indexed from. Facets are the tenant's
+// declared facets, name → type (FacetKeyword, FacetNumber, FacetDate): what a search may filter
+// on beside tags and paths. nil declares none.
 type Policy struct {
 	AccessFields []string
 	View         string
+	Facets       map[string]string
 }
 
 var (
@@ -172,32 +176,75 @@ func (s *Store) Quarantined(ctx context.Context, limit int) ([]IngestError, erro
 	return out, nil
 }
 
-// SetPolicy records the tenant's access policy, replacing any it had. A policy with no access
-// field is refused (ErrNoAccess): there is no policy that turns access checking off.
+// SetPolicy records the tenant's access policy, replacing any it had (ReplacePolicy).
 func (s *Store) SetPolicy(ctx context.Context, p Policy) error {
+	_, err := s.ReplacePolicy(ctx, p)
+	return err
+}
+
+// ReplacePolicy records the tenant's access policy, replacing any it had, and reports whether it
+// replaced one whose declared facets differ. Then, in the same transaction, the tenant's last
+// refresh is forgotten (Refreshed is zero), so its ingester refreshes at once: the facets'
+// values are kept with the documents, and an incremental pass would give the new declaration only
+// to the rows it reads. Forgotten with the policy, the refresh is due until one completes, even
+// across a restart.
+//
+// A policy with no access field is refused (ErrNoAccess): there is no policy that turns access
+// checking off. One whose facets CheckFacets refuses is ErrFacetDecl.
+func (s *Store) ReplacePolicy(ctx context.Context, p Policy) (facetsChanged bool, err error) {
 	if err := CheckAccessFields(p.AccessFields); err != nil {
-		return err
+		return false, err
 	}
-	err := dao.RunTx(ctx, func(tx *dao.Transaction) error {
-		return s.rw.policy.On(tx, dao.WithQueryContext(ctx)).Set(pTenant, s.tenant).
-			Set(pAccess, slices.Clone(p.AccessFields)).Set(pView, p.View).Upsert()
+	if err := CheckFacets(p.AccessFields, p.Facets); err != nil {
+		return false, err
+	}
+	facets, err := facetsJSON(p.Facets)
+	if err != nil {
+		return false, fmt.Errorf("pgstore: set policy: %w", err)
+	}
+	err = dao.RunTx(ctx, func(tx *dao.Transaction) error {
+		old, err := s.rw.policy.On(tx, dao.WithQueryContext(ctx)).With(pTenant, s.tenant).Get(pFacets)
+		switch {
+		case errors.Is(err, dao.ErrNoRows):
+		case err != nil:
+			return err
+		default:
+			was, err := facetsOf(old.Facets)
+			if err != nil {
+				return err
+			}
+			facetsChanged = !maps.Equal(was, p.Facets) && (len(was) > 0 || len(p.Facets) > 0)
+		}
+		if err := s.rw.policy.On(tx, dao.WithQueryContext(ctx)).Set(pTenant, s.tenant).
+			Set(pAccess, slices.Clone(p.AccessFields)).Set(pView, p.View).Set(pFacets, facets).Upsert(); err != nil {
+			return err
+		}
+		if !facetsChanged {
+			return nil
+		}
+		return s.rw.cursor.On(tx, dao.WithQueryContext(ctx)).With(kTenant, s.tenant).
+			Set(kStarted, (*time.Time)(nil)).Set(kFinished, (*time.Time)(nil)).Update()
 	})
 	if err != nil {
-		return fmt.Errorf("pgstore: set policy: %w", err)
+		return false, fmt.Errorf("pgstore: set policy: %w", err)
 	}
-	return nil
+	return facetsChanged, nil
 }
 
 // Policy is the tenant's access policy: ErrNoPolicy when none is recorded.
 func (s *Store) Policy(ctx context.Context) (Policy, error) {
-	r, err := s.rw.policy.DAO(dao.WithQueryContext(ctx)).With(pTenant, s.tenant).Get(pAccess, pView)
+	r, err := s.rw.policy.DAO(dao.WithQueryContext(ctx)).With(pTenant, s.tenant).Get(pAccess, pView, pFacets)
 	switch {
 	case errors.Is(err, dao.ErrNoRows):
 		return Policy{}, ErrNoPolicy
 	case err != nil:
 		return Policy{}, fmt.Errorf("pgstore: policy: %w", err)
 	}
-	return Policy{AccessFields: r.AccessFields, View: r.View}, nil
+	facets, err := facetsOf(r.Facets)
+	if err != nil {
+		return Policy{}, err
+	}
+	return Policy{AccessFields: r.AccessFields, View: r.View, Facets: facets}, nil
 }
 
 // CheckAccessFields refuses (ErrNoAccess) access fields no scope can be built on: none, an empty

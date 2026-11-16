@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -111,6 +112,21 @@ func TestAGoodConfigurationLoads(t *testing.T) {
 	}
 	if len(s.Warnings) != 0 {
 		t.Errorf("warnings %v", s.Warnings)
+	}
+}
+
+// A source's [source.facets] loads as declared, name → type; a source without one declares none.
+func TestASourcesFacetsLoad(t *testing.T) {
+	s, err := load(t, good)
+	if err != nil || s.Sources[0].Facets != nil {
+		t.Fatalf("no [source.facets]: %v, %v", s.Sources[0].Facets, err)
+	}
+	s, err = load(t, good+"[source.facets]\nstatus = \"keyword\"\nreleased = \"date\"\nbpm = \"number\"\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := map[string]string{"status": "keyword", "released": "date", "bpm": "number"}; !maps.Equal(s.Sources[0].Facets, want) {
+		t.Errorf("Facets %v, want %v", s.Sources[0].Facets, want)
 	}
 }
 
@@ -257,6 +273,10 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 		{"no access", sub(`access   = ["label_id"]`, ``), "source[0].access", "required"},
 		{"access twice", sub(`access   = ["label_id"]`, `access = ["label_id", "label_id"]`), "source[0].access", "named twice"},
 		{"access with =", sub(`access   = ["label_id"]`, `access = ["label=id"]`), "source[0].access", "not an access field name"},
+		{"a facet that is an access field", good + "[source.facets]\nLabel_Id = \"keyword\"\n", "source[0].facets.Label_Id", "is an access field"},
+		{"a facet a document keeps", good + "[source.facets]\ntitle = \"keyword\"\n", "source[0].facets.title", "a document's own"},
+		{"a facet not an identifier", good + "[source.facets]\n\"bpm-max\" = \"number\"\n", "source[0].facets.bpm-max", "not a plain identifier"},
+		{"a facet of an unknown type", good + "[source.facets]\nbpm = \"integer\"\n", "source[0].facets.bpm", "want keyword, number or date"},
 		{"metrics with no operator", good + "\n[metrics]\nenabled = true\n", "metrics.enabled", "no [[http.operator]]"},
 		{"metrics with no http", good[:strings.Index(good, "[http]")] + good[strings.Index(good, "[[source]]"):] + "\n[metrics]\nenabled = true\n", "metrics.enabled", "no [http] table"},
 		{"unknown", good + "\n[telemetry]\nport = 9\n", "telemetry", "unknown field"}, // [metrics] is a known table

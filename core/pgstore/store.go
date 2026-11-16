@@ -5,6 +5,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 
@@ -165,14 +166,18 @@ func (s *Store) ViewWithin(ctx context.Context, access map[string][]string, fn f
 // from the View would let a scope checked against the old policy read the new documents.
 func (s *Store) ViewPolicy(ctx context.Context, access map[string][]string, check func(p Policy, access map[string][]string) error, fn func(v *View) error) error {
 	return dao.RunTx(ctx, func(tx *dao.Transaction) error {
-		r, err := s.ro.policy.On(tx, dao.WithQueryContext(ctx)).With(pTenant, s.tenant).Get(pAccess, pView)
+		r, err := s.ro.policy.On(tx, dao.WithQueryContext(ctx)).With(pTenant, s.tenant).Get(pAccess, pView, pFacets)
 		switch {
 		case errors.Is(err, dao.ErrNoRows):
 			return ErrNoPolicy
 		case err != nil:
 			return fmt.Errorf("pgstore: policy: %w", err)
 		}
-		p := Policy{AccessFields: r.AccessFields, View: r.View}
+		facets, err := facetsOf(r.Facets)
+		if err != nil {
+			return err
+		}
+		p := Policy{AccessFields: r.AccessFields, View: r.View, Facets: facets}
 		if err := CheckScope(p, access); err != nil {
 			return err
 		}
@@ -273,6 +278,10 @@ type Document struct {
 	// SourceID is the source row the document was rendered from (an enterprise .view's id): a
 	// search hit links back to its record by it. "" for none.
 	SourceID string
+	// Values are the document's number and date facets' values (a date as Unix seconds), by
+	// field: a list value is several. A Range filters on them. They are replaced with the
+	// document, and go with it.
+	Values map[string][]float64
 }
 
 // The kinds of chunk (000002): a document's section, or its abstract. WithSectionsOnly leaves the
@@ -295,6 +304,16 @@ func (d Document) kindOf(i int) string {
 func (d Document) check() error {
 	if d.Path == "" {
 		return errs.Wrap(errs.ErrInvalidArgument, "pgstore: a document has no path")
+	}
+	for field, vals := range d.Values {
+		if !facetName.MatchString(field) {
+			return errs.Wrap(errs.ErrInvalidArgument, "pgstore: %s: %q is not a facet name", d.Path, field)
+		}
+		for _, v := range vals {
+			if math.IsNaN(v) || math.IsInf(v, 0) {
+				return errs.Wrap(errs.ErrInvalidArgument, "pgstore: %s: the facet %s has a value that is not finite", d.Path, field)
+			}
+		}
 	}
 	if len(d.Kinds) != 0 && len(d.Kinds) != len(d.Chunks) {
 		return errs.Wrap(errs.ErrInvalidArgument, "pgstore: %s has %d chunks and %d kinds", d.Path, len(d.Chunks), len(d.Kinds))
@@ -503,6 +522,9 @@ func (s *Store) putIn(ctx context.Context, tx *dao.Transaction, d Document, tags
 			if err := s.rw.link.On(tx, dao.WithQueryContext(ctx)).With(lTenant, s.tenant).With(lSrc, id).Delete(); err != nil {
 				return err
 			}
+			if err := s.rw.value.On(tx, dao.WithQueryContext(ctx)).With(vTenant, s.tenant).With(vDoc, id).Delete(); err != nil {
+				return err
+			}
 		}
 		if len(d.Chunks) > 0 {
 			b := s.rw.chunk.On(tx, dao.WithQueryContext(ctx)).Batch().ForceInsert()
@@ -511,6 +533,18 @@ func (s *Store) putIn(ctx context.Context, tx *dao.Transaction, d Document, tags
 				b.Add(map[chunkField]any{cTenant: s.tenant, cDoc: id, cOrd: i, cCrumb: c.Breadcrumb, cBody: c.Body,
 					cEmb: c.Embed, cTitle: d.Title, cTags: tagText,
 					cStart: c.ByteStart, cEnd: c.ByteEnd, cHash: h[:], cKind: d.kindOf(i)})
+			}
+			if err := b.Flush(); err != nil {
+				return err
+			}
+		}
+		if len(d.Values) > 0 {
+			// a value repeated in a list is one row: the key is (tenant, field, value, doc)
+			b := s.rw.value.On(tx, dao.WithQueryContext(ctx)).Batch().ForceInsert().SkipConflicts()
+			for _, field := range sortedNames(d.Values) {
+				for _, v := range d.Values[field] {
+					b.Add(map[valueField]any{vTenant: s.tenant, vDoc: id, vField: field, vValue: v})
+				}
 			}
 			if err := b.Flush(); err != nil {
 				return err
