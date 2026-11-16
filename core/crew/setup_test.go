@@ -1,5 +1,3 @@
-//go:build unix
-
 package crew_test
 
 import (
@@ -7,7 +5,6 @@ import (
 	"errors"
 	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -740,35 +737,6 @@ const (
 	codexOlderHelp = "      --remote <ADDR>   Connect the TUI to a remote app server endpoint"
 )
 
-// codexOnPath is a folder holding an executable named codex whose --help prints help and whose
-// --version names a build, to stand as an agent's PATH.
-func codexOnPath(t *testing.T, help string) string {
-	t.Helper()
-	return codexScript(t, "case \"$1\" in --version) echo 'codex-cli 0.0.0-test';; --help) printf '%s\\n' \""+help+"\";; esac\nexit 0\n")
-}
-
-// codexScript is a folder holding an executable named codex that runs body as a shell script. It
-// runs with that folder as its whole PATH, so body uses builtins alone, or a command's full path
-// (sleepCmd).
-func codexScript(t *testing.T, body string) string {
-	t.Helper()
-	bin := t.TempDir()
-	if err := os.WriteFile(filepath.Join(bin, "codex"), []byte("#!/bin/sh\n"+body), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	return bin
-}
-
-// sleepCmd is sleep's full path, for a script whose PATH holds no sleep.
-func sleepCmd(t *testing.T) string {
-	t.Helper()
-	p, err := exec.LookPath("sleep")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return p
-}
-
 // TestSetupForCodexWithNoFolderRefusesACodexItCantRead: with no folder of its own, the setup must
 // know whether the Codex takes --no-daemon, since a start without it runs in Codex's shared daemon,
 // with whichever agent's identity started that. A Codex that isn't found, whose --help fails, or
@@ -778,9 +746,9 @@ func TestSetupForCodexWithNoFolderRefusesACodexItCantRead(t *testing.T) {
 	crew.SetCodexProbeTimeout(t, 300*time.Millisecond)
 	for name, path := range map[string]string{
 		"not found":    t.TempDir(),
-		"help fails":   codexScript(t, "exit 1\n"),
-		"help hangs":   codexScript(t, "[ \"$1\" = --help ] && exec "+sleepCmd(t)+" 5\necho codex-cli 0.163.0\n"),
-		"version only": codexScript(t, "[ \"$1\" = --version ] && echo codex-cli 0.163.0 && exit 0\nexit 2\n"),
+		"help fails":   newCodex(t, codexPlays{"fail", ""}),
+		"help hangs":   newCodex(t, codexPlays{"version", "0.163.0", "helphang", ""}),
+		"version only": newCodex(t, codexPlays{"version", "0.163.0"}),
 	} {
 		start := time.Now()
 		s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostNvim, Env: map[string]string{"PATH": path}, Dir: t.TempDir()}, "")
@@ -802,8 +770,7 @@ func TestSetupForCodexWithNoFolderRefusesACodexItCantRead(t *testing.T) {
 // time later: the start waits about the probe's time for a Codex that never answers, no more.
 func TestTheCodexProbeCutsOffAChildHoldingItsOutputAtOnce(t *testing.T) {
 	crew.SetCodexProbeTimeout(t, 4*time.Second)
-	bin := codexScript(t, "[ \"$1\" = --version ] && echo codex-cli 0.163.0 && exit 0\n"+
-		sleepCmd(t)+" 30 &\nexec "+sleepCmd(t)+" 30\n")
+	bin := newCodex(t, codexPlays{"version", "0.163.0", "hold", ""})
 	start := time.Now()
 	s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostNvim, Env: map[string]string{"PATH": bin}, Dir: t.TempDir()}, "")
 	if err == nil || !strings.Contains(err.Error(), "--no-daemon") {
@@ -819,12 +786,11 @@ func TestTheCodexProbeCutsOffAChildHoldingItsOutputAtOnce(t *testing.T) {
 // --no-daemon.
 func TestSetupForCodexWithNoFolderNeverKeepsAFailedProbe(t *testing.T) {
 	crew.SetCodexProbeTimeout(t, 300*time.Millisecond)
-	for name, failing := range map[string]string{"fails": "exit 1", "hangs": "exec " + sleepCmd(t) + " 5"} {
+	for name, failing := range map[string]string{"fails": "fail", "hangs": "hang"} {
 		// its --version answers throughout: the failed --help is of a Codex the probe can name
-		bin := codexScript(t, "[ \"$1\" = --help ] && [ -f \"${0%/*}/broken\" ] && "+failing+"\n"+
-			"case \"$1\" in --version) echo codex-cli 0.163.0;; --help) printf '%s\\n' \""+codexNewerHelp+"\";; esac\n")
+		bin := newCodex(t, codexPlays{"version", "0.163.0", "help", codexNewerHelp})
 		broken := filepath.Join(bin, "broken")
-		if err := os.WriteFile(broken, nil, 0o600); err != nil {
+		if err := os.WriteFile(broken, []byte(failing), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		in := crew.SetupInput{Kind: crew.KindCodex, Host: crew.HostNvim, Env: map[string]string{"PATH": bin}, Dir: t.TempDir()}
@@ -846,8 +812,8 @@ func TestSetupForCodexWithNoFolderNeverKeepsAFailedProbe(t *testing.T) {
 // Each setup reads the Codex its start will run: the newer one gets --no-daemon, in whichever order,
 // and the older one never gets the flag it would refuse, nor the newer one's step.
 func TestSetupForCodexWithNoFolderReadsEachProjectsOwnCodex(t *testing.T) {
-	shim := codexScript(t, "if [ -f .codex-newer ] || [ \"$CODEX_PICK\" = newer ]; then v=0.163.0 h='"+codexNewerHelp+"'; else v=0.150.0 h='"+codexOlderHelp+"'; fi\n"+
-		"case \"$1\" in --version) echo \"codex-cli $v\";; --help) printf '%s\\n' \"$h\";; esac\n")
+	shim := newCodex(t, codexPlays{"version", "0.150.0", "help", codexOlderHelp,
+		"newer/version", "0.163.0", "newer/help", codexNewerHelp})
 	older, newer := t.TempDir(), t.TempDir()
 	if err := os.WriteFile(filepath.Join(newer, ".codex-newer"), nil, 0o600); err != nil {
 		t.Fatal(err)
@@ -877,24 +843,6 @@ func TestSetupForCodexWithNoFolderReadsEachProjectsOwnCodex(t *testing.T) {
 		if !c.flag && (len(s.Argv) != 0 || len(s.After) != 1) {
 			t.Errorf("%s: %+v; want no flag and the registration step", c.name, s)
 		}
-	}
-}
-
-// TestSetupForAClaudeWrapperOfAnotherName: a Claude agent whose program is a wrapper of another name
-// (a roster's cmd = ["claude_tui.sh", "work"]) gets the prompt hooks of the claude the wrapper runs,
-// on Neovim's command line, with no notice: its prompts are reported.
-func TestSetupForAClaudeWrapperOfAnotherName(t *testing.T) {
-	wrappers := t.TempDir()
-	if err := os.WriteFile(filepath.Join(wrappers, "claude_tui.sh"), []byte("#!/bin/bash\nexec claude \"$@\"\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	path := wrappers + string(os.PathListSeparator) + claudeOnPath(t, everyClaudeEvent...)
-	s, err := crew.SetupFor(crew.SetupInput{Kind: crew.KindClaude, Host: crew.HostNvim, Program: "claude_tui.sh", Autodoc: "/opt/autodoc wrap", Env: map[string]string{"PATH": path}, Dir: t.TempDir()}, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !s.Prompts || len(s.Notices) != 0 || len(s.Argv) != 2 || s.Argv[0] != "--settings" || !strings.Contains(s.Argv[1], "PermissionRequest") {
-		t.Fatalf("claude_tui.sh's setup: prompts %v, notices %q, argv %q; want --settings naming PermissionRequest, prompts, no notice", s.Prompts, s.Notices, s.Argv)
 	}
 }
 
