@@ -85,6 +85,9 @@ type server struct {
 	// writes a tenant only while its ingester holds the tenant's lease, through the ingester's
 	// fenced Store.
 	ingesters []*ingest.Ingester
+	// refreshWhy is why each source's tenant refreshes at once, by the configuration's order: ""
+	// for none (setPolicies)
+	refreshWhy []string
 	// worker is the embedding worker once it has started, which an ingester's commit wakes; nil
 	// before, when a commit has nothing to wake (the worker's first round reads what it wrote).
 	worker atomic.Pointer[embedder.Worker]
@@ -177,15 +180,23 @@ func (s *server) tenantStore(tenant string) (*pgstore.Store, error) {
 }
 
 // setPolicies records each tenant's access policy from the configuration: the fields every search
-// of the tenant must be scoped by, and the view it is indexed from.
+// of the tenant must be scoped by, the view it is indexed from, and its declared facets. A tenant
+// whose declared facets changed is refreshed at once (pgstore's ReplacePolicy forgets its last
+// refresh), and its status says why until the refresh completes.
 func (s *server) setPolicies() error {
+	s.refreshWhy = make([]string, len(s.cfg.Sources))
 	for i, src := range s.cfg.Sources {
 		st, err := s.tenantStore(src.Tenant)
 		if err != nil {
 			return err
 		}
-		if err := st.SetPolicy(s.ctx, pgstore.Policy{AccessFields: src.Access, View: s.sources[i].Name()}); err != nil {
+		changed, err := st.ReplacePolicy(s.ctx, pgstore.Policy{AccessFields: src.Access, View: s.sources[i].Name(), Facets: src.Facets})
+		if err != nil {
 			return fmt.Errorf("tenant %s: %w", src.Tenant, err)
+		}
+		if changed {
+			s.refreshWhy[i] = ingest.RefreshFacets
+			logger.Info(s.log, fmt.Sprintf("tenant %s: its declared facets changed: refreshing it now, so every document keeps their values", src.Tenant))
 		}
 	}
 	return nil
@@ -205,8 +216,12 @@ func (s *server) startIngesters() error {
 		if err != nil {
 			return err
 		}
+		var why string
+		if i < len(s.refreshWhy) {
+			why = s.refreshWhy[i]
+		}
 		in := ingest.New(st, src.Tenant, s.sources[i], s.business, s.store, ingest.Options{
-			Refresh: src.Refresh, RefreshRetry: src.RefreshRetry, Interval: src.Interval, Lag: lagOf(src.Lag), Log: s.log, Committed: s.wakeEmbedder, Locked: s.wakeEmbedder})
+			Refresh: src.Refresh, RefreshRetry: src.RefreshRetry, Interval: src.Interval, Lag: lagOf(src.Lag), Log: s.log, Committed: s.wakeEmbedder, Locked: s.wakeEmbedder, RefreshWhy: why})
 		s.ingesters = append(s.ingesters, in)
 		wg.Add(1)
 		go func() {
@@ -265,7 +280,7 @@ func loadSources(path string, cfg *config.Server) ([]*ingest.Source, error) {
 	out := make([]*ingest.Source, len(cfg.Sources))
 	var refused config.Refusal
 	for i, s := range cfg.Sources {
-		src, err := ingest.Load(s.View, s.Access)
+		src, err := ingest.LoadDeclared(s.View, s.Access, s.Facets)
 		if err != nil {
 			refused.Errors = append(refused.Errors, &config.Error{Field: fmt.Sprintf("source[%d].view", i), Reason: err.Error()})
 			continue

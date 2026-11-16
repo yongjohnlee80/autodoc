@@ -92,6 +92,39 @@ It is never a search facet, because facets from the query text are OR-merged and
 
 In the code: `enterprise/search/search.go`, `core/pgstore/`
 
+## Typed facets, filtered in SQL an index answers
+
+A source declares the row fields a search may filter on, each typed: `keyword`, `number` or
+`date`. The declaration is part of the tenant's policy, read in the snapshot that reads the access
+fields. Facets never widen access: a name that is an access field (in any case), `tags`, `path`
+or `title` is refused when the configuration loads, and a filter, a range or a query word naming
+an access field is refused at search.
+
+Each predicate is one an index answers, ANDed beside the access predicate and never merged with
+it:
+
+- **keyword:** `field=value` pairs in `rag_document.facets`, beside the access pairs. A field's
+  values are one overlap, `facets && $n`, which the GIN index on `facets` answers; fields are
+  ANDed. Matching is exact, case included.
+- **number and date:** one row per value in `rag_document_value (tenant, doc_id, field, value)`,
+  each a double (a date as Unix seconds). A range is `EXISTS` over that table with the bounds
+  given, and its primary key `(tenant, field, value, doc_id)` answers it with a range scan. A
+  list value is several rows, so a document matches when any of its values is within every bound.
+  A side table and not a jsonb column, because a jsonb range needs an expression index per field,
+  which means DDL per source on a table every tenant shares.
+
+The values are replaced with their document, in its put's transaction, and go with it through
+the foreign key. They are part of the document's content hash, so a changed value writes it again.
+A changed declaration forgets the tenant's last refresh in the policy's own transaction, so the
+next start refreshes the source at once and every document gets the new declaration's values. The
+refresh embeds nothing again: embeddings are keyed by the text, and the text is unchanged.
+
+A request with ranges and no words is listed by the search package itself, since golib's engine
+lists only what its own filter narrows. The approximate path's small-scope count reads the same
+`where`, so a narrow range is answered exactly, without trying the index.
+
+In the code: `core/pgstore/facets.go`, `enterprise/search/search.go`, `enterprise/ingest/source.go`
+
 ## An HTTP API with a token per client
 
 The same search package serves Go applications directly and `POST /v1/search` over HTTP/JSON.

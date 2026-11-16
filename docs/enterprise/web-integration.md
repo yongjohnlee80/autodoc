@@ -35,9 +35,9 @@ the caller may see:
 - **The scope is checked against the policy as it is when the search runs,** in the same database
   snapshot the search reads. A server restarted with a new access field makes the next search
   without it refuse.
-- **Nothing in the request can widen the scope.** A query word or a filter facet naming an access
-  field is refused (`label_id:B`, in any case). Narrow by tags and path prefixes in the filter; the
-  scope is applied apart from them, in the database.
+- **Nothing in the request can widen the scope.** A query word, a filter facet or a range naming
+  an access field is refused (`label_id:B`, in any case). Narrow by tags, path prefixes and the
+  tenant's declared facets in the filter; the scope is applied apart from them, in the database.
 
 ## The Go library
 
@@ -87,6 +87,9 @@ for _, h := range res.Hits {
     `"document"` (the highest-scoring chunk per document). `Limit` counts the returned chunks or
     documents respectively. Grouping happens before the result limit, within the same scoped
     search snapshot; it does not merge scores or change retrieval's bounded candidate pool.
+  - `Filter.Facets` filters on the tenant's declared keyword facets
+    ([Filtering by facets](#filtering-by-facets)), and `Request.Ranges` on its number and date
+    facets.
   - A request with no words and only a filter lists what the filter admits.
 - **`Result`** has the hits, `ModeUsed`, and `Semantic`:
   - `"ready"`: every record can be found by meaning;
@@ -102,7 +105,9 @@ Each is a sentinel; test with `errors.Is`.
 |---|---|
 | `search.ErrScope` | The scope isn't the tenant's access: a field missing, extra or without values; a value empty, repeated or `*`. |
 | `search.ErrProtectedFacet` | The query or the filter names an access field. |
-| `search.ErrUnknownFacet` | The filter has a facet; a tenant keeps none but its access fields. Filter by tags or paths. |
+| `search.ErrUnknownFacet` | A facet or a range on a field the tenant doesn't declare. The message names the facets it does. |
+| `search.ErrFacetType` | A facet's equality on a number or a date, a range on a keyword, or a bound that isn't a value of its facet's type (NaN and infinities included). |
+| `search.ErrFilter` | More than 16 ranges or 64 values of one facet, a facet with no value, a range with no bound, or a low bound above its high one. |
 | `search.ErrLimit` | The limit is below 0 or above the most. |
 | `search.ErrGroup` | The group isn't `""`, `"chunk"` or `"document"`. |
 | `search.ErrNoPolicy` | The tenant has no policy: the server hasn't recorded it (check the tenant's name and that the server has started). |
@@ -130,11 +135,38 @@ curl -s http://127.0.0.1:8730/v1/search \
 | `scope` | required | The scope, as above. Every value must be granted to the token; a `["*"]` grant admits any value the request names. |
 | `query` | | The words, at most 1 KiB. |
 | `mode` | | `"auto"` (the default), `"lexical"` or `"semantic"`. |
-| `filter` | | `{"tags": […], "paths": […]}`: narrows within the scope. |
+| `filter` | | `{"tags": […], "paths": […], "facets": {…}, "ranges": {…}}`: narrows within the scope ([Filtering by facets](#filtering-by-facets)). |
 | `limit` | | 1 to 200; 0 or absent is 20. |
 | `group` | | `"chunk"` (default), or `"document"`: one hit per document, its highest-scoring chunk. `limit` counts documents in this mode. |
 
 The body is one JSON object of at most 64 KiB, with no other field.
+
+### Filtering by facets
+
+A source declares the row fields a search may filter on, each with a type, in its
+`[source.facets]` table ([server-config](server-config.md#source-what-is-indexed)):
+
+```json
+"filter": {
+  "facets": {"status": ["released", "scheduled"], "territory": ["CA"]},
+  "ranges": {"released": {"gte": "2024-01-01", "lt": "2025-01-01"}, "bpm": {"gte": 118, "lte": 126}}
+}
+```
+
+- **`facets`** are a keyword facet's values. A record matches when it holds one of a field's
+  values, for every field given.
+  - A list value (a record's territories) matches when any of its values is among them.
+  - Matching is exact, case included: send a value as the record holds it. Tags alone are
+    lowercased.
+  - A query word `status:released` is the same filter, for a declared keyword facet.
+  - At most 64 values per field.
+- **`ranges`** filter number and date facets: `gt`, `gte`, `lt` and `lte`, at least one per
+  field, at most 16 fields.
+  - A bound is a number, or a string read as the facet's values are: a number from a decimal, a
+    date as `YYYY-MM-DD` (midnight UTC) or RFC 3339.
+  - A list value matches when any of its values is within every bound given.
+- Every filter is ANDed with the scope, in the database, by a predicate an index answers. A
+  record with no value for a field never matches a filter on it.
 
 ### The answer
 
@@ -182,7 +214,7 @@ caller without a valid token learns nothing about tenants or bodies:
 | 400 | `bad_request` | Not one JSON search request: an unknown field, a second value, a query over 1 KiB. |
 | 403 | `forbidden` | The token isn't granted the tenant. A tenant that doesn't exist answers the same. |
 | 403 | `scope_forbidden` | A scope field or value the token isn't granted. |
-| 400 | `scope_required`, `protected_facet`, `unknown_facet`, `bad_limit`, `bad_group`, `bad_mode` | The library's refusals, above. |
+| 400 | `scope_required`, `protected_facet`, `unknown_facet`, `facet_type`, `bad_filter`, `bad_limit`, `bad_group`, `bad_mode` | The library's refusals, above. |
 | 503 | `switching` | Semantic mode while the tenant switches models (`Retry-After`). Use auto mode to be answered by words meanwhile. |
 | 502 | `embed_failed` | Semantic mode, and the query couldn't be embedded. |
 | 503 | `unavailable` | The search didn't finish within 25 s, or the server is stopping (`Retry-After`). |

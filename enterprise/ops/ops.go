@@ -212,10 +212,13 @@ type TenantStatus struct {
 	Cursor      CursorState `json:"cursor"`
 	LastPass    RunState    `json:"last_pass"`
 	LastRefresh RunState    `json:"last_refresh"`
-	Quarantine  uint64      `json:"quarantine"`
-	Documents   Documents   `json:"documents"`
-	Models      ModelsState `json:"models"`
-	Error       opcode.Code `json:"error"` // reading the tenant's state failed: its other figures are absent
+	// RefreshDue is why a refresh is due at once, not on its schedule, until it completes:
+	// "facets" when the tenant's declared facets changed. Absent for none.
+	RefreshDue string      `json:"refresh_due,omitempty"`
+	Quarantine uint64      `json:"quarantine"`
+	Documents  Documents   `json:"documents"`
+	Models     ModelsState `json:"models"`
+	Error      opcode.Code `json:"error"` // reading the tenant's state failed: its other figures are absent
 }
 
 // CursorState is where the tenant's cursor is, and how far behind the database's clock. The cursor
@@ -394,6 +397,7 @@ func live(ts *TenantStatus, st ingest.State) {
 	ts.LastRefresh = runState(st.LastRefresh, ts.LastRefresh.LastComplete)
 	ts.LastPass.LastComplete = nil
 	ts.LastRefresh.Complete = st.LastRefresh.Stats.Complete
+	ts.RefreshDue = st.RefreshDue
 }
 
 func runState(o ingest.Outcome, lastComplete *time.Time) RunState {

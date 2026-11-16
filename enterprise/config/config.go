@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"net/url"
 	"os"
@@ -168,6 +169,9 @@ type Source struct {
 	RefreshRetry time.Duration
 	// Access are the row fields every search of the tenant must be scoped by.
 	Access []string
+	// Facets are the row fields a search of the tenant may filter on, name → type: keyword,
+	// number or date ([source.facets]). nil declares none.
+	Facets map[string]string
 }
 
 // Error is one refusal: the field it is about and why.
@@ -259,13 +263,14 @@ type file struct {
 		Enabled bool `toml:"enabled"`
 	} `toml:"metrics"`
 	Sources []struct {
-		Tenant   string    `toml:"tenant"`
-		View     string    `toml:"view"`
-		Refresh  *duration `toml:"refresh"`
-		Interval *duration `toml:"interval"`
-		Lag      *duration `toml:"lag"`
-		Retry    *duration `toml:"refresh_retry"`
-		Access   []string  `toml:"access"`
+		Tenant   string            `toml:"tenant"`
+		View     string            `toml:"view"`
+		Refresh  *duration         `toml:"refresh"`
+		Interval *duration         `toml:"interval"`
+		Lag      *duration         `toml:"lag"`
+		Retry    *duration         `toml:"refresh_retry"`
+		Access   []string          `toml:"access"`
+		Facets   map[string]string `toml:"facets"`
 	} `toml:"source"`
 }
 
@@ -486,7 +491,7 @@ func (v *validator) sources(f file) []Source {
 	for i, raw := range f.Sources {
 		at := func(k string) string { return fmt.Sprintf("source[%d].%s", i, k) }
 		s := Source{Tenant: raw.Tenant, Refresh: DefaultRefresh, Interval: DefaultInterval, Lag: DefaultLag,
-			Access: raw.Access}
+			Access: raw.Access, Facets: raw.Facets}
 		switch {
 		case s.Tenant == "":
 			v.refuse(at("tenant"), "required")
@@ -534,6 +539,11 @@ func (v *validator) sources(f file) []Source {
 			v.refuse(at("access"), "required: the row fields every search of the tenant is scoped by")
 		} else if err := pgstore.CheckAccessFields(s.Access); err != nil {
 			v.refuse(at("access"), "%s", strings.TrimPrefix(err.Error(), "pgstore: "))
+		}
+		for _, name := range slices.Sorted(maps.Keys(s.Facets)) {
+			if err := pgstore.CheckFacets(s.Access, map[string]string{name: s.Facets[name]}); err != nil {
+				v.refuse(at("facets."+name), "%s", strings.TrimPrefix(err.Error(), "pgstore: not a facet declaration: "))
+			}
 		}
 		out = append(out, s)
 	}

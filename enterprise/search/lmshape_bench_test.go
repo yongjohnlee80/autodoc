@@ -45,7 +45,9 @@ func lmEnvInt(name string, def int) int {
 // text and vectors, every one a pure function of the seed and the document's index, so a query can
 // be made from a document without keeping the corpus.
 type lmCorpus struct {
-	n       int
+	n      int
+	facets bool // AUTODOC_BENCH_FACETS: each document has the declared facets lmFacets
+
 	labels  []string // by rank: labels[0] is the largest
 	label   []int    // document -> rank
 	chunks  []int    // document -> chunk count
@@ -166,11 +168,46 @@ func (c *lmCorpus) document(d int) pgstore.Document {
 		Facets:   map[string][]string{"label_id": {c.labels[c.label[d]]}},
 		SourceID: strconv.Itoa(d),
 	}
+	if c.facets {
+		c.facetsOf(d, &doc)
+	}
 	for k := range c.chunks[d] {
 		body := c.text(d, k)
 		doc.Chunks = append(doc.Chunks, gsearch.Chunk{Ord: k, Breadcrumb: doc.Path, Body: body, ByteEnd: len(body)})
 	}
 	return doc
+}
+
+// lmFacets is the declaration of a corpus with facets: a release's status and territories, its
+// release date and its tempo, as LabelManager filters them.
+var lmFacets = map[string]string{"status": pgstore.FacetKeyword, "territory": pgstore.FacetKeyword,
+	"released": pgstore.FacetDate, "bpm": pgstore.FacetNumber}
+
+// lmTerritories are the territories a document may be released in.
+var lmTerritories = []string{"US", "CA", "GB", "DE", "JP", "BR"}
+
+// facetsOf gives document d its facets, a pure function of d: status released (70%), scheduled
+// (20%) or draft (10%); one to three territories; a release date uniform over 2016 to 2025; a
+// tempo uniform from 60 to 180 bpm, whole.
+func (c *lmCorpus) facetsOf(d int, doc *pgstore.Document) {
+	r := rand.New(rand.NewPCG(lmSeed+5, uint64(d)))
+	status := "released"
+	switch x := r.IntN(10); {
+	case x == 9:
+		status = "draft"
+	case x >= 7:
+		status = "scheduled"
+	}
+	doc.Facets["status"] = []string{status}
+	ts := slices.Clone(lmTerritories)
+	r.Shuffle(len(ts), func(i, j int) { ts[i], ts[j] = ts[j], ts[i] })
+	doc.Facets["territory"] = ts[:1+r.IntN(3)]
+	from := time.Date(2016, 1, 1, 0, 0, 0, 0, time.UTC).Unix()
+	to := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC).Unix()
+	doc.Values = map[string][]float64{
+		"released": {float64(from + r.Int64N(to-from))},
+		"bpm":      {float64(60 + r.IntN(121))},
+	}
 }
 
 // seed writes the corpus through the store's own paths: Batch for the documents, Embed for the
@@ -277,6 +314,7 @@ func BenchmarkLMShape(b *testing.B) {
 	n := lmEnvInt("AUTODOC_BENCH_DOCS", 56000)
 	nl := lmEnvInt("AUTODOC_BENCH_LABELS", 200)
 	c := newLMCorpus(n, nl)
+	c.facets = os.Getenv("AUTODOC_BENCH_FACETS") == "1"
 	// the cases' labels are the largest and the smallest that hold a document: with few documents
 	// over many labels, the Zipf tail is empty, and a case on an empty label would have no query
 	small, large := -1, -1
@@ -315,7 +353,11 @@ func BenchmarkLMShape(b *testing.B) {
 	if err := st.SetModels(ctx, lmModel, ""); err != nil {
 		b.Fatal(err)
 	}
-	if err := st.SetPolicy(ctx, pgstore.Policy{AccessFields: []string{"label_id"}, View: "track"}); err != nil {
+	policy := pgstore.Policy{AccessFields: []string{"label_id"}, View: "track"}
+	if c.facets {
+		policy.Facets = lmFacets
+	}
+	if err := st.SetPolicy(ctx, policy); err != nil {
 		b.Fatal(err)
 	}
 	t0 := time.Now()
@@ -343,11 +385,32 @@ func BenchmarkLMShape(b *testing.B) {
 	allLabels := make(map[string][]string)
 	allLabels["label_id"] = c.labels
 	cases := []lmCase{
-		{"a_hybrid_small_label", Scope{"label_id": {c.labels[small]}}, gsearch.ModeAuto, c.queries(pool, ranksOf(small), 1)},
-		{"b_hybrid_large_label", Scope{"label_id": {c.labels[large]}}, gsearch.ModeAuto, c.queries(pool, ranksOf(large), 2)},
-		{"c_hybrid_unscoped", Scope(allLabels), gsearch.ModeAuto, c.queries(pool, nil, 3)},
-		{"d_semantic_small_label", Scope{"label_id": {c.labels[small]}}, gsearch.ModeSemantic, c.queries(pool, ranksOf(small), 4)},
-		{"e_lexical_small_label", Scope{"label_id": {c.labels[small]}}, gsearch.ModeLexical, c.queries(pool, ranksOf(small), 5)},
+		{name: "a_hybrid_small_label", scope: Scope{"label_id": {c.labels[small]}}, mode: gsearch.ModeAuto, qs: c.queries(pool, ranksOf(small), 1)},
+		{name: "b_hybrid_large_label", scope: Scope{"label_id": {c.labels[large]}}, mode: gsearch.ModeAuto, qs: c.queries(pool, ranksOf(large), 2)},
+		{name: "c_hybrid_unscoped", scope: Scope(allLabels), mode: gsearch.ModeAuto, qs: c.queries(pool, nil, 3)},
+		{name: "d_semantic_small_label", scope: Scope{"label_id": {c.labels[small]}}, mode: gsearch.ModeSemantic, qs: c.queries(pool, ranksOf(small), 4)},
+		{name: "e_lexical_small_label", scope: Scope{"label_id": {c.labels[small]}}, mode: gsearch.ModeLexical, qs: c.queries(pool, ranksOf(small), 5)},
+	}
+	if c.facets {
+		// typed facets (AUTODOC_BENCH_FACETS=1): each filter against the same queries unfiltered
+		inLarge, all := Scope{"label_id": {c.labels[large]}}, Scope(allLabels)
+		released := gsearch.Filter{Facets: map[string][]string{"status": {"released"}}}
+		combined := gsearch.Filter{Facets: map[string][]string{"status": {"released"}, "territory": {"US"}}}
+		year := map[string]Range{"released": {Gte: "2024-01-01", Lt: "2025-01-01"}}
+		cases = append(cases,
+			lmCase{name: "f_hybrid_large_status", scope: inLarge, mode: gsearch.ModeAuto, qs: c.queries(pool, ranksOf(large), 6), filter: released},
+			lmCase{name: "g_hybrid_large_year", scope: inLarge, mode: gsearch.ModeAuto, qs: c.queries(pool, ranksOf(large), 7), ranges: year},
+			lmCase{name: "h_hybrid_large_combined", scope: inLarge, mode: gsearch.ModeAuto, qs: c.queries(pool, ranksOf(large), 8), filter: combined,
+				ranges: map[string]Range{"released": {Gte: "2020-01-01", Lt: "2025-01-01"}, "bpm": {Gte: "118", Lte: "126"}}},
+			lmCase{name: "i_hybrid_unscoped_bpm_narrow", scope: all, mode: gsearch.ModeAuto, qs: c.queries(pool, nil, 9),
+				ranges: map[string]Range{"bpm": {Gte: "120", Lt: "121"}}},
+			lmCase{name: "j_hybrid_unscoped_bpm_wide", scope: all, mode: gsearch.ModeAuto, qs: c.queries(pool, nil, 10),
+				ranges: map[string]Range{"bpm": {Gte: "70"}}},
+			lmCase{name: "k_lexical_large_combined", scope: inLarge, mode: gsearch.ModeLexical, qs: c.queries(pool, ranksOf(large), 11), filter: combined,
+				ranges: map[string]Range{"released": {Gte: "2020-01-01"}}},
+			lmCase{name: "l_filters_alone_large_combined", scope: inLarge, mode: gsearch.ModeAuto, qs: []lmQuery{{}}, filter: combined,
+				ranges: map[string]Range{"released": {Gte: "2024-01-01", Lt: "2025-01-01"}}},
+		)
 	}
 	for _, cs := range cases {
 		for _, q := range cs.qs {
@@ -358,13 +421,14 @@ func BenchmarkLMShape(b *testing.B) {
 	one := func(b *testing.B, s *Searcher, cs lmCase, i int) time.Duration {
 		q := cs.qs[i%len(cs.qs)]
 		t := time.Now()
-		res, err := s.Search(ctx, cs.scope, Request{Query: q.text, Mode: cs.mode, Limit: 20})
+		res, err := s.Search(ctx, cs.scope, Request{Query: q.text, Mode: cs.mode, Limit: 20, Filter: cs.filter, Ranges: cs.ranges})
 		d := time.Since(t)
 		if err != nil {
 			b.Error(err)
 			return d
 		}
-		if len(res.Hits) == 0 {
+		// a filtered case's words may come from a document its filter leaves out
+		if len(res.Hits) == 0 && cs.filter.Facets == nil && cs.ranges == nil {
 			b.Errorf("%s: no hits for %q", cs.name, q.text)
 		}
 		return d
@@ -465,12 +529,15 @@ func BenchmarkLMShape(b *testing.B) {
 	}
 }
 
-// lmCase is one measured case: a scope and a mode, with its queries.
+// lmCase is one measured case: a scope and a mode, with its queries, and its filter and ranges
+// (typed facets) when it has them.
 type lmCase struct {
-	name  string
-	scope Scope
-	mode  gsearch.Mode
-	qs    []lmQuery
+	name   string
+	scope  Scope
+	mode   gsearch.Mode
+	qs     []lmQuery
+	filter gsearch.Filter
+	ranges map[string]Range
 }
 
 // explainPhase runs each case once more, exact then approximate, on fresh connections of a database
@@ -532,7 +599,8 @@ func explainPhase(ctx context.Context, b *testing.B, dsn string, cases []lmCase)
 			}
 			for i := range 2 { // the second is the warm one
 				t := time.Now()
-				if _, err := run.s.Search(ctx, cs.scope, Request{Query: cs.qs[i].text, Mode: cs.mode, Limit: 20}); err != nil {
+				q := cs.qs[i%len(cs.qs)]
+				if _, err := run.s.Search(ctx, cs.scope, Request{Query: q.text, Mode: cs.mode, Limit: 20, Filter: cs.filter, Ranges: cs.ranges}); err != nil {
 					b.Fatal(err)
 				}
 				b.Logf("explain %s run %d: %s", mark, i, time.Since(t))
