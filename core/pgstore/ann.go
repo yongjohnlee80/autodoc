@@ -248,6 +248,7 @@ type ANN struct {
 	cand      map[dao.VectorType]*chunkSchema // snapshot schemas with an ANN sort key for the type
 	underfill map[string]*atomic.Int64        // per model: candidate stages that came back short
 	scoped    map[string]*atomic.Int64        // per model: searches answered exactly for their small scope (ExactScopeDocs)
+	past      map[pastKey]time.Time           // per tenant and model: when it was last seen past the threshold (pastThreshold)
 
 	hook    dao.Hook    // the builder's statements, observed; nil in production
 	checked atomic.Bool // the ready indexes' definitions were checked once this run (verifyReady)
@@ -266,7 +267,7 @@ func NewANN(conn dao.DataConn, cfg ANNConfig, run string) *ANN {
 		rwIndex: newANNIndexSchema(committedConn{conn}), rwBuilder: newANNBuilderSchema(committedConn{conn}),
 		roIndex: newANNIndexSchema(snapshotConn{conn}), rwMeta: newMetaSchema(committedConn{conn}), rwEmb: newEmbSchema(committedConn{conn}),
 		cand: map[dao.VectorType]*chunkSchema{}, underfill: map[string]*atomic.Int64{}, scoped: map[string]*atomic.Int64{},
-		leaseFor: annLease, renewEvery: annRenew}
+		past: map[pastKey]time.Time{}, leaseFor: annLease, renewEvery: annRenew}
 }
 
 // candidates is t's candidate schema: the chunk schema with an ANN sort key over the embeddings
@@ -362,6 +363,64 @@ func (a *ANN) Status(ctx context.Context) ([]ANNStatus, error) {
 
 // --- the two-stage search --------------------------------------------------------------
 
+// pastKey is a tenant's model.
+type pastKey struct{ tenant, model string }
+
+// pastFor is how long a tenant's model seen past the threshold is taken to be past it without
+// asking again (a variable, so a cell can shorten it); pastClock is the time it is measured by.
+var (
+	pastFor   = time.Minute
+	pastClock = time.Now
+)
+
+// pastThreshold reports whether the View's tenant has at least the threshold's embeddings of
+// model: what lets its searches go through the index. Asking costs a read of the threshold's
+// embeddings (LIMIT 1 OFFSET threshold − 1: 50,000 rows at the default, about 10 ms), so a yes is
+// remembered for pastFor, and asked again only after it. A no is never remembered: a tenant's bulk
+// load crosses the threshold, and its next search should see it.
+//
+// A tenant's embeddings fall below the threshold only by a reclaim or a drop. This Store's own
+// clear the tenant's yes at once (forget); another server's are seen past pastFor. Until then a
+// search still tries the index for a tenant now below it: the candidate stage, under the tenant's
+// filter, comes back short whenever the tenant has fewer than its k embeddings left, and the
+// search is answered exactly (underfill); with more, the index answers, as it would for any tenant
+// past the threshold. Either way the answer is a right one.
+func (v *View) pastThreshold(ctx context.Context, model string) (bool, error) {
+	a := v.s.ann
+	k := pastKey{v.s.tenant, model}
+	a.mu.Lock()
+	at, ok := a.past[k]
+	a.mu.Unlock()
+	now := pastClock()
+	if ok && now.Sub(at) < pastFor {
+		return true, nil
+	}
+	rows, err := v.s.ro.emb.On(v.tx, v.opts(ctx)...).With(eTenant, v.s.tenant).With(eModel, model).
+		Offset(uint64(a.cfg.Threshold - 1)).Limit(1).Select(eHash)
+	if err != nil {
+		return false, err
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if len(rows) == 0 {
+		delete(a.past, k)
+		return false, nil
+	}
+	a.past[k] = now
+	return true, nil
+}
+
+// forget clears what pastThreshold remembers of tenant: its embeddings were reclaimed or dropped.
+func (a *ANN) forget(tenant string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for k := range a.past {
+		if k.tenant == tenant {
+			delete(a.past, k)
+		}
+	}
+}
+
 func (a *ANN) scopedOf(model string) *atomic.Int64 {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -404,9 +463,7 @@ func (v *View) semanticANN(ctx context.Context, model string, vec []float32, f s
 	if err != nil {
 		return nil, false, err
 	}
-	past, err := v.s.ro.emb.On(v.tx, v.opts(ctx)...).With(eTenant, v.s.tenant).With(eModel, model).
-		Offset(uint64(a.cfg.Threshold - 1)).Limit(1).Select(eHash)
-	if err != nil || len(past) == 0 {
+	if past, err := v.pastThreshold(ctx, model); err != nil || !past {
 		return nil, false, err
 	}
 
