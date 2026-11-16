@@ -48,7 +48,7 @@ func detailModule() fakeModule {
 // text after its own, up to a filesystem's error wrapped beside it (naming a host path), on one
 // line, bounded; and not at all when it still names an absolute path. One whose entry does not crosses as its message alone, however much its
 // wrapping says. Code is the contract either way. The mutants, named here: every error's detail
-// sent (the refused one's host path crosses); the detail not cut at its cause (the guard then
+// sent (the refused one's other tenant crosses); the detail not cut at its cause (the guard then
 // drops all of it); the guard skipped (a host path in the error's own text crosses).
 func TestACataloguedErrorsDetailCrossesOnlyWhenItsEntrySays(t *testing.T) {
 	cli, _ := moduleServer(t, detailModule())
@@ -62,7 +62,8 @@ func TestACataloguedErrorsDetailCrossesOnlyWhenItsEntrySays(t *testing.T) {
 		{"its detail", "invalid", "title is required", -32072, "a value the rules refuse: title is required"},
 		{"on one line", "invalid", "line one\nline\ttwo  ", -32072, "a value the rules refuse: line one line two"},
 		{"none past its own", "invalid", "", -32072, "a value the rules refuse"},
-		{"no detail sent", "refused", "disk full at /secret/path", -32073, "refused"},
+		{"no detail sent", "refused", "another tenant's store, acme-records", -32073, "refused"},
+		{"no detail sent, a path either", "refused", "disk full at /secret/path", -32073, "refused"},
 		{"a detail naming a host path", "invalid", "the store /home/someone/kb/.todo-list belongs to no workspace", -32072, "a value the rules refuse"},
 		{"a Windows one", "invalid", `C:\Users\someone\kb is not a store`, -32072, "a value the rules refuse"},
 		{"a relative path kept", "invalid", "archived/2026/11/a.md is malformed", -32072, "a value the rules refuse: archived/2026/11/a.md is malformed"},
