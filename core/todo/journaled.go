@@ -51,7 +51,23 @@ func (m *Manager) settle(ctx context.Context, st *store, c Change, err, as error
 	if errors.Is(err, vfs.ErrConflict) {
 		return m.dropped(ctx, c, fmt.Errorf("%w: %s", as, p))
 	}
-	return m.failed(ctx, st, c, err)
+	return m.failed(ctx, st, c, refused(err, p))
+}
+
+// refused is a task file's write that the documents refused for what was asked of them, said as
+// the todo format's own refusal (ErrInvalid, todos.invalid): a file over the documents' size limit
+// (docs.ErrTooLarge), or a name the filesystem refuses (vfs.ErrInvalidName: the format's ids are
+// safe file names, but a disk may refuse one, as Windows refuses a name it reserves). Each is the
+// request's to mend, not the daemon's fault, and the todos.* catalog lists neither. Any other
+// error is as it is.
+func refused(err error, p string) error {
+	switch {
+	case errors.Is(err, docs.ErrTooLarge):
+		return fmt.Errorf("%w: %s is over the size limit (%d bytes): shorten its description: %w", ErrInvalid, p, docs.MaxSize, err)
+	case errors.Is(err, vfs.ErrInvalidName):
+		return fmt.Errorf("%w: %s is a name the filesystem refuses: give the task another id or title: %w", ErrInvalid, p, err)
+	}
+	return err
 }
 
 // dropped deletes the row of a change that made no file change, and returns why.
