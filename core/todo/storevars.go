@@ -698,7 +698,9 @@ func (m *Manager) kbFor(ctx context.Context, o SetVarOpts) (string, error) {
 		}
 		kb, err := m.owner(ctx, w.rec.ID)
 		if err == nil && kb == "" {
-			err = fmt.Errorf("%w: the store %s belongs to no workspace: link it with todos.set_kb", ErrInvalid, w.rec.Path)
+			// no path: the message crosses to the client (todos.invalid's detail), and a store
+			// named by its workspace is a path the caller never gave
+			err = fmt.Errorf("%w: the store belongs to no workspace: link it with todos.set_kb", ErrInvalid)
 		}
 		return kb, err
 	}
@@ -735,7 +737,8 @@ func (m *Manager) editKBFile(ctx context.Context, kb string, fn func(*storeVars)
 	default:
 		ver = doc.Version
 		if sv, err = parseStoreVars(doc.Content); err != nil {
-			return fmt.Errorf("%w: %s/%s is not a variable file the daemon rewrites (fix it by hand): %v", ErrInvalid, kb, varsFile, err)
+			// the KB's file by its name in the KB, not its path on this host: the message crosses
+			return fmt.Errorf("%w: the KB's %s is not a variable file the daemon rewrites (fix it by hand): %v", ErrInvalid, varsFile, err)
 		}
 	}
 	if err := fn(&sv); err != nil {

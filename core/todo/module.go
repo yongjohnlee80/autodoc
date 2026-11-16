@@ -52,7 +52,7 @@ func (m *Manager) Errors() []module.PublicError {
 			Next: "todos.get it again, re-apply the change, and retry with its new rev"},
 		{Err: ErrNotFound, Code: CodeNoTask, Name: "todos.not_found", Message: "no such task", Next: "list the tasks again"},
 		{Err: ErrInvalid, Code: CodeInvalid, Name: "todos.invalid", Message: "a value the todo format or its rules refuse",
-			Next: "fix the field and send it again"},
+			Next: "fix the field and send it again", Detail: true},
 		{Err: ErrNotAStore, Code: CodeNotAStore, Name: "todos.not_a_store", Message: "there is no todo store there",
 			Next: "todos.scaffold one, or todos.set_dir to another"},
 		{Err: ErrExists, Code: CodeExists, Name: "todos.exists", Message: "that already exists",
