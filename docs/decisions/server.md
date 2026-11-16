@@ -131,6 +131,21 @@ lists only what its own filter narrows. The approximate path's small-scope count
 
 In the code: `core/pgstore/facets.go`, `enterprise/search/search.go`, `enterprise/ingest/source.go`
 
+## GIN indexes without stale pending lists
+
+A GIN index with `fastupdate` on (PostgreSQL's default) adds each write's entries to a pending list
+that every scan reads whole until VACUUM merges it. After a bulk load, that list made every scoped
+search slower: a label's facet scan read 3 ms of list for 37 entries.
+
+- **The document's facets and tags** keep no pending list (`fastupdate = off`, script 000009,
+  which also merges the lists already there). Their entries are a few short strings per
+  document, so writing them straight into the index costs a load little.
+- **The chunks' text index** keeps its list, since a chunk's words are many. The ingester merges
+  it (`gin_clean_pending_list`) after a load: a refresh that wrote documents, or a pass that wrote
+  many. Between loads autovacuum merges what trickles in.
+
+In the code: `core/pgstore/gin.go`, `enterprise/ingest/ingest.go`
+
 ## An HTTP API with a token per client
 
 The same search package serves Go applications directly and `POST /v1/search` over HTTP/JSON.
