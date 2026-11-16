@@ -87,7 +87,7 @@ func TestTheExplorersStripHidePaintsItsDockIconLitThenDimmed(t *testing.T) {
 }
 
 func TestTheTerminalsStripHideAndEscapePaintItsDockIconLitThenDimmed(t *testing.T) {
-	_, r := runShellTUI(t, nil)
+	_, r := runLineShellTUI(t, nil)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
 	shown, after := dockIconPaints(t, r, "❯", func() { windowControl(t, r, "_") })

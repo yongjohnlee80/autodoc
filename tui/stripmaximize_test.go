@@ -63,7 +63,7 @@ func stripAt(screen string) (x, y int) {
 }
 
 func TestTheTerminalsStripMaximizesAndRestores(t *testing.T) {
-	_, r := runShellTUI(t, nil)
+	_, r := runLineShellTUI(t, nil)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
 	row0, _ := frameAt(r.s.String())
