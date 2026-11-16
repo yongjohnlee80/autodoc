@@ -36,6 +36,11 @@ type ANNConfig struct {
 	// scan's candidate list, wider than k so a tenant sharing the index with others still finds
 	// its own nearest. 0 is 1.
 	EfFactor int
+	// ExactScopeDocs answers a filtered search exactly, without trying the index, when its filter
+	// and access admit at most this many of the tenant's ready documents: the index's candidates
+	// for so few come back short, and the exact search then runs after the scan was already paid
+	// for. 0 never counts: every search past the threshold tries the index first.
+	ExactScopeDocs int
 	// M and EfConstruction are the index's build parameters (pgvector's m and ef_construction; 0
 	// is pgvector's default, 16 and 64). An index built with others is replaced while it serves.
 	M, EfConstruction int
@@ -65,7 +70,7 @@ type ANNConfig struct {
 // 20 builds, 8 of them below 0.95, and no ef_search, scan budget or scan order moved it, since the
 // graph left whole regions unreachable; at 200, 0.994 to 1.000 over 5. m 32 did no better than 16.
 func DefaultANNConfig() ANNConfig {
-	return ANNConfig{Threshold: 50000, MaxScanTuples: 1000, ScanMemMultiplier: 2, EfConstruction: 200,
+	return ANNConfig{Threshold: 50000, MaxScanTuples: 1000, ScanMemMultiplier: 2, EfConstruction: 200, ExactScopeDocs: 1000,
 		DeferBacklog: 2000, DeferMax: 24 * time.Hour, MaintenanceWorkMem: "512MB"}
 }
 
@@ -242,6 +247,7 @@ type ANN struct {
 	mu        sync.Mutex
 	cand      map[dao.VectorType]*chunkSchema // snapshot schemas with an ANN sort key for the type
 	underfill map[string]*atomic.Int64        // per model: candidate stages that came back short
+	scoped    map[string]*atomic.Int64        // per model: searches answered exactly for their small scope (ExactScopeDocs)
 
 	hook    dao.Hook    // the builder's statements, observed; nil in production
 	checked atomic.Bool // the ready indexes' definitions were checked once this run (verifyReady)
@@ -259,7 +265,7 @@ func NewANN(conn dao.DataConn, cfg ANNConfig, run string) *ANN {
 	return &ANN{cfg: cfg, conn: conn, run: run,
 		rwIndex: newANNIndexSchema(committedConn{conn}), rwBuilder: newANNBuilderSchema(committedConn{conn}),
 		roIndex: newANNIndexSchema(snapshotConn{conn}), rwMeta: newMetaSchema(committedConn{conn}), rwEmb: newEmbSchema(committedConn{conn}),
-		cand: map[dao.VectorType]*chunkSchema{}, underfill: map[string]*atomic.Int64{},
+		cand: map[dao.VectorType]*chunkSchema{}, underfill: map[string]*atomic.Int64{}, scoped: map[string]*atomic.Int64{},
 		leaseFor: annLease, renewEvery: annRenew}
 }
 
@@ -319,6 +325,9 @@ type ANNStatus struct {
 	// search answered exactly: a selective filter, a small share of a shared index, or a scan
 	// that hit its budget.
 	Underfill int64
+	// ExactScoped counts this server run's searches answered exactly without trying the index,
+	// their filter and access admitting at most ExactScopeDocs documents.
+	ExactScoped int64
 }
 
 // Status is every recorded model's index: its mode (ann when ready, ann-building while wanted or
@@ -330,7 +339,7 @@ func (a *ANN) Status(ctx context.Context) ([]ANNStatus, error) {
 	}
 	out := make([]ANNStatus, 0, len(rows))
 	for _, r := range rows {
-		s := ANNStatus{Model: r.Model, Underfill: a.underfillOf(r.Model).Load()}
+		s := ANNStatus{Model: r.Model, Underfill: a.underfillOf(r.Model).Load(), ExactScoped: a.scopedOf(r.Model).Load()}
 		switch r.State {
 		case annReady:
 			s.Mode = ModeANN
@@ -352,6 +361,17 @@ func (a *ANN) Status(ctx context.Context) ([]ANNStatus, error) {
 }
 
 // --- the two-stage search --------------------------------------------------------------
+
+func (a *ANN) scopedOf(model string) *atomic.Int64 {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	c := a.scoped[model]
+	if c == nil {
+		c = new(atomic.Int64)
+		a.scoped[model] = c
+	}
+	return c
+}
 
 // annSettings are the candidate stage's transaction-local settings for k candidates.
 func (a *ANN) annSettings(k int) dao.QueryOption {
@@ -390,12 +410,16 @@ func (v *View) semanticANN(ctx context.Context, model string, vec []float32, f s
 		return nil, false, err
 	}
 
+	where := v.where(f)
+	if small, err := v.smallScope(ctx, model, where); err != nil || small {
+		return nil, false, err
+	}
 	k := candidateCount(n)
-	d := v.sectioned(ctx, a.candidates(t).On(v.tx, append(v.opts(ctx), a.annSettings(k))...).With(cTenant, v.s.tenant)).
+	d := v.sectioned(ctx, a.candidates(t).On(v.tx, append(v.plain(ctx), a.annSettings(k))...).With(cTenant, v.s.tenant)).
 		Join(joinDoc, joinEmb).
 		WithPredicate(dao.Eq(qcol(tEmb, "model"), model)).
 		WithPredicate(dao.Eq(qcol(tDoc, string(dReady)), true))
-	for _, p := range v.where(f) {
+	for _, p := range where {
 		d = d.WithPredicate(p)
 	}
 	cands, err := d.OrderBy(dao.AscBy(cByANN, postgres.Vector(vec))).Limit(uint64(k)).Select(cDoc, cOrd)
@@ -423,6 +447,30 @@ func (v *View) semanticANN(ctx context.Context, model string, vec []float32, f s
 		out = append(out, candidate(r, chunk.Snippet(r.Body)))
 	}
 	return out, true, nil
+}
+
+// smallScope reports whether where (a search's filter and the View's access) admits at most
+// ExactScopeDocs of the tenant's ready documents, so the search is answered exactly: one read of
+// at most that many document ids and one more, through the indexes the predicates have (the GIN
+// indexes on facets and tags). A search with no predicate is the whole tenant's, never small.
+func (v *View) smallScope(ctx context.Context, model string, where []dao.Predicate) (bool, error) {
+	most := v.s.ann.cfg.ExactScopeDocs
+	if most <= 0 || len(where) == 0 {
+		return false, nil
+	}
+	d := v.docs(ctx).With(dReady, true)
+	for _, p := range where {
+		d = d.WithPredicate(p)
+	}
+	ids, err := d.Limit(uint64(most) + 1).Select(dID)
+	if err != nil {
+		return false, err
+	}
+	if len(ids) > most {
+		return false, nil
+	}
+	v.s.ann.scopedOf(model).Add(1)
+	return true, nil
 }
 
 // ANNMode is model's search mode for this tenant, and why: exact below the threshold or with no

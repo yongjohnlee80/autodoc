@@ -73,7 +73,7 @@ type Postgres struct {
 	// Schema is the schema pgstore's tables live in, created when missing.
 	Schema string
 	// ANN is the approximate semantic search's settings (ann_threshold, ann_max_scan_tuples,
-	// ann_scan_mem_multiplier, ann_m, ann_ef_construction, ann_defer_backlog, ann_defer_max,
+	// ann_scan_mem_multiplier, ann_exact_scope_docs, ann_m, ann_ef_construction, ann_defer_backlog, ann_defer_max,
 	// ann_maintenance_work_mem), pgstore's defaults for any not set.
 	ANN pgstore.ANNConfig
 }
@@ -220,6 +220,8 @@ type file struct {
 		ANNEfConstruction    *int     `toml:"ann_ef_construction"`
 		ANNM                 *int     `toml:"ann_m"`
 		// a model's first build waits for its bulk load, and the builder's memory
+		// a filtered search admitting at most this many documents is answered exactly, index untried
+		ANNExactScopeDocs     *int      `toml:"ann_exact_scope_docs"`
 		ANNDeferBacklog       *int      `toml:"ann_defer_backlog"`
 		ANNDeferMax           *duration `toml:"ann_defer_max"`
 		ANNMaintenanceWorkMem *string   `toml:"ann_maintenance_work_mem"`
@@ -398,6 +400,12 @@ func (v *validator) postgres(f file) Postgres {
 			v.refuse("postgres.ann_ef_construction", "%d: 4 to 1000, and at least twice m (%d) (pgvector's ef_construction)", *n, m)
 		}
 		p.ANN.EfConstruction = *n
+	}
+	if n := f.Postgres.ANNExactScopeDocs; n != nil {
+		if *n < 0 || *n > 100000 {
+			v.refuse("postgres.ann_exact_scope_docs", "%d: 0 (always try the index) to 100000 documents", *n)
+		}
+		p.ANN.ExactScopeDocs = *n
 	}
 	if n := f.Postgres.ANNDeferBacklog; n != nil {
 		if *n < 0 {

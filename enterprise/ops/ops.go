@@ -180,12 +180,15 @@ type Snapshot struct {
 }
 
 // ANNState is one model's approximate index: exact, ann, ann-building or ann-failed (with the
-// reason), and how many searches' candidates came back short and were answered exactly instead.
+// reason), how many searches' candidates came back short and were answered exactly instead, and
+// how many were answered exactly without trying the index, for their small scope.
 type ANNState struct {
 	Model     string `json:"model"`
 	Mode      string `json:"mode"`
 	Reason    string `json:"reason,omitempty"`
 	Underfill int64  `json:"underfill"`
+	// ExactScoped is the searches answered exactly for their small scope (postgres.ann_exact_scope_docs)
+	ExactScoped int64 `json:"exact_scoped"`
 }
 
 // ServerState is the server's own part of a status.
@@ -306,7 +309,7 @@ func (c *Collector) read(ctx context.Context) Snapshot {
 			s.ANNError = opcode.Database
 		}
 		for _, a := range st {
-			s.ANN = append(s.ANN, ANNState{Model: a.Model, Mode: a.Mode, Reason: a.Reason, Underfill: a.Underfill})
+			s.ANN = append(s.ANN, ANNState{Model: a.Model, Mode: a.Mode, Reason: a.Reason, Underfill: a.Underfill, ExactScoped: a.ExactScoped})
 		}
 	}
 	return s

@@ -79,6 +79,7 @@ when it is missing, then applies its migrations there. Your tables are never wri
 | `ann_threshold` | `50000` | How many embeddings of its model a tenant has before its semantic searches become approximate, through the model's HNSW index. Below it they're exact. | below 1 |
 | `ann_max_scan_tuples` | `1000` | The most index tuples one approximate search scans past its first candidates (pgvector's `hnsw.max_scan_tuples`). It bounds what a filtered search spends before it answers exactly: a selective filter mostly comes back short, and at 1,000,000 embeddings under a 1% filter a budget of 40,000 made the search 7.6× slower than exact, against 1.4× at 1,000. Unfiltered searches are unaffected. | outside 1 to 2147483647 |
 | `ann_scan_mem_multiplier` | `2` | The memory one approximate search's scan may use, as a multiple of `work_mem` (pgvector's `hnsw.scan_mem_multiplier`). | outside 1 to 1000 |
+| `ann_exact_scope_docs` | `1000` | A filtered search whose filter and access admit at most this many of the tenant's ready documents is answered exactly, without trying the index: the index's candidates for so few come back short, and the exact search then runs after the scan was already paid for. At 56,000 documents and 168,000 embeddings, a search scoped to a small label took 49 ms through the index and 12 ms answered exactly up front. `0` always tries the index first. | below 0 or above 100000 |
 | `ann_ef_construction` | `200` | How wide each model's HNSW index is built (pgvector's `ef_construction`). It decides recall more than any search setting: at pgvector's default of 64, a tenant sharing the index found 0.938 to 0.990 of its exact top ten across 20 builds, and 8 of those builds were below 0.95; at 200, 0.994 to 1.000. A wider build takes longer. | outside 4 to 1000, or below twice `ann_m` |
 | `ann_m` | `16` | The links each node of the index keeps (pgvector's `m`). 32 did no better than 16 at an ef_construction of 200. | outside 2 to 100 |
 | `ann_defer_backlog` | `2000` | A model's wanted index waits while a tenant whose active model it is has this many documents or more not yet ready (its bulk load under way), so the load's inserts don't pay the index's cost. 0 never waits. | below 0 |
@@ -99,6 +100,8 @@ background, one index at a time across every server on the database.
   it, semantic search is exact.
 - Above the threshold it is approximate. The nearest candidates come through the index, are then
   ordered exactly, and ties are ordered within the returned set.
+- A filtered search whose scope admits at most `ann_exact_scope_docs` documents is answered
+  exactly up front, the index untried.
 - A search whose candidates come back short (a selective filter, or a scan that hit
   `ann_max_scan_tuples`) is answered exactly instead, and counted as an underfill.
 - A model of more than 4,000 dimensions has no index and stays exact.
