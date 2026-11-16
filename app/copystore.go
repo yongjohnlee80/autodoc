@@ -16,8 +16,8 @@ import (
 // runCopyStore is --copy-store-from (docs/decisions/store.md#copying-a-sqlite-store-into-postgresql):
 // it copies the SQLite store at from into the config's store on PostgreSQL, which must be empty,
 // in one transaction. Both stores are held while it runs, so neither may have a daemon serving it.
-// Opening the file applies this build's scripts to it, as any start of this build would; they are
-// said before anything is copied.
+// The destination is opened and found empty first; then opening the file applies this build's
+// scripts to it, as any start of this build would, and they are said before anything is copied.
 func runCopyStore(ctx context.Context, configPath, from string, out io.Writer) error {
 	e, err := endpoint.Load(configPath)
 	if err != nil {
@@ -36,6 +36,18 @@ func runCopyStore(ctx context.Context, configPath, from string, out io.Writer) e
 	if err := e.MakeDataDir(); err != nil { // the destination's key file's folder
 		return err
 	}
+	// the destination first, held and found empty, so a copy it refuses leaves the file as it was
+	dst, err := store.OpenAt(ctx, loc)
+	if errors.Is(err, store.ErrBusy) {
+		return fmt.Errorf("%w: a daemon serves the PostgreSQL store in schema %s: stop it first, or, if it was killed, wait out its lease (up to 30 s)", err, loc.Schema)
+	}
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+	if err := store.CopyDestinationEmpty(ctx, dst); err != nil {
+		return err
+	}
 	src, err := store.Open(ctx, from)
 	if errors.Is(err, store.ErrBusy) {
 		return fmt.Errorf("a daemon is serving %s: stop it first (--call sys.shutdown), then --copy-store-from", from)
@@ -47,14 +59,6 @@ func runCopyStore(ctx context.Context, configPath, from string, out io.Writer) e
 	if applied := src.Schema().Pending; len(applied) > 0 {
 		fmt.Fprintf(out, "applied this build's scripts to %s, as its daemon's next start would: %s\n", from, strings.Join(applied, ", "))
 	}
-	dst, err := store.OpenAt(ctx, loc)
-	if errors.Is(err, store.ErrBusy) {
-		return fmt.Errorf("%w: a daemon serves the PostgreSQL store in schema %s: stop it first, then --copy-store-from", err, loc.Schema)
-	}
-	if err != nil {
-		return err
-	}
-	defer dst.Close()
 	rep, err := store.CopySQLite(ctx, dst, src)
 	if err != nil {
 		return err

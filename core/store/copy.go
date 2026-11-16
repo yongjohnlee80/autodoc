@@ -152,14 +152,12 @@ func CopySQLite(ctx context.Context, dst, src *Store) (CopyReport, error) {
 	if err != nil {
 		return rep, err
 	}
-	for _, t := range tables {
-		var has bool
-		if err := scanOne(ctx, dst.w, `SELECT EXISTS (SELECT 1 FROM `+quoteIdent(t.name)+`)`, []any{&has}); err != nil {
-			return rep, fmt.Errorf("store: reading the destination's %s: %w", t.name, err)
-		}
-		if has {
-			return rep, fmt.Errorf("%w: its %s has rows (copy into a new schema, or drop this one first)", ErrCopyNotEmpty, t.name)
-		}
+	names := make([]string, len(tables))
+	for i, t := range tables {
+		names[i] = t.name
+	}
+	if err := emptyTables(ctx, dst, names); err != nil {
+		return rep, err
 	}
 	if rep.Key, err = shareKey(src.keys.path, dst.keys.path); err != nil {
 		return rep, err
@@ -184,6 +182,45 @@ func CopySQLite(ctx context.Context, dst, src *Store) (CopyReport, error) {
 		}
 	}
 	return rep, nil
+}
+
+// CopyDestinationEmpty refuses a destination that is no store on PostgreSQL, or one that holds
+// rows, from its catalog alone: a copy checks it before it opens its source, so a copy refused
+// for its destination leaves the source's file as it was. CopySQLite checks again.
+func CopyDestinationEmpty(ctx context.Context, dst *Store) error {
+	if dst.pg == nil {
+		return errors.New("store: a copy's destination is a store on PostgreSQL")
+	}
+	var names []string
+	err := eachRow(ctx, dst.w, `SELECT table_name FROM information_schema.tables
+		WHERE table_schema = $1 AND table_type = 'BASE TABLE' ORDER BY table_name`, func(scan func(...any) error) error {
+		var n string
+		if err := scan(&n); err != nil {
+			return err
+		}
+		if !slices.Contains(copyLeftOut, n) {
+			names = append(names, n)
+		}
+		return nil
+	}, dst.pg.loc.Schema)
+	if err != nil {
+		return fmt.Errorf("store: reading the destination's tables: %w", err)
+	}
+	return emptyTables(ctx, dst, names)
+}
+
+// emptyTables is ErrCopyNotEmpty naming the first of names that holds a row in dst.
+func emptyTables(ctx context.Context, dst *Store, names []string) error {
+	for _, n := range names {
+		var has bool
+		if err := scanOne(ctx, dst.w, `SELECT EXISTS (SELECT 1 FROM `+quoteIdent(n)+`)`, []any{&has}); err != nil {
+			return fmt.Errorf("store: reading the destination's %s: %w", n, err)
+		}
+		if has {
+			return fmt.Errorf("%w: its %s has rows (copy into a new schema, or drop this one first)", ErrCopyNotEmpty, n)
+		}
+	}
+	return nil
 }
 
 // scriptsDiffer names the first script one of two stores has applied and the other has not; ""

@@ -114,9 +114,12 @@ CheckPostgresStore), `internal/client` (ForPaths), `core/store/postgres.go` (Ope
 (the server build), all or nothing.
 
 - **Both stores are held** for the whole copy. The destination's writer lease is held, and so is
-  the source's writer, so a daemon serving either one refuses the copy. Opening the file applies
-  this build's scripts to it, as any start of this build would; the command says which ones before
-  it copies anything. The two stores must then name the same applied scripts.
+  the source's writer, so a daemon serving either one refuses the copy.
+- **The destination is opened first** and must be empty, from its catalog alone. A copy refused
+  for its destination leaves the file as it was.
+- **Then the file is opened,** which applies this build's scripts to it, as any start of this build
+  would. The command says which ones before it copies anything. The two stores must then name the
+  same applied scripts.
 - **The destination must be empty.** There is no merge.
 - **What is copied:**
   - every table both stores have, with the columns read from PostgreSQL's catalog and checked
@@ -128,7 +131,8 @@ CheckPostgresStore), `internal/client` (ForPaths), `core/store/postgres.go` (Ope
   - each store's ledger of scripts;
   - the writer lease;
   - `store_identity`.
-- **Values.** A value that does not fit its column is refused. Examples: text in an integer column,
+- **Values.** A value that does not fit its column is refused. The one coercion: an integral real
+  number in an integer column copies as that integer; any other real number there is refused. Examples: text in an integer column,
   or text with a NUL byte or invalid UTF-8. Every such value is listed from one pass (table, column,
   row key; the first 50, then a count), and nothing is committed.
 - **Ids and high-waters.** Rows keep their ids. Each identity sequence is set to the larger of its
@@ -146,7 +150,8 @@ CheckPostgresStore), `internal/client` (ForPaths), `core/store/postgres.go` (Ope
   The key's bytes are never printed or logged.
 - **One transaction.**
   - The source is read from one snapshot. The destination is written in one fenced transaction,
-    streamed through COPY in batches of at most 10,000 rows or 8 MB.
+    streamed through COPY. A batch is sent once it reaches 10,000 rows or 8 MB, so it holds at most
+    one row more than 8 MB.
   - Before the commit, each table's row count must equal the file's and every sealed secret must
     open with the destination's key. The lease is then fenced again: the lease renews on its own
     connection throughout, and a copy that outlasted it is rolled back.
