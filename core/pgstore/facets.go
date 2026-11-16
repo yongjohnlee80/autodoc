@@ -159,6 +159,17 @@ func (v *View) Within(ranges []Range) error {
 	return nil
 }
 
+// FacetsDigest is a facet declaration as a refresh records the one it wrote with (Refresh.Facets):
+// its name:type pairs in name order, comma-separated; "" for none, as every refresh before facets
+// were declared recorded. Two declarations are the same exactly when their digests are.
+func FacetsDigest(facets map[string]string) string {
+	parts := make([]string, 0, len(facets))
+	for _, name := range sortedNames(facets) {
+		parts = append(parts, name+":"+facets[name])
+	}
+	return strings.Join(parts, ",")
+}
+
 // facetsJSON is facets as rag_tenant_policy.facets keeps them; none is {}.
 func facetsJSON(facets map[string]string) (string, error) {
 	if len(facets) == 0 {

@@ -291,52 +291,17 @@ func TestAFacetDeclarationIsChecked(t *testing.T) {
 	}
 }
 
-// A policy keeps its declared facets, read back by Policy and inside ViewPolicy's snapshot. A
-// replacement whose facets differ says so and forgets the tenant's last refresh, in the same
-// transaction, so the ingester refreshes at once; one with the same facets (or none, as before)
-// leaves it. A declaration CheckFacets refuses is not recorded.
-func TestAChangedDeclarationForgetsTheLastRefresh(t *testing.T) {
+// A policy keeps its declared facets, read back by Policy and inside ViewPolicy's snapshot; a
+// declaration CheckFacets refuses is not recorded. A refresh records the declaration it wrote its
+// documents with (FacetsDigest: name order, "" for none), read back by Refreshed: what makes a
+// refresh due whichever server changed the configuration.
+func TestARefreshRecordsTheDeclarationItWroteWith(t *testing.T) {
 	ctx := context.Background()
 	conn := scratch(t)
 	s := openCorpus(t, conn, "t", nil)
-	refreshed := func(ts string) {
-		t.Helper()
-		b := s.Begin(ctx)
-		at, err := time.Parse(time.DateOnly, ts)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := b.SetRefreshed(ctx, Refresh{Started: at, Finished: at}); err != nil {
-			t.Fatal(err)
-		}
-		if err := b.Commit(); err != nil {
-			t.Fatal(err)
-		}
-	}
-	replace := func(facets map[string]string) bool {
-		t.Helper()
-		changed, err := s.ReplacePolicy(ctx, Policy{AccessFields: []string{"label_id"}, View: "v", Facets: facets})
-		if err != nil {
-			t.Fatal(err)
-		}
-		return changed
-	}
-	if replace(nil) {
-		t.Fatal("a first policy with no facets: changed")
-	}
-	refreshed("2026-01-01")
-	if replace(map[string]string{}) {
-		t.Fatal("no facets again: changed")
-	}
-	if r, _ := s.Refreshed(ctx); r.Finished.IsZero() {
-		t.Fatal("no facets again forgot the refresh")
-	}
 	decl := map[string]string{"status": FacetKeyword, "bpm": FacetNumber}
-	if !replace(decl) {
-		t.Fatal("facets declared: not changed")
-	}
-	if r, _ := s.Refreshed(ctx); !r.Finished.IsZero() || !r.Started.IsZero() {
-		t.Fatalf("facets declared: the refresh is still %+v", r)
+	if err := s.SetPolicy(ctx, Policy{AccessFields: []string{"label_id"}, View: "v", Facets: decl}); err != nil {
+		t.Fatal(err)
 	}
 	p, err := s.Policy(ctx)
 	if err != nil || !maps.Equal(p.Facets, decl) {
@@ -351,18 +316,34 @@ func TestAChangedDeclarationForgetsTheLastRefresh(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	refreshed("2026-01-02")
-	if replace(map[string]string{"bpm": FacetNumber, "status": FacetKeyword}) {
-		t.Fatal("the same facets: changed")
-	}
-	if !replace(map[string]string{"bpm": FacetDate, "status": FacetKeyword}) {
-		t.Fatal("a type changed: not changed")
-	}
-	if _, err := s.ReplacePolicy(ctx, Policy{AccessFields: []string{"label_id"}, Facets: map[string]string{"label_id": FacetKeyword}}); !errors.Is(err, ErrFacetDecl) {
+	if err := s.SetPolicy(ctx, Policy{AccessFields: []string{"label_id"}, Facets: map[string]string{"label_id": FacetKeyword}}); !errors.Is(err, ErrFacetDecl) {
 		t.Fatalf("an access field declared a facet: %v", err)
 	}
-	if p, _ := s.Policy(ctx); p.Facets["bpm"] != FacetDate {
+	if p, _ := s.Policy(ctx); !maps.Equal(p.Facets, decl) {
 		t.Fatalf("the refused declaration was recorded: %v", p.Facets)
+	}
+
+	if got := FacetsDigest(decl); got != "bpm:number,status:keyword" {
+		t.Errorf("FacetsDigest %q", got)
+	}
+	if got := FacetsDigest(nil); got != "" {
+		t.Errorf("FacetsDigest of none %q; want \"\"", got)
+	}
+	if r, err := s.Refreshed(ctx); err != nil || r.Facets != "" {
+		t.Fatalf("no refresh yet: %+v, %v; want no declaration", r, err)
+	}
+	for _, want := range []string{FacetsDigest(decl), ""} {
+		b := s.Begin(ctx)
+		at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		if err := b.SetRefreshed(ctx, Refresh{Started: at, Finished: at, Facets: want}); err != nil {
+			t.Fatal(err)
+		}
+		if err := b.Commit(); err != nil {
+			t.Fatal(err)
+		}
+		if r, err := s.Refreshed(ctx); err != nil || r.Facets != want || !r.Finished.Equal(at) {
+			t.Fatalf("a refresh recorded with %q: %+v, %v", want, r, err)
+		}
 	}
 }
 

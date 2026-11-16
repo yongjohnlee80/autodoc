@@ -83,10 +83,6 @@ type Options struct {
 	Now func(ctx context.Context) (time.Time, error)
 	// Clock is the time a refresh records and Run schedules refreshes by. nil: time.Now.
 	Clock clock.Clock
-	// RefreshWhy, when set, is why the tenant's refresh is due at once, not on its schedule
-	// (RefreshFacets): State says it until a refresh completes. The refresh is due because the
-	// tenant's last one was forgotten (pgstore's ReplacePolicy), not because of this field.
-	RefreshWhy string
 	// Committed, when set, is called after each batch commits: the embedding worker's wake, so the
 	// chunks a page wrote are embedded without waiting for the worker's own poll. It runs on the
 	// ingester's goroutine and must not block.
@@ -125,13 +121,14 @@ type Ingester struct {
 	// another server's lock: an operator's status reads them from another goroutine
 	state   atomic.Pointer[State]
 	waiting atomic.Bool
-	// refreshed says a complete refresh ran since the ingester started: Options.RefreshWhy is
-	// answered
-	refreshed atomic.Bool
+	// facetsDue says the tenant's last complete refresh wrote its documents with another facet
+	// declaration than the source's (checkDue): a refresh is due at once, and State says why
+	facetsDue atomic.Bool
 }
 
-// RefreshFacets is Options.RefreshWhy for a tenant whose declared facets changed: its documents
-// keep their facets' values, and each is written again with the new declaration's.
+// RefreshFacets is State.RefreshDue for a tenant whose last complete refresh wrote its documents
+// with another facet declaration than its source's: their facets' values are kept with them, and
+// each is written again with the declaration's.
 const RefreshFacets = "facets"
 
 // beforeCommit, when set, runs before each commit and fails it with its error: a test's way to
@@ -199,10 +196,29 @@ func (in *Ingester) Acquire(ctx context.Context) error {
 		return err
 	}
 	in.lock.Store(l)
+	in.checkDue(ctx)
 	if in.o.Locked != nil {
 		in.o.Locked()
 	}
 	return nil
+}
+
+// checkDue reads which facet declaration the tenant's last complete refresh wrote with, and
+// marks a refresh due when it is not the source's (facetsDue). It is a fact of the store, so it
+// holds whichever server changed the configuration, through restarts, until a refresh with this
+// declaration completes. A read that fails is logged and marks nothing: the scheduled refresh
+// still comes.
+func (in *Ingester) checkDue(ctx context.Context) {
+	r, err := in.st.Refreshed(ctx)
+	if err != nil {
+		logger.Warning(in.o.Log, err, "tenant "+in.tenant+": reading its last refresh")
+		return
+	}
+	due := r.Facets != pgstore.FacetsDigest(in.src.Facets())
+	in.facetsDue.Store(due)
+	if due {
+		logger.Info(in.o.Log, fmt.Sprintf("tenant %s: its last refresh wrote another facet declaration than the source's: refreshing it now", in.tenant))
+	}
 }
 
 // Release lets go of the writer lease.
@@ -502,7 +518,7 @@ func (in *Ingester) Refresh(ctx context.Context) (Stats, error) {
 		st.Complete = false
 		return st, err
 	}
-	in.refreshed.Store(true) // Options.RefreshWhy is answered
+	in.facetsDue.Store(false) // this refresh wrote the source's declaration (finish)
 	in.count(ctx, &st)
 	return st, nil
 }
@@ -585,7 +601,8 @@ func (in *Ingester) finish(ctx context.Context, st *Stats, current map[string]pg
 		}
 		st.Released++
 	}
-	if err := b.SetRefreshed(ctx, pgstore.Refresh{Started: started, Finished: in.o.Clock.Now()}); err != nil {
+	if err := b.SetRefreshed(ctx, pgstore.Refresh{Started: started, Finished: in.o.Clock.Now(),
+		Facets: pgstore.FacetsDigest(in.src.Facets())}); err != nil {
 		_ = b.Rollback()
 		return err
 	}
@@ -700,8 +717,8 @@ type Outcome struct {
 type State struct {
 	Locked, Waiting       bool
 	LastPass, LastRefresh Outcome
-	// RefreshDue is why a refresh is due before its schedule (Options.RefreshWhy), until one
-	// completes; "" for none.
+	// RefreshDue is why a refresh is due before its schedule, until one completes: RefreshFacets;
+	// "" for none.
 	RefreshDue string
 }
 
@@ -713,8 +730,8 @@ func (in *Ingester) State() State {
 	}
 	st.Locked = in.lock.Load() != nil
 	st.Waiting = !st.Locked && in.waiting.Load()
-	if !in.refreshed.Load() {
-		st.RefreshDue = in.o.RefreshWhy
+	if in.facetsDue.Load() {
+		st.RefreshDue = RefreshFacets
 	}
 	return st
 }
@@ -830,7 +847,7 @@ func (in *Ingester) loop(ctx context.Context) error {
 		logger.Warning(in.o.Log, err, "tenant "+in.tenant+": reading its last refresh")
 	}
 	var due time.Time // the next refresh's time; zero: at once
-	if !refreshed.Finished.IsZero() {
+	if !refreshed.Finished.IsZero() && !in.facetsDue.Load() {
 		due = refreshed.Finished.Add(in.o.Refresh)
 	}
 	for {

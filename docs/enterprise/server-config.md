@@ -274,11 +274,13 @@ Each name is a row field, and each value is its type:
 - **Refused when the file loads** (exit 2), naming the source and the facet: a name that is an
   access field (in any case), `tags`, `path` or `title`; a name that isn't a plain identifier
   (letters, digits and `_`, not starting with a digit); a type other than the three.
-- **A changed declaration refreshes the tenant at once** when the server starts with it. A
-  record's facet values are kept with its document, and a pass reads only changed rows. The
-  status shows `"refresh_due": "facets"` until the refresh completes, and searches answer from
-  the documents as they were until then: a filter on a value a document doesn't have yet doesn't
-  match it. The refresh embeds nothing again, since the records' text is unchanged.
+- **A changed declaration refreshes the tenant at once.** A record's facet values are kept with
+  its document, and a pass reads only changed rows, so every record is read again. The refresh
+  is due until one completes with the source's declaration, whichever server loaded the new
+  configuration, and across restarts. The status shows `"refresh_due": "facets"` until then.
+  Searches answer from the documents as they were until the refresh reaches them: a filter on a
+  value a document doesn't have yet doesn't match it. The refresh embeds nothing again, since the
+  records' text is unchanged.
 
 ## Exit codes
 

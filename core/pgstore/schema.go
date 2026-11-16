@@ -310,6 +310,7 @@ type cursorRow struct {
 	UpdatedAt                       *time.Time
 	ID                              string
 	RefreshStarted, RefreshFinished *time.Time
+	RefreshFacets                   string // 000008
 }
 
 type cursorField string
@@ -320,6 +321,7 @@ const (
 	kID       cursorField = "id"
 	kStarted  cursorField = "refresh_started"
 	kFinished cursorField = "refresh_finished"
+	kFacets   cursorField = "refresh_facets" // 000008
 )
 
 type cursorSchema = dao.Schema[*cursorRow, cursorField, string, int64]
@@ -334,6 +336,7 @@ func newCursorSchema(conn dao.DataConn) *cursorSchema {
 			kID:       {Expr: dao.T(tCursor, kID), Scan: func(r *cursorRow) any { return &r.ID }},
 			kStarted:  {Expr: dao.T(tCursor, kStarted), Scan: func(r *cursorRow) any { return &r.RefreshStarted }},
 			kFinished: {Expr: dao.T(tCursor, kFinished), Scan: func(r *cursorRow) any { return &r.RefreshFinished }},
+			kFacets:   {Expr: dao.T(tCursor, kFacets), Scan: func(r *cursorRow) any { return &r.RefreshFacets }},
 		})),
 		o(dao.Conflict[*cursorRow, cursorField, string, int64](kTenant)),
 	)
