@@ -373,9 +373,12 @@ schema   = "autodoc"             # made when missing
 key_file = ""                    # default: store.key in data_dir; it seals the store's secrets
 ```
 
-The daemon reads the DSN from the variable `dsn_env` names when it starts. It holds the store's
-writer lease there, so a second daemon on the same database and schema waits, and takes over when
-the first stops (at once) or is killed (30 seconds after its last renew). Clients never read the
+The daemon reads the DSN from the variable `dsn_env` names when it starts, so a daemon a client
+starts for you needs that variable in the client's environment. The daemon holds the store's writer
+lease in the database. A second daemon on the same database and schema waits for it, for at most
+the lease's length (30 seconds) and one poll (2 seconds). If the first daemon stopped, or was
+killed and its lease ran out, the second takes the store over; if the first is still running and
+renewing its lease, the second exits, naming it. Clients never read the
 database: they reach the daemon on the configured socket, and refuse one that says it serves
 another store. `autodoc --check-store` and `--compact` are a SQLite store's, and refuse a store on
 PostgreSQL: its database server checks and vacuums it. Search works as on SQLite: lexical search

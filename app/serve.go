@@ -131,7 +131,7 @@ func (s *stack) unwind() {
 // bind makes the state and data directories (the socket's, with no runtime directory, and the
 // store's) and binds the endpoint. An endpoint held by this store's daemon is errAlreadyServing.
 func (d *process) bind() error {
-	sock, storePath := d.p.Socket, d.p.Store
+	sock := d.p.Socket
 	if err := d.e.MakeStateDir(); err != nil {
 		return err
 	}
@@ -149,7 +149,7 @@ func (d *process) bind() error {
 		case servesPaths(info, d.p):
 			return fmt.Errorf("%w on %s (version %s); this process is not serving", errAlreadyServing, sock, info.Version)
 		default:
-			return fmt.Errorf("bind %s: in use by an autodoc %s (protocol %d) that is not serving %s", sock, info.Version, info.Protocol, storePath)
+			return fmt.Errorf("bind %s: in use by an autodoc %s (protocol %d) that is not serving %s", sock, info.Version, info.Protocol, d.p.StoreName())
 		}
 	}
 	if err != nil {

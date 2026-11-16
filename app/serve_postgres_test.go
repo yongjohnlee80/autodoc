@@ -5,6 +5,7 @@ package app
 import (
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -52,5 +53,11 @@ func TestADaemonServesAStoreOnPostgres(t *testing.T) {
 	same := endpoint.Paths{Socket: sock, Engine: store.EngineOfPostgres, Schema: "autodoc_daemon"}
 	if _, err := endpoint.ProbePaths(context.Background(), sock, same); err != nil {
 		t.Errorf("a client of this store: %v", err)
+	}
+	// a daemon of another schema on this socket names the store it would serve, not a SQLite path
+	pg2 := strings.Replace(pg, "autodoc_daemon", "another_schema", 1)
+	err = runServe(context.Background(), writeConfig(t, sock, short(t), pg2), io.Discard, testBuild, nil, "")
+	if err == nil || !strings.Contains(err.Error(), "that is not serving the PostgreSQL store in schema another_schema") {
+		t.Errorf("--serve of another schema on this daemon's socket: %v", err)
 	}
 }
