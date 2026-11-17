@@ -1,5 +1,3 @@
-//go:build linux || darwin
-
 package tui
 
 import (
@@ -46,8 +44,8 @@ func TestAnAgentRetriedWhileStartedAgainReadsNoLiveState(t *testing.T) {
 		}
 		return pty.Start(c)
 	})
-	profiles := []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}
-	_, r, _ := runSetupTUI(t, t.TempDir(), profiles, "heron", nil, Options{seams: s})
+	profiles := []agents.AgentProfile{{Name: "heron", Command: agentCall(agent), Codename: "heron"}}
+	_, r, _ := runSetupTUI(t, agentsFolder(t), profiles, "heron", nil, Options{seams: s})
 	r.leader(t, 'g')
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
 	starting := 0
