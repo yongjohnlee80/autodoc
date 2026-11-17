@@ -1,0 +1,15 @@
+name     = "card-panes-qml"
+title    = "Reading list (QML card, two panes)"
+kind     = "dialog"
+protocol = 6                       # the pointer (protocol 6) reaches the panes and their controls
+                                   # protocol 12 and [window] controls (hide, maximize, close) come
+                                   # with the host's protocol 12; until then the divider's drag waits
+command  = ["./bin/autodoc-card-panes-qml"]
+
+[dialog]
+modal      = false                 # a card beside the page
+width      = 60
+placements = ["right", "left"]
+
+[install]
+build = ["go", "build", "-o", "bin/autodoc-card-panes-qml", "."]
