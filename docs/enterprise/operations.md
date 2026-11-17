@@ -68,6 +68,7 @@ curl -s http://127.0.0.1:8730/v1/status -H "Authorization: Bearer $AUTODOC_OPS_T
 | Field | What it tells you |
 |---|---|
 | `lock` | `held`; `waiting` (another server holds the tenant: a standby); `none` |
+| `lock_wait` | why a `waiting` lock waits when it isn't for another server of this release: `older_server`, a server of v0.3.15 or before holding the tenant by its advisory lock ([upgrading from v0.3.15](#upgrading-from-v0315)). Stop that server. Absent otherwise. |
 | `cursor.lag_seconds` | how far the index is behind your data, on the database's clock. It grows when passes fail or can't keep up. |
 | `last_pass`, `last_refresh` | when each last ran, what it read and wrote, and its error code. `complete` is false for a refresh that couldn't read every row (it deletes nothing then; see [views](views.md)). |
 | `deletes` | a source with a deletes view: its cursor (`updated_at` is the last tombstone's `deleted_at`), how far behind the database's clock, and its last pass's `error` (`view`, `order`, or none). A deletes view that fails holds only the deletes; its lag grows while it does. |
@@ -250,6 +251,23 @@ SELECT scope, holder, holder_info, epoch, lease_until FROM <schema>.rag_writer_l
   row committed later than `lag` after its `updated_at` is passed over by the incremental passes and
   found only by the next refresh. Find your longest with `SELECT max(clock_timestamp() - xact_start)
   FROM pg_stat_activity WHERE state <> 'idle'` on the business database, under load.
+
+### Upgrading from v0.3.15
+
+**Stop every v0.3.15 server of a store before you start a v0.3.16 one.** A v0.3.15 server held each
+tenant by a PostgreSQL advisory lock, which the lease knows nothing of, so the two would write at once.
+
+- A v0.3.15 server refuses to start on a store a newer release has migrated: it says the
+  database has a newer schema. So only one already running when the store was migrated can meet
+  a newer server.
+- A v0.3.16 server looks for that lock before it takes a tenant's lease, and again at every renew.
+  - While a v0.3.15 server holds the tenant, it waits and logs that an older server holds it, and
+    the status shows `"lock": "waiting"` with `"lock_wait": "older_server"`.
+  - If an older server takes the lock while this one holds the lease (a v0.3.15 standby, already
+    waiting when you upgraded), this one stops writing and exits 1, and its supervisor restarts it
+    to wait.
+- From v0.3.16 on, upgrades are rolling: every server takes the same lease, and a standby of the
+  new release takes over as the old one stops.
 
 ## A container
 

@@ -207,7 +207,8 @@ func (s *server) startIngesters() error {
 			return err
 		}
 		in := ingest.New(st, src.Tenant, s.sources[i], s.business, s.store, ingest.Options{
-			Refresh: src.Refresh, RefreshRetry: src.RefreshRetry, Interval: src.Interval, Lag: lagOf(src.Lag), Log: s.log, Committed: s.wakeEmbedder, Locked: s.wakeEmbedder})
+			Refresh: src.Refresh, RefreshRetry: src.RefreshRetry, Interval: src.Interval, Lag: lagOf(src.Lag), Log: s.log, Committed: s.wakeEmbedder, Locked: s.wakeEmbedder,
+			OlderSchema: s.cfg.Postgres.Schema})
 		s.ingesters = append(s.ingesters, in)
 		wg.Add(1)
 		go func() {

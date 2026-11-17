@@ -2,6 +2,8 @@ package pgstore
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"time"
@@ -49,6 +51,38 @@ func AcquireWriter(ctx context.Context, conn dao.DataConn, tenant string, ttl, p
 		return nil, fmt.Errorf("pgstore: take the writer lease: %w", err)
 	}
 	return &Writer{l: l}, nil
+}
+
+// olderKey is the advisory lock key a server of v0.3.15 or before held a tenant's writer by, in a
+// schema: v0.3.15's pgstore.WriterKey, the first 8 bytes of a SHA-256 over both, the sign bit
+// cleared. It must never change: it is that release's key, not this one's.
+func olderKey(schema, tenant string) int64 {
+	h := sha256.Sum256([]byte("autodoc-enterprise\x00" + schema + "\x00" + tenant))
+	return int64(binary.BigEndian.Uint64(h[:8]) &^ (1 << 63))
+}
+
+// OlderWriterHeld reports whether a server of v0.3.15 or before holds tenant's writer in schema.
+// Such a server held the tenant by a session advisory lock, which the lease knows nothing of, so
+// it and a server of this release would write at once. A v0.3.15 server refuses to start on a
+// store migrated past its scripts (the deploy ledger's downgrade check), so the only one that can
+// meet this release's is one already running when the store was migrated: one holding the lock,
+// or a standby of one, waiting to take it.
+//
+// It is one statement on conn, in its own implicit transaction: pg_try_advisory_xact_lock takes
+// the key only when no session holds it, and lets it go as the statement ends, so nothing is ever
+// kept, and a v0.3.15 standby polling for the lock is never refused it for long.
+//
+// It is for upgrading from v0.3.15: it goes in v0.3.18, which upgrades only from v0.3.16 or later.
+func OlderWriterHeld(ctx context.Context, conn dao.DataConn, schema, tenant string) (bool, error) {
+	rows, err := conn.QueryContext(ctx, "SELECT NOT pg_try_advisory_xact_lock($1)", olderKey(schema, tenant))
+	if err != nil {
+		return false, fmt.Errorf("pgstore: an older server's writer lock: %w", err)
+	}
+	var held bool
+	if err := scanRows(rows, &held); err != nil {
+		return false, fmt.Errorf("pgstore: an older server's writer lock: %w", err)
+	}
+	return held, nil
 }
 
 // lost is err as the writer's: ErrWriterLost when the lease is gone, err itself otherwise.

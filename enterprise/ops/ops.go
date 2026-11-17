@@ -212,8 +212,12 @@ type EmbeddingState struct {
 
 // TenantStatus is one tenant's status.
 type TenantStatus struct {
-	Tenant      string      `json:"tenant"`
-	Lock        string      `json:"lock"` // held, waiting, or none
+	Tenant string `json:"tenant"`
+	Lock   string `json:"lock"` // held, waiting, or none
+	// LockWait is why a waiting lock waits, when it is not another server of this release:
+	// "older_server", a server of v0.3.15 or before holding the tenant by its advisory lock, which
+	// must be stopped. Absent otherwise.
+	LockWait    string      `json:"lock_wait,omitempty"`
 	Cursor      CursorState `json:"cursor"`
 	LastPass    RunState    `json:"last_pass"`
 	LastRefresh RunState    `json:"last_refresh"`
@@ -424,6 +428,9 @@ func live(ts *TenantStatus, st ingest.State) {
 		ts.Lock = "held"
 	case st.Waiting:
 		ts.Lock = "waiting"
+		if st.OlderServer {
+			ts.LockWait = "older_server"
+		}
 	default:
 		ts.Lock = "none"
 	}
