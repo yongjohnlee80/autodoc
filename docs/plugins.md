@@ -229,7 +229,7 @@ plugin of an earlier protocol runs as it always has, and is sent what it always 
   the frame is no click. Clamp what you draw, never the event. Their `count` is 1.
 - **The window's keys are AutoDoc's.** A protocol-12 card is not sent the keys that cycle AutoDoc's
   widgets (F6 and Shift+F6 by default), nor, when its `[window]` lists `maximize`, the keys that
-  maximize a panel (F11 and SPC M by default). A remapped key follows its new binding. A
+  maximize a panel (F11 by default). A remapped key follows its new binding. A
   protocol-11 card is still sent every key, F6 and F11 included.
 
 ## The run
@@ -359,7 +359,7 @@ controls = ["hide", "maximize", "close"]   # any of them; none when unset
 | Icon | Does |
 |---|---|
 | `_` hide | closes the panel as Esc does: the plugin runs on, told `plugin.hide`, and `plugin.show` when the panel opens again |
-| `+` maximize | maximizes the panel, or restores it, as F11 and SPC M do (the card is not sent those keys); the plugin is told its new size |
+| `+` maximize | maximizes the panel, or restores it, as F11 does (the card is not sent F11), and SPC z from the page; the plugin is told its new size |
 | `x` close | stops the plugin, as Turn off does: `plugin.close {reason: "off"}` |
 
 - The icons are drawn `_ + x`, left to right, whatever the order written. In a window (`--gui`)

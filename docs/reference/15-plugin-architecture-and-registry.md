@@ -118,7 +118,7 @@ Protocol 11 (`[[menu]]`) puts a plugin's rows on the editor's right-click menu, 
 Protocol 12 gives a card the window icons AutoDoc's own panels have, and the pointer a divider needs:
 - **`[window] controls`** lists any of `"hide"`, `"maximize"` and `"close"`. AutoDoc draws them on the card's frame as `_ + x` (in `--gui`, the title bar's dots) and does what they do:
   - `_` closes the panel as Esc does, and the plugin runs on (`plugin.hide`);
-  - `+` maximizes or restores it, as F11 and SPC M do;
+  - `+` maximizes or restores it, as F11 does (and SPC z from the page);
   - `x` stops the plugin, as Turn off does (`plugin.close {reason: "off"}`).
 - **`plugin.pointer` gains `drag`, `release` and `cancel`.** A gesture is a left press, then any drags and wheel steps, then exactly one release or cancel. A drag's, release's and cancel's coordinates are the view's own and may lie off the frame (a cancel's are the last the host saw), and a release there is no click.
 - **The window keeps its keys:** a protocol-12 card is not sent the widget-cycling keys (F6, Shift+F6), nor the maximize keys when it lists `maximize`.
