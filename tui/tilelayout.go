@@ -38,8 +38,10 @@ type tileWindow struct {
 	size  int    // its tile's size by default, a percent of the base across its edge
 }
 
-// tileWindows are the base's windows: the page, then the tileable panels.
-var tileWindows = []tileWindow{
+// staticTileWindows are the base's windows main.qml declares: the page, then the tileable panels.
+// A card's panel is a window too, one per card plugin (cardTileWindows); tileHost's tileWindows are
+// both.
+var staticTileWindows = []tileWindow{
 	{id: "editor", node: "editorWindow", tiled: true},
 	{id: "explorer", node: "explorer", edge: "left", size: 35},
 	{id: "terminal", node: "terminal", edge: "bottom", size: 30},
@@ -60,19 +62,53 @@ func layoutKey(id string) string   { return "tui." + id + ".layout" }
 func tileEdgeKey(id string) string { return "tui." + id + ".tileEdge" }
 func tileSizeKey(id string) string { return "tui." + id + ".tileSize" }
 
-// tileWindowOf is the window whose member is node, or false.
-func tileWindowOf(node string) (tileWindow, bool) {
-	i := slices.IndexFunc(tileWindows, func(w tileWindow) bool { return w.node == node })
+// tileWindowOf is the window of ws whose member is node, or false.
+func tileWindowOf(ws []tileWindow, node string) (tileWindow, bool) {
+	i := slices.IndexFunc(ws, func(w tileWindow) bool { return w.node == node })
 	if i < 0 {
 		return tileWindow{}, false
 	}
-	return tileWindows[i], true
+	return ws[i], true
+}
+
+// tileHost is what the tiling needs of its host: the preferences, the windows the base may tile
+// (the static ones, then one per card), and setting a window's layoutKey, tileEdgeKey or
+// tileSizeKey: a static window's through its Preferences row, a card's as its geometry is kept, by
+// its panel's id. Either way the document hears it.
+type tileHost interface {
+	Prefs() feature.PrefsView
+	tileWindows() []tileWindow
+	setTile(id, name, value string)
 }
 
 // tiles is the base's Layout: the windows' tiling preferences, and what keeps them.
-type tiles struct{ c feature.Core }
+type tiles struct {
+	c    feature.Core
+	host tileHost // nil for a Core that is no tileHost: the static windows alone
+}
 
-func newTiles(c feature.Core) *tiles { return &tiles{c: c} }
+func newTiles(c feature.Core) *tiles {
+	t := &tiles{c: c}
+	t.host, _ = c.(tileHost)
+	return t
+}
+
+// windows are the windows the tiles keep: the host's, the cards' among them.
+func (t *tiles) windows() []tileWindow {
+	if t.host == nil {
+		return staticTileWindows
+	}
+	return t.host.tileWindows()
+}
+
+// set sets a window's tiling preference name through the host.
+func (t *tiles) set(id, name, value string) {
+	if t.host == nil {
+		t.c.SetPref(name, value)
+		return
+	}
+	t.host.setTile(id, name, value)
+}
 
 func (*tiles) Name() string { return "tiles" }
 
@@ -97,10 +133,11 @@ func (t *tiles) Commands() map[string]feature.Command {
 	}
 }
 
-// Prefs are three per window: its Layout, and for a panel its tile's edge and size.
+// Prefs are three per static window: its Layout, and for a panel its tile's edge and size. A card's
+// three are kept by its panel's id, as its geometry is (readCardTiles), and are no Preferences rows.
 func (*tiles) Prefs() []feature.PrefSpec {
 	var rows []feature.PrefSpec
-	for _, w := range tileWindows {
+	for _, w := range staticTileWindows {
 		def := layoutFloat
 		if w.tiled {
 			def = layoutTiled
@@ -136,29 +173,23 @@ func (t *tiles) setLayout(id string, tiled bool) {
 	if tiled {
 		v = layoutTiled
 	}
-	t.c.SetPref(layoutKey(id), v)
+	t.set(id, layoutKey(id), v)
 }
 
 // tileChanged keeps a shared border's drag as the tile's size. Nothing else is the preferences':
 // a member never re-docks on its own (its edge is the preference's), and a release for want of
 // room leaves its Layout as the user chose it.
 func (t *tiles) tileChanged(node, operation string, size float64) {
-	w, ok := tileWindowOf(node)
+	w, ok := tileWindowOf(t.windows(), node)
 	if !ok || w.edge == "" || operation != "resize" {
 		return
 	}
 	n := min(max(int(math.Round(size)), minTileSize), maxTileSize)
-	t.c.SetPref(tileSizeKey(w.id), strconv.Itoa(n))
+	t.set(w.id, tileSizeKey(w.id), strconv.Itoa(n))
 }
 
 // rowMaker makes a row of the menu Layout › goes in (feature.RowMaker).
 type rowMaker = feature.RowMaker
-
-// layoutHost is what Layout › needs of its host: the preferences, and setting one through its row.
-type layoutHost interface {
-	Prefs() feature.PrefsView
-	SetPref(name, value string)
-}
 
 // layoutRows is Layout ›, layoutChoices in a submenu, for the window id. A host that sets no
 // preference has none.
@@ -181,29 +212,40 @@ var tileEdgeRows = []struct{ edge, label string }{{"left", "Le&ft"}, {"right", "
 // (tui.<id>.tileEdge): its edge is checked while it is tiled, and choosing one docks it there, tiling
 // it first when it floats. The page, the fill, has no edge. nil for a host that sets no preference.
 func layoutChoices(c any, id string, row rowMaker) []widgetcore.MenuItemModel {
-	h, ok := c.(layoutHost)
+	h, ok := c.(tileHost)
 	if !ok {
 		return nil
 	}
-	tiled := h.Prefs().Value(layoutKey(id)) == layoutTiled
+	w, known := tileWindowByID(h.tileWindows(), id)
+	value := func(key, def string) string {
+		if v := h.Prefs().Value(key); v != "" {
+			return v
+		}
+		return def
+	}
+	layoutDefault := layoutFloat
+	if w.tiled {
+		layoutDefault = layoutTiled
+	}
+	tiled := value(layoutKey(id), layoutDefault) == layoutTiled
 	radio := func(value, label string) widgetcore.MenuItemModel {
-		r := row("layout."+value, label, func() { h.SetPref(layoutKey(id), value) })
+		r := row("layout."+value, label, func() { h.setTile(id, layoutKey(id), value) })
 		r.Kind, r.Group, r.Checked = widgetcore.ItemKindRadio, "layout", tiled == (value == layoutTiled)
 		return r
 	}
 	float := radio(layoutFloat, "&Float")
-	if w, ok := tileWindowByID(id); !ok || w.edge == "" {
+	if !known || w.edge == "" {
 		return []widgetcore.MenuItemModel{radio(layoutTiled, "&Tiled"), float}
 	}
-	edge := h.Prefs().Value(tileEdgeKey(id))
+	edge := value(tileEdgeKey(id), w.edge)
 	var edges []widgetcore.MenuItemModel
 	for _, e := range tileEdgeRows {
 		r := row("layout.tiled."+e.edge, e.label, func() {
-			h.SetPref(tileEdgeKey(id), e.edge) // the edge first: a floating panel then tiles once, there
+			h.setTile(id, tileEdgeKey(id), e.edge) // the edge first: a floating panel then tiles once, there
 			// the Layout as it is now, not as the menu was built: a reload while it was open may
 			// have floated the panel
 			if h.Prefs().Value(layoutKey(id)) != layoutTiled {
-				h.SetPref(layoutKey(id), layoutTiled)
+				h.setTile(id, layoutKey(id), layoutTiled)
 			}
 		})
 		r.Kind, r.Group, r.Checked = widgetcore.ItemKindRadio, "layout.edge", tiled && edge == e.edge
@@ -214,13 +256,13 @@ func layoutChoices(c any, id string, row rowMaker) []widgetcore.MenuItemModel {
 	return []widgetcore.MenuItemModel{feature.WithLabelMessage(sub, "&Tiled"), float}
 }
 
-// tileWindowByID is the window id, or false.
-func tileWindowByID(id string) (tileWindow, bool) {
-	i := slices.IndexFunc(tileWindows, func(w tileWindow) bool { return w.id == id })
+// tileWindowByID is the window of ws whose id is id, or false.
+func tileWindowByID(ws []tileWindow, id string) (tileWindow, bool) {
+	i := slices.IndexFunc(ws, func(w tileWindow) bool { return w.id == id })
 	if i < 0 {
 		return tileWindow{}, false
 	}
-	return tileWindows[i], true
+	return ws[i], true
 }
 
 // tabsRowOf is a row of a TabView's menu as a rowMaker: a row whatever tab it was opened for.
@@ -252,10 +294,11 @@ func (h *Host) attachTabViewMenus() {
 	}
 }
 
-// tileWindowIDs are the windows' ids, in their order: what :layout takes.
-func tileWindowIDs() []string {
-	ids := make([]string, len(tileWindows))
-	for i, w := range tileWindows {
+// tileWindowIDs are the windows' ids, in their order, the cards' last: what :layout takes.
+func (h *Host) tileWindowIDs() []string {
+	ws := core{h}.tileWindows()
+	ids := make([]string, len(ws))
+	for i, w := range ws {
 		ids[i] = w.id
 	}
 	return ids
@@ -267,14 +310,14 @@ func tileWindowIDs() []string {
 func (h *Host) layoutEntries() []feature.Entry {
 	return []feature.Entry{{ID: "window.layout", Title: "a window's layout", Verb: "layout", Args: "[window]",
 		Help:     "Tiled at an edge, or Float, for a window: alone, the editor's; Tab lists the windows",
-		Complete: func(editor.CompleteContext) []string { return tileWindowIDs() },
+		Complete: func(editor.CompleteContext) []string { return h.tileWindowIDs() },
 		Run: func(x feature.Invocation) error {
 			id := strings.TrimSpace(x.Line)
 			if id == "" {
 				id = "editor"
 			}
-			if !slices.Contains(tileWindowIDs(), id) {
-				h.notify(h.trf("autodoc.notice.layout.no_window_s_the_windows_are_s", id, strings.Join(tileWindowIDs(), ", ")))
+			if ids := h.tileWindowIDs(); !slices.Contains(ids, id) {
+				h.notify(h.trf("autodoc.notice.layout.no_window_s_the_windows_are_s", id, strings.Join(ids, ", ")))
 				return nil
 			}
 			return h.openLayoutMenu(id)

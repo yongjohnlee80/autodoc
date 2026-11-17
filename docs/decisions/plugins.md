@@ -71,7 +71,14 @@ Closing a card's panel hides it and leaves its plugin running: Esc, its menu's C
 `plugin.hide`. A signed-in plugin therefore stays signed in across a hide. Only Turn off (or an
 update, a removal, a fault, or quitting) stops the process.
 
-In the code: `tui/plugincmds.go`, `tui/pluginpanels.go`, `tui/pluginview.go`
+A card's panel is a window of the tile manager, as the static panels are. It floats until the user
+tiles it, from its right-click menu's Layout › or `:layout card_<name>`, as every panel floats until
+then. Its tile docks at its placement's side, and a card at the centre takes the right, since the
+page holds the tile manager's one centre. Its layout, tile edge and tile size are kept under its
+panel's id, as its geometry is (`tui.card_<name>.layout`, `.tileEdge`, `.tileSize`), not as
+Preferences rows, since cards come and go with the plugins folder.
+
+In the code: `tui/plugincmds.go`, `tui/pluginpanels.go`, `tui/pluginview.go`, `tui/tilelayout.go`
 
 ## The document feed
 

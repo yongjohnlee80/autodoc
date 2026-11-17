@@ -48,7 +48,12 @@ func (s *scopedPanelHost) Prefs() feature.PrefsView { return s.core.Prefs() }
 func (s *scopedPanelHost) LayoutRows(id string, row feature.RowMaker) []widgetcore.MenuItemModel {
 	return layoutRows(s, id, row)
 }
-func (s *scopedPanelHost) Env() procenv.Env { return s.core.Env() }
+
+// tileWindows and setTile are the core's (tileHost's).
+func (s *scopedPanelHost) tileWindows() []tileWindow { return s.core.tileWindows() }
+
+func (s *scopedPanelHost) setTile(id, name, value string) { s.core.setTile(id, name, value) }
+func (s *scopedPanelHost) Env() procenv.Env               { return s.core.Env() }
 
 func (s *scopedPanelHost) Keep(err error) { s.core.Keep(err) }
 

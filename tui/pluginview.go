@@ -331,18 +331,25 @@ func (v *pluginView) HandleEvent(ev tuicore.Event) bool {
 	return true
 }
 
-// openMenu is a card's right-click menu, at a point in the card: Close (Esc), which closes its
-// panel as Esc does.
+// openMenu is a card's right-click menu, at a point in the card: Layout › (its panel's tiling, as
+// every tileable panel's menu has it), then Close (Esc), which closes its panel as Esc does.
 func (v *pluginView) openMenu(at tuicore.Point) bool {
 	if v.menu == nil {
 		v.menu = editor.NewEditorMenu(v, nil)
 		v.menu.SetEnabled(true)
-		v.menu.SetRows(func() []widgetcore.MenuItemModel {
-			return []widgetcore.MenuItemModel{menuCommand("plugin.card.close", "&Close (Esc)",
-				editor.CoreMenuAction{ID: "plugin.card.close", Run: func(*editor.EditorCore) { v.closePanel() }})}
-		})
+		v.menu.SetRows(v.menuRows)
 	}
 	return v.menu.OpenAt(at)
+}
+
+// menuRows are the card's right-click menu's rows, as it opens: Layout ›, then Close (Esc).
+func (v *pluginView) menuRows() []widgetcore.MenuItemModel {
+	var rows []widgetcore.MenuItemModel
+	if v.pl != nil && v.card != "" {
+		rows = layoutRows(v.pl.c, cardPanelID(v.card), coreRowOf)
+	}
+	return append(rows, menuCommand("plugin.card.close", "&Close (Esc)",
+		editor.CoreMenuAction{ID: "plugin.card.close", Run: func(*editor.EditorCore) { v.closePanel() }}))
 }
 
 // closePanel closes the card's panel: the card hides, its plugin runs on.
