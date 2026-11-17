@@ -114,3 +114,30 @@ func TestTheDividerFollowsADrag(t *testing.T) {
 		return d > 0 && d < x-10
 	})
 }
+
+// TestACancelEndsTheDividersDrag: AutoDoc cancels a gesture when the panel closes, a menu opens, F6
+// moves the keys, or the pointer is taken back. The divider then ends its drag where it had
+// reached (golib's split keeps a revoked drag's division), takes a later drag with no press as
+// nothing, and a press elsewhere, on the reading list's field, moves no divider.
+func TestACancelEndsTheDividersDrag(t *testing.T) {
+	h := hosttest.Start(t, newReadingList(), 60, 12, plugin.Theme{Name: "plain"})
+	const y = 3
+	s := h.Screen("2 books")
+	x := dividerAt(s, y)
+	if x < 0 {
+		t.Fatalf("no divider on row %d:\n%s", y, s)
+	}
+	h.Pointer(plugin.Pointer{Kind: "press", Button: "left", X: x, Y: y, Count: 1})
+	h.Pointer(plugin.Pointer{Kind: "drag", Button: "left", X: x - 5, Y: y, Count: 1})
+	s = h.WaitFor("the divider five cells left", func(s string) bool { return dividerAt(s, y) == x-5 })
+	h.Pointer(plugin.Pointer{Kind: "cancel", Button: "left", X: x - 5, Y: y, Count: 1})
+	h.Pointer(plugin.Pointer{Kind: "drag", Button: "left", X: x - 15, Y: y, Count: 1}) // no press: no drag
+	fx, fy := titleAt(t, s, "add a book")
+	h.Press(fx, fy+1) // the field, below its hint
+	h.Type("Persuasion")
+	h.Key(plugin.Key{Key: "Enter"})
+	s = h.Screen("3 books") // a frame after the cancel, the stray drag and the press
+	if d := dividerAt(s, y); d != x-5 {
+		t.Fatalf("after the cancel, a stray drag and a press on the field, the divider is at %d; want %d, where the drag had reached:\n%s", d, x-5, s)
+	}
+}
