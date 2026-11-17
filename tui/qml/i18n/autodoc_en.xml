@@ -816,12 +816,12 @@
         <translation>arrange a panel</translation>
     </message>
     <message id="autodoc.cmd.panel.maximize">
-        <source>maximize or restore the terminal or agents</source>
-        <translation>maximize or restore the terminal or agents</translation>
+        <source>maximize or restore the terminal, the agents or a card that offers it</source>
+        <translation>maximize or restore the terminal, the agents or a card that offers it</translation>
     </message>
     <message id="autodoc.cmd.panel.maximize.help">
-        <source>maximize or restore the terminal or agents</source>
-        <translation>maximize or restore the terminal or agents</translation>
+        <source>maximize or restore the terminal, the agents or a card that offers it</source>
+        <translation>maximize or restore the terminal, the agents or a card that offers it</translation>
     </message>
     <message id="autodoc.cmd.panel.reset_layout">
         <source>reset the panel layout</source>
@@ -4928,8 +4928,8 @@ WHAT A KEY NEEDS
         <translation>every panel is at its edge already</translation>
     </message>
     <message id="autodoc.notice.panelfloat.maximize_is_the_terminal_s_and_the_agents_open_o">
-        <source>Maximize is the terminal's and the agents': open one first (SPC ` or SPC g)</source>
-        <translation>Maximize is the terminal's and the agents': open one first (SPC ` or SPC g)</translation>
+        <source>Maximize is the terminal's, the agents' and a card's that offers it: open one first (SPC ` or SPC g)</source>
+        <translation>Maximize is the terminal's, the agents' and a card's that offers it: open one first (SPC ` or SPC g)</translation>
     </message>
     <message id="autodoc.notice.panelfloat.resume_has_no_tab_to_wake_the_panel_is_empty">
         <source>Resume has no tab to wake: the panel is empty</source>

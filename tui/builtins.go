@@ -23,7 +23,7 @@ func (h *Host) builtinEntries() []feature.Entry {
 	return slices.Concat([]feature.Entry{
 		// File
 		feature.Builtin("file.new", "new file", "App.newFile()", h.newFile),
-		feature.Builtin("panel.maximize", "maximize or restore the terminal or agents", "App.maximizePanel()", h.maximizePanel),
+		feature.Builtin("panel.maximize", "maximize or restore the terminal, the agents or a card that offers it", "App.maximizePanel()", h.maximizePanel),
 		feature.Builtin("panel.resume", "resume the terminal's or the agents' tab (SIGCONT)", "App.resumePanel()", h.resumePanel),
 		feature.Builtin("file.open", "open a document", "App.openPicker()", h.openPicker),
 		feature.Builtin("buffer.pick", "switch buffer", "App.openBuffers()", h.openBuffers),
