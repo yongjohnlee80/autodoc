@@ -1146,10 +1146,15 @@ Panes {                        // two panes; a Panes inside a Pane nests rows an
 - **A `Pane` is a titled frame around one child.** Tab and Shift+Tab move among the controls in it
   and never leave it.
 - **F7 and Shift+F7** move to the next and previous pane, in reading order across every nested
-  `Panes`. **F8** maximizes the focused pane in its `Panes`, or restores it. A double press on a
-  pane's title does what F8 does.
+  `Panes`, among the panes shown: with one maximized, F7 keeps it. **F8** maximizes the focused
+  pane in its `Panes`, or restores it. A double press on a pane's title does what F8 does.
+- **A pane just shown takes the keys at its next frame.** Keys sent in the same frame as the F8
+  that restored it act from where the keys were: F7 there steps from the maximized pane.
 - **A pane with nothing to focus** (a `Text` alone), or whose controls are all disabled, is itself
-  the stop F7 and F8 reach. Once one of its controls is enabled, Tab moves to it.
+  the stop F7 and F8 reach. Once one of its controls is enabled, Tab moves to it; once the keys
+  leave it, it is a stop again only while it holds nothing to focus.
+- **A dialog** opens over the card's `Window`, never inside a `Pane`, and keeps its keys: no pane
+  key moves them out of it, and Tab stays in it.
 - **The divider** follows a drag from protocol 12, as `plugin/card`'s does.
 - Example: `examples/card-panes-qml`.
 
