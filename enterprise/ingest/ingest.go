@@ -119,8 +119,10 @@ type Ingester struct {
 	lock atomic.Pointer[pgstore.Writer]
 	// state is the last pass's and refresh's outcome (State), and waiting whether Acquire waits for
 	// another server's lock: an operator's status reads them from another goroutine
-	state   atomic.Pointer[State]
-	waiting atomic.Bool
+	state atomic.Pointer[State]
+	// deletesErr is the last deletes pass's failure, opcode.None after one that succeeded (deletes)
+	deletesErr atomic.Pointer[opcode.Code]
+	waiting    atomic.Bool
 	// facetsDue says the tenant's last complete refresh wrote its documents with another facet
 	// declaration than the source's (checkDue): a refresh is due at once, and State says why
 	facetsDue atomic.Bool
@@ -250,6 +252,10 @@ type Stats struct {
 	Quarantined int // rows that failed and wait in quarantine
 	Released    int // quarantined rows that ingested, or that the source no longer returns
 	Deleted     int // refresh: documents of rows the source no longer returns
+	// DeletedFlag and DeletedView are documents deleted by a row's deleted field and by the
+	// deletes view's tombstones; DeleteNoop is deletes that found no document to remove (an id
+	// never indexed or already gone, or a document written after the delete).
+	DeletedFlag, DeletedView, DeleteNoop int
 	// Unidentified are rows with no id: they can be neither indexed nor quarantined, and a refresh
 	// that read one deletes nothing.
 	Unidentified int
@@ -327,6 +333,9 @@ func (in *Ingester) Pass(ctx context.Context) (Stats, error) {
 			return st, ErrStalled
 		}
 		cur = next
+	}
+	if err := in.deletes(ctx, upto, &st); err != nil {
+		return st, err
 	}
 	if st.Written >= mergeAfter {
 		in.merge(ctx)
@@ -642,6 +651,20 @@ func (in *Ingester) finish(ctx context.Context, st *Stats, current map[string]pg
 // With current (a refresh), a document already current is left as it is. written says a document
 // was written.
 func (in *Ingester) apply(ctx context.Context, b *pgstore.Batch, r row, st *Stats, current map[string]pgstore.DocInfo) (written bool, err error) {
+	if r.deleted && r.bad == nil {
+		// a soft delete at the row's updated_at: its document goes, unless written after it, and the
+		// row leaves quarantine; nothing of it is rendered
+		gone, err := b.DeleteSource(ctx, r.id, r.at)
+		if err != nil {
+			return false, err
+		}
+		if gone {
+			st.DeletedFlag++
+		} else {
+			st.DeleteNoop++
+		}
+		return false, b.Release(ctx, r.id)
+	}
 	path, err := in.src.Path(r.id)
 	var d pgstore.Document
 	if err == nil {
@@ -740,6 +763,10 @@ type State struct {
 	// RefreshDue is why a refresh is due before its schedule, until one completes: RefreshFacets;
 	// "" for none.
 	RefreshDue string
+	// Deletes says the source has a deletes view; DeletesError is its last pass's failure, None
+	// after one that succeeded (the status shows its cursor's lag beside it).
+	Deletes      bool
+	DeletesError opcode.Code
 }
 
 // State is the ingester's state now.
@@ -752,6 +779,10 @@ func (in *Ingester) State() State {
 	st.Waiting = !st.Locked && in.waiting.Load()
 	if in.facetsDue.Load() {
 		st.RefreshDue = RefreshFacets
+	}
+	st.Deletes = in.src.Deletes() != nil
+	if c := in.deletesErr.Load(); c != nil {
+		st.DeletesError = *c
 	}
 	return st
 }

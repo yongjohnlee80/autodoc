@@ -85,6 +85,40 @@ func (b *Batch) SetCursor(ctx context.Context, c Cursor) error {
 	return nil
 }
 
+// SetDeletesCursor moves the tenant's deletes cursor to c inside the batch: the (deleted_at, id)
+// of the last tombstone of the source's deletes view a pass applied, apart from the rows' cursor
+// (SetCursor). It commits with the deletes the batch made, or not at all; the rows' cursor and the
+// last refresh are left as they are.
+func (b *Batch) SetDeletesCursor(ctx context.Context, c Cursor) error {
+	at, id := c.UpdatedAt, c.ID
+	err := b.s.rw.cursor.On(b.tx, dao.WithQueryContext(ctx)).
+		Set(kTenant, b.s.tenant).Set(kDelAt, &at).Set(kDelID, &id).Upsert()
+	if err != nil {
+		return fmt.Errorf("pgstore: set deletes cursor: %w", err)
+	}
+	return nil
+}
+
+// DeletesCursor is the tenant's committed deletes cursor (SetDeletesCursor); the zero Cursor when
+// no tombstone was applied.
+func (s *Store) DeletesCursor(ctx context.Context) (Cursor, error) {
+	r, err := s.rw.cursor.DAO(dao.WithQueryContext(ctx)).With(kTenant, s.tenant).Get(kDelAt, kDelID)
+	switch {
+	case errors.Is(err, dao.ErrNoRows):
+		return Cursor{}, nil
+	case err != nil:
+		return Cursor{}, fmt.Errorf("pgstore: deletes cursor: %w", err)
+	}
+	var c Cursor
+	if r.DeletesAt != nil {
+		c.UpdatedAt = *r.DeletesAt
+	}
+	if r.DeletesID != nil {
+		c.ID = *r.DeletesID
+	}
+	return c, nil
+}
+
 // SetRefreshed records the tenant's last full refresh inside the batch, leaving the cursor as it
 // is.
 func (b *Batch) SetRefreshed(ctx context.Context, r Refresh) error {

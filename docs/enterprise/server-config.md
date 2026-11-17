@@ -237,6 +237,7 @@ Each source is one `.view` file, indexed into a tenant of its own. There must be
 |---|---|---|---|
 | `tenant` | (required) | The tenant the source is indexed into. It keys every index row, names the source in the log, and keys its writer lease. | missing; not letters, digits, `.`, `_` and `-` starting with a letter or digit, at most 64; another source has it |
 | `view` | (required) | The `.view` file, relative to this file. | missing; the view is refused ([its rules](views.md)) |
+| `deletes` | (none) | A deletes view, relative to this file: the tombstones of the source's rows deleted outright, which every pass applies ([deletes](views.md#deletes)). Without one, such a row's document leaves the index at the next complete refresh. | the view is refused ([its rules](views.md)) |
 | `interval` | `1m` | How often the rows changed since the cursor are read. | under `1s` |
 | `refresh` | `24h` | How often every row is read again: content changes the rows' `updated_at` missed are written, and the documents of rows gone are deleted. | shorter than `interval` |
 | `refresh_retry` | `15m` | How soon a refresh that failed, or couldn't read every row, is tried again: the documents of rows gone wait only for a refresh that completes. | under `1m`; over `refresh` |

@@ -157,6 +157,9 @@ type Source struct {
 	Tenant string
 	// View is the .view file's path, resolved against the configuration file's directory.
 	View string
+	// Deletes is the source's deletes view's path, resolved likewise: the tombstones of its rows
+	// deleted outright, which every pass applies. "" for none.
+	Deletes string
 	// Refresh is how often every row is read again, and documents of rows gone are deleted.
 	Refresh time.Duration
 	// Interval is how often the rows changed since the cursor are read.
@@ -265,6 +268,7 @@ type file struct {
 	Sources []struct {
 		Tenant   string            `toml:"tenant"`
 		View     string            `toml:"view"`
+		Deletes  string            `toml:"deletes"`
 		Refresh  *duration         `toml:"refresh"`
 		Interval *duration         `toml:"interval"`
 		Lag      *duration         `toml:"lag"`
@@ -509,6 +513,12 @@ func (v *validator) sources(f file) []Source {
 			s.View = raw.View
 			if !filepath.IsAbs(s.View) {
 				s.View = filepath.Join(v.dir, s.View)
+			}
+		}
+		if raw.Deletes != "" {
+			s.Deletes = raw.Deletes
+			if !filepath.IsAbs(s.Deletes) {
+				s.Deletes = filepath.Join(v.dir, s.Deletes)
 			}
 		}
 		if raw.Interval != nil {
