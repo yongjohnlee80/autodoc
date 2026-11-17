@@ -321,6 +321,22 @@ PostgreSQL's own autovacuum reclaims the space; AutoDoc compacts nothing there.
 
 In the code: `core/pgstore/store.go`, `enterprise/embedder/embedder.go`
 
+## pgstore sweeps its orphans
+
+A tenant's vector of a text no chunk of the tenant has is an orphan: a document rewritten keeps its
+old texts' vectors, and a vector the embedding worker stores for a text a delete has just taken is
+left too. `SweepEmbeddings` deletes them, under every model, in batches of 5,000, each its own
+transaction that reads the orphans and deletes them with the same `NOT EXISTS` evaluated again, so
+a text that gains a chunk between the two keeps its vector.
+
+The ingester runs it under the tenant's lease, between its own writes: after every complete
+refresh, and after a pass that wrote at most once every 15 minutes. A sweep that finds nothing is
+an anti-join of the tenant's vectors against its chunks; the interval keeps a minute's passes from
+paying it each time. A search running meanwhile reads no row a sweep deletes: it joins every vector
+to a chunk. The status counts the vectors swept as `vectors_swept`.
+
+In the code: `core/pgstore/store.go`, `enterprise/ingest/ingest.go`
+
 ## Protocol 16 gates the deleting verbs
 
 From protocol 16, `embedding.cancel_switch` deletes the partial target's vectors and
