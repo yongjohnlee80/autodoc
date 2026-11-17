@@ -1,5 +1,3 @@
-//go:build linux || darwin
-
 package tui
 
 import (
@@ -74,7 +72,7 @@ func TestTheTodosTiledAtTheirLeastTakeTheKeyboard(t *testing.T) {
 // The terminal's least: 6 rows at the bottom, its edge, three of them the shell's, and 27 columns
 // at the left, SPC ` each time.
 func TestTheTerminalTiledAtItsLeastTakesTheKeyboard(t *testing.T) {
-	_, r := runShellTUI(t, nil)
+	_, r := runLineShellTUI(t, nil)
 	spcTick := func() { r.leader(t, '`') }
 	atItsLeast(t, r, "terminal", "bottom", 6, spcTick)
 	closePanel(t, r, "terminal") // its shell runs on: SPC ` opens it again
@@ -84,7 +82,7 @@ func TestTheTerminalTiledAtItsLeastTakesTheKeyboard(t *testing.T) {
 // The agent's least: 27 columns at the right, its edge, and 6 rows at the bottom, SPC g each time.
 func TestTheAgentTiledAtItsLeastTakesTheKeyboard(t *testing.T) {
 	agent, _ := fakeAgent(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron")
+	_, r, _ := runAgentTUI(t, agentsFolder(t), []agents.AgentProfile{{Name: "heron", Command: agentCall(agent), Codename: "heron"}}, "heron")
 	spcG := func() { r.leader(t, 'g') }
 	atItsLeast(t, r, "agent", "right", 27, spcG)
 	closePanel(t, r, "agent")
