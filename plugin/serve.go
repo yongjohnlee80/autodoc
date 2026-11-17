@@ -441,7 +441,8 @@ func ServeConn(ctx context.Context, conn net.Conn, h Handler) error {
 			}
 		case MethodPointer:
 			if ph, ok := h.(PointerHandler); ok && opened && peer.protocol.Load() >= 6 {
-				if p, err := ReadPointer(n.params); err == nil {
+				// a drag, release or cancel is protocol 12's: a plugin opened at less never sees one
+				if p, err := ReadPointer(n.params); err == nil && (p.Kind == "press" || p.Kind == "wheel" || peer.protocol.Load() >= 12) {
 					ph.Pointer(p)
 				}
 			}

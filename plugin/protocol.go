@@ -238,10 +238,16 @@ type Key struct {
 	Ctrl, Alt, Shift bool
 }
 
-// Pointer is a view-local, zero-based left press or vertical wheel step. Count is capped by the
-// host, and the plugin checks the coordinates against its most recently opened/resized frame.
+// Pointer is a view-local, zero-based pointer event. Kind and Button: "press"/"left", or
+// "wheel"/"up"/"down"; from protocol 12, "drag"/"left" (the button held, moving), "release"/"left",
+// and "cancel"/"left" (the gesture ended without a release: the card was hidden or detached, or the
+// host took the pointer back). From protocol 12 every left press is followed by exactly one release
+// or cancel. A press's and a wheel's X and Y lie in the view, which the plugin checks against its
+// most recently opened/resized frame; a drag's, release's and cancel's are the pointer's, relative
+// to the view, and may lie outside it (negative, or at or past the frame's width or height): a
+// release there is no click. Count is capped by the host: 1 for a drag, release or cancel.
 type Pointer struct {
-	Kind, Button string // "press"/"left", or "wheel"/"up"/"down"
+	Kind, Button string
 	X, Y, Count  int
 }
 
@@ -682,9 +688,11 @@ func ReadPointer(params []any) (Pointer, error) {
 	y, yOK := num(m, "y")
 	count, countOK := num(m, "count")
 	p := Pointer{Kind: str(m, "kind"), Button: str(m, "button"), X: x, Y: y, Count: count}
-	if !xOK || !yOK || !countOK || x < 0 || y < 0 || count < 1 || count > 16 ||
-		!(p.Kind == "press" && p.Button == "left" || p.Kind == "wheel" && (p.Button == "up" || p.Button == "down")) {
-		return Pointer{}, fmt.Errorf("%w: plugin.pointer wants a left press or vertical wheel, nonnegative coordinates and 1–16 steps", ErrParams)
+	inView := p.Kind == "press" && p.Button == "left" || p.Kind == "wheel" && (p.Button == "up" || p.Button == "down")
+	gesture := (p.Kind == "drag" || p.Kind == "release" || p.Kind == "cancel") && p.Button == "left"
+	if !xOK || !yOK || !countOK || count < 1 || count > 16 || !inView && !gesture || inView && (x < 0 || y < 0) {
+		return Pointer{}, fmt.Errorf("%w: plugin.pointer wants a left press, drag, release or cancel or a vertical wheel, "+
+			"1–16 steps, and nonnegative coordinates for a press or a wheel", ErrParams)
 	}
 	return p, nil
 }
