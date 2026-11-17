@@ -4,26 +4,33 @@ package tui
 
 import "testing"
 
-// The fixtures below start a POSIX shell or a shell-script stand-in for an agent's CLI
-// (terminal_test.go, agentserver_test.go, terminalkeymap_test.go).
-// They are not ported: on Windows a cell that needs one is skipped, and says so, rather than
-// keeping every other cell in this package from compiling.
+// The fixtures below stand for what Windows has not: a cell that needs one is skipped, saying why,
+// rather than keeping every other cell in this package from compiling. A cell that needs only a
+// shell running uses the line shell (runLineShellTUI), and an agent's cells fakeAgent: both run on
+// every OS.
 
-const unixFixture = "needs a POSIX shell fixture, not ported to Windows"
+// realShell is why a cell that types shell commands (seq, printf, cat -v, $((…))) is Unix's: the line
+// shell other OSes run does not run them.
+const realShell = "types real shell commands, which only a POSIX shell runs"
+
+// agentServer is why a cell that starts a crew agent's own server is Unix's: the server needs process
+// groups, so on Windows none is started (agents.CanRunAgentServers) and a Codex agent's setup asks
+// for none.
+const agentServer = "starts an agent's own server, which needs process groups (none on Windows)"
 
 func runShellTUI(t *testing.T, _ map[string]string) (*daemon, *running) {
 	t.Helper()
-	t.Skip(unixFixture)
+	t.Skip(realShell)
 	return nil, nil
 }
 
 func fakeServer(t *testing.T, _ string, _ bool) []string {
 	t.Helper()
-	t.Skip(unixFixture)
+	t.Skip(agentServer)
 	return nil
 }
 
 func catInTheTerminal(t *testing.T, _ *running) {
 	t.Helper()
-	t.Skip(unixFixture)
+	t.Skip(realShell)
 }
