@@ -89,12 +89,38 @@ func TestACardAddedWhileRunningIsSplicedInAndTilesFromItsMenu(t *testing.T) {
 	tileCard(t, r, "other", "right")
 }
 
-// A tiled card removed while AutoDoc runs (its plugin stopped first, as on Windows it must be)
-// leaves the tile manager: the other card keeps its tile,
+// removeCard removes the card name's folder while AutoDoc runs: its plugin stopped first when
+// stopped, else while it runs, as a user deleting it does where the OS allows that.
+func removeCard(t *testing.T, r *running, dir, name string, stopped bool) {
+	t.Helper()
+	if stopped {
+		stopPluginRun(t, r, name)
+		if err := os.RemoveAll(filepath.Join(dir, name)); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	removeRunningPluginFolder(t, filepath.Join(dir, name))
+}
+
+// A tiled card removed while AutoDoc runs leaves the tile manager: the other card keeps its tile,
 // edge and size, the page takes the removed card's cells, and a drag of the kept card's border
-// still resizes it, so no gesture or capture was left behind. The mutant, named here: a removed
-// member kept in the tile manager (the page never widens).
+// still resizes it, so no gesture or capture was left behind. Its plugin is stopped first here, as
+// on Windows it must be (a running program's folder can't be removed there; Turn off comes first).
+// The mutant, named here: a removed member kept in the tile manager (the page never widens).
 func TestRemovingATiledCardLeavesTheOtherOnItsTile(t *testing.T) {
+	removingATiledCard(t, true)
+}
+
+// A tiled card whose folder is removed while its plugin runs, as a user can on Linux and macOS:
+// the reload stops its run and splices the open, tiled member out, the other card kept on its tile
+// as above. Skipped where the OS refuses to remove a running program's folder (Windows), where the
+// case can't arise.
+func TestRemovingARunningTiledCardStopsItAndLeavesTheOtherOnItsTile(t *testing.T) {
+	removingATiledCard(t, false)
+}
+
+func removingATiledCard(t *testing.T, stopped bool) {
 	t.Parallel()
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "echo", rightCard)
@@ -109,12 +135,7 @@ func TestRemovingATiledCardLeavesTheOtherOnItsTile(t *testing.T) {
 	id := cardPanelID("card")
 	before, page := boundsOf(r, id), boundsOf(r, "editorWindow")
 
-	// its plugin stopped first: on Windows a running program's folder can't be removed (a user
-	// can't delete a running card's folder there; Turn off comes first)
-	stopPluginRun(t, r, "other")
-	if err := os.RemoveAll(filepath.Join(dir, "other")); err != nil {
-		t.Fatal(err)
-	}
+	removeCard(t, r, dir, "other", stopped)
 	r.readFolder()
 	r.s.WaitFor(t, "the removed card's panel and run gone", func(string) bool {
 		return onLoop(r, func() bool { return r.h.panelSpec(cardPanelID("other")) == nil && r.h.plugins.running["other"] == nil })
