@@ -884,6 +884,9 @@ func (s *Store) SweepEmbeddings(ctx context.Context) (int, error) {
 			}
 			return nil
 		})
+		if deleted > 0 && s.ann != nil {
+			s.ann.forget(s.tenant) // what the approximate search remembers of its embeddings
+		}
 		if err != nil {
 			return total, fmt.Errorf("pgstore: sweeping embeddings: %w", err)
 		}
