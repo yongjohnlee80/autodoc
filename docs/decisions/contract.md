@@ -112,7 +112,9 @@ unchanged.
   the path they were given) ends the detail where its text begins. A refused task-file write
   sends the file's store-relative name, not the disk's own error.
 - **A detail that still names an absolute path is not sent**, so the rule holds against a wrap
-  site written after it.
+  site written after it. A path is found at the detail's start, after a space or a quote, or after
+  `(`, `=`, `[`, `:` or `,`. So `todos.exists` for a `todos.move_store` target the caller gave
+  as an absolute path crosses as its message alone, though the path is the caller's own.
 - **These entries send their detail today:** `todos.invalid`, `todos.stale`, `todos.not_found`,
   `todos.exists`, `mail.no_recipient`, `mail.ambiguous`, `mail.too_large` and `inbox.too_large`.
   `mail.ambiguous` names other scopes' addresses, which its Next already tells the caller to

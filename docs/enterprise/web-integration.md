@@ -220,6 +220,11 @@ mode, limit and grouping are shared:
 - **The hits are merged by relevance × weight**, then by the tenant's place in the request, then
   the path. Relevance is on a fixed scale, so each tenant's best hit is worth the same however
   weak it is: a weight is how one tenant is favoured over another. `score` is per tenant.
+- **What it costs, and what bounds it:** a request naming 16 tenants is one request with up to 16
+  searches' work. The server bounds it server-wide, its tenants' searches each waiting for one of
+  `max_tenant_searches` ([server-config](server-config.md)), and per request, by its 25 s deadline.
+  No limit counts a client's calls or tenants: an application that fans its users' searches out
+  across tenants bounds its own calls.
 - **The answer** names each hit's tenant, and each tenant's mode and semantic state:
 
 ```json
