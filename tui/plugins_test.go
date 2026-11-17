@@ -1952,8 +1952,9 @@ func TestTheInstallConfirmationListsWhatIsDeclared(t *testing.T) {
 // TestThePluginReferenceKeepsUp (docs/decisions/plugins.md#the-published-reference):
 // docs/plugins.md is the published reference. Every notification the protocol defines (each
 // plugin.Method* constant, read from the source) is documented, and every manifest sample in it
-// runs: it decodes, strictly, with no reason against it. One sample declares editor menu rows
-// ([[menu]], protocol 11).
+// runs: it decodes, strictly, with no reason against it, as a whole plugin.toml. One sample
+// declares editor menu rows ([[menu]], protocol 11), and one a card's window icons ([window],
+// protocol 12).
 func TestThePluginReferenceKeepsUp(t *testing.T) {
 	t.Parallel()
 	doc, err := os.ReadFile("../docs/plugins.md")
@@ -1992,10 +1993,10 @@ func TestThePluginReferenceKeepsUp(t *testing.T) {
 	}
 
 	samples := regexp.MustCompile("(?s)```toml\n(.*?)```").FindAllSubmatch(doc, -1)
-	if len(samples) != 5 {
-		t.Fatalf("%d manifest samples, want 5 (a dialog, a card, a service, a card with a table, a dialog with editor menu rows)", len(samples))
+	if len(samples) != 6 {
+		t.Fatalf("%d manifest samples, want 6 (a dialog, a card, a service, a card with a table, a dialog with editor menu rows, a card with window icons)", len(samples))
 	}
-	kinds, menus := map[string]bool{}, 0
+	kinds, menus, windows := map[string]bool{}, 0, 0
 	for _, m := range samples {
 		dir := filepath.Join(t.TempDir(), "p")
 		_ = os.MkdirAll(dir, 0o755)
@@ -2007,6 +2008,9 @@ func TestThePluginReferenceKeepsUp(t *testing.T) {
 		}
 		if len(e.m.Menus) > 0 && e.m.Protocol >= 11 {
 			menus++
+		}
+		if len(e.m.Window.Controls) > 0 && e.m.Protocol >= 12 && e.m.Card() {
+			windows++
 		}
 		switch {
 		case e.m.Service():
@@ -2022,6 +2026,9 @@ func TestThePluginReferenceKeepsUp(t *testing.T) {
 	}
 	if menus != 1 {
 		t.Errorf("%d samples declare [[menu]] rows at protocol 11, want 1", menus)
+	}
+	if windows != 1 {
+		t.Errorf("%d samples are a card declaring [window] controls at protocol 12, want 1", windows)
 	}
 }
 

@@ -363,10 +363,19 @@ Each notification carries one map.
 
 ### Window icons (`[window]`, protocol 12)
 
-A card may show hide, maximize and close icons on its panel's frame, as AutoDoc's own panels do:
+A card may show hide, maximize and close icons on its panel's frame, as AutoDoc's own panels do.
+Its `[window]` lists them, at `protocol = 12`:
 
 ```toml
-protocol = 12
+name     = "clock"
+title    = "Clock"
+kind     = "dialog"
+protocol = 12                              # [window] needs 12
+command  = ["./bin/clock"]
+
+[dialog]
+modal      = false                         # a card: a modal dialog has no window icons
+placements = ["right"]
 
 [window]
 controls = ["hide", "maximize", "close"]   # any of them; none when unset
