@@ -34,15 +34,27 @@ func keyEvent(k plugin.Key) tui.KeyEvent {
 	return e
 }
 
-// mouseEvents are at as the App reads the pointer: a left press is a press and its release (the
-// host sends no release); a wheel step is Count wheel events.
-func mouseEvents(at plugin.Pointer) []tui.Event {
+// mouseEvents are at as the App reads the pointer, by the protocol the card was opened with: below
+// 12 a left press is a press and its release (the host sends no release); from 12 the release
+// follows, a drag is the button's motion, and a cancel ends the gesture as golib's capture loss
+// (tui.PointerCancelEvent), activating nothing. A drag's and release's coordinates go through as
+// they came, off the view included: golib activates only a release inside the pressed control. A
+// wheel step is Count wheel events.
+func mouseEvents(at plugin.Pointer, protocol int) []tui.Event {
+	gesture := protocol >= 12 && at.Button == "left"
 	switch {
 	case at.Kind == "press" && at.Button == "left":
-		return []tui.Event{
-			tui.MouseEvent{Kind: tui.MousePress, Button: tui.MouseLeft, X: at.X, Y: at.Y},
-			tui.MouseEvent{Kind: tui.MouseRelease, Button: tui.MouseLeft, X: at.X, Y: at.Y},
+		press := tui.MouseEvent{Kind: tui.MousePress, Button: tui.MouseLeft, X: at.X, Y: at.Y}
+		if gesture {
+			return []tui.Event{press}
 		}
+		return []tui.Event{press, tui.MouseEvent{Kind: tui.MouseRelease, Button: tui.MouseLeft, X: at.X, Y: at.Y}}
+	case gesture && at.Kind == "drag":
+		return []tui.Event{tui.MouseEvent{Kind: tui.MouseMotion, Button: tui.MouseLeft, X: at.X, Y: at.Y}}
+	case gesture && at.Kind == "release":
+		return []tui.Event{tui.MouseEvent{Kind: tui.MouseRelease, Button: tui.MouseLeft, X: at.X, Y: at.Y}}
+	case gesture && at.Kind == "cancel":
+		return []tui.Event{tui.PointerCancelEvent{}}
 	case at.Kind == "wheel" && (at.Button == "up" || at.Button == "down"):
 		b := tui.WheelDown
 		if at.Button == "up" {
