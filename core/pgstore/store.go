@@ -340,6 +340,9 @@ func (d Document) check() error {
 type DocInfo struct {
 	Path, Version, Indexer string
 	Generation             int64
+	// SourceAt is the source row's updated_at it was written from; the zero time for none (a
+	// document written before source_at was kept, or by a writer that has no source row).
+	SourceAt time.Time
 }
 
 // Docs pages the tenant's documents in path order: at most limit after the path after ("" from the
@@ -369,7 +372,7 @@ func (s *Store) docsPage(ctx context.Context, after string, limit int, unready b
 	if after != "" {
 		d = d.WithPredicate(dao.Gt(string(dByPath), after))
 	}
-	rows, err := d.OrderBy(dao.Asc(dByPath)).Limit(uint64(limit)+1).Select(dPath, dVersion, dIndexer, dGen)
+	rows, err := d.OrderBy(dao.Asc(dByPath)).Limit(uint64(limit)+1).Select(dPath, dVersion, dIndexer, dGen, dSrcAt)
 	if err != nil {
 		return nil, false, fmt.Errorf("pgstore: docs: %w", err)
 	}
@@ -378,7 +381,11 @@ func (s *Store) docsPage(ctx context.Context, after string, limit int, unready b
 			more = true
 			break
 		}
-		docs = append(docs, DocInfo{Path: r.Path, Version: r.Version, Indexer: r.Indexer, Generation: r.Generation})
+		info := DocInfo{Path: r.Path, Version: r.Version, Indexer: r.Indexer, Generation: r.Generation}
+		if r.SourceAt != nil {
+			info.SourceAt = *r.SourceAt
+		}
+		docs = append(docs, info)
 	}
 	return docs, more, nil
 }
