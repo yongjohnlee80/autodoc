@@ -281,12 +281,13 @@ restart.
   so.
 - An added card keeps its stored geometry (`tui.card_<name>.*`).
 - A card's window icons are read from its manifest as it was found, and a card is kept across an
-  edit of its manifest, so a changed `[window]` shows after a restart. Until then everything about
-  the window reads that first manifest, its panel's: the icons, what they do, the keys the card
-  leaves to the host and Maximize's reach. The plugin may restart on the edited manifest
-  meanwhile; a window that followed it would decline F11 for a panel that cannot be maximized, or
-  draw a `+` that does nothing. Only the protocol is the run's, since the plugin answers by the
-  one it was opened at.
+  edit of its manifest, so a changed `[window]` shows after a restart, or once the card's folder is
+  removed and added back, which builds its panel anew. Until then everything about the window
+  reads that first manifest, its panel's: the icons, what they do, the keys the card leaves to the
+  host and Maximize's reach. The plugin may restart on the edited manifest meanwhile; a window that
+  followed it would decline F11 for a panel that cannot be maximized, or draw a `+` that does
+  nothing. Only the protocol is the run's, since the plugin answers by the one it was opened at: a
+  run below 12 is sent every key, F11 included, whatever its panel draws.
 
 In the code: `tui/pluginpanels.go`, `tui/feature/panelregistry.go`
 
