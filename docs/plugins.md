@@ -992,6 +992,44 @@ func (p *people) Key(k plugin.Key) {
   when done, which zeroes it.
 - `card.Options{Modal: true}` for a modal dialog, which AutoDoc sends no `plugin.focus`.
 
+#### Panes
+
+`card.NewPanes(&split, o)` is a card of panes in the one frame the plugin sends.
+- A `card.Split` is two panes, side by side or stacked (`Vertical`).
+- `Ratio` is the first pane's share: 0 is a half, and it's kept within the panes' least sizes.
+- Each `card.Pane` has a `Title` line and either a `Page` of its own or a `Split`, which nests for rows and columns.
+- The plugin keeps the `Split` between draws, as it keeps its controls.
+
+```go
+l.panes = card.Split{
+	Ratio: 0.4,
+	A:     card.Pane{Title: "Library", Page: l.libraryPage},
+	B:     card.Pane{Title: "Editor", Page: l.editorPage},
+}
+l.card = card.NewPanes(&l.panes, card.Options{})
+```
+
+Each pane is laid out at its own size, with its own focus and scroll. The focused pane's title is
+the card's title (`host.title`). A one-cell divider sits between two panes: `|` beside, `-` stacked.
+
+| Key or pointer | Does |
+|---|---|
+| F7 / Shift+F7 | the next / previous pane takes the keys, in reading order, wrapping |
+| F8 | the focused pane maximized in its `Split`, or restored |
+| Tab / Shift+Tab | the focused pane's controls only: the keys never leave the pane |
+| a left press in a pane | that pane takes the keys, then the press reaches what it lands on |
+| a left double press on a pane's title | F8 for that pane |
+| a left press on a divider, then drag and release | the divider follows, and `Ratio` is set |
+
+- **A pane with no control** (text alone, or no page) still takes F7, F8 and a title double press. Tab
+  in it is unused, so `Card.Key` returns false.
+- **Dragging a divider** needs the pointer's drag, release and cancel, which a host sends from
+  protocol 12. At an earlier protocol the divider stays where `Ratio` puts it, and the other keys
+  and presses work as above.
+- A drag's or release's coordinates may lie off the card: the divider stops at the panes' least
+  sizes. A cancel (the gesture ended without a release) leaves it where it is.
+- Example: `examples/card-panes-go`.
+
 ### `plugin/decl`
 
 `decl.New` is a whole `plugin.Handler`: pass it to `plugin.Serve`, or embed `*decl.Card` in a type

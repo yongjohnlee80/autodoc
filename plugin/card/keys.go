@@ -28,6 +28,9 @@ import (
 //	                 Left h              close; on a closed node or a leaf, the row holding it
 //	                 Enter               OnEnter; when it returns false, open or close
 func (c *Card) Key(k plugin.Key) bool {
+	if c.root != nil {
+		return c.paneKey(k)
+	}
 	ctls := controls(c.page())
 	c.settle(ctls)
 	if len(ctls) == 0 {
