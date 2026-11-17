@@ -171,7 +171,7 @@ files it opens: "opens .ipynb files".
 
 ## Versions
 
-AutoDoc speaks plugin protocols **1 to 11**, and speaks to each plugin the one its manifest says. A
+AutoDoc speaks plugin protocols **1 to 12**, and speaks to each plugin the one its manifest says. A
 plugin of an earlier protocol runs as it always has, and is sent what it always was.
 
 - **A manifest that declares any protocol-2 key says `protocol = 2`.** Those keys are
@@ -208,10 +208,27 @@ plugin of an earlier protocol runs as it always has, and is sent what it always 
 - **A plugin with rows on the editor's right-click menu says `protocol = 11`.** Its `[[menu]]`
   declares them, and it may retitle or disable them with `host.menu` (below). An older AutoDoc
   refuses the manifest, so a plugin never runs where its rows would not show.
+- **A card with window icons, or one that follows a drag, says `protocol = 12`.** Its `[window]`
+  lists the icons on its panel's frame (below), and `plugin.pointer` also carries a left drag, its
+  release, and a cancel. An older AutoDoc refuses the manifest, so a card never runs where its icons
+  would not show or a divider it draws could not be dragged. A protocol-11 card is sent exactly
+  what it was.
 - **The protocol rises** when a manifest can declare something an older AutoDoc must not run
   without, when a meaning changes, or when a plugin must handle something new. Everything a
   protocol adds is declared in the manifest, so a plugin is never sent what it did not ask for.
-- The Go SDK speaks 1 to 11, and answers `plugin.open` with the protocol it was opened at.
+- The Go SDK speaks 1 to 12, and answers `plugin.open` with the protocol it was opened at.
+
+### Moving to 12
+
+- **A release follows every press.** At 12, every left press AutoDoc sends is followed by exactly
+  one `release` or `cancel`, and a drag sends `drag` between them. A raw `PointerHandler` that acted
+  on every `plugin.pointer` acts on its release too: check `Kind`. The UI kits already do.
+- **A drag's, release's and cancel's coordinates may lie off the frame:** negative, or at or past
+  its width or height. A release there is no click. Clamp what you draw, never the event.
+- **The window's keys are AutoDoc's.** A protocol-12 card is not sent the keys that cycle AutoDoc's
+  widgets (F6 and Shift+F6 by default), nor, when its `[window]` lists `maximize`, the keys that
+  maximize a panel (F11 and SPC M by default). A remapped key follows its new binding. A
+  protocol-11 card is still sent every key, F6 and F11 included.
 
 ## The run
 
@@ -261,15 +278,15 @@ Each notification carries one map.
 | AutoDoc | `plugin.key` | 1 | `{key, text, ctrl, alt, shift}` |
 | AutoDoc | `plugin.resize` | 1 | `{width, height}`: the dialog laid out at another size |
 | AutoDoc | `plugin.theme` | 1 | `{theme}`: the theme switched |
-| AutoDoc | `plugin.hide`, `plugin.show` | 1 | `{}`: under `esc = "hide"`, Esc hid the dialog, and its menu entry showed it again; a card's panel closed, and opened again |
+| AutoDoc | `plugin.hide`, `plugin.show` | 1 | `{}`: under `esc = "hide"`, Esc hid the dialog, and its menu entry showed it again; a card's panel closed (Esc, or from 12 its `_`), and opened again |
 | AutoDoc | `plugin.focus` | 2 | `{focused}`: a card took the keys, or gave them back |
 | AutoDoc | `plugin.document` | 2 | `{path, workspace, text, cursor, selection, version, too_large}`: the open note, under `[feed] document = true`; from 4 also `{cursor_byte, selection_bytes}`; `root` (the workspace's absolute folder) whenever the note is a workspace's |
 | AutoDoc | `plugin.command` | 2 | `{id}`: one of the manifest's `[[commands]]`, chosen; from 4, under the feed, `{id, document}`; from 7, `{args}` too when it has arguments |
 | AutoDoc | `plugin.result` | 3 | `{call, ok, error}`: the answer to the `host.call` numbered `call` |
 | AutoDoc | `plugin.table.fetch` | 4 | `{id, n}`: up to `n` more rows of the table `id` |
 | AutoDoc | `plugin.table.close` | 4 | `{id}`: the table is gone: its panel closed, or a newer table replaced it |
-| AutoDoc | `plugin.pointer` | 6 | `{kind, button, x, y, count}`: an unmodified left press (`press`, `left`) or wheel step (`wheel`, `up`/`down`) inside the card or dialog; frame-local nonnegative coordinates and count 1–16 |
-| AutoDoc | `plugin.close` | 1 | `{}`: the last; from 7, `{reason}` (below) |
+| AutoDoc | `plugin.pointer` | 6 | `{kind, button, x, y, count}`: an unmodified left press (`press`, `left`) or wheel step (`wheel`, `up`/`down`) inside the card or dialog; frame-local nonnegative coordinates and count 1–16. From 12 also `drag`, `release` and `cancel` (`left`): the button held and moving, let go, or the gesture ended without a release; their coordinates may lie off the frame (below) |
+| AutoDoc | `plugin.close` | 1 | `{}`: the last; from 7, `{reason}` (below). From 12 a card's `x` closes it, with the reason `off` |
 | plugin | `host.ready` | 1 | `{protocol}`: the answer to `plugin.open`, with the protocol it was opened at |
 | plugin | `host.frame` | 1 | `{rows}`: the whole dialog, at any time. A service's is dropped |
 | plugin | `host.title` | 1 | `{title}` |
@@ -321,6 +338,34 @@ Each notification carries one map.
 - **A card, or a dialog, draws no key help of its own.** It registers its commands (`[[commands]]`,
   each with an optional `key`), and SPC p and Plugins › Commands… list them with their letters. Its
   frames are its content: a line of keys there says again what AutoDoc already shows.
+- **A card can be tiled**, as the terminal and the agents can: Layout › on its right-click menu
+  (above Close), or `:layout card_<name>`. It floats or docks until the user tiles it. Its tile
+  takes its placement's side, and the right for a centred one, 35% across. AutoDoc keeps its
+  layout, its edge and its tile's size, per card, across restarts and while cards come and go.
+
+### Window icons (`[window]`, protocol 12)
+
+A card may show hide, maximize and close icons on its panel's frame, as AutoDoc's own panels do:
+
+```toml
+protocol = 12
+
+[window]
+controls = ["hide", "maximize", "close"]   # any of them; none when unset
+```
+
+| Icon | Does |
+|---|---|
+| `_` hide | closes the panel as Esc does: the plugin runs on, told `plugin.hide`, and `plugin.show` when the panel opens again |
+| `+` maximize | maximizes the panel, or restores it, as F11 and SPC M do (the card is not sent those keys); the plugin is told its new size |
+| `x` close | stops the plugin, as Turn off does: `plugin.close {reason: "off"}` |
+
+- The icons are drawn `_ + x`, left to right, whatever the order written. In a window (`--gui`)
+  they are the title bar's dots: amber, green and red.
+- A press on an icon is the icon's: it never moves the panel, and the plugin is not sent it.
+- `[window]` is refused below `protocol = 12` ("declares [window]: needs protocol = 12"), on a modal
+  dialog (a dialog has none; Esc closes it), and with an unknown or doubled control.
+- A changed `[window]` shows after AutoDoc restarts.
 
 ### The document feed (`[feed] document = true`)
 
@@ -917,6 +962,13 @@ protocol-6 handshake and only for unmodified input inside the frame. A right pre
 the card's context menu. `Pointer.X` and `Pointer.Y` are zero-based frame coordinates; `Count` is
 bounded to 1–16. A plugin can ignore pointer events and keep its keyboard controls.
 
+**Protocol 12** passes a left drag, its release and a cancel to the `PointerHandler`, as `Pointer`s
+of `Kind` `"drag"`, `"release"` and `"cancel"`. `Serve` passes them only to a plugin opened at 12;
+`plugin.ReadPointer` reads them at any protocol. Every left press is followed by exactly one
+release or cancel, so a handler that acted on every `Pointer` checks `Kind` (Moving to 12, above).
+A drag's, release's and cancel's `X` and `Y` may lie off the frame. A card's `[window]` needs no
+code: AutoDoc draws the icons and does what they do.
+
 ## Drawing a card: the UI kits
 
 A card or dialog can draw every cell itself with `plugin.Frame`. Most don't need to: the SDK has two
@@ -1064,9 +1116,34 @@ Window {
 - **State** changes on the program's loop only: in `Setup`, before the first frame; in a handler; or
   through `Card.Post` from your own goroutines. A `Post` after the card closed does not run.
 - **Keys** reach the program as a terminal's would, except Esc, which AutoDoc keeps to close or hide
-  the card. A left press arrives as a press and its release.
+  the card. A left press arrives as a press and its release; at protocol 12, its release when the
+  button is let go, with the drags between, and a cancel ends the gesture with nothing activated.
 - A layout that fails to build, or a `Setup` that fails, is shown in the card in red, and the card
   closes. A program that quits closes its card.
+
+#### Panes
+
+`Panes` and `Pane` are the decl kit's panes, the same as `plugin/card`'s (above), with the same
+keys. Every card's program has them.
+
+```qml
+Panes {                        // two panes; a Panes inside a Pane nests rows and columns
+    orientation: Tui.Horizontal  // side by side; Tui.Vertical stacks them
+    ratio: 0.4                   // the first pane's share
+    Pane { title: "Instances"; ListView { … } }
+    Pane { title: "Agent"; TextArea { … } }
+}
+```
+
+- **A `Pane` is a titled frame around one child.** Tab and Shift+Tab move among the controls in it
+  and never leave it.
+- **F7 and Shift+F7** move to the next and previous pane, in reading order across every nested
+  `Panes`. **F8** maximizes the focused pane in its `Panes`, or restores it. A double press on a
+  pane's title does what F8 does.
+- **A pane with nothing to focus** (a `Text` alone), or whose controls are all disabled, is itself
+  the stop F7 and F8 reach. Once one of its controls is enabled, Tab moves to it.
+- **The divider** follows a drag from protocol 12, as `plugin/card`'s does.
+- Example: `examples/card-panes-qml`.
 
 ### Testing a card
 
