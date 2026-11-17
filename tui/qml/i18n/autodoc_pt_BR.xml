@@ -792,12 +792,12 @@
         <translation>organizar um painel</translation>
     </message>
     <message id="autodoc.cmd.panel.maximize">
-        <source>maximize or restore the terminal or agents</source>
-        <translation>maximizar ou restaurar o terminal ou os agentes</translation>
+        <source>maximize or restore the terminal, the agents or a card that offers it</source>
+        <translation>maximizar ou restaurar o terminal, os agentes ou um cartão que o ofereça</translation>
     </message>
     <message id="autodoc.cmd.panel.maximize.help">
-        <source>maximize or restore the terminal or agents</source>
-        <translation>maximizar ou restaurar o terminal ou os agentes</translation>
+        <source>maximize or restore the terminal, the agents or a card that offers it</source>
+        <translation>maximizar ou restaurar o terminal, os agentes ou um cartão que o ofereça</translation>
     </message>
     <message id="autodoc.cmd.panel.reset_layout">
         <source>reset the panel layout</source>
@@ -4661,8 +4661,8 @@ O QUE UMA TECLA PRECISA
         <translation>todos os painéis já estão na borda</translation>
     </message>
     <message id="autodoc.notice.panelfloat.maximize_is_the_terminal_s_and_the_agents_open_o">
-        <source>Maximize is the terminal's and the agents': open one first (SPC ` or SPC g)</source>
-        <translation>Maximizar vale para o terminal e os agentes: abra um antes (SPC ` ou SPC g)</translation>
+        <source>Maximize is the terminal's, the agents' and a card's that offers it: open one first (SPC ` or SPC g)</source>
+        <translation>Maximizar vale para o terminal, os agentes e um cartão que o ofereça: abra um antes (SPC ` ou SPC g)</translation>
     </message>
     <message id="autodoc.notice.panelfloat.resume_has_no_tab_to_wake_the_panel_is_empty">
         <source>Resume has no tab to wake: the panel is empty</source>
