@@ -544,3 +544,119 @@ func TestACardsIconsAreItsFramesWindowControlsGUI(t *testing.T) {
 	t.Parallel()
 	runACardsIconsAreItsFramesWindowControls(t, true)
 }
+
+// A CARD'S WINDOW IS ITS PANEL'S (windowOf): a [window] edited while AutoDoc runs is read with the
+// folder, and the plugin's next start runs with it, but the card's panel was built with the first
+// one. Until AutoDoc restarts, everything about the window follows the panel's: the icons drawn,
+// what they do, the keys the card leaves to AutoDoc and Maximize's reach.
+
+// rewriteWindow replaces the installed card's [window] controls, from's list with to's.
+func rewriteWindow(t *testing.T, dir, name, from, to string) {
+	t.Helper()
+	path := filepath.Join(dir, name, "plugin.toml")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := "controls = [" + from + "]\n"
+	if strings.Count(string(b), old) != 1 {
+		t.Fatalf("no %q in the manifest:\n%s", old, b)
+	}
+	if err := os.WriteFile(path, []byte(strings.Replace(string(b), old, "controls = ["+to+"]\n", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// restartedAfterAnEdit installs a protocol-12 card listing controls and opens it; then, while
+// AutoDoc runs, edits its [window] to edited, reads the folder again, and restarts the plugin (Turn
+// off, then its command), so the run's manifest is the edited one, maximize listed or not as
+// editedMax says, and the panel's the first. It returns where the card's text starts, the card
+// holding the keyboard.
+func restartedAfterAnEdit(t *testing.T, controls, edited string, editedMax bool) (*running, string, int, int) {
+	t.Helper()
+	dir := t.TempDir()
+	installCard12(t, dir, "card", "echo", controls)
+	r, logs, _, _ := openCard12(t, dir)
+	rewriteWindow(t, dir, "card", controls, edited)
+	r.readFolder()
+	r.s.WaitFor(t, "the edited manifest read with the folder", func(string) bool {
+		return onLoop(r, func() bool {
+			i := slices.IndexFunc(r.h.plugins.pluginList, func(e pluginEntry) bool { return e.m.Name == "card" })
+			return i >= 0 && r.h.plugins.pluginList[i].m.Controls("maximize") == editedMax
+		})
+	})
+	r.turnOff("card")
+	r.s.WaitFor(t, "the card's plugin stopped", func(string) bool {
+		return onLoop(r, func() bool { return r.h.plugins.running["card"] == nil })
+	})
+	r.openPlugin("card")
+	r.s.WaitFor(t, "the card's plugin running again, on the edited manifest", func(string) bool {
+		return onLoop(r, func() bool {
+			run := r.h.plugins.running["card"]
+			return run != nil && !run.closing && run.e.m.Controls("maximize") == editedMax
+		}) && r.panelShown("card")
+	})
+	r.waitShown(t, "open ")
+	x, y := r.textAt("open ")
+	r.click(t, x, y)
+	r.s.WaitFor(t, "the restarted card holding the keyboard", func(string) bool {
+		return onLoop(r, func() bool { run := r.h.plugins.running["card"]; return run != nil && run.focused })
+	})
+	return r, logs, x, y
+}
+
+// iconsShown is the card's frame's title row between its corners, where its icons are drawn.
+func iconsShown(r *running) string {
+	top, left, right, _, ok := frameOf(r.s.String(), "Card")
+	if !ok {
+		return ""
+	}
+	row := []rune(strings.Split(r.s.String(), "\n")[top])
+	if right < 0 || right >= len(row) {
+		right = len(row) - 1
+	}
+	return string(row[left:right])
+}
+
+// maximize added to [window] while AutoDoc runs, the plugin restarted on it: the panel draws no +,
+// Maximize doesn't reach it, and F11 still reaches the card rather than going nowhere. The mutant,
+// named here: the window's keys read from the run's manifest (F11 left to a Window that cannot
+// maximize the panel, and the card never sent it).
+func TestMaximizeAddedWhileRunningWaitsForARestart(t *testing.T) {
+	t.Parallel()
+	r, logs, _, _ := restartedAfterAnEdit(t, `"close"`, `"close", "maximize"`, true)
+	id := cardPanelID("card")
+	if s := iconsShown(r); strings.Contains(s, " + ") || !strings.Contains(s, "x") {
+		t.Fatalf("the card's frame shows %q; want its first icons, x alone", s)
+	}
+	if onLoop(r, func() bool { return slices.Contains(r.h.maximizablePanels(), id) }) {
+		t.Fatal("Maximize reaches a card whose panel was built without maximize")
+	}
+	before := boundsOf(r, id)
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyF11})
+	waitSaid(t, logs, "card", "key F11")
+	if b := boundsOf(r, id); b != before {
+		t.Fatalf("F11 moved the card's panel from %+v to %+v", before, b)
+	}
+}
+
+// maximize removed from [window] while AutoDoc runs, the plugin restarted on it: the + still drawn
+// still maximizes, and F11 is still left to AutoDoc, which maximizes the panel; the card is not
+// sent F11. The mutant, named here: the window read from the run's manifest (F11 sent to the card,
+// nothing maximized, and the + refused).
+func TestMaximizeRemovedWhileRunningWaitsForARestart(t *testing.T) {
+	t.Parallel()
+	r, logs, _, _ := restartedAfterAnEdit(t, `"close", "maximize"`, `"close"`, false)
+	id := cardPanelID("card")
+	if s := iconsShown(r); !strings.Contains(s, "+") {
+		t.Fatalf("the card's frame shows %q; want its first icons, + among them", s)
+	}
+	before := boundsOf(r, id)
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyF11})
+	r.s.WaitFor(t, "the card's panel maximized by F11", func(string) bool { return boundsOf(r, id).W > before.W })
+	r.clickControl(t, "Card", '+')
+	r.s.WaitFor(t, "the + restoring the panel", func(string) bool { return boundsOf(r, id) == before })
+	if slices.ContainsFunc(said(t, logs, "card"), func(s string) bool { return strings.HasPrefix(s, "key F11") }) {
+		t.Fatal("the card was sent F11, which its panel's window leaves to AutoDoc")
+	}
+}

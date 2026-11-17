@@ -383,7 +383,9 @@ controls = ["hide", "maximize", "close"]   # any of them; none when unset
 - A press on an icon is the icon's: it never moves the panel, and the plugin is not sent it.
 - `[window]` is refused below `protocol = 12` ("declares [window]: needs protocol = 12"), on a modal
   dialog (a dialog has none; Esc closes it), and with an unknown or doubled control.
-- A changed `[window]` shows after AutoDoc restarts.
+- A changed `[window]` takes effect when AutoDoc restarts. Until then the card's icons, what they
+  do, the keys it leaves to AutoDoc and whether Maximize reaches it stay those of the manifest its
+  panel was built with, even once the plugin has restarted on the edited one.
 - `examples/card-panes-go` and `examples/card-panes-qml` list all three, at protocol 12.
 
 ### The document feed (`[feed] document = true`)

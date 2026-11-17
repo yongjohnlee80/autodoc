@@ -392,8 +392,20 @@ func cardWindowQML(c *cardPanel) string {
 	return b.String()
 }
 
-// maximizableCards are the panels Maximize reaches among the cards: those of the protocol-12 cards
-// that list maximize.
+// windowOf is the manifest a card's window was built from: its panel's, the one cardWindowQML wrote
+// its icons from, kept until AutoDoc restarts. Everything about a card's window reads it (its
+// icons, what they do, the keys it leaves to AutoDoc, Maximize's reach), never the run's manifest,
+// which a manifest edited while AutoDoc runs makes a later one: so the icons drawn and what the
+// window does stay one list. The zero manifest for a name with no card panel.
+func (pl *plugins) windowOf(name string) *manifest {
+	if c := pl.cards[name]; c != nil {
+		return &c.entry.m
+	}
+	return &manifest{}
+}
+
+// maximizableCards are the panels Maximize reaches among the cards: those whose window lists
+// maximize (windowOf, the panel's manifest, at protocol 12).
 func (pl *plugins) maximizableCards() []string {
 	var out []string
 	for _, c := range pl.fixCards() {
@@ -407,10 +419,11 @@ func (pl *plugins) maximizableCards() []string {
 // cardWindow is a press on a card's icon (App.cardWindow): hide its panel, its plugin running on, as
 // Esc does; maximize its panel over the page or restore it, as F11 does; or stop its plugin, as its
 // Plugins menu's Turn off does. A card not running has no icons to press, and a control its
-// manifest does not list is no icon of it: refused, whoever asks.
+// window does not list (windowOf: the manifest its icons were drawn from) is no icon of it: refused,
+// whoever asks.
 func (pl *plugins) cardWindow(name, control string) {
 	r := pl.running[name]
-	if r == nil || r.closing || !r.e.m.Controls(control) {
+	if r == nil || r.closing || !pl.windowOf(name).Controls(control) {
 		return
 	}
 	switch control {

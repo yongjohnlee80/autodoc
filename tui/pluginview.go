@@ -169,15 +169,16 @@ var _ tuicore.Focusable = (*pluginView)(nil)
 func (v *pluginView) AcceptsFocus() bool { return true }
 
 // hostKey reports whether e is one of the keys a protocol-12 card leaves to the Window
-// (CardHostKeys): F6 and Shift+F6, and maximize's when the card lists maximize, as the map binds
-// them now.
-func (v *pluginView) hostKey(r *pluginRun, e tuicore.KeyEvent) bool {
+// (CardHostKeys): F6 and Shift+F6, and maximize's when the card's window lists maximize, as the map
+// binds them now. The window is the panel's (windowOf), so F11 is left to the Window exactly when
+// the panel can be maximized; a later edit of the manifest changes neither until AutoDoc restarts.
+func (v *pluginView) hostKey(e tuicore.KeyEvent) bool {
 	chord, ok := tuikey.Of(e.Code, e.Mods, e.Text)
 	if !ok {
 		return false
 	}
 	candidates := tuikey.Candidates(chord)
-	return slices.ContainsFunc(v.pl.c.CardHostKeys(r.e.m.Controls("maximize")), func(s tuikey.Seq) bool {
+	return slices.ContainsFunc(v.pl.c.CardHostKeys(v.pl.windowOf(v.card).Controls("maximize")), func(s tuikey.Seq) bool {
 		return slices.Contains(candidates, s)
 	})
 }
@@ -368,6 +369,9 @@ func (v *pluginView) HandleEvent(ev tuicore.Event) bool {
 				p.Kind, p.Button = "wheel", "down"
 			}
 			if p.Kind != "" {
+				// the gesture follows the run's protocol, the one the plugin was opened at and
+				// answers by, never the panel's manifest (windowOf): a plugin opened at 12 is
+				// promised its release or cancel, whatever its window was drawn from
 				if p.Kind == "press" && r.e.m.Protocol >= 12 {
 					v.endDrag() // one release or cancel per press: a press with one in hand ends it
 				}
@@ -399,7 +403,9 @@ func (v *pluginView) HandleEvent(ev tuicore.Event) bool {
 	if !ok || e.Kind == tuicore.KeyRelease {
 		return false
 	}
-	if r.e.m.Protocol >= 12 && r.e.m.Card() && v.hostKey(r, e) {
+	// the protocol is the run's, the one the plugin was opened at: at 12 it is never sent F6 and
+	// Shift+F6, which is its protocol's promise to it; what its window lists is the panel's (hostKey)
+	if r.e.m.Protocol >= 12 && r.e.m.Card() && v.hostKey(e) {
 		return false // the Window's Shortcut runs: F6 leaves the card, F11 maximizes its panel
 	}
 	if e.Code == tuicore.KeyEscape && e.Mods.Chord() == 0 {
