@@ -444,8 +444,10 @@ var ErrWriteRace = errs.Sentinel(errs.ErrPrecondition, "pgstore: the document ch
 const putRetries = 8
 
 // Put writes a document: replaced whole when its path exists (its generation bumped, its chunks
-// and links replaced), created otherwise, in one transaction. It is not ready for semantic search
-// until MarkReady says so. It returns the document's id.
+// and links replaced), created otherwise, in one transaction. A document created is not ready for
+// semantic search until MarkReady says so; one replaced is ready at once when every text of it has
+// a vector under the active model (embedded), and otherwise waits for MarkReady too. It returns the
+// document's id.
 //
 // The generation bump and the chunk replacement are one compare-and-set: the update carries the
 // generation it read, so a concurrent Put of the same path that committed first makes this one's
@@ -503,6 +505,7 @@ var putHook func()
 // first insert two writers both made is a duplicate, and an error ends a PostgreSQL transaction.
 func (s *Store) putIn(ctx context.Context, tx *dao.Transaction, d Document, tags, facets []string, tagText string) (int64, error) {
 	var id int64
+	rewritten := false // an existing document's edit, not a first write
 	err := func() error {
 		cur, err := s.rw.doc.On(tx, dao.WithQueryContext(ctx)).With(dTenant, s.tenant).With(dPath, d.Path).Get(dID, dGen)
 		switch {
@@ -546,6 +549,7 @@ func (s *Store) putIn(ctx context.Context, tx *dao.Transaction, d Document, tags
 			if err := s.rw.value.On(tx, dao.WithQueryContext(ctx)).With(vTenant, s.tenant).With(vDoc, id).Delete(); err != nil {
 				return err
 			}
+			rewritten = true
 		}
 		if len(d.Chunks) > 0 {
 			b := s.rw.chunk.On(tx, dao.WithQueryContext(ctx)).Batch().ForceInsert()
@@ -580,9 +584,31 @@ func (s *Store) putIn(ctx context.Context, tx *dao.Transaction, d Document, tags
 				return err
 			}
 		}
+		if rewritten {
+			// an edit whose every text already has a vector under the active model stays ready in
+			// this write, rather than leaving semantic search until the embedding worker marks it
+			if _, err := dao.UpdateAffected(s.rw.doc.On(tx, dao.WithQueryContext(ctx)).With(dTenant, s.tenant).With(dID, id).
+				WithPredicate(embedded()).Set(dReady, true)); err != nil {
+				return err
+			}
+		}
 		return nil
 	}()
 	return id, err
+}
+
+// embedded is "every chunk of the document has a vector under the tenant's active model, and no
+// switch to another model is under way", MarkReady's verdict read in the writing statement, over
+// the chunks this transaction wrote. While a switch fills its target, an edit is left unready, as
+// before: the worker marks it under the model it fills. A first write is not asked: its texts are
+// new as a rule, and a load of thousands would pay a statement each for nothing.
+func embedded() dao.Predicate {
+	doc := func(c docField) string { return qcol(tDoc, string(c)) }
+	return dao.Raw("EXISTS (SELECT 1 FROM " + tMeta + " m WHERE m.tenant = " + doc(dTenant) +
+		" AND m.active_model <> '' AND COALESCE(m.target_model, '') IN ('', m.active_model)" +
+		" AND NOT EXISTS (SELECT 1 FROM " + tChunk + " k WHERE k.tenant = " + doc(dTenant) + " AND k.doc = " + doc(dID) +
+		" AND NOT EXISTS (SELECT 1 FROM " + tEmb + " e WHERE e.tenant = k.tenant AND e.model = m.active_model" +
+		" AND e.text_hash = k.text_hash)))")
 }
 
 func nonNil(s []string) []string {
