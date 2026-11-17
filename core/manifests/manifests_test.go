@@ -164,6 +164,42 @@ func TestAPluginThatOpensAnExtensionDeclaresIt(t *testing.T) {
 	}
 }
 
+// cardHead is a protocol-12 card, for [window]'s rules.
+const cardHead = "name = \"p\"\nkind = \"dialog\"\nprotocol = 12\ncommand = [\"./p\"]\n[dialog]\nmodal = false\n"
+
+// [window] needs protocol 12 and a card; its controls are hide, maximize and close, each once. A
+// valid one is read, each control answered by Controls, and declared for the install in the order the
+// icons are drawn. The mutants, named here: checkWindow not called (a modal dialog's controls load),
+// and a control taken twice.
+func TestAWindowsControlsAreCheckedWithItsManifest(t *testing.T) {
+	modal := strings.Replace(cardHead, "modal = false", "modal = true", 1)
+	at11 := strings.Replace(cardHead, "protocol = 12", "protocol = 11", 1)
+	for _, c := range []struct{ src, want string }{
+		{at11 + "[window]\ncontrols = [\"close\"]\n", "declares [window]: needs protocol = 12"},
+		{modal + "[window]\ncontrols = [\"close\"]\n", "[window]: only a card ([dialog] modal = false) has window controls"},
+		{cardHead + "[window]\ncontrols = [\"minimize\"]\n", `[window] controls: "minimize": want hide, maximize or close`},
+		{cardHead + "[window]\ncontrols = [\"hide\", \"hide\"]\n", `[window] controls: "hide" twice`},
+		{cardHead + "[window]\nbuttons = [\"hide\"]\n", `unknown key`},
+	} {
+		if _, err := ParsePlugin([]byte(c.src)); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%q\n err = %v\nwant %q", c.src, err, c.want)
+		}
+	}
+	m, err := ParsePlugin([]byte(cardHead + "[window]\ncontrols = [\"close\", \"hide\"]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !m.Controls("hide") || !m.Controls("close") || m.Controls("maximize") {
+		t.Fatalf("the controls: %+v", m.Window)
+	}
+	if d := m.Declares(); !slices.Contains(d, "window controls: hide, close") {
+		t.Fatalf("Declares: %q, want the controls in the order they are drawn", d)
+	}
+	if m, err := ParsePlugin([]byte(cardHead)); err != nil || len(m.Window.Controls) != 0 {
+		t.Fatalf("a protocol-12 card with no [window]: %v, %+v; want it to load with no controls", err, m)
+	}
+}
+
 // menuHead is a protocol-11 dialog with run and stop commands, for [[menu]]'s rules.
 const menuHead = "name = \"p\"\nkind = \"dialog\"\nprotocol = 11\ncommand = [\"./p\"]\n[[commands]]\nid = \"run\"\ntitle = \"Run\"\n[[commands]]\nid = \"stop\"\ntitle = \"Stop\"\n"
 
