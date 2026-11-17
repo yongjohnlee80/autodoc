@@ -26,13 +26,13 @@ func (h *probeRan) BeforeExec(ctx context.Context, q *dao.QueryInfo) error {
 }
 
 // A tenant seen past the threshold is remembered for pastFor: its next search sends no probe. A
-// reclaim through the Store forgets it, and the next search probes again; another tenant's drop
+// reclaim or a sweep that deleted through the Store forgets it, and the next search probes again; another tenant's drop
 // does not. Embeddings deleted below the threshold behind the Store's back (another server's
 // reclaim) leave a stale "past" until pastFor ends: in that window the search tries the index,
 // whose candidates under the tenant's filter come back short, and it is answered exactly
 // (underfill), the exact answer. Past pastFor the probe runs again and the search is exact up
 // front. The mutants, named here: a "past" never remembered (the second search probes); a reclaim
-// not forgetting (the search after it sends no probe).
+// not forgetting (the search after it sends no probe); a sweep not forgetting (the same).
 func TestANN_PastTheThresholdIsRememberedForAWhile(t *testing.T) {
 	ctx := context.Background()
 	cfg := DefaultANNConfig()
@@ -69,6 +69,16 @@ func TestANN_PastTheThresholdIsRememberedForAWhile(t *testing.T) {
 	}
 	if h, _ := run("after a reclaim"); h.probes != 1 {
 		t.Fatalf("the search after a reclaim: %d probes; want it asked again", h.probes)
+	}
+	if _, err := conn.ExecContext(ctx, `INSERT INTO rag_embedding (tenant, model, text_hash, vec)
+		SELECT tenant, model, sha256(text_hash), vec FROM rag_embedding WHERE tenant = 't' LIMIT 3`); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := at.SweepEmbeddings(ctx); err != nil || n != 3 {
+		t.Fatalf("the sweep: %d, %v; want the 3 vectors no chunk has", n, err)
+	}
+	if h, _ := run("after a sweep"); h.probes != 1 {
+		t.Fatalf("the search after a sweep: %d probes; want it asked again", h.probes)
 	}
 	if err := other.Drop(ctx); err != nil {
 		t.Fatal(err)
