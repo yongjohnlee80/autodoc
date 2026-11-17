@@ -605,3 +605,39 @@ func TestEveryButtonIsATabStop(t *testing.T) {
 		t.Fatalf("Up from the name reached %q, want Cancel", at())
 	}
 }
+
+// From protocol 12 a native card's control acts on the press, as below it: the release that
+// follows, a drag over another control, and a cancel do nothing, so a card answers a click the same
+// on either host. The mutant, named here: a release acting as a press (B pressed twice).
+func TestAProtocol12GestureActsOnThePressAlone(t *testing.T) {
+	var pressed []int
+	btns := &Buttons{Labels: []string{"A", "B"}, OnPress: func(i int) { pressed = append(pressed, i) }}
+	c, host := open(t, func() Page { return Page{Buttons: btns} }, 30, 6)
+	rows := screen(host.last())
+	find := func(s string) (int, int) {
+		for y, r := range rows {
+			if x := strings.Index(r, s); x >= 0 {
+				return width(r[:x]), y
+			}
+		}
+		t.Fatalf("%q not drawn:\n%s", s, strings.Join(rows, "\n"))
+		return 0, 0
+	}
+	ax, ay := find("[ A ]")
+	bx, by := find("[ B ]")
+	p := func(kind string, x, y int) plugin.Pointer {
+		return plugin.Pointer{Kind: kind, Button: "left", X: x, Y: y, Count: 1}
+	}
+	c.Pointer(p("press", bx+1, by))
+	for _, at := range []plugin.Pointer{p("drag", ax+1, ay), p("release", ax+1, ay), p("press", bx+1, by), p("cancel", bx+1, by)} {
+		if at.Kind != "press" && c.Pointer(at) {
+			t.Errorf("a %s was used", at.Kind)
+		}
+		if at.Kind == "press" {
+			c.Pointer(at)
+		}
+	}
+	if len(pressed) != 2 || pressed[0] != 1 || pressed[1] != 1 {
+		t.Fatalf("pressed %v, want B twice: once for each press, never for a drag, release or cancel", pressed)
+	}
+}
