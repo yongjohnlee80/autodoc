@@ -57,9 +57,57 @@ func TestThePanesOverTheWire(t *testing.T) {
 	h.Key(plugin.Key{Key: "Up"})
 	s := h.Screen("editing: Dune")
 	x, y := titleAt(t, s, "Library")
-	h.Pointer(plugin.Pointer{Kind: "press", Button: "left", X: x, Y: y, Count: 2})
+	h.PressCount(x, y, 2)          // the second press of a double click, and its release
 	h.Key(plugin.Key{Key: "Down"}) // a frame after the press: the list's selection moved
 	if s = h.Screen("> Persuasion!"); strings.Contains(s, "Editor") {
 		t.Fatalf("a double press on the library's title didn't maximize it:\n%s", s)
+	}
+}
+
+// dividerAt is the column of the divider, the one `|` on the screen's row y; -1 when the row has
+// none or several.
+func dividerAt(screen string, y int) int {
+	rows := strings.Split(screen, "\n")
+	if y >= len(rows) || strings.Count(rows[y], "|") != 1 {
+		return -1
+	}
+	return len([]rune(rows[y][:strings.Index(rows[y], "|")]))
+}
+
+// TestTheManifestShowsTheWindowIcons: AutoDoc reads the example's plugin.toml at protocol 12, with
+// hide, maximize and close on its frame.
+func TestTheManifestShowsTheWindowIcons(t *testing.T) {
+	m := hosttest.Manifest(t)
+	if m.Protocol != 12 {
+		t.Fatalf("protocol %d; want 12, for the divider's drag and the icons", m.Protocol)
+	}
+	for _, c := range []string{"hide", "maximize", "close"} {
+		if !m.Controls(c) {
+			t.Fatalf("[window] controls don't list %q: %v", c, m.Window.Controls)
+		}
+	}
+}
+
+// TestTheDividerFollowsADrag drives the divider as AutoDoc sends a drag at protocol 12: a press on
+// it, a drag a cell at a time, and the release. It stays where it was let go, and the library's
+// list still has the keys. Dragged past the card's right edge, it stops at the editor's least width.
+func TestTheDividerFollowsADrag(t *testing.T) {
+	h := hosttest.Start(t, newLibrary(), 60, 14, plugin.Theme{Name: "plain"})
+	const y = 3
+	x := dividerAt(h.Screen("Library"), y)
+	if x < 0 {
+		t.Fatalf("no divider on row %d:\n%s", y, h.Screen("Library"))
+	}
+	h.Drag(x, y, x+10, y)
+	h.WaitFor("the divider ten cells right", func(s string) bool { return dividerAt(s, y) == x+10 })
+	h.Key(plugin.Key{Key: "Down"}) // the list still has the keys: Emma
+	h.Screen("editing: Emma")
+	h.Drag(x+10, y, 70, y) // let go off the card
+	s := h.WaitFor("the divider stopped short of the right edge", func(s string) bool {
+		d := dividerAt(s, y)
+		return d > x+10 && d < 59
+	})
+	if !strings.Contains(s, "Editor") {
+		t.Fatalf("the editor's pane is gone after the drag:\n%s", s)
 	}
 }

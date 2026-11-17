@@ -1,8 +1,11 @@
 // card-panes-go is AutoDoc's native-kit example of panes (plugin/card): a card of two titled
 // panes, a library's list on the left and an editor on the right. F7 and Shift+F7 move between
-// them, F8 maximizes one, and Tab stays inside the focused pane. Install it from a local checkout
-// with `go build -o bin/autodoc-card-panes-go .` here, or let AutoDoc run [install] build; see
-// plugin.toml.
+// them, F8 maximizes one, and Tab stays inside the focused pane. It speaks protocol 12: its
+// divider follows a drag, and its controls still act on the press, as at every protocol, so the
+// release that follows does nothing more. Its plugin.toml lists hide, maximize and close
+// ([window]), which AutoDoc draws on its frame and acts on; the card needs no code for them.
+// Install it from a local checkout with `go build -o bin/autodoc-card-panes-go .` here, or let
+// AutoDoc run [install] build; see plugin.toml.
 package main
 
 import (

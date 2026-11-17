@@ -1,5 +1,8 @@
 // card-panes-qml is AutoDoc's QML example of panes (plugin/decl's Panes and Pane): a reading list
-// beside a status pane, run inside the plugin, its frames sent to AutoDoc. Install it as card-go
+// beside a status pane, run inside the plugin, its frames sent to AutoDoc. It speaks protocol 12:
+// its divider follows a drag, and a control that clicks (a Button) acts on a release inside it, as
+// a desktop toolkit's does. Its plugin.toml lists hide, maximize and close ([window]), which
+// AutoDoc draws on its frame and acts on; the card needs no code for them. Install it as card-go
 // is; see plugin.toml.
 package main
 
