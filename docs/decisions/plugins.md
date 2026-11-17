@@ -296,8 +296,8 @@ the plugin is sent nothing for a press on one.
   says close, and a card that only hid on `x` would read as one that cannot be closed. The plugin
   does not choose: the same icon does the same thing on every card.
 - The icons only request: golib's panel frame emits a request for each, and the host decides what it
-  does. The panel's own window operations are not used for them, because golib's minimize and close
-  are not AutoDoc's hide and stop.
+  does. golib's own minimize and close are not used, because they are not AutoDoc's hide and stop;
+  maximize is the panel's own, the same call F11 makes.
 - A protocol-12 card leaves the keys that cycle AutoDoc's widgets to the host, and the maximize keys
   too when it lists maximize, so F6 always leaves a card and F11 maximizes one. A protocol-11 card is
   still sent every key.
