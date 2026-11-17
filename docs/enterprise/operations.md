@@ -53,7 +53,8 @@ curl -s http://127.0.0.1:8730/v1/status -H "Authorization: Bearer $AUTODOC_OPS_T
 ```json
 {"as_of": "2026-10-13T09:41:07Z",
  "server": {"version": "v0.1.40", "started": "2026-10-13T09:00:00Z",
-            "embedding": {"model": "openai|text-embedding-3-small||1536", "state": "up", "error": ""}},
+            "embedding": {"model": "openai|text-embedding-3-small||1536", "state": "up", "error": "",
+                          "batch": 64, "in_flight": 4, "last_call_ms": 812}},
  "tenants": [{"tenant": "music", "lock": "held",
    "cursor": {"updated_at": "2026-10-13T09:41:03Z", "id": "8812", "lag_seconds": 4},
    "last_pass": {"at": "…", "read": 12, "written": 12, "quarantined": 0, "error": ""},
@@ -67,6 +68,7 @@ curl -s http://127.0.0.1:8730/v1/status -H "Authorization: Bearer $AUTODOC_OPS_T
 
 | Field | What it tells you |
 |---|---|
+| `server.embedding` | the provider's `state` (`starting`, `up`, `down`) and its `error` code; the texts one request carries now (`batch`) and the requests in flight (`in_flight`), which are `[embedding] batch` and `slots` unless requests ran out of `call_timeout` and the pace stepped down ([server-config](server-config.md#how-the-server-embeds)); the last request's time (`last_call_ms`), and how many requests ran out of their time since the server started (`timeouts`, absent while none). A `batch` below yours that stays there means the provider is too slow for it. |
 | `lock` | `held`; `waiting` (another server holds the tenant: a standby); `none` |
 | `lock_wait` | why a `waiting` lock waits when it isn't for another server of this release: `older_server`, a server of v0.3.15 or before holding the tenant by its advisory lock ([upgrading from v0.3.15](#upgrading-from-v0315)). Stop that server. Absent otherwise. |
 | `cursor.lag_seconds` | how far the index is behind your data, on the database's clock: now, less the bound the last pass that completed read to (the database's now less `lag` when it ran). On a quiet source it stays at most `lag` plus `interval`; it grows only while passes fail or can't keep up. Alert on it. It's absent on a standby (only the server holding the tenant's lease measures it) and before that server's first complete pass, so make absence an alarm of its own: absent on every server of a tenant for longer than an `interval` means no server is completing passes. `cursor.updated_at` and `id` are the last row read, which stays put while nothing changes. |

@@ -185,8 +185,9 @@ func CopySQLite(ctx context.Context, dst, src *Store) (CopyReport, error) {
 }
 
 // CopyDestinationEmpty refuses a destination that is no store on PostgreSQL, or one that holds
-// rows, from its catalog alone: a copy checks it before it opens its source, so a copy refused
-// for its destination leaves the source's file as it was. CopySQLite checks again.
+// rows, from the catalog's table names and one EXISTS per table: a copy checks it before it opens
+// its source, so a copy refused for its destination leaves the source's file as it was.
+// CopySQLite checks again.
 func CopyDestinationEmpty(ctx context.Context, dst *Store) error {
 	if dst.pg == nil {
 		return errors.New("store: a copy's destination is a store on PostgreSQL")

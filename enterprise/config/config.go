@@ -25,22 +25,30 @@ import (
 
 // The defaults of the fields that have one.
 const (
-	DefaultSchema   = "autodoc_search"
-	DefaultListen   = "127.0.0.1:8730"
-	DefaultSlots    = 4
-	DefaultRefresh  = 24 * time.Hour
-	DefaultInterval = time.Minute
-	DefaultLag      = time.Minute
-	DefaultOpenAI   = "https://api.openai.com/v1"
-	DefaultOllama   = "http://127.0.0.1:11434"
+	DefaultSchema = "autodoc_search"
+	DefaultListen = "127.0.0.1:8730"
+	DefaultSlots  = 4
+	// DefaultBatch is how many texts one embedding call carries, and DefaultCallTimeout how long
+	// one call may take: the worker's own, which it steps down from when a call runs out of time.
+	DefaultBatch       = 64
+	DefaultCallTimeout = 2 * time.Minute
+	DefaultRefresh     = 24 * time.Hour
+	DefaultInterval    = time.Minute
+	DefaultLag         = time.Minute
+	DefaultOpenAI      = "https://api.openai.com/v1"
+	DefaultOllama      = "http://127.0.0.1:11434"
 	// DefaultMetricsInterval is how often the server logs its metrics lines.
 	DefaultMetricsInterval = time.Minute
 )
 
 // Bounds a field is refused outside of.
 const (
-	MaxSlots    = 64
-	MinInterval = time.Second
+	MaxSlots = 64
+	MaxBatch = 256
+	// MinCallTimeout and MaxCallTimeout bound [embedding] call_timeout.
+	MinCallTimeout = time.Second
+	MaxCallTimeout = 30 * time.Minute
+	MinInterval    = time.Second
 	// MinRefreshRetry is the soonest a failed refresh may be tried again.
 	MinRefreshRetry = time.Minute
 	// MinMetricsInterval is the most often the metrics lines may be logged.
@@ -92,6 +100,11 @@ type Embedding struct {
 	KeyEnv string
 	// Slots is how many embedding requests may be in flight at once, across every tenant.
 	Slots int
+	// Batch is how many texts one embedding request carries, and CallTimeout how long one may
+	// take. The worker starts at Batch and Slots and steps both down while requests run out of
+	// CallTimeout, so a slow provider still makes progress; it steps back up as they answer in time.
+	Batch       int
+	CallTimeout time.Duration
 }
 
 // Key is the provider's API key, read from the environment when called; "" when KeyEnv names none.
@@ -237,11 +250,13 @@ type file struct {
 		ANNMaintenanceWorkMem *string   `toml:"ann_maintenance_work_mem"`
 	} `toml:"postgres"`
 	Embedding *struct {
-		Provider string `toml:"provider"`
-		BaseURL  string `toml:"base_url"`
-		Model    string `toml:"model"`
-		KeyEnv   string `toml:"key_env"`
-		Slots    *int   `toml:"slots"`
+		Provider    string    `toml:"provider"`
+		BaseURL     string    `toml:"base_url"`
+		Model       string    `toml:"model"`
+		KeyEnv      string    `toml:"key_env"`
+		Slots       *int      `toml:"slots"`
+		Batch       *int      `toml:"batch"`
+		CallTimeout *duration `toml:"call_timeout"`
 	} `toml:"embedding"`
 	HTTP *struct {
 		Listen  string `toml:"listen"`
@@ -452,7 +467,7 @@ func (v *validator) embedding(f file) Embedding {
 		return Embedding{}
 	}
 	e := Embedding{Provider: f.Embedding.Provider, BaseURL: f.Embedding.BaseURL, Model: f.Embedding.Model,
-		KeyEnv: f.Embedding.KeyEnv, Slots: DefaultSlots}
+		KeyEnv: f.Embedding.KeyEnv, Slots: DefaultSlots, Batch: DefaultBatch, CallTimeout: DefaultCallTimeout}
 	switch e.Provider {
 	case "openai":
 		if e.BaseURL == "" {
@@ -482,6 +497,18 @@ func (v *validator) embedding(f file) Embedding {
 		e.Slots = *f.Embedding.Slots
 		if e.Slots < 1 || e.Slots > MaxSlots {
 			v.refuse("embedding.slots", "%d: want 1 to %d", e.Slots, MaxSlots)
+		}
+	}
+	if f.Embedding.Batch != nil {
+		e.Batch = *f.Embedding.Batch
+		if e.Batch < 1 || e.Batch > MaxBatch {
+			v.refuse("embedding.batch", "%d: want 1 to %d", e.Batch, MaxBatch)
+		}
+	}
+	if f.Embedding.CallTimeout != nil {
+		e.CallTimeout = f.Embedding.CallTimeout.Duration
+		if e.CallTimeout < MinCallTimeout || e.CallTimeout > MaxCallTimeout {
+			v.refuse("embedding.call_timeout", "%v: want %v to %v", e.CallTimeout, MinCallTimeout, MaxCallTimeout)
 		}
 	}
 	return e
