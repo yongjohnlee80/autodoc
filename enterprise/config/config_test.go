@@ -95,7 +95,8 @@ func TestAGoodConfigurationLoads(t *testing.T) {
 	if s.Postgres.DSN() != "postgres://u:secret-password@db.internal/app" || s.Postgres.Schema != "autodoc_search" {
 		t.Errorf("Postgres %+v", s.Postgres)
 	}
-	if s.Embedding != (config.Embedding{Provider: "openai", BaseURL: "https://embeddings.example.internal/v1", Model: "text-embedding-3-small", KeyEnv: "TEST_EMBED_KEY", Slots: 4}) {
+	if s.Embedding != (config.Embedding{Provider: "openai", BaseURL: "https://embeddings.example.internal/v1", Model: "text-embedding-3-small", KeyEnv: "TEST_EMBED_KEY", Slots: 4,
+		Batch: config.DefaultBatch, CallTimeout: config.DefaultCallTimeout}) {
 		t.Errorf("Embedding %+v", s.Embedding)
 	}
 	if s.Embedding.Key() != "sk-embedding-secret" || (config.Embedding{}).Key() != "" {
@@ -149,7 +150,8 @@ access = ["org"]
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Postgres.Schema != config.DefaultSchema || s.Embedding.BaseURL != config.DefaultOllama || s.Embedding.Slots != config.DefaultSlots || s.HTTP != nil {
+	if s.Postgres.Schema != config.DefaultSchema || s.Embedding.BaseURL != config.DefaultOllama || s.Embedding.Slots != config.DefaultSlots ||
+		s.Embedding.Batch != config.DefaultBatch || s.Embedding.CallTimeout != config.DefaultCallTimeout || s.HTTP != nil {
 		t.Errorf("%+v", s)
 	}
 	if src := s.Sources[0]; src.View != view || src.Refresh != config.DefaultRefresh || src.Interval != config.DefaultInterval || src.Lag != config.DefaultLag {
@@ -158,6 +160,10 @@ access = ["org"]
 	s, err = load(t, strings.Replace(good, `base_url = "https://embeddings.example.internal/v1"`, "", 1))
 	if err != nil || s.Embedding.BaseURL != config.DefaultOpenAI {
 		t.Errorf("openai's default URL: %v %+v", err, s)
+	}
+	s, err = load(t, strings.Replace(good, `slots    = 4`, "slots = 4\nbatch = 16\ncall_timeout = \"5m\"", 1))
+	if err != nil || s.Embedding.Batch != 16 || s.Embedding.CallTimeout != 5*time.Minute {
+		t.Errorf("the batch and the call timeout as written: %v %+v", err, s.Embedding)
 	}
 }
 
@@ -237,6 +243,11 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 		{"key unset", sub(`key_env  = "TEST_EMBED_KEY"`, `key_env = "TEST_UNSET_KEY"`), "embedding.key_env", "TEST_UNSET_KEY is not set"},
 		{"slots", sub(`slots    = 4`, `slots = 0`), "embedding.slots", "want 1 to 64"},
 		{"slots type", sub(`slots    = 4`, `slots = "four"`), "(file)", "slots"},
+		{"batch none", sub(`slots    = 4`, "slots = 4\nbatch = 0"), "embedding.batch", "want 1 to 256"},
+		{"batch too big", sub(`slots    = 4`, "slots = 4\nbatch = 257"), "embedding.batch", "want 1 to 256"},
+		{"call timeout short", sub(`slots    = 4`, "slots = 4\ncall_timeout = \"999ms\""), "embedding.call_timeout", "want 1s to 30m0s"},
+		{"call timeout long", sub(`slots    = 4`, "slots = 4\ncall_timeout = \"31m\""), "embedding.call_timeout", "want 1s to 30m0s"},
+		{"call timeout not a duration", sub(`slots    = 4`, "slots = 4\ncall_timeout = \"two minutes\""), "(file)", "want a duration"},
 		// http
 		{"listen", sub(`listen = "127.0.0.1:8730"`, `listen = "8730"`), "http.listen", "want host:port"},
 		{"off loopback", sub(`listen = "127.0.0.1:8730"`, `listen = "0.0.0.0:8730"`), "http.listen", "needs tls_cert and tls_key"},

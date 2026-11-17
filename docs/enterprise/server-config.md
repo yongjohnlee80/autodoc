@@ -125,12 +125,14 @@ worker.
 | `model` | (required) | The model's name. | missing or blank; `--check`: an Ollama server without it |
 | `key_env` | none | The name of the environment variable holding the provider's API key, sent as a bearer token. | given, and the variable is not set or is empty; `--check`: the provider refuses the key |
 | `slots` | `4` | How many embedding requests may be in flight at once, across every tenant. | below 1 or above 64 |
+| `batch` | `64` | How many texts one embedding request carries, at most. | below 1 or above 256 |
+| `call_timeout` | `"2m"` | How long one embedding request may take before it is given up. | below `1s` or above `30m` |
 
 ### How the server embeds
 
 - **Once per distinct text.** The worker embeds the chunk texts that have no vector under the
-  model, each distinct text once per tenant, in batches of 64 texts, at most `slots` requests at a
-  time whichever tenants they are for. Vectors are normalized and stored in the index's schema
+  model, each distinct text once per tenant, in batches of `batch` texts, at most `slots` requests
+  at a time whichever tenants they are for. Vectors are normalized and stored in the index's schema
   (pgvector).
 - **A document is ready** for search by meaning once every one of its chunks has a vector. Until
   then it is found by words, and ingestion never waits for the worker: an ingester's commit only
@@ -139,6 +141,14 @@ worker.
   after a wait that doubles from a second to a minute; the log says so each time. That includes a
   provider that does not answer when the server starts: the server runs, ingests, and answers by
   words until it does.
+- **A slow provider is asked for less at once.** A request that runs out of `call_timeout` halves
+  the batch and the requests in flight, down to one text and one request, and the texts are asked
+  for again at once at the smaller size: a provider on CPU, or loading its model, embeds
+  something rather than nothing. The log says so once, with what to change: `batch`,
+  `call_timeout`, or the provider's cores. Once four requests in a row answer in under half their
+  time, the batch doubles, then the requests in flight rise by one, back to `batch` and `slots`
+  (logged once). Only a request of one text that still runs out of time is the provider failing.
+  The status shows the pace now ([operations](operations.md)).
 - **A text the provider rejects** (too long, say) is set aside for an hour and logged, and the rest
   of its batch is embedded. Its document is found by words meanwhile.
 - **One writer per tenant.** The worker writes a tenant only while this server's ingester holds the

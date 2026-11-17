@@ -343,3 +343,25 @@ func TestADeletesViewsLagIsFromItsLastPass(t *testing.T) {
 		t.Fatalf("the deletes view's state %+v; want its cursor kept and a lag of 70 s", d)
 	}
 }
+
+// The embedding worker's pace reaches the status as the provider's health carries it: the texts a
+// call carries now, the calls in flight, the last call's time in milliseconds, and the calls that
+// ran out of their time; the JSON names them.
+func TestTheStatusCarriesTheEmbeddingPace(t *testing.T) {
+	f := newFixture()
+	f.provider.Store(&embedder.Health{State: embedder.ProviderUp, Model: "m1", Batch: 8, InFlight: 1,
+		LastCall: 1500 * time.Millisecond, Timeouts: 3})
+	got := f.c.Snapshot(context.Background()).Server.Embedding
+	if want := (EmbeddingState{Model: "m1", State: embedder.ProviderUp, Batch: 8, InFlight: 1, LastCallMS: 1500, Timeouts: 3}); got != want {
+		t.Fatalf("the status's embedding %+v, want %+v", got, want)
+	}
+	b, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{`"batch":8`, `"in_flight":1`, `"last_call_ms":1500`, `"timeouts":3`} {
+		if !strings.Contains(string(b), k) {
+			t.Errorf("the status's embedding %s has no %s", b, k)
+		}
+	}
+}

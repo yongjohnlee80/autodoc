@@ -230,7 +230,8 @@ func (s *server) startEmbedder() error {
 		// the ingester's Store: every write of the worker's to the tenant is fenced on its lease
 		tenants[i] = embedder.Tenant{Name: in.Tenant(), Store: in.Store(), Confirm: in.Confirm}
 	}
-	w := embedder.New(providerOf(s.cfg.Embedding), tenants, embedder.WithSlots(s.cfg.Embedding.Slots), embedder.WithLogger(s.log))
+	w := embedder.New(providerOf(s.cfg.Embedding), tenants, embedder.WithSlots(s.cfg.Embedding.Slots),
+		embedder.WithBatch(s.cfg.Embedding.Batch), embedder.WithCallTimeout(s.cfg.Embedding.CallTimeout), embedder.WithLogger(s.log))
 	ctx, cancel := context.WithCancel(s.ctx)
 	done := make(chan struct{})
 	s.stops.push(func() {

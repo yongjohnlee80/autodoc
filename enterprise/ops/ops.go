@@ -208,6 +208,13 @@ type EmbeddingState struct {
 	Model string      `json:"model"`
 	State string      `json:"state"`
 	Error opcode.Code `json:"error"`
+	// Batch and InFlight are the texts one embedding call carries now and the calls in flight:
+	// [embedding] batch and slots, stepped down while calls run out of call_timeout. LastCallMS is
+	// the last call's time, and Timeouts the calls that ran out of it since the server started.
+	Batch      int   `json:"batch,omitempty"`
+	InFlight   int   `json:"in_flight,omitempty"`
+	LastCallMS int64 `json:"last_call_ms,omitempty"`
+	Timeouts   int64 `json:"timeouts,omitempty"`
 }
 
 // TenantStatus is one tenant's status.
@@ -327,7 +334,8 @@ func (c *Collector) Snapshot(ctx context.Context) Snapshot {
 	s.Tenants = make([]TenantStatus, len(c.cached.Tenants))
 	copy(s.Tenants, c.cached.Tenants)
 	p := c.o.Provider()
-	s.Server = ServerState{Version: c.o.Version, Started: c.o.Started, Embedding: EmbeddingState{Model: p.Model, State: p.State, Error: p.Error}}
+	s.Server = ServerState{Version: c.o.Version, Started: c.o.Started, Embedding: EmbeddingState{Model: p.Model, State: p.State, Error: p.Error,
+		Batch: p.Batch, InFlight: p.InFlight, LastCallMS: p.LastCall.Milliseconds(), Timeouts: p.Timeouts}}
 	for i, t := range c.o.Tenants {
 		live(&s.Tenants[i], t.State())
 	}

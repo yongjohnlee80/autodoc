@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/yongjohnlee80/golib/search"
 	"github.com/yongjohnlee80/golib/search/embed"
@@ -93,14 +94,24 @@ type Health struct {
 	State string
 	Model string
 	Error opcode.Code
+	// Batch and InFlight are the worker's pace now: the texts one call carries and the calls in
+	// flight, stepped down from the configured ones while calls run out of their time (pace).
+	// LastCall is the last batch call's time, and Timeouts the calls that ran out of it since the
+	// worker started.
+	Batch, InFlight int
+	LastCall        time.Duration
+	Timeouts        int64
 }
 
-// Health is the provider's state now. It may be called from any goroutine.
+// Health is the provider's state now, with the worker's pace. It may be called from any goroutine.
 func (w *Worker) Health() Health {
-	if h := w.health.Load(); h != nil {
-		return *h
+	h := Health{State: ProviderStarting}
+	if p := w.health.Load(); p != nil {
+		h = *p
 	}
-	return Health{State: ProviderStarting}
+	ps := w.pace.state()
+	h.Batch, h.InFlight, h.LastCall, h.Timeouts = ps.batch, ps.inFlight, ps.lastCall, ps.timeouts
+	return h
 }
 
 // answered publishes how the provider's last call went: up when it answered (err nil), down with
