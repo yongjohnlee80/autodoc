@@ -619,9 +619,11 @@ func iconsShown(r *running) string {
 }
 
 // maximize added to [window] while AutoDoc runs, the plugin restarted on it: the panel draws no +,
-// Maximize doesn't reach it, and F11 still reaches the card rather than going nowhere. The mutant,
-// named here: the window's keys read from the run's manifest (F11 left to a Window that cannot
-// maximize the panel, and the card never sent it).
+// Maximize doesn't reach it, F11 still reaches the card rather than going nowhere, and maximize
+// asked of the card's window directly is refused, as a control its window doesn't list. The
+// mutants, named here: hostKey reading the run's manifest (F11 left to a Window that cannot
+// maximize the panel, and the card never sent it); cardWindow's guard reading it (the panel
+// maximized by the direct request).
 func TestMaximizeAddedWhileRunningWaitsForARestart(t *testing.T) {
 	t.Parallel()
 	r, logs, _, _ := restartedAfterAnEdit(t, `"close"`, `"close", "maximize"`, true)
@@ -638,12 +640,17 @@ func TestMaximizeAddedWhileRunningWaitsForARestart(t *testing.T) {
 	if b := boundsOf(r, id); b != before {
 		t.Fatalf("F11 moved the card's panel from %+v to %+v", before, b)
 	}
+	// asked directly, as #627's guard is, maximize is refused: the panel's window doesn't list it
+	onLoop(r, func() bool { r.h.plugins.cardWindow("card", "maximize"); return true })
+	if b := boundsOf(r, id); b != before {
+		t.Fatalf("maximize asked of a card whose panel doesn't list it moved the panel from %+v to %+v", before, b)
+	}
 }
 
 // maximize removed from [window] while AutoDoc runs, the plugin restarted on it: the + still drawn
 // still maximizes, and F11 is still left to AutoDoc, which maximizes the panel; the card is not
-// sent F11. The mutant, named here: the window read from the run's manifest (F11 sent to the card,
-// nothing maximized, and the + refused).
+// sent F11. The mutants, named here: hostKey reading the run's manifest (F11 sent to the card, and
+// nothing maximized); cardWindow's guard reading it (the + refused).
 func TestMaximizeRemovedWhileRunningWaitsForARestart(t *testing.T) {
 	t.Parallel()
 	r, logs, _, _ := restartedAfterAnEdit(t, `"close", "maximize"`, `"close"`, false)
