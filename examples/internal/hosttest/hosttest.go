@@ -119,8 +119,10 @@ func (hs *Host) PressCount(x, y, count int) {
 }
 
 // Drag presses the left button at (x0, y0), drags it to (x1, y1) a cell at a time along each axis,
-// as AutoDoc sends a drag only when the pointer reaches another cell, and releases it there
-// (protocol 12; below it AutoDoc sends no drag, and the test fails).
+// and releases it there (protocol 12; below it AutoDoc sends no drag, and the test fails). AutoDoc
+// sends a drag only when the pointer reaches another cell, and a fast pointer may skip cells: the
+// steps of one cell are this helper's choice, not the host's. Send the Pointers yourself for a
+// jump.
 func (hs *Host) Drag(x0, y0, x1, y1 int) {
 	hs.t.Helper()
 	if hs.protocol < 12 {

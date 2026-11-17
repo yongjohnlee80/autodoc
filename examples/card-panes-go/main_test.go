@@ -89,8 +89,9 @@ func TestTheManifestShowsTheWindowIcons(t *testing.T) {
 }
 
 // TestTheDividerFollowsADrag drives the divider as AutoDoc sends a drag at protocol 12: a press on
-// it, a drag a cell at a time, and the release. It stays where it was let go, and the library's
-// list still has the keys. Dragged past the card's right edge, it stops at the editor's least width.
+// it, one drag that jumps ten cells, and the release. It stays where it was let go, and the
+// library's list still has the keys. Dragged a cell at a time past the card's right edge, it stops
+// at the editor's least width.
 func TestTheDividerFollowsADrag(t *testing.T) {
 	h := hosttest.Start(t, newLibrary(), 60, 14, plugin.Theme{Name: "plain"})
 	const y = 3
@@ -98,7 +99,10 @@ func TestTheDividerFollowsADrag(t *testing.T) {
 	if x < 0 {
 		t.Fatalf("no divider on row %d:\n%s", y, h.Screen("Library"))
 	}
-	h.Drag(x, y, x+10, y)
+	// one jump of ten cells, as a fast pointer moves: AutoDoc sends one drag for it
+	h.Pointer(plugin.Pointer{Kind: "press", Button: "left", X: x, Y: y, Count: 1})
+	h.Pointer(plugin.Pointer{Kind: "drag", Button: "left", X: x + 10, Y: y, Count: 1})
+	h.Pointer(plugin.Pointer{Kind: "release", Button: "left", X: x + 10, Y: y, Count: 1})
 	h.WaitFor("the divider ten cells right", func(s string) bool { return dividerAt(s, y) == x+10 })
 	h.Key(plugin.Key{Key: "Down"}) // the list still has the keys: Emma
 	h.Screen("editing: Emma")
@@ -109,5 +113,30 @@ func TestTheDividerFollowsADrag(t *testing.T) {
 	})
 	if !strings.Contains(s, "Editor") {
 		t.Fatalf("the editor's pane is gone after the drag:\n%s", s)
+	}
+}
+
+// TestACancelEndsTheDividersDrag: AutoDoc cancels a gesture when the panel closes, a menu opens, F6
+// moves the keys, or the pointer is taken back. The divider then ends its drag where it had
+// reached (the native kit keeps it there), takes a later drag with no press as nothing, and a
+// press elsewhere, on the library's list, selects a book and moves no divider.
+func TestACancelEndsTheDividersDrag(t *testing.T) {
+	h := hosttest.Start(t, newLibrary(), 60, 14, plugin.Theme{Name: "plain"})
+	const y = 3
+	s := h.Screen("Library")
+	x := dividerAt(s, y)
+	if x < 0 {
+		t.Fatalf("no divider on row %d:\n%s", y, s)
+	}
+	h.Pointer(plugin.Pointer{Kind: "press", Button: "left", X: x, Y: y, Count: 1})
+	h.Pointer(plugin.Pointer{Kind: "drag", Button: "left", X: x + 5, Y: y, Count: 1})
+	s = h.WaitFor("the divider five cells right", func(s string) bool { return dividerAt(s, y) == x+5 })
+	h.Pointer(plugin.Pointer{Kind: "cancel", Button: "left", X: x + 5, Y: y, Count: 1})
+	h.Pointer(plugin.Pointer{Kind: "drag", Button: "left", X: x + 15, Y: y, Count: 1}) // no press: no drag
+	bx, by := titleAt(t, s, "Ulysses")
+	h.Press(bx, by)
+	s = h.Screen("editing: Ulysses") // a frame after the cancel and the stray drag
+	if d := dividerAt(s, y); d != x+5 {
+		t.Fatalf("after the cancel, a stray drag and a press on the list, the divider is at %d; want %d, where the drag had reached:\n%s", d, x+5, s)
 	}
 }
