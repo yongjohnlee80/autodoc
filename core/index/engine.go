@@ -176,16 +176,16 @@ func (v *View) Signals(ctx context.Context, docs []int64) (map[int64]search.Sign
 	for i, k := range BodyKinds {
 		body[i] = k
 	}
+	// a document's links to itself are read too, and skipped below: they are a document's own few
 	links, err := v.s.linksOut(v.tx).WithPredicate(dao.In(`"link"."dst_doc"`, ids)).
-		WithPredicate(dao.In(`"link"."kind"`, body)).
-		WithPredicate(dao.Raw(`"link"."src_doc" <> "link"."dst_doc"`)).Select(LinkSrc, LinkDst)
+		WithPredicate(dao.In(`"link"."kind"`, body)).Select(LinkSrc, LinkDst)
 	if err != nil {
 		return nil, err
 	}
 	from := map[int64]map[int64]bool{}
 	for _, l := range links {
-		if l.DstDoc == nil {
-			continue
+		if l.DstDoc == nil || l.SrcDoc == *l.DstDoc {
+			continue // unresolved, or a link to itself, which is not an in-link
 		}
 		if from[*l.DstDoc] == nil {
 			from[*l.DstDoc] = map[int64]bool{}
