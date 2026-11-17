@@ -1,24 +1,29 @@
 // Package hosttest plays AutoDoc's side of the plugin protocol for the examples' tests: it runs a
 // Handler under plugin.ServeConn over a pair of pipes, as AutoDoc runs a plugin's process, sends
-// the host's notifications and reads the frames the plugin sends back.
+// the host's notifications and reads the frames the plugin sends back. It opens the example at the
+// protocol its plugin.toml says, as AutoDoc does, and sends the pointer as AutoDoc sends it at that
+// protocol.
 package hosttest
 
 import (
 	"context"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/core/manifests"
 	"github.com/yongjohnlee80/autodoc/plugin"
 )
 
 // Host is a test's end of the link.
 type Host struct {
-	t    *testing.T
-	link *plugin.Link
-	got  chan note
-	last string // the last frame read, a row per line
+	t        *testing.T
+	link     *plugin.Link
+	got      chan note
+	last     string // the last frame read, a row per line
+	protocol int    // the protocol the plugin was opened at: its manifest's
 }
 
 type note struct {
@@ -26,9 +31,12 @@ type note struct {
 	params []any
 }
 
-// Start serves h and opens it at w×h in theme, at the newest protocol, answering the handshake.
+// Start serves h and opens it at w×h in theme, at the protocol of the plugin.toml in the test's
+// folder (the example's own), as AutoDoc opens it. A manifest AutoDoc would refuse fails the test,
+// with AutoDoc's reason.
 func Start(t *testing.T, h plugin.Handler, w, hh int, theme plugin.Theme) *Host {
 	t.Helper()
+	m := Manifest(t)
 	toPlugin, fromHost, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -40,7 +48,7 @@ func Start(t *testing.T, h plugin.Handler, w, hh int, theme plugin.Theme) *Host 
 	ctx, cancel := context.WithCancel(context.Background())
 	served := make(chan error, 1)
 	go func() { served <- plugin.ServeConn(ctx, plugin.FileConn(toPlugin, toHost), h) }()
-	hs := &Host{t: t, got: make(chan note, 256)}
+	hs := &Host{t: t, got: make(chan note, 256), protocol: m.Protocol}
 	hs.link, err = plugin.NewLink(ctx, plugin.FileConn(fromPlugin, fromHost), func(m string, p []any) { hs.got <- note{m, p} })
 	if err != nil {
 		t.Fatal(err)
@@ -57,9 +65,27 @@ func Start(t *testing.T, h plugin.Handler, w, hh int, theme plugin.Theme) *Host 
 		cancel()
 		_ = hs.link.Close()
 	})
-	hs.send(plugin.MethodOpen, plugin.OpenParams(plugin.Open{Protocol: plugin.Protocol, Width: w, Height: hh, Theme: theme}))
+	hs.send(plugin.MethodOpen, plugin.OpenParams(plugin.Open{Protocol: m.Protocol, Width: w, Height: hh, Theme: theme}))
 	return hs
 }
+
+// Manifest is the plugin.toml in the test's folder, as AutoDoc reads it; one AutoDoc would refuse
+// fails the test, with AutoDoc's reason.
+func Manifest(t *testing.T) *manifests.Plugin {
+	t.Helper()
+	src, err := os.ReadFile("plugin.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := manifests.ParsePlugin(src)
+	if err != nil {
+		t.Fatalf("AutoDoc refuses this plugin.toml: %v", err)
+	}
+	return m
+}
+
+// Protocol is the protocol the plugin was opened at.
+func (hs *Host) Protocol() int { return hs.protocol }
 
 func (hs *Host) send(method string, params []any) {
 	hs.t.Helper()
@@ -79,13 +105,45 @@ func (hs *Host) Type(s string) {
 	}
 }
 
-// Press is a left press at (x, y) in the frame (protocol 6).
-func (hs *Host) Press(x, y int) {
+// Press is a left click at (x, y) in the frame, as AutoDoc sends one: the press (protocol 6), and
+// from protocol 12 its release there.
+func (hs *Host) Press(x, y int) { hs.t.Helper(); hs.PressCount(x, y, 1) }
+
+// PressCount is Press as the count-th press of a multiple click: 2 for a double click's second.
+func (hs *Host) PressCount(x, y, count int) {
 	hs.t.Helper()
-	hs.send(plugin.MethodPointer, plugin.PointerParams(plugin.Pointer{Kind: "press", Button: "left", X: x, Y: y, Count: 1}))
+	hs.Pointer(plugin.Pointer{Kind: "press", Button: "left", X: x, Y: y, Count: count})
+	if hs.protocol >= 12 {
+		hs.Pointer(plugin.Pointer{Kind: "release", Button: "left", X: x, Y: y, Count: 1})
+	}
 }
 
-// Pointer sends any pointer event: a double press (Count 2), a drag, a release.
+// Drag presses the left button at (x0, y0), drags it to (x1, y1) a cell at a time along each axis,
+// as AutoDoc sends a drag only when the pointer reaches another cell, and releases it there
+// (protocol 12; below it AutoDoc sends no drag, and the test fails).
+func (hs *Host) Drag(x0, y0, x1, y1 int) {
+	hs.t.Helper()
+	if hs.protocol < 12 {
+		hs.t.Fatalf("a drag at protocol %d: AutoDoc sends one from 12", hs.protocol)
+	}
+	hs.Pointer(plugin.Pointer{Kind: "press", Button: "left", X: x0, Y: y0, Count: 1})
+	step := func(a, b int) int {
+		switch {
+		case a < b:
+			return a + 1
+		case a > b:
+			return a - 1
+		}
+		return a
+	}
+	for x, y := x0, y0; x != x1 || y != y1; {
+		x, y = step(x, x1), step(y, y1)
+		hs.Pointer(plugin.Pointer{Kind: "drag", Button: "left", X: x, Y: y, Count: 1})
+	}
+	hs.Pointer(plugin.Pointer{Kind: "release", Button: "left", X: x1, Y: y1, Count: 1})
+}
+
+// Pointer sends one pointer event as it is: a press, a drag, a release, a cancel, a wheel step.
 func (hs *Host) Pointer(at plugin.Pointer) {
 	hs.t.Helper()
 	hs.send(plugin.MethodPointer, plugin.PointerParams(at))
@@ -101,7 +159,14 @@ func (hs *Host) Theme(t plugin.Theme) {
 // frame, a row per line.
 func (hs *Host) Screen(want string) string {
 	hs.t.Helper()
-	if strings.Contains(hs.last, want) {
+	return hs.WaitFor(strconv.Quote(want), func(screen string) bool { return strings.Contains(screen, want) })
+}
+
+// WaitFor waits for a frame, the last read or one after it, that ok accepts, and returns it, a
+// row per line; what names it in a failure.
+func (hs *Host) WaitFor(what string, ok func(screen string) bool) string {
+	hs.t.Helper()
+	if ok(hs.last) {
 		return hs.last
 	}
 	// NOTE: a test's bound: a frame that never comes fails the test instead of hanging it; each
@@ -125,11 +190,11 @@ func (hs *Host) Screen(want string) string {
 				b.WriteByte('\n')
 			}
 			hs.last = b.String()
-			if strings.Contains(hs.last, want) {
+			if ok(hs.last) {
 				return hs.last
 			}
 		case <-deadline:
-			hs.t.Fatalf("no frame showed %q; the last:\n%s", want, hs.last)
+			hs.t.Fatalf("no frame showed %s; the last:\n%s", what, hs.last)
 		}
 	}
 }
