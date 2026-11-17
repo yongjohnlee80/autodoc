@@ -93,6 +93,64 @@ the row before it stops the pass, and nothing of the page is written. The ids wi
 are compared by the database, by their type and collation, so only a real database can check that
 part: `--check` does (below).
 
+## Deletes
+
+A pass reads only the rows past its cursor, so a row that leaves the view is never seen by one:
+without more, its document leaves the index at the next complete refresh (24 hours by default).
+For a record that must leave search promptly, a payee's or an invoice's, say the delete in one
+of two ways. Each is read by every pass, so a deleted record leaves search within the interval
+and the lag (two minutes by default).
+
+- **A soft delete:** the row stays in the view, with `deleted: true` and its `updated_at` moved
+  to the time of the delete.
+- **A delete outright:** the source keeps a tombstone, and a **deletes view** returns it. Name it
+  in the source's `deletes` ([server-config](server-config.md#source-what-is-indexed)):
+
+```sql
+CREATE TABLE payee_deleted (id bigint NOT NULL, deleted_at timestamptz NOT NULL DEFAULT now());
+CREATE INDEX ON payee_deleted (deleted_at, id);
+CREATE FUNCTION payee_tombstone() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  INSERT INTO payee_deleted (id) VALUES (OLD.id);  -- the database's own clock, as updated_at's
+  RETURN OLD;
+END $$;
+CREATE TRIGGER payee_tombstone AFTER DELETE ON payee FOR EACH ROW EXECUTE FUNCTION payee_tombstone();
+```
+
+```yaml
+---
+version: 1
+name: payee_deletes
+source: postgres
+args: [after_ts, after_id, upto_ts]
+process: |
+  SELECT jsonb_build_object('id', id, 'deleted_at', deleted_at)
+  FROM payee_deleted
+  WHERE (deleted_at, id::text) > ($1, coalesce($2, ''))
+    AND deleted_at <= $3
+  ORDER BY deleted_at, id
+---
+```
+
+- **The contract** is the main view's. It takes the same args, and returns `{id, deleted_at}`
+  past the cursor and at most `upto_ts`, in `(deleted_at, id)` order. It has a cursor of its own,
+  moved in each page's transaction. A page out of order writes nothing.
+- **One clock.** `deleted_at` and `updated_at` must come from the source database's clock, as the
+  trigger above writes it.
+- **The newest event wins.** A delete removes the document only when it is no older than the
+  document's last write, so a record deleted and created again before one pass keeps its new
+  document. An equal time is a delete.
+- **What goes:** the document, its chunks, links and facet values, and the vectors of its texts
+  that no other document shares. A tombstone for an id never indexed is counted and is no error,
+  and a tombstone takes its row out of quarantine.
+- **Retention.** Keep a tombstone at least one `refresh` period. Past that, the refresh removes
+  the document of a row gone anyway, so older tombstones may be dropped.
+- **A deletes view that fails** holds only the deletes: the rows' pass still runs, the log says
+  why at every pass, and the status shows the deletes cursor's lag and its error.
+- **Joined rows are yours to reflect.** A record's `updated_at` must be the greatest of its joined
+  rows' (below), and a joined row's delete must touch its parent row, or the change waits for the
+  refresh: the server can't see a join it isn't given.
+
 ## `updated_at` must cover what the document shows
 
 `updated_at` is how a pass finds a changed row. It must change when **anything the document
@@ -119,6 +177,7 @@ returned by the comparison at all (`COALESCE` it if it can be).
 | every `access` field | yes | Each field the source's `access` lists: a string, number or boolean, or a non-empty list of them. A record with several values (a track shared by two labels) is visible to callers allowed any one of them. |
 | `title` | no | The document's title; else the Markdown's own (its frontmatter or first heading); else the `id`. |
 | `tags` | no | A string or a list of strings, lowercased, added to the Markdown's own tags. |
+| `deleted` | no | `true` for a row deleted softly (a status, a `deleted_at`): its document leaves the index in the pass that reads it, at the row's `updated_at`. `false` or absent is a live row; any other value is the row's error. |
 
 Every other field is yours, for the template.
 

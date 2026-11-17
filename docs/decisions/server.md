@@ -70,6 +70,15 @@ A source is read two ways, both needing only `SELECT` on the business tables:
 A view must order by its cursor, and `export` may use only `id`; `--server --check` verifies the
 order against the live database.
 
+- **Deletes reach the index in the pass,** not only at the refresh. A row may say `deleted: true`
+  (a soft delete, ordered with the rows by `updated_at`), or a source's deletes view returns a
+  tombstone `{id, deleted_at}`, read past a cursor of its own in the same order and up to the
+  same bound. Either deletes the document only when it is no older than the document's last write
+  (`rag_document.source_at`), so the newest event wins; an equal time is a delete, since a
+  deleted record that leaks is worse than a live one that waits for the refresh. A delete takes
+  the vectors of the document's texts that no other document of the tenant shares. The refresh
+  stays the backstop for every delete a source doesn't say.
+
 In the code: `enterprise/ingest/ingest.go`, `core/pgstore/README.md`
 
 ## Embedding is central

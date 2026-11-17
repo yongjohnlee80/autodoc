@@ -271,6 +271,14 @@ func loadSources(path string, cfg *config.Server) ([]*ingest.Source, error) {
 			refused.Errors = append(refused.Errors, &config.Error{Field: fmt.Sprintf("source[%d].view", i), Reason: err.Error()})
 			continue
 		}
+		if s.Deletes != "" {
+			d, err := ingest.LoadDeletes(s.Deletes)
+			if err != nil {
+				refused.Errors = append(refused.Errors, &config.Error{Field: fmt.Sprintf("source[%d].deletes", i), Reason: err.Error()})
+				continue
+			}
+			src = src.WithDeletes(d)
+		}
 		out[i] = src
 	}
 	if len(refused.Errors) > 0 {

@@ -66,6 +66,11 @@ type Options struct {
 }
 
 // annModer is a Store that reports its tenant's search mode for a model (*pgstore.Store).
+// deletesStore is a Store that keeps a deletes cursor (pgstore's).
+type deletesStore interface {
+	DeletesCursor(ctx context.Context) (pgstore.Cursor, error)
+}
+
 type annModer interface {
 	ANNMode(ctx context.Context, model string) (mode, reason string, err error)
 }
@@ -214,11 +219,14 @@ type TenantStatus struct {
 	LastRefresh RunState    `json:"last_refresh"`
 	// RefreshDue is why a refresh is due at once, not on its schedule, until it completes:
 	// "facets" when the tenant's declared facets changed. Absent for none.
-	RefreshDue string      `json:"refresh_due,omitempty"`
-	Quarantine uint64      `json:"quarantine"`
-	Documents  Documents   `json:"documents"`
-	Models     ModelsState `json:"models"`
-	Error      opcode.Code `json:"error"` // reading the tenant's state failed: its other figures are absent
+	RefreshDue string `json:"refresh_due,omitempty"`
+	// Deletes is the source's deletes view, when it has one: where its cursor is, how far behind
+	// the database's clock, and its last pass's error. Absent for a source without one.
+	Deletes    *DeletesState `json:"deletes,omitempty"`
+	Quarantine uint64        `json:"quarantine"`
+	Documents  Documents     `json:"documents"`
+	Models     ModelsState   `json:"models"`
+	Error      opcode.Code   `json:"error"` // reading the tenant's state failed: its other figures are absent
 }
 
 // CursorState is where the tenant's cursor is, and how far behind the database's clock. The cursor
@@ -229,6 +237,13 @@ type CursorState struct {
 	UpdatedAt  *time.Time `json:"updated_at"`
 	ID         string     `json:"id"`
 	LagSeconds *int64     `json:"lag_seconds"` // nil until the cursor first moves
+}
+
+// DeletesState is a deletes view's cursor (absent before its first tombstone is applied) and its
+// last pass's error, a code.
+type DeletesState struct {
+	CursorState
+	Error opcode.Code `json:"error"`
 }
 
 // RunState is how a pass or a refresh last ended. For a refresh, Complete says whether it read every
@@ -336,6 +351,22 @@ func (c *Collector) tenant(ctx context.Context, t Tenant) TenantStatus {
 		at := cur.UpdatedAt
 		lag := int64(max(dbNow.Sub(at), 0) / time.Second)
 		ts.Cursor = CursorState{UpdatedAt: &at, ID: cur.ID, LagSeconds: &lag}
+	}
+	if ds, ok := t.Store.(deletesStore); ok && t.State != nil {
+		if st := t.State(); st.Deletes {
+			dc, err := ds.DeletesCursor(ctx)
+			if err != nil {
+				ts.Error = opcode.Database
+				return ts
+			}
+			d := &DeletesState{Error: st.DeletesError}
+			if !dc.IsZero() {
+				at := dc.UpdatedAt
+				lag := int64(max(dbNow.Sub(at), 0) / time.Second)
+				d.CursorState = CursorState{UpdatedAt: &at, ID: dc.ID, LagSeconds: &lag}
+			}
+			ts.Deletes = d
+		}
 	}
 	ref, err := t.Store.Refreshed(ctx)
 	if err != nil {

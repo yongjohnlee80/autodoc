@@ -8,6 +8,7 @@ import (
 	"math"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/dao/deploy"
@@ -278,6 +279,10 @@ type Document struct {
 	// SourceID is the source row the document was rendered from (an enterprise .view's id): a
 	// search hit links back to its record by it. "" for none.
 	SourceID string
+	// SourceAt is the updated_at of the source row it was rendered from: a delete of the row
+	// (Batch.DeleteSource) removes the document only when it is no older than this. The zero
+	// time is none, which any delete removes.
+	SourceAt time.Time
 	// Values are the document's number and date facets' values (a date as Unix seconds), by
 	// field: a list value is several. A Range filters on them. They are replaced with the
 	// document, and go with it.
@@ -290,6 +295,15 @@ const (
 	ChunkSection  = "section"
 	ChunkAbstract = "abstract"
 )
+
+// sourceAt is d.SourceAt as rag_document.source_at keeps it: NULL for none.
+func (d Document) sourceAt() *time.Time {
+	if d.SourceAt.IsZero() {
+		return nil
+	}
+	t := d.SourceAt
+	return &t
+}
 
 // kindOf is chunk i's kind in d: ChunkSection unless d says otherwise.
 func (d Document) kindOf(i int) string {
@@ -488,7 +502,7 @@ func (s *Store) putIn(ctx context.Context, tx *dao.Transaction, d Document, tags
 		case errors.Is(err, dao.ErrNoRows):
 			id, err = s.rw.doc.On(tx, dao.WithQueryContext(ctx)).Set(dTenant, s.tenant).Set(dPath, d.Path).Set(dTitle, d.Title).
 				Set(dTags, tags).Set(dFacets, facets).Set(dVersion, d.Version).Set(dIndexer, d.Indexer).
-				Set(dGen, int64(1)).Set(dReady, false).Set(dSource, d.SourceID).Insert()
+				Set(dGen, int64(1)).Set(dReady, false).Set(dSource, d.SourceID).Set(dSrcAt, d.sourceAt()).Insert()
 			if err != nil {
 				// two first writers of one path both saw no row: the unique (tenant, path) makes
 				// the second's insert a duplicate — the same race, retried on the update path
@@ -509,7 +523,7 @@ func (s *Store) putIn(ctx context.Context, tx *dao.Transaction, d Document, tags
 			n, err := dao.UpdateAffected(s.rw.doc.On(tx, dao.WithQueryContext(ctx)).With(dTenant, s.tenant).With(dID, id).
 				With(dGen, cur.Generation).
 				Set(dTitle, d.Title).Set(dTags, tags).Set(dFacets, facets).Set(dVersion, d.Version).Set(dIndexer, d.Indexer).
-				Set(dGen, cur.Generation+1).Set(dReady, false).Set(dSource, d.SourceID))
+				Set(dGen, cur.Generation+1).Set(dReady, false).Set(dSource, d.SourceID).Set(dSrcAt, d.sourceAt()))
 			if err != nil {
 				return err
 			}
