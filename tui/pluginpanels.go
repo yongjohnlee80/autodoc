@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -21,6 +22,12 @@ import (
 // panel does (Alt/Option-left drag, Alt/Option-right drag, in the GUI a plain drag of its frame,
 // Go › Arrange panel), and keeps its size and its floating rectangle in the preferences under its
 // panel's id (tui.card_<name>.*).
+//
+// A card's panel is a window of the tile manager too, as the static panels are (tilelayout.go): it
+// floats until the user tiles it from its right-click menu's Layout › or :layout card_<name>, and
+// then sits over its tile at cardTileEdge, 35% across, until floated again. Its layout, tile edge
+// and tile size are kept as its geometry is, under its panel's id (tui.card_<name>.layout,
+// .tileEdge, .tileSize: readCardTiles), never as Preferences rows.
 //
 // The panels are written into main.qml (cardPanelsQML), one for each card plugin found as the
 // program is built. Then the set follows the folder
@@ -37,7 +44,8 @@ import (
 // when AutoDoc quits.
 
 // cardPanelsMarker is the line of main.qml the card panels are written after.
-const cardPanelsMarker = "    // ---- the card plugins' panels ----\n"
+// It is inside the TileManager, after its last static member, so the panels are its members.
+const cardPanelsMarker = "        // ---- the card plugins' panels ----\n"
 
 // cardPanelPrefix begins every card panel's id; the plugin's name follows, its - as _.
 const cardPanelPrefix = "card_"
@@ -59,6 +67,63 @@ func cardEdge(place string) string {
 		return "right"
 	}
 	return place
+}
+
+// cardTileEdge is the edge a card's tile docks at before the user picks one: its placement's side.
+// The centre, which the page holds as the tile manager's one fill member, takes the right, as the
+// agents' tile does. Its docking edge (cardEdge) is untouched.
+func cardTileEdge(place string) string {
+	if e := cardEdge(place); e != "center" {
+		return e
+	}
+	return "right"
+}
+
+// cardTileSize is a card's tile size before the user drags its border, in percent across its edge.
+const cardTileSize = 35
+
+// cardTileWindows are the cards' windows of the tile manager, in the card set's order: each floats
+// by default, its tile at cardTileEdge of its placement, cardTileSize across.
+func (pl *plugins) cardTileWindows() []tileWindow {
+	var out []tileWindow
+	for _, c := range pl.fixCards() {
+		id := cardPanelID(c.name)
+		out = append(out, tileWindow{id: id, node: id, edge: cardTileEdge(pl.cardEdgeIn(pl.c.Prefs(), c.name)), size: cardTileSize})
+	}
+	return out
+}
+
+// cardTiling is the card's tiling as the preferences have it now: its Layout tiled or not, its tile's
+// edge and size. A value outside its choices or bounds, or none, is the default.
+func (pl *plugins) cardTiling(name string) (tiled bool, edge string, size int) {
+	id := cardPanelID(name)
+	p := pl.c.Prefs()
+	tiled = p.Value(layoutKey(id)) == layoutTiled
+	edge = p.Value(tileEdgeKey(id))
+	if !slices.Contains(feature.Edges, edge) {
+		edge = cardTileEdge(pl.cardEdgeIn(p, name))
+	}
+	size = cardTileSize
+	if n, err := strconv.Atoi(p.Value(tileSizeKey(id))); err == nil && n >= minTileSize && n <= maxTileSize {
+		size = n
+	}
+	return tiled, edge, size
+}
+
+// readCardTiles reads each card's tiling, kept under its panel's id as its geometry is: its Layout,
+// its tile's edge and size, as stored. cardTiling takes a value outside its choices or bounds as
+// the default, so a bad one stored is no error.
+func readCardTiles(p *prefs, m map[string]any) {
+	for _, spec := range p.geometrySpecs() {
+		if !strings.HasPrefix(spec.ID, cardPanelPrefix) {
+			continue
+		}
+		for _, key := range []string{layoutKey(spec.ID), tileEdgeKey(spec.ID), tileSizeKey(spec.ID)} {
+			if v, ok := m[key].(string); ok && v != "" {
+				p.SetValue(key, v)
+			}
+		}
+	}
 }
 
 // cardPanel is a card plugin's panel.
@@ -220,18 +285,22 @@ func (pl *plugins) cardDefault(name, edge string) (size, length int) {
 	return min(max(size, 10), 90), min(max(length, 20), 100)
 }
 
-// cardState is what the document reads of every card's panel: its heading, edge, size and length.
-// The floating rectangle is every panel's (floatState).
+// cardState is what the document reads of every card's panel: its heading, edge, size and length,
+// and its tiling (cardTiling). The floating rectangle is every panel's (floatState).
 func (pl *plugins) cardState() map[string]any {
 	st := map[string]any{}
 	for _, c := range pl.fixCards() {
 		id := cardPanelID(c.name)
 		edge := pl.cardEdgeIn(pl.c.Prefs(), c.name)
 		size, length := pl.c.Prefs().PanelGeometry(id, edge)
+		tiled, tileEdge, tileSize := pl.cardTiling(c.name)
 		st["App."+id+"Title"] = c.entry.label()
 		st["App."+id+"Edge"] = edge
 		st["App."+id+"Size"] = size
 		st["App."+id+"Length"] = length
+		st["App."+id+"Tiled"] = tiled
+		st["App."+id+"TileEdge"] = tileEdge
+		st["App."+id+"TileSize"] = tileSize
 	}
 	return st
 }
@@ -247,9 +316,13 @@ func (pl *plugins) syncCard(name string) {
 	id := cardPanelID(name)
 	edge := pl.cardEdgeIn(pl.c.Prefs(), name)
 	size, length := pl.c.Prefs().PanelGeometry(id, edge)
+	tiled, tileEdge, tileSize := pl.cardTiling(name)
 	pl.c.Set("App."+id+"Edge", edge)
 	pl.c.Set("App."+id+"Size", size)
 	pl.c.Set("App."+id+"Length", length)
+	pl.c.Set("App."+id+"Tiled", tiled)
+	pl.c.Set("App."+id+"TileEdge", tileEdge)
+	pl.c.Set("App."+id+"TileSize", tileSize)
 }
 
 // showCard opens the card's panel, its plugin running: focused, when focus says so. A panel the dock
@@ -313,26 +386,31 @@ func (pl *plugins) cardClosed(name string) {
 	}
 }
 
-// cardPanelsQML is the card panels, as main.qml declares a panel, for the cards in order.
+// cardPanelsQML is the card panels, as main.qml declares a tileable panel (a member of its
+// TileManager, as the terminal's is), for the cards in order.
 func cardPanelsQML(cards []*cardPanel) string {
 	var b strings.Builder
 	for _, c := range cards {
 		id := cardPanelID(c.name)
-		fmt.Fprintf(&b, `    Panel {
-        id: %[1]s
-        heading: App.%[1]sTitle
-        edge: App.%[1]sEdge
-        size: App.%[1]sSize
-        length: App.%[1]sLength
-        floating: App.%[1]sFloating
-        floatX: App.%[1]sX; floatY: App.%[1]sY; floatWidth: App.%[1]sW; floatHeight: App.%[1]sH
-        onPlaced: App.panelPlaced(%[2]q, x, y, width, height)
-        minimumSize: 10
-        onResized: App.panelResized(%[2]q, size, length)
-        onOpened: App.panelOpened(%[2]q)
-        onClosed: App.panelClosed(%[2]q)
-        PluginCard { id: %[3]s; plugin: %[4]q }
-    }
+		fmt.Fprintf(&b, `        Panel {
+            id: %[1]s
+            TileManager.edge: App.%[1]sTileEdge; TileManager.edges: "left right top bottom"
+            TileManager.size: App.%[1]sTileSize
+            TileManager.minimumWidth: 20; TileManager.minimumHeight: 4
+            TileManager.tiled: App.%[1]sTiled
+            heading: App.%[1]sTitle
+            edge: App.%[1]sEdge
+            size: App.%[1]sSize
+            length: App.%[1]sLength
+            floating: App.%[1]sFloating
+            floatX: App.%[1]sX; floatY: App.%[1]sY; floatWidth: App.%[1]sW; floatHeight: App.%[1]sH
+            onPlaced: App.panelPlaced(%[2]q, x, y, width, height)
+            minimumSize: 10
+            onResized: App.panelResized(%[2]q, size, length)
+            onOpened: App.panelOpened(%[2]q)
+            onClosed: App.panelClosed(%[2]q)
+            PluginCard { id: %[3]s; plugin: %[4]q }
+        }
 `, id, id, cardViewID(c.name), c.name)
 	}
 	return b.String()

@@ -930,6 +930,10 @@ Window {
                 }
             }
         }
+        // the card plugins' panels (pluginpanels.go): one per card plugin found when AutoDoc starts,
+        // written in here as the program is built, each a member of the tile manager as the panels
+        // above are: it floats until its Layout says Tiled. Escape closes one, and its plugin runs on
+        // ---- the card plugins' panels ----
     }
 
     StatusBar {
@@ -993,10 +997,7 @@ Window {
         }
     }
 
-    // the card plugins' panels (pluginpanels.go): one per card plugin found when AutoDoc starts,
-    // written in here as the program is built; Escape closes one, and its plugin runs on
     // ---- the relation views' panels (the GUI's) ----
-    // ---- the card plugins' panels ----
 
     // a script's card (autodoc.ui.card, luacard.go): its Markdown drawn Rendered in the GUI, where a
     // vega-lite fence is a chart; a terminal shows the source. One card at a time; :usage is one

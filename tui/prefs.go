@@ -387,6 +387,7 @@ func prefsForPanels(m map[string]any, gui bool, specs []feature.PanelSpec) prefs
 	feature.ReadRows(&p, m, agents.AgentPrefRows(nil))
 	readPanelPrefs(&p, m)
 	readPanelFloats(&p, m)
+	readCardTiles(&p, m)
 	readFontPrefs(&p, m)
 	return p
 }
