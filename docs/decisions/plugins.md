@@ -76,7 +76,10 @@ tiles it, from its right-click menu's Layout › or `:layout card_<name>`, as ev
 then. Its tile docks at its placement's side, and a card at the centre takes the right, since the
 page holds the tile manager's one centre. Its layout, tile edge and tile size are kept under its
 panel's id, as its geometry is (`tui.card_<name>.layout`, `.tileEdge`, `.tileSize`), not as
-Preferences rows, since cards come and go with the plugins folder.
+Preferences rows, since cards come and go with the plugins folder. A card added or removed while
+AutoDoc runs is spliced into the tile manager or out of it, the other panels keeping their state;
+one whose folder comes back while AutoDoc runs returns over its tile, since the card set's reload
+reads the preferences again, its tiling with its geometry.
 
 In the code: `tui/plugincmds.go`, `tui/pluginpanels.go`, `tui/pluginview.go`, `tui/tilelayout.go`
 
