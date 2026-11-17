@@ -129,6 +129,7 @@ func TestAProtocol12CardsGestureIsAPressItsDragsAndOneRelease(t *testing.T) {
 	if px, rx := xOf(t, got[0]), xOf(t, got[3]); px < 0 || rx != px-30 {
 		t.Errorf("the press at x %d, the release at %d: want the release 30 cells left of it, off the view, unclamped (%q)", px, rx, got)
 	}
+	gestureCountsOne(t, logs, "card")
 	typedIntoThePage(t, r, 5, 5)
 }
 
@@ -156,11 +157,101 @@ func TestAProtocol12CardClosedMidGestureIsSentOneCancel(t *testing.T) {
 	r.s.WaitFor(t, "the second release", func(string) bool {
 		return slices.Equal(kinds(pointers(t, logs, "card")), []string{"press", "drag", "cancel", "press", "release"})
 	})
+	got := pointers(t, logs, "card")
+	if _, drag, _ := strings.Cut(got[1], " "); got[2] != "cancel "+drag {
+		t.Errorf("the cancel %q, want it at the last place the gesture was, %s", got[2], drag)
+	}
+	gestureCountsOne(t, logs, "card")
 }
 
-// A protocol-12 card's plugin stopped mid-gesture gives the pointer back: a press on the page then
-// takes the keyboard, and typing reaches the page. The mutant, named here: detach not ending the
-// gesture (the stopped card's view keeps the capture).
+// gestureCountsOne fails when a drag, release or cancel the card was sent carried a count other
+// than 1 (the echo plugin says "pointer <kind> <button> <x>,<y> x<count>").
+func gestureCountsOne(t *testing.T, logs, name string) {
+	t.Helper()
+	for _, s := range said(t, logs, name) {
+		for _, k := range []string{"pointer drag ", "pointer release ", "pointer cancel "} {
+			if strings.HasPrefix(s, k) && !strings.HasSuffix(s, " x1") {
+				t.Errorf("%q: a drag, release or cancel carries a count of 1", s)
+			}
+		}
+	}
+}
+
+// midGesture opens a protocol-12 card and leaves it pressed and dragged one cell: its view holds the
+// pointer. It returns where the drag is, view-local, as the card was told.
+func midGesture(t *testing.T) (*running, string, string) {
+	t.Helper()
+	dir := t.TempDir()
+	installCard12(t, dir, "card", "echo", "")
+	r, logs, x, y := openCard12(t, dir)
+	r.keys(t, mouse(tuicore.MousePress, x, y))
+	waitSaid(t, logs, "card", "pointer press")
+	r.keys(t, mouse(tuicore.MouseMotion, x+1, y))
+	waitSaid(t, logs, "card", "pointer drag")
+	got := pointers(t, logs, "card")
+	_, at, _ := strings.Cut(got[len(got)-1], " ")
+	return r, logs, at
+}
+
+// oneCancelAt waits for the card's gesture to end in exactly one cancel, at, and no release.
+func oneCancelAt(t *testing.T, logs, at string) {
+	t.Helper()
+	waitSaid(t, logs, "card", "pointer cancel")
+	got := pointers(t, logs, "card")
+	if n := slices.Index(kinds(got), "cancel"); n < 0 || got[n] != "cancel "+at || slices.Contains(kinds(got), "release") {
+		t.Fatalf("the card was sent %q, want one cancel at %s and no release", got, at)
+	}
+	if c := strings.Count(strings.Join(kinds(got), " "), "cancel"); c != 1 {
+		t.Fatalf("the card was sent %d cancels, want one: %q", c, got)
+	}
+}
+
+// A right press while a protocol-12 card's button is down opens its menu: the host takes the
+// pointer back, so the gesture ends in one cancel at its last place, and the menu works: its Close
+// hides the panel. The mutant, named here: the capture's loss sending nothing (no cancel).
+func TestARightPressMidGestureCancelsItAndOpensTheMenu(t *testing.T) {
+	t.Parallel()
+	r, logs, at := midGesture(t)
+	x, y := r.textAt("open ")
+	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseRight, X: x + 2, Y: y + 1},
+		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseRight, X: x + 2, Y: y + 1})
+	r.s.WaitForText(t, "Close (Esc)")
+	oneCancelAt(t, logs, at)
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyDown}, enter())
+	waitSaid(t, logs, "card", "hide")
+}
+
+// A backend's pointer cancel (the window lost the pointer) mid-gesture ends it in one cancel at its
+// last place; the next press and release reach the card as a press and a release. The mutant, named
+// here: the capture's loss sending a release.
+func TestABackendPointerCancelMidGestureIsOneCancel(t *testing.T) {
+	t.Parallel()
+	r, logs, at := midGesture(t)
+	r.keys(t, tuicore.PointerCancelEvent{})
+	oneCancelAt(t, logs, at)
+	x, y := r.textAt("open ")
+	r.click(t, x, y)
+	r.s.WaitFor(t, "the next press and release", func(string) bool {
+		k := kinds(pointers(t, logs, "card"))
+		return len(k) >= 2 && k[len(k)-2] == "press" && k[len(k)-1] == "release"
+	})
+}
+
+// F6 mid-gesture takes the keyboard from the card (a protocol-12 card leaves it to the Window), and
+// the focus leaving ends the gesture in one cancel at its last place.
+func TestF6MidGestureIsOneCancel(t *testing.T) {
+	t.Parallel()
+	r, logs, at := midGesture(t)
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyF6})
+	oneCancelAt(t, logs, at)
+}
+
+// A protocol-12 card's plugin stopped mid-gesture gives the pointer back as it stops: the view the
+// run leaves holds no gesture and no capture once the stop returns, in the same turn, so no press
+// of the user's reaches the dead view; a press on the page then takes the keyboard, and typing
+// reaches the page. The stop moves the focus off the card first, and golib ends the capture as
+// focus leaves its owner, so detach's own end of the gesture finds none here: it guards a view
+// holding a gesture without the focus, which no path makes (a mutant removing it survives).
 func TestAProtocol12CardStoppedMidGestureGivesThePointerBack(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -168,12 +259,14 @@ func TestAProtocol12CardStoppedMidGestureGivesThePointerBack(t *testing.T) {
 	r, logs, x, y := openCard12(t, dir)
 	r.keys(t, mouse(tuicore.MousePress, x, y), mouse(tuicore.MouseMotion, x+1, y))
 	waitSaid(t, logs, "card", "pointer drag")
-	onLoop(r, func() bool {
-		if run := r.h.plugins.running["card"]; run != nil {
-			run.stopFor(plugin.CloseOff, "")
-		}
-		return true
-	})
+	if held := onLoop(r, func() bool {
+		run := r.h.plugins.running["card"]
+		v := run.view
+		run.stopFor(plugin.CloseOff, "")
+		return v.dragRun != nil || v.Context() != nil && v.Context().HasPointerCapture()
+	}); held {
+		t.Fatal("the view its run left still holds the gesture")
+	}
 	r.s.WaitFor(t, "the card stopped", func(string) bool {
 		return onLoop(r, func() bool { return r.h.plugins.running["card"] == nil })
 	})
@@ -209,8 +302,11 @@ func TestASurfaceShownMidGestureLeavesTheGestureToTheCard(t *testing.T) {
 }
 
 // A card below protocol 12 takes no capture and is sent no drag or release: its press, then its
-// wheel; a press on the page afterwards takes the keyboard. The mutant, named here: the gesture
-// taken whatever the card's protocol.
+// wheel. A press of it whose release never comes (a terminal can lose one) leaves the pointer
+// free, so the user's next press on the page reaches the page and takes the keyboard. The
+// mutant, named here: the gesture taken whatever the card's protocol (the SDK's Serve drops what
+// a protocol-11 plugin would be sent, so the card's log can't show it: the capture it keeps takes
+// the page's press).
 func TestACardBelowProtocol12TakesNoGesture(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -223,6 +319,8 @@ func TestACardBelowProtocol12TakesNoGesture(t *testing.T) {
 	if k := kinds(pointers(t, logs, "card")); !slices.Equal(k, []string{"press", "wheel"}) {
 		t.Fatalf("a protocol-11 card was sent %q, want its press and its wheel", k)
 	}
+	r.keys(t, mouse(tuicore.MousePress, x, y)) // its release lost
+	waitSaidN(t, logs, "card", "pointer press", 2)
 	typedIntoThePage(t, r, 5, 5)
 }
 
