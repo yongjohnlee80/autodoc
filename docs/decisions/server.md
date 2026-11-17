@@ -47,6 +47,11 @@ dropped or recycled connection loses nothing.
   lease lost, taken over or not renewed in time, stops the ingester and exits the server non-zero,
   so its supervisor restarts it; it never goes on writing without the lease.
 - Every time is the database's `clock_timestamp()`; no host's clock is compared with another's.
+- **A claim within milliseconds of a stop that cut a write can wait one poll.** The cut write holds
+  the row `FOR KEY SHARE` until its backend sees its connection closed, so a claim landing then is
+  refused as busy and comes back at the next poll, up to 5 seconds later. It's harmless, and has
+  been since the lease came in: the lease was released, no second writer can start, and a
+  supervisor's restart or a standby's poll comes later anyway.
 - **A v0.3.15 server is looked for, until v0.3.18.** v0.3.15 held a tenant by a session advisory
   lock, which the lease doesn't see. It refuses a store migrated past its scripts, so only one
   running when the store was migrated, or its standby, can meet a newer server. Before the lease
