@@ -158,23 +158,55 @@ func (v *View) SemanticState(ctx context.Context) (search.State, error) {
 // Signals are each document's in-links (the documents linking to it from their bodies, itself not
 // counted) and tags. A frontmatter relation is not an in-link: whether relations should lift a
 // document is a ranking change of its own, to be measured, so they leave the boost as it was.
+//
+// Two statements whatever the number of documents: the body links into any of them, counted by
+// distinct source per target here, and their tags in key order. One pair per document cost a
+// search on PostgreSQL a round trip each (3.1 ms of a 27 ms hybrid search for 20 documents).
 func (v *View) Signals(ctx context.Context, docs []int64) (map[int64]search.Signals, error) {
 	out := make(map[int64]search.Signals, len(docs))
+	if len(docs) == 0 {
+		return out, nil
+	}
+	ids := make([]any, len(docs))
+	for i, id := range docs {
+		ids[i] = id
+		out[id] = search.Signals{}
+	}
 	body := make([]any, len(BodyKinds))
 	for i, k := range BodyKinds {
 		body[i] = k
 	}
+	links, err := v.s.linksOut(v.tx).WithPredicate(dao.In(`"link"."dst_doc"`, ids)).
+		WithPredicate(dao.In(`"link"."kind"`, body)).
+		WithPredicate(dao.Raw(`"link"."src_doc" <> "link"."dst_doc"`)).Select(LinkSrc, LinkDst)
+	if err != nil {
+		return nil, err
+	}
+	from := map[int64]map[int64]bool{}
+	for _, l := range links {
+		if l.DstDoc == nil {
+			continue
+		}
+		if from[*l.DstDoc] == nil {
+			from[*l.DstDoc] = map[int64]bool{}
+		}
+		from[*l.DstDoc][l.SrcDoc] = true
+	}
+	tags, err := v.s.tags(v.tx).WithPredicate(dao.In(`"doc_tag"."doc_id"`, ids)).OrderBy(dao.Asc(byKey)).
+		Select(DocValueDoc, DocValueValue)
+	if err != nil {
+		return nil, err
+	}
+	byDoc := map[int64][]string{}
+	for _, t := range tags {
+		byDoc[t.DocID] = append(byDoc[t.DocID], t.Value)
+	}
 	for _, id := range docs {
-		inLinks, err := dao.CountDistinct(v.s.linksOut(v.tx).With(LinkDst, id).Excluding(LinkSrc, id).
-			WithPredicate(dao.In(`"link"."kind"`, body)), LinkSrc)
-		if err != nil {
-			return nil, err
+		t := byDoc[id]
+		if t == nil {
+			t = []string{} // as one document's read answered: no tags, not none read
 		}
-		tags, err := v.s.tagsOf(v.tx, id)
-		if err != nil {
-			return nil, err
-		}
-		out[id] = search.Signals{InLinks: int(inLinks), Tags: tags}
+		out[id] = search.Signals{InLinks: len(from[id]), Tags: t}
 	}
 	return out, nil
 }
