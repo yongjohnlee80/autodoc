@@ -137,7 +137,7 @@ func (c core) LayoutRows(id string, row feature.RowMaker) []widgetcore.MenuItemM
 
 // tileWindows are the windows the base may tile: the static ones, then one per card (tileHost's).
 func (c core) tileWindows() []tileWindow {
-	return append(slices.Clip(staticTileWindows), c.h.plugins.cardTileWindows()...)
+	return append(slices.Clip(staticTileWindows), c.cardTileWindows()...)
 }
 
 // setTile sets a window's tiling preference (tileHost's): a static window's through its Preferences
