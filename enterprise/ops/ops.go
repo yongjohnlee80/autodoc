@@ -226,7 +226,7 @@ type TenantStatus struct {
 	Quarantine uint64        `json:"quarantine"`
 	// VectorsSwept is how many orphan vectors (of texts no document has any more) the tenant's
 	// ingester has deleted since the server started.
-	VectorsSwept int64       `json:"vectors_swept"`
+	VectorsSwept int64       `json:"vectors_swept,omitempty"`
 	Documents    Documents   `json:"documents"`
 	Models       ModelsState `json:"models"`
 	Error        opcode.Code `json:"error"` // reading the tenant's state failed: its other figures are absent
