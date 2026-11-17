@@ -258,6 +258,9 @@ func (in *Ingester) waitOlder(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		// NOTE: timed, because nothing tells this server when an older one lets go of its advisory
+		// lock: a session lock's release raises no event another session can wait on. It is asked
+		// again every LockPoll, as a held lease is.
 		case <-time.After(in.o.LockPoll):
 		}
 	}
