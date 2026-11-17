@@ -66,6 +66,9 @@ func TestACataloguedErrorsDetailCrossesOnlyWhenItsEntrySays(t *testing.T) {
 		{"no detail sent, a path either", "refused", "disk full at /secret/path", -32073, "refused"},
 		{"a detail naming a host path", "invalid", "the store /home/someone/kb/.todo-list belongs to no workspace", -32072, "a value the rules refuse"},
 		{"a Windows one", "invalid", `C:\Users\someone\kb is not a store`, -32072, "a value the rules refuse"},
+		{"a host path after a colon", "invalid", "store:/home/someone/kb is not a workspace's", -32072, "a value the rules refuse"},
+		{"a host path after a comma", "invalid", "two stores,/home/someone/kb and another", -32072, "a value the rules refuse"},
+		{"a URL kept", "invalid", "see https://example.com/a for the rules", -32072, "a value the rules refuse: see https://example.com/a for the rules"},
 		{"a relative path kept", "invalid", "archived/2026/11/a.md is malformed", -32072, "a value the rules refuse: archived/2026/11/a.md is malformed"},
 		{"its detail, not its cause's", "caused", "open/a.md is a name the filesystem refuses", -32072, "a value the rules refuse: open/a.md is a name the filesystem refuses"},
 	} {

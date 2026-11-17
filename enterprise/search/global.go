@@ -271,6 +271,14 @@ func EmbedQuery(ctx context.Context, model, text string, embed func() ([]float32
 	}
 	c.mu.Unlock()
 	if !ok {
+		// done closes however embed ends: a panic leaves the waiters an error, then goes on up
+		defer func() {
+			if r := recover(); r != nil {
+				q.vec, q.err = nil, fmt.Errorf("%w: the query's embedding panicked", gsearch.ErrEmbedFailed)
+				close(q.done)
+				panic(r)
+			}
+		}()
 		q.vec, q.err = embed()
 		close(q.done)
 		return q.vec, q.err

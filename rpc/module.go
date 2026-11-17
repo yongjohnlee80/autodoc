@@ -243,8 +243,9 @@ type unmapped struct{ err error }
 func (e unmapped) Error() string { return e.err.Error() }
 
 // absPath finds an absolute path in a detail: a Unix one, a word starting with '/' and holding
-// more than the slash, or a Windows one, a drive letter, a colon and a separator.
-var absPath = regexp.MustCompile(`(^|[\s'"(=\[])(/[^\s'"/][^\s'"]*|[A-Za-z]:[\\/])`)
+// more than the slash, or a Windows one, a drive letter, a colon and a separator. A path begins
+// at the detail's start, after a space or a quote, or after one of ( = [ : , ("key:/a", "a,/b").
+var absPath = regexp.MustCompile(`(^|[\s'"(=\[:,])(/[^\s'"/][^\s'"]*|[A-Za-z]:[\\/])`)
 
 // causes are the texts of the filesystem's errors wrapped in err beside own (an *fs.PathError or
 // *os.LinkError, each with what it wraps), own and what own wraps aside.

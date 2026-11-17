@@ -311,3 +311,39 @@ func TestTheGlobalSlotsBoundSearchesAcrossRequests(t *testing.T) {
 		}
 	}
 }
+
+// A query whose embedding panics leaves the requests waiting on it an error, never a wait without
+// end, and the panic goes on up to the call that embedded. The mutant, named here: no deferred
+// close (the waiter waits until its deadline).
+func TestAPanickingQueryEmbeddingReleasesItsWaiters(t *testing.T) {
+	ctx := WithQueryCache(context.Background())
+	started, release := make(chan struct{}), make(chan struct{})
+	panicked := make(chan any, 1)
+	go func() {
+		defer func() { panicked <- recover() }()
+		_, _ = EmbedQuery(ctx, "m", "midnight drive", func() ([]float32, error) {
+			close(started)
+			<-release
+			panic("the provider's client")
+		})
+	}()
+	<-started
+	waited := make(chan error, 1)
+	go func() {
+		_, err := EmbedQuery(ctx, "m", "midnight drive", func() ([]float32, error) { return []float32{1}, nil })
+		waited <- err
+	}()
+	time.Sleep(20 * time.Millisecond) // the second call is waiting on the first's
+	close(release)
+	if r := <-panicked; r != "the provider's client" {
+		t.Errorf("the embedding call recovered %v; want its panic to go on up", r)
+	}
+	select {
+	case err := <-waited:
+		if !errors.Is(err, gsearch.ErrEmbedFailed) {
+			t.Errorf("the waiter's error: %v; want ErrEmbedFailed", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the waiter still waits 5 s after the embedding panicked")
+	}
+}

@@ -48,7 +48,12 @@ func (s *Store) chunkTexts(ctx context.Context, hits []search.Hit) ([]string, er
 		return out, nil
 	}
 	// two reads whatever the number of hits: their documents by path, then the chunks at their
-	// byte starts, matched here to each hit's exact range and its document's generation
+	// byte starts, matched here to each hit's exact range and its document's generation. The second
+	// read is a superset: every hit's document crossed with every hit's start, under each
+	// generation still kept (until gc). A (document, start) has at most one chunk a generation, so
+	// it reads at most documents × distinct starts × kept generations rows, hits² × generations at
+	// worst. Starts seldom coincide across documents but at 0, so it is about (hits + documents) ×
+	// kept generations: some hundreds of rows for a window of 50.
 	err := s.read(ctx, func(tx *store.Tx) error {
 		paths, starts := make([]any, 0, len(hits)), make([]any, 0, len(hits))
 		for _, h := range hits {
