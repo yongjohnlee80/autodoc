@@ -179,13 +179,15 @@ func TestASlowStoreIsCutAtTheDeadline(t *testing.T) {
 	}
 }
 
-// The status of a tenant: its lag on the database's clock (never negative; none before the first
-// page), its documents ready, its semantic state, its lock and last runs as its ingester published
-// them, with their codes. The mutant, named here: the lag by the server's clock.
+// The status of a tenant: its lag on the database's clock, from the bound its last complete run read
+// to, not from its cursor (never negative; none before such a run, and none on a standby), its
+// documents ready, its semantic state, its lock and last runs as its ingester published them, with
+// their codes. The mutants, named here: the lag by the server's clock; the lag from the cursor (a
+// quiet source's grows); a standby's lag shown.
 func TestATenantsStatus(t *testing.T) {
 	f := newFixture()
 	ran := dbNow.Add(-time.Minute)
-	f.state.Store(&ingest.State{Locked: true,
+	f.state.Store(&ingest.State{Locked: true, CaughtUp: dbNow.Add(-4 * time.Second),
 		LastPass:    ingest.Outcome{At: ran, Stats: ingest.Stats{Read: 12, Written: 11, Quarantined: 1}, Error: opcode.View},
 		LastRefresh: ingest.Outcome{At: ran, Stats: ingest.Stats{Complete: true}}})
 	f.c.o.Clock = func() time.Time { return dbNow.Add(time.Hour) } // the server's clock, an hour off
@@ -200,18 +202,25 @@ func TestATenantsStatus(t *testing.T) {
 		t.Errorf("published state %+v / %+v", ts.LastPass, ts.LastRefresh)
 	}
 
+	ninety := int64(90)
 	for _, c := range []struct {
+		what   string
 		cursor pgstore.Cursor
+		state  ingest.State
 		lag    *int64
 	}{
-		{pgstore.Cursor{UpdatedAt: dbNow.Add(time.Minute), ID: "1"}, new(int64)}, // a future row: 0
-		{pgstore.Cursor{}, nil}, // no page yet
+		{"a quiet source: the cursor a day old, the last pass read to 90 s ago",
+			pgstore.Cursor{UpdatedAt: dbNow.Add(-24 * time.Hour), ID: "1"}, ingest.State{Locked: true, CaughtUp: dbNow.Add(-90 * time.Second)}, &ninety},
+		{"a bound past the database's clock: 0", pgstore.Cursor{}, ingest.State{Locked: true, CaughtUp: dbNow.Add(time.Minute)}, new(int64)},
+		{"no complete run yet", pgstore.Cursor{UpdatedAt: dbNow.Add(-4 * time.Second), ID: "1"}, ingest.State{Locked: true}, nil},
+		{"a standby", pgstore.Cursor{UpdatedAt: dbNow.Add(-4 * time.Second), ID: "1"}, ingest.State{Waiting: true, CaughtUp: dbNow.Add(-time.Second)}, nil},
 	} {
 		g := newFixture()
 		g.st.cursor = c.cursor
+		g.state.Store(&c.state)
 		got := g.c.Snapshot(context.Background()).Tenants[0].Cursor.LagSeconds
 		if (got == nil) != (c.lag == nil) || (got != nil && *got != *c.lag) {
-			t.Errorf("cursor %+v: lag %v", c.cursor, got)
+			t.Errorf("%s: lag %v, want %v", c.what, deref(got), deref(c.lag))
 		}
 	}
 	for _, c := range []struct {
@@ -251,6 +260,7 @@ func TestASnapshotForAnOperatorsTenants(t *testing.T) {
 // named here: the API's counts on every tenant line.
 func TestTheMetricsLines(t *testing.T) {
 	f := newFixture()
+	f.state.Store(&ingest.State{Locked: true, CaughtUp: dbNow.Add(-4 * time.Second)})
 	s := f.c.Snapshot(context.Background())
 	lines := Lines(s, HTTPCounts{OK: 118, Client: 3, Server: 0, Slowest: 412 * time.Millisecond})
 	if len(lines) != 2 {
@@ -301,5 +311,35 @@ func TestACancelledHealthCallerDoesNotSpeakForTheDatabase(t *testing.T) {
 	f.c.Health(gone)
 	if h := f.c.Health(context.Background()); h.Status != StatusOK || h.Checks["database"] != CheckOK {
 		t.Errorf("after a cancelled caller, a live one within PingFor: %+v, want ok", h)
+	}
+}
+
+// deref is *p, or -1 for nil, for a message.
+func deref(p *int64) int64 {
+	if p == nil {
+		return -1
+	}
+	return *p
+}
+
+// withDeletes is the fixture's store with a deletes view's cursor.
+type withDeletes struct {
+	*store
+	cursor pgstore.Cursor
+}
+
+func (s withDeletes) DeletesCursor(context.Context) (pgstore.Cursor, error) { return s.cursor, nil }
+
+// A deletes view's lag is measured as the rows' is: from the bound its last deletes pass that
+// succeeded read to, not from its cursor, which a source with no deletes leaves where it is. The
+// mutant, named here: the deletes lag from its cursor.
+func TestADeletesViewsLagIsFromItsLastPass(t *testing.T) {
+	f := newFixture()
+	f.c.o.Tenants[0].Store = withDeletes{store: f.st, cursor: pgstore.Cursor{UpdatedAt: dbNow.Add(-24 * time.Hour), ID: "7"}}
+	f.state.Store(&ingest.State{Locked: true, Deletes: true, CaughtUp: dbNow.Add(-70 * time.Second),
+		DeletesCaughtUp: dbNow.Add(-70 * time.Second)})
+	d := f.c.Snapshot(context.Background()).Tenants[0].Deletes
+	if d == nil || d.LagSeconds == nil || *d.LagSeconds != 70 || d.ID != "7" {
+		t.Fatalf("the deletes view's state %+v; want its cursor kept and a lag of 70 s", d)
 	}
 }
