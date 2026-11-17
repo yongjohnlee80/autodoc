@@ -79,6 +79,11 @@ type pluginView struct {
 	// precise: the backend has told a scroll precisely (MouseEvent.ScrollX, ScrollY), so it tells
 	// every one, and a wheel step that carries none adds nothing
 	precise bool
+	// dragRun is the run a protocol-12 left press went to, until the one release or cancel that
+	// follows it (endDrag): the gesture is that run's, and a later run never hears of it. dragAt is
+	// where the pointer last was in the gesture, a cancel's place.
+	dragRun *pluginRun
+	dragAt  tuicore.Point
 }
 
 // NativeView is a pixel surface's native view over the view's cells, where the window draws streams;
@@ -161,8 +166,31 @@ var _ tuicore.Focusable = (*pluginView)(nil)
 
 func (v *pluginView) AcceptsFocus() bool { return true }
 
-// attach makes the view r's: a card's panel showing a run of its plugin.
+// gestureAt is a protocol-12 gesture's pointer event of kind ("drag", "release" or "cancel") at p.
+func (v *pluginView) gestureAt(kind string, p tuicore.Point) plugin.Pointer {
+	return plugin.Pointer{Kind: kind, Button: "left", X: p.X, Y: p.Y, Count: 1}
+}
+
+// endDrag ends a protocol-12 gesture the view holds: a cancel to the run that saw the press (send
+// drops it once that run is closing), and the capture given back.
+func (v *pluginView) endDrag() {
+	dr := v.dragRun
+	if dr == nil {
+		return
+	}
+	v.dragRun = nil
+	dr.send(plugin.MethodPointer, plugin.PointerParams(v.gestureAt("cancel", v.dragAt)))
+	if ctx := v.Context(); ctx != nil {
+		ctx.ReleasePointer()
+	}
+}
+
+// attach makes the view r's: a card's panel showing a run of its plugin. A gesture an earlier run
+// holds ends with a cancel to it.
 func (v *pluginView) attach(r *pluginRun) {
+	if v.dragRun != r {
+		v.endDrag()
+	}
 	v.run, r.view = r, v
 	v.sentW, v.sentH = 0, 0
 	v.MarkDirty()
@@ -171,6 +199,7 @@ func (v *pluginView) attach(r *pluginRun) {
 // detach leaves the view showing nothing, when it is r's.
 func (v *pluginView) detach(r *pluginRun) {
 	if v.run == r {
+		v.endDrag()
 		v.run = nil
 		v.MarkDirty()
 	}
@@ -263,6 +292,15 @@ func (v *pluginView) RequestFocus() {
 // press on it opens its menu.
 func (v *pluginView) HandleEvent(ev tuicore.Event) bool {
 	r := v.run
+	if _, ok := ev.(tuicore.PointerCaptureLostEvent); ok {
+		if dr := v.dragRun; dr != nil {
+			// the host took the pointer back (the panel closed, a menu opened): a cancel, never a
+			// release, which would click where the pointer happens to be
+			v.dragRun = nil
+			dr.send(plugin.MethodPointer, plugin.PointerParams(v.gestureAt("cancel", v.dragAt)))
+		}
+		return false
+	}
 	if m, ok := ev.(tuicore.MouseEvent); ok && v.surfaceMode() {
 		hostMenu := r.e.m.Surface == nil || r.e.m.Surface.ContextMenu != "plugin"
 		if v.card != "" && hostMenu && m.Kind == tuicore.MousePress && m.Button == tuicore.MouseRight && m.Mods.Chord() == 0 {
@@ -279,6 +317,20 @@ func (v *pluginView) HandleEvent(ev tuicore.Event) bool {
 		return true
 	}
 	if m, ok := ev.(tuicore.MouseEvent); ok {
+		if r != nil && v.dragRun == r && (m.Kind == tuicore.MouseMotion || m.Kind == tuicore.MouseRelease && m.Button == tuicore.MouseLeft) {
+			// the gesture's motion and its release, wherever the pointer is: unclamped, off the
+			// view included (golib keeps a captured event's coordinates); another button's release
+			// never ends a left drag
+			v.dragAt = tuicore.Point{X: m.X, Y: m.Y}
+			if m.Kind == tuicore.MouseMotion {
+				r.send(plugin.MethodPointer, plugin.PointerParams(v.gestureAt("drag", v.dragAt)))
+				return true
+			}
+			v.dragRun = nil // before the capture goes: giving it back is no cancel
+			r.send(plugin.MethodPointer, plugin.PointerParams(v.gestureAt("release", v.dragAt)))
+			v.Context().ReleasePointer()
+			return true
+		}
 		if v.card != "" && m.Kind == tuicore.MousePress && m.Button == tuicore.MouseRight && m.Mods.Chord() == 0 {
 			return v.openMenu(tuicore.Point{X: m.X, Y: m.Y})
 		}
@@ -294,7 +346,18 @@ func (v *pluginView) HandleEvent(ev tuicore.Event) bool {
 				p.Kind, p.Button = "wheel", "down"
 			}
 			if p.Kind != "" {
+				if p.Kind == "press" && r.e.m.Protocol >= 12 {
+					v.endDrag() // one release or cancel per press: a press with one in hand ends it
+				}
 				r.send(plugin.MethodPointer, plugin.PointerParams(p))
+				if p.Kind == "press" && r.e.m.Protocol >= 12 {
+					v.dragRun, v.dragAt = r, tuicore.Point{X: m.X, Y: m.Y}
+					if !v.Context().CapturePointer() {
+						// refused: no motion or release will come, so the gesture ends at once
+						v.dragRun = nil
+						r.send(plugin.MethodPointer, plugin.PointerParams(v.gestureAt("release", v.dragAt)))
+					}
+				}
 				return true
 			}
 		}
