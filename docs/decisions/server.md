@@ -47,6 +47,13 @@ dropped or recycled connection loses nothing.
   lease lost, taken over or not renewed in time, stops the ingester and exits the server non-zero,
   so its supervisor restarts it; it never goes on writing without the lease.
 - Every time is the database's `clock_timestamp()`; no host's clock is compared with another's.
+- **A v0.3.15 server is looked for, until v0.3.18.** v0.3.15 held a tenant by a session advisory
+  lock, which the lease doesn't see. It refuses a store migrated past its scripts, so only one
+  running when the store was migrated, or its standby, can meet a newer server. Before the lease
+  is claimed, after it, and at every renew, the ingester tries that lock's key with
+  `pg_try_advisory_xact_lock`, in one statement that keeps nothing. Held, it waits (or, holding the
+  lease, stops) and says that an older server must be stopped. v0.3.18 upgrades only from v0.3.16
+  or later, and drops the check.
 
 In the code: `core/pglease/`, `core/pgstore/writer.go`, `enterprise/ingest/`
 
