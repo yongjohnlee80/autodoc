@@ -506,14 +506,14 @@ func TestKeysAndThePointerAsTheTerminalSendsThem(t *testing.T) {
 	if e := keyEvent(plugin.Key{Key: "Tab", Shift: true}); e.Mods != tui.ModShift {
 		t.Errorf("Shift+Tab = %+v", e)
 	}
-	press := mouseEvents(plugin.Pointer{Kind: "press", Button: "left", X: 3, Y: 1, Count: 1})
+	press := mouseEvents(plugin.Pointer{Kind: "press", Button: "left", X: 3, Y: 1, Count: 1}, 11)
 	if len(press) != 2 || press[0].(tui.MouseEvent).Kind != tui.MousePress || press[1].(tui.MouseEvent).Kind != tui.MouseRelease {
 		t.Errorf("a press = %+v, want a press and its release", press)
 	}
-	if wheel := mouseEvents(plugin.Pointer{Kind: "wheel", Button: "up", Count: 3}); len(wheel) != 3 || wheel[0].(tui.MouseEvent).Button != tui.WheelUp {
+	if wheel := mouseEvents(plugin.Pointer{Kind: "wheel", Button: "up", Count: 3}, 11); len(wheel) != 3 || wheel[0].(tui.MouseEvent).Button != tui.WheelUp {
 		t.Errorf("a wheel of 3 = %+v", wheel)
 	}
-	if mouseEvents(plugin.Pointer{Kind: "press", Button: "right", Count: 1}) != nil {
+	if mouseEvents(plugin.Pointer{Kind: "press", Button: "right", Count: 1}, 11) != nil {
 		t.Error("a right press was sent: AutoDoc keeps it for the card's menu")
 	}
 }
