@@ -11,6 +11,9 @@ import "github.com/yongjohnlee80/autodoc/plugin"
 //	wheel                                 the focused List's or Tree's selection, 3 rows a step
 //	                                      (48 at most); with neither focused, the body scrolls
 func (c *Card) Pointer(at plugin.Pointer) bool {
+	if c.root != nil {
+		return c.panePointer(at)
+	}
 	if at.X < 0 || at.X >= c.w || at.Y < 0 || at.Y >= len(c.hits) || at.Count < 1 {
 		return false
 	}

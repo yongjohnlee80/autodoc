@@ -85,6 +85,12 @@ func (hs *Host) Press(x, y int) {
 	hs.send(plugin.MethodPointer, plugin.PointerParams(plugin.Pointer{Kind: "press", Button: "left", X: x, Y: y, Count: 1}))
 }
 
+// Pointer sends any pointer event: a double press (Count 2), a drag, a release.
+func (hs *Host) Pointer(at plugin.Pointer) {
+	hs.t.Helper()
+	hs.send(plugin.MethodPointer, plugin.PointerParams(at))
+}
+
 // Theme switches the theme.
 func (hs *Host) Theme(t plugin.Theme) {
 	hs.t.Helper()
