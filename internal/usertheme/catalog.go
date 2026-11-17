@@ -17,6 +17,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/internal/localfs"
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
 	"github.com/yongjohnlee80/golib/tui/style"
+	"github.com/yongjohnlee80/golib/vfs/local"
 )
 
 var namePattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
@@ -191,7 +192,7 @@ func (f checkedFS) ReadFile(name string) ([]byte, error) {
 		return nil, &fs.PathError{Op: "read", Path: name, Err: fs.ErrNotExist}
 	}
 	file := filepath.Join(f.c.dir, name)
-	src, err := os.ReadFile(file)
+	src, err := fs.ReadFile(local.DirFS(f.c.dir), name) // a save may replace or delete it as it is read
 	if err != nil {
 		return nil, err
 	}
@@ -204,6 +205,22 @@ func (f checkedFS) ReadFile(name string) ([]byte, error) {
 		return nil, err
 	}
 	return src, nil
+}
+
+// Stat is a user theme's file as the disk has it, read for nothing: HotReload stats each followed
+// file on every poll, and through Open each stat would read and validate the whole file.
+func (f checkedFS) Stat(name string) (fs.FileInfo, error) {
+	if !fs.ValidPath(name) {
+		return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrInvalid}
+	}
+	if name == "." {
+		return os.Stat(f.c.dir)
+	}
+	n := strings.TrimSuffix(name, ".qml")
+	if name != n+".qml" || !slices.Contains(f.c.users, n) {
+		return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrNotExist}
+	}
+	return os.Stat(filepath.Join(f.c.dir, name))
 }
 func (f checkedFS) ReadDir(name string) ([]fs.DirEntry, error) {
 	if !fs.ValidPath(name) {

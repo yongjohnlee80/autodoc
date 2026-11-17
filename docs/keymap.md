@@ -4,7 +4,10 @@ AutoDoc reads a key-mapping file, `keymap.xml`, beside the selected `config.toml
 `$XDG_CONFIG_HOME/autodoc/keymap.xml`, or `~/.config/autodoc/keymap.xml`. `--config
 /path/config.toml` selects `/path/keymap.xml`. The file is optional: with none, every key is its
 default. It is followed while AutoDoc runs: a save applies on the next frame, and creating or
-deleting the file counts too.
+deleting the file counts too. On Windows, a save that deletes the file and writes it anew always
+lands. An editor that saves by renaming its new copy over the file can, rarely, be refused ("Access
+is denied") when the save meets AutoDoc reading the file, one short read for each change. Windows'
+rename replaces no file another program holds, and such an editor's own retry then saves it.
 
 ## Agent workflow
 

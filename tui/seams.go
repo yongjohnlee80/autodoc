@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -12,6 +13,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/internal/usershell"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+	"github.com/yongjohnlee80/golib/tui/decl/themes"
 	"github.com/yongjohnlee80/golib/tui/pty"
 	"github.com/yongjohnlee80/golib/tui/widget/terminal"
 )
@@ -50,6 +53,11 @@ type seams struct {
 	// scheduled, when set (tests only), hears each delay Host.after is given, on the loop: the seam
 	// that shows a consumer's wait without timing it.
 	scheduled func(time.Duration)
+
+	// embeddedQML and embeddedThemes, when a test sets them, are what the program's embedded QML
+	// and golib's themes are read through (a counting file system); nil is the embedded copies. The
+	// program marks them Static either way (modules.go).
+	embeddedQML, embeddedThemes fs.FS
 
 	// registry is the plugin registry's index and its cache between runs (registry.go).
 	registry registrySource
@@ -257,4 +265,21 @@ func (s *seams) setAgentBin(bin string) {
 // the terminals ask for each new shell (terminals.shellSpawn).
 func (h *Host) shellSpawnSeam() func(pty.Cmd) (terminal.TerminalProcess, error) {
 	return h.seams.shellSpawn
+}
+
+// embeddedQML is the program's embedded QML (qmlFiles), or a test's stand-in for it, marked
+// Static: it never changes while the program runs, so HotReload never reads it again.
+func (h *Host) embeddedQML() fs.FS {
+	if h.seams.embeddedQML != nil {
+		return tuidecl.Static(h.seams.embeddedQML)
+	}
+	return tuidecl.Static(qmlFiles)
+}
+
+// embeddedThemes is golib's themes (themes.FS), or a test's stand-in for them, marked Static.
+func (h *Host) embeddedThemes() fs.FS {
+	if h.seams.embeddedThemes != nil {
+		return tuidecl.Static(h.seams.embeddedThemes)
+	}
+	return tuidecl.Static(themes.FS())
 }

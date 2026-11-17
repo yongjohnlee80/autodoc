@@ -19,9 +19,13 @@ line and column. A malformed QML file prints the parser's positioned syntax erro
 names the file and the number of required colours. The starter never overwrites an existing file.
 
 Theme names match `[a-z][a-z0-9_]*`. Built-in names (`dark`, `light`, `mono`, `retro`, `sepia`)
-cannot be shadowed. Copy a built-in under a new name. Restart AutoDoc after adding a new filename
-to register its module; edits to a registered theme reload live. User entries say `(user)` in
-the Theme menu and Preferences; preferences store the plain name.
+cannot be shadowed. Copy a built-in under a new name. Restart AutoDoc after adding a new filename to
+register its module; edits to a registered theme reload live. On Windows, a save that deletes the
+file and writes it anew always lands. An editor that saves by renaming its new copy over the file
+can, rarely, be refused ("Access is denied") when the save meets AutoDoc reading the file, one short
+read for each change. Windows' rename replaces no file another program holds, and such an editor's
+own retry then saves it. User entries say `(user)` in the Theme menu and Preferences; preferences
+store the plain name.
 
 ## Format and validation
 
