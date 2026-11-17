@@ -1,5 +1,8 @@
 //go:build linux || darwin
 
+// Unix only: Ctrl+Z here is POSIX job control (SIGTSTP stops a program, SIGCONT resumes it), which a
+// Windows console does not have.
+
 package tui
 
 import (

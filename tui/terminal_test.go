@@ -1,5 +1,9 @@
 //go:build linux || darwin
 
+// Unix only: most of these cells type real shell commands to /bin/sh (echo with $((…)), printf, cat,
+// stty, a hang-up's forwarding), which the line shell other OSes run (dockshell_test.go) does not;
+// the cells that need only a shell running are in the dock's and the panels' files, on every OS.
+
 package tui
 
 import (
