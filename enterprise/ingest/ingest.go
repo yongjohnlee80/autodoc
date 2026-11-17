@@ -675,7 +675,14 @@ func (in *Ingester) apply(ctx context.Context, b *pgstore.Batch, r row, st *Stat
 		return false, b.Quarantine(ctx, r.id, err)
 	}
 	if info, ok := current[path]; ok && info.Version == d.Version && info.Indexer == d.Indexer {
+		// current: its Version begins with the row's updated_at, so a row deleted and created again
+		// since it was written renders another Version and is written again. Its source_at is
+		// recorded when it has none (a document written before source_at was kept), as a write
+		// would have: one statement for such a document, none for the rest.
 		st.Unchanged++
+		if info.SourceAt.IsZero() {
+			return false, b.SetSourceAt(ctx, path, r.at)
+		}
 		return false, nil
 	}
 	if _, err := b.Put(ctx, d); err != nil {

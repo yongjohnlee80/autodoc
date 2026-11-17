@@ -3,6 +3,7 @@ package pgstore
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -190,5 +191,33 @@ func TestTheDeletesCursorIsItsOwn(t *testing.T) {
 	d, derr := s.DeletesCursor(ctx)
 	if err != nil || derr != nil || !c.UpdatedAt.Equal(rows.UpdatedAt) || c.ID != "r" || !d.UpdatedAt.Equal(dels.UpdatedAt) || d.ID != "d" {
 		t.Fatalf("the cursors: rows %+v %v, deletes %+v %v; want each as committed, the rolled-back one not", c, err, d, derr)
+	}
+}
+
+// A delete finds its document by an index of the tenant's source ids, not by a scan of the
+// tenant's documents: at 20,000 documents, the plan of DeleteSource's read probes
+// rag_document_source. The mutant, named here: 000010 without the index (a scan).
+func TestADeleteFindsItsDocumentByAnIndex(t *testing.T) {
+	conn := scratch(t)
+	exec(t, conn, `INSERT INTO rag_document (tenant, path, source_id, source_at)
+		SELECT 't', 'track/' || g || '.md', g::text, now() FROM generate_series(1, 20000) g`)
+	exec(t, conn, `ANALYZE rag_document`)
+	rows, err := conn.QueryContext(context.Background(), `EXPLAIN SELECT rag_document.id FROM rag_document
+		WHERE rag_document.tenant = 't' AND rag_document.source_id = '777'
+		  AND (rag_document.source_at IS NULL OR rag_document.source_at <= now())`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var plan string
+	for rows.Next() {
+		var line string
+		if err := rows.Scan(&line); err != nil {
+			t.Fatal(err)
+		}
+		plan += line + "\n"
+	}
+	if !strings.Contains(plan, "rag_document_source") {
+		t.Fatalf("DeleteSource's read: %s; want it answered by rag_document_source", plan)
 	}
 }

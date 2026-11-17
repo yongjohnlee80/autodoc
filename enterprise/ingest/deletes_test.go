@@ -181,3 +181,34 @@ func TestADeletesViewThatCannotBePagedIsRefused(t *testing.T) {
 		t.Errorf("the sample deletes view: %v", err)
 	}
 }
+
+// A row deleted and created again, with a refresh between them and the next pass, keeps its
+// document: the row's new updated_at renders another Version, so the refresh writes the document
+// again with its source_at, and the tombstone older than that is a no-op. A document the refresh
+// finds current with no source_at (written before it was kept) is given its row's. The mutants,
+// named here: a Version without updated_at (the refresh leaves the stale source_at, and the
+// tombstone deletes a live document); a current document's source_at left NULL.
+func TestARowCreatedAgainSurvivesARefreshBeforeItsTombstone(t *testing.T) {
+	f, src := deletesFixture(t, "")
+	f.track(1, "A", "One", 1)
+	f.track(2, "A", "Two", 2)
+	in := f.ingester(src, Options{}, "")
+	pass(t, in)
+	f.exec(`DELETE FROM track WHERE id = 1`)
+	f.exec(`INSERT INTO track_deleted VALUES (1, $1)`, at(5))
+	f.track(1, "A", "One", 9) // created again, the same content, at 9
+	f.exec2(`UPDATE rag_document SET source_at = NULL WHERE path = 'track/2.md'`)
+	st, err := in.Refresh(f.ctx)
+	if err != nil || !st.Complete || st.Written != 1 || st.Unchanged != 1 {
+		t.Fatalf("the refresh: %+v, %v; want track 1 written again, track 2 current", st, err)
+	}
+	if got := f.scalar(f.store, `SELECT coalesce(string_agg(path || '@' || extract(epoch FROM source_at - $1::timestamptz)::int, ',' ORDER BY path), '') FROM rag_document`, at(0)); got != "track/1.md@9,track/2.md@2" {
+		t.Errorf("source_at after the refresh: %s; want track 1's new write (9), track 2's row (2)", got)
+	}
+	if st := pass(t, in); st.DeleteNoop != 1 || st.DeletedView != 0 {
+		t.Errorf("the pass after the refresh: %+v; want the tombstone a no-op", st)
+	}
+	if got := f.paths(); !slices.Equal(got, trackPaths(1, 2)) {
+		t.Errorf("documents %v; want track 1 kept", got)
+	}
+}

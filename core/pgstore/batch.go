@@ -52,6 +52,19 @@ func (b *Batch) Delete(ctx context.Context, path string) error {
 	return nil
 }
 
+// SetSourceAt records at as the source_at of the document at path inside the batch, when it has
+// none or an older one: a document a refresh found current, written before source_at was kept.
+// Nothing else of it changes (no generation bump, no rewrite). A path not stored is no error.
+func (b *Batch) SetSourceAt(ctx context.Context, path string, at time.Time) error {
+	err := b.s.rw.doc.On(b.tx, dao.WithQueryContext(ctx)).With(dTenant, b.s.tenant).With(dPath, path).
+		WithPredicate(dao.Raw("("+qcol(tDoc, string(dSrcAt))+" IS NULL OR "+qcol(tDoc, string(dSrcAt))+" < ?)", at)).
+		Set(dSrcAt, &at).Update()
+	if err != nil {
+		return fmt.Errorf("pgstore: set source_at of %s: %w", path, err)
+	}
+	return nil
+}
+
 // DeleteSource removes inside the batch the tenant's document rendered from the source row
 // sourceID, when the row's delete at at is no older than the document's last write (its
 // source_at; a document with none is removed): a row deleted and written again before one pass

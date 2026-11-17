@@ -8,6 +8,10 @@
 -- next refresh sets it.
 ALTER TABLE rag_document ADD COLUMN source_at timestamptz;
 
+-- A delete finds its document by the source row's id: an index of each
+-- tenant's ids, so a tombstone is one index probe, not a scan of the tenant.
+CREATE INDEX rag_document_source ON rag_document (tenant, source_id);
+
 -- The deletes view's cursor: the (deleted_at, id) of the last tombstone a pass
 -- applied, apart from the rows' cursor. NULL is the view's start.
 ALTER TABLE rag_cursor ADD COLUMN deletes_at timestamptz;
