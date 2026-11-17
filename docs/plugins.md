@@ -210,9 +210,9 @@ plugin of an earlier protocol runs as it always has, and is sent what it always 
   refuses the manifest, so a plugin never runs where its rows would not show.
 - **A card with window icons, or one that follows a drag, says `protocol = 12`.** Its `[window]`
   lists the icons on its panel's frame (below), and `plugin.pointer` also carries a left drag, its
-  release, and a cancel. An older AutoDoc refuses the manifest, so a card never runs where its icons
-  would not show or a divider it draws could not be dragged. A protocol-11 card is sent exactly
-  what it was.
+  release, and a cancel. An AutoDoc of 1 to 11 lists it disabled ("protocol 12; this AutoDoc speaks
+  1 to 11"), so a card never runs where its icons would not show or a divider it draws could not be
+  dragged. A protocol-11 card is sent exactly what it was.
 - **The protocol rises** when a manifest can declare something an older AutoDoc must not run
   without, when a meaning changes, or when a plugin must handle something new. Everything a
   protocol adds is declared in the manifest, so a plugin is never sent what it did not ask for.
@@ -220,6 +220,9 @@ plugin of an earlier protocol runs as it always has, and is sent what it always 
 
 ### Moving to 12
 
+- **An older AutoDoc won't run it.** An AutoDoc of 1 to 11 lists a protocol-12 plugin disabled,
+  "protocol 12; this AutoDoc speaks 1 to 11". A card that needs neither `[window]` nor a drag can
+  stay at 11 and run on both.
 - **A release follows every press.** At 12 a gesture is a left press, then any drags and wheel
   steps, then exactly one `release` or `cancel`: a cancel when the gesture ends without a release
   (the card hidden or detached, or AutoDoc took the pointer back). A raw `PointerHandler` that acted
