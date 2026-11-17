@@ -23,6 +23,18 @@ func call(t *testing.T, c *Card, id, method string) {
 	}
 }
 
+// set sets a source of the program's on its loop, as a handler would.
+func set(t *testing.T, c *Card, name string, v any) {
+	t.Helper()
+	done := make(chan error, 1)
+	if !c.Post(func() { done <- c.Program().Set(name, v) }) {
+		t.Fatalf("set %s: the card is not running", name)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("set %s: %v", name, err)
+	}
+}
+
 // A dialog open in a card of panes holds its keys: F7, Shift+F7 and F8 move nothing out of it, and
 // Tab stays in it, since none reaches the panes from inside the dialog. Closed, both panes are
 // shown (F8 maximized neither), the keys are back in the pane that had them, and F7 steps again.
@@ -107,4 +119,74 @@ func TestOnlyACardOfPanesTakesThePaneKeys(t *testing.T) {
 			t.Fatal("a card of panes let F7 through to its Shortcut as well as stepping the panes")
 		}
 	}
+}
+
+// A dialog over a card of panes keeps Tab within itself: Tab and Shift+Tab move between its two
+// fields, as its trap has them, and no pane takes Tab from it, since a key bubbles up from inside a
+// trap no further than the trap (golib's routing ceiling). A Dialog opens over a Window only (golib
+// refuses one declared inside a Pane), so this is every dialog a card of panes can show. Closed,
+// the keys are back in the pane's field.
+func TestTabInADialogOverACardOfPanesMovesBetweenItsFields(t *testing.T) {
+	body := twoPanes + `
+  Dialog { id: dlg; title: "Ask"; width: 30; Flex { direction: Tui.Vertical; ` + field("d1") + " " + field("d2") + ` } }`
+	c, host, got := panesCard(t, body, 50, 12)
+	lastHas(t, host, "Two")
+	call(t, c, "dlg", "open")
+	lastHas(t, host, "Ask")
+	typeLine(c, "m")
+	saidLast(t, got, "d1=m")
+	c.Key(plugin.Key{Key: "Tab"})
+	typeLine(c, "n")
+	saidLast(t, got, "d2=n")
+	c.Key(plugin.Key{Key: "Tab", Shift: true})
+	typeLine(c, "o")
+	saidLast(t, got, "d1=mo")
+	c.Key(plugin.Key{Key: "Tab"})
+	c.Key(plugin.Key{Key: "Tab"}) // round, within the dialog
+	typeLine(c, "q")
+	saidLast(t, got, "d1=moq")
+	call(t, c, "dlg", "close")
+	waitFor(t, "the dialog gone", func() bool {
+		_, frames, _ := host.snapshot()
+		return !strings.Contains(text(frames[len(frames)-1]), "Ask")
+	})
+	typeLine(c, "p")
+	saidLast(t, got, "a1=p") // the keys are back in pane One's first field
+}
+
+// A Panes nested in the first Pane: the outermost Panes still gives the keys to the first leaf at
+// the start (each Panes registers its start under the same key, which golib keeps per node), and the
+// inner one leaves the start to it.
+func TestTheStartReachesTheFirstLeafOfNestedPanes(t *testing.T) {
+	body := `Panes { Pane { title: "Outer"; Panes { orientation: Tui.Vertical
+      Pane { title: "A"; ` + field("a") + ` } Pane { title: "B"; ` + field("b") + ` } } }
+  Pane { title: "C"; ` + field("c") + ` } }`
+	c, host, got := panesCard(t, body, 50, 12)
+	lastHas(t, host, "C")
+	typeLine(c, "s")
+	saidLast(t, got, "a=s")
+	c.Key(fkey("F7", false))
+	typeLine(c, "t")
+	saidLast(t, got, "b=t") // reading order: A, B (nested), then C
+	c.Key(fkey("F7", false))
+	typeLine(c, "u")
+	saidLast(t, got, "c=u")
+}
+
+// A pane the keys left lets go of being a stop of its own: once its control is enabled, a press on
+// its frame (no control there) doesn't give the pane itself the keys, which stay where they were.
+// The mutant, named here: self never cleared (the press takes the keys to the empty pane, and the
+// typing after it reaches no field).
+func TestAPaneTheKeysLeftIsAStopOnlyWhileItHoldsNone(t *testing.T) {
+	body := `Panes { Pane { title: "Off"; Button { text: "Go"; enabled: App.on } } Pane { title: "Two"; ` + field("b1") + ` } }`
+	c, host, got := panesCardWith(t, body, 40, 8, map[string]any{"App.on": false})
+	lastHas(t, host, "Go")
+	c.Key(fkey("F7", false)) // from Off (its own stop: its one control disabled) to Two
+	typeLine(c, "a")
+	saidLast(t, got, "b1=a")
+	set(t, c, "App.on", true)
+	// a press on pane Off's left border, inside the card: no control there
+	c.Pointer(plugin.Pointer{Kind: "press", Button: "left", X: 0, Y: 3, Count: 1})
+	typeLine(c, "b")
+	saidLast(t, got, "b1=ab")
 }

@@ -21,9 +21,15 @@ import (
 // Enter says its id and text (App.got), and the returned func reads what was said.
 func panesCard(t *testing.T, body string, w, h int) (*Card, *fakeHost, func() []string) {
 	t.Helper()
+	return panesCardWith(t, body, w, h, nil)
+}
+
+// panesCardWith is panesCard with the App singleton's sources given (nil: none).
+func panesCardWith(t *testing.T, body string, w, h int, sources map[string]any) (*Card, *fakeHost, func() []string) {
+	t.Helper()
 	var mu sync.Mutex
 	var got []string
-	c, host := start(t, Options{Program: []tuidecl.ProgramOption{
+	opts := []tuidecl.ProgramOption{
 		tuidecl.LayoutSource("card.qml", []byte(layoutHead+body+" }")),
 		tuidecl.Singleton("hello", "1.0", "App"),
 		tuidecl.Types(controls.Types()...),
@@ -33,7 +39,11 @@ func panesCard(t *testing.T, body string, w, h int) (*Card, *fakeHost, func() []
 			mu.Unlock()
 			return nil
 		}}),
-	}}, w, h)
+	}
+	if sources != nil {
+		opts = append(opts, tuidecl.Sources(sources))
+	}
+	c, host := start(t, Options{Program: opts}, w, h)
 	return c, host, func() []string {
 		mu.Lock()
 		defer mu.Unlock()
