@@ -1,5 +1,3 @@
-//go:build linux || darwin
-
 package tui
 
 import (
@@ -18,8 +16,8 @@ func TestAnAgentsSpawnHookSetOnTheLoopWhileItStarts(t *testing.T) {
 	t.Parallel()
 	agent, _ := fakeAgent(t)
 	spawn := func(c pty.Cmd) (terminal.TerminalProcess, error) { return pty.Start(c) }
-	profiles := []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}
-	_, r, _ := runAgentTUI(t, t.TempDir(), profiles, "heron")
+	profiles := []agents.AgentProfile{{Name: "heron", Command: agentCall(agent), Codename: "heron"}}
+	_, r, _ := runAgentTUI(t, agentsFolder(t), profiles, "heron")
 	onLoop(r, func() bool {
 		p, _ := r.h.agents.Profile("heron")
 		if _, err := r.h.agents.StartInstance(p); err != nil {
