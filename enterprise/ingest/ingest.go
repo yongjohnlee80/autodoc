@@ -123,6 +123,10 @@ type Ingester struct {
 	// deletesErr is the last deletes pass's failure, opcode.None after one that succeeded (deletes)
 	deletesErr atomic.Pointer[opcode.Code]
 	waiting    atomic.Bool
+	// lastSweep is when the ingester last swept the tenant's orphan vectors (sweep); swept is how
+	// many it has swept since it started, which State says
+	lastSweep time.Time
+	swept     atomic.Int64
 	// facetsDue says the tenant's last complete refresh wrote its documents with another facet
 	// declaration than the source's (checkDue): a refresh is due at once, and State says why
 	facetsDue atomic.Bool
@@ -256,6 +260,9 @@ type Stats struct {
 	// deletes view's tombstones; DeleteNoop is deletes that found no document to remove (an id
 	// never indexed or already gone, or a document written after the delete).
 	DeletedFlag, DeletedView, DeleteNoop int
+	// Swept is the orphan vectors the run swept (pgstore's SweepEmbeddings): those of texts no
+	// chunk of the tenant has any more.
+	Swept int
 	// Unidentified are rows with no id: they can be neither indexed nor quarantined, and a refresh
 	// that read one deletes nothing.
 	Unidentified int
@@ -340,8 +347,33 @@ func (in *Ingester) Pass(ctx context.Context) (Stats, error) {
 	if st.Written >= mergeAfter {
 		in.merge(ctx)
 	}
+	if st.Written > 0 && !in.o.Clock.Now().Before(in.lastSweep.Add(sweepEvery)) {
+		in.sweep(ctx, &st)
+	}
 	in.count(ctx, &st)
 	return st, nil
+}
+
+// sweepEvery is how often a pass that wrote sweeps the tenant's orphan vectors (a variable, so a
+// cell can shorten it); a complete refresh always sweeps. A sweep is an anti-join of the tenant's
+// vectors against its chunks: run after every pass, it would cost that every minute of a day of
+// updates; every fifteen minutes, the vectors an update leaves wait at most that long.
+var sweepEvery = 15 * time.Minute
+
+// sweep deletes the tenant's orphan vectors (pgstore's SweepEmbeddings), between the ingester's own
+// writes, under its lease. A failure is logged and the vectors wait for the next sweep; a lost lease
+// stops the ingester at its next write, as any.
+func (in *Ingester) sweep(ctx context.Context, st *Stats) {
+	in.lastSweep = in.o.Clock.Now()
+	n, err := in.st.SweepEmbeddings(ctx)
+	st.Swept += n
+	in.swept.Add(int64(n))
+	switch {
+	case err != nil && ctx.Err() == nil:
+		logger.Warning(in.o.Log, err, "tenant "+in.tenant+": sweeping its orphan vectors")
+	case n > 0:
+		logger.Info(in.o.Log, fmt.Sprintf("tenant %s: swept %d vectors of texts no document has any more", in.tenant, n))
+	}
 }
 
 // mergeAfter is how many documents a pass writes before it merges the text index's pending list
@@ -548,6 +580,7 @@ func (in *Ingester) Refresh(ctx context.Context) (Stats, error) {
 	if st.Written > 0 {
 		in.merge(ctx)
 	}
+	in.sweep(ctx, &st)
 	in.count(ctx, &st)
 	return st, nil
 }
@@ -774,6 +807,8 @@ type State struct {
 	// after one that succeeded (the status shows its cursor's lag beside it).
 	Deletes      bool
 	DeletesError opcode.Code
+	// VectorsSwept is how many orphan vectors the ingester has swept since it started (sweep).
+	VectorsSwept int64
 }
 
 // State is the ingester's state now.
@@ -788,6 +823,7 @@ func (in *Ingester) State() State {
 		st.RefreshDue = RefreshFacets
 	}
 	st.Deletes = in.src.Deletes() != nil
+	st.VectorsSwept = in.swept.Load()
 	if c := in.deletesErr.Load(); c != nil {
 		st.DeletesError = *c
 	}

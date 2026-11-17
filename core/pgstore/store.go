@@ -815,6 +815,79 @@ func (s *Store) ReclaimModels(ctx context.Context) (int, error) {
 	}
 }
 
+// sweepBatch bounds the embeddings one transaction of SweepEmbeddings deletes (a variable, so a
+// cell can lower it).
+var sweepBatch uint64 = 5000
+
+// sweepRead is called between a batch's read of its orphans and their delete: a cell's seam, to
+// give a text a chunk in that window.
+var sweepRead = func(context.Context) {}
+
+// orphan is "no chunk of the tenant has this embedding's text", evaluated where it is used: in the
+// statement that reads the orphans, and again in the one that deletes them, at its own snapshot.
+func orphan() dao.Predicate {
+	return dao.Raw("NOT EXISTS (SELECT 1 FROM " + tChunk + " k WHERE k.tenant = " + qcol(tEmb, string(eTenant)) +
+		" AND k.text_hash = " + qcol(tEmb, string(eHash)) + ")")
+}
+
+// SweepEmbeddings deletes the tenant's embeddings, under every model, of texts no chunk of the
+// tenant has any more: a document rewritten with other text leaves its old texts' vectors, and a
+// vector the embedding worker wrote for a text whose last chunk a delete had just taken is left
+// too. Without the sweep a store whose documents change only grows. It runs in batches of at most
+// sweepBatch, each its own transaction (a fenced Store's fenced), and returns how many it deleted.
+//
+// Each batch reads its orphans, then deletes them with the same NOT EXISTS evaluated again in the
+// deleting statement: a text that gained a chunk between the two keeps its vector. It is the
+// tenant's writer's to run, between its own writes (the ingester, under its lease), so no chunk
+// of the tenant is being written while it runs; the embedding worker writes vectors, never
+// chunks. Were a needed vector ever taken, its document would go unready and its text be
+// embedded again: a provider call, never a wrong answer.
+//
+// A search running meanwhile reads no row the sweep deletes: a search joins every vector to a
+// chunk, and an orphan has none. A model's ANN index loses the orphans' entries, which no search
+// returns either.
+func (s *Store) SweepEmbeddings(ctx context.Context) (int, error) {
+	total := 0
+	for {
+		read, deleted := 0, 0
+		err := dao.RunTx(ctx, func(tx *dao.Transaction) error {
+			rows, err := s.rw.emb.On(tx, dao.WithQueryContext(ctx)).With(eTenant, s.tenant).WithPredicate(orphan()).
+				Limit(sweepBatch).Select(eModel, eHash)
+			if err != nil || len(rows) == 0 {
+				return err
+			}
+			sweepRead(ctx)
+			byModel := map[string][]any{}
+			for _, r := range rows {
+				byModel[r.Model] = append(byModel[r.Model], r.TextHash)
+			}
+			read, deleted = len(rows), len(rows)
+			for model, hashes := range byModel {
+				these := func() dao.DAO[*embRow, embField, int64] {
+					return s.rw.emb.On(tx, dao.WithQueryContext(ctx)).With(eTenant, s.tenant).With(eModel, model).
+						WithPredicate(dao.In(qcol(tEmb, string(eHash)), hashes))
+				}
+				if err := these().WithPredicate(orphan()).Delete(); err != nil {
+					return err
+				}
+				kept, err := these().Count() // texts that gained a chunk since the read
+				if err != nil {
+					return err
+				}
+				deleted -= int(kept)
+			}
+			return nil
+		})
+		if err != nil {
+			return total, fmt.Errorf("pgstore: sweeping embeddings: %w", err)
+		}
+		total += deleted
+		if uint64(read) < sweepBatch {
+			return total, nil
+		}
+	}
+}
+
 // qcol is a table-qualified column for a raw-column predicate; pgstore's names need no quoting.
 func qcol(table, col string) string { return table + "." + col }
 
