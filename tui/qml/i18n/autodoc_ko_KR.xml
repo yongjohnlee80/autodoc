@@ -792,12 +792,12 @@
         <translation>패널 배치</translation>
     </message>
     <message id="autodoc.cmd.panel.maximize">
-        <source>maximize or restore the terminal or agents</source>
-        <translation>터미널 또는 에이전트 최대화/복원</translation>
+        <source>maximize or restore the terminal, the agents or a card that offers it</source>
+        <translation>터미널, 에이전트 또는 최대화를 제공하는 카드 최대화/복원</translation>
     </message>
     <message id="autodoc.cmd.panel.maximize.help">
-        <source>maximize or restore the terminal or agents</source>
-        <translation>터미널 또는 에이전트 최대화/복원</translation>
+        <source>maximize or restore the terminal, the agents or a card that offers it</source>
+        <translation>터미널, 에이전트 또는 최대화를 제공하는 카드 최대화/복원</translation>
     </message>
     <message id="autodoc.cmd.panel.reset_layout">
         <source>reset the panel layout</source>
@@ -4653,8 +4653,8 @@ WHAT A KEY NEEDS
         <translation>모든 패널이 이미 가장자리에 있습니다</translation>
     </message>
     <message id="autodoc.notice.panelfloat.maximize_is_the_terminal_s_and_the_agents_open_o">
-        <source>Maximize is the terminal's and the agents': open one first (SPC ` or SPC g)</source>
-        <translation>최대화는 터미널과 에이전트에서만 됩니다: 먼저 하나를 여세요 (SPC ` 또는 SPC g)</translation>
+        <source>Maximize is the terminal's, the agents' and a card's that offers it: open one first (SPC ` or SPC g)</source>
+        <translation>최대화는 터미널, 에이전트, 그리고 최대화를 제공하는 카드에서만 됩니다: 먼저 하나를 여세요 (SPC ` 또는 SPC g)</translation>
     </message>
     <message id="autodoc.notice.panelfloat.resume_has_no_tab_to_wake_the_panel_is_empty">
         <source>Resume has no tab to wake: the panel is empty</source>

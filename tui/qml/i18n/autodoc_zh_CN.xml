@@ -792,12 +792,12 @@
         <translation>排列面板</translation>
     </message>
     <message id="autodoc.cmd.panel.maximize">
-        <source>maximize or restore the terminal or agents</source>
-        <translation>最大化或还原终端或智能体</translation>
+        <source>maximize or restore the terminal, the agents or a card that offers it</source>
+        <translation>最大化或还原终端、智能体或提供该功能的卡片</translation>
     </message>
     <message id="autodoc.cmd.panel.maximize.help">
-        <source>maximize or restore the terminal or agents</source>
-        <translation>最大化或还原终端或智能体</translation>
+        <source>maximize or restore the terminal, the agents or a card that offers it</source>
+        <translation>最大化或还原终端、智能体或提供该功能的卡片</translation>
     </message>
     <message id="autodoc.cmd.panel.reset_layout">
         <source>reset the panel layout</source>
@@ -4646,8 +4646,8 @@ WHAT A KEY NEEDS
         <translation>所有面板都已在边缘</translation>
     </message>
     <message id="autodoc.notice.panelfloat.maximize_is_the_terminal_s_and_the_agents_open_o">
-        <source>Maximize is the terminal's and the agents': open one first (SPC ` or SPC g)</source>
-        <translation>最大化仅适用于终端和智能体：请先打开其中之一(SPC ` 或 SPC g)</translation>
+        <source>Maximize is the terminal's, the agents' and a card's that offers it: open one first (SPC ` or SPC g)</source>
+        <translation>最大化仅适用于终端、智能体和提供该功能的卡片：请先打开其中之一(SPC ` 或 SPC g)</translation>
     </message>
     <message id="autodoc.notice.panelfloat.resume_has_no_tab_to_wake_the_panel_is_empty">
         <source>Resume has no tab to wake: the panel is empty</source>
