@@ -219,12 +219,13 @@ func TestADocumentIsReadyOnceItsTextsAreStored(t *testing.T) {
 	waitFor(t, "every document ready", func() bool { return st.isReady("e.md") && st.isReady("f.md") })
 }
 
-// A tenant's rounds resume where the last one stopped, and a round whose batch failed is read
-// again from where it began: with four texts a round and the first call failing, the failed text
-// is embedded before the next round's, and a later round resumes after the last text of the one
-// before; with no switch, every scan reads the unready documents alone. The mutants, named here:
-// every round reading from the start (no round resumes), the failed round's start forgotten (the
-// failed text waits for the scan to come round again), and the scan reading every document.
+// A tenant's rounds resume where the last one stopped, and a round whose batch failed sends no
+// batch after it and is read again from where it began: with four texts a round and the first call
+// failing, nothing is embedded before the failed text, which is embedded before the next round's,
+// and the round after the one read again resumes after its last text; with no switch, every scan
+// reads the unready documents alone. The mutants, named here: every round reading from the start
+// (no round resumes), the failed round's start forgotten (the failed text waits for the scan to
+// come round again), and the scan reading every document.
 func TestRoundsResumeWhereTheLastStopped(t *testing.T) {
 	t.Cleanup(embedder.SetSleep(func(ctx context.Context, d time.Duration) bool { return ctx.Err() == nil }))
 	st := newStore()
@@ -246,6 +247,9 @@ func TestRoundsResumeWhereTheLastStopped(t *testing.T) {
 	p.mu.Lock()
 	order := slices.Clone(p.order)
 	p.mu.Unlock()
+	if len(order) == 0 || order[0] != "text of a" {
+		t.Errorf("a text embedded before the failed one, a: the failed round sent a batch after its failure: %v", order)
+	}
 	if a, e := slices.Index(order, "text of a"), slices.Index(order, "text of e"); a < 0 || a > e {
 		t.Errorf("the failed text embedded at %d, after the next round's at %d: %v", a, e, order)
 	}
@@ -255,9 +259,9 @@ func TestRoundsResumeWhereTheLastStopped(t *testing.T) {
 	if slices.Contains(unready, false) {
 		t.Errorf("a scan read every document with no switch under way: %v", unready)
 	}
-	// a, e, f, g after the failure: the round after resumes behind g, the seventh document
-	if !slices.Contains(afters, pgstore.PendingKey{Doc: 7, Ord: 0}) {
-		t.Errorf("no round resumed after g: %+v", afters)
+	// a, b, c, d read again after the failure: the round after resumes behind d, the fourth document
+	if !slices.Contains(afters, pgstore.PendingKey{Doc: 4, Ord: 0}) {
+		t.Errorf("no round resumed after d: %+v", afters)
 	}
 }
 
