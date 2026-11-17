@@ -111,6 +111,7 @@ func (c *Card) open(to host, peer *plugin.Peer, o plugin.Open) {
 	c.known = known
 	c.be = newFrameBackend(to, o.Width, o.Height, c.ctx, colorsOf(o.Theme))
 	opts := append(slices.Clone(c.o.Program),
+		tuidecl.Types(paneTypes()...), // Panes and Pane, every card's (panes.go)
 		tuidecl.Singleton(themeModule, themeVersion, "Theme"),
 		tuidecl.Sources(sources),
 		tuidecl.AppOptions(tui.WithBackend(c.be)))
