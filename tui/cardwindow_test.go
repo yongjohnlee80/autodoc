@@ -635,15 +635,15 @@ func TestMaximizeAddedWhileRunningWaitsForARestart(t *testing.T) {
 		t.Fatal("Maximize reaches a card whose panel was built without maximize")
 	}
 	before := boundsOf(r, id)
+	// asked directly first, as #627's guard is: maximize is refused, the panel's window not listing
+	// it. F11 after it, the card's answer and the frame that draws it come after the request, so
+	// the panel's bounds read then are past the layout a maximize would have moved them in.
+	onLoop(r, func() bool { r.h.plugins.cardWindow("card", "maximize"); return true })
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyF11})
 	waitSaid(t, logs, "card", "key F11")
+	r.waitShown(t, "key F11") // the card's frame showing the key: drawn after the request
 	if b := boundsOf(r, id); b != before {
-		t.Fatalf("F11 moved the card's panel from %+v to %+v", before, b)
-	}
-	// asked directly, as #627's guard is, maximize is refused: the panel's window doesn't list it
-	onLoop(r, func() bool { r.h.plugins.cardWindow("card", "maximize"); return true })
-	if b := boundsOf(r, id); b != before {
-		t.Fatalf("maximize asked of a card whose panel doesn't list it moved the panel from %+v to %+v", before, b)
+		t.Fatalf("maximize asked directly, then F11, moved the card's panel from %+v to %+v", before, b)
 	}
 }
 
