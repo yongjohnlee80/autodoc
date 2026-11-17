@@ -406,10 +406,11 @@ func (pl *plugins) maximizableCards() []string {
 
 // cardWindow is a press on a card's icon (App.cardWindow): hide its panel, its plugin running on, as
 // Esc does; maximize its panel over the page or restore it, as F11 does; or stop its plugin, as its
-// Plugins menu's Turn off does. A card not running has no icons to press.
+// Plugins menu's Turn off does. A card not running has no icons to press, and a control its
+// manifest does not list is no icon of it: refused, whoever asks.
 func (pl *plugins) cardWindow(name, control string) {
 	r := pl.running[name]
-	if r == nil || r.closing {
+	if r == nil || r.closing || !r.e.m.Controls(control) {
 		return
 	}
 	switch control {
