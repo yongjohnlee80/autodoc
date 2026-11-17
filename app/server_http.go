@@ -10,7 +10,11 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"runtime"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/yongjohnlee80/golib/logger"
@@ -60,7 +64,7 @@ func (s *server) startHTTP() error {
 		tenants[src.Tenant] = sr
 	}
 	h := api.New(clients, tenants, api.WithLogger(s.log), api.WithOps(s.ops), api.WithOperators(operators),
-		api.WithMetrics(s.cfg.Metrics.Enabled))
+		api.WithMetrics(s.cfg.Metrics.Enabled), api.WithTenantSearches(tenantSearches(s.cfg)))
 	ln, err := net.Listen("tcp", s.cfg.HTTP.Listen)
 	if err != nil {
 		return err
@@ -194,4 +198,33 @@ func newHTTPServer(h http.Handler) *http.Server {
 		// a request's context is not the server's: a stop drains it rather than cancelling it
 		BaseContext: func(net.Listener) context.Context { return context.Background() },
 	}
+}
+
+// tenantSearches is how many tenants' searches the requests naming several tenants run at once
+// ([http] max_tenant_searches): the configured number, or the store pool's size less two, so a
+// burst of them leaves connections for the ingesters and the single searches.
+func tenantSearches(cfg *config.Server) int {
+	if n := cfg.HTTP.MaxTenantSearches; n > 0 {
+		return n
+	}
+	return max(poolSize(cfg.Postgres.DSN())-2, 1)
+}
+
+// poolSize is the size of the pool a DSN opens: its pool_max_conns, in a URL's query or among a
+// keyword DSN's pairs, or pgxpool's default, max(4, the CPUs).
+func poolSize(dsn string) int {
+	var v string
+	if u, err := url.Parse(dsn); err == nil && u.Scheme != "" {
+		v = u.Query().Get("pool_max_conns")
+	} else {
+		for _, kv := range strings.Fields(dsn) {
+			if k, val, ok := strings.Cut(kv, "="); ok && k == "pool_max_conns" {
+				v = val
+			}
+		}
+	}
+	if n, err := strconv.Atoi(v); err == nil && n > 0 {
+		return n
+	}
+	return max(4, runtime.NumCPU())
 }
