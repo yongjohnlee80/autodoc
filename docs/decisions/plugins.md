@@ -411,7 +411,7 @@ by a trapping focus scope, which would also hold the pointer and every other key
 outermost `Panes` takes F7 across every nested one; F8 goes to the innermost split holding the
 focus. A pane with nothing to focus is itself a stop.
 
-In the code: `plugin/decl/decl.go`, `plugin/decl/backend.go`, `plugin/decl/events.go`
+In the code: `plugin/decl/decl.go`, `plugin/decl/backend.go`, `plugin/decl/events.go`, `plugin/decl/panes.go`
 
 ## Pixel surfaces
 
