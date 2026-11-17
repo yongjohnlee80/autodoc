@@ -236,14 +236,28 @@ type TenantStatus struct {
 	Error        opcode.Code `json:"error"` // reading the tenant's state failed: its other figures are absent
 }
 
-// CursorState is where the tenant's cursor is, and how far behind the database's clock. The cursor
-// moves when a pass commits a page, and when a refresh finishes (its pages commit their documents
-// without it), so its figures are absent before either: before the first pass's first page
-// commits, or before the first refresh finishes.
+// CursorState is where the tenant's cursor is, and how far the index is behind the database's
+// clock. The cursor is the last row read: it moves when a pass commits a page, and when a refresh
+// finishes, so UpdatedAt and ID are absent before either. It doesn't move while the source is
+// quiet, so how far behind the index is isn't measured from it.
 type CursorState struct {
-	UpdatedAt  *time.Time `json:"updated_at"`
-	ID         string     `json:"id"`
-	LagSeconds *int64     `json:"lag_seconds"` // nil until the cursor first moves
+	UpdatedAt *time.Time `json:"updated_at"`
+	ID        string     `json:"id"`
+	// LagSeconds is how far the index is behind the source: the database's clock now, less the
+	// bound the last run that read every row did read to (ingest.State.CaughtUp). A quiet source
+	// keeps it at most the configured lag plus the interval; it grows only while runs fail or
+	// don't run. Nil on a server that doesn't hold the tenant's lease (a standby), and before
+	// this server's first such run.
+	LagSeconds *int64 `json:"lag_seconds"`
+}
+
+// lagSince is the whole seconds from caught to now, never negative; nil for the zero time.
+func lagSince(now, caught time.Time) *int64 {
+	if caught.IsZero() {
+		return nil
+	}
+	lag := int64(max(now.Sub(caught), 0) / time.Second)
+	return &lag
 }
 
 // DeletesState is a deletes view's cursor (absent before its first tombstone is applied) and its
@@ -354,13 +368,20 @@ func (c *Collector) tenant(ctx context.Context, t Tenant) TenantStatus {
 		ts.Error = opcode.Database
 		return ts
 	}
+	var st ingest.State
+	if t.State != nil {
+		st = t.State()
+	}
+	if !st.Locked {
+		st.CaughtUp, st.DeletesCaughtUp = time.Time{}, time.Time{} // a standby's lag is the holder's to say
+	}
 	if !cur.IsZero() {
 		at := cur.UpdatedAt
-		lag := int64(max(dbNow.Sub(at), 0) / time.Second)
-		ts.Cursor = CursorState{UpdatedAt: &at, ID: cur.ID, LagSeconds: &lag}
+		ts.Cursor = CursorState{UpdatedAt: &at, ID: cur.ID}
 	}
+	ts.Cursor.LagSeconds = lagSince(dbNow, st.CaughtUp)
 	if ds, ok := t.Store.(deletesStore); ok && t.State != nil {
-		if st := t.State(); st.Deletes {
+		if st.Deletes {
 			dc, err := ds.DeletesCursor(ctx)
 			if err != nil {
 				ts.Error = opcode.Database
@@ -369,9 +390,9 @@ func (c *Collector) tenant(ctx context.Context, t Tenant) TenantStatus {
 			d := &DeletesState{Error: st.DeletesError}
 			if !dc.IsZero() {
 				at := dc.UpdatedAt
-				lag := int64(max(dbNow.Sub(at), 0) / time.Second)
-				d.CursorState = CursorState{UpdatedAt: &at, ID: dc.ID, LagSeconds: &lag}
+				d.CursorState = CursorState{UpdatedAt: &at, ID: dc.ID}
 			}
+			d.LagSeconds = lagSince(dbNow, st.DeletesCaughtUp)
 			ts.Deletes = d
 		}
 	}

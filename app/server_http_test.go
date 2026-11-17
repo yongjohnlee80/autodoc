@@ -292,7 +292,10 @@ metrics_interval = "10s"
 		var s struct {
 			AsOf time.Time `json:"as_of"`
 		}
-		return status != http.StatusOK || json.Unmarshal([]byte(body), &s) != nil || !s.AsOf.Before(moved)
+		// and once the refresh that moved it has published how far it read, which the lag is
+		// measured from: a moment after its commit
+		return status != http.StatusOK || json.Unmarshal([]byte(body), &s) != nil ||
+			!s.AsOf.Before(moved) && !strings.Contains(body, `"lag_seconds":null`)
 	})
 	if err := json.Unmarshal([]byte(body), &snap); err != nil || status != http.StatusOK || len(snap.Tenants) != 1 {
 		t.Fatalf("status: %d %s", status, body)

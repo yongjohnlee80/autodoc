@@ -128,6 +128,8 @@ type Ingester struct {
 	waiting    atomic.Bool
 	// older says Acquire waits because a server of v0.3.15 or before holds the tenant (waitOlder)
 	older atomic.Bool
+	// deletesTo is the bound the last deletes pass that succeeded read the deletes view to
+	deletesTo atomic.Pointer[time.Time]
 	// lastSweep is when the ingester last swept the tenant's orphan vectors (sweep); swept is how
 	// many it has swept since it started, which State says
 	lastSweep time.Time
@@ -307,6 +309,9 @@ func (in *Ingester) Confirm(_ context.Context) error {
 
 // Stats are what one Pass or Refresh did.
 type Stats struct {
+	// Upto is the bound on the database's clock the run read the view to (now − Lag): every row
+	// whose updated_at is at most Upto was read, once the run completed.
+	Upto        time.Time
 	Pages, Read int
 	Written     int // documents written
 	Unchanged   int // refresh: rows whose document was already current
@@ -351,6 +356,7 @@ func (in *Ingester) Pass(ctx context.Context) (Stats, error) {
 	if err != nil {
 		return st, err
 	}
+	st.Upto = upto
 	if err := in.retry(ctx, upto, &st); err != nil {
 		return st, err
 	}
@@ -546,6 +552,7 @@ func (in *Ingester) Refresh(ctx context.Context) (Stats, error) {
 	if err != nil {
 		return st, err
 	}
+	st.Upto = upto
 	stored, err := in.st.Cursor(ctx)
 	if err != nil {
 		return st, err
@@ -867,6 +874,11 @@ type State struct {
 	// after one that succeeded (the status shows its cursor's lag beside it).
 	Deletes      bool
 	DeletesError opcode.Code
+	// CaughtUp is the bound on the database's clock the last run that read every row did read to
+	// (Stats.Upto of a pass that completed, or of a complete refresh): the index holds every row
+	// updated at or before it. DeletesCaughtUp is the same of the last deletes pass that succeeded.
+	// Both are the zero time until such a run, since this ingester started.
+	CaughtUp, DeletesCaughtUp time.Time
 	// VectorsSwept is how many orphan vectors the ingester has swept since it started (sweep).
 	VectorsSwept int64
 }
@@ -888,6 +900,9 @@ func (in *Ingester) State() State {
 	if c := in.deletesErr.Load(); c != nil {
 		st.DeletesError = *c
 	}
+	if t := in.deletesTo.Load(); t != nil {
+		st.DeletesCaughtUp = *t
+	}
 	return st
 }
 
@@ -898,6 +913,10 @@ func (in *Ingester) record(kind string, st Stats, err error) {
 		next = *p
 	}
 	o := Outcome{At: in.o.Clock.Now(), Stats: st, Error: codeOf(err)}
+	// a pass that returned no error read every row to its bound, and so did a complete refresh
+	if err == nil && (kind != "refresh" || st.Complete) && st.Upto.After(next.CaughtUp) {
+		next.CaughtUp = st.Upto
+	}
 	if kind == "refresh" {
 		next.LastRefresh = o
 	} else {

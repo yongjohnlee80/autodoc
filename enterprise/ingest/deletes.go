@@ -160,6 +160,7 @@ func (in *Ingester) deletes(ctx context.Context, upto time.Time, st *Stats) erro
 	in.deletesErr.Store(&code)
 	switch {
 	case err == nil:
+		in.deletesTo.Store(&upto)
 		return nil
 	case errors.Is(err, ErrLockLost):
 		return err
