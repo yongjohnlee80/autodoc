@@ -223,10 +223,16 @@ plugin of an earlier protocol runs as it always has, and is sent what it always 
 - **A release follows every press.** At 12 a gesture is a left press, then any drags and wheel
   steps, then exactly one `release` or `cancel`: a cancel when the gesture ends without a release
   (the card hidden or detached, or AutoDoc took the pointer back). A raw `PointerHandler` that acted
-  on every `plugin.pointer` would act on the release too: check `Kind`. The UI kits already do.
+  on every `plugin.pointer` would act on the release too: check `Kind`.
+  - **`plugin/card` needs no change.** Its controls act on the press at every protocol, so a click
+    answers the same on an older AutoDoc; a release, a drag or a cancel does nothing to a control,
+    and a card of panes takes its divider's drag.
+  - **`plugin/decl`'s controls act on a release inside them,** as a desktop toolkit's do, and a
+    cancel activates nothing.
 - **A drag's, release's and cancel's coordinates are the view's own and may lie off the frame:**
   negative, or at or past its width or height. A cancel's are the last the host saw. A release off
-  the frame is no click. Clamp what you draw, never the event. Their `count` is 1.
+  the frame is no click. Clamp what you draw, never the event. Their `count` is always 1, and
+  `plugin.ReadPointer` refuses any other.
 - **The window's keys are AutoDoc's.** A protocol-12 card is not sent the keys that cycle AutoDoc's
   widgets (F6 and Shift+F6 by default), nor, when its `[window]` lists `maximize`, the keys that
   maximize a panel (F11 by default). A remapped key follows its new binding. A
