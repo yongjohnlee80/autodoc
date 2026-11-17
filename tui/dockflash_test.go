@@ -70,7 +70,7 @@ func TestAHiddenPanelsDockIconFlashesTwice(t *testing.T) {
 // The terminal's _ closes its drawer with the shell running on, into the dock: its icon flashes
 // twice. Its x hangs the shell up and leaves the dock: none.
 func TestTheTerminalsHideFlashesAndItsXDoesNot(t *testing.T) {
-	_, r := runLineShellTUI(t, nil)
+	_, r := runShellTUI(t, nil) // a shell that runs catInTheTerminal's commands: Unix's
 	steps := flashes(t, r)
 	catInTheTerminal(t, r)
 
