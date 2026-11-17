@@ -494,14 +494,33 @@ var dialogCommands = []keymap.Command{
 	dialogCommand(suspendID, "Ctrl+Z"),
 }
 
-// terminalModeID is the terminals' mode key's command; maximizeID the Window's maximize, whose keys a
-// terminal keeps from its program (hostKeys, App.terminalHostKeys) so they reach the Window;
-// suspendID the keys a terminal keeps from its program and that go nowhere (Ctrl+Z).
+// terminalModeID is the terminals' mode key's command; MaximizeID the Window's maximize, whose keys a
+// terminal keeps from its program (hostKeys, App.terminalHostKeys) so they reach the Window, and a
+// protocol-12 card that lists maximize leaves to it (CardHostKeys); suspendID the keys a terminal
+// keeps from its program and that go nowhere (Ctrl+Z).
 const (
 	TerminalModeID = "autodoc.terminal.mode"
-	maximizeID     = "autodoc.window.maximizePanel"
+	MaximizeID     = "autodoc.window.maximizePanel"
 	suspendID      = "autodoc.terminal.suspend"
 )
+
+// cycleWidgetIDs are F6's and Shift+F6's commands: the keyboard to the next and previous widget,
+// which a protocol-12 card leaves to the Window (CardHostKeys).
+var cycleWidgetIDs = []string{"autodoc.window.cycleWidget", "autodoc.window.cycleWidgetBack"}
+
+// CardHostKeys are the keys a protocol-12 card leaves to the Window, as the map binds them now: F6
+// and Shift+F6's always, so the keyboard can leave the card; maximize's when the card lists it, so
+// F11 maximizes its panel. A moved binding moves what the card declines.
+func (k Keyset) CardHostKeys(maximize bool) tuidecl.Keys {
+	var out tuidecl.Keys
+	for _, id := range cycleWidgetIDs {
+		out = append(out, k.KeysValue(id)...)
+	}
+	if maximize {
+		out = append(out, k.KeysValue(MaximizeID)...)
+	}
+	return out
+}
 
 // panelTabIDs are Ctrl+Tab's and Ctrl+Shift+Tab's commands (windowKeys): a terminal keeps their keys
 // from its program always, as it keeps maximize's, so they move between its panel's tabs.
@@ -529,7 +548,7 @@ var movePaneIDs = []string{"autodoc.window.movePane.h", "autodoc.window.movePane
 // the tab keys' always, and with panelKeys the panel moves too, so a moved binding moves what the
 // programs lose.
 func (k Keyset) TerminalKeys() map[string]any {
-	host := tuidecl.Keys(slices.Concat(k.KeysValue(maximizeID), k.KeysValue(suspendID))) // a copy: never the map's own slices
+	host := tuidecl.Keys(slices.Concat(k.KeysValue(MaximizeID), k.KeysValue(suspendID))) // a copy: never the map's own slices
 	for _, id := range panelTabIDs {
 		host = append(host, k.KeysValue(id)...)
 	}

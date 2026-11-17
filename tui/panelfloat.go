@@ -75,7 +75,7 @@ func (h *Host) toggleMaximize(panel string) error { return h.p.Call(panel, "togg
 // opened of them that is still open; "" for neither. Maximize and Resume act on it.
 func (h *Host) panelInHand() string {
 	target := ""
-	for _, p := range maximizable {
+	for _, p := range h.maximizablePanels() {
 		if s := h.panelSpec(p); s != nil && h.paneHasKeyboard(s.View) {
 			target = p
 		}

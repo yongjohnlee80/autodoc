@@ -1,12 +1,14 @@
 package tui
 
 import (
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/yongjohnlee80/autodoc/plugin"
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	tuikey "github.com/yongjohnlee80/golib/tui/key"
 	"github.com/yongjohnlee80/golib/tui/style"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
@@ -165,6 +167,20 @@ func (v *pluginView) surfacePointer(m tuicore.MouseEvent) (plugin.SurfacePointer
 var _ tuicore.Focusable = (*pluginView)(nil)
 
 func (v *pluginView) AcceptsFocus() bool { return true }
+
+// hostKey reports whether e is one of the keys a protocol-12 card leaves to the Window
+// (CardHostKeys): F6 and Shift+F6, and maximize's when the card lists maximize, as the map binds
+// them now.
+func (v *pluginView) hostKey(r *pluginRun, e tuicore.KeyEvent) bool {
+	chord, ok := tuikey.Of(e.Code, e.Mods, e.Text)
+	if !ok {
+		return false
+	}
+	candidates := tuikey.Candidates(chord)
+	return slices.ContainsFunc(v.pl.c.CardHostKeys(r.e.m.Controls("maximize")), func(s tuikey.Seq) bool {
+		return slices.Contains(candidates, s)
+	})
+}
 
 // gestureAt is a protocol-12 gesture's pointer event of kind ("drag", "release" or "cancel") at p.
 func (v *pluginView) gestureAt(kind string, p tuicore.Point) plugin.Pointer {
@@ -382,6 +398,9 @@ func (v *pluginView) HandleEvent(ev tuicore.Event) bool {
 	e, ok := ev.(tuicore.KeyEvent)
 	if !ok || e.Kind == tuicore.KeyRelease {
 		return false
+	}
+	if r.e.m.Protocol >= 12 && r.e.m.Card() && v.hostKey(r, e) {
+		return false // the Window's Shortcut runs: F6 leaves the card, F11 maximizes its panel
 	}
 	if e.Code == tuicore.KeyEscape && e.Mods.Chord() == 0 {
 		if !r.e.m.Modal() {

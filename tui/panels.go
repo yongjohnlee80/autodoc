@@ -140,7 +140,7 @@ func (h *Host) panelOpened(name string) {
 	h.panelOpen[name] = true
 	h.dockHidden = nil // a panel opened since the editor's icon hid the others: its next click hides
 	h.lastPanel = name
-	if slices.Contains(maximizable, name) {
+	if slices.Contains(h.maximizablePanels(), name) {
 		// the newest first: F11 and SPC z off the panels reach the newest still open
 		h.maximizableOpened = append([]string{name}, slices.DeleteFunc(h.maximizableOpened, func(p string) bool { return p == name })...)
 	}
