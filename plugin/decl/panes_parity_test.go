@@ -76,6 +76,11 @@ var paritySteps = []kitStep{
 	{"F7, F8: the second alone", keys(one(fkey("F7", false)), one(fkey("F8", false)), typed("w")), "prtuv", "qsw", []string{"Two"}},
 	{"F8 restores both", keys(one(fkey("F8", false)), typed("x")), "prtuv", "qswx", []string{"One", "Two"}},
 	{"F7 in the restored panes", keys(one(fkey("F7", false)), typed("y")), "prtuvy", "qswx", []string{"One", "Two"}},
+	// F7 with a pane maximized steps only the panes shown: the maximized one alone keeps the keys
+	{"F8, then F7 while maximized", keys(one(fkey("F8", false)), one(fkey("F7", false)), typed("z")), "prtuvyz", "qswx", []string{"One"}},
+	{"F8 restores both again", one(fkey("F8", false)), "prtuvyz", "qswx", []string{"One", "Two"}},
+	// a frame after the restore: golib gives a pane just shown the keys once it is laid out
+	{"F7 after the restore", keys(one(fkey("F7", false)), typed("0")), "prtuvyz", "qswx0", []string{"One", "Two"}},
 }
 
 // showsTitles reports which of One and Two a frame's text holds as a pane's title.

@@ -157,10 +157,19 @@ func (n *panesNode) HandleEvent(ev tui.Event) bool {
 
 func isPanes(c tui.Component) bool { _, ok := c.(*panesNode); return ok }
 
-// panes are the Panes' leaf panes in reading order, nested ones included.
+// panes are the Panes' leaf panes in reading order, nested ones included, as they are shown: a
+// side another is maximized over is left out, so F7 never gives the keys to a pane the Split hides
+// (the native kit's panes, laid out as shown, step the same way).
 func (n *panesNode) panes() []*paneNode {
 	var out []*paneNode
-	for _, c := range []tui.Component{n.a, n.b} {
+	sides := []tui.Component{n.a, n.b}
+	switch n.split.Zoomed() {
+	case core.PaneA:
+		sides = sides[:1]
+	case core.PaneB:
+		sides = sides[1:]
+	}
+	for _, c := range sides {
 		switch c := c.(type) {
 		case *panesNode:
 			out = append(out, c.panes()...)
@@ -269,11 +278,16 @@ func (p *paneNode) focus() {
 	ctx.RequestFocus()
 }
 
-// HandleEvent keeps Tab and Shift+Tab (the key map's FocusNext and FocusPrev) inside the pane, and
-// takes a double press on its title line as F8 for it.
+// HandleEvent keeps Tab and Shift+Tab (the key map's FocusNext and FocusPrev) inside the pane,
+// takes a double press on its title line as F8 for it, and lets go of self once the keys leave it:
+// a pane the keys left is a stop of its own again only while its content holds none.
 func (p *paneNode) HandleEvent(ev tui.Event) bool {
 	ctx := p.Context()
 	switch e := ev.(type) {
+	case tui.FocusEvent:
+		if !e.Terminal && !e.Gained && !ctx.FocusWithin(p) {
+			p.self = false
+		}
 	case tui.KeyEvent:
 		if e.Kind != tui.KeyPress {
 			return false
@@ -289,7 +303,7 @@ func (p *paneNode) HandleEvent(ev tui.Event) bool {
 			return true // the keys never leave the pane by Tab
 		}
 	case tui.MouseEvent:
-		if e.Kind == tui.MousePress && e.Button == tui.MouseLeft && e.Count == 2 && e.Y == 0 {
+		if e.Kind == tui.MousePress && e.Button == tui.MouseLeft && e.Count == 2 && e.Y == p.frame.TitleRow() {
 			if n, ok := ctx.Ancestor(isPanes).(*panesNode); ok {
 				switch p {
 				case n.a:
