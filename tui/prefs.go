@@ -405,11 +405,16 @@ func prefState(p prefs) map[string]any {
 // loadPrefs reads the store's preferences on a connection, and applies them: the theme by a
 // reload, when it is not the one on screen. What is set while the list is read (a panel resized as
 // the TUI connects) is laid over its answer: the list may have been read before that write landed,
-// and must not undo it.
+// and must not undo it. So is every write still waiting for the store's answer as the first list
+// starts: set just before it, the list may be answered before the write lands. A second list
+// started while one is in flight shares what the first keeps.
 func (h *Host) loadPrefs() {
 	tk := h.ticket(nil, feature.TicketSession) // daemon-wide: a workspace switch keeps it, a new connection drops it
 	if h.prefsLoading == 0 {
 		h.prefsSetMeanwhile = map[string]string{}
+		for _, w := range h.prefWrites { // in the order set: a name's last value wins, as the store's will
+			h.prefsSetMeanwhile[w[0]] = w[1]
+		}
 	}
 	h.prefsLoading++
 	do(h, func(ctx context.Context) feature.AnswerOf[map[string]any] {
@@ -419,6 +424,10 @@ func (h *Host) loadPrefs() {
 		meanwhile := h.prefsSetMeanwhile
 		if h.prefsLoading--; h.prefsLoading == 0 {
 			h.prefsSetMeanwhile = nil
+			if h.prefsReread { // a value refused while the lists were read: read once more, alone
+				h.prefsReread = false
+				defer h.loadPrefs()
+			}
 		}
 		if !tk.Current() {
 			return
@@ -582,14 +591,37 @@ func (h *Host) writePref() {
 		_, err := h.call(ctx, "preference.set", w[0], w[1])
 		return err
 	}, func(err error) {
+		h.prefWrites = h.prefWrites[1:]
 		if err != nil {
 			h.failed(h.tr("autodoc.notice.prefs.save_the_preference"), err)
+			h.prefRefused(w[0], w[1])
 		}
-		h.prefWrites = h.prefWrites[1:]
 		if len(h.prefWrites) > 0 {
 			h.writePref()
 		}
 	})
+}
+
+// prefRefused follows the store again after it refused name's value, the error said: what is shown
+// would otherwise keep a value the store never took. A later write of the same name waiting decides
+// it instead. Otherwise the value leaves what a list in flight lays over its answer, and the list is
+// read again: at once, or after the last in flight answers, since one read before an earlier value
+// of the name landed would show the one before it. A refusal for want of a connection waits for the
+// next one, whose list is read as it connects.
+func (h *Host) prefRefused(name, value string) {
+	if slices.ContainsFunc(h.prefWrites, func(w [2]string) bool { return w[0] == name }) {
+		return
+	}
+	if h.prefsSetMeanwhile[name] == value {
+		delete(h.prefsSetMeanwhile, name)
+	}
+	switch {
+	case !h.connected:
+	case h.prefsLoading > 0:
+		h.prefsReread = true
+	default:
+		h.loadPrefs()
+	}
 }
 
 // The preference commands, as the menu, the leader and the Preferences dialog give them.

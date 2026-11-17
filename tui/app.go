@@ -135,9 +135,12 @@ type Host struct {
 	prefs      prefs
 	prefWrites [][2]string // name and value, the first being written (prefs.go)
 	// prefsLoading counts the preference.lists in flight; prefsSetMeanwhile is what was stored since
-	// the first began, laid over each answer (loadPrefs)
+	// the first began, and what was still being written as it began, laid over each answer
+	// (loadPrefs); prefsReread reads the list once more after the last answers: the store refused a
+	// value while they were read (prefRefused)
 	prefsLoading                   int
 	prefsSetMeanwhile              map[string]string
+	prefsReread                    bool
 	connected                      bool // to the daemon: the status line shows while not (prefs.go)
 	mismatchOpen, mismatchRecovery bool
 	// the registrations (registrations.go): this binary's, the daemon's, and the kinds a file is
