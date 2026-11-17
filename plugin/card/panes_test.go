@@ -254,3 +254,41 @@ func TestNestedSplitsLayOutAndF7ReachesEveryLeaf(t *testing.T) {
 		t.Fatalf("F8 on the third pane maximized more than it in its own Split:\n%s", strings.Join(screen(f), "\n"))
 	}
 }
+
+// A divider dragged to either end of a card too small for both panes keeps its Ratio inside (0, 1):
+// share reads 0 and 1 or more as a half, so a stored 1 would put the divider in the middle once the
+// card grew. At every small width, a drag to each end and its release leave a ratio strictly between
+// 0 and 1 that lays the divider out where the drag put it; and the right end of the narrowest card,
+// where the left pane takes everything, is still the right end at 41 columns, not the middle. The
+// mutant, named here: the ratio stored unclamped, as a / avail.
+func TestADividerAtEitherEndOfATinyCardKeepsItsRatioInside(t *testing.T) {
+	ev := func(kind string, x int) plugin.Pointer {
+		return plugin.Pointer{Kind: kind, Button: "left", X: x, Y: 3, Count: 1}
+	}
+	for w := 4; w <= 9; w++ {
+		root := &Split{A: leafPane("Left", listOf(2, "left")), B: leafPane("Right", listOf(2, "right"))}
+		c, _ := openPanes(t, root, w, 8)
+		at := func() int { return c.dividers[0].x }
+		for _, end := range []int{-50, 50} {
+			if !c.Pointer(press(at(), 3, 1)) || c.drag == nil {
+				t.Fatalf("width %d: a press on the divider at %d didn't start a drag", w, at())
+			}
+			c.Pointer(ev("drag", end))
+			c.Pointer(ev("release", end))
+			placed := at()
+			if root.Ratio <= 0 || root.Ratio >= 1 {
+				t.Errorf("width %d, dragged to %d: ratio %v; want strictly inside (0, 1)", w, end, root.Ratio)
+			}
+			c.Resize(w, 8) // laid out again from the ratio alone
+			if at() != placed {
+				t.Errorf("width %d, dragged to %d: the divider at %d after a redraw; want where the drag put it, %d", w, end, at(), placed)
+			}
+		}
+		if w == 4 {
+			c.Resize(41, 8)
+			if at() != 37 {
+				t.Errorf("dragged to the right end of a 4-column card, the divider is at %d of 41 once it grew; want the right end, 37", at())
+			}
+		}
+	}
+}

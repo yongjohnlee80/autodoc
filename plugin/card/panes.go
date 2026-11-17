@@ -373,6 +373,11 @@ func (c *Card) panePointer(at plugin.Pointer) bool {
 // moveDivider puts s's divider where at is along its axis, kept within its sides' least sizes: the
 // event's coordinates are never clamped, so a release off the view still ends the drag, at the
 // nearest place the divider may be.
+//
+// Ratio stays inside (0, 1) whatever the size: share reads 0 and 1 or more as a half, so a divider
+// put at either end of a card too small for both panes (all of it A's) must not store 1, or the
+// card's next, larger size would put it in the middle. A quarter cell in from each end is a ratio
+// share rounds back to the same cell, at this size, and the end it means at a larger one.
 func (c *Card) moveDivider(s *Split, at plugin.Pointer) {
 	i := slices.IndexFunc(c.dividers, func(d divider) bool { return d.s == s })
 	if i < 0 {
@@ -388,5 +393,6 @@ func (c *Card) moveDivider(s *Split, at plugin.Pointer) {
 		return
 	}
 	a := max(min(pos-d.from, avail-d.minB), min(d.minA, avail))
-	s.Ratio = float64(a) / float64(avail)
+	edge := 0.25 / float64(avail)
+	s.Ratio = min(max(float64(a)/float64(avail), edge), 1-edge)
 }
