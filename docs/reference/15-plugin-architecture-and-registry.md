@@ -30,11 +30,11 @@ Every plugin directory contains a strictly decoded `plugin.toml` manifest at its
 
 ---
 
-## 15.3 Progression of Protocols 1 Through 11
+## 15.3 Progression of Protocols 1 Through 12
 
-AutoDoc's plugin contract evolves through ten cumulative protocol versions. A manifest must declare the minimum `protocol` version required for the features it uses, and AutoDoc refuses any manifest that mixes newer keys with an older protocol number—ensuring a plugin never runs half-broken on an older host.
+AutoDoc's plugin contract evolves through twelve cumulative protocol versions. A manifest must declare the minimum `protocol` version required for the features it uses, and AutoDoc refuses any manifest that mixes newer keys with an older protocol number—ensuring a plugin never runs half-broken on an older host.
 
-![Evolution of AutoDoc Plugin Protocols 1 to 9](plugin-protocols.mmd)
+![Evolution of AutoDoc Plugin Protocols 1 to 12](plugin-protocols.mmd)
 
 ### Protocol 1: Modal Dialogs and Styled Cell Frames
 
@@ -112,6 +112,18 @@ Protocol 11 (`[[menu]]`) puts a plugin's rows on the editor's right-click menu, 
 - While it runs, the plugin may retitle a row or disable it with `host.menu {id, title?, enabled?}` (the SDK's `Peer.MenuRow`), from the next time the menu opens.
 - The host keeps the latest and never asks the plugin as the menu opens; a stopped plugin's rows show as declared.
 - A script's rows (`autodoc.menu`) share the same registry and the same submenu ([editor menu rows](../decisions/plugins.md#editor-menu-rows)).
+
+### Protocol 12: Window Icons and Dragging in a Card
+
+Protocol 12 gives a card the window icons AutoDoc's own panels have, and the pointer a divider needs:
+- **`[window] controls`** lists any of `"hide"`, `"maximize"` and `"close"`. AutoDoc draws them on the card's frame as `_ + x` (in `--gui`, the title bar's dots) and does what they do:
+  - `_` closes the panel as Esc does, and the plugin runs on (`plugin.hide`);
+  - `+` maximizes or restores it, as F11 and SPC M do;
+  - `x` stops the plugin, as Turn off does (`plugin.close {reason: "off"}`).
+- **`plugin.pointer` gains `drag`, `release` and `cancel`.** Every left press is followed by exactly one release or cancel. A drag's and a release's coordinates may lie off the frame, and a release there is no click.
+- **The window keeps its keys:** a protocol-12 card is not sent the widget-cycling keys (F6, Shift+F6), nor the maximize keys when it lists `maximize`.
+
+An older AutoDoc refuses a protocol-12 manifest, and a protocol-11 card is sent exactly what it was. Whatever their protocol, cards can be tiled like the terminal and the agents (Layout › on a card's menu). Both UI kits gained panes at the same time (15.6).
 
 ---
 
@@ -223,6 +235,8 @@ A card or dialog can draw every cell itself into a `plugin.Frame`, as the exampl
 
 - **`plugin/card`, the native kit.** The plugin keeps its controls (`card.Input`, including a masked passphrase field; `card.Buttons`; `card.List`; `card.Tree`) and returns a `card.Page` (header, scrolling body, button bar, keys line, status, problem) each time the card is drawn. The `card.Card` shares the height in a fixed order, so the header, the focused row, the first problem row, the buttons and the keys survive a short card. It draws the selection in the theme's highlight (the inactive one while the card lacks the keys), and handles Tab and Shift+Tab, j/k/g/G, PageUp/PageDown, l/h on trees, Enter, and the Protocol 6 pointer. Your Handler forwards its methods to the Card; `Card.Key` returns false for keys it did not use, so your own letters and `q` stay yours. In a field, every printable key is text, `q` included. `examples/card-go` is the reference: about a hundred lines of Go, with no drawing code.
 - **`plugin/decl`, the QML adapter.** `decl.New(decl.Options{Program: …})` is a whole `plugin.Handler` that runs a golib QML layout (`tui/decl`, the language AutoDoc's own panels are written in) inside the plugin, on a backend whose every frame becomes a `host.frame`. Keys, resizes, focus and pointer presses arrive as terminal events. The layout binds its palette to `Theme.*` (module `autodoc.plugin 1.0`), so AutoDoc's theme switches apply without rebuilding the program, and typed text and scroll positions stay. State changes on the program's loop: in `Options.Setup` before the first frame, in a handler, or through `Card.Post`. `examples/card-qml` is the reference: a 19-line layout and about 60 lines of Go.
+
+- **Panes, in both kits.** A card can be rows and columns of titled panes in its one frame: `card.Split` and `card.Pane` in the native kit, `Panes` and `Pane` in QML. The keys are the same in both: F7 and Shift+F7 move between panes, F8 maximizes one or restores it, and Tab stays within the focused pane. From protocol 12 a divider follows a drag. `examples/card-panes-go` and `examples/card-panes-qml` are the references.
 
 **Which to pick:** the native kit starts drawing at once and adds little to the binary (about 3 MB for a minimal stripped plugin); the QML adapter parses its layout first and brings golib's widgets with it (about 7.5 MB), in exchange for declarative layouts and widgets such as `TreeView` and `TableView`. Both measure text exactly as AutoDoc does: a CJK character takes two cells, and an accent written as a combining mark, a ZWJ emoji or a flag stays one character. `plugin.Frame` itself places characters this way, and AutoDoc's renderer draws them a grapheme cluster at a time.
 
