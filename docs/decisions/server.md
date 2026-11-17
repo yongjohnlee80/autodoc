@@ -131,6 +131,21 @@ lists only what its own filter narrows. The approximate path's small-scope count
 
 In the code: `core/pgstore/facets.go`, `enterprise/search/search.go`, `enterprise/ingest/source.go`
 
+## One search across several tenants
+
+A request may name several tenants, each with its own scope and filter, sharing the query, mode,
+limit and grouping. Every tenant's grants and request are checked before any search runs, and one
+refusal refuses all. The tenants are searched concurrently, each in its own snapshot under its own
+access predicate (at most 4 at once per request, and `max_tenant_searches` across requests), and
+the query is embedded once per model. The hits are merged by golib's fixed-scale relevance (the
+RRF of each tenant's own retrievers) times an optional weight, every hit naming its tenant.
+
+Fusing each arm across tenants instead (lexical by rank, semantic by distance) would need per-arm
+scores out of the engine and helps only where tenants share a model. A server-side ranker would
+rescore the merged hits anyway.
+
+In the code: `enterprise/search/global.go`, `enterprise/api/api.go`
+
 ## An HTTP API with a token per client
 
 The same search package serves Go applications directly and `POST /v1/search` over HTTP/JSON.

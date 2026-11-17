@@ -112,6 +112,9 @@ type HTTP struct {
 	Proxy     bool
 	Clients   []Client
 	Operators []Operator
+	// MaxTenantSearches is how many tenants' searches the requests naming several tenants run at
+	// once, across every request; 0 is the store pool's size less two (the server's choice).
+	MaxTenantSearches int
 }
 
 // Client is one caller of the HTTP API and what it may search.
@@ -242,7 +245,9 @@ type file struct {
 		TLSCert string `toml:"tls_cert"`
 		TLSKey  string `toml:"tls_key"`
 		Proxy   bool   `toml:"proxy"`
-		Clients []struct {
+		// a search across tenants' searches in flight at once, across every request
+		MaxTenantSearches *int `toml:"max_tenant_searches"`
+		Clients           []struct {
 			Name        string                         `toml:"name"`
 			TokenSHA256 string                         `toml:"token_sha256"`
 			TokenEnv    string                         `toml:"token_env"`
@@ -555,6 +560,12 @@ func (v *validator) http(f file, sources []Source) *HTTP {
 		return nil
 	}
 	h := &HTTP{Listen: f.HTTP.Listen, TLSCert: f.HTTP.TLSCert, TLSKey: f.HTTP.TLSKey, Proxy: f.HTTP.Proxy}
+	if n := f.HTTP.MaxTenantSearches; n != nil {
+		if *n < 1 || *n > 1000 {
+			v.refuse("http.max_tenant_searches", "%d: 1 to 1000 searches", *n)
+		}
+		h.MaxTenantSearches = *n
+	}
 	if h.Listen == "" {
 		h.Listen = DefaultListen
 	}

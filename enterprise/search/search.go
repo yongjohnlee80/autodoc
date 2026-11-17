@@ -179,24 +179,12 @@ func Open(ctx context.Context, conn dao.DataConn, tenant string, qe gsearch.Quer
 // where the policy and the documents are one, and the scope is applied apart from the query and
 // the filter. The hits' source ids are read in that snapshot too.
 func (s *Searcher) Search(ctx context.Context, scope Scope, r Request) (Result, error) {
-	if r.Limit < 0 || r.Limit > s.max {
-		return Result{}, fmt.Errorf("%w: %d (0 to %d)", ErrLimit, r.Limit, s.max)
-	}
-	if r.Group != "" && r.Group != "chunk" && r.Group != "document" {
-		return Result{}, fmt.Errorf("%w: %q", ErrGroup, r.Group)
-	}
-	check := func(p pgstore.Policy, access map[string][]string) ([]pgstore.Range, error) {
-		return checkRequest(p, access, r)
-	}
-	p, err := s.st.Policy(ctx)
+	p, err := s.precheck(ctx, scope, r)
 	if err != nil {
 		return Result{}, err
 	}
-	if err := refusal(pgstore.CheckScope(p, scope)); err != nil {
-		return Result{}, err
-	}
-	if _, err := check(p, scope); err != nil {
-		return Result{}, err
+	check := func(p pgstore.Policy, access map[string][]string) ([]pgstore.Range, error) {
+		return checkRequest(p, access, r)
 	}
 	c := &call{scope: scope, check: check}
 	eng := s.eng
@@ -230,6 +218,29 @@ func (s *Searcher) Search(ctx context.Context, scope Scope, r Request) (Result, 
 		out.Hits = append(out.Hits, Hit{Hit: h, SourceID: id})
 	}
 	return out, nil
+}
+
+// precheck is a request's first check, against the tenant's policy as it is now, before anything
+// is embedded or read: the limit and the grouping, the scope (ErrScope) and the request
+// (checkRequest). It returns the policy it read. The search checks again inside its snapshot.
+func (s *Searcher) precheck(ctx context.Context, scope Scope, r Request) (pgstore.Policy, error) {
+	if r.Limit < 0 || r.Limit > s.max {
+		return pgstore.Policy{}, fmt.Errorf("%w: %d (0 to %d)", ErrLimit, r.Limit, s.max)
+	}
+	if r.Group != "" && r.Group != "chunk" && r.Group != "document" {
+		return pgstore.Policy{}, fmt.Errorf("%w: %q", ErrGroup, r.Group)
+	}
+	p, err := s.st.Policy(ctx)
+	if err != nil {
+		return pgstore.Policy{}, err
+	}
+	if err := refusal(pgstore.CheckScope(p, scope)); err != nil {
+		return pgstore.Policy{}, err
+	}
+	if _, err := checkRequest(p, scope, r); err != nil {
+		return pgstore.Policy{}, err
+	}
+	return p, nil
 }
 
 // rangesAlone reports whether r is answered by its filters alone, ranges among them: it has
@@ -503,13 +514,20 @@ func (s scoped) View(ctx context.Context, fn func(v *pgstore.View) error) error 
 func QueryEmbedder(p embed.Provider) gsearch.QueryEmbedder {
 	fp := p.Model().Fingerprint()
 	return func(ctx context.Context, q string) (string, []float32, error) {
-		vecs, err := p.Embed(ctx, []string{q})
+		// once per model and text in a search across tenants (WithQueryCache)
+		vec, err := EmbedQuery(ctx, fp, q, func() ([]float32, error) {
+			vecs, err := p.Embed(ctx, []string{q})
+			if err != nil {
+				return nil, fmt.Errorf("%w: %w", gsearch.ErrEmbedFailed, err)
+			}
+			if len(vecs) != 1 {
+				return nil, fmt.Errorf("%w: the provider answered %d vectors for one query", gsearch.ErrEmbedFailed, len(vecs))
+			}
+			return vector.Normalize(vecs[0]), nil
+		})
 		if err != nil {
-			return "", nil, fmt.Errorf("%w: %w", gsearch.ErrEmbedFailed, err)
+			return "", nil, err
 		}
-		if len(vecs) != 1 {
-			return "", nil, fmt.Errorf("%w: the provider answered %d vectors for one query", gsearch.ErrEmbedFailed, len(vecs))
-		}
-		return fp, vector.Normalize(vecs[0]), nil
+		return fp, vec, nil
 	}
 }
