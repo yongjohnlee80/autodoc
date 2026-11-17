@@ -220,9 +220,16 @@ plugin of an earlier protocol runs as it always has, and is sent what it always 
 
 ### Moving to 12
 
-- **An older AutoDoc won't run it.** An AutoDoc of 1 to 11 lists a protocol-12 plugin disabled,
-  "protocol 12; this AutoDoc speaks 1 to 11". A card that needs neither `[window]` nor a drag can
-  stay at 11 and run on both.
+- **An older AutoDoc won't run it.** An AutoDoc of 1 to 11 (v0.3.15 and before) refuses a
+  protocol-12 manifest with "protocol 12; this AutoDoc speaks 1 to 11":
+  - a plugin already in its plugins folder is listed as `<Title> — protocol 12; this AutoDoc speaks
+    1 to 11`, and never runs;
+  - Plugins › Add says `not added: protocol 12; …` and installs nothing;
+  - an update to a protocol-12 version says `<name> not updated: protocol 12; …`, and the installed
+    version stays and runs on.
+
+  A card that needs neither `[window]` nor a drag can stay at 11 and run on both. A card at 12 asks
+  its users to update AutoDoc first.
 - **A release follows every press.** At 12 a gesture is a left press, then any drags and wheel
   steps, then exactly one `release` or `cancel`: a cancel when the gesture ends without a release
   (the card hidden or detached, or AutoDoc took the pointer back). A raw `PointerHandler` that acted
