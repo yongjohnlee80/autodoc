@@ -120,7 +120,7 @@ Protocol 12 gives a card the window icons AutoDoc's own panels have, and the poi
   - `_` closes the panel as Esc does, and the plugin runs on (`plugin.hide`);
   - `+` maximizes or restores it, as F11 and SPC M do;
   - `x` stops the plugin, as Turn off does (`plugin.close {reason: "off"}`).
-- **`plugin.pointer` gains `drag`, `release` and `cancel`.** Every left press is followed by exactly one release or cancel. A drag's and a release's coordinates may lie off the frame, and a release there is no click.
+- **`plugin.pointer` gains `drag`, `release` and `cancel`.** A gesture is a left press, then any drags and wheel steps, then exactly one release or cancel. A drag's, release's and cancel's coordinates are the view's own and may lie off the frame (a cancel's are the last the host saw), and a release there is no click.
 - **The window keeps its keys:** a protocol-12 card is not sent the widget-cycling keys (F6, Shift+F6), nor the maximize keys when it lists `maximize`.
 
 An older AutoDoc refuses a protocol-12 manifest, and a protocol-11 card is sent exactly what it was. Whatever their protocol, cards can be tiled like the terminal and the agents (Layout › on a card's menu). Both UI kits gained panes at the same time (15.6).

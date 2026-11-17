@@ -309,12 +309,12 @@ In the code: `core/manifests/manifests.go` (`[window]`), `tui/pluginpanels.go`, 
 At protocol 12 `plugin.pointer` carries a left drag, its release, and a cancel, so a card can drag a
 divider.
 
-- Every left press the host sends is followed by exactly one release or cancel. A cancel ends the
-  gesture with nothing activated: the window lost focus, the view went away, the card was hidden. It
-  is never sent as a release, which would click.
-- A drag's, release's and cancel's coordinates are the pointer's, off the frame included, never
-  clamped: a release outside is no click, and a clamped one would click an edge control. A kit
-  clamps what it draws, never the event.
+- A gesture is a left press, then any drags and wheel steps, then exactly one release or cancel. A
+  cancel ends it with nothing activated: the card was hidden or detached, or the host took the
+  pointer back. It is never sent as a release, which would click.
+- A drag's, release's and cancel's coordinates are the pointer's, relative to the view, off the
+  frame included, never clamped: a release outside is no click, and a clamped one would click an
+  edge control. A cancel's are the last the host saw. A kit clamps what it draws, never the event.
 - `Serve` passes the new kinds only to a plugin opened at 12, and `plugin/decl` translates by the
   protocol it was opened at, never by the SDK's own, so a protocol-11 card sees what it always saw.
   In decl a cancel is golib's pointer cancel: the gesture ends, and focus, menus and an editor's undo

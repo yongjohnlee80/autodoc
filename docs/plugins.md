@@ -220,11 +220,13 @@ plugin of an earlier protocol runs as it always has, and is sent what it always 
 
 ### Moving to 12
 
-- **A release follows every press.** At 12, every left press AutoDoc sends is followed by exactly
-  one `release` or `cancel`, and a drag sends `drag` between them. A raw `PointerHandler` that acted
-  on every `plugin.pointer` acts on its release too: check `Kind`. The UI kits already do.
-- **A drag's, release's and cancel's coordinates may lie off the frame:** negative, or at or past
-  its width or height. A release there is no click. Clamp what you draw, never the event.
+- **A release follows every press.** At 12 a gesture is a left press, then any drags and wheel
+  steps, then exactly one `release` or `cancel`: a cancel when the gesture ends without a release
+  (the card hidden or detached, or AutoDoc took the pointer back). A raw `PointerHandler` that acted
+  on every `plugin.pointer` would act on the release too: check `Kind`. The UI kits already do.
+- **A drag's, release's and cancel's coordinates are the view's own and may lie off the frame:**
+  negative, or at or past its width or height. A cancel's are the last the host saw. A release off
+  the frame is no click. Clamp what you draw, never the event. Their `count` is 1.
 - **The window's keys are AutoDoc's.** A protocol-12 card is not sent the keys that cycle AutoDoc's
   widgets (F6 and Shift+F6 by default), nor, when its `[window]` lists `maximize`, the keys that
   maximize a panel (F11 and SPC M by default). A remapped key follows its new binding. A
@@ -285,7 +287,7 @@ Each notification carries one map.
 | AutoDoc | `plugin.result` | 3 | `{call, ok, error}`: the answer to the `host.call` numbered `call` |
 | AutoDoc | `plugin.table.fetch` | 4 | `{id, n}`: up to `n` more rows of the table `id` |
 | AutoDoc | `plugin.table.close` | 4 | `{id}`: the table is gone: its panel closed, or a newer table replaced it |
-| AutoDoc | `plugin.pointer` | 6 | `{kind, button, x, y, count}`: an unmodified left press (`press`, `left`) or wheel step (`wheel`, `up`/`down`) inside the card or dialog; frame-local nonnegative coordinates and count 1–16. From 12 also `drag`, `release` and `cancel` (`left`): the button held and moving, let go, or the gesture ended without a release; their coordinates may lie off the frame (below) |
+| AutoDoc | `plugin.pointer` | 6 | `{kind, button, x, y, count}`: an unmodified left press (`press`, `left`) or wheel step (`wheel`, `up`/`down`) inside the card or dialog; frame-local nonnegative coordinates and count 1–16. From 12 also `drag`, `release` and `cancel` (`left`): the button held and moving, let go, or the gesture ended without a release; after a press come any drags and wheel steps, then exactly one release or cancel; their coordinates may lie off the frame, and their count is 1 (below) |
 | AutoDoc | `plugin.close` | 1 | `{}`: the last; from 7, `{reason}` (below). From 12 a card's `x` closes it, with the reason `off` |
 | plugin | `host.ready` | 1 | `{protocol}`: the answer to `plugin.open`, with the protocol it was opened at |
 | plugin | `host.frame` | 1 | `{rows}`: the whole dialog, at any time. A service's is dropped |
