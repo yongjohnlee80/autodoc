@@ -49,6 +49,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 	"github.com/yongjohnlee80/golib/vfs"
+	"github.com/yongjohnlee80/golib/vfs/local"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
@@ -637,9 +638,9 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 	var src []byte
 	if opt.Dev != "" {
 		src, _ = os.ReadFile(filepath.Join(opt.Dev, "main.qml"))
-		files := os.DirFS(opt.Dev)
+		files := local.DirFS(opt.Dev) // a save may replace or delete a file the poll is reading
 		// main.qml with the card plugins' panels written in, on every reload (pluginpanels.go)
-		opts = append(modulesFrom(files), tuidecl.Layout(cardFS{FS: files, pl: h.plugins, layout: h.windowLayout}, "main.qml"),
+		opts = append(modulesFrom(files, h.embeddedThemes()), tuidecl.Layout(cardFS{FS: files, pl: h.plugins, layout: h.windowLayout}, "main.qml"),
 			tuidecl.HotReload(tuidecl.OnReloadError(h.themeReloadError), tuidecl.OnReload(func(decl.Result) { h.reloaded(h.hotReloadedLayout()) })))
 	} else {
 		src = opt.Layout
@@ -651,7 +652,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		}
 		h.layoutBase = h.windowLayout(src)           // the GUI's relation views and its own title bar (titlebar.go)
 		src = h.plugins.withCardPanels(h.layoutBase) // a panel for each card plugin found (pluginpanels.go)
-		opts = append(modulesFrom(qmlFiles), tuidecl.LayoutSource("main.qml", src))
+		opts = append(modulesFrom(h.embeddedQML(), h.embeddedThemes()), tuidecl.LayoutSource("main.qml", src))
 		// Names added later require a restart; with no registered user modules and no key file
 		// there is nothing mutable to follow, so the normal built-in-only UI keeps no poller. A key
 		// file is followed from its first save, so its directory being named is enough.
@@ -676,7 +677,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 	}
 	opts = append(opts, tuidecl.KeyCommands(cmds...))
 	if opt.KeymapFile != "" {
-		opts = append(opts, tuidecl.Keymap(os.DirFS(filepath.Dir(opt.KeymapFile)), filepath.Base(opt.KeymapFile)))
+		opts = append(opts, tuidecl.Keymap(local.DirFS(filepath.Dir(opt.KeymapFile)), filepath.Base(opt.KeymapFile)))
 	}
 	h.plugins.syncPluginEntries() // the plugins found at newHost, now that there is a catalog
 	h.plugins.refreshPlugins()

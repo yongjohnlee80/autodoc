@@ -7,7 +7,6 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/controls"
 	"github.com/yongjohnlee80/golib/tui/decl/panels"
-	"github.com/yongjohnlee80/golib/tui/decl/themes"
 )
 
 // THE QML THIS PROGRAM SHIPS, and the modules a document imports it through.
@@ -43,14 +42,16 @@ var layout = func() []byte {
 // moduleVersion is what every import of this program's modules asks for.
 const moduleVersion = "1.0"
 
-// modulesFrom are the modules, with the program's QML read from files: the embedded copy, or a
-// directory on disk under -dev.
-func modulesFrom(files fs.FS) []tuidecl.ProgramOption {
+// modulesFrom are the modules, with the program's QML read from files (the embedded copy, Static;
+// or a directory on disk under -dev, followed) and golib's themes from themeFiles, embedded and
+// Static. A Static source is wrapped last: a wrapper over it would hide the mark, and HotReload
+// would read it again on every poll.
+func modulesFrom(files, themeFiles fs.FS) []tuidecl.ProgramOption {
 	return []tuidecl.ProgramOption{
 		// everything the document can reach of this program is under App
 		tuidecl.Singleton("autodoc", moduleVersion, "App"),
 		// golib's five themes, as autodoc.theme.<name>: the program keeps no colours of its own
-		tuidecl.Themes(themes.FS(), ".", "autodoc.theme", moduleVersion),
+		tuidecl.Themes(themeFiles, ".", "autodoc.theme", moduleVersion),
 		tuidecl.Components(files, "dialogs", "autodoc.dialogs", moduleVersion),
 		tuidecl.Components(files, "views", "autodoc.views", moduleVersion),
 		// tui.panels: Panel, golib's docked panel
