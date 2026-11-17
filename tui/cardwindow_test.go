@@ -393,7 +393,10 @@ func TestAProtocol12CardsIconsHideMaximizeAndStopIt(t *testing.T) {
 }
 
 // A protocol-12 card's frame shows only the icons it lists, and a card that lists none shows none:
-// its title row ends in its border. The mutant, named here: cardWindowQML writing every control.
+// its title row ends in its border. A control it does not list is refused, however it is asked
+// for (App.cardWindow is reached from the host's own document alone today: a guard); the one it
+// lists acts. The mutants, named here: cardWindowQML writing every control, and cardWindow acting
+// on any control it is handed (the card hidden).
 func TestACardShowsOnlyTheIconsItLists(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -408,6 +411,21 @@ func TestACardShowsOnlyTheIconsItLists(t *testing.T) {
 	if seg := string(row[left:right]); strings.Contains(seg, " _ ") || strings.Contains(seg, " + ") {
 		t.Fatalf("a card listing close alone shows %q", seg)
 	}
+	// a control it does not list is refused however it is asked for; the one it lists acts
+	before := boundsOf(r, cardPanelID("card"))
+	onLoop(r, func() bool {
+		r.h.plugins.cardWindow("card", "hide")
+		r.h.plugins.cardWindow("card", "maximize")
+		return true
+	})
+	if !r.panelShown("card") || boundsOf(r, cardPanelID("card")) != before ||
+		onLoop(r, func() bool { return r.h.plugins.running["card"] == nil }) {
+		t.Fatal("a card listing close alone was hidden, maximized or stopped by a control it does not list")
+	}
+	onLoop(r, func() bool { r.h.plugins.cardWindow("card", "close"); return true })
+	r.s.WaitFor(t, "the card stopped by its close", func(string) bool {
+		return onLoop(r, func() bool { return r.h.plugins.running["card"] == nil })
+	})
 }
 
 // F6 on a protocol-12 card is the Window's: the card is not sent it, and the keyboard leaves it
