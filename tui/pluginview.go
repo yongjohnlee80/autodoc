@@ -301,6 +301,26 @@ func (v *pluginView) HandleEvent(ev tuicore.Event) bool {
 		}
 		return false
 	}
+	if m, ok := ev.(tuicore.MouseEvent); ok && r != nil && v.dragRun == r &&
+		(m.Kind == tuicore.MouseMotion || m.Kind == tuicore.MouseRelease && m.Button == tuicore.MouseLeft) {
+		// the gesture's motion and its release, before anything else reads the pointer (a pixel
+		// surface shown mid-gesture included: the gesture began on the cells, and ends there),
+		// wherever the pointer is: unclamped, off the view included (golib keeps a captured
+		// event's coordinates). Another button's release never ends a left drag. A motion within
+		// the cell the gesture was last in sends nothing: a window reports several a cell.
+		at := tuicore.Point{X: m.X, Y: m.Y}
+		if m.Kind == tuicore.MouseMotion {
+			if at != v.dragAt {
+				v.dragAt = at
+				r.send(plugin.MethodPointer, plugin.PointerParams(v.gestureAt("drag", at)))
+			}
+			return true
+		}
+		v.dragRun, v.dragAt = nil, at // before the capture goes: giving it back is no cancel
+		r.send(plugin.MethodPointer, plugin.PointerParams(v.gestureAt("release", at)))
+		v.Context().ReleasePointer()
+		return true
+	}
 	if m, ok := ev.(tuicore.MouseEvent); ok && v.surfaceMode() {
 		hostMenu := r.e.m.Surface == nil || r.e.m.Surface.ContextMenu != "plugin"
 		if v.card != "" && hostMenu && m.Kind == tuicore.MousePress && m.Button == tuicore.MouseRight && m.Mods.Chord() == 0 {
@@ -317,20 +337,6 @@ func (v *pluginView) HandleEvent(ev tuicore.Event) bool {
 		return true
 	}
 	if m, ok := ev.(tuicore.MouseEvent); ok {
-		if r != nil && v.dragRun == r && (m.Kind == tuicore.MouseMotion || m.Kind == tuicore.MouseRelease && m.Button == tuicore.MouseLeft) {
-			// the gesture's motion and its release, wherever the pointer is: unclamped, off the
-			// view included (golib keeps a captured event's coordinates); another button's release
-			// never ends a left drag
-			v.dragAt = tuicore.Point{X: m.X, Y: m.Y}
-			if m.Kind == tuicore.MouseMotion {
-				r.send(plugin.MethodPointer, plugin.PointerParams(v.gestureAt("drag", v.dragAt)))
-				return true
-			}
-			v.dragRun = nil // before the capture goes: giving it back is no cancel
-			r.send(plugin.MethodPointer, plugin.PointerParams(v.gestureAt("release", v.dragAt)))
-			v.Context().ReleasePointer()
-			return true
-		}
 		if v.card != "" && m.Kind == tuicore.MousePress && m.Button == tuicore.MouseRight && m.Mods.Chord() == 0 {
 			return v.openMenu(tuicore.Point{X: m.X, Y: m.Y})
 		}
