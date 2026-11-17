@@ -801,7 +801,7 @@ func TestSPCZWithNoPanelOpenSaysWhatItMaximizes(t *testing.T) {
 	r := attached(t, d)
 	r.leader(t, 'z')
 	r.s.WaitFor(t, "the notice", func(string) bool {
-		return r.noticed("Maximize is the terminal's and the agents': open one first (SPC ` or SPC g)")
+		return r.noticed("Maximize is the terminal's, the agents' and a card's that offers it: open one first (SPC ` or SPC g)")
 	})
 	if onLoop(r, func() bool { return r.h.panelMax["terminal"] || r.h.panelMax["agent"] }) {
 		t.Error("a closed panel maximized")

@@ -85,7 +85,7 @@ configuration. `editor.commands` lists them with the rest.
 | `mindmap.toggle` |  |  | the Mindmap |
 | `notices.open` |  |  | notifications |
 | `panel.arrange` |  |  | arrange a panel |
-| `panel.maximize` |  |  | maximize or restore the terminal or agents |
+| `panel.maximize` |  |  | maximize or restore the terminal, the agents or a card that offers it |
 | `panel.reset_layout` |  |  | reset the panel layout |
 | `panel.resume` |  |  | resume the terminal's or the agents' tab (SIGCONT) |
 | `plugins.add` |  |  | add a plugin by its registry name or a git URL |
