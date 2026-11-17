@@ -12,6 +12,7 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
+	"github.com/yongjohnlee80/autodoc/core/manifests"
 	"github.com/yongjohnlee80/autodoc/plugin"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
@@ -36,7 +37,7 @@ import (
 // reload succeeded; a refused change puts the set back (cardPanelsChanged).
 //
 // Closing the panel hides the card and never stops its plugin: Esc while the panel has the keys,
-// its right-click menu's Close, or the plugin's host.close. The plugin is told plugin.hide and runs
+// its right-click menu's Close, its _ icon, or the plugin's host.close; only its x icon stops it. The plugin is told plugin.hide and runs
 // on, its tables and its session with it; a command, its Plugins menu entry or its toggle opens the
 // panel again (plugin.show); its toggle while the panel is open closes the panel the same way. It
 // stops when the user turns it off (its Plugins menu's Turn off, Manage plugins), when it exits, or
@@ -348,14 +349,77 @@ func cardPanelsQML(cards []*cardPanel) string {
             floatX: App.%[1]sX; floatY: App.%[1]sY; floatWidth: App.%[1]sW; floatHeight: App.%[1]sH
             onPlaced: App.panelPlaced(%[2]q, x, y, width, height)
             minimumSize: 10
-            onResized: App.panelResized(%[2]q, size, length)
+%[5]s            onResized: App.panelResized(%[2]q, size, length)
             onOpened: App.panelOpened(%[2]q)
             onClosed: App.panelClosed(%[2]q)
             PluginCard { id: %[3]s; plugin: %[4]q }
         }
-`, id, id, cardViewID(c.name), c.name)
+`, id, id, cardViewID(c.name), c.name, cardWindowQML(c))
 	}
 	return b.String()
+}
+
+// cardWindowOps are the Drawer's names of a card's icons ([window] controls): its hide is the
+// Drawer's minimize, a request the host answers by hiding the panel (cardWindow).
+var cardWindowOps = map[string]string{"hide": "minimize", "maximize": "maximize", "close": "close"}
+
+// cardWindowQML is a protocol-12 card's window controls, as its panel declares them: the icons its
+// manifest lists, maximizable when it lists maximize, and each icon's request to cardWindow; "" for
+// a card that lists none (or one below protocol 12, whose manifest can't).
+func cardWindowQML(c *cardPanel) string {
+	m := c.entry.m
+	if m.Protocol < 12 || len(m.Window.Controls) == 0 {
+		return ""
+	}
+	var ops []string
+	for _, ctl := range manifests.WindowControls {
+		if m.Controls(ctl) {
+			ops = append(ops, cardWindowOps[ctl])
+		}
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "            windowControls: %q\n", strings.Join(ops, " "))
+	if m.Controls("maximize") {
+		b.WriteString("            maximizable: true\n")
+	}
+	for _, s := range []struct{ signal, control string }{
+		{"onMinimizeRequested", "hide"}, {"onMaximizeRequested", "maximize"}, {"onCloseRequested", "close"},
+	} {
+		if m.Controls(s.control) {
+			fmt.Fprintf(&b, "            %s: App.cardWindow(%q, %q)\n", s.signal, c.name, s.control)
+		}
+	}
+	return b.String()
+}
+
+// maximizableCards are the panels Maximize reaches among the cards: those of the protocol-12 cards
+// that list maximize.
+func (pl *plugins) maximizableCards() []string {
+	var out []string
+	for _, c := range pl.fixCards() {
+		if c.entry.m.Protocol >= 12 && c.entry.m.Controls("maximize") {
+			out = append(out, cardPanelID(c.name))
+		}
+	}
+	return out
+}
+
+// cardWindow is a press on a card's icon (App.cardWindow): hide its panel, its plugin running on, as
+// Esc does; maximize its panel over the page or restore it, as F11 does; or stop its plugin, as its
+// Plugins menu's Turn off does. A card not running has no icons to press.
+func (pl *plugins) cardWindow(name, control string) {
+	r := pl.running[name]
+	if r == nil || r.closing {
+		return
+	}
+	switch control {
+	case "hide":
+		pl.hideCard(r) // cardClosed tells it plugin.hide
+	case "maximize":
+		pl.c.Keep(pl.c.View(cardPanelID(name), "toggleMaximize"))
+	case "close":
+		r.stopFor(plugin.CloseOff, "")
+	}
 }
 
 // withCardPanels is src with the card panels written after its marker; src as it is when it has
