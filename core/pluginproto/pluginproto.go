@@ -16,7 +16,8 @@ const (
 	Min = 1
 	// Current is the newest version, the one a new manifest declares.
 	//
+	// 12: [window] and plugin.pointer drag, release and cancel;
 	// 11: [[menu]] and host.menu (docs/decisions/plugins.md#editor-menu-rows);
 	// 10: [surface] (docs/decisions/plugins.md#pixel-surfaces)
-	Current = 11
+	Current = 12
 )

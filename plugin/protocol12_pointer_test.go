@@ -28,6 +28,8 @@ func TestAProtocol12GestureCrossesTheWireAtAnyCoordinates(t *testing.T) {
 		{Kind: "drag", Button: "right", X: 2, Y: 9, Count: 1},
 		{Kind: "release", Button: "up", X: 2, Y: 9, Count: 1},
 		{Kind: "cancel", Button: "left", X: 2, Y: 9, Count: 0},
+		{Kind: "drag", Button: "left", X: 2, Y: 9, Count: 2},
+		{Kind: "release", Button: "left", X: 2, Y: 9, Count: 16},
 		{Kind: "hover", Button: "left", X: 2, Y: 9, Count: 1},
 		{Kind: "wheel", Button: "down", X: -1, Y: 9, Count: 1},
 	} {
@@ -42,16 +44,17 @@ type pointing struct{ recorder }
 
 func (p *pointing) Pointer(at Pointer) { p.add(fmt.Sprintf("pointer %s %d,%d", at.Kind, at.X, at.Y)) }
 
-// Serve gives a plugin opened below 12 no drag, release or cancel, as before: a press is its whole
-// click. (A plugin opened at 12, which gets them, is the raise to 12's cell: this SDK opens nothing
-// newer than plugin.Protocol.) The mutant, named here: Serve's protocol-12 gate gone (a protocol-11
-// plugin sees a release after every press, and would click twice).
-func TestServePassesNoGestureBelowProtocol12(t *testing.T) {
+// Serve gives a plugin opened at 12 the drag, release and cancel; one opened at less never sees
+// one, as before: a press is its whole click. The mutants, named here: Serve's protocol-12 gate gone
+// (a protocol-11 plugin sees a release after every press, and would click twice), and the gate
+// refusing them at 12 too.
+func TestServePassesAGestureOnlyToAProtocol12Plugin(t *testing.T) {
 	for _, c := range []struct {
 		protocol int
 		want     []string
 	}{
 		{11, []string{"open 10x5  ", "pointer press 1,1", "pointer wheel 1,1", "close"}},
+		{12, []string{"open 10x5  ", "pointer press 1,1", "pointer drag -3,2", "pointer release -3,2", "pointer cancel 0,0", "pointer wheel 1,1", "close"}},
 	} {
 		t.Run(fmt.Sprint(c.protocol), func(t *testing.T) {
 			p := &pointing{}
