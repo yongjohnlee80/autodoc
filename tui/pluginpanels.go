@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"maps"
 	"slices"
-	"strconv"
 	"strings"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -67,63 +66,6 @@ func cardEdge(place string) string {
 		return "right"
 	}
 	return place
-}
-
-// cardTileEdge is the edge a card's tile docks at before the user picks one: its placement's side.
-// The centre, which the page holds as the tile manager's one fill member, takes the right, as the
-// agents' tile does. Its docking edge (cardEdge) is untouched.
-func cardTileEdge(place string) string {
-	if e := cardEdge(place); e != "center" {
-		return e
-	}
-	return "right"
-}
-
-// cardTileSize is a card's tile size before the user drags its border, in percent across its edge.
-const cardTileSize = 35
-
-// cardTileWindows are the cards' windows of the tile manager, in the card set's order: each floats
-// by default, its tile at cardTileEdge of its placement, cardTileSize across.
-func (pl *plugins) cardTileWindows() []tileWindow {
-	var out []tileWindow
-	for _, c := range pl.fixCards() {
-		id := cardPanelID(c.name)
-		out = append(out, tileWindow{id: id, node: id, edge: cardTileEdge(pl.cardEdgeIn(pl.c.Prefs(), c.name)), size: cardTileSize})
-	}
-	return out
-}
-
-// cardTiling is the card's tiling as the preferences have it now: its Layout tiled or not, its tile's
-// edge and size. A value outside its choices or bounds, or none, is the default.
-func (pl *plugins) cardTiling(name string) (tiled bool, edge string, size int) {
-	id := cardPanelID(name)
-	p := pl.c.Prefs()
-	tiled = p.Value(layoutKey(id)) == layoutTiled
-	edge = p.Value(tileEdgeKey(id))
-	if !slices.Contains(feature.Edges, edge) {
-		edge = cardTileEdge(pl.cardEdgeIn(p, name))
-	}
-	size = cardTileSize
-	if n, err := strconv.Atoi(p.Value(tileSizeKey(id))); err == nil && n >= minTileSize && n <= maxTileSize {
-		size = n
-	}
-	return tiled, edge, size
-}
-
-// readCardTiles reads each card's tiling, kept under its panel's id as its geometry is: its Layout,
-// its tile's edge and size, as stored. cardTiling takes a value outside its choices or bounds as
-// the default, so a bad one stored is no error.
-func readCardTiles(p *prefs, m map[string]any) {
-	for _, spec := range p.geometrySpecs() {
-		if !strings.HasPrefix(spec.ID, cardPanelPrefix) {
-			continue
-		}
-		for _, key := range []string{layoutKey(spec.ID), tileEdgeKey(spec.ID), tileSizeKey(spec.ID)} {
-			if v, ok := m[key].(string); ok && v != "" {
-				p.SetValue(key, v)
-			}
-		}
-	}
 }
 
 // cardPanel is a card plugin's panel.
@@ -286,14 +228,14 @@ func (pl *plugins) cardDefault(name, edge string) (size, length int) {
 }
 
 // cardState is what the document reads of every card's panel: its heading, edge, size and length,
-// and its tiling (cardTiling). The floating rectangle is every panel's (floatState).
+// and its tiling (pluginHost's CardTiling). The floating rectangle is every panel's (floatState).
 func (pl *plugins) cardState() map[string]any {
 	st := map[string]any{}
 	for _, c := range pl.fixCards() {
 		id := cardPanelID(c.name)
 		edge := pl.cardEdgeIn(pl.c.Prefs(), c.name)
 		size, length := pl.c.Prefs().PanelGeometry(id, edge)
-		tiled, tileEdge, tileSize := pl.cardTiling(c.name)
+		tiled, tileEdge, tileSize := pl.c.CardTiling(c.name, edge)
 		st["App."+id+"Title"] = c.entry.label()
 		st["App."+id+"Edge"] = edge
 		st["App."+id+"Size"] = size
@@ -316,7 +258,7 @@ func (pl *plugins) syncCard(name string) {
 	id := cardPanelID(name)
 	edge := pl.cardEdgeIn(pl.c.Prefs(), name)
 	size, length := pl.c.Prefs().PanelGeometry(id, edge)
-	tiled, tileEdge, tileSize := pl.cardTiling(name)
+	tiled, tileEdge, tileSize := pl.c.CardTiling(name, edge)
 	pl.c.Set("App."+id+"Edge", edge)
 	pl.c.Set("App."+id+"Size", size)
 	pl.c.Set("App."+id+"Length", length)

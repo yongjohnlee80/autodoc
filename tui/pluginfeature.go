@@ -320,6 +320,9 @@ type pluginHost interface {
 	MenuRows() *feature.MenuRows             // the menus' added rows: a manifest's [[menu]] joins them (feature/menurows.go)
 	// SetPluginPref sets a tui.plugin.* preference, applied and stored; ErrNotPluginPref for any other
 	SetPluginPref(name, value string) error
+	// CardTiling is the card's tiling as the preferences have it now, its panel docked at edge: its
+	// Layout tiled or not, its tile's edge and size (cardtiles.go)
+	CardTiling(name, edge string) (tiled bool, tileEdge string, size int)
 	// LaunchConsent runs start for the plugin name (title its label) whose manifest says start =
 	// "launch" once the user allows it: at once when allowed before, never when refused before,
 	// else after asking (pluginlaunch.go)
