@@ -267,16 +267,33 @@ func TestRunReleasesItsLeaseWhenItStops(t *testing.T) {
 // and no connection the cancel broke carries it. Stopped twenty times, a renew every millisecond.
 // The mutant, named here: the release on the run's own context (cancelled as it stops, the lease
 // is left to expire).
+//
+// The next Run's first claim can be refused though the lease was released: a write the stop cut
+// off holds the row FOR KEY SHARE until its backend sees its connection closed, a few
+// milliseconds. Its claims are polled every 20 ms here, not every DefaultLockPoll (5 s, the
+// cell's whole wait), so that refusal is retried within the wait and the cell tests the release.
 func TestAStopWithARenewInFlightStillReleasesTheLease(t *testing.T) {
 	f := newFixture(t)
 	f.track(1, "A", "song", 1)
 	leases := f.leases("leases", "")
 	for i := 0; i < 20; i++ {
-		in := New(f.st, f.tenant, f.source(nil), f.business, leases, Options{Interval: time.Hour, PingEvery: time.Millisecond, Lag: -1})
+		in := New(f.st, f.tenant, f.source(nil), f.business, leases, Options{Interval: time.Hour, PingEvery: time.Millisecond, Lag: -1,
+			LockPoll: 20 * time.Millisecond})
 		ctx, cancel := context.WithCancel(f.ctx)
 		done := make(chan error, 1)
 		go func() { done <- in.Run(ctx) }()
-		waitFor(t, 5*time.Second, "the lease taken", func() bool { _, live := f.lease(); return live })
+		began := time.Now()
+		for _, live := f.lease(); !live; _, live = f.lease() {
+			if time.Since(began) > 5*time.Second {
+				// say which side lost the wait: a release that did not land (the row still live under
+				// the last Run's holder) or a claim that did not (the new Run waiting, or not there yet)
+				holder, live := f.lease()
+				st := in.State()
+				t.Fatalf("stop %d: the lease not taken within 5s: the row's holder %q, live %v; the new Run locked %v, waiting %v",
+					i, holder, live, st.Locked, st.Waiting)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
 		time.Sleep(time.Duration(i%5) * time.Millisecond)
 		cancel()
 		if err := <-done; err != nil {
