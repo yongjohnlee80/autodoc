@@ -45,7 +45,7 @@ func TestTheDockListsTheTerminalWhileItsShellRuns(t *testing.T) {
 	}
 
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
-	r.s.WaitFor(t, "a shell running", func(string) bool { return r.shellsRunning() == 1 })
+	waitShellStarted(t, r, 1)
 	r.waitDock(t, "the terminal open", "editor", "terminal")
 	if r.menuAutoHides() {
 		t.Fatal("the bar auto-hides while the dock lists the terminal")
@@ -190,7 +190,7 @@ func TestADockIconHidesAndShowsItsPanel(t *testing.T) {
 func TestTheEditorsIconHidesThePanelsAndShowsThemAgain(t *testing.T) {
 	_, r := runShellTUI(t, nil)
 	onLoop(r, func() bool { r.h.togglePanel("explorer"); r.h.terminals.toggleTerminal(); return true })
-	r.s.WaitFor(t, "a shell running", func(string) bool { return r.shellsRunning() == 1 })
+	waitShellStarted(t, r, 1)
 	r.waitDock(t, "both listed", "editor", "explorer", "terminal")
 
 	onLoop(r, func() bool { r.h.goDock("editor"); return true })

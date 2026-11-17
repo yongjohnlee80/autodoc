@@ -129,6 +129,13 @@ func shellInTheTerminal(t *testing.T, r *running) {
 	t.Helper()
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
-	r.s.WaitFor(t, "a shell running", func(string) bool { return r.shellsRunning() == 1 })
-	r.s.WaitForText(t, "$ ")
+	waitShellStarted(t, r, 1)
+	r.waitWithin(t, "the shell's prompt", daemonWait, func() bool { return strings.Contains(r.s.String(), "$ ") })
+}
+
+// waitShellStarted waits for n shells running: a program's start (on a loaded Windows runner, more
+// than the screen's own wait at times), bounded as one, not as a frame's change.
+func waitShellStarted(t *testing.T, r *running, n int) {
+	t.Helper()
+	r.waitWithin(t, fmt.Sprintf("%d shell(s) running", n), daemonWait, func() bool { return r.shellsRunning() == n })
 }
