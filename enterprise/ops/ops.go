@@ -224,9 +224,12 @@ type TenantStatus struct {
 	// the database's clock, and its last pass's error. Absent for a source without one.
 	Deletes    *DeletesState `json:"deletes,omitempty"`
 	Quarantine uint64        `json:"quarantine"`
-	Documents  Documents     `json:"documents"`
-	Models     ModelsState   `json:"models"`
-	Error      opcode.Code   `json:"error"` // reading the tenant's state failed: its other figures are absent
+	// VectorsSwept is how many orphan vectors (of texts no document has any more) the tenant's
+	// ingester has deleted since the server started.
+	VectorsSwept int64       `json:"vectors_swept"`
+	Documents    Documents   `json:"documents"`
+	Models       ModelsState `json:"models"`
+	Error        opcode.Code `json:"error"` // reading the tenant's state failed: its other figures are absent
 }
 
 // CursorState is where the tenant's cursor is, and how far behind the database's clock. The cursor
@@ -429,6 +432,7 @@ func live(ts *TenantStatus, st ingest.State) {
 	ts.LastPass.LastComplete = nil
 	ts.LastRefresh.Complete = st.LastRefresh.Stats.Complete
 	ts.RefreshDue = st.RefreshDue
+	ts.VectorsSwept = st.VectorsSwept
 }
 
 func runState(o ingest.Outcome, lastComplete *time.Time) RunState {
