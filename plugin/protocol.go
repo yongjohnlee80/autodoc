@@ -239,13 +239,18 @@ type Key struct {
 }
 
 // Pointer is a view-local, zero-based pointer event. Kind and Button: "press"/"left", or
-// "wheel"/"up"/"down"; from protocol 12, "drag"/"left" (the button held, moving), "release"/"left",
-// and "cancel"/"left" (the gesture ended without a release: the card was hidden or detached, or the
-// host took the pointer back). From protocol 12 every left press is followed by exactly one release
-// or cancel. A press's and a wheel's X and Y lie in the view, which the plugin checks against its
-// most recently opened/resized frame; a drag's, release's and cancel's are the pointer's, relative
-// to the view, and may lie outside it (negative, or at or past the frame's width or height): a
-// release there is no click. Count is capped by the host: 1 for a drag, release or cancel.
+// "wheel"/"up"/"down"; from protocol 12, "drag"/"left" (the button held, moving to another cell),
+// "release"/"left", and "cancel"/"left" (the gesture ended without a release: the card was hidden,
+// closed or detached, its plugin stopped, or the host took the pointer back).
+//
+// From protocol 12 the order a plugin can rely on is: a left press, then any number of drags and
+// wheel steps, then exactly one release or cancel; no second press comes before it. A terminal that
+// reports no motion while a button is held sends the release alone, with no drag: the order holds.
+// A press's and a wheel's X and Y lie in the view, which the plugin checks against its most
+// recently opened/resized frame. A drag's and a release's are the pointer's, in the view's own
+// coordinates, and may lie outside it (negative, or at or past the frame's width or height): a
+// release there is no click. A cancel's are the last the host saw in the gesture. Count is capped
+// by the host: 1 for a drag, release or cancel.
 type Pointer struct {
 	Kind, Button string
 	X, Y, Count  int
