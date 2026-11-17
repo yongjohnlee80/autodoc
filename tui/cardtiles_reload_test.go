@@ -89,7 +89,8 @@ func TestACardAddedWhileRunningIsSplicedInAndTilesFromItsMenu(t *testing.T) {
 	tileCard(t, r, "other", "right")
 }
 
-// A tiled card removed while AutoDoc runs leaves the tile manager: the other card keeps its tile,
+// A tiled card removed while AutoDoc runs (its plugin stopped first, as on Windows it must be)
+// leaves the tile manager: the other card keeps its tile,
 // edge and size, the page takes the removed card's cells, and a drag of the kept card's border
 // still resizes it, so no gesture or capture was left behind. The mutant, named here: a removed
 // member kept in the tile manager (the page never widens).
@@ -108,6 +109,9 @@ func TestRemovingATiledCardLeavesTheOtherOnItsTile(t *testing.T) {
 	id := cardPanelID("card")
 	before, page := boundsOf(r, id), boundsOf(r, "editorWindow")
 
+	// its plugin stopped first: on Windows a running program's folder can't be removed (a user
+	// can't delete a running card's folder there; Turn off comes first)
+	stopPluginRun(t, r, "other")
 	if err := os.RemoveAll(filepath.Join(dir, "other")); err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +125,8 @@ func TestRemovingATiledCardLeavesTheOtherOnItsTile(t *testing.T) {
 	resizedByDrag(t, r, id, before.W)
 }
 
-// A card whose folder is removed while AutoDoc runs, then added back, comes back over its tile: the
+// A card whose folder is removed while AutoDoc runs (its plugin stopped first, as on Windows it must
+// be), then added back, comes back over its tile: the
 // card set's reload reads the preferences again (loadPrefs), its stored tiling with its geometry, so
 // the tiling the user chose survives the card's absence. The mutant, named here: readCardTiles
 // not reading a card's tiling (it comes back floating).
@@ -134,6 +139,8 @@ func TestACardRemovedAndAddedBackComesBackOnItsTile(t *testing.T) {
 	r.s.WaitFor(t, "the card's panel", func(string) bool { return r.panelShown("card") })
 	tileCard(t, r, "card", "left")
 	storedPref(t, d, r, layoutKey(cardPanelID("card")), layoutTiled) // a reload reads it again
+	// its plugin stopped first: on Windows a running program's folder can't be removed
+	stopPluginRun(t, r, "card")
 	if err := os.RemoveAll(filepath.Join(dir, "card")); err != nil {
 		t.Fatal(err)
 	}
