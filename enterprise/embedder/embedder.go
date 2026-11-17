@@ -573,7 +573,7 @@ func (t *tenant) skip(now time.Time) (map[[32]byte]bool, bool) {
 
 // embed embeds texts in batches of size, at most inFlight at once, each in a slot, and stores each
 // batch's vectors as it comes. It returns the hashes stored, and every batch's failure: a failed
-// batch leaves the others stored.
+// batch leaves the others stored, and no batch is sent after it (nor after a step down of the pace).
 func (w *Worker) embed(ctx context.Context, t *tenant, texts []pgstore.Text, size, inFlight int) ([][32]byte, error) {
 	var (
 		mu     sync.Mutex
@@ -590,15 +590,22 @@ func (w *Worker) embed(ctx context.Context, t *tenant, texts []pgstore.Text, siz
 			wg.Wait()
 			return stored, ctx.Err()
 		}
-		if b, f := w.pace.now(); b < size || f < inFlight {
-			// a call of this round ran out of its time and stepped the pace down: the rest would
-			// only run out too, each taking the whole of its time. The round ends, and the next
-			// reads these texts again at the smaller pace.
+		mu.Lock()
+		failed := len(errs) > 0
+		mu.Unlock()
+		if b, f := w.pace.now(); failed || b < size || f < inFlight {
+			// a batch of this round failed, or a call ran out of its time and stepped the pace
+			// down: the rest would only fail or run out too, each call taking the whole of its
+			// time. The round ends with the calls in flight, and its texts are read again: at the
+			// smaller pace at once, or after the failure's wait.
 			<-ours
 			wg.Wait()
 			mu.Lock()
 			defer mu.Unlock()
-			return stored, errors.Join(append(errs, errSteppedDown)...)
+			if !failed {
+				errs = append(errs, errSteppedDown)
+			}
+			return stored, errors.Join(errs...)
 		}
 		if err := w.lim.acquire(ctx, false); err != nil {
 			<-ours
