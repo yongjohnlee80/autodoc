@@ -384,6 +384,7 @@ controls = ["hide", "maximize", "close"]   # any of them; none when unset
 - `[window]` is refused below `protocol = 12` ("declares [window]: needs protocol = 12"), on a modal
   dialog (a dialog has none; Esc closes it), and with an unknown or doubled control.
 - A changed `[window]` shows after AutoDoc restarts.
+- `examples/card-panes-go` and `examples/card-panes-qml` list all three, at protocol 12.
 
 ### The document feed (`[feed] document = true`)
 
@@ -985,7 +986,8 @@ of `Kind` `"drag"`, `"release"` and `"cancel"`. `Serve` passes them only to a pl
 `plugin.ReadPointer` reads them at any protocol. Every left press is followed by exactly one
 release or cancel, so a handler that acted on every `Pointer` checks `Kind` (Moving to 12, above).
 A drag's, release's and cancel's `X` and `Y` may lie off the frame. A card's `[window]` needs no
-code: AutoDoc draws the icons and does what they do.
+code: AutoDoc draws the icons and does what they do. `examples/card-panes-go` (the native kit) and
+`examples/card-panes-qml` (the decl kit) speak 12: each drags its divider and shows the icons.
 
 ## Drawing a card: the UI kits
 
