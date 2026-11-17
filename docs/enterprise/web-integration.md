@@ -198,6 +198,39 @@ A source declares the row fields a search may filter on, each with a type, in it
   - Below the threshold, and whenever the candidates come back short, it is exact. The operator's
     status says which (`models.search`).
 
+### Searching several tenants at once
+
+A request may name several tenants in place of one, each with its own scope and filter. The query,
+mode, limit and grouping are shared:
+
+```json
+{"query": "midnight drive", "limit": 20, "tenants": [
+  {"tenant": "releases", "scope": {"label_id": ["42"]}, "filter": {"facets": {"status": ["released"]}}},
+  {"tenant": "tracks",   "scope": {"label_id": ["42"]}},
+  {"tenant": "payees",   "scope": {"org_id": ["7"]}, "weight": 0.5}]}
+```
+
+- **`tenants` excludes `tenant`, `scope` and `filter`.** At most 16 tenants, each named once. A
+  tenant's `weight` is above 0 and at most 10; absent is 1.
+- **Every tenant is checked before anything is searched**, as a single search is: its grants, its
+  scope, its filter. One refusal refuses the whole request, naming its tenant, and no query is
+  embedded.
+- **The tenants are searched concurrently**, each in its own snapshot under its own scope. The
+  query is embedded once per model. A tenant that fails fails the request, naming it.
+- **The hits are merged by relevance × weight**, then by the tenant's place in the request, then
+  the path. Relevance is on a fixed scale, so each tenant's best hit is worth the same however
+  weak it is: a weight is how one tenant is favoured over another. `score` is per tenant.
+- **The answer** names each hit's tenant, and each tenant's mode and semantic state:
+
+```json
+{"hits": [{"tenant": "tracks", "path": "track/42.md", "source_id": "42", "relevance": 0.98, "…": "…"}],
+ "tenants": {"releases": {"mode_used": "hybrid", "semantic": "ready"},
+             "payees":   {"mode_used": "lexical", "semantic": "error", "semantic_error": "…"}}}
+```
+
+In Go, `search.NewGlobal(n).Search(ctx, search.GlobalRequest{…})` does the same over your own
+Searchers, `n` bounding the tenants' searches in flight across every request.
+
 ### Errors
 
 An error answers `{"error": {"code": "…", "message": "…"}}`. The checks run in this order, so a
@@ -215,6 +248,7 @@ caller without a valid token learns nothing about tenants or bodies:
 | 403 | `forbidden` | The token isn't granted the tenant. A tenant that doesn't exist answers the same. |
 | 403 | `scope_forbidden` | A scope field or value the token isn't granted. |
 | 400 | `scope_required`, `protected_facet`, `unknown_facet`, `facet_type`, `bad_filter`, `bad_limit`, `bad_group`, `bad_mode` | The library's refusals, above. |
+| 400 | `bad_tenants` | A search across tenants naming more than 16, one twice, or a weight outside (0, 10]. |
 | 503 | `switching` | Semantic mode while the tenant switches models (`Retry-After`). Use auto mode to be answered by words meanwhile. |
 | 502 | `embed_failed` | Semantic mode, and the query couldn't be embedded. |
 | 503 | `unavailable` | The search didn't finish within 25 s, or the server is stopping (`Retry-After`). |

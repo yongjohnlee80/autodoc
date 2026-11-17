@@ -168,6 +168,7 @@ through the library ([web-integration](web-integration.md)). With it, the server
 | Field | Default | Meaning | Refused when |
 |---|---|---|---|
 | `listen` | `127.0.0.1:8730` | The address the API listens on. | not `host:port`; not loopback with neither TLS nor `proxy` |
+| `max_tenant_searches` | the store pool's size less two | How many tenants' searches the requests naming several tenants run at once, across every request; beyond it a tenant waits its turn under its request's deadline. | outside 1 to 1000 |
 | `tls_cert`, `tls_key` | none | The certificate and key files, relative to this file: to listen beyond loopback over HTTPS. | only one given; a file can't be read |
 | `proxy` | `false` | `true`: a proxy in front terminates TLS, so the API may listen beyond loopback over plain HTTP. `--check` warns that requests cross the network between the two in clear text: keep it private ([operations](operations.md#behind-a-proxy)). | given with `tls_cert` |
 
