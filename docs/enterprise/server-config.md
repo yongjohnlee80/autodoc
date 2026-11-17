@@ -152,7 +152,7 @@ worker.
 - **A text the provider rejects** (too long, say) is set aside for an hour and logged, and the rest
   of its batch is embedded. Its document is found by words meanwhile.
 - **One writer per tenant.** The worker writes a tenant only while this server's ingester holds the
-  tenant's lock, so a standby server never touches it.
+  tenant's writer lease, so a standby server never touches it.
 - **Changing the model is a switch, with no gap in search.** The model's identity is its provider,
   name, digest (Ollama reports one) and dimensions, so a new `model`, or a model that now answers
   with another size, is a new model. At the next start the worker records it as the tenant's
@@ -298,6 +298,6 @@ Each name is a row field, and each value is its type:
 
 | Code | When |
 |---|---|
-| 0 | stopped by SIGINT or SIGTERM, with every lock released; or `--check` found nothing wrong |
+| 0 | stopped by SIGINT or SIGTERM, with every writer lease released; or `--check` found nothing wrong |
 | 1 | the file can't be read; the database can't be reached; a tenant's writer lease was lost (restart it: it waits for the lease and takes it again) |
 | 2 | the configuration or a view is refused, the field named; `--check` refused a view's order, or the embedding provider refused the key or has no such model |
