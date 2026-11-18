@@ -101,11 +101,12 @@ jobs:
 
       - run: go build -tags server ./...
 
-      # The desktop builds (no server tag) carry no server: none of its Postgres or enterprise code is
-      # reachable from the binary, and --server refuses, naming the build that has it.
+      # The desktop builds (no server tag) carry no server: none of its Postgres or enterprise code,
+      # nor Google's credentials (vertex's), is reachable from the binary, and --server refuses,
+      # naming the build that has it.
       - name: the untagged build has no server
         run: |
-          if go list -deps ./cmd/autodoc | grep -E 'jackc/pgx|autodoc/core/pgstore|autodoc/enterprise|golib/dao/postgres'; then
+          if go list -deps ./cmd/autodoc | grep -E 'jackc/pgx|autodoc/core/pgstore|autodoc/enterprise|golib/dao/postgres|golang.org/x/oauth2|cloud.google.com/go/compute/metadata'; then
             echo "::error::the untagged build reaches the server's packages"
             exit 1
           fi

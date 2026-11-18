@@ -236,7 +236,7 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 		{"plaintext dsn", sub(`schema  = "autodoc_search"`, `dsn = "postgres://u:pw@h/db"`), "postgres.dsn", "unknown field"},
 		// embedding
 		{"no embedding", sub("[embedding]", "[embeddings]"), "embedding", "required"},
-		{"provider", sub(`provider = "openai"`, `provider = "cohere"`), "embedding.provider", `want "openai" or "ollama"`},
+		{"provider", sub(`provider = "openai"`, `provider = "cohere"`), "embedding.provider", `want "openai", "ollama" or "vertex"`},
 		{"no provider", sub(`provider = "openai"`, ``), "embedding.provider", "required"},
 		{"base url", sub(`base_url = "https://embeddings.example.internal/v1"`, `base_url = "embeddings.internal"`), "embedding.base_url", "http or https URL"},
 		{"model", sub(`model    = "text-embedding-3-small"`, `model = " "`), "embedding.model", "required"},

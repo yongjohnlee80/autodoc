@@ -124,13 +124,16 @@ worker.
 
 | Field | Default | Meaning | Refused when |
 |---|---|---|---|
-| `provider` | (required) | `"openai"` (any OpenAI-compatible endpoint) or `"ollama"`. | missing, or another value |
-| `base_url` | `https://api.openai.com/v1` for openai, `http://127.0.0.1:11434` for ollama | The provider's endpoint. For openai, the API's root or its `/v1`: either way the server asks `<root>/v1/embeddings`. | not an `http` or `https` URL with a host |
+| `provider` | (required) | `"openai"` (any OpenAI-compatible endpoint), `"ollama"`, or `"vertex"` (Vertex AI's gemini-embedding-2, [below](#vertex-ai-on-google-cloud)). | missing, or another value |
+| `base_url` | `https://api.openai.com/v1` for openai, `http://127.0.0.1:11434` for ollama, the location's Google host for vertex | The provider's endpoint. For openai, the API's root or its `/v1`: either way the server asks `<root>/v1/embeddings`. | not an `http` or `https` URL with a host |
 | `model` | (required) | The model's name. | missing or blank; `--check`: an Ollama server without it |
-| `key_env` | none | The name of the environment variable holding the provider's API key, sent as a bearer token. | given, and the variable is not set or is empty; `--check`: the provider refuses the key |
+| `key_env` | none | The name of the environment variable holding the provider's API key, sent as a bearer token. Not for vertex, which authenticates with Application Default Credentials. | given, and the variable is not set or is empty; given for vertex; `--check`: the provider refuses the key |
 | `slots` | `4` | How many embedding requests may be in flight at once, across every tenant. | below 1 or above 64 |
-| `batch` | `64` | How many texts one embedding request carries, at most. | below 1 or above 256 |
+| `batch` | `64`; `1` for vertex | How many texts one embedding request carries, at most. Vertex embeds one text a request, so `slots` sets its throughput. | below 1 or above 256; other than 1 for vertex |
 | `call_timeout` | `"2m"` | How long one embedding request may take before it is given up. | below `1s` or above `30m` |
+| `project` | (required for vertex) | vertex only: the Google Cloud project the calls are made in and billed to. | missing for vertex; given for another provider; `--check`: Google refuses the credentials, or the API isn't enabled in it |
+| `location` | (required for vertex) | vertex only: `"global"`, `"us"` or `"eu"`, where gemini-embedding-2 is served. | missing or another value for vertex; given for another provider |
+| `dimensions` | `3072` | vertex only: the vectors' size, 128 to 3072. Google normalizes a vector it reduces; 1536 halves the index for a small loss. A change is a model switch. | outside 128 to 3072; given for another provider |
 
 ### How the server embeds
 
@@ -180,10 +183,11 @@ candidates, the window. Without one, searches answer in recall order, as they al
 
 | Field | Default | Meaning | Refused when |
 |---|---|---|---|
-| `kind` | (required) | `"tei"` (a Hugging Face Text Embeddings Inference server serving a reranker) or `"rerank-api"` (a Cohere-style `POST <base_url>/rerank`: Cohere, Jina, Voyage, vLLM, Infinity, llama.cpp's server). There is no Ollama kind: Ollama has no rerank API. | missing, or another value |
-| `base_url` | (required) | The ranker's endpoint. For rerank-api, with its version (`https://api.cohere.com/v2`). | missing, or not an `http` or `https` URL with a host |
-| `model` | none | rerank-api only: the model the endpoint serves. A TEI server serves one and names it. | missing for rerank-api; given for tei |
-| `key_env` | none | The name of the environment variable holding the ranker's API key, sent as a bearer token. | given, and the variable is not set or is empty; `--check`: the ranker refuses the key |
+| `kind` | (required) | `"tei"` (a Hugging Face Text Embeddings Inference server serving a reranker), `"rerank-api"` (a Cohere-style `POST <base_url>/rerank`: Cohere, Jina, Voyage, vLLM, Infinity, llama.cpp's server), or `"vertex"` (the Vertex AI Ranking API, [below](#vertex-ai-on-google-cloud)). There is no Ollama kind: Ollama has no rerank API. | missing, or another value |
+| `base_url` | (required; Google's host for vertex) | The ranker's endpoint. For rerank-api, with its version (`https://api.cohere.com/v2`). | missing for tei and rerank-api, or not an `http` or `https` URL with a host |
+| `model` | none | rerank-api's: the model the endpoint serves; vertex's: the ranking model, pinned (`semantic-ranker-default-005`, or `-fast-005`). A TEI server serves one and names it. | missing for rerank-api or vertex; an `@` alias for vertex; given for tei |
+| `key_env` | none | The name of the environment variable holding the ranker's API key, sent as a bearer token. Not for vertex. | given, and the variable is not set or is empty; given for vertex; `--check`: the ranker refuses the key |
+| `project` | (required for vertex) | vertex only: the Google Cloud project the calls are made in and billed to. | missing for vertex; given for another kind |
 | `window` | `40` | How many of recall's best candidates a search reranks. | below 10 or above 100 |
 | `timeout` | `"750ms"` | How long a search's ranker call may take. Past it, the search answers in recall order. | below `100ms` or above `10s` |
 | `slots` | `4` | How many ranker calls may be in flight across every search. | below 1 or above 64 |
@@ -213,6 +217,41 @@ candidates, the window. Without one, searches answer in recall order, as they al
 is refused, naming `ranker.key_env`; a model it doesn't serve, or a TEI server serving another kind
 of model (an embedding model, say), is refused, naming `ranker.model`. A ranker that can't be
 reached, or fails otherwise, is a warning: the server would start without it and keep probing.
+
+## Vertex AI on Google Cloud
+
+On a GCP VM, `provider = "vertex"` embeds with gemini-embedding-2 and `kind = "vertex"` reranks
+with the Ranking API, inside the project:
+
+```toml
+[embedding]
+provider   = "vertex"
+project    = "my-project"
+location   = "us"                # global, us or eu
+model      = "gemini-embedding-2"
+dimensions = 1536
+slots      = 16
+
+[ranker]
+kind    = "vertex"
+project = "my-project"
+model   = "semantic-ranker-default-005"
+```
+
+- **No key in the configuration.** The server asks for short-lived OAuth tokens through
+  Application Default Credentials: on the VM, its attached service account; elsewhere, the file
+  `GOOGLE_APPLICATION_CREDENTIALS` names, or `gcloud auth application-default login`. A token
+  never reaches the log.
+- **Each side in Google's prompt format.** A document is sent as `title: none | text: <chunk>`,
+  a query as `task: search result | query: <query>`, as Google's documentation gives them for
+  retrieval. The format is part of the model's identity (`vertex|gemini-embedding-2|doc-v1|1536`),
+  so a later format is a model switch, as another `dimensions` is.
+- **One text a request.** The model's method takes one text, so `batch` is 1 and `slots` is the
+  throughput: about 70,000 chunks take some ten minutes at 16 slots.
+- **A down ranker is probed once a minute**, never faster: each probe is a billed count.
+
+The service account, its roles, the APIs to enable and what it costs are in
+[operations](operations.md#on-google-cloud-vertex-ai).
 
 ## `[http]` and `[[http.client]]`: the search API (optional)
 
