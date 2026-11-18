@@ -138,6 +138,8 @@ curl -s http://127.0.0.1:8730/v1/search \
 | `filter` | | `{"tags": […], "paths": […], "facets": {…}, "ranges": {…}}`: narrows within the scope ([Filtering by facets](#filtering-by-facets)). |
 | `limit` | | 1 to 200; 0 or absent is 20. |
 | `group` | | `"chunk"` (default), or `"document"`: one hit per document, its highest-scoring chunk. `limit` counts documents in this mode. |
+| `rerank` | | `false` skips the server's ranker ([server-config](server-config.md#ranker-a-reranker-after-recall-optional)): the answer is in recall order. Absent or `true` reranks, when the server has one. For as-you-type, where a ranker's time a keystroke matters more than the order. |
+| `window` | | 10 to 100: how many of recall's best candidates the ranker reorders, for this search alone. 0 or absent is the server's `[ranker] window` (across tenants, at least 4 a tenant). |
 
 The body is one JSON object of at most 64 KiB, with no other field.
 
@@ -187,6 +189,16 @@ A source declares the row fields a search may filter on, each with a type, in it
   combined score or extra snippets. `source_id` links to the source row, but is not the grouping
   key (older records may have an empty id).
 - **`via`** says which ways found the hit: `lexical`, `semantic`, or `facet` for a filter-only list.
+  A hit the ranker scored adds `rank`.
+- **`rank`** says what the server's ranker did with the search: `{"state": "off"}` without one,
+  for `"rerank": false`, and where nothing is ranked (no words, or filters alone);
+  `{"state": "ready", "model": "…"}` when it reordered the window; `{"state": "error", "model":
+  "…", "error": "<code>"}` when it couldn't, and the hits are in recall order, whole. The code is
+  `provider_unreachable`, `provider_refused`, `rate_limited`, `bad_answer`, `timeout`, `busy` or
+  `internal`. A search is never failed by its ranker: an application that wants ranked or nothing
+  refuses an answer whose state isn't `ready` itself.
+- **`rank_score`** is the ranker's score for a hit it scored, comparable only within one answer;
+  a hit past the window has none. `relevance` keeps its meaning, recall's.
 - **`relevance`** is 0 to 1, comparable across queries; **`score`** orders hits within one answer.
 - **Approximate by meaning, above a size.** Once a tenant has `ann_threshold` embeddings of its
   model (50,000 by default) and the model's index is built, the semantic part of a search is
@@ -220,6 +232,12 @@ mode, limit and grouping are shared:
 - **The hits are merged by relevance × weight**, then by the tenant's place in the request, then
   the path. Relevance is on a fixed scale, so each tenant's best hit is worth the same however
   weak it is: a weight is how one tenant is favoured over another. `score` is per tenant.
+- **With a ranker, the merge is reranked once**: the merged top window in one call, each hit's
+  text from its own tenant, so a weak tenant's best falls below a strong tenant's good hits. A
+  weight then decides which candidates enter the window, not their order after it. The window
+  fills by rank, every tenant's first, then every tenant's second: a tenant whose fifth-best
+  would beat every other tenant's best reaches the ranker only with a wider `window`. The answer
+  carries `rank` once, for the request.
 - **What it costs, and what bounds it:** a request naming 16 tenants is one request with up to 16
   searches' work. The server bounds it server-wide, its tenants' searches each waiting for one of
   `max_tenant_searches` ([server-config](server-config.md)), and per request, by its 25 s deadline.
@@ -235,6 +253,9 @@ mode, limit and grouping are shared:
 
 In Go, `search.NewGlobal(n).Search(ctx, search.GlobalRequest{…})` does the same over your own
 Searchers, `n` bounding the tenants' searches in flight across every request.
+`search.NewGlobal(n, search.WithGlobalRanker(r, window, timeout))` reranks the merge with any
+golib `rank.Ranker`, as `search.Open(…, search.WithRanker(r, window, timeout))` reranks a tenant's
+searches.
 
 ### Errors
 
@@ -252,7 +273,7 @@ caller without a valid token learns nothing about tenants or bodies:
 | 400 | `bad_request` | Not one JSON search request: an unknown field, a second value, a query over 1 KiB. |
 | 403 | `forbidden` | The token isn't granted the tenant. A tenant that doesn't exist answers the same. |
 | 403 | `scope_forbidden` | A scope field or value the token isn't granted. |
-| 400 | `scope_required`, `protected_facet`, `unknown_facet`, `facet_type`, `bad_filter`, `bad_limit`, `bad_group`, `bad_mode` | The library's refusals, above. |
+| 400 | `scope_required`, `protected_facet`, `unknown_facet`, `facet_type`, `bad_filter`, `bad_limit`, `bad_group`, `bad_mode`, `bad_window` | The library's refusals, above. |
 | 400 | `bad_tenants` | A search across tenants naming more than 16, one twice, or a weight outside (0, 10]. |
 | 503 | `switching` | Semantic mode while the tenant switches models (`Retry-After`). Use auto mode to be answered by words meanwhile. |
 | 502 | `embed_failed` | Semantic mode, and the query couldn't be embedded. |

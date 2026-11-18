@@ -39,6 +39,11 @@ const (
 	DefaultOllama      = "http://127.0.0.1:11434"
 	// DefaultMetricsInterval is how often the server logs its metrics lines.
 	DefaultMetricsInterval = time.Minute
+	// DefaultRankWindow is how many candidates [ranker] reranks a search, DefaultRankTimeout a
+	// search's ranker call, and DefaultRankSlots the calls in flight across every search.
+	DefaultRankWindow  = 40
+	DefaultRankTimeout = 750 * time.Millisecond
+	DefaultRankSlots   = 4
 )
 
 // Bounds a field is refused outside of.
@@ -53,6 +58,11 @@ const (
 	MinRefreshRetry = time.Minute
 	// MinMetricsInterval is the most often the metrics lines may be logged.
 	MinMetricsInterval = 10 * time.Second
+	// The bounds of [ranker] window, timeout and slots.
+	MinRankWindow  = 10
+	MaxRankWindow  = 100
+	MinRankTimeout = 100 * time.Millisecond
+	MaxRankTimeout = 10 * time.Second
 	// MinTokenBytes is the shortest bearer token --server --check accepts without a warning: 32
 	// random bytes, as `openssl rand -hex 32` makes. A token's hash protects where it is stored,
 	// not a token short enough to guess.
@@ -63,6 +73,9 @@ const (
 type Server struct {
 	Postgres  Postgres
 	Embedding Embedding
+	// Ranker is [ranker]: the reranker after recall; nil when the file has none, and searches
+	// answer in recall order.
+	Ranker *Ranker
 	// HTTP is the HTTP API; nil when the file has no [http] table: the server then answers no
 	// request, and a web application reaches the index through the Go library alone.
 	HTTP    *HTTP
@@ -114,6 +127,31 @@ func (e Embedding) Key() string {
 		return ""
 	}
 	return os.Getenv(e.KeyEnv)
+}
+
+// Ranker is the server's one reranker, for every tenant: golib's TEI or Cohere-style rerank API
+// client (Kind "tei" or "rerank-api").
+type Ranker struct {
+	Kind    string
+	BaseURL string
+	Model   string // rerank-api's: the model the server serves; TEI serves one, and names it
+	// KeyEnv names the environment variable holding the ranker's API key; "" for none.
+	KeyEnv string
+	// Window is how many of recall's best candidates a search reranks, Timeout how long its
+	// ranker call may take (past it, the search answers in recall order), and Slots how many
+	// ranker calls may be in flight across every search.
+	Window  int
+	Timeout time.Duration
+	Slots   int
+}
+
+// Key is the ranker's API key, read from the environment when called; "" when KeyEnv names none.
+// It is a secret: never log it, and never put it in an error.
+func (r Ranker) Key() string {
+	if r.KeyEnv == "" {
+		return ""
+	}
+	return os.Getenv(r.KeyEnv)
 }
 
 // HTTP is the HTTP API: where it listens and who may call it.
@@ -258,6 +296,15 @@ type file struct {
 		Batch       *int      `toml:"batch"`
 		CallTimeout *duration `toml:"call_timeout"`
 	} `toml:"embedding"`
+	Ranker *struct {
+		Kind    string    `toml:"kind"`
+		BaseURL string    `toml:"base_url"`
+		Model   string    `toml:"model"`
+		KeyEnv  string    `toml:"key_env"`
+		Window  *int      `toml:"window"`
+		Timeout *duration `toml:"timeout"`
+		Slots   *int      `toml:"slots"`
+	} `toml:"ranker"`
 	HTTP *struct {
 		Listen  string `toml:"listen"`
 		TLSCert string `toml:"tls_cert"`
@@ -331,6 +378,7 @@ func Load(path string) (*Server, error) {
 	s.Postgres = v.postgres(f)
 	s.Sources = v.sources(f)
 	s.Embedding = v.embedding(f)
+	s.Ranker = v.ranker(f)
 	s.HTTP = v.http(f, s.Sources)
 	s.Log = v.log(f)
 	s.Metrics = v.metrics(f)
@@ -512,6 +560,55 @@ func (v *validator) embedding(f file) Embedding {
 		}
 	}
 	return e
+}
+
+func (v *validator) ranker(f file) *Ranker {
+	if f.Ranker == nil {
+		return nil
+	}
+	r := &Ranker{Kind: f.Ranker.Kind, BaseURL: f.Ranker.BaseURL, Model: f.Ranker.Model, KeyEnv: f.Ranker.KeyEnv,
+		Window: DefaultRankWindow, Timeout: DefaultRankTimeout, Slots: DefaultRankSlots}
+	switch r.Kind {
+	case "tei":
+		if r.Model != "" {
+			v.refuse("ranker.model", "a TEI server serves one model, and names it: leave model out")
+		}
+	case "rerank-api":
+		if strings.TrimSpace(r.Model) == "" {
+			v.refuse("ranker.model", "required for rerank-api: the model the server serves")
+		}
+	case "":
+		v.refuse("ranker.kind", `required: "tei" or "rerank-api"`)
+	default:
+		v.refuse("ranker.kind", `%q: want "tei" or "rerank-api"`, r.Kind)
+	}
+	if r.BaseURL == "" {
+		v.refuse("ranker.base_url", "required: where the ranker answers")
+	} else if u, err := url.Parse(r.BaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		v.refuse("ranker.base_url", "want an http or https URL with a host")
+	}
+	if r.KeyEnv != "" {
+		v.envSet("ranker.key_env", r.KeyEnv)
+	}
+	if f.Ranker.Window != nil {
+		r.Window = *f.Ranker.Window
+		if r.Window < MinRankWindow || r.Window > MaxRankWindow {
+			v.refuse("ranker.window", "%d: want %d to %d", r.Window, MinRankWindow, MaxRankWindow)
+		}
+	}
+	if f.Ranker.Timeout != nil {
+		r.Timeout = f.Ranker.Timeout.Duration
+		if r.Timeout < MinRankTimeout || r.Timeout > MaxRankTimeout {
+			v.refuse("ranker.timeout", "%v: want %v to %v", r.Timeout, MinRankTimeout, MaxRankTimeout)
+		}
+	}
+	if f.Ranker.Slots != nil {
+		r.Slots = *f.Ranker.Slots
+		if r.Slots < 1 || r.Slots > MaxSlots {
+			v.refuse("ranker.slots", "%d: want 1 to %d", r.Slots, MaxSlots)
+		}
+	}
+	return r
 }
 
 // tenantName is a tenant as a source names it: it is a key in every pgstore table, a log label and

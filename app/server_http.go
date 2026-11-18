@@ -57,14 +57,22 @@ func (s *server) startHTTP() error {
 	w := s.worker.Load()
 	tenants := make(map[string]api.Searcher, len(s.cfg.Sources))
 	for _, src := range s.cfg.Sources {
-		sr, err := search.Open(s.ctx, s.store, src.Tenant, w.QueryEmbedder(src.Tenant), search.WithANN(s.ann))
+		opts := []search.Option{search.WithANN(s.ann)}
+		if s.ranker != nil {
+			opts = append(opts, search.WithRanker(s.ranker, s.cfg.Ranker.Window, s.cfg.Ranker.Timeout))
+		}
+		sr, err := search.Open(s.ctx, s.store, src.Tenant, w.QueryEmbedder(src.Tenant), opts...)
 		if err != nil {
 			return redact(err, s.cfg.Postgres.DSN())
 		}
 		tenants[src.Tenant] = sr
 	}
-	h := api.New(clients, tenants, api.WithLogger(s.log), api.WithOps(s.ops), api.WithOperators(operators),
-		api.WithMetrics(s.cfg.Metrics.Enabled), api.WithTenantSearches(tenantSearches(s.cfg)))
+	hopts := []api.Option{api.WithLogger(s.log), api.WithOps(s.ops), api.WithOperators(operators),
+		api.WithMetrics(s.cfg.Metrics.Enabled), api.WithTenantSearches(tenantSearches(s.cfg))}
+	if s.ranker != nil {
+		hopts = append(hopts, api.WithRanker(s.ranker, s.cfg.Ranker.Window, s.cfg.Ranker.Timeout), api.WithRankCounter(s.ranker))
+	}
+	h := api.New(clients, tenants, hopts...)
 	ln, err := net.Listen("tcp", s.cfg.HTTP.Listen)
 	if err != nil {
 		return err
@@ -157,9 +165,13 @@ func (s *server) startOps() error {
 		}
 		tenants[i] = ops.Tenant{Name: in.Tenant(), Store: st, State: in.State}
 	}
-	s.ops = ops.New(ops.Options{Tenants: tenants, Provider: s.worker.Load().Health,
+	o := ops.Options{Tenants: tenants, Provider: s.worker.Load().Health,
 		Now: func(ctx context.Context) (time.Time, error) { return pgstore.Now(ctx, s.store) }, Version: s.version, Started: time.Now(),
-		ANN: s.ann.Status})
+		ANN: s.ann.Status}
+	if s.ranker != nil {
+		o.Ranker = s.ranker.Health
+	}
+	s.ops = ops.New(o)
 	if every := s.cfg.Log.MetricsInterval; every > 0 {
 		ctx, cancel := context.WithCancel(s.ctx)
 		done := make(chan struct{})

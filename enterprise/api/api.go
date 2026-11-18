@@ -34,6 +34,7 @@ import (
 
 	"github.com/yongjohnlee80/golib/logger"
 	gsearch "github.com/yongjohnlee80/golib/search"
+	"github.com/yongjohnlee80/golib/search/rank"
 
 	"github.com/yongjohnlee80/autodoc/enterprise/ops"
 	"github.com/yongjohnlee80/autodoc/enterprise/search"
@@ -114,10 +115,25 @@ const DefaultTenantSearches = 8
 func WithTenantSearches(n int) Option {
 	return func(h *Handler) {
 		if n > 0 {
-			h.global = search.NewGlobal(n)
+			h.inFlight = n
 		}
 	}
 }
+
+// WithRanker reranks a search across tenants once, after the merge (search.WithGlobalRanker),
+// with the ranker each tenant's Searcher has (search.WithRanker): the server's one.
+func WithRanker(r rank.Ranker, window int, timeout time.Duration) Option {
+	return func(h *Handler) { h.globalOpts = append(h.globalOpts, search.WithGlobalRanker(r, window, timeout)) }
+}
+
+// RankCounter counts each search's ranking ([ranker]'s status and metrics): skipped when the
+// request said rerank false.
+type RankCounter interface {
+	Searched(rk search.Ranking, skipped bool)
+}
+
+// WithRankCounter counts every search's ranking with c.
+func WithRankCounter(c RankCounter) Option { return func(h *Handler) { h.ranks = c } }
 
 // WithOperators are the tokens that may read /v1/status.
 func WithOperators(o []Operator) Option { return func(h *Handler) { h.operators = slices.Clone(o) } }
@@ -139,14 +155,17 @@ func WithBudget(b Budget) Option {
 
 // Handler is the API. It is safe for concurrent use.
 type Handler struct {
-	clients   []Client
-	operators []Operator
-	tenants   map[string]Searcher
-	global    *search.Global // a search across tenants' slots (WithTenantSearches)
-	ops       *ops.Collector
-	log       logger.Logger
-	budget    Budget
-	active    sync.WaitGroup // the requests being answered (Wait)
+	clients    []Client
+	operators  []Operator
+	tenants    map[string]Searcher
+	global     *search.Global // a search across tenants' slots (WithTenantSearches)
+	inFlight   int            // its slots
+	globalOpts []search.GlobalOption
+	ranks      RankCounter // nil counts nothing
+	ops        *ops.Collector
+	log        logger.Logger
+	budget     Budget
+	active     sync.WaitGroup // the requests being answered (Wait)
 
 	// the requests answered since TakeCounts last took them, by status class, and the slowest
 	ok, client4xx, server5xx, slowest atomic.Int64
@@ -224,10 +243,11 @@ func (h *Handler) count(path string, status int, took time.Duration) {
 // New is the API for clients over tenants.
 func New(clients []Client, tenants map[string]Searcher, opts ...Option) *Handler {
 	h := &Handler{clients: slices.Clone(clients), tenants: tenants, log: logger.New(logger.WithWriter(io.Discard)), budget: DefaultBudget,
-		global: search.NewGlobal(DefaultTenantSearches)}
+		inFlight: DefaultTenantSearches}
 	for _, o := range opts {
 		o(h)
 	}
+	h.global = search.NewGlobal(h.inFlight, h.globalOpts...)
 	return h
 }
 
@@ -246,6 +266,10 @@ type (
 		Filter *filter             `json:"filter"`
 		Limit  int                 `json:"limit"`
 		Group  string              `json:"group"`
+		// Rerank false skips the ranker; absent or true reranks when the server has one. Window
+		// is how many candidates the ranker reorders, 0 the server's own
+		Rerank *bool `json:"rerank"`
+		Window int   `json:"window"`
 		// Tenants is a search across tenants, each with its own scope, filter and weight; it
 		// excludes Tenant, Scope and Filter
 		Tenants []tenantRequest `json:"tenants"`
@@ -261,6 +285,14 @@ type (
 	globalResponse struct {
 		Hits    []hit                  `json:"hits"`
 		Tenants map[string]tenantState `json:"tenants"`
+		Rank    rankState              `json:"rank"`
+	}
+	// rankState is what the ranker did with a search: off, ready or error, its model, and an
+	// error's code
+	rankState struct {
+		State string `json:"state"`
+		Model string `json:"model,omitempty"`
+		Error string `json:"error,omitempty"`
 	}
 	tenantState struct {
 		ModeUsed      string `json:"mode_used"`
@@ -281,11 +313,12 @@ type (
 		Lte bound `json:"lte"`
 	}
 	response struct {
-		Tenant        string `json:"tenant"`
-		ModeUsed      string `json:"mode_used"`
-		Semantic      string `json:"semantic"`
-		SemanticError string `json:"semantic_error,omitempty"`
-		Hits          []hit  `json:"hits"`
+		Tenant        string    `json:"tenant"`
+		ModeUsed      string    `json:"mode_used"`
+		Semantic      string    `json:"semantic"`
+		SemanticError string    `json:"semantic_error,omitempty"`
+		Rank          rankState `json:"rank"`
+		Hits          []hit     `json:"hits"`
 	}
 	hit struct {
 		Tenant     string   `json:"tenant,omitempty"` // a search across tenants' only
@@ -299,6 +332,9 @@ type (
 		Relevance  float64  `json:"relevance"`
 		Via        []string `json:"via"`
 		SourceID   string   `json:"source_id"`
+		// RankScore is the ranker's score, comparable only within one answer: absent for a hit
+		// the ranker did not score
+		RankScore *float64 `json:"rank_score,omitempty"`
 	}
 	failure struct {
 		Error struct {
@@ -421,10 +457,12 @@ func (h *Handler) answer(ctx context.Context, w http.ResponseWriter, r *http.Req
 		e.client, e.tenant = a.client, a.tenant
 		return e, response{}
 	}
-	out := response{Tenant: req.Tenant, ModeUsed: string(res.ModeUsed), Semantic: string(res.Semantic), SemanticError: res.SemanticError, Hits: make([]hit, len(res.Hits))}
+	out := response{Tenant: req.Tenant, ModeUsed: string(res.ModeUsed), Semantic: string(res.Semantic), SemanticError: res.SemanticError,
+		Rank: rankOf(res.Rank), Hits: make([]hit, len(res.Hits))}
 	for i, x := range res.Hits {
 		out.Hits[i] = hitOf(x, "")
 	}
+	h.counted(req, res.Rank)
 	a.status, a.hits = http.StatusOK, len(out.Hits)
 	return a, out
 }
@@ -467,7 +505,8 @@ func (h *Handler) answerTenants(ctx context.Context, c *Client, req request, a a
 		ts[i] = search.TenantSearch{Tenant: t.Tenant, Searcher: sr, Scope: search.Scope(t.Scope), Filter: r.Filter, Ranges: r.Ranges, Weight: t.Weight}
 	}
 	a.tenant = strings.Join(names, ",")
-	res, err := h.global.Search(ctx, search.GlobalRequest{Query: req.Query, Mode: gsearch.Mode(req.Mode), Limit: req.Limit, Group: req.Group, Tenants: ts})
+	res, err := h.global.Search(ctx, search.GlobalRequest{Query: req.Query, Mode: gsearch.Mode(req.Mode), Limit: req.Limit, Group: req.Group, Tenants: ts,
+		NoRerank: noRerank(req), Window: req.Window})
 	if err != nil {
 		e := failed(ctx, err)
 		e.client, e.tenant = a.client, a.tenant
@@ -477,10 +516,11 @@ func (h *Handler) answerTenants(ctx context.Context, c *Client, req request, a a
 		}
 		return e, nil
 	}
-	out := globalResponse{Hits: make([]hit, len(res.Hits)), Tenants: make(map[string]tenantState, len(res.Tenants))}
+	out := globalResponse{Hits: make([]hit, len(res.Hits)), Tenants: make(map[string]tenantState, len(res.Tenants)), Rank: rankOf(res.Rank)}
 	for i, x := range res.Hits {
 		out.Hits[i] = hitOf(x.Hit, x.Tenant)
 	}
+	h.counted(req, res.Rank)
 	for name, t := range res.Tenants {
 		out.Tenants[name] = tenantState{ModeUsed: string(t.ModeUsed), Semantic: string(t.Semantic), SemanticError: t.SemanticError}
 	}
@@ -520,7 +560,7 @@ func (h *Handler) granted(c *Client, tenant string, scope map[string][]string) (
 // searchRequest is the library's request of the body's query, mode, limit and grouping, with f
 // (nil: none) as its filter.
 func searchRequest(req request, f *filter) search.Request {
-	r := search.Request{Query: req.Query, Mode: gsearch.Mode(req.Mode), Limit: req.Limit, Group: req.Group}
+	r := search.Request{Query: req.Query, Mode: gsearch.Mode(req.Mode), Limit: req.Limit, Group: req.Group, NoRerank: noRerank(req), Window: req.Window}
 	if f != nil {
 		r.Filter = gsearch.Filter{Tags: f.Tags, Paths: f.Paths, Facets: f.Facets}
 		r.Ranges = f.ranges()
@@ -531,7 +571,26 @@ func searchRequest(req request, f *filter) search.Request {
 // hitOf is a hit as the body carries it, its tenant named in a search across tenants.
 func hitOf(x search.Hit, tenant string) hit {
 	return hit{Tenant: tenant, Path: x.Path, Breadcrumb: x.Breadcrumb, Snippet: x.Snippet, Generation: x.Generation, ByteStart: x.ByteStart,
-		ByteEnd: x.ByteEnd, Score: x.Score, Relevance: x.Relevance, Via: x.Via, SourceID: x.SourceID}
+		ByteEnd: x.ByteEnd, Score: x.Score, Relevance: x.Relevance, Via: x.Via, SourceID: x.SourceID, RankScore: x.RankScore}
+}
+
+// noRerank is the body's rerank false: absent is true.
+func noRerank(req request) bool { return req.Rerank != nil && !*req.Rerank }
+
+// rankOf is a search's ranking as the body carries it: no state is off, a Searcher that ranks
+// nothing.
+func rankOf(r search.Ranking) rankState {
+	if r.State == "" {
+		r.State = gsearch.RankOff
+	}
+	return rankState{State: string(r.State), Model: r.Model, Error: r.Error}
+}
+
+// counted counts an answered search's ranking, when the Handler counts them.
+func (h *Handler) counted(req request, r search.Ranking) {
+	if h.ranks != nil {
+		h.ranks.Searched(r, noRerank(req))
+	}
 }
 
 // client is the client whose token the Authorization header bears, or nil.
@@ -707,6 +766,8 @@ func failed(ctx context.Context, err error) answer {
 		return refuse(http.StatusBadRequest, "bad_limit", err.Error())
 	case errors.Is(err, search.ErrGroup):
 		return refuse(http.StatusBadRequest, "bad_group", err.Error())
+	case errors.Is(err, search.ErrWindow):
+		return refuse(http.StatusBadRequest, "bad_window", err.Error())
 	case errors.Is(err, gsearch.ErrUnknownMode):
 		return refuse(http.StatusBadRequest, "bad_mode", err.Error())
 	case errors.Is(err, gsearch.ErrSwitching):

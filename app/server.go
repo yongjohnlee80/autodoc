@@ -26,6 +26,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/enterprise/embedder"
 	"github.com/yongjohnlee80/autodoc/enterprise/ingest"
 	"github.com/yongjohnlee80/autodoc/enterprise/ops"
+	"github.com/yongjohnlee80/autodoc/enterprise/ranker"
 )
 
 // runServer is --server: the enterprise search server, headless, with no socket, no TUI and no
@@ -95,6 +96,8 @@ type server struct {
 	ops     *ops.Collector
 	api     atomic.Pointer[api.Handler]
 	version string
+	// ranker is [ranker]'s, every search's; nil when the server has none
+	ranker *ranker.Ranker
 }
 
 // serverSteps are --server's subsystems in the order they start. The schema must exist before
@@ -110,6 +113,7 @@ var serverSteps = []struct {
 	{"policy", (*server).setPolicies},
 	{"ingesters", (*server).startIngesters},
 	{"embedder", (*server).startEmbedder},
+	{"ranker", (*server).startRanker},
 	{"ops", (*server).startOps},
 	{"http", (*server).startHTTP},
 }
@@ -328,6 +332,11 @@ func checkServer(ctx context.Context, path string, cfg *config.Server, sources [
 	}
 	if err := checkEmbedding(ctx, path, cfg.Embedding, out); err != nil {
 		return err
+	}
+	if cfg.Ranker != nil {
+		if err := checkRanker(ctx, path, *cfg.Ranker, out); err != nil {
+			return err
+		}
 	}
 	fmt.Fprintf(out, "%s: ok\n", path)
 	return nil

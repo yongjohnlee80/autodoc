@@ -48,6 +48,15 @@ type Request struct {
 	Ranges map[string]Range
 	Limit  int    // 0 is the default (20); above the most (200) is refused
 	Group  string // "" or "chunk" (default), or "document": the best chunk per export path
+	// NoRerank skips the Searcher's ranker (WithRanker): the answer is in recall order, its
+	// Ranking off. Window is how many of the best candidates the ranker reorders, 0 the
+	// Searcher's own; outside rank.MinWindow to rank.MaxWindow it is refused (ErrWindow).
+	NoRerank bool
+	Window   int
+
+	// keepTexts asks the search's View to keep its candidates' texts (Result.texts), for a ranker
+	// after a merge across tenants
+	keepTexts bool
 }
 
 // Range is a filter on a number or a date facet: a document has a value within every bound given,
@@ -71,6 +80,12 @@ type Result struct {
 	ModeUsed      gsearch.Mode
 	Semantic      gsearch.State // "switching" while the tenant changes models: answered by words
 	SemanticError string
+	// Rank is what the Searcher's ranker did: off without one, for a request that skips it, and
+	// where nothing is ranked (no words, or a listing by facets alone)
+	Rank Ranking
+
+	// texts are the candidates' texts its View kept (Request.keepTexts)
+	texts map[pgstore.TextKey]string
 }
 
 // Hit is golib's hit and its SourceID: the id of the row the .view rendered it from. It is "" for
@@ -116,6 +131,7 @@ type Option func(*options)
 type options struct {
 	def, max int
 	ann      *pgstore.ANN
+	rank     *stage
 }
 
 // WithANN gives the Searcher's store the server's approximate search (pgstore.WithANN).
@@ -141,6 +157,7 @@ type Searcher struct {
 	docEng *gsearch.Engine[int64, *pgstore.View]
 	def    int
 	max    int
+	rank   *stage // WithRanker's; nil is none
 }
 
 // Open binds a Searcher to tenant over conn: a pool whose connections have the server's schema on
@@ -169,7 +186,8 @@ func Open(ctx context.Context, conn dao.DataConn, tenant string, qe gsearch.Quer
 		eopts = append(eopts, gsearch.WithQueryEmbedder(qe))
 	}
 	return &Searcher{st: st, eng: gsearch.NewEngine[int64, *pgstore.View](scoped{st}, eopts...),
-		docEng: gsearch.NewEngine[int64, *pgstore.View](scoped{st}, append(eopts, gsearch.WithPerDocument(1))...), def: o.def, max: o.max}, nil
+		docEng: gsearch.NewEngine[int64, *pgstore.View](scoped{st}, append(eopts, gsearch.WithPerDocument(1))...), def: o.def, max: o.max,
+		rank: o.rank}, nil
 }
 
 // Search answers r within scope.
@@ -186,7 +204,8 @@ func (s *Searcher) Search(ctx context.Context, scope Scope, r Request) (Result, 
 	check := func(p pgstore.Policy, access map[string][]string) ([]pgstore.Range, error) {
 		return checkRequest(p, access, r)
 	}
-	c := &call{scope: scope, check: check}
+	ranking := s.rank != nil && !r.NoRerank
+	c := &call{scope: scope, check: check, keep: ranking || r.keepTexts}
 	eng := s.eng
 	if r.Group == "document" {
 		eng = s.docEng
@@ -197,6 +216,7 @@ func (s *Searcher) Search(ctx context.Context, scope Scope, r Request) (Result, 
 	}
 	ctx = context.WithValue(ctx, callKey{}, c)
 	var res gsearch.Result
+	rk := Ranking{State: gsearch.RankOff}
 	if f, listed, err := rangesAlone(q, r); err != nil {
 		return Result{}, refusal(err)
 	} else if listed {
@@ -204,10 +224,15 @@ func (s *Searcher) Search(ctx context.Context, scope Scope, r Request) (Result, 
 		if err != nil {
 			return Result{}, refusal(err)
 		}
+	} else if ranking {
+		if res, rk, err = s.ranked(ctx, eng, q, r.Window, c); err != nil {
+			return Result{}, refusal(err)
+		}
 	} else if res, err = eng.Search(ctx, q); err != nil {
 		return Result{}, refusal(err)
 	}
-	out := Result{Hits: make([]Hit, 0, len(res.Hits)), ModeUsed: res.ModeUsed, Semantic: res.Semantic, SemanticError: res.SemanticError}
+	out := Result{Hits: make([]Hit, 0, len(res.Hits)), ModeUsed: res.ModeUsed, Semantic: res.Semantic, SemanticError: res.SemanticError,
+		Rank: rk, texts: c.texts}
 	for _, h := range res.Hits {
 		id, ok := c.ids[h.Path]
 		if !ok {
@@ -229,6 +254,9 @@ func (s *Searcher) precheck(ctx context.Context, scope Scope, r Request) (pgstor
 	}
 	if r.Group != "" && r.Group != "chunk" && r.Group != "document" {
 		return pgstore.Policy{}, fmt.Errorf("%w: %q", ErrGroup, r.Group)
+	}
+	if err := checkWindow(r.Window); err != nil {
+		return pgstore.Policy{}, err
 	}
 	p, err := s.st.Policy(ctx)
 	if err != nil {
@@ -470,6 +498,9 @@ type call struct {
 	scope Scope
 	check func(pgstore.Policy, map[string][]string) ([]pgstore.Range, error)
 	ids   map[string]string
+	// keep asks the views to keep their candidates' texts, and texts are the answering view's
+	keep  bool
+	texts map[pgstore.TextKey]string
 }
 
 // scoped is the engine's store: every view it gives is ViewPolicy's, scoped by the Search's call.
@@ -493,6 +524,9 @@ func (s scoped) View(ctx context.Context, fn func(v *pgstore.View) error) error 
 		if err := v.Within(ranges); err != nil {
 			return refusal(err)
 		}
+		if c.keep {
+			v.KeepTexts()
+		}
 		if err := fn(v); err != nil {
 			return err
 		}
@@ -502,7 +536,7 @@ func (s scoped) View(ctx context.Context, fn func(v *pgstore.View) error) error 
 		}
 		// replaced only by a view that answered: the engine's retry after a model change asks
 		// again, and the hits it returns are the last answering view's
-		c.ids = ids
+		c.ids, c.texts = ids, v.CandidateTexts()
 		return nil
 	})
 }
