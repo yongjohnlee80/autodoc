@@ -27,26 +27,26 @@ import (
 // documents of two to four short chunks, 1,024-dimension vectors under one model, spread over about
 // 200 access labels with a skewed (Zipf-like) share each. All of it is generated, from a fixed seed.
 const (
-	lmModel  = "bench|embed||1024"
-	lmDims   = 1024
-	lmTopics = 64
-	lmSeed   = 20261114
+	catalogModel  = "bench|embed||1024"
+	catalogDims   = 1024
+	catalogTopics = 64
+	catalogSeed   = 20261114
 )
 
-// lmEnvInt reads a positive integer from the environment.
-func lmEnvInt(name string, def int) int {
+// catalogEnvInt reads a positive integer from the environment.
+func catalogEnvInt(name string, def int) int {
 	if v, err := strconv.Atoi(os.Getenv(name)); err == nil && v > 0 {
 		return v
 	}
 	return def
 }
 
-// lmCorpus is the generated corpus: documents' labels and chunk counts, and the generators of their
+// catalogCorpus is the generated corpus: documents' labels and chunk counts, and the generators of their
 // text and vectors, every one a pure function of the seed and the document's index, so a query can
 // be made from a document without keeping the corpus.
-type lmCorpus struct {
+type catalogCorpus struct {
 	n      int
-	facets bool // AUTODOC_BENCH_FACETS: each document has the declared facets lmFacets
+	facets bool // AUTODOC_BENCH_FACETS: each document has the declared facets catalogFacets
 
 	labels  []string // by rank: labels[0] is the largest
 	label   []int    // document -> rank
@@ -57,9 +57,9 @@ type lmCorpus struct {
 	topics  [][]float32
 }
 
-func newLMCorpus(n, nlabels int) *lmCorpus {
-	r := rand.New(rand.NewPCG(lmSeed, 1))
-	c := &lmCorpus{n: n, label: make([]int, n), chunks: make([]int, n), byLabel: make([][]int, nlabels)}
+func newLMCorpus(n, nlabels int) *catalogCorpus {
+	r := rand.New(rand.NewPCG(catalogSeed, 1))
+	c := &catalogCorpus{n: n, label: make([]int, n), chunks: make([]int, n), byLabel: make([][]int, nlabels)}
 	for i := range nlabels {
 		c.labels = append(c.labels, fmt.Sprintf("L%03d", i))
 	}
@@ -99,8 +99,8 @@ func newLMCorpus(n, nlabels int) *lmCorpus {
 		acc += 1 / float64(i+8)
 		c.cum = append(c.cum, acc)
 	}
-	for range lmTopics {
-		c.topics = append(c.topics, unit(gauss(r, lmDims)))
+	for range catalogTopics {
+		c.topics = append(c.topics, unit(gauss(r, catalogDims)))
 	}
 	return c
 }
@@ -126,15 +126,15 @@ func unit(v []float32) []float32 {
 	return v
 }
 
-func (c *lmCorpus) word(r *rand.Rand) string {
+func (c *catalogCorpus) word(r *rand.Rand) string {
 	x := r.Float64() * c.cum[len(c.cum)-1]
 	i, _ := slices.BinarySearch(c.cum, x)
 	return c.vocab[min(i, len(c.vocab)-1)]
 }
 
 // text is chunk k of document d: a dozen to twenty words, ending in a token no other chunk has.
-func (c *lmCorpus) text(d, k int) string {
-	r := rand.New(rand.NewPCG(lmSeed+1, uint64(d)<<4|uint64(k)))
+func (c *catalogCorpus) text(d, k int) string {
+	r := rand.New(rand.NewPCG(catalogSeed+1, uint64(d)<<4|uint64(k)))
 	var b strings.Builder
 	for range 12 + r.IntN(9) {
 		b.WriteString(c.word(r))
@@ -144,23 +144,23 @@ func (c *lmCorpus) text(d, k int) string {
 	return b.String()
 }
 
-func (c *lmCorpus) title(d int) string {
-	r := rand.New(rand.NewPCG(lmSeed+2, uint64(d)))
+func (c *catalogCorpus) title(d int) string {
+	r := rand.New(rand.NewPCG(catalogSeed+2, uint64(d)))
 	return c.word(r) + " " + c.word(r) + " " + c.word(r)
 }
 
 // vec is chunk k of document d's vector: its topic's direction and noise, normalised.
-func (c *lmCorpus) vec(d, k int) []float32 {
-	r := rand.New(rand.NewPCG(lmSeed+3, uint64(d)<<4|uint64(k)))
-	t := c.topics[(c.label[d]*7+d)%lmTopics]
-	v := gauss(r, lmDims)
+func (c *catalogCorpus) vec(d, k int) []float32 {
+	r := rand.New(rand.NewPCG(catalogSeed+3, uint64(d)<<4|uint64(k)))
+	t := c.topics[(c.label[d]*7+d)%catalogTopics]
+	v := gauss(r, catalogDims)
 	for i := range v {
-		v[i] = t[i]*float32(math.Sqrt(lmDims))*0.8 + v[i]*0.6
+		v[i] = t[i]*float32(math.Sqrt(catalogDims))*0.8 + v[i]*0.6
 	}
 	return unit(v)
 }
 
-func (c *lmCorpus) document(d int) pgstore.Document {
+func (c *catalogCorpus) document(d int) pgstore.Document {
 	doc := pgstore.Document{
 		Path:     fmt.Sprintf("track/%d.md", d),
 		Title:    c.title(d),
@@ -178,19 +178,19 @@ func (c *lmCorpus) document(d int) pgstore.Document {
 	return doc
 }
 
-// lmFacets is the declaration of a corpus with facets: a release's status and territories, its
-// release date and its tempo, as LabelManager filters them.
-var lmFacets = map[string]string{"status": pgstore.FacetKeyword, "territory": pgstore.FacetKeyword,
+// catalogFacets is the declaration of a corpus with facets: a release's status and territories, its
+// release date and its tempo, as a music catalog filters them.
+var catalogFacets = map[string]string{"status": pgstore.FacetKeyword, "territory": pgstore.FacetKeyword,
 	"released": pgstore.FacetDate, "bpm": pgstore.FacetNumber}
 
-// lmTerritories are the territories a document may be released in.
-var lmTerritories = []string{"US", "CA", "GB", "DE", "JP", "BR"}
+// catalogTerritories are the territories a document may be released in.
+var catalogTerritories = []string{"US", "CA", "GB", "DE", "JP", "BR"}
 
 // facetsOf gives document d its facets, a pure function of d: status released (70%), scheduled
 // (20%) or draft (10%); one to three territories; a release date uniform over 2016 to 2025; a
 // tempo uniform from 60 to 180 bpm, whole.
-func (c *lmCorpus) facetsOf(d int, doc *pgstore.Document) {
-	r := rand.New(rand.NewPCG(lmSeed+5, uint64(d)))
+func (c *catalogCorpus) facetsOf(d int, doc *pgstore.Document) {
+	r := rand.New(rand.NewPCG(catalogSeed+5, uint64(d)))
 	status := "released"
 	switch x := r.IntN(10); {
 	case x == 9:
@@ -199,7 +199,7 @@ func (c *lmCorpus) facetsOf(d int, doc *pgstore.Document) {
 		status = "scheduled"
 	}
 	doc.Facets["status"] = []string{status}
-	ts := slices.Clone(lmTerritories)
+	ts := slices.Clone(catalogTerritories)
 	r.Shuffle(len(ts), func(i, j int) { ts[i], ts[j] = ts[j], ts[i] })
 	doc.Facets["territory"] = ts[:1+r.IntN(3)]
 	from := time.Date(2016, 1, 1, 0, 0, 0, 0, time.UTC).Unix()
@@ -212,11 +212,11 @@ func (c *lmCorpus) facetsOf(d int, doc *pgstore.Document) {
 
 // seed writes the corpus through the store's own paths: Batch for the documents, Embed for the
 // vectors, MarkReady for each document. It reports the chunks written.
-func (c *lmCorpus) seed(ctx context.Context, b *testing.B, st *pgstore.Store) (chunks int) {
+func (c *catalogCorpus) seed(ctx context.Context, b *testing.B, st *pgstore.Store) (chunks int) {
 	const perBatch = 250
 	var vecs []pgstore.Embedding
 	flush := func() {
-		if err := st.Embed(ctx, lmModel, vecs); err != nil {
+		if err := st.Embed(ctx, catalogModel, vecs); err != nil {
 			b.Fatal(err)
 		}
 		vecs = vecs[:0]
@@ -244,7 +244,7 @@ func (c *lmCorpus) seed(ctx context.Context, b *testing.B, st *pgstore.Store) (c
 		}
 		flush()
 		for _, doc := range docs {
-			if ready, err := st.MarkReady(ctx, doc.Path, lmModel); err != nil || !ready {
+			if ready, err := st.MarkReady(ctx, doc.Path, catalogModel); err != nil || !ready {
 				b.Fatalf("mark %s ready: %v, %v", doc.Path, ready, err)
 			}
 		}
@@ -255,17 +255,17 @@ func (c *lmCorpus) seed(ctx context.Context, b *testing.B, st *pgstore.Store) (c
 	return chunks
 }
 
-// lmQuery is one query of a case: its words, its vector, and the scope it runs in.
-type lmQuery struct {
+// catalogQuery is one query of a case: its words, its vector, and the scope it runs in.
+type catalogQuery struct {
 	text string
 	vec  []float32
 }
 
 // queries makes n queries from documents of the given label ranks (nil is every label): three words
 // of a chunk, and that chunk's vector with noise, as a user's query lands near what it asks for.
-func (c *lmCorpus) queries(n int, ranks []int, seed uint64) []lmQuery {
-	r := rand.New(rand.NewPCG(lmSeed+4, seed))
-	var out []lmQuery
+func (c *catalogCorpus) queries(n int, ranks []int, seed uint64) []catalogQuery {
+	r := rand.New(rand.NewPCG(catalogSeed+4, seed))
+	var out []catalogQuery
 	for len(out) < n {
 		var d int
 		if ranks == nil {
@@ -278,11 +278,11 @@ func (c *lmCorpus) queries(n int, ranks []int, seed uint64) []lmQuery {
 		words := strings.Fields(c.text(d, k))
 		i := r.IntN(len(words) - 4)
 		v := c.vec(d, k)
-		noise := gauss(r, lmDims)
+		noise := gauss(r, catalogDims)
 		for j := range v {
 			v[j] += noise[j] * 0.02
 		}
-		out = append(out, lmQuery{text: strings.Join(words[i:i+3], " "), vec: unit(v)})
+		out = append(out, catalogQuery{text: strings.Join(words[i:i+3], " "), vec: unit(v)})
 	}
 	return out
 }
@@ -302,17 +302,17 @@ func reportLatency(b *testing.B, durs []time.Duration) {
 	b.ReportMetric(pct(durs, 0.99), "p99-ms")
 }
 
-// BenchmarkLMShape measures Searcher.Search over a labelled catalogue's shape: AUTODOC_BENCH_DOCS
+// BenchmarkCatalogShape measures Searcher.Search over a labelled catalogue's shape: AUTODOC_BENCH_DOCS
 // documents (default 56,000) of two to four chunks, 1,024-d vectors, AUTODOC_BENCH_LABELS labels
 // (default 200) of Zipf-skewed sizes, all semantic-ready, in one tenant, with the query vector given
 // by a stub embedder (no model server). Each case reports ns/op and the p50, p95 and p99 of its
 // operations in milliseconds. The cases run first as the store answers exactly (no approximate
 // search configured), then, once the model's HNSW index is built, through it. AUTODOC_BENCH_EXPLAIN=1
 // ends with every case's plans in the server's log (auto_explain), as one operation each.
-func BenchmarkLMShape(b *testing.B) {
+func BenchmarkCatalogShape(b *testing.B) {
 	ctx := context.Background()
-	n := lmEnvInt("AUTODOC_BENCH_DOCS", 56000)
-	nl := lmEnvInt("AUTODOC_BENCH_LABELS", 200)
+	n := catalogEnvInt("AUTODOC_BENCH_DOCS", 56000)
+	nl := catalogEnvInt("AUTODOC_BENCH_LABELS", 200)
 	c := newLMCorpus(n, nl)
 	c.facets = os.Getenv("AUTODOC_BENCH_FACETS") == "1"
 	// the cases' labels are the largest and the smallest that hold a document: with few documents
@@ -350,12 +350,12 @@ func BenchmarkLMShape(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	if err := st.SetModels(ctx, lmModel, ""); err != nil {
+	if err := st.SetModels(ctx, catalogModel, ""); err != nil {
 		b.Fatal(err)
 	}
 	policy := pgstore.Policy{AccessFields: []string{"label_id"}, View: "track"}
 	if c.facets {
-		policy.Facets = lmFacets
+		policy.Facets = catalogFacets
 	}
 	if err := st.SetPolicy(ctx, policy); err != nil {
 		b.Fatal(err)
@@ -363,7 +363,7 @@ func BenchmarkLMShape(b *testing.B) {
 	t0 := time.Now()
 	chunks := c.seed(ctx, b, st)
 	seedTime := time.Since(t0)
-	b.Logf("seeded %d documents, %d chunks, %d-d vectors in %s", n, chunks, lmDims, seedTime.Round(time.Second))
+	b.Logf("seeded %d documents, %d chunks, %d-d vectors in %s", n, chunks, catalogDims, seedTime.Round(time.Second))
 	// VACUUM, not ANALYZE alone: the steady state a server reaches once autovacuum has run. Right
 	// after a bulk load the GIN indexes still hold their pending lists, which every scoped search
 	// then reads whole (a small label's hybrid search took 11.7 ms, against 5.8 after a VACUUM).
@@ -381,13 +381,13 @@ func BenchmarkLMShape(b *testing.B) {
 		if !ok {
 			return "", nil, fmt.Errorf("the stub knows no query %q", q)
 		}
-		return lmModel, v, nil
+		return catalogModel, v, nil
 	}
 	const pool = 128
 	ranksOf := func(r ...int) []int { return r }
 	allLabels := make(map[string][]string)
 	allLabels["label_id"] = c.labels
-	cases := []lmCase{
+	cases := []catalogCase{
 		{name: "a_hybrid_small_label", scope: Scope{"label_id": {c.labels[small]}}, mode: gsearch.ModeAuto, qs: c.queries(pool, ranksOf(small), 1)},
 		{name: "b_hybrid_large_label", scope: Scope{"label_id": {c.labels[large]}}, mode: gsearch.ModeAuto, qs: c.queries(pool, ranksOf(large), 2)},
 		{name: "c_hybrid_unscoped", scope: Scope(allLabels), mode: gsearch.ModeAuto, qs: c.queries(pool, nil, 3)},
@@ -401,17 +401,17 @@ func BenchmarkLMShape(b *testing.B) {
 		combined := gsearch.Filter{Facets: map[string][]string{"status": {"released"}, "territory": {"US"}}}
 		year := map[string]Range{"released": {Gte: "2024-01-01", Lt: "2025-01-01"}}
 		cases = append(cases,
-			lmCase{name: "f_hybrid_large_status", scope: inLarge, mode: gsearch.ModeAuto, qs: c.queries(pool, ranksOf(large), 6), filter: released},
-			lmCase{name: "g_hybrid_large_year", scope: inLarge, mode: gsearch.ModeAuto, qs: c.queries(pool, ranksOf(large), 7), ranges: year},
-			lmCase{name: "h_hybrid_large_combined", scope: inLarge, mode: gsearch.ModeAuto, qs: c.queries(pool, ranksOf(large), 8), filter: combined,
+			catalogCase{name: "f_hybrid_large_status", scope: inLarge, mode: gsearch.ModeAuto, qs: c.queries(pool, ranksOf(large), 6), filter: released},
+			catalogCase{name: "g_hybrid_large_year", scope: inLarge, mode: gsearch.ModeAuto, qs: c.queries(pool, ranksOf(large), 7), ranges: year},
+			catalogCase{name: "h_hybrid_large_combined", scope: inLarge, mode: gsearch.ModeAuto, qs: c.queries(pool, ranksOf(large), 8), filter: combined,
 				ranges: map[string]Range{"released": {Gte: "2020-01-01", Lt: "2025-01-01"}, "bpm": {Gte: "118", Lte: "126"}}},
-			lmCase{name: "i_hybrid_unscoped_bpm_narrow", scope: all, mode: gsearch.ModeAuto, qs: c.queries(pool, nil, 9),
+			catalogCase{name: "i_hybrid_unscoped_bpm_narrow", scope: all, mode: gsearch.ModeAuto, qs: c.queries(pool, nil, 9),
 				ranges: map[string]Range{"bpm": {Gte: "120", Lt: "121"}}},
-			lmCase{name: "j_hybrid_unscoped_bpm_wide", scope: all, mode: gsearch.ModeAuto, qs: c.queries(pool, nil, 10),
+			catalogCase{name: "j_hybrid_unscoped_bpm_wide", scope: all, mode: gsearch.ModeAuto, qs: c.queries(pool, nil, 10),
 				ranges: map[string]Range{"bpm": {Gte: "70"}}},
-			lmCase{name: "k_lexical_large_combined", scope: inLarge, mode: gsearch.ModeLexical, qs: c.queries(pool, ranksOf(large), 11), filter: combined,
+			catalogCase{name: "k_lexical_large_combined", scope: inLarge, mode: gsearch.ModeLexical, qs: c.queries(pool, ranksOf(large), 11), filter: combined,
 				ranges: map[string]Range{"released": {Gte: "2020-01-01"}}},
-			lmCase{name: "l_filters_alone_large_combined", scope: inLarge, mode: gsearch.ModeAuto, qs: []lmQuery{{}}, filter: combined,
+			catalogCase{name: "l_filters_alone_large_combined", scope: inLarge, mode: gsearch.ModeAuto, qs: []catalogQuery{{}}, filter: combined,
 				ranges: map[string]Range{"released": {Gte: "2024-01-01", Lt: "2025-01-01"}}},
 		)
 	}
@@ -421,7 +421,7 @@ func BenchmarkLMShape(b *testing.B) {
 		}
 	}
 
-	one := func(b *testing.B, s *Searcher, cs lmCase, i int) time.Duration {
+	one := func(b *testing.B, s *Searcher, cs catalogCase, i int) time.Duration {
 		q := cs.qs[i%len(cs.qs)]
 		t := time.Now()
 		res, err := s.Search(ctx, cs.scope, Request{Query: q.text, Mode: cs.mode, Limit: 20, Filter: cs.filter, Ranges: cs.ranges})
@@ -436,7 +436,7 @@ func BenchmarkLMShape(b *testing.B) {
 		}
 		return d
 	}
-	runSerial := func(b *testing.B, s *Searcher, cs lmCase) {
+	runSerial := func(b *testing.B, s *Searcher, cs catalogCase) {
 		one(b, s, cs, 0) // warm: the plan and the cache
 		durs := make([]time.Duration, 0, 1024)
 		i := 0
@@ -446,7 +446,7 @@ func BenchmarkLMShape(b *testing.B) {
 		}
 		reportLatency(b, durs)
 	}
-	runParallel := func(b *testing.B, s *Searcher, cs lmCase, workers int) {
+	runParallel := func(b *testing.B, s *Searcher, cs catalogCase, workers int) {
 		one(b, s, cs, 0)
 		// exactly workers searchers, whatever GOMAXPROCS is: RunParallel starts a multiple of
 		// GOMAXPROCS goroutines, so 8 asked on 3 CPUs would be 9. They share b.N operations.
@@ -477,7 +477,7 @@ func BenchmarkLMShape(b *testing.B) {
 	}
 
 	phase := func(name string, s *Searcher, st *pgstore.Store) {
-		mode, reason, err := st.ANNMode(ctx, lmModel)
+		mode, reason, err := st.ANNMode(ctx, catalogModel)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -499,13 +499,13 @@ func BenchmarkLMShape(b *testing.B) {
 
 	// the approximate search, at its default settings: the model's index built, then served
 	cfg := pgstore.DefaultANNConfig()
-	ann := pgstore.NewANN(conn, cfg, "lmbench")
+	ann := pgstore.NewANN(conn, cfg, "catalogbench")
 	annSt, err := pgstore.New(conn, "t", pgstore.WithANN(ann))
 	if err != nil {
 		b.Fatal(err)
 	}
 	b.Logf("ANN threshold %d embeddings; the tenant has %d", cfg.Threshold, chunks)
-	if err := ann.Want(ctx, lmModel); err != nil {
+	if err := ann.Want(ctx, catalogModel); err != nil {
 		b.Fatal(err)
 	}
 	t0 = time.Now()
@@ -532,13 +532,13 @@ func BenchmarkLMShape(b *testing.B) {
 	}
 }
 
-// lmCase is one measured case: a scope and a mode, with its queries, and its filter and ranges
+// catalogCase is one measured case: a scope and a mode, with its queries, and its filter and ranges
 // (typed facets) when it has them.
-type lmCase struct {
+type catalogCase struct {
 	name   string
 	scope  Scope
 	mode   gsearch.Mode
-	qs     []lmQuery
+	qs     []catalogQuery
 	filter gsearch.Filter
 	ranges map[string]Range
 }
@@ -546,7 +546,7 @@ type lmCase struct {
 // explainPhase runs each case once more, exact then approximate, on fresh connections of a database
 // that logs every statement's plan with its timings (auto_explain), a marker line in the log before
 // each, so the plans can be read case by case.
-func explainPhase(ctx context.Context, b *testing.B, dsn string, cases []lmCase) {
+func explainPhase(ctx context.Context, b *testing.B, dsn string, cases []catalogCase) {
 	admin, err := postgres.Open(ctx, dsn)
 	if err != nil {
 		b.Fatal(err)
@@ -574,13 +574,13 @@ func explainPhase(ctx context.Context, b *testing.B, dsn string, cases []lmCase)
 		b.Cleanup(func() { conn.Close() })
 		var opts []Option
 		if approximate {
-			opts = append(opts, WithANN(pgstore.NewANN(conn, pgstore.DefaultANNConfig(), "lmbench-explain")))
+			opts = append(opts, WithANN(pgstore.NewANN(conn, pgstore.DefaultANNConfig(), "catalogbench-explain")))
 		}
 		s, err := Open(ctx, conn, "t", func(_ context.Context, q string) (string, []float32, error) {
 			for _, cs := range cases {
 				for _, x := range cs.qs {
 					if x.text == q {
-						return lmModel, x.vec, nil
+						return catalogModel, x.vec, nil
 					}
 				}
 			}

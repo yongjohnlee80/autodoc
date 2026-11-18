@@ -14,16 +14,16 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/pgstore/pgtest"
 )
 
-// BenchmarkLMShapeTenants measures a search across ten tenants, as a catalogue's global search is:
+// BenchmarkCatalogShapeTenants measures a search across ten tenants, as a catalogue's global search is:
 // AUTODOC_BENCH_DOCS documents (default 56,000) split over ten tenants (t0 to t9) of the
-// LM-shape corpus, each scoped to its largest label, hybrid, with the query vector given by a stub.
+// catalog-shape corpus, each scoped to its largest label, hybrid, with the query vector given by a stub.
 // The cases: the ten single searches one after another (seq10), the ten at once (par10), one
 // search across the ten (global10), and eight such requests at once (global10_par8, a Global of
 // eight slots). Each reports ns/op and the p50, p95 and p99 of its operations in milliseconds.
-func BenchmarkLMShapeTenants(b *testing.B) {
+func BenchmarkCatalogShapeTenants(b *testing.B) {
 	ctx := context.Background()
-	n := lmEnvInt("AUTODOC_BENCH_DOCS", 56000)
-	nl := lmEnvInt("AUTODOC_BENCH_LABELS", 200)
+	n := catalogEnvInt("AUTODOC_BENCH_DOCS", 56000)
+	nl := catalogEnvInt("AUTODOC_BENCH_LABELS", 200)
 	const tenants = 10
 	c := newLMCorpus(n/tenants, nl)
 	large := 0
@@ -47,7 +47,7 @@ func BenchmarkLMShapeTenants(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		if err := st.SetModels(ctx, lmModel, ""); err != nil {
+		if err := st.SetModels(ctx, catalogModel, ""); err != nil {
 			b.Fatal(err)
 		}
 		if err := st.SetPolicy(ctx, pgstore.Policy{AccessFields: []string{"label_id"}, View: "track"}); err != nil {
@@ -71,7 +71,7 @@ func BenchmarkLMShapeTenants(b *testing.B) {
 		if !ok {
 			return "", nil, fmt.Errorf("the stub knows no query %q", q)
 		}
-		return lmModel, v, nil
+		return catalogModel, v, nil
 	}
 	scope := Scope{"label_id": {c.labels[large]}}
 	ts := make([]TenantSearch, tenants)

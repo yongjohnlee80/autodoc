@@ -205,7 +205,7 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 		}
 		return strings.Replace(good, old, new, 1)
 	}
-	lmWebGrant := "[http.client.grants.music]\nlabel_id = [\"*\"]\n\n[[http.client]]\nname      = \"admin-app\""
+	webGrant := "[http.client.grants.music]\nlabel_id = [\"*\"]\n\n[[http.client]]\nname      = \"admin-app\""
 	for _, c := range []struct {
 		name, src, field, says string
 	}{
@@ -263,7 +263,7 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 		{"the hash of no token, upper case", sub(hashOf("a long random token, as openssl rand -hex 32 makes"), strings.ToUpper(hashOf(""))), "http.client[0] (web-app).token_sha256", "no token at all"},
 		{"a short hash", sub(hashOf("a long random token, as openssl rand -hex 32 makes"), strings.Repeat("ab", 16)), "http.client[0] (web-app).token_sha256", "64 hex digits"},
 		{"token unset", sub(`token_env = "TEST_ADMIN_TOKEN"`, `token_env = "TEST_UNSET_TOKEN"`), "http.client[1] (admin-app).token_env", "TEST_UNSET_TOKEN is not set"},
-		{"unknown tenant", sub(lmWebGrant, strings.Replace(lmWebGrant, "grants.music", "grants.other-music", 1)), "http.client[0] (web-app).grants.other-music", "not a configured source's tenant"},
+		{"unknown tenant", sub(webGrant, strings.Replace(webGrant, "grants.music", "grants.other-music", 1)), "http.client[0] (web-app).grants.other-music", "not a configured source's tenant"},
 		{"missing grant", sub(`label_id = ["A", "B"]`, `region = ["ca"]`), "http.client[1] (admin-app).grants.music.label_id", "every access field of a granted tenant needs a grant"},
 		{"a field not an access field", sub(`label_id = ["A", "B"]`, "label_id = [\"A\"]\nregion = [\"ca\"]"), "http.client[1] (admin-app).grants.music.region", "not one of the tenant's access fields"},
 		{"star and a value", sub(`label_id = ["A", "B"]`, `label_id = ["*", "A"]`), "http.client[1] (admin-app).grants.music.label_id", `"*" stands alone`},
@@ -274,7 +274,7 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 		// sources
 		{"no source", strings.SplitN(good, "[[source]]", 2)[0], "source", "at least one"},
 		{"no tenant", sub(`tenant   = "music"`, ``), "source[0].tenant", "required"},
-		{"bad tenant", sub(`tenant   = "music"`, `tenant = "lm catalog"`), "source[0].tenant", "letters, digits"},
+		{"bad tenant", sub(`tenant   = "music"`, `tenant = "a catalog"`), "source[0].tenant", "letters, digits"},
 		{"duplicate tenant", good + "[[source]]\ntenant = \"music\"\nview = \"v.view\"\naccess = [\"x\"]\n", "source[1].tenant", "a tenant of its own"},
 		{"no view", sub(`view     = "views/track.view"`, ``), "source[0].view", "required"},
 		{"interval", sub(`interval = "1m"`, `interval = "10ms"`), "source[0].interval", "want at least 1s"},
