@@ -40,6 +40,10 @@ model    = "text-embedding-3-small"
 key_env  = "AUTODOC_EMBED_KEY"
 slots    = 4
 
+[ranker]
+kind     = "tei"
+base_url = "http://127.0.0.1:8081"
+
 [http]
 listen = "127.0.0.1:8730"
 
@@ -168,6 +172,47 @@ model and its dimensions. A key the provider refuses (`401`/`403`) is refused, n
 `embedding.key_env`; an Ollama server without the model is refused, naming `embedding.model`. A
 provider that can't be reached, or fails otherwise, is a warning: the server would start without
 it and keep trying.
+
+## `[ranker]`: a reranker after recall (optional)
+
+With a `[ranker]`, every search gets a second stage: a cross-encoder reorders recall's best
+candidates, the window. Without one, searches answer in recall order, as they always have.
+
+| Field | Default | Meaning | Refused when |
+|---|---|---|---|
+| `kind` | (required) | `"tei"` (a Hugging Face Text Embeddings Inference server serving a reranker) or `"rerank-api"` (a Cohere-style `POST <base_url>/rerank`: Cohere, Jina, Voyage, vLLM, Infinity, llama.cpp's server). There is no Ollama kind: Ollama has no rerank API. | missing, or another value |
+| `base_url` | (required) | The ranker's endpoint. For rerank-api, with its version (`https://api.cohere.com/v2`). | missing, or not an `http` or `https` URL with a host |
+| `model` | none | rerank-api only: the model the endpoint serves. A TEI server serves one and names it. | missing for rerank-api; given for tei |
+| `key_env` | none | The name of the environment variable holding the ranker's API key, sent as a bearer token. | given, and the variable is not set or is empty; `--check`: the ranker refuses the key |
+| `window` | `40` | How many of recall's best candidates a search reranks. | below 10 or above 100 |
+| `timeout` | `"750ms"` | How long a search's ranker call may take. Past it, the search answers in recall order. | below `100ms` or above `10s` |
+| `slots` | `4` | How many ranker calls may be in flight across every search. | below 1 or above 64 |
+
+### How the server reranks
+
+- **The texts are the search's own.** Each candidate's text is its chunk's breadcrumb and body, as
+  the search read it, in its own snapshot and scope: nothing is read again, and a ranker is never
+  sent a text the search's scope doesn't admit. Two candidates with the same text cost one.
+- **The window, then recall.** The search asks recall for the larger of the window and its limit,
+  the ranker reorders the window, and any hits past it follow in recall order, unscored. A
+  request may set its own `window`, or skip the ranker with `"rerank": false`
+  ([web-integration](web-integration.md#the-request)).
+- **Across tenants, once.** A search across tenants reranks the merged top window in one call, each
+  hit's text from its own tenant. Its window is at least 4 a tenant by default, at most 100.
+- **A ranker that fails never fails a search.** Unreachable, refused, rate limited, a bad answer,
+  past `timeout`, or no slot free within it: the search answers in recall order, and its `rank`
+  says why. A ranker that is down, or refused, is asked nothing until a probe answers again: the
+  server probes it at start, and after a failure, waiting from a second to a minute between
+  probes.
+- **What the ranker receives.** Every reranked search sends it its query and its window's texts. A
+  TEI server on the server's own machine keeps them there; a hosted rerank API receives them under
+  its provider's terms. The log and the status carry codes and counts, never a query, a text or an
+  answer; the key is taken out of every error, as the embedding provider's is.
+
+`--check` makes the ranker as the server does and ranks a two-text probe. A key the ranker refuses
+is refused, naming `ranker.key_env`; a model it doesn't serve, or a TEI server serving another kind
+of model (an embedding model, say), is refused, naming `ranker.model`. A ranker that can't be
+reached, or fails otherwise, is a warning: the server would start without it and keep probing.
 
 ## `[http]` and `[[http.client]]`: the search API (optional)
 

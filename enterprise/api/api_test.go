@@ -288,8 +288,9 @@ func TestTheSearchsErrorsAreAnsweredByKind(t *testing.T) {
 	}
 }
 
-// The answer is the search's result, field for field, each hit with its source id; the search is
-// asked with the request's scope, query, mode, filter and limit.
+// The answer is the search's result, field for field, each hit with its source id and its rank
+// score, and the ranking off for a result that names none; the search is asked with the request's
+// scope, query, mode, filter and limit.
 func TestTheAnswerIsTheSearchsResult(t *testing.T) {
 	rank := 0.5
 	res := search.Result{ModeUsed: gsearch.ModeHybrid, Semantic: gsearch.StateReady, Hits: []search.Hit{
@@ -307,8 +308,9 @@ func TestTheAnswerIsTheSearchsResult(t *testing.T) {
 	if err := json.Unmarshal(r.body, &got); err != nil {
 		t.Fatal(err)
 	}
-	want := response{Tenant: "music", ModeUsed: "hybrid", Semantic: "ready", Hits: []hit{{Path: "track/42.md", Breadcrumb: "Love Song",
-		Snippet: "a \x02love\x03 song", Generation: 3, ByteStart: 1, ByteEnd: 9, Score: 0.031, Relevance: 0.87, Via: []string{"lexical", "semantic"}, SourceID: "42"}}}
+	want := response{Tenant: "music", ModeUsed: "hybrid", Semantic: "ready", Rank: rankState{State: "off"}, Hits: []hit{{Path: "track/42.md", Breadcrumb: "Love Song",
+		Snippet: "a \x02love\x03 song", Generation: 3, ByteStart: 1, ByteEnd: 9, Score: 0.031, Relevance: 0.87, Via: []string{"lexical", "semantic"}, SourceID: "42",
+		RankScore: &rank}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("the answer:\n%+v\nwant\n%+v", got, want)
 	}

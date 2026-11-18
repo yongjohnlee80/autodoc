@@ -250,6 +250,7 @@ the code ever disagree, the code is right and the page is fixed.
 - [Incremental passes and full refreshes](server.md#incremental-passes-and-full-refreshes)
 - [Embedding is central](server.md#embedding-is-central)
 - [Access is a separate predicate](server.md#access-is-a-separate-predicate)
+- [A reranker after recall](server.md#a-reranker-after-recall)
 - [An HTTP API with a token per client](server.md#an-http-api-with-a-token-per-client)
 - [Operator health, status and metrics](server.md#operator-health-status-and-metrics)
 - [A model's index waits for its bulk load](server.md#a-models-index-waits-for-its-bulk-load)
