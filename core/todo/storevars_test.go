@@ -657,17 +657,17 @@ func TestMigrateVarsRecordsOwnersAndClearsRouteKBRoots(t *testing.T) {
 // root, when the store is inside that project, so the cutover writes $PROJECT_ROOT/….
 func TestAClaimRecordsTheProjectItsStoreIsIn(t *testing.T) {
 	e := newEnv(t)
-	e.roots["lm"] = "/lm/.auto-agents/kb"
-	lm := todo.At{Workspace: "lm"}
-	e.disk.WriteFile("/lm/.auto-agents/kb/AGENTS.md", []byte(kbAgents))
-	e.disk.WriteFile("/lm/docs/d.md", []byte("x"))
-	e.disk.WriteFile("/lm/.auto-agents/kb/.todo-list/open/l.md", []byte(taskFile("l", "open", "adr:\n  - $WORKSPACE/docs/d.md")))
-	e.must(e.m.Claim(ctx, lm, todo.ClaimOpts{LegacyWorkspace: "/lm"}))
-	if v := varOf(t, e, lm, "PROJECT_ROOT"); v.Value != "/lm" || v.Source != "kb" ||
-		!strings.Contains(e.read("/lm/.auto-agents/kb/.autodoc-vars.toml"), `PROJECT_ROOT = "../.."`) {
+	e.roots["proj"] = "/proj/.auto-agents/kb"
+	proj := todo.At{Workspace: "proj"}
+	e.disk.WriteFile("/proj/.auto-agents/kb/AGENTS.md", []byte(kbAgents))
+	e.disk.WriteFile("/proj/docs/d.md", []byte("x"))
+	e.disk.WriteFile("/proj/.auto-agents/kb/.todo-list/open/l.md", []byte(taskFile("l", "open", "adr:\n  - $WORKSPACE/docs/d.md")))
+	e.must(e.m.Claim(ctx, proj, todo.ClaimOpts{LegacyWorkspace: "/proj"}))
+	if v := varOf(t, e, proj, "PROJECT_ROOT"); v.Value != "/proj" || v.Source != "kb" ||
+		!strings.Contains(e.read("/proj/.auto-agents/kb/.autodoc-vars.toml"), `PROJECT_ROOT = "../.."`) {
 		t.Errorf("PROJECT_ROOT %+v", v)
 	}
-	l, err := e.m.Get(ctx, lm, "l")
+	l, err := e.m.Get(ctx, proj, "l")
 	if err != nil || !slices.Equal(l.ADR, []string{"$PROJECT_ROOT/docs/d.md"}) {
 		t.Errorf("the cutover's ref %v %v", l.ADR, err)
 	}

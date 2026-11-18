@@ -145,17 +145,17 @@ func TestBlockedNamesATaskOfItsOwnStore(t *testing.T) {
 // $KB_ROOT, not the indexing one's.
 func TestEveryDocumentsVariableRefs(t *testing.T) {
 	m := &modes{stores: map[string]*TodoStore{"kb/.todo-list/": {ID: "S"}},
-		vars: map[string]map[string]string{"": {"KB_ROOT": "/ws"}, "kb/": {"KB_ROOT": "/ws/kb", "PROJECT_ROOT": "/src/lm"}}}
+		vars: map[string]map[string]string{"": {"KB_ROOT": "/ws"}, "kb/": {"KB_ROOT": "/ws/kb", "PROJECT_ROOT": "/src/proj"}}}
 	e := newEnv(t, options{Modes: m.mode, Root: "/ws"})
 	// z.md at the root: an unknown variable read as the root would reach it
 	e.put("kb/adrs/a.md", "a", "kb/reviews/r.md", "r", "adrs/b.md", "b", "z.md", "the root's z",
-		"kb/.todo-list/open/t.md", "---\nadr:\n  - $KB_ROOT/adrs/a.md\n  - $PROJECT_ROOT/lm/x.md\n  - $NOPE/z.md\n"+
+		"kb/.todo-list/open/t.md", "---\nadr:\n  - $KB_ROOT/adrs/a.md\n  - $PROJECT_ROOT/proj/x.md\n  - $NOPE/z.md\n"+
 			"  - /ws/kb/adrs/a.md\n  - /elsewhere/q.md\nreview:\n  - $KB_ROOT/reviews/r.md\n---\nt\n",
 		"notes/n.md", "---\nrelated: [$KB_ROOT/adrs/b.md, $NOPE/z.md]\n---\nn\n",
-		"kb/notes/m.md", "---\nrelated: [$KB_ROOT/adrs/a.md]\n---\nsee [x]($PROJECT_ROOT/lm/x.md) and [r]($KB_ROOT/reviews/r.md#top)\n")
+		"kb/notes/m.md", "---\nrelated: [$KB_ROOT/adrs/a.md]\n---\nsee [x]($PROJECT_ROOT/proj/x.md) and [r]($KB_ROOT/reviews/r.md#top)\n")
 	eq(t, "the task's", e.kinds("kb/.todo-list/open/t.md"), []string{
 		"adr $KB_ROOT/adrs/a.md -> kb/adrs/a.md",
-		"adr $PROJECT_ROOT/lm/x.md -> -",
+		"adr $PROJECT_ROOT/proj/x.md -> -",
 		"adr $NOPE/z.md -> -",
 		"adr /ws/kb/adrs/a.md -> kb/adrs/a.md",
 		"adr /elsewhere/q.md -> -",
@@ -166,7 +166,7 @@ func TestEveryDocumentsVariableRefs(t *testing.T) {
 		"related $NOPE/z.md -> -",
 	})
 	eq(t, "a note of the nested workspace", e.kinds("kb/notes/m.md"), []string{
-		"markdown [x]($PROJECT_ROOT/lm/x.md) -> -",
+		"markdown [x]($PROJECT_ROOT/proj/x.md) -> -",
 		"markdown [r]($KB_ROOT/reviews/r.md#top) -> kb/reviews/r.md",
 		"related $KB_ROOT/adrs/a.md -> kb/adrs/a.md",
 	})
@@ -182,15 +182,15 @@ func TestEveryDocumentsVariableRefs(t *testing.T) {
 			}
 		}
 	}
-	eq(t, "external", external, []string{"$PROJECT_ROOT/lm/x.md => /src/lm/lm/x.md", "/elsewhere/q.md => /elsewhere/q.md",
-		"[x]($PROJECT_ROOT/lm/x.md) => /src/lm/lm/x.md"})
+	eq(t, "external", external, []string{"$PROJECT_ROOT/proj/x.md => /src/proj/proj/x.md", "/elsewhere/q.md => /elsewhere/q.md",
+		"[x]($PROJECT_ROOT/proj/x.md) => /src/proj/proj/x.md"})
 	eq(t, "unresolved: the unknown variable alone", e.unresolved(), []string{
 		"kb/.todo-list/open/t.md $NOPE/z.md missing", "notes/n.md $NOPE/z.md missing"})
 
 	// the workspace's variables changed: the documents naming a changed one are indexed again, no
 	// file changed, and only they: kb/adrs/a.md names none, kb/notes/m.md names KB_ROOT and
 	// PROJECT_ROOT, the task NOPE too, and the other workspace's note is in another workspace
-	e.put("lm/x.md", "x", "kb/z.md", "z")
+	e.put("proj/x.md", "x", "kb/z.md", "z")
 	m.set(func(m *modes) {
 		m.vars["kb/"] = map[string]string{"KB_ROOT": "/ws/kb", "PROJECT_ROOT": "/ws", "NOPE": "/ws/kb"}
 	})
@@ -202,13 +202,13 @@ func TestEveryDocumentsVariableRefs(t *testing.T) {
 	e.revalidate(func() bool {
 		return strings.Join(e.kinds("kb/.todo-list/open/t.md"), "|") == strings.Join([]string{
 			"adr $KB_ROOT/adrs/a.md -> kb/adrs/a.md",
-			"adr $PROJECT_ROOT/lm/x.md -> lm/x.md",
+			"adr $PROJECT_ROOT/proj/x.md -> proj/x.md",
 			"adr $NOPE/z.md -> kb/z.md",
 			"adr /ws/kb/adrs/a.md -> kb/adrs/a.md",
 			"adr /elsewhere/q.md -> -",
 			"review $KB_ROOT/reviews/r.md -> kb/reviews/r.md",
 		}, "|") && strings.Join(e.kinds("kb/notes/m.md"), "|") == strings.Join([]string{
-			"markdown [x]($PROJECT_ROOT/lm/x.md) -> lm/x.md",
+			"markdown [x]($PROJECT_ROOT/proj/x.md) -> proj/x.md",
 			"markdown [r]($KB_ROOT/reviews/r.md#top) -> kb/reviews/r.md",
 			"related $KB_ROOT/adrs/a.md -> kb/adrs/a.md",
 		}, "|")
