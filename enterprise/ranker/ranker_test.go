@@ -218,3 +218,46 @@ func TestTheRankerCountsTheSearches(t *testing.T) {
 		t.Errorf("health %+v", h)
 	}
 }
+
+// A probe is never sooner than the first wait after the last one: a ranker found down by a call
+// just after its probe answered is probed again only once that wait is out, since each probe of a
+// hosted ranker is billed. The mutant, named here: the hold removed (the wake probes at once).
+func TestAProbeWaitsTheFirstWaitAfterTheLast(t *testing.T) {
+	var down atomic.Bool
+	var probes atomic.Int64
+	c := &client{failing: func() error {
+		if down.Load() {
+			return fmt.Errorf("%w: POST /rerank", rank.ErrUnreachable)
+		}
+		return nil
+	}}
+	wait := 400 * time.Millisecond
+	r := New("vertex", "semantic-ranker-default-005", 40, 4, func(context.Context) (rank.Ranker, error) { return countingClient{c, &probes}, nil },
+		WithRetry(wait, wait))
+	run(t, r)
+	waitState(t, r, Up)
+	start := time.Now()
+	down.Store(true)
+	if _, err := r.Rank(context.Background(), "q", []string{"a"}); !errors.Is(err, rank.ErrUnreachable) {
+		t.Fatalf("the call: %v", err)
+	}
+	time.Sleep(wait / 2)
+	if n := probes.Load(); n != 1 && time.Since(start) < wait {
+		t.Fatalf("%d probes within %v of the last, want only the first", n, wait/2)
+	}
+	down.Store(false)
+	waitState(t, r, Up)
+}
+
+// countingClient counts the probes: every Rank of the probe's query.
+type countingClient struct {
+	*client
+	probes *atomic.Int64
+}
+
+func (c countingClient) Rank(ctx context.Context, q string, texts []string) ([]float64, error) {
+	if q == probeQuery {
+		c.probes.Add(1)
+	}
+	return c.client.Rank(ctx, q, texts)
+}
