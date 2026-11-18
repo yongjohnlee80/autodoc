@@ -7,16 +7,18 @@ require (
 	github.com/Microsoft/go-winio v0.6.4
 	github.com/prometheus/common v0.67.2
 	github.com/yongjohnlee80/gio v0.1.6
-	github.com/yongjohnlee80/golib v0.8.63
+	github.com/yongjohnlee80/golib v0.8.64
 	github.com/yongjohnlee80/golib/gui v0.3.22
 	github.com/yuin/gopher-lua v1.1.2
 	golang.org/x/image v0.45.0
+	golang.org/x/oauth2 v0.38.0
 	golang.org/x/sys v0.49.0
 	golang.org/x/term v0.46.0
 	golang.org/x/text v0.42.0
 )
 
 require (
+	cloud.google.com/go/compute/metadata v0.3.0 // indirect
 	gioui.org/shader v1.0.9 // indirect
 	github.com/coder/websocket v1.8.15 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
