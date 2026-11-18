@@ -30,6 +30,48 @@ type View struct {
 
 	mu   sync.Mutex
 	seen map[int64]bool // the documents handed out as candidates (CandidateSourceIDs)
+	// texts are the candidates' texts, by TextKey, while keep is set (KeepTexts): a ranker's
+	// input, recorded as the rows are read
+	keep  bool
+	texts map[TextKey]string
+}
+
+// TextKey is a candidate's chunk in a View: its document's path and the chunk's byte range, one
+// chunk in one snapshot.
+type TextKey struct {
+	Path       string
+	Start, End int
+}
+
+// KeepTexts makes the View record every candidate's text as it hands it out, its chunk's
+// breadcrumb and body (CandidateTexts): what a ranker reads, from the rows the search read in
+// this snapshot under its access. A View that is not asked records none, at no cost.
+func (v *View) KeepTexts() {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.keep = true
+}
+
+// CandidateTexts are the texts of every candidate this View has handed out since KeepTexts, by
+// TextKey: each its chunk's breadcrumb, a newline, and its body, as the daemon's ranker reads a
+// chunk. Nil when KeepTexts was not called.
+func (v *View) CandidateTexts() map[TextKey]string {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.texts
+}
+
+// candidate is r as a candidate with snippet, its text recorded when the View keeps texts.
+func (v *View) candidate(r *chunkRow, snippet string) search.Candidate[int64] {
+	v.mu.Lock()
+	if v.keep {
+		if v.texts == nil {
+			v.texts = map[TextKey]string{}
+		}
+		v.texts[TextKey{Path: r.Path, Start: r.ByteStart, End: r.ByteEnd}] = r.Breadcrumb + "\n" + r.Body
+	}
+	v.mu.Unlock()
+	return candidate(r, snippet)
 }
 
 // saw records the documents of cands as handed out, and returns cands.
@@ -188,7 +230,7 @@ func (v *View) lexical(ctx context.Context, terms []search.Term, f search.Filter
 	}
 	out := make([]search.Candidate[int64], 0, len(rows))
 	for _, r := range rows {
-		out = append(out, candidate(r, chunk.Highlight(r.Body, terms, snippetTokens)))
+		out = append(out, v.candidate(r, chunk.Highlight(r.Body, terms, snippetTokens)))
 	}
 	return v.saw(out), nil
 }
@@ -246,7 +288,7 @@ func (v *View) Semantic(ctx context.Context, model string, vec []float32, f sear
 	}
 	out := make([]search.Candidate[int64], 0, len(rows))
 	for _, r := range rows {
-		out = append(out, candidate(r, chunk.Snippet(r.Body)))
+		out = append(out, v.candidate(r, chunk.Snippet(r.Body)))
 	}
 	return v.saw(out), nil
 }
@@ -372,7 +414,7 @@ func (v *View) List(ctx context.Context, f search.Filter, n int) ([]search.Candi
 			c = &chunkRow{Doc: doc.ID}
 		}
 		c.Path, c.Generation = doc.Path, doc.Generation
-		out = append(out, candidate(c, chunk.Snippet(c.Body)))
+		out = append(out, v.candidate(c, chunk.Snippet(c.Body)))
 	}
 	return v.saw(slices.Clip(out)), nil
 }

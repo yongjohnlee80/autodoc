@@ -20,6 +20,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/enterprise/embedder"
 	"github.com/yongjohnlee80/autodoc/enterprise/ingest"
 	"github.com/yongjohnlee80/autodoc/enterprise/opcode"
+	"github.com/yongjohnlee80/autodoc/enterprise/ranker"
 )
 
 // The collector's bounds.
@@ -56,6 +57,8 @@ type Options struct {
 	Tenants []Tenant
 	// Provider is the embedding worker's published health.
 	Provider func() embedder.Health
+	// Ranker is the ranker's health ([ranker]); nil when the server has none.
+	Ranker func() ranker.Health
 	// Now is the database's clock, and health's ping (pgstore.Now on the server's pool).
 	Now     func(ctx context.Context) (time.Time, error)
 	Version string
@@ -201,6 +204,24 @@ type ServerState struct {
 	Version   string         `json:"version"`
 	Started   time.Time      `json:"started"`
 	Embedding EmbeddingState `json:"embedding"`
+	// Ranker is [ranker]'s state; absent when the server has none
+	Ranker *RankerState `json:"ranker,omitempty"`
+
+	// rank is the ranker's counts for the metrics (WriteMetrics)
+	rank *ranker.Health
+}
+
+// RankerState is the ranker's state, and what it has done since the server started: searches
+// ranked, answered unranked by code, and skipped (rerank false).
+type RankerState struct {
+	Kind     string           `json:"kind"`
+	Model    string           `json:"model"`
+	State    string           `json:"state"`
+	Error    string           `json:"error,omitempty"`
+	Window   int              `json:"window"`
+	Ranked   int64            `json:"ranked"`
+	Unranked map[string]int64 `json:"unranked"`
+	Skipped  int64            `json:"skipped"`
 }
 
 // EmbeddingState is the provider's state.
@@ -336,6 +357,12 @@ func (c *Collector) Snapshot(ctx context.Context) Snapshot {
 	p := c.o.Provider()
 	s.Server = ServerState{Version: c.o.Version, Started: c.o.Started, Embedding: EmbeddingState{Model: p.Model, State: p.State, Error: p.Error,
 		Batch: p.Batch, InFlight: p.InFlight, LastCallMS: p.LastCall.Milliseconds(), Timeouts: p.Timeouts}}
+	if c.o.Ranker != nil {
+		r := c.o.Ranker()
+		s.Server.Ranker = &RankerState{Kind: r.Kind, Model: r.Model, State: r.State, Error: r.Error, Window: r.Window,
+			Ranked: r.Ranked, Unranked: r.Unranked, Skipped: r.Skipped}
+		s.Server.rank = &r
+	}
 	for i, t := range c.o.Tenants {
 		live(&s.Tenants[i], t.State())
 	}

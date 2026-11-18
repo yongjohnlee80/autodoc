@@ -7,10 +7,15 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strconv"
 	"sync"
+	"time"
 
 	"github.com/yongjohnlee80/golib/errs"
 	gsearch "github.com/yongjohnlee80/golib/search"
+	"github.com/yongjohnlee80/golib/search/rank"
+
+	"github.com/yongjohnlee80/autodoc/core/pgstore"
 )
 
 // The bounds on a search across tenants.
@@ -44,6 +49,11 @@ type GlobalRequest struct {
 	Limit   int    // as Request's; each tenant is asked for Limit hits, and the merge is cut to it
 	Group   string // as Request's, per tenant: two tenants' documents are never one group
 	Tenants []TenantSearch
+	// NoRerank and Window are as Request's, for the one ranker call after the merge
+	// (WithGlobalRanker): Window 0 is the larger of the Global's window and 4 a tenant, at most
+	// rank.MaxWindow.
+	NoRerank bool
+	Window   int
 }
 
 // GlobalHit is a hit of one of the tenants, named.
@@ -65,6 +75,8 @@ type TenantResult struct {
 type GlobalResult struct {
 	Hits    []GlobalHit
 	Tenants map[string]TenantResult
+	// Rank is what the Global's ranker did with the merged hits, once for the request
+	Rank Ranking
 }
 
 // TenantError is one tenant's failure in a search across tenants, which fails the whole request:
@@ -82,13 +94,34 @@ func (e *TenantError) Unwrap() error { return e.Err }
 // flight, so concurrent requests cannot take a database pool whole. It is safe for concurrent use.
 type Global struct {
 	slots chan struct{}
+	rank  *stage // WithGlobalRanker's; nil is none
+}
+
+// GlobalOption configures a Global.
+type GlobalOption func(*Global)
+
+// WithGlobalRanker reranks a search across tenants once, after the merge, as WithRanker reranks a
+// tenant's search: one call over the merged top window, each hit's text from its own tenant's
+// View. The tenants' own rankers are not used.
+func WithGlobalRanker(r rank.Ranker, window int, timeout time.Duration) GlobalOption {
+	return func(g *Global) { g.rank = newStage(r, window, timeout) }
 }
 
 // NewGlobal is a Global running at most inFlight tenants' searches at once across every request
 // (below 1: 1).
-func NewGlobal(inFlight int) *Global {
-	return &Global{slots: make(chan struct{}, max(inFlight, 1))}
+func NewGlobal(inFlight int, opts ...GlobalOption) *Global {
+	g := &Global{slots: make(chan struct{}, max(inFlight, 1))}
+	for _, o := range opts {
+		if o != nil {
+			o(g)
+		}
+	}
+	return g
 }
+
+// tenantWindow is how many candidates a ranked search across tenants admits by default: four a
+// tenant, so each tenant's best few reach the ranker at equal weights.
+const tenantWindow = 4
 
 // Search answers r across its tenants.
 //
@@ -108,11 +141,29 @@ func (g *Global) Search(ctx context.Context, r GlobalRequest) (GlobalResult, err
 	if err := checkTenants(r.Tenants); err != nil {
 		return GlobalResult{}, err
 	}
+	if err := checkWindow(r.Window); err != nil {
+		return GlobalResult{}, err
+	}
+	ranking := g.rank != nil && !r.NoRerank
+	window := r.Window
+	if ranking && window == 0 {
+		window = min(max(g.rank.window, tenantWindow*len(r.Tenants)), rank.MaxWindow)
+	}
 	reqs := make([]Request, len(r.Tenants))
 	for i, t := range r.Tenants {
-		reqs[i] = Request{Query: r.Query, Mode: r.Mode, Limit: r.Limit, Group: r.Group, Filter: t.Filter, Ranges: t.Ranges}
+		// a tenant's own ranker never runs here: the merge is ranked once, after it
+		reqs[i] = Request{Query: r.Query, Mode: r.Mode, Limit: r.Limit, Group: r.Group, Filter: t.Filter, Ranges: t.Ranges, NoRerank: true}
 		if _, err := t.Searcher.precheck(ctx, t.Scope, reqs[i]); err != nil {
 			return GlobalResult{}, &TenantError{Tenant: t.Tenant, Err: err}
+		}
+		if ranking {
+			// each tenant is asked for the window at least, so the window can fill from one
+			// tenant when the weights say so
+			lim := reqs[i].Limit
+			if lim == 0 {
+				lim = t.Searcher.def
+			}
+			reqs[i].Limit, reqs[i].keepTexts = min(max(lim, window), t.Searcher.max), true
 		}
 	}
 
@@ -193,10 +244,90 @@ func (g *Global) Search(ctx context.Context, r GlobalRequest) (GlobalResult, err
 	if limit == 0 {
 		limit = r.Tenants[0].Searcher.def
 	}
+	out.Rank = Ranking{State: gsearch.RankOff}
+	if ranking {
+		merged := make([]GlobalHit, len(all))
+		kept := make([]map[pgstore.TextKey]string, len(all))
+		for i, x := range all {
+			merged[i], kept[i] = x.hit, results[x.at].texts
+		}
+		hits, rk, err := g.ranked(ctx, r.Query, results[0].ModeUsed, merged, kept, window, limit)
+		if err != nil {
+			return GlobalResult{}, err
+		}
+		out.Hits, out.Rank = hits, rk
+		return out, nil
+	}
 	for _, x := range all[:min(len(all), limit)] {
 		out.Hits = append(out.Hits, x.hit)
 	}
 	return out, nil
+}
+
+// ranked is a search across tenants' merged hits through the Global's stage: golib's stage over a
+// searcher that answers the merge, its hits named by their place in it, so the texts and the
+// tenants are found again by place, each hit's text from its own tenant's View.
+func (g *Global) ranked(ctx context.Context, query string, mode gsearch.Mode, merged []GlobalHit, kept []map[pgstore.TextKey]string,
+	window, limit int) ([]GlobalHit, Ranking, error) {
+	out := &outcome{}
+	inner := mergedSearcher{hits: merged, mode: mode}
+	texts := func(_ context.Context, hits []gsearch.Hit) ([]string, error) {
+		ts := make([]string, len(hits))
+		for i, h := range hits {
+			at, ok := placeOf(h, len(merged))
+			if !ok {
+				out.fail(RankInternal)
+				return nil, fmt.Errorf("search: a merged hit with no place %q", h.Path)
+			}
+			m := merged[at]
+			t, err := textsOf(kept[at], []gsearch.Hit{m.Hit.Hit}, out)
+			if err != nil {
+				return nil, fmt.Errorf("tenant %s: %w", m.Tenant, err)
+			}
+			ts[i] = t[0]
+		}
+		return ts, nil
+	}
+	rs := rank.NewSearcher(inner, texts, source{r: timed{st: g.rank, out: out}, window: window},
+		rank.WithDefaultLimit(limit), rank.WithMaxLimit(max(limit, MaxLimit)))
+	res, err := rs.Search(ctx, gsearch.Query{Text: query, Limit: limit})
+	if err != nil {
+		return nil, Ranking{}, err
+	}
+	hits := make([]GlobalHit, 0, len(res.Hits))
+	for _, h := range res.Hits {
+		at, ok := placeOf(h, len(merged))
+		if !ok {
+			return nil, Ranking{}, fmt.Errorf("search: a ranked hit with no place %q", h.Path)
+		}
+		x := merged[at]
+		x.RankScore, x.Via = h.RankScore, h.Via
+		hits = append(hits, x)
+	}
+	return hits, out.ranking(res.Rank), nil
+}
+
+// mergedSearcher answers the merge of a search across tenants, whatever it is asked: its hits in
+// the merge's order, each named by its place (placeOf), so a stage over it orders places.
+type mergedSearcher struct {
+	hits []GlobalHit
+	mode gsearch.Mode
+}
+
+func (m mergedSearcher) Search(context.Context, gsearch.Query) (gsearch.Result, error) {
+	res := gsearch.Result{Hits: make([]gsearch.Hit, len(m.hits)), ModeUsed: m.mode}
+	for i, h := range m.hits {
+		x := h.Hit.Hit
+		x.Path = strconv.Itoa(i)
+		res.Hits[i] = x
+	}
+	return res, nil
+}
+
+// placeOf is the place in the merge a mergedSearcher's hit names.
+func placeOf(h gsearch.Hit, n int) (int, bool) {
+	at, err := strconv.Atoi(h.Path)
+	return at, err == nil && at >= 0 && at < n
 }
 
 // take waits for a slot of ch under ctx: false when ctx ended first.
