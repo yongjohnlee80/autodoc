@@ -186,7 +186,8 @@ In the code: `enterprise/search/global.go`, `enterprise/api/api.go`
 
 A `[ranker]` section adds a second stage to every search: a cross-encoder (a TEI server, or a
 Cohere-style rerank API) reorders recall's best candidates, the window (40 by default, 10 to 100).
-LabelManager's experiment met its bar only with one.
+A test on a 55,000-document catalog met its bar only with one: recall at 1 went from 0.47 to
+0.76.
 
 - **The texts are the search's own.** Each candidate's text is its chunk's breadcrumb and body,
   kept by the snapshot the search read it in, under its access predicate, as the rows are read.
