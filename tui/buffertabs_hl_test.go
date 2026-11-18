@@ -76,8 +76,7 @@ func TestHAndLStayOutOfTheTerminal(t *testing.T) {
 	r.s.WaitFor(t, "two buffers, the draft shown", func(string) bool {
 		return onLoop(r, func() bool { return len(r.h.buffers) == 2 }) && r.shownPath() == ""
 	})
-	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
-	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	shellInTheTerminal(t, r) // its start waited for as a start, not a screen change: slow on Windows
 	r.keys(t, key('L'), key('H'), key('L'))
 	r.s.WaitForText(t, "LHL") // the shell echoed them: they went to the terminal
 	if got := r.shownPath(); got != "" {
