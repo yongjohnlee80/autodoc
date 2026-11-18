@@ -142,6 +142,66 @@ func TestAgentTabMenuClosesAndRestartsAskingWhileItRuns(t *testing.T) {
 	}
 }
 
+// A tab's × is its agent's Close:
+//   - a running agent is asked first, mid-turn or idle alike, since the window can't tell which, and
+//     only Yes closes it;
+//   - an agent that has exited closes at once;
+//   - an agent already closing, and a tab with no agent behind it, have no Close: a request does
+//     nothing. (A closing agent's tab is being removed, and golib draws no × on such a tab.)
+//
+// The mutant, named here: the × closing without the question.
+func TestAnAgentTabsXIsItsClose(t *testing.T) {
+	a, c := modelAgents(t)
+	one, _ := a.Profile("one")
+	two, _ := a.Profile("two")
+	first, _ := a.StartInstance(one)
+	second, err := a.StartInstance(two)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// running: asked, and only Yes closes it
+	a.CloseAgentTab(string(first.tab))
+	if len(c.questions) != 1 || a.instances["one"] != first || !first.running {
+		t.Fatalf("the × of a running agent: %d questions, instance %v", len(c.questions), a.instances["one"])
+	}
+	c.questions[0].OnYes()
+	if a.instances["one"] != nil {
+		t.Fatalf("Yes to the ×'s question left agent one: %v", a.instances["one"])
+	}
+
+	// exited: closed at once, unasked
+	c.panel.exit(second.tab, 0)
+	a.CloseAgentTab(string(second.tab))
+	if len(c.questions) != 1 || a.instances["two"] != nil {
+		t.Fatalf("the × of an exited agent: %d questions, instance %v", len(c.questions), a.instances["two"])
+	}
+
+	// closing: its removal held, a request doing nothing
+	third, err := a.StartInstance(one)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.panel.removal = &modelRemoval{done: make(chan struct{})}
+	a.CloseAgentTab(string(third.tab))
+	c.questions[1].OnYes()
+	if !third.closing {
+		t.Fatal("the held removal didn't leave the agent closing")
+	}
+	asked := len(c.questions)
+	a.CloseAgentTab(string(third.tab))
+	if len(c.questions) != asked || a.instances["one"] != third {
+		t.Fatalf("the × of a closing agent asked %d questions or changed it", len(c.questions)-asked)
+	}
+
+	// no agent behind it: the first agent's tab, still in the model panel once its agent is gone
+	a.CloseAgentTab(string(first.tab))
+	a.CloseAgentTab("no-such-tab")
+	if len(c.questions) != asked {
+		t.Fatalf("the × of a tab with no agent asked %d questions", len(c.questions)-asked)
+	}
+}
+
 // The strip's x stops every agent in the panel and closes it, asking once while any runs, naming how
 // many: No (the question left unanswered) keeps them all; with none running it closes at once.
 func TestTheStripsXStopsEveryAgentAndClosesThePanelAskingOnce(t *testing.T) {

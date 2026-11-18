@@ -140,6 +140,21 @@ func (a *Agents) CloseAgent(code string) {
 		Yes: a.c.Tr("autodoc.question.agenttabs.yes_close_it"), OnYes: closeIt})
 }
 
+// CloseAgentTab is a tab's ×: its agent's Close, asked as the menu's is. Where the menu has no
+// Close or a disabled one, a request does nothing: an agent already closing (its tab is being
+// removed, so golib draws no × on it), and a tab with no agent behind it (only between panel.Add
+// and the agent's registration, in one turn of the loop).
+func (a *Agents) CloseAgentTab(id string) {
+	panel, err := a.Runtime()
+	if err != nil {
+		return
+	}
+	a.syncInstances()
+	if instance := a.instanceOn(panel, terminal.TerminalTabID(id)); instance != nil && !instance.closing {
+		a.CloseAgent(instance.profile.Codename)
+	}
+}
+
 // stopAllAgents is the strip's x: every agent in the panel stopped and its tab closed, then the panel
 // closed; asked once while any of them runs. _ beside it is the panel's own hide, every agent kept.
 func (a *Agents) StopAllAgents() {

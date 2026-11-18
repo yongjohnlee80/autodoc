@@ -18,7 +18,7 @@ flowchart LR
 
 **Conoce tu espacio de trabajo.** Un agente se inicia en la carpeta propia de AutoDoc para el espacio de trabajo, donde AutoDoc escribe `AGENTS.md` y `CLAUDE.md`: el nombre y la raíz del espacio de trabajo, y cómo acceder a él. El `autodoc` de su PATH es el tuyo, así que `autodoc --call workspace.list` y los demás verbos llegan al mismo índice en el que buscas.
 
-**Pestañas.** Cada agente tiene una pestaña, con su nombre en clave. **+** inicia otro perfil, o va a uno que ya está en ejecución. El menú de una pestaña (`≡`, o un clic derecho en las pestañas) tiene **Ir a**, **Reiniciar**, **Cerrar**, **Perfiles…**, **Tema y fuente…**, **Maximizar** y **Ocultar**.
+**Pestañas.** Cada agente tiene una pestaña, con su nombre en clave. **+** inicia otro perfil, o va a uno que ya está en ejecución. El menú de una pestaña (`≡`, o un clic derecho en las pestañas) tiene **Ir a**, **Reiniciar**, **Cerrar**, **Perfiles…**, **Tema y fuente…**, **Maximizar** y **Ocultar**. La **×** al principio de una pestaña, a la izquierda de su nombre, es su **Cerrar**: pregunta antes mientras el agente se ejecuta.
 
 **Dentro del panel**, todas las teclas van al agente, también Esc. **Ctrl+T** pasa al modo Normal, para recorrer su historial (`h j k l`, `/`, `v`, `y`); Esc ahí oculta el panel.
 

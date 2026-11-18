@@ -272,6 +272,11 @@ func (p *modelPanel) Remove(id terminal.TerminalTabID) (feature.TerminalRemoval,
 
 func (*modelPanel) ForceRemove(terminal.TerminalTabID) error { return nil }
 
+// Activity is idle: a model panel's tabs run no shell whose foreground could be asked.
+func (*modelPanel) Activity(terminal.TerminalTabID) terminal.TerminalActivity {
+	return terminal.TerminalIdle
+}
+
 func (p *modelPanel) Tabs() []terminal.TerminalTab {
 	return append([]terminal.TerminalTab(nil), p.tabs...)
 }

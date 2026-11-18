@@ -31,6 +31,9 @@ type terminals struct {
 	// shellSpawn is a test's stand-in for a shell tab's program (seams.shellSpawn); nil, or one
 	// answering nil, is the user's shell
 	shellSpawn func() func(pty.Cmd) (terminal.TerminalProcess, error)
+	// activity is a test's stand-in for what a tab's shell is doing (closeShell); nil, the panel's
+	// own (golib's TerminalTabs.Activity)
+	activity func(terminal.TerminalTabID) terminal.TerminalActivity
 }
 
 // terminalRuntimeHost is the PanelHost with the terminal panel's tabs (feature/terminalpanel.go).
@@ -208,6 +211,7 @@ func (t *terminals) Commands() map[string]feature.Command {
 	return map[string]feature.Command{
 		"App.toggleTerminal":    feature.None(t.toggleTerminal),
 		"App.stopAllShells":     feature.None(t.stopAllShells),
+		"App.closeTerminalTab":  feature.OneString("a tab", func(id string) { t.closeShell(terminal.TerminalTabID(id)) }),
 		"App.openTerminal":      feature.None(t.openTerminal),
 		"App.setTerminalEdge":   feature.OneNumber("a row", t.setTerminalEdge),
 		"App.setTerminalSize":   feature.OneNumber("a row", t.setTerminalSize),
@@ -505,11 +509,46 @@ func (t *terminals) tabRows(id terminal.TerminalTabID) []widgetcore.MenuItemMode
 	return append(rows, feature.PanelRows(t.c, "terminal", panel, id, t.toggleTerminal)...)
 }
 
-// closeShell is Close on a tab's menu: the shell hung up and its tab closed. The panel stays open,
-// on its next shell or its empty text; SPC ` then starts a fresh one.
+// closeShell is a shell tab's close, its menu's Close and its × alike: asked first while a program
+// runs in the shell, or while the terminal can't tell (feature.TerminalPanel's Activity), and at once
+// at an idle prompt; then hangShellUp. A tab already closing, or none, is left alone.
 func (t *terminals) closeShell(id terminal.TerminalTabID) {
 	panel, err := t.panel()
 	if err != nil {
+		return
+	}
+	i := slices.IndexFunc(panel.Tabs(), func(tab terminal.TerminalTab) bool { return tab.ID == id })
+	if i < 0 || panel.Tabs()[i].Closing {
+		return
+	}
+	label := panel.Tabs()[i].Label
+	text := ""
+	activity := panel.Activity
+	if t.activity != nil {
+		activity = t.activity
+	}
+	switch activity(id) {
+	case terminal.TerminalIdle:
+		t.hangShellUp(id)
+		return
+	case terminal.TerminalRunning:
+		text = t.c.Trf("autodoc.question.terminal.close_s_the_program_running_in_it_is_stopped", label)
+	default: // unknown is asked as busy, and said as may be
+		text = t.c.Trf("autodoc.question.terminal.close_s_a_program_may_be_running_in_it", label)
+	}
+	t.c.Ask(feature.Question{Title: t.c.Tr("autodoc.question.terminal.close_the_shell"), Text: text,
+		Yes: t.c.Tr("autodoc.question.terminal.yes_close_it"), OnYes: func() { t.hangShellUp(id) }})
+}
+
+// hangShellUp is the shell hung up and its tab closed, once closeShell has its answer: a tab gone or
+// already closing meanwhile is left alone. The panel stays open, on its next shell or its empty
+// text; SPC ` then starts a fresh one.
+func (t *terminals) hangShellUp(id terminal.TerminalTabID) {
+	panel, err := t.panel()
+	if err != nil {
+		return
+	}
+	if i := slices.IndexFunc(panel.Tabs(), func(tab terminal.TerminalTab) bool { return tab.ID == id }); i < 0 || panel.Tabs()[i].Closing {
 		return
 	}
 	active := panel.Active()

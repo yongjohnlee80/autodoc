@@ -6297,6 +6297,18 @@ Revoked, its next use of %2 is refused, and asks you again by a card.</translati
         <source>restart the backend?</source>
         <translation>restart the backend?</translation>
     </message>
+    <message id="autodoc.question.terminal.close_s_a_program_may_be_running_in_it">
+        <source>Close %1? A program may be running in it, and it would be stopped.</source>
+        <translation>Close %1? A program may be running in it, and it would be stopped.</translation>
+    </message>
+    <message id="autodoc.question.terminal.close_s_the_program_running_in_it_is_stopped">
+        <source>Close %1? The program running in it is stopped.</source>
+        <translation>Close %1? The program running in it is stopped.</translation>
+    </message>
+    <message id="autodoc.question.terminal.close_the_shell">
+        <source>close the shell?</source>
+        <translation>close the shell?</translation>
+    </message>
     <message id="autodoc.question.terminal.stop_every_shell_running_here">
         <source>%1 shells are running here. Each is hung up and its tab closed, then the terminal closes.</source>
         <translation>%1 shells are running here. Each is hung up and its tab closed, then the terminal closes.</translation>
@@ -6304,6 +6316,10 @@ Revoked, its next use of %2 is refused, and asks you again by a card.</translati
     <message id="autodoc.question.terminal.stop_the_shells_and_close_the_terminal">
         <source>stop the shells and close the terminal?</source>
         <translation>stop the shells and close the terminal?</translation>
+    </message>
+    <message id="autodoc.question.terminal.yes_close_it">
+        <source>&amp;Yes, close it</source>
+        <translation>&amp;Yes, close it</translation>
     </message>
     <message id="autodoc.question.terminal.yes_stop_them">
         <source>&amp;Yes, stop them</source>

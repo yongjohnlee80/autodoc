@@ -398,7 +398,7 @@ In Normal mode, `/` finds in the page, `n` and `N` go to the next and previous m
 
 The terminal runs your shells in the workspace's folder: at the bottom, or wherever Preferences puts it.
 
-- **Tabs:** each shell has a tab. `+` adds one, and a tab's menu has Go to ›, New, Close, Theme and font…, Maximize and Hide. `Ctrl+Tab` goes to the next tab and `Ctrl+Shift+Tab` the previous one, round from the last to the first, in input and Normal mode alike. The shell never gets them; `Ctrl+\` then `Ctrl+Tab` sends one to it. In a terminal, AutoDoc tells `Ctrl+Tab` from `Tab` only where the terminal does (kitty's keyboard protocol); elsewhere it arrives as `Tab` and goes to the shell.
+- **Tabs:** each shell has a tab. `+` adds one, and a tab's menu has Go to ›, New, Close, Theme and font…, Maximize and Hide. The `×` at the start of a tab, left of its name, is its Close. Close asks first while a program runs in the shell (on Windows, where that can't be told, it always asks), and hangs up an idle shell at once. `Ctrl+Tab` goes to the next tab and `Ctrl+Shift+Tab` the previous one, round from the last to the first, in input and Normal mode alike. The shell never gets them; `Ctrl+\` then `Ctrl+Tab` sends one to it. In a terminal, AutoDoc tells `Ctrl+Tab` from `Tab` only where the terminal does (kitty's keyboard protocol); elsewhere it arrives as `Tab` and goes to the shell.
 - **Keys:** every key goes to the shell, `Esc` too. `Ctrl+T` (or `Ctrl+\ Ctrl+n`) leaves for Normal mode, where `h` `j` `k` `l`, `/` and `?` move over the shell's history, `v` selects and `y` copies. `Ctrl+T`, `i` or `Enter` goes back.
 - **Closing:** `Escape` in Normal mode, or `` SPC ` `` again, hides the terminal, and its shells run on.
 

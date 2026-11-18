@@ -65,6 +65,10 @@ type TerminalPanel interface {
 	Resume(terminal.TerminalTabID) error
 	Remove(terminal.TerminalTabID) (TerminalRemoval, error)
 	ForceRemove(terminal.TerminalTabID) error
+	// Activity says whether a program runs in the tab's shell beyond its prompt (golib's
+	// TerminalTabs.Activity): idle, running, or unknown where the platform can't tell, which a caller
+	// treats as running. It is one syscall on the loop, never a wait.
+	Activity(terminal.TerminalTabID) terminal.TerminalActivity
 	Tabs() []terminal.TerminalTab
 	Active() terminal.TerminalTabID
 	Actions(add func(), menu func(terminal.TerminalTabID))
@@ -114,7 +118,10 @@ func (p terminalPanel) Add(label string, config TerminalConfig) (terminal.Termin
 	return p.tabs.Add(label, opts...)
 }
 func (p terminalPanel) Select(id terminal.TerminalTabID) error { return p.tabs.Select(id) }
-func (p terminalPanel) Start(id terminal.TerminalTabID) error  { return p.tabs.Start(id) }
+func (p terminalPanel) Activity(id terminal.TerminalTabID) terminal.TerminalActivity {
+	return p.tabs.Activity(id)
+}
+func (p terminalPanel) Start(id terminal.TerminalTabID) error { return p.tabs.Start(id) }
 func (p terminalPanel) StartAsync(id terminal.TerminalTabID, done func(error)) {
 	p.tabs.StartAsync(id, done)
 }

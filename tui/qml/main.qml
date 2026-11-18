@@ -506,6 +506,10 @@ Window {
                 onMinimizeRequested: App.toggleTerminal()
                 onMaximizeRequested: terminal.toggleMaximize()
                 onCloseRequested: App.stopAllShells()
+                // a × at the start of each tab, left of its name: its shell's Close, asked first while
+                // a program runs in it (terminal.go closeShell)
+                tabCloseButtons: true
+                onTabCloseRequested: App.closeTerminalTab(id)
                 onChanged: App.widgetsChanged() // a shell started or gone: the dock lists the terminal while one runs
                 // maximize's keys (F11) reach the Window with the keyboard in a shell: its program never gets them
                 hostKeys: App.terminalHostKeys
@@ -559,6 +563,10 @@ Window {
                 onMinimizeRequested: App.toggleAgent()
                 onMaximizeRequested: agent.toggleMaximize()
                 onCloseRequested: App.stopAllAgents()
+                // a × at the start of each tab, left of its name: its agent's Close, asked first while
+                // it runs (agenttabs.go CloseAgentTab); off where the tab's menu has no Close
+                tabCloseButtons: true
+                onTabCloseRequested: App.closeAgentTab(id)
                 // maximize's keys (F11) reach the Window with the keyboard in a shell: its program never gets them
                 hostKeys: App.terminalHostKeys
                 emptyText: "No agent running. Press + to start one of the profiles."

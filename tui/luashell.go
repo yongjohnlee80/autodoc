@@ -54,6 +54,8 @@ type luaShell struct {
 	runDone chan struct{} // run has returned: closed by run's own defer, never by anyone else
 	once    sync.Once
 	closed  atomic.Bool // set by Close before its post: the loop drops a request it finds closed
+	// busy mirrors run's phase for the loop: set while a chunk is in flight (Activity)
+	busy atomic.Bool
 
 	// the loop's own (evalShell, rebind, dropShell)
 	eng *script.Engine
@@ -157,6 +159,18 @@ func (s *luaShell) Write(p []byte) (int, error) {
 		return 0, io.ErrClosedPipe
 	}
 }
+
+// Activity is what the terminal asks a process of its own before its tab's Close (golib's
+// terminal.ActivityReporter): running while a chunk is being evaluated, idle at the prompt. So a Lua
+// shell at its prompt closes at once, as a shell at its prompt does.
+func (s *luaShell) Activity() terminal.TerminalActivity {
+	if s.busy.Load() {
+		return terminal.TerminalRunning
+	}
+	return terminal.TerminalIdle
+}
+
+var _ terminal.ActivityReporter = (*luaShell)(nil)
 
 func (s *luaShell) Resize(rows, cols int) error { return nil } // the line wraps as the terminal does
 
@@ -351,6 +365,7 @@ func (s *luaShell) send() {
 	e.line, e.at = nil, 0
 	e.seq++
 	e.sent, e.phase = chunk, evaluating
+	s.busy.Store(true)
 	req := evalRequest{seq: e.seq, chunk: chunk}
 	s.post(func() { s.h.evalShell(s, req) })
 }
@@ -394,6 +409,7 @@ func (s *luaShell) settle(r evalResult) {
 		}
 	}
 	e.phase = editing
+	s.busy.Store(false)
 	s.prompt()
 	held := e.held
 	e.held = nil

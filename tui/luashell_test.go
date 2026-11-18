@@ -174,6 +174,25 @@ func TestTheShellHoldsKeysUntilTheAnswer(t *testing.T) {
 	}
 }
 
+// A Lua shell says what it's doing when its tab's Close asks (golib's terminal.ActivityReporter):
+// idle at its prompt, running while a chunk is in flight, idle again once its answer is applied. The
+// mutant, named here: Activity never saying running (a chunk's Close unasked).
+func TestALuaShellSaysItRunsWhileAChunkIsInFlight(t *testing.T) {
+	r := newShellRig(t, "")
+	r.start()
+	r.until("the first prompt", func() bool { return strings.HasSuffix(r.output(), "> ") })
+	if a := r.s.Activity(); a != terminal.TerminalIdle {
+		t.Fatalf("at its prompt: %v, want idle", a)
+	}
+	r.write("x = 1\r")
+	r.until("the request in flight", func() bool { return r.posts() == 1 })
+	if a := r.s.Activity(); a != terminal.TerminalRunning {
+		t.Fatalf("a chunk in flight: %v, want running", a)
+	}
+	r.runPost()
+	r.until("the prompt again", func() bool { return r.s.Activity() == terminal.TerminalIdle })
+}
+
 // R3: a request posted, then the tab closed, then the request run by the loop: no Eval, no edit of
 // the page, no environment made; dropShell then has nothing to forget. A shell without the closed
 // check at execution edits the page and makes an environment.

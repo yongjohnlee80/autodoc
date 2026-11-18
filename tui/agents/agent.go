@@ -202,6 +202,7 @@ func (a *Agents) Commands() map[string]feature.Command {
 	return map[string]feature.Command{
 		"App.toggleAgent":             feature.None(a.ToggleAgent),
 		"App.stopAllAgents":           feature.None(a.StopAllAgents),
+		"App.closeAgentTab":           feature.OneString("a tab", a.CloseAgentTab),
 		"App.openAgentProfiles":       feature.None(a.OpenAgentProfiles),
 		"App.startAddAgent":           feature.None(a.StartAddAgent),
 		"App.startEditAgent":          feature.OneNumber("a row", a.StartEditAgent),

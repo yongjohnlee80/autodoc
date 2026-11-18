@@ -5918,6 +5918,18 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>restart the backend?</source>
         <translation>백엔드를 다시 시작할까요?</translation>
     </message>
+    <message id="autodoc.question.terminal.close_s_a_program_may_be_running_in_it">
+        <source>Close %1? A program may be running in it, and it would be stopped.</source>
+        <translation>%1을(를) 닫을까요? 실행 중인 프로그램이 있다면 중지됩니다.</translation>
+    </message>
+    <message id="autodoc.question.terminal.close_s_the_program_running_in_it_is_stopped">
+        <source>Close %1? The program running in it is stopped.</source>
+        <translation>%1을(를) 닫을까요? 실행 중인 프로그램이 중지됩니다.</translation>
+    </message>
+    <message id="autodoc.question.terminal.close_the_shell">
+        <source>close the shell?</source>
+        <translation>셸을 닫을까요?</translation>
+    </message>
     <message id="autodoc.question.terminal.stop_every_shell_running_here">
         <source>%1 shells are running here. Each is hung up and its tab closed, then the terminal closes.</source>
         <translation>여기서 셸 %1개가 실행 중입니다. 각각 종료하고 탭을 닫은 뒤 터미널을 닫습니다.</translation>
@@ -5925,6 +5937,10 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
     <message id="autodoc.question.terminal.stop_the_shells_and_close_the_terminal">
         <source>stop the shells and close the terminal?</source>
         <translation>셸을 중지하고 터미널을 닫을까요?</translation>
+    </message>
+    <message id="autodoc.question.terminal.yes_close_it">
+        <source>&amp;Yes, close it</source>
+        <translation>예, 닫기(&amp;y)</translation>
     </message>
     <message id="autodoc.question.terminal.yes_stop_them">
         <source>&amp;Yes, stop them</source>
