@@ -5926,6 +5926,18 @@ Em uma nova aba do terminal, em %2. Digite ali qualquer senha: o agente não vê
         <source>restart the backend?</source>
         <translation>reiniciar o backend?</translation>
     </message>
+    <message id="autodoc.question.terminal.close_s_a_program_may_be_running_in_it">
+        <source>Close %1? A program may be running in it, and it would be stopped.</source>
+        <translation>Fechar %1? Pode haver um programa rodando nele, que seria parado.</translation>
+    </message>
+    <message id="autodoc.question.terminal.close_s_the_program_running_in_it_is_stopped">
+        <source>Close %1? The program running in it is stopped.</source>
+        <translation>Fechar %1? O programa rodando nele é parado.</translation>
+    </message>
+    <message id="autodoc.question.terminal.close_the_shell">
+        <source>close the shell?</source>
+        <translation>fechar o shell?</translation>
+    </message>
     <message id="autodoc.question.terminal.stop_every_shell_running_here">
         <source>%1 shells are running here. Each is hung up and its tab closed, then the terminal closes.</source>
         <translation>%1 shells estão rodando aqui. Cada um é encerrado e sua aba fechada; depois o terminal fecha.</translation>
@@ -5933,6 +5945,10 @@ Em uma nova aba do terminal, em %2. Digite ali qualquer senha: o agente não vê
     <message id="autodoc.question.terminal.stop_the_shells_and_close_the_terminal">
         <source>stop the shells and close the terminal?</source>
         <translation>parar os shells e fechar o terminal?</translation>
+    </message>
+    <message id="autodoc.question.terminal.yes_close_it">
+        <source>&amp;Yes, close it</source>
+        <translation>Sim, fechar (&amp;y)</translation>
     </message>
     <message id="autodoc.question.terminal.yes_stop_them">
         <source>&amp;Yes, stop them</source>

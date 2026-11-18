@@ -57,7 +57,7 @@ func TestTheStripIsFedTheBuffers(t *testing.T) {
 		return out
 	})
 	if !slices.Equal(got.tabs, want) || got.active != want[2].ID {
-		t.Fatalf("fed tabs %q, active %q: want %q, the last opened active", got.tabs, got.active, want)
+		t.Fatalf("fed tabs %+v, active %q: want %+v, the last opened active", got.tabs, got.active, want)
 	}
 	if l := got.tabs[2].Label; l == long || len([]rune(l)) > r.h.tabWidth()-2 {
 		t.Fatalf("the long name's tab is %q: want it cut to %d cells", l, r.h.tabWidth()-2)
@@ -83,7 +83,7 @@ func TestTheStripIsFedTheBuffers(t *testing.T) {
 	})
 	got = feed(strip)
 	if len(got.tabs) != 2 || len(got.spans) != 4 {
-		t.Fatalf("after b.md's ×: tabs %q, spans %v", got.tabs, got.spans)
+		t.Fatalf("after b.md's ×: tabs %+v, spans %v", got.tabs, got.spans)
 	}
 
 	plus := got.spans[2]

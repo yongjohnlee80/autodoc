@@ -5922,6 +5922,18 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>restart the backend?</source>
         <translation>バックエンドを再起動しますか?</translation>
     </message>
+    <message id="autodoc.question.terminal.close_s_a_program_may_be_running_in_it">
+        <source>Close %1? A program may be running in it, and it would be stopped.</source>
+        <translation>%1 を閉じますか? 実行中のプログラムがあれば停止します。</translation>
+    </message>
+    <message id="autodoc.question.terminal.close_s_the_program_running_in_it_is_stopped">
+        <source>Close %1? The program running in it is stopped.</source>
+        <translation>%1 を閉じますか? 実行中のプログラムは停止します。</translation>
+    </message>
+    <message id="autodoc.question.terminal.close_the_shell">
+        <source>close the shell?</source>
+        <translation>シェルを閉じますか?</translation>
+    </message>
     <message id="autodoc.question.terminal.stop_every_shell_running_here">
         <source>%1 shells are running here. Each is hung up and its tab closed, then the terminal closes.</source>
         <translation>ここで %1 個のシェルが実行中です。それぞれを終了してタブを閉じ、その後ターミナルを閉じます。</translation>
@@ -5929,6 +5941,10 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
     <message id="autodoc.question.terminal.stop_the_shells_and_close_the_terminal">
         <source>stop the shells and close the terminal?</source>
         <translation>シェルを停止してターミナルを閉じますか?</translation>
+    </message>
+    <message id="autodoc.question.terminal.yes_close_it">
+        <source>&amp;Yes, close it</source>
+        <translation>はい、閉じる(&amp;y)</translation>
     </message>
     <message id="autodoc.question.terminal.yes_stop_them">
         <source>&amp;Yes, stop them</source>

@@ -18,7 +18,7 @@ flowchart LR
 
 **Ele conhece o seu espaço de trabalho.** Um agente começa na pasta própria do AutoDoc para o espaço de trabalho, onde o AutoDoc escreve `AGENTS.md` e `CLAUDE.md`: o nome e a raiz do espaço de trabalho, e como chegar até ele. O `autodoc` no path dele é o seu, então `autodoc --call workspace.list` e os outros verbos chegam ao mesmo índice em que você busca.
 
-**Abas.** Cada agente tem uma aba, com o nome do seu codinome. **+** inicia outro perfil, ou vai para um que já está rodando. O menu de uma aba (`≡`, ou um clique direito nas abas) tem **Ir para**, **Reiniciar**, **Fechar**, **Perfis…**, **Tema e fonte…**, **Maximizar** e **Esconder**.
+**Abas.** Cada agente tem uma aba, com o nome do seu codinome. **+** inicia outro perfil, ou vai para um que já está rodando. O menu de uma aba (`≡`, ou um clique direito nas abas) tem **Ir para**, **Reiniciar**, **Fechar**, **Perfis…**, **Tema e fonte…**, **Maximizar** e **Esconder**. O **×** no começo de uma aba, à esquerda do nome, é o seu **Fechar**: ele pergunta antes enquanto o agente está rodando.
 
 **Dentro do painel**, toda tecla vai para o agente, Esc também. **Ctrl+T** passa para o modo Normal, para percorrer o histórico (`h j k l`, `/`, `v`, `y`); ali, Esc esconde o painel.
 

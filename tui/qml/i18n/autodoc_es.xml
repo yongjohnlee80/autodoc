@@ -5927,6 +5927,18 @@ En una pestaña nueva del terminal, en %2. Escriba ahí la contraseña: el agent
         <source>restart the backend?</source>
         <translation>¿reiniciar el backend?</translation>
     </message>
+    <message id="autodoc.question.terminal.close_s_a_program_may_be_running_in_it">
+        <source>Close %1? A program may be running in it, and it would be stopped.</source>
+        <translation>¿Cerrar %1? Puede que haya un programa ejecutándose en él, y se detendría.</translation>
+    </message>
+    <message id="autodoc.question.terminal.close_s_the_program_running_in_it_is_stopped">
+        <source>Close %1? The program running in it is stopped.</source>
+        <translation>¿Cerrar %1? El programa que se ejecuta en él se detiene.</translation>
+    </message>
+    <message id="autodoc.question.terminal.close_the_shell">
+        <source>close the shell?</source>
+        <translation>¿cerrar el shell?</translation>
+    </message>
     <message id="autodoc.question.terminal.stop_every_shell_running_here">
         <source>%1 shells are running here. Each is hung up and its tab closed, then the terminal closes.</source>
         <translation>Aquí se ejecutan %1 shells. Cada uno se cuelga y su pestaña se cierra; después se cierra la terminal.</translation>
@@ -5934,6 +5946,10 @@ En una pestaña nueva del terminal, en %2. Escriba ahí la contraseña: el agent
     <message id="autodoc.question.terminal.stop_the_shells_and_close_the_terminal">
         <source>stop the shells and close the terminal?</source>
         <translation>¿detener los shells y cerrar la terminal?</translation>
+    </message>
+    <message id="autodoc.question.terminal.yes_close_it">
+        <source>&amp;Yes, close it</source>
+        <translation>Sí, cerrarlo (&amp;y)</translation>
     </message>
     <message id="autodoc.question.terminal.yes_stop_them">
         <source>&amp;Yes, stop them</source>
