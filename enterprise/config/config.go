@@ -21,6 +21,7 @@ import (
 	coreconfig "github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/pgstore"
 	"github.com/yongjohnlee80/golib/logger"
+	"github.com/yongjohnlee80/golib/search/embed"
 )
 
 // The defaults of the fields that have one.
@@ -106,9 +107,16 @@ func (p Postgres) DSN() string { return os.Getenv(p.DSNEnv) }
 
 // Embedding is the enterprise's embedding provider, which embeds every tenant's chunks centrally.
 type Embedding struct {
-	Provider string // "openai" or "ollama"
-	BaseURL  string
-	Model    string
+	Provider string // "openai", "ollama" or "vertex"
+	// BaseURL is the provider's endpoint; for vertex, "" is the location's Google host
+	BaseURL string
+	Model   string
+	// Project, Location and Dimensions are vertex's: the Google Cloud project the calls are billed
+	// to, where the model is served (global, us or eu), and the vectors' size (0 is the model's
+	// own, 3072). Vertex authenticates with Application Default Credentials, never a key.
+	Project    string
+	Location   string
+	Dimensions int
 	// KeyEnv names the environment variable holding the provider's API key; "" for none.
 	KeyEnv string
 	// Slots is how many embedding requests may be in flight at once, across every tenant.
@@ -132,9 +140,15 @@ func (e Embedding) Key() string {
 // Ranker is the server's one reranker, for every tenant: golib's TEI or Cohere-style rerank API
 // client (Kind "tei" or "rerank-api").
 type Ranker struct {
-	Kind    string
+	Kind string
+	// BaseURL is the ranker's endpoint; for vertex, "" is Google's Ranking API host
 	BaseURL string
-	Model   string // rerank-api's: the model the server serves; TEI serves one, and names it
+	// Model is rerank-api's (the model the server serves) and vertex's (the ranking model,
+	// pinned); TEI serves one, and names it
+	Model string
+	// Project is vertex's: the Google Cloud project the calls are billed to. Vertex authenticates
+	// with Application Default Credentials, never a key.
+	Project string
 	// KeyEnv names the environment variable holding the ranker's API key; "" for none.
 	KeyEnv string
 	// Window is how many of recall's best candidates a search reranks, Timeout how long its
@@ -295,12 +309,16 @@ type file struct {
 		Slots       *int      `toml:"slots"`
 		Batch       *int      `toml:"batch"`
 		CallTimeout *duration `toml:"call_timeout"`
+		Project     string    `toml:"project"`
+		Location    string    `toml:"location"`
+		Dimensions  *int      `toml:"dimensions"`
 	} `toml:"embedding"`
 	Ranker *struct {
 		Kind    string    `toml:"kind"`
 		BaseURL string    `toml:"base_url"`
 		Model   string    `toml:"model"`
 		KeyEnv  string    `toml:"key_env"`
+		Project string    `toml:"project"`
 		Window  *int      `toml:"window"`
 		Timeout *duration `toml:"timeout"`
 		Slots   *int      `toml:"slots"`
@@ -515,7 +533,8 @@ func (v *validator) embedding(f file) Embedding {
 		return Embedding{}
 	}
 	e := Embedding{Provider: f.Embedding.Provider, BaseURL: f.Embedding.BaseURL, Model: f.Embedding.Model,
-		KeyEnv: f.Embedding.KeyEnv, Slots: DefaultSlots, Batch: DefaultBatch, CallTimeout: DefaultCallTimeout}
+		KeyEnv: f.Embedding.KeyEnv, Slots: DefaultSlots, Batch: DefaultBatch, CallTimeout: DefaultCallTimeout,
+		Project: f.Embedding.Project, Location: f.Embedding.Location}
 	switch e.Provider {
 	case "openai":
 		if e.BaseURL == "" {
@@ -525,10 +544,22 @@ func (v *validator) embedding(f file) Embedding {
 		if e.BaseURL == "" {
 			e.BaseURL = DefaultOllama
 		}
+	case "vertex":
+		v.vertexEmbedding(f, &e)
 	case "":
-		v.refuse("embedding.provider", `required: "openai" or "ollama"`)
+		v.refuse("embedding.provider", `required: "openai", "ollama" or "vertex"`)
 	default:
-		v.refuse("embedding.provider", `%q: want "openai" or "ollama"`, e.Provider)
+		v.refuse("embedding.provider", `%q: want "openai", "ollama" or "vertex"`, e.Provider)
+	}
+	if e.Provider != "vertex" {
+		for _, x := range []struct {
+			field string
+			set   bool
+		}{{"project", e.Project != ""}, {"location", e.Location != ""}, {"dimensions", f.Embedding.Dimensions != nil}} {
+			if x.set {
+				v.refuse("embedding."+x.field, "vertex's only: provider is %q", e.Provider)
+			}
+		}
 	}
 	if e.BaseURL != "" {
 		if u, err := url.Parse(e.BaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
@@ -549,8 +580,11 @@ func (v *validator) embedding(f file) Embedding {
 	}
 	if f.Embedding.Batch != nil {
 		e.Batch = *f.Embedding.Batch
-		if e.Batch < 1 || e.Batch > MaxBatch {
+		switch {
+		case e.Batch < 1 || e.Batch > MaxBatch:
 			v.refuse("embedding.batch", "%d: want 1 to %d", e.Batch, MaxBatch)
+		case e.Provider == "vertex" && e.Batch != 1:
+			v.refuse("embedding.batch", "%d: vertex embeds one text a call, so batch is 1: slots sets how many calls are in flight", e.Batch)
 		}
 	}
 	if f.Embedding.CallTimeout != nil {
@@ -566,7 +600,7 @@ func (v *validator) ranker(f file) *Ranker {
 	if f.Ranker == nil {
 		return nil
 	}
-	r := &Ranker{Kind: f.Ranker.Kind, BaseURL: f.Ranker.BaseURL, Model: f.Ranker.Model, KeyEnv: f.Ranker.KeyEnv,
+	r := &Ranker{Kind: f.Ranker.Kind, BaseURL: f.Ranker.BaseURL, Model: f.Ranker.Model, KeyEnv: f.Ranker.KeyEnv, Project: f.Ranker.Project,
 		Window: DefaultRankWindow, Timeout: DefaultRankTimeout, Slots: DefaultRankSlots}
 	switch r.Kind {
 	case "tei":
@@ -577,15 +611,35 @@ func (v *validator) ranker(f file) *Ranker {
 		if strings.TrimSpace(r.Model) == "" {
 			v.refuse("ranker.model", "required for rerank-api: the model the server serves")
 		}
+	case "vertex":
+		switch {
+		case strings.TrimSpace(r.Model) == "":
+			v.refuse("ranker.model", "required for vertex: the ranking model, pinned (semantic-ranker-default-005)")
+		case strings.Contains(r.Model, "@"):
+			v.refuse("ranker.model", "%q: pin a version (semantic-ranker-default-005): an alias moves under a running server", r.Model)
+		}
+		if strings.TrimSpace(r.Project) == "" {
+			v.refuse("ranker.project", "required for vertex: the Google Cloud project the calls are billed to")
+		}
+		if r.KeyEnv != "" {
+			v.refuse("ranker.key_env", "vertex authenticates with Application Default Credentials (the VM's service account): leave key_env out")
+			r.KeyEnv = ""
+		}
 	case "":
-		v.refuse("ranker.kind", `required: "tei" or "rerank-api"`)
+		v.refuse("ranker.kind", `required: "tei", "rerank-api" or "vertex"`)
 	default:
-		v.refuse("ranker.kind", `%q: want "tei" or "rerank-api"`, r.Kind)
+		v.refuse("ranker.kind", `%q: want "tei", "rerank-api" or "vertex"`, r.Kind)
 	}
-	if r.BaseURL == "" {
+	if r.Kind != "vertex" && r.Project != "" {
+		v.refuse("ranker.project", "vertex's only: kind is %q", r.Kind)
+	}
+	switch {
+	case r.BaseURL == "" && r.Kind != "vertex":
 		v.refuse("ranker.base_url", "required: where the ranker answers")
-	} else if u, err := url.Parse(r.BaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		v.refuse("ranker.base_url", "want an http or https URL with a host")
+	case r.BaseURL != "":
+		if u, err := url.Parse(r.BaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			v.refuse("ranker.base_url", "want an http or https URL with a host")
+		}
 	}
 	if r.KeyEnv != "" {
 		v.envSet("ranker.key_env", r.KeyEnv)
@@ -609,6 +663,36 @@ func (v *validator) ranker(f file) *Ranker {
 		}
 	}
 	return r
+}
+
+// vertexEmbedding checks [embedding] for provider "vertex": a project, a location gemini-embedding-2
+// is served at, its one model, dimensions within its sizes, no key (Application Default
+// Credentials), one text a call.
+func (v *validator) vertexEmbedding(f file, e *Embedding) {
+	e.Batch = 1
+	if strings.TrimSpace(e.Project) == "" {
+		v.refuse("embedding.project", "required for vertex: the Google Cloud project the calls are billed to")
+	}
+	switch e.Location {
+	case "global", "us", "eu":
+	case "":
+		v.refuse("embedding.location", `required for vertex: "global", "us" or "eu", where %s is served`, embed.VertexModel)
+	default:
+		v.refuse("embedding.location", `%q: want "global", "us" or "eu", where %s is served`, e.Location, embed.VertexModel)
+	}
+	if e.Model != "" && e.Model != embed.VertexModel {
+		v.refuse("embedding.model", "%q: want %q, the Vertex model the server speaks", e.Model, embed.VertexModel)
+	}
+	if f.Embedding.Dimensions != nil {
+		e.Dimensions = *f.Embedding.Dimensions
+		if e.Dimensions < embed.VertexMinDims || e.Dimensions > embed.VertexMaxDims {
+			v.refuse("embedding.dimensions", "%d: want %d to %d", e.Dimensions, embed.VertexMinDims, embed.VertexMaxDims)
+		}
+	}
+	if e.KeyEnv != "" {
+		v.refuse("embedding.key_env", "vertex authenticates with Application Default Credentials (the VM's service account): leave key_env out")
+		e.KeyEnv = ""
+	}
 }
 
 // tenantName is a tenant as a source names it: it is a key in every pgstore table, a log label and

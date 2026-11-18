@@ -194,6 +194,35 @@ least `ann_maintenance_work_mem` (`--shm-size 1g` for the default; `shm_size: 1g
 With less, the build runs out of shared memory, and the server builds the index again without
 parallel workers (slower) and logs a warning saying so.
 
+## On Google Cloud: Vertex AI
+
+With `provider = "vertex"` and `kind = "vertex"` ([server-config](server-config.md#vertex-ai-on-google-cloud)),
+the server calls Vertex AI and the Ranking API as the VM's service account.
+
+- **The service account.** Attach one to the VM, with the `cloud-platform` access scope: a VM's
+  default scopes don't reach Vertex AI. Grant it, in the project:
+  - Vertex AI User (`roles/aiplatform.user`), for the embeddings;
+  - Discovery Engine User (`roles/discoveryengine.user`), for the ranking.
+  Check both against your project once, with `--check`.
+- **The APIs.** Enable `aiplatform.googleapis.com` and `discoveryengine.googleapis.com` in the
+  project. `--check` names an API that isn't enabled, from Google's answer.
+- **The location.** gemini-embedding-2 is served at `global`, `us` and `eu`; pick the one nearest the
+  VM. The Ranking API is global.
+- **`--check`** fetches a token and probes each, and refuses with what it met: no credentials (no
+  service account, no `GOOGLE_APPLICATION_CREDENTIALS`), Google refusing the credentials (a key
+  revoked, or a role missing), or an API not enabled. A good probe prints the model and its size.
+- **What leaves.** Every chunk embedded and every query go to Vertex AI in the configured location;
+  every reranked search sends its query and its window's texts to the Ranking API. Both stay
+  within the project's terms with Google.
+- **What it costs** (Google's list prices, November 2026; check them before you budget):
+  - embedding, gemini-embedding-2: $0.20 per million tokens. A corpus of 11 million tokens costs
+    about $2 to embed once, then only what changes, and each query's few tokens.
+  - ranking: $1.00 per 1,000 searches of up to 100 candidates (the default window is 40), after a
+    free allowance per project a month.
+  - A down ranker's probe is a billed search: the server probes it at most once a minute.
+  - `autodoc_rank_texts_total` and the ranker's `ranked` count in the status are what the bill
+    counts.
+
 ## Behind a proxy
 
 The server listens on loopback by default. To serve beyond it, either give it a certificate (`tls_cert`, `tls_key`), or put a proxy that terminates TLS in front and say so:

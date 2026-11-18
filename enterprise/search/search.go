@@ -550,14 +550,11 @@ func QueryEmbedder(p embed.Provider) gsearch.QueryEmbedder {
 	return func(ctx context.Context, q string) (string, []float32, error) {
 		// once per model and text in a search across tenants (WithQueryCache)
 		vec, err := EmbedQuery(ctx, fp, q, func() ([]float32, error) {
-			vecs, err := p.Embed(ctx, []string{q})
+			vec, err := embed.Query(ctx, p, q) // in the model's format for a query
 			if err != nil {
 				return nil, fmt.Errorf("%w: %w", gsearch.ErrEmbedFailed, err)
 			}
-			if len(vecs) != 1 {
-				return nil, fmt.Errorf("%w: the provider answered %d vectors for one query", gsearch.ErrEmbedFailed, len(vecs))
-			}
-			return vector.Normalize(vecs[0]), nil
+			return vector.Normalize(vec), nil
 		})
 		if err != nil {
 			return "", nil, err

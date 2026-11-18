@@ -122,7 +122,14 @@ func New(kind, model string, window, slots int, build Build, opts ...Option) *Ra
 // first wait to the longest while it stays down, and waiting while it is up.
 func (r *Ranker) Run(ctx context.Context) {
 	wait := r.retry
+	var last time.Time
 	for ctx.Err() == nil {
+		// NOTE: a probe is a billed call on a hosted ranker: never sooner than the first wait after
+		// the last, however soon a call finds the ranker down again
+		if since := time.Since(last); !last.IsZero() && since < r.retry && !clock.Sleep(ctx, r.retry-since) {
+			return
+		}
+		last = time.Now()
 		if r.probe(ctx) {
 			wait = r.retry
 			select {

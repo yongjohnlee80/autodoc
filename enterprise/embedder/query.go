@@ -62,17 +62,15 @@ func (w *Worker) QueryEmbedder(tenant string) search.QueryEmbedder {
 				return nil, err
 			}
 			defer w.lim.release()
-			vecs, err := st.p.Embed(ctx, []string{q})
+			// in the model's format for a query (embed.Query): a document's for most providers
+			vec, err := embed.Query(ctx, st.p, q)
 			if ctx.Err() == nil {
 				w.answered(st.fp, err) // a query that ran out its own time says nothing of the provider
 			}
 			if err != nil {
 				return nil, fmt.Errorf("%w: %w", search.ErrEmbedFailed, err)
 			}
-			if len(vecs) != 1 {
-				return nil, fmt.Errorf("%w: the provider answered %d vectors for one query", search.ErrEmbedFailed, len(vecs))
-			}
-			return vector.Normalize(vecs[0]), nil
+			return vector.Normalize(vec), nil
 		})
 		if err != nil {
 			return "", nil, err

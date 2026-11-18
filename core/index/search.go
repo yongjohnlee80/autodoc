@@ -8,6 +8,7 @@ import (
 
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/errs"
+	"github.com/yongjohnlee80/golib/search/embed"
 	"github.com/yongjohnlee80/golib/search/vector"
 
 	"github.com/yongjohnlee80/autodoc/core/store"
@@ -176,14 +177,14 @@ func (s *Store) embedQuery(ctx context.Context, sem *semantic, q string) (string
 	}
 	cctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
-	vecs, err := p.Embed(cctx, []string{q})
+	vec, err := embed.Query(cctx, p, q) // in the model's format for a query
 	if err != nil {
 		return "", nil, err
 	}
-	if len(vecs) != 1 || len(vecs[0]) != dims {
+	if len(vec) != dims {
 		return "", nil, fmt.Errorf("index: the query's vector does not fit model %s", fp)
 	}
-	return fp, vector.Normalize(vecs[0]), nil
+	return fp, vector.Normalize(vec), nil
 }
 
 // filtered narrows a chunk query (joined to its document) to the query's filters: every facet

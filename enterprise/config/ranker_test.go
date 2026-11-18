@@ -45,7 +45,7 @@ func TestEveryRankerRefusalNamesItsField(t *testing.T) {
 	tei := "\n[ranker]\nkind = \"tei\"\nbase_url = \"http://127.0.0.1:8081\"\n"
 	for _, c := range []struct{ name, add, field, says string }{
 		{"no kind", "\n[ranker]\nbase_url = \"http://127.0.0.1:8081\"\n", "ranker.kind", "required"},
-		{"a kind it lacks", "\n[ranker]\nkind = \"ollama\"\nbase_url = \"http://127.0.0.1:8081\"\n", "ranker.kind", `want "tei" or "rerank-api"`},
+		{"a kind it lacks", "\n[ranker]\nkind = \"ollama\"\nbase_url = \"http://127.0.0.1:8081\"\n", "ranker.kind", `want "tei", "rerank-api" or "vertex"`},
 		{"no base url", "\n[ranker]\nkind = \"tei\"\n", "ranker.base_url", "required"},
 		{"a base url without a scheme", "\n[ranker]\nkind = \"tei\"\nbase_url = \"rerank.internal\"\n", "ranker.base_url", "http or https URL"},
 		{"tei with a model", tei + "model = \"bge\"\n", "ranker.model", "leave model out"},
