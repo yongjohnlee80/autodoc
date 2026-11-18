@@ -379,7 +379,9 @@ func (v *pluginView) HandleEvent(ev tuicore.Event) bool {
 				if p.Kind == "press" && r.e.m.Protocol >= 12 {
 					v.dragRun, v.dragAt = r, tuicore.Point{X: m.X, Y: m.Y}
 					if !v.Context().CapturePointer() {
-						// refused: no motion or release will come, so the gesture ends at once
+						// refused: no motion or release will come, so the gesture ends at once. It is
+						// defence: no golib refusal lets the press reach the view today (another node's
+						// capture takes the press, and a trapping scope or a disabled policy drops it)
 						v.dragRun = nil
 						r.send(plugin.MethodPointer, plugin.PointerParams(v.gestureAt("release", v.dragAt)))
 					}
