@@ -10,23 +10,23 @@ import (
 
 // worktreeLayout lays out, under /repo, the two layouts movedFromWorktree knows and the ones it must
 // leave alone:
-//   - /repo/lm: a bare repository's container, its main worktree /repo/lm/main and a canary
+//   - /repo/proj: a bare repository's container, its main worktree /repo/proj/main and a canary
 //     worktree beside it, a worktree on a detached HEAD, and Claude Code worktrees under .claude;
 //   - /repo/plain: an ordinary checkout with Claude Code worktrees under .claude.
 func worktreeLayout(e *env) {
 	w := func(p, s string) { e.disk.WriteFile(p, []byte(s)) }
-	w("/repo/lm/.git/config", "[core]\n\trepositoryformatversion = 0\n\tbare = true\n")
+	w("/repo/proj/.git/config", "[core]\n\trepositoryformatversion = 0\n\tbare = true\n")
 	for _, wt := range []struct{ name, head string }{
 		{"main", "ref: refs/heads/main"}, {"canary", "ref: refs/heads/canary"}, {"detached", "4c8ad8d13cb8378f95d0dc3ef3b3f3ca8d2b20f9"},
 	} {
-		w("/repo/lm/.git/worktrees/"+wt.name+"/HEAD", wt.head+"\n")
-		w("/repo/lm/.git/worktrees/"+wt.name+"/gitdir", "/repo/lm/"+wt.name+"/.git\n")
-		w("/repo/lm/"+wt.name+"/.git", "gitdir: /repo/lm/.git/worktrees/"+wt.name+"\n")
+		w("/repo/proj/.git/worktrees/"+wt.name+"/HEAD", wt.head+"\n")
+		w("/repo/proj/.git/worktrees/"+wt.name+"/gitdir", "/repo/proj/"+wt.name+"/.git\n")
+		w("/repo/proj/"+wt.name+"/.git", "gitdir: /repo/proj/.git/worktrees/"+wt.name+"\n")
 	}
-	w("/repo/lm/main/docs/a.md", "a")
-	w("/repo/lm/canary/docs/a.md", "a")
-	w("/repo/lm/canary/docs/only-canary.md", "c")
-	w("/repo/lm/.claude/worktrees/live/x.md", "x")
+	w("/repo/proj/main/docs/a.md", "a")
+	w("/repo/proj/canary/docs/a.md", "a")
+	w("/repo/proj/canary/docs/only-canary.md", "c")
+	w("/repo/proj/.claude/worktrees/live/x.md", "x")
 	w("/repo/bare2/.git/config", "[core]\n\tbare = true\n") // no .claude/worktrees left at all
 	w("/repo/bare2/.git/worktrees/main/HEAD", "ref: refs/heads/main\n")
 	w("/repo/bare2/.git/worktrees/main/gitdir", "/repo/bare2/main/.git\n")
@@ -54,22 +54,22 @@ func TestMigrateRefsMovesRefsOutOfRemovedWorktrees(t *testing.T) {
 	worktreeLayout(e)
 	e.must(e.m.SetVar(ctx, "PROJECT_ROOT", "/repo", todo.SetVarOpts{At: &kb}))
 	adr := []string{
-		"$PROJECT_ROOT/lm/feat-x/docs/a.md",                    // a bare container's removed worktree: main's, not canary's
-		"/repo/lm/.claude/worktrees/gone/docs/a.md",            // a Claude worktree in a bare container
-		"$PROJECT_ROOT/lm/feat-y/docs/only-canary.md",          // main has no copy: left
-		"$PROJECT_ROOT/lm/main/docs/missing.md",                // only the file is missing: no worktree removed
-		"$PROJECT_ROOT/lm/main/docs/a.md",                      // resolves: left
-		"$PROJECT_ROOT/plain/gone-dir/docs/b.md",               // a directory deleted from a checkout: not a worktree
-		"$PROJECT_ROOT/lm/detached/../gone-detached/docs/x.md", // no main copy: left
-		"/repo/bare2/.claude/worktrees/gone/docs/c.md",         // .claude/worktrees itself removed
-		"/repo/lm/.claude/worktrees/live/x.md",                 // a live Claude worktree: resolves, left
-		"/repo/lm/.claude/worktrees/live/docs/a.md",            // a live worktree's missing file, though main has it: left
-		"/repo/nogit/.claude/worktrees/w/docs/a.md",            // a Claude path in no repository: left
-		"/repo/nogit/gone/docs/a.md",                           // a missing directory in no repository: left
-		"/repo/canaryonly/feat/docs/a.md",                      // a bare repository with no main worktree: left
-		"/repo/broken/feat/docs/a.md",                          // worktree records without HEAD or gitdir: left
-		"$NOPE/docs/a.md",                                      // an unresolved variable: left
-		"docs/relative.md",                                     // a relative ref: left
+		"$PROJECT_ROOT/proj/feat-x/docs/a.md",                    // a bare container's removed worktree: main's, not canary's
+		"/repo/proj/.claude/worktrees/gone/docs/a.md",            // a Claude worktree in a bare container
+		"$PROJECT_ROOT/proj/feat-y/docs/only-canary.md",          // main has no copy: left
+		"$PROJECT_ROOT/proj/main/docs/missing.md",                // only the file is missing: no worktree removed
+		"$PROJECT_ROOT/proj/main/docs/a.md",                      // resolves: left
+		"$PROJECT_ROOT/plain/gone-dir/docs/b.md",                 // a directory deleted from a checkout: not a worktree
+		"$PROJECT_ROOT/proj/detached/../gone-detached/docs/x.md", // no main copy: left
+		"/repo/bare2/.claude/worktrees/gone/docs/c.md",           // .claude/worktrees itself removed
+		"/repo/proj/.claude/worktrees/live/x.md",                 // a live Claude worktree: resolves, left
+		"/repo/proj/.claude/worktrees/live/docs/a.md",            // a live worktree's missing file, though main has it: left
+		"/repo/nogit/.claude/worktrees/w/docs/a.md",              // a Claude path in no repository: left
+		"/repo/nogit/gone/docs/a.md",                             // a missing directory in no repository: left
+		"/repo/canaryonly/feat/docs/a.md",                        // a bare repository with no main worktree: left
+		"/repo/broken/feat/docs/a.md",                            // worktree records without HEAD or gitdir: left
+		"$NOPE/docs/a.md",                                        // an unresolved variable: left
+		"docs/relative.md",                                       // a relative ref: left
 	}
 	review := []string{"/repo/plain/.claude/worktrees/gone/docs/b.md"} // a Claude worktree in a checkout
 	e.disk.WriteFile(kbStore+"/archived/2026/09/w.md", []byte(taskFile("w", "archived",
@@ -88,8 +88,8 @@ func TestMigrateRefsMovesRefsOutOfRemovedWorktrees(t *testing.T) {
 		got = append(got, move{c.Field, c.Ref, c.To})
 	}
 	want := []move{
-		{"adr", adr[0], "$PROJECT_ROOT/lm/main/docs/a.md"},
-		{"adr", adr[1], "$PROJECT_ROOT/lm/main/docs/a.md"},
+		{"adr", adr[0], "$PROJECT_ROOT/proj/main/docs/a.md"},
+		{"adr", adr[1], "$PROJECT_ROOT/proj/main/docs/a.md"},
 		{"adr", adr[7], "$PROJECT_ROOT/bare2/main/docs/c.md"},
 		{"review", review[0], "$PROJECT_ROOT/plain/docs/b.md"},
 	}
@@ -101,7 +101,7 @@ func TestMigrateRefsMovesRefsOutOfRemovedWorktrees(t *testing.T) {
 	}
 
 	stale := plan.Candidates[1]
-	stale.To = "$PROJECT_ROOT/lm/canary/docs/a.md" // not what the plan proposed
+	stale.To = "$PROJECT_ROOT/proj/canary/docs/a.md" // not what the plan proposed
 	apply := []todo.RefCandidate{plan.Candidates[0], stale, plan.Candidates[2], plan.Candidates[3]}
 	res, err := e.m.MigrateRefs(ctx, kb, todo.MigrateOpts{Apply: apply})
 	if err != nil || res.Rewritten != 3 || len(res.Skipped) != 1 || res.Skipped[0].To != stale.To {
@@ -109,7 +109,7 @@ func TestMigrateRefsMovesRefsOutOfRemovedWorktrees(t *testing.T) {
 	}
 	w := e.get("w")
 	wantADR := slices.Clone(adr)
-	wantADR[0] = "$PROJECT_ROOT/lm/main/docs/a.md"
+	wantADR[0] = "$PROJECT_ROOT/proj/main/docs/a.md"
 	wantADR[7] = "$PROJECT_ROOT/bare2/main/docs/c.md"
 	if !slices.Equal(w.ADR, wantADR) || !slices.Equal(w.Review, []string{"$PROJECT_ROOT/plain/docs/b.md"}) {
 		t.Errorf("adr %v\nreview %v", w.ADR, w.Review)
@@ -133,9 +133,9 @@ func TestMigrateRefsMovesRefsOutOfRemovedWorktrees(t *testing.T) {
 func TestAWorktreePlanNeedsNoProjectRoot(t *testing.T) {
 	e := claimed(t)
 	worktreeLayout(e)
-	e.disk.WriteFile(kbStore+"/open/p.md", []byte(taskFile("p", "open", "adr:\n  - /repo/lm/feat-z/docs/a.md")))
+	e.disk.WriteFile(kbStore+"/open/p.md", []byte(taskFile("p", "open", "adr:\n  - /repo/proj/feat-z/docs/a.md")))
 	plan, err := e.m.MigrateRefs(ctx, kb, todo.MigrateOpts{Plan: true, Worktrees: true})
-	if err != nil || len(plan.Candidates) != 1 || plan.Candidates[0].To != "/repo/lm/main/docs/a.md" {
+	if err != nil || len(plan.Candidates) != 1 || plan.Candidates[0].To != "/repo/proj/main/docs/a.md" {
 		t.Fatalf("plan %+v %v", plan, err)
 	}
 	if _, err := e.m.MigrateRefs(ctx, kb, todo.MigrateOpts{Plan: true}); !is(err, todo.ErrInvalid) {

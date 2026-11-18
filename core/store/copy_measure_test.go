@@ -17,20 +17,20 @@ import (
 	"time"
 )
 
-// TestMeasureACopy measures a copy at a store's shape (AUTODOC_MEASURE_COPY): "lm" is
-// LabelManager's (56,000 documents, 168,000 chunks, each with a 1024-dimension embedding), "1m"
+// TestMeasureACopy measures a copy at a store's shape (AUTODOC_MEASURE_COPY): "catalog" is a
+// 56,000-document catalog's (168,000 chunks, each with a 1024-dimension embedding), "1m"
 // is a million chunks (100,000 documents, no embeddings). It logs the copy's time, the process's
 // peak RSS during it, and the WAL PostgreSQL wrote for it.
 func TestMeasureACopy(t *testing.T) {
 	shape := os.Getenv("AUTODOC_MEASURE_COPY")
 	var docs, chunks, dims int
 	switch shape {
-	case "lm":
+	case "catalog":
 		docs, chunks, dims = 56_000, 168_000, 1024
 	case "1m":
 		docs, chunks, dims = 100_000, 1_000_000, 0
 	default:
-		t.Skip("set AUTODOC_MEASURE_COPY=lm or 1m to measure a copy")
+		t.Skip("set AUTODOC_MEASURE_COPY=catalog or 1m to measure a copy")
 	}
 	ctx := context.Background()
 	dst, src := copyStores(t)

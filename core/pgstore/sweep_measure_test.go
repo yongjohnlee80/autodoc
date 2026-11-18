@@ -10,7 +10,7 @@ import (
 	"github.com/yongjohnlee80/golib/search"
 )
 
-// TestMeasureASweep measures SweepEmbeddings at LabelManager's shape, AUTODOC_MEASURE_SWEEP=1 (a
+// TestMeasureASweep measures SweepEmbeddings at a 56,000-document catalog's shape, AUTODOC_MEASURE_SWEEP=1 (a
 // separate run): 56,000 documents of three chunks, a 1,024-d vector per chunk (168,000), tagged
 // with one of 200 labels. It times a sweep that finds nothing (the common case), one of 1% orphans
 // and one of 10% (a template change's refresh), and what a 10% sweep costs searches running at the
