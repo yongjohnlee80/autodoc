@@ -59,6 +59,8 @@ type helloJSON struct {
 	PID            int64  `json:"pid"`
 	Addr           string `json:"addr"`
 	StoreID        string `json:"store_id"`
+	Engine         string `json:"engine,omitempty"` // a store on PostgreSQL's: "postgres"
+	Schema         string `json:"schema,omitempty"` // and its schema
 	Client         string `json:"client,omitempty"`
 	Events         *int64 `json:"events,omitempty"` // where this client's sys.events begins
 }
@@ -82,9 +84,9 @@ func (s *Server) sysVerbs() []module.Verb {
 	agent, internal := module.AudienceAgent, module.AudienceInternal
 	return []module.Verb{
 		module.Handle(module.Contract{Verb: "sys.hello", Effect: module.EffectRead, Since: 1, Audience: internal,
-			Result: "{protocol, server_protocol, min_protocol, server, version, instance, pid, addr, store_id, client, events}",
+			Result: "{protocol, server_protocol, min_protocol, server, version, instance, pid, addr, store_id, engine, schema, client, events}",
 			Errors: []int64{CodeProtocolMismatch},
-			Doc:    "Opens the session at the protocol it declares. protocol is the session's, server_protocol and min_protocol the range the daemon serves, store_id the store's identity, client this connection's token, events the event log's head."},
+			Doc:    "Opens the session at the protocol it declares. protocol is the session's, server_protocol and min_protocol the range the daemon serves, store_id the store's identity, engine and schema a store on PostgreSQL's (absent for a SQLite store), client this connection's token, events the event log's head."},
 			s.hello),
 		module.Handle(module.Contract{Verb: "sys.shutdown", Effect: module.EffectSettings, Since: 1, Scope: module.ScopeLocalPeer, Audience: internal,
 			Errors: []int64{golibrpc.CodeAccessDenied}, Doc: "Stops the daemon. Frozen across protocols."},
@@ -178,7 +180,8 @@ func (s *Server) hello(ctx context.Context, p sysHello) (*helloJSON, error) {
 		info = m
 	}
 	reply := &helloJSON{Protocol: Protocol, ServerProtocol: Protocol, MinProtocol: MinProtocol, Server: ServerName,
-		Version: s.version, Instance: s.instance, PID: int64(os.Getpid()), Addr: s.rpc.Addr(), StoreID: s.storeID}
+		Version: s.version, Instance: s.instance, PID: int64(os.Getpid()), Addr: s.rpc.Addr(), StoreID: s.storeID,
+		Engine: s.storeEngine, Schema: s.storeSchema}
 	raw, declared := info["protocol"]
 	if !declared {
 		return reply, nil

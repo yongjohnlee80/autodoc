@@ -85,7 +85,7 @@ func edgeRow(rows []widgetcore.MenuItemModel, edge string) (widgetcore.MenuItemM
 // stored: the page Tiled, the terminal Float. Its Tiled chosen, the terminal's Layout is Tiled,
 // and its menu says so.
 func TestLayoutIsRightAboveGoToOnTheBufferAndShellMenus(t *testing.T) {
-	_, r := runShellTUI(t, nil)
+	_, r := runLineShellTUI(t, nil)
 	wantLayoutAbove(t, "the buffer strip", onLoop(r, func() []widgetcore.MenuItemModel { return r.h.bufferTabRows("") }), "buffer.tabs.goto", true)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
@@ -105,7 +105,7 @@ func TestLayoutIsRightAboveGoToOnTheBufferAndShellMenus(t *testing.T) {
 // The agent's tabs have Layout › right above Go to ›, Float as stored.
 func TestLayoutIsRightAboveGoToOnTheAgentsMenu(t *testing.T) {
 	agent, _ := fakeAgent(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron")
+	_, r, _ := runAgentTUI(t, agentsFolder(t), []agents.AgentProfile{{Name: "heron", Command: agentCall(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
 	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
 	tab := onLoop(r, func() terminal.TerminalTabID { return r.h.agents.Snapshot().Instances["heron"].Tab })
@@ -207,7 +207,7 @@ func TestTheLayoutCommandOpensAWindowsLayout(t *testing.T) {
 // floating terminal, Right tiles it there, the page beside it; Top, Left and Bottom then move its
 // tile, each checked as chosen. Its edge set elsewhere (the preference), the menu checks it.
 func TestAPanelsEdgeIsChosenOnItsLayout(t *testing.T) {
-	_, r := runShellTUI(t, nil)
+	_, r := runLineShellTUI(t, nil)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
 	rows := func() []widgetcore.MenuItemModel {
@@ -261,7 +261,7 @@ func TestAPanelsEdgeIsChosenOnItsLayout(t *testing.T) {
 // reload). Right then docks it at the right and tiles it: the Layout as it is when chosen, not as
 // it was when the menu was built.
 func TestAnEdgeChosenTilesThePanelAsItIsNow(t *testing.T) {
-	d, r := runShellTUI(t, nil)
+	d, r := runLineShellTUI(t, nil)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
 	onLoop(r, func() bool {

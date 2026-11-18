@@ -32,7 +32,9 @@ func (h *Host) commands() map[string]feature.Command {
 		"App.unsaved":            feature.OneString("save, discard or stay", h.unsaved),
 		"App.recovery":           feature.OneString("restore, discard or later", h.recovery),
 		"App.openHTMLAs":         feature.OneString("simplified, raw or cancel", h.openHTMLAs),
-		"App.conflict":           feature.OneString("keep, reload or overwrite", h.conflict),
+		"App.conflict":           feature.OneString("keep, reload, overwrite or compare", h.conflict),
+		"App.compareDone":        feature.OneBool(h.compareDone),
+		"App.compareClosed":      feature.None(h.compareClosed),
 
 		// the pickers
 		"App.openSearch":            feature.None(h.openSearch),

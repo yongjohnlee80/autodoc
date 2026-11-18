@@ -18,7 +18,7 @@ Unlike external vector databases that force you to replicate business data acros
 
 The server maintains three specialized PostgreSQL connection pools and four core subsystems:
 
-1. **Declarative `.view` Ingesters (One per Source/Tenant)**: Each `[[source]]` in `server.toml` maps one `.view` file to an isolated `tenant`. The ingester acquires a dedicated PostgreSQL session-level **advisory lock** for that tenant (`lock = "held"`), ensuring that even if you deploy multiple `autodoc --server` replicas for high availability, at most one writer mutates a tenant at a time while standby instances wait seamlessly for failover.
+1. **Declarative `.view` Ingesters (One per Source/Tenant)**: Each `[[source]]` in `server.toml` maps one `.view` file to an isolated `tenant`. The ingester holds that tenant's **writer lease**, a row claimed and renewed in transactions and confirmed inside every write (`lock = "held"`), so that even if you deploy multiple `autodoc --server` replicas for high availability, at most one writer mutates a tenant at a time while standby instances wait, and take over when the holder releases the lease or stops renewing it.
 2. **Storage Tables (`core/pgstore`)**: Inside `autodoc_search`, the server manages document records (`rag_document` / `documents`), full-text search tsvector chunks (`rag_chunk` / `chunks_fts`), deduplicated vector embeddings (`rag_embedding` / `content_vectors`), keyset ingestion cursors (`rag_cursor`), quarantined row errors (`rag_ingest_error`), and immutable tenant access policies (`rag_tenant_policy`).
 3. **Central Distinct-Hash Embedding Worker**: A single background worker across all tenants batches unembedded chunk texts (64 texts per batch across `slots = 4` concurrent requests) and embeds each distinct SHA-256 content hash once per tenant.
 4. **Snapshot-Scoped Search (`POST /v1/search` & `enterprise/search`)**: Every search query runs inside a `REPEATABLE READ` transaction that validates the caller's mandatory access `scope` against the tenant policy in the same snapshot before executing hybrid lexical + `pgvector` retrieval.
@@ -165,7 +165,7 @@ func SearchTracks(ctx context.Context, searcher *search.Searcher, labelIDs []str
 
 ### Operator Telemetry (`/v1/status` and `/v1/health`)
 
-Operators authenticated via `[[http.operator]]` can query `GET /v1/status` (or `GET /v1/status?tenant=music`) to inspect per-tenant ingestion health, advisory lock ownership (`lock: "held"` vs. `"waiting"`), last cursor `(updated_at, id)`, semantic embedding progress (`ready_documents`, `pending_documents`, `semantic: "ready" | "backfilling" | "switching"`), and the count of quarantined rows in `rag_ingest_error`. Load balancers and Kubernetes probes can poll `GET /v1/health` (unauthenticated liveness check) to verify database pool reachability.
+Operators authenticated via `[[http.operator]]` can query `GET /v1/status` (or `GET /v1/status?tenant=music`) to inspect per-tenant ingestion health, writer lease ownership (`lock: "held"` vs. `"waiting"`), last cursor `(updated_at, id)`, semantic embedding progress (`ready_documents`, `pending_documents`, `semantic: "ready" | "backfilling" | "switching"`), and the count of quarantined rows in `rag_ingest_error`. Load balancers and Kubernetes probes can poll `GET /v1/health` (unauthenticated liveness check) to verify database pool reachability.
 
 ---
 

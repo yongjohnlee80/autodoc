@@ -1,5 +1,5 @@
 // FileConflict.qml — the note changed on disk since it was opened: keep editing, reload the disk's
-// version (yours is lost), or overwrite it with yours. Keep takes initial focus, so Enter can
+// version (yours is lost), overwrite it with yours, or compare the two and merge. Keep takes initial focus, so Enter can
 // neither overwrite the disk nor throw your edits away.
 Dialog {
     closeOnQ: true
@@ -11,5 +11,7 @@ Dialog {
         Button { text: qsTrId("autodoc.dialog.fileConflict.keep");      DialogButtonBox.buttonRole: DialogButtonBox.RejectRole; onClicked: App.conflict("keep") }
         Button { text: qsTrId("autodoc.dialog.fileConflict.reload");    DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.conflict("reload") }
         Button { text: qsTrId("autodoc.dialog.fileConflict.overwrite"); DialogButtonBox.buttonRole: DialogButtonBox.DestructiveRole; onClicked: App.conflict("overwrite") }
+        // the two texts merged in the Compare (compare.go)
+        Button { text: qsTrId("autodoc.dialog.fileConflict.compare");   DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.conflict("compare") }
     }
 }

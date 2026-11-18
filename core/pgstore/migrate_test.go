@@ -146,8 +146,9 @@ func TestMigration000002KeepsWhat000001Wrote(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if docs, _, err := s.Docs(ctx, "", 10); err != nil || len(docs) != 2 || docs[0].Version != "v1" || docs[0].Indexer != "ix1" {
-		t.Errorf("Docs after 000002: %+v, %v", docs, err)
+	// as Docs reads them; Docs itself reads the latest scripts' columns (source_at, 000010)
+	if got := scalar(t, conn, "SELECT string_agg(version || '|' || indexer, ',' ORDER BY path) FROM rag_document"); !strings.HasPrefix(got, "v1|ix1,") {
+		t.Errorf("the documents' versions and indexers after 000002: %s", got)
 	}
 
 	// the revert undoes exactly 000002: the rows stay, the ingest tables and the kind go

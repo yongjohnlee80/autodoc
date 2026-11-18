@@ -5,12 +5,20 @@ import "github.com/yongjohnlee80/autodoc/plugin"
 // Pointer is a left press or a wheel step on the card (protocol 6), read against the last draw.
 // It returns true when the card used it, and has drawn.
 //
+// A control acts on the press, at every protocol: below 12 a click is a press alone, and from 12 the
+// press is still what acts, so a card answers a click the same on either host. The release, a drag
+// and a cancel that follow a press from protocol 12 do nothing here (a divider drag of a card of
+// panes is theirs: panes.go), so a release off the control takes nothing back.
+//
 //	press, left, on an Input's row        focus it
 //	press, left, on a button              focus the Buttons on it, and OnPress it
 //	press, left, on a List or Tree row    focus it, and select that row
 //	wheel                                 the focused List's or Tree's selection, 3 rows a step
 //	                                      (48 at most); with neither focused, the body scrolls
 func (c *Card) Pointer(at plugin.Pointer) bool {
+	if c.root != nil {
+		return c.panePointer(at)
+	}
 	if at.X < 0 || at.X >= c.w || at.Y < 0 || at.Y >= len(c.hits) || at.Count < 1 {
 		return false
 	}

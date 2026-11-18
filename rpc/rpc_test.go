@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"path/filepath"
 	"reflect"
@@ -353,6 +354,19 @@ func TestWireErrMapsEverySentinel(t *testing.T) {
 	plain := errors.New("disk full at /home/x")
 	if wireErr(plain) != plain {
 		t.Error("an unmapped error is not left to the transport, which withholds its text")
+	}
+}
+
+// TestWireErrSaysTheSystemRefusedAccess: a file the operating system refuses (not permitted) is
+// said as a file the system refused, not an internal error, and without its path.
+func TestWireErrSaysTheSystemRefusedAccess(t *testing.T) {
+	err := wireErr(fmt.Errorf("save: %w", &fs.PathError{Op: "write", Path: "/secret/a.md", Err: fs.ErrPermission}))
+	var re *golibrpc.Error
+	if !errors.As(err, &re) || re.Code != CodeFileRefused || re.Message != errOSRefused.Message {
+		t.Fatalf("%v, want the file refused, the system's refusal", err)
+	}
+	if strings.Contains(re.Message, "secret") {
+		t.Fatalf("the message %q carries the path", re.Message)
 	}
 }
 

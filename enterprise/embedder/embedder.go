@@ -26,9 +26,11 @@ const (
 	DefaultRefusedFor = time.Hour        // how long a text the provider rejected is set aside
 )
 
+// DefaultCallTimeout bounds one provider call (WithCallTimeout).
+const DefaultCallTimeout = 2 * time.Minute
+
 const (
-	// batchTimeout bounds one provider call, and setupTimeout the provider's setup (its probe).
-	batchTimeout = 2 * time.Minute
+	// setupTimeout bounds the provider's setup (its probe).
 	setupTimeout = 30 * time.Second
 	// roundBatches is how many batches a tenant's round reads from Pending at once, so a round
 	// can keep every slot busy; the slots, not the read, bound the calls in flight.
@@ -57,8 +59,8 @@ type Tenant struct {
 	Name  string
 	Store Store
 	// Confirm answers nil while this process may write the tenant: the server's ingester holds the
-	// tenant's writer lock (ingest.Ingester.Confirm). The worker confirms it before each of its
-	// writes, and leaves a tenant it is not confirmed for alone, so a second server waiting for
+	// tenant's writer lease (ingest.Ingester.Confirm). The worker confirms it before each of its
+	// writes, which the ingester's fenced Store confirms again in the database, and leaves a tenant it is not confirmed for alone, so a second server waiting for
 	// the tenant never switches its model or writes its vectors. nil: always this process's.
 	Confirm func(ctx context.Context) error
 }
@@ -72,6 +74,7 @@ type Option func(*options)
 
 type options struct {
 	batch, slots     int
+	callTimeout      time.Duration
 	retry, maxRetry  time.Duration
 	poll, refusedFor time.Duration
 	log              logger.Logger
@@ -81,6 +84,11 @@ type options struct {
 // WithBatch sets how many texts one provider call embeds (DefaultBatch). A value below 1 leaves
 // the default.
 func WithBatch(n int) Option { return func(o *options) { o.batch = n } }
+
+// WithCallTimeout sets how long one provider call may take (DefaultCallTimeout): the server's
+// [embedding] call_timeout. A call that runs out of it steps the worker's pace down (pace). A value
+// of zero or less leaves the default.
+func WithCallTimeout(d time.Duration) Option { return func(o *options) { o.callTimeout = d } }
 
 // WithSlots sets how many provider calls may be in flight at once, across every tenant
 // (DefaultSlots): the server's [embedding] slots. A value below 1 leaves the default.
@@ -128,6 +136,8 @@ type Worker struct {
 	qs atomic.Pointer[queryState]
 	// health is the provider's state for an operator (Health), published by Run's goroutine
 	health atomic.Pointer[Health]
+	// pace is the batch size and the calls in flight the worker sends now
+	pace *pace
 }
 
 // tenant is a Tenant with what the worker knows of it.
@@ -152,8 +162,8 @@ type tenant struct {
 
 // New is a worker embedding tenants with the provider build sets up. It does nothing until Run.
 func New(build Build, tenants []Tenant, opts ...Option) *Worker {
-	o := options{batch: DefaultBatch, slots: DefaultSlots, retry: DefaultRetry, maxRetry: DefaultMaxRetry,
-		poll: DefaultPoll, refusedFor: DefaultRefusedFor}
+	o := options{batch: DefaultBatch, slots: DefaultSlots, callTimeout: DefaultCallTimeout, retry: DefaultRetry,
+		maxRetry: DefaultMaxRetry, poll: DefaultPoll, refusedFor: DefaultRefusedFor}
 	def := o
 	for _, opt := range opts {
 		opt(&o)
@@ -163,7 +173,7 @@ func New(build Build, tenants []Tenant, opts ...Option) *Worker {
 			*f.v = *f.def
 		}
 	}
-	for _, f := range []struct{ v, def *time.Duration }{{&o.retry, &def.retry}, {&o.maxRetry, &def.maxRetry},
+	for _, f := range []struct{ v, def *time.Duration }{{&o.callTimeout, &def.callTimeout}, {&o.retry, &def.retry}, {&o.maxRetry, &def.maxRetry},
 		{&o.poll, &def.poll}, {&o.refusedFor, &def.refusedFor}} {
 		if *f.v <= 0 {
 			*f.v = *f.def
@@ -173,7 +183,7 @@ func New(build Build, tenants []Tenant, opts ...Option) *Worker {
 	if o.log == nil {
 		o.log = logger.Adapt(func(logger.Severity, any) {})
 	}
-	w := &Worker{build: build, o: o, lim: newLimiter(o.slots), wake: make(chan struct{}, 1)}
+	w := &Worker{build: build, o: o, lim: newLimiter(o.slots), wake: make(chan struct{}, 1), pace: newPace(o.batch, o.slots)}
 	for _, t := range tenants {
 		w.tenants = append(w.tenants, &tenant{Tenant: t, waiting: map[string]int64{}, refused: map[[32]byte]time.Time{}})
 	}
@@ -326,8 +336,9 @@ func (w *Worker) round(ctx context.Context, t *tenant) (bool, error) {
 	// Under the active model only unready documents can hold a pending text, so the scan reads
 	// those alone; a switch's target is missing from ready documents too.
 	from := t.cursor
+	batch, inFlight := w.pace.now()
 	texts, next, err := t.Store.Pending(ctx, pgstore.PendingQuery{Model: w.fp, After: from, Unready: !t.switching,
-		Skip: skip, Limit: w.o.batch * w.o.slots * roundBatches})
+		Skip: skip, Limit: batch * inFlight * roundBatches})
 	if err != nil {
 		return false, err
 	}
@@ -343,11 +354,16 @@ func (w *Worker) round(ctx context.Context, t *tenant) (bool, error) {
 		}
 		return false, w.settle(ctx, t)
 	}
-	stored, err := w.embed(ctx, t, texts)
+	stored, err := w.embed(ctx, t, texts, batch, inFlight)
 	if err != nil {
 		// a batch that failed is read again: its texts have no vector, and the next round
 		// resumes where this one began
 		t.cursor = from
+	}
+	if steppedDownOnly(err) {
+		// calls ran out of their time, and the pace stepped down: the next round sends smaller
+		// calls at once, which is no failure to wait after
+		err = nil
 	}
 	if len(stored) > 0 && !t.switching {
 		// while a switch fills, readiness is the active model's, which the flip marks again
@@ -555,26 +571,53 @@ func (t *tenant) skip(now time.Time) (map[[32]byte]bool, bool) {
 	return out, expired
 }
 
-// embed embeds texts in batches, each in a slot, and stores each batch's vectors as it comes. It
-// returns the hashes stored, and every batch's failure: a failed batch leaves the others stored.
-func (w *Worker) embed(ctx context.Context, t *tenant, texts []pgstore.Text) ([][32]byte, error) {
+// embed embeds texts in batches of size, at most inFlight at once, each in a slot, and stores each
+// batch's vectors as it comes. It returns the hashes stored, and every batch's failure: a failed
+// batch leaves the others stored, and no batch is sent after it (nor after a step down of the pace).
+func (w *Worker) embed(ctx context.Context, t *tenant, texts []pgstore.Text, size, inFlight int) ([][32]byte, error) {
 	var (
 		mu     sync.Mutex
 		wg     sync.WaitGroup
 		stored [][32]byte
 		errs   []error
 	)
-	for start := 0; start < len(texts); start += w.o.batch {
-		batch := texts[start:min(start+w.o.batch, len(texts))]
+	ours := make(chan struct{}, inFlight) // the pace's calls in flight; the slots are shared with queries
+	for start := 0; start < len(texts); start += size {
+		batch := texts[start:min(start+size, len(texts))]
+		select {
+		case ours <- struct{}{}:
+		case <-ctx.Done():
+			wg.Wait()
+			return stored, ctx.Err()
+		}
+		mu.Lock()
+		failed := len(errs) > 0
+		mu.Unlock()
+		if b, f := w.pace.now(); failed || b < size || f < inFlight {
+			// a batch of this round failed, or a call ran out of its time and stepped the pace
+			// down: the rest would only fail or run out too, each call taking the whole of its
+			// time. The round ends with the calls in flight, and its texts are read again: at the
+			// smaller pace at once, or after the failure's wait.
+			<-ours
+			wg.Wait()
+			mu.Lock()
+			defer mu.Unlock()
+			if !failed {
+				errs = append(errs, errSteppedDown)
+			}
+			return stored, errors.Join(errs...)
+		}
 		if err := w.lim.acquire(ctx, false); err != nil {
+			<-ours
 			wg.Wait()
 			return stored, err
 		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer func() { <-ours }()
 			defer w.lim.release()
-			hashes, err := w.embedBatch(ctx, t, batch)
+			hashes, err := w.embedBatch(ctx, t, batch, size, inFlight)
 			mu.Lock()
 			defer mu.Unlock()
 			stored = append(stored, hashes...)
@@ -590,18 +633,36 @@ func (w *Worker) embed(ctx context.Context, t *tenant, texts []pgstore.Text) ([]
 // embedBatch embeds one batch with embed.Bisect, which normalizes each vector and narrows a
 // rejection by the provider down to the texts it rejects: they are set aside for refusedFor, and
 // the rest are stored once the tenant is confirmed this server's.
-func (w *Worker) embedBatch(ctx context.Context, t *tenant, batch []pgstore.Text) ([][32]byte, error) {
+func (w *Worker) embedBatch(ctx context.Context, t *tenant, batch []pgstore.Text, size, inFlight int) ([][32]byte, error) {
 	in := make([]string, len(batch))
 	for i, x := range batch {
 		in[i] = x.Text
 	}
-	vecs, rejected, err := embed.Bisect(ctx, w.p, in, w.dims, batchTimeout)
+	start := time.Now() // the call's own time, whatever clock the worker schedules by
+	vecs, rejected, err := embed.Bisect(ctx, w.p, in, w.dims, w.o.callTimeout)
+	took := time.Since(start)
+	if ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
+		// the call ran out its own time, the worker's still running: the provider is slower than
+		// the pace asks. Smaller calls, fewer at once, until they answer in time; only a call at
+		// the floor that still runs out is the provider failing.
+		if step, ok := w.pace.timedOut(size, inFlight, took); ok {
+			if step.first {
+				logger.Notice(w.o.log, fmt.Sprintf("embedding: a call of %d texts, %d at once, took longer than %v: "+
+					"calls of %d texts, %d at once, until they answer in time (set [embedding] batch or call_timeout, or give the provider more cores)",
+					size, inFlight, w.o.callTimeout, step.batch, step.inFlight))
+			}
+			return nil, fmt.Errorf("%w (%v)", errSteppedDown, err)
+		}
+	}
 	if ctx.Err() == nil {
 		// the provider answered, or failed on its own: a texts' rejection is an answer, per text
 		w.answered(w.fp, err)
 	}
 	if err != nil {
 		return nil, err
+	}
+	if up, ok := w.pace.answered(took, w.o.callTimeout); ok && up.full {
+		logger.Info(w.o.log, fmt.Sprintf("embedding: calls answer in time again: back to %d texts, %d at once", up.batch, up.inFlight))
 	}
 	if len(rejected) > 0 {
 		retry := w.o.clock.Now().Add(w.o.refusedFor)

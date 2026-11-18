@@ -816,12 +816,12 @@
         <translation>arrange a panel</translation>
     </message>
     <message id="autodoc.cmd.panel.maximize">
-        <source>maximize or restore the terminal or agents</source>
-        <translation>maximize or restore the terminal or agents</translation>
+        <source>maximize or restore the terminal, the agents or a card that offers it</source>
+        <translation>maximize or restore the terminal, the agents or a card that offers it</translation>
     </message>
     <message id="autodoc.cmd.panel.maximize.help">
-        <source>maximize or restore the terminal or agents</source>
-        <translation>maximize or restore the terminal or agents</translation>
+        <source>maximize or restore the terminal, the agents or a card that offers it</source>
+        <translation>maximize or restore the terminal, the agents or a card that offers it</translation>
     </message>
     <message id="autodoc.cmd.panel.reset_layout">
         <source>reset the panel layout</source>
@@ -1698,6 +1698,10 @@
     <message id="autodoc.dialog.exportResultsFile.export_the_loaded_rows_to">
         <source>export the loaded rows to</source>
         <translation>export the loaded rows to</translation>
+    </message>
+    <message id="autodoc.dialog.fileConflict.compare">
+        <source>&amp;Compare</source>
+        <translation>&amp;Compare</translation>
     </message>
     <message id="autodoc.dialog.fileConflict.file_changed_on_disk">
         <source>file changed on disk</source>
@@ -4363,6 +4367,18 @@ WHAT A KEY NEEDS
         <source>This Vega-Lite chart isn't supported in AutoDoc yet. Its source is in the Raw view, or in its .chart.json file.</source>
         <translation>This Vega-Lite chart isn't supported in AutoDoc yet. Its source is in the Raw view, or in its .chart.json file.</translation>
     </message>
+    <message id="autodoc.notice.compare.merged">
+        <source>merged %1 with the disk: unsaved, u brings your text back</source>
+        <translation>merged %1 with the disk: unsaved, u brings your text back</translation>
+    </message>
+    <message id="autodoc.notice.compare.read">
+        <source>read %1 to compare</source>
+        <translation>read %1 to compare</translation>
+    </message>
+    <message id="autodoc.notice.compare.took_the_disk_s_version">
+        <source>took the disk's version of %1: saved</source>
+        <translation>took the disk's version of %1: saved</translation>
+    </message>
     <message id="autodoc.notice.contextmenu.the_right_click_menu_opens_where_the_cursor_is_o">
         <source>the right-click menu opens where the cursor is on the screen: scroll it into view</source>
         <translation>the right-click menu opens where the cursor is on the screen: scroll it into view</translation>
@@ -4543,6 +4559,10 @@ WHAT A KEY NEEDS
         <source>workspace %1 was renamed %2 %3</source>
         <translation>workspace %1 was renamed %2 %3</translation>
     </message>
+    <message id="autodoc.notice.files.another_workspace_was_entered_meanwhile_open_it">
+        <source>another workspace was entered meanwhile; open it again</source>
+        <translation>another workspace was entered meanwhile; open it again</translation>
+    </message>
     <message id="autodoc.notice.files.changed_on_disk_while_the_backend_was_away_a_sav">
         <source>%1 changed on disk while the backend was away: a save asks before it overwrites it</source>
         <translation>%1 changed on disk while the backend was away: a save asks before it overwrites it</translation>
@@ -4575,6 +4595,10 @@ WHAT A KEY NEEDS
         <source>%1: it is in no workspace: no search, links, backlinks, frontmatter check or embeddings</source>
         <translation>%1: it is in no workspace: no search, links, backlinks, frontmatter check or embeddings</translation>
     </message>
+    <message id="autodoc.notice.files.it_was_read_again_from_disk_meanwhile_save_it_ag">
+        <source>it was read again from disk meanwhile; save it again</source>
+        <translation>it was read again from disk meanwhile; save it again</translation>
+    </message>
     <message id="autodoc.notice.files.kept_as_it_was_saved_while_it_was_read">
         <source>kept %1 as it was saved while it was read</source>
         <translation>kept %1 as it was saved while it was read</translation>
@@ -4582,6 +4606,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.files.kept_your_changes_the_disk_s_version_is_newer">
         <source>kept your changes; the disk's version is newer</source>
         <translation>kept your changes; the disk's version is newer</translation>
+    </message>
+    <message id="autodoc.notice.files.no_workspace_is_in_use_so_a_relative_path_names">
+        <source>no workspace is in use, so a relative path names no file; give its full path</source>
+        <translation>no workspace is in use, so a relative path names no file; give its full path</translation>
     </message>
     <message id="autodoc.notice.files.open">
         <source>open %1</source>
@@ -4623,6 +4651,10 @@ WHAT A KEY NEEDS
         <source>saved %1, but it could not be read back: %2 — reload before saving again</source>
         <translation>saved %1, but it could not be read back: %2 — reload before saving again</translation>
     </message>
+    <message id="autodoc.notice.files.saved_but_the_disk_differs_from_what_was_written">
+        <source>saved %1, but the disk differs from what was written — reload before saving again</source>
+        <translation>saved %1, but the disk differs from what was written — reload before saving again</translation>
+    </message>
     <message id="autodoc.notice.files.saved_the_draft_as">
         <source>saved the draft as %1</source>
         <translation>saved the draft as %1</translation>
@@ -4634,6 +4666,14 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.files.saving">
         <source>saving %1…</source>
         <translation>saving %1…</translation>
+    </message>
+    <message id="autodoc.notice.files.the_connection_to_the_backend_was_renewed_meanwh">
+        <source>the connection to the backend was renewed meanwhile; open it again</source>
+        <translation>the connection to the backend was renewed meanwhile; open it again</translation>
+    </message>
+    <message id="autodoc.notice.files.the_connection_to_the_backend_was_renewed_save_it">
+        <source>the connection to the backend was renewed meanwhile; save it again</source>
+        <translation>the connection to the backend was renewed meanwhile; save it again</translation>
     </message>
     <message id="autodoc.notice.find.find_cleared">
         <source>find cleared</source>
@@ -4888,8 +4928,8 @@ WHAT A KEY NEEDS
         <translation>every panel is at its edge already</translation>
     </message>
     <message id="autodoc.notice.panelfloat.maximize_is_the_terminal_s_and_the_agents_open_o">
-        <source>Maximize is the terminal's and the agents': open one first (SPC ` or SPC g)</source>
-        <translation>Maximize is the terminal's and the agents': open one first (SPC ` or SPC g)</translation>
+        <source>Maximize is the terminal's, the agents' and a card's that offers it: open one first (SPC ` or SPC g)</source>
+        <translation>Maximize is the terminal's, the agents' and a card's that offers it: open one first (SPC ` or SPC g)</translation>
     </message>
     <message id="autodoc.notice.panelfloat.resume_has_no_tab_to_wake_the_panel_is_empty">
         <source>Resume has no tab to wake: the panel is empty</source>
@@ -6257,6 +6297,18 @@ Revoked, its next use of %2 is refused, and asks you again by a card.</translati
         <source>restart the backend?</source>
         <translation>restart the backend?</translation>
     </message>
+    <message id="autodoc.question.terminal.close_s_a_program_may_be_running_in_it">
+        <source>Close %1? A program may be running in it, and it would be stopped.</source>
+        <translation>Close %1? A program may be running in it, and it would be stopped.</translation>
+    </message>
+    <message id="autodoc.question.terminal.close_s_the_program_running_in_it_is_stopped">
+        <source>Close %1? The program running in it is stopped.</source>
+        <translation>Close %1? The program running in it is stopped.</translation>
+    </message>
+    <message id="autodoc.question.terminal.close_the_shell">
+        <source>close the shell?</source>
+        <translation>close the shell?</translation>
+    </message>
     <message id="autodoc.question.terminal.stop_every_shell_running_here">
         <source>%1 shells are running here. Each is hung up and its tab closed, then the terminal closes.</source>
         <translation>%1 shells are running here. Each is hung up and its tab closed, then the terminal closes.</translation>
@@ -6264,6 +6316,10 @@ Revoked, its next use of %2 is refused, and asks you again by a card.</translati
     <message id="autodoc.question.terminal.stop_the_shells_and_close_the_terminal">
         <source>stop the shells and close the terminal?</source>
         <translation>stop the shells and close the terminal?</translation>
+    </message>
+    <message id="autodoc.question.terminal.yes_close_it">
+        <source>&amp;Yes, close it</source>
+        <translation>&amp;Yes, close it</translation>
     </message>
     <message id="autodoc.question.terminal.yes_stop_them">
         <source>&amp;Yes, stop them</source>
@@ -6449,6 +6505,50 @@ Revoked, its next use of %2 is refused, and asks you again by a card.</translati
         <source>Audit asks your agent to read this code. AutoDoc can't stop the agent from running code or changing files: pick an agent you trust, and watch its tab.</source>
         <translation>Audit asks your agent to read this code. AutoDoc can't stop the agent from running code or changing files: pick an agent you trust, and watch its tab.</translation>
     </message>
+    <message id="autodoc.text.compare.is_gone_from_disk">
+        <source>%1 is gone from disk</source>
+        <translation>%1 is gone from disk</translation>
+    </message>
+    <message id="autodoc.text.compare.is_no_longer_open">
+        <source>%1 is no longer open</source>
+        <translation>%1 is no longer open</translation>
+    </message>
+    <message id="autodoc.text.compare.keep_editing">
+        <source>&amp;Keep editing</source>
+        <translation>&amp;Keep editing</translation>
+    </message>
+    <message id="autodoc.text.compare.nothing_to_merge">
+        <source>Nothing to merge</source>
+        <translation>Nothing to merge</translation>
+    </message>
+    <message id="autodoc.text.compare.on_disk">
+        <source>On disk</source>
+        <translation>On disk</translation>
+    </message>
+    <message id="autodoc.text.compare.take_the_disk_s_version">
+        <source>&amp;Take the disk's version</source>
+        <translation>&amp;Take the disk's version</translation>
+    </message>
+    <message id="autodoc.text.compare.the_buffer_changed_reload">
+        <source>The buffer changed since the merge was loaded: reload it</source>
+        <translation>The buffer changed since the merge was loaded: reload it</translation>
+    </message>
+    <message id="autodoc.text.compare.the_disk_holds_your_text">
+        <source>%1 on disk holds your buffer's text. Take the disk's version, the buffer then saved?</source>
+        <translation>%1 on disk holds your buffer's text. Take the disk's version, the buffer then saved?</translation>
+    </message>
+    <message id="autodoc.text.compare.the_merge_was_closed">
+        <source>The merge was closed before it was applied</source>
+        <translation>The merge was closed before it was applied</translation>
+    </message>
+    <message id="autodoc.text.compare.title">
+        <source>Compare %1 with the disk</source>
+        <translation>Compare %1 with the disk</translation>
+    </message>
+    <message id="autodoc.text.compare.your_unsaved_edits">
+        <source>Your unsaved edits</source>
+        <translation>Your unsaved edits</translation>
+    </message>
     <message id="autodoc.text.crew_bridges.count">
         <source>%1 helper(s), %2 orphaned. The daemon ends an orphan that stays one for 10 minutes.</source>
         <translation>%1 helper(s), %2 orphaned. The daemon ends an orphan that stays one for 10 minutes.</translation>
@@ -6493,9 +6593,9 @@ Revoked, its next use of %2 is refused, and asks you again by a card.</translati
         <source>Crew Bridges reads the crew's processes on Linux only for now: on this system, find and end them by hand (ps, kill). The daemon reclaims none here.</source>
         <translation>Crew Bridges reads the crew's processes on Linux only for now: on this system, find and end them by hand (ps, kill). The daemon reclaims none here.</translation>
     </message>
-    <message id="autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_kee">
-        <source>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</source>
-        <translation>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</translation>
+    <message id="autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_compare">
+        <source>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), overwrite it with yours, or compare the two and merge them?</source>
+        <translation>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), overwrite it with yours, or compare the two and merge them?</translation>
     </message>
     <message id="autodoc.text.embedsetup.about">
         <source>about %1</source>
@@ -6665,9 +6765,9 @@ Revoked, its next use of %2 is refused, and asks you again by a card.</translati
         <source>changed on disk</source>
         <translation>changed on disk</translation>
     </message>
-    <message id="autodoc.text.files.changed_on_disk_since_you_opened_it_keep_editing">
-        <source>%1 changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</source>
-        <translation>%1 changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</translation>
+    <message id="autodoc.text.files.changed_on_disk_since_you_opened_it_compare">
+        <source>%1 changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), overwrite it with yours, or compare the two and merge them?</source>
+        <translation>%1 changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), overwrite it with yours, or compare the two and merge them?</translation>
     </message>
     <message id="autodoc.text.files.deleted_on_disk">
         <source>deleted on disk</source>
@@ -8134,6 +8234,10 @@ The last connect failed:
     <message id="autodoc.text.state.vectors">
         <source>vectors</source>
         <translation>vectors</translation>
+    </message>
+    <message id="autodoc.text.terminal.starting">
+        <source>starting…</source>
+        <translation>starting…</translation>
     </message>
     <message id="autodoc.text.terminal.the_page_s">
         <source>the page's</source>

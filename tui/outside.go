@@ -133,7 +133,7 @@ func (h *Host) openAbsoluteAs(a authority, abs string) {
 		return
 	}
 	abs = filepath.Clean(abs)
-	tk := h.ticket(nil, feature.TicketWorkspace)
+	tk, sess := h.ticket(nil, feature.TicketWorkspace), h.session.Gen()
 	do(h, func(ctx context.Context) located {
 		if a.gated() {
 			res, err := h.call(withAuthority(ctx, a), "file.locate", abs)
@@ -147,6 +147,7 @@ func (h *Host) openAbsoluteAs(a authority, abs string) {
 		return h.locate(ctx, abs)
 	}, func(l located) {
 		if !tk.Current() {
+			h.openLost(abs, sess) // File › Open file… was asked: the status line says why nothing opened
 			return
 		}
 		switch {
@@ -212,12 +213,15 @@ func (h *Host) createAbsolute(abs string) {
 	if filepath.Ext(abs) == "" {
 		abs += ".md"
 	}
-	tk := h.ticket(nil, feature.TicketWorkspace)
+	tk, sess := h.ticket(nil, feature.TicketWorkspace), h.session.Gen()
 	raw := kind.RawText(abs)
 	do(h, func(ctx context.Context) created {
 		return h.writeNew(ctx, "", abs, "", []byte{}) // any path: File › New file…'s own rules
 	}, func(a created) {
 		if !tk.Current() {
+			if a.err == nil {
+				h.openLost(abs, sess) // created, but not opened: said, or it would seem not made
+			}
 			return
 		}
 		switch {

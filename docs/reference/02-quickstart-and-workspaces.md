@@ -334,7 +334,7 @@ setting leaves every setting as it was, and the dialog opens again as it was typ
 
 ### Daemon Configuration (`config.toml`)
 
-Because workspaces and sealed provider keys live in the SQLite store (`core/config/config.go` explicitly rejects unknown keys or legacy `[[workspace]]` / `[embedding]` sections so typos are caught at startup), `~/.config/autodoc/config.toml` is reserved strictly for daemon-level `[server]`, `[follow]`, `[embedding_queue]`, `[log]` and `[mail]` settings:
+Because workspaces and sealed provider keys live in the SQLite store (`core/config/config.go` explicitly rejects unknown keys or legacy `[[workspace]]` / `[embedding]` sections so typos are caught at startup), `~/.config/autodoc/config.toml` is reserved strictly for daemon-level `[server]`, `[follow]`, `[embedding_queue]`, `[log]`, `[mail]` and `[store]` settings:
 
 ```toml
 # $XDG_CONFIG_HOME/autodoc/config.toml
@@ -354,9 +354,52 @@ level = ""                  # the least severe record logged; "" (the default) l
 
 [mail]
 keep_handled = "720h"       # handled crew mail is deleted this long after it was handled; at least 24h
+
+[store]
+engine = "sqlite"           # "sqlite" (the default: autodoc.db in data_dir) or "postgres"
 ```
 
 A missing file is every default.
+
+`[store]` puts the store in a PostgreSQL database instead of the SQLite file. It is the server
+build's (`-tags server`): the desktop builds carry no PostgreSQL store, and refuse
+`engine = "postgres"` when they load the config, naming the server build.
+
+```toml
+[store]
+engine   = "postgres"
+dsn_env  = "AUTODOC_STORE_DSN"   # the environment variable holding the DSN, never the DSN itself
+schema   = "autodoc"             # made when missing
+key_file = ""                    # default: store.key in data_dir; it seals the store's secrets
+```
+
+The daemon reads the DSN from the variable `dsn_env` names when it starts, so a daemon a client
+starts for you needs that variable in the client's environment. The daemon holds the store's writer
+lease in the database. A second daemon on the same database and schema waits for it, for at most
+the lease's length (30 seconds) and one poll (2 seconds). If the first daemon stopped, or was
+killed and its lease ran out, the second takes the store over; if the first is still running and
+renewing its lease, the second exits, naming it. Clients never read the
+database: they reach the daemon on the configured socket, and refuse one that says it serves
+another store. `autodoc --check-store` and `--compact` are a SQLite store's, and refuse a store on
+PostgreSQL: its database server checks and vacuums it. Search works as on SQLite: lexical search
+uses PostgreSQL's full-text search, and semantic search scans the store's vectors in the daemon's
+memory, as it does on SQLite.
+
+To move an existing SQLite store onto PostgreSQL:
+
+1. Back up the store's file (`autodoc.db` in the data directory) and its key (`autodoc.db.key`).
+   The copy applies this build's scripts to the file, as an upgrade would.
+2. Stop the daemon serving it: `autodoc --call sys.shutdown`.
+3. Set `[store]` as above, and export the variable `dsn_env` names.
+4. Run `autodoc --copy-store-from <data dir>/autodoc.db`. It copies into an empty schema, in one
+   transaction, and keeps every id. It prints each table's rows, then what it did not do: the file
+   is left as it was, apart from those scripts, and no daemon was started. A value that does not
+   fit PostgreSQL's column (text with a NUL byte, say) is listed with its table, column and row,
+   and nothing is copied.
+5. Start the daemon. It serves the copy, under a `store_id` of its own.
+
+The store's key goes with it: the copy writes the file's key to `key_file` when there is none
+there, and refuses a `key_file` holding another key.
 
 `[mail] keep_handled` is how long the crew's mail is kept once it was handled: acked, read,
 answered, dismissed or expired. The daemon deletes older handled mail once when it starts and then

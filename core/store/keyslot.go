@@ -52,10 +52,34 @@ func (k *keyslot) get() ([]byte, error) {
 }
 
 func (k *keyslot) load() ([]byte, error) {
-	f, err := userperm.OpenPrivate(k.path)
-	switch {
-	case errors.Is(err, fs.ErrNotExist):
+	key, err := readKey(k.path)
+	if errors.Is(err, fs.ErrNotExist) {
 		return k.make()
+	}
+	return key, err
+}
+
+// make writes a new key, only when no file is there: two makers never both win.
+func (k *keyslot) make() ([]byte, error) {
+	key := make([]byte, keySize)
+	if _, err := rand.Read(key); err != nil {
+		return nil, err
+	}
+	err := writeKey(k.path, key)
+	if errors.Is(err, fs.ErrExist) {
+		return k.load() // another made it first
+	}
+	if err != nil {
+		return nil, err
+	}
+	return key, nil
+}
+
+// readKey reads the key file at path: fs.ErrNotExist when there is none, ErrKeyslotExposed when
+// others can read it, an error when it is not a key's size.
+func readKey(path string) ([]byte, error) {
+	f, err := userperm.OpenPrivate(path)
+	switch {
 	case errors.Is(err, userperm.ErrExposed):
 		return nil, fmt.Errorf("%w: %w", ErrKeyslotExposed, err)
 	case err != nil:
@@ -67,34 +91,27 @@ func (k *keyslot) load() ([]byte, error) {
 		return nil, err
 	}
 	if len(key) != keySize {
-		return nil, fmt.Errorf("store: the keyslot %s is %d bytes, want %d", k.path, len(key), keySize)
+		return nil, fmt.Errorf("store: the keyslot %s is %d bytes, want %d", path, len(key), keySize)
 	}
 	return key, nil
 }
 
-// make writes a new key, only when no file is there: two makers never both win.
-func (k *keyslot) make() ([]byte, error) {
-	key := make([]byte, keySize)
-	if _, err := rand.Read(key); err != nil {
-		return nil, err
-	}
-	f, err := userperm.CreatePrivate(k.path)
-	if errors.Is(err, fs.ErrExist) {
-		return k.load() // another made it first
-	}
+// writeKey writes key to a new file at path, private to this user: fs.ErrExist when one is there.
+func writeKey(path string, key []byte) error {
+	f, err := userperm.CreatePrivate(path)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if _, err := f.Write(key); err != nil {
 		_ = f.Close()
-		_ = os.Remove(k.path)
-		return nil, err
+		_ = os.Remove(path)
+		return err
 	}
 	if err := f.Sync(); err != nil {
 		_ = f.Close()
-		return nil, err
+		return err
 	}
-	return key, f.Close()
+	return f.Close()
 }
 
 // seal encrypts plaintext for what aad names.

@@ -45,7 +45,7 @@ func TestTheServerIsStartedWithTheCLIsEnvironment(t *testing.T) {
 	awaitStart(t, c, instance)
 	cfg := c.panel.configs[instance.State().Tab]
 	var spawned pty.Cmd // the CLI, as runAgent gives it
-	seamsOf(a).agentSpawn = func(c pty.Cmd) (terminal.TerminalProcess, error) { spawned = c; return newFakeTerminal(), nil }
+	seamsOf(a).setAgentSpawn(func(c pty.Cmd) (terminal.TerminalProcess, error) { spawned = c; return newFakeTerminal(), nil })
 	proc, err := cfg.Start(pty.Cmd{Path: cfg.Command, Args: cfg.Args, Dir: cfg.Dir})
 	if err != nil {
 		t.Fatal(err)
@@ -109,7 +109,7 @@ func TestTheWindowStopsTheServerWhenItsCLIFailsToStart(t *testing.T) {
 	}
 	awaitStart(t, c, instance)
 	cfg := c.panel.configs[instance.State().Tab]
-	seamsOf(a).agentSpawn = func(pty.Cmd) (terminal.TerminalProcess, error) { return nil, errors.New("no such program") }
+	seamsOf(a).setAgentSpawn(func(pty.Cmd) (terminal.TerminalProcess, error) { return nil, errors.New("no such program") })
 	if _, err := cfg.Start(pty.Cmd{Path: cfg.Command, Args: cfg.Args, Dir: cfg.Dir}); err == nil {
 		t.Fatal("a CLI that failed to start: started")
 	}

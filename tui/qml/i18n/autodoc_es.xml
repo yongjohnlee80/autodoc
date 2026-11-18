@@ -792,12 +792,12 @@
         <translation>organizar un panel</translation>
     </message>
     <message id="autodoc.cmd.panel.maximize">
-        <source>maximize or restore the terminal or agents</source>
-        <translation>maximizar o restaurar el terminal o los agentes</translation>
+        <source>maximize or restore the terminal, the agents or a card that offers it</source>
+        <translation>maximizar o restaurar el terminal, los agentes o una tarjeta que lo ofrezca</translation>
     </message>
     <message id="autodoc.cmd.panel.maximize.help">
-        <source>maximize or restore the terminal or agents</source>
-        <translation>maximizar o restaurar el terminal o los agentes</translation>
+        <source>maximize or restore the terminal, the agents or a card that offers it</source>
+        <translation>maximizar o restaurar el terminal, los agentes o una tarjeta que lo ofrezca</translation>
     </message>
     <message id="autodoc.cmd.panel.reset_layout">
         <source>reset the panel layout</source>
@@ -1614,6 +1614,10 @@
     <message id="autodoc.dialog.fileConflict.overwrite">
         <source>&amp;Overwrite</source>
         <translation>S&amp;obrescribir</translation>
+    </message>
+    <message id="autodoc.dialog.fileConflict.compare">
+        <source>&amp;Compare</source>
+        <translation>&amp;Comparar</translation>
     </message>
     <message id="autodoc.dialog.fileConflict.reload">
         <source>&amp;Reload</source>
@@ -4293,6 +4297,10 @@ LO QUE NECESITA UNA TECLA
         <source>workspace %1 was renamed %2 %3</source>
         <translation>el espacio de trabajo %1 se renombró a %2 %3</translation>
     </message>
+    <message id="autodoc.notice.files.another_workspace_was_entered_meanwhile_open_it">
+        <source>another workspace was entered meanwhile; open it again</source>
+        <translation>se entró en otro espacio de trabajo entretanto; vuelve a abrirlo</translation>
+    </message>
     <message id="autodoc.notice.files.changed_on_disk_while_the_backend_was_away_a_sav">
         <source>%1 changed on disk while the backend was away: a save asks before it overwrites it</source>
         <translation>%1 cambió en el disco mientras el backend no estaba: al guardar se preguntará antes de sobrescribirlo</translation>
@@ -4325,6 +4333,10 @@ LO QUE NECESITA UNA TECLA
         <source>%1: it is in no workspace: no search, links, backlinks, frontmatter check or embeddings</source>
         <translation>%1: no está en ningún espacio de trabajo: sin búsqueda, enlaces, retroenlaces, comprobación de frontmatter ni embeddings</translation>
     </message>
+    <message id="autodoc.notice.files.it_was_read_again_from_disk_meanwhile_save_it_ag">
+        <source>it was read again from disk meanwhile; save it again</source>
+        <translation>se volvió a leer del disco entretanto; vuelve a guardarlo</translation>
+    </message>
     <message id="autodoc.notice.files.kept_as_it_was_saved_while_it_was_read">
         <source>kept %1 as it was saved while it was read</source>
         <translation>%1 se conservó tal como se guardó mientras se leía</translation>
@@ -4332,6 +4344,10 @@ LO QUE NECESITA UNA TECLA
     <message id="autodoc.notice.files.kept_your_changes_the_disk_s_version_is_newer">
         <source>kept your changes; the disk's version is newer</source>
         <translation>se conservaron tus cambios; la versión del disco es más reciente</translation>
+    </message>
+    <message id="autodoc.notice.files.no_workspace_is_in_use_so_a_relative_path_names">
+        <source>no workspace is in use, so a relative path names no file; give its full path</source>
+        <translation>no hay ningún espacio de trabajo en uso, así que una ruta relativa no nombra ningún archivo; indica su ruta completa</translation>
     </message>
     <message id="autodoc.notice.files.open">
         <source>open %1</source>
@@ -4373,6 +4389,10 @@ LO QUE NECESITA UNA TECLA
         <source>saved %1, but it could not be read back: %2 — reload before saving again</source>
         <translation>%1 guardado, pero no se pudo volver a leer: %2 — recarga antes de guardar de nuevo</translation>
     </message>
+    <message id="autodoc.notice.files.saved_but_the_disk_differs_from_what_was_written">
+        <source>saved %1, but the disk differs from what was written — reload before saving again</source>
+        <translation>%1 guardado, pero el disco difiere de lo escrito — recarga antes de guardar de nuevo</translation>
+    </message>
     <message id="autodoc.notice.files.saved_the_draft_as">
         <source>saved the draft as %1</source>
         <translation>borrador guardado como %1</translation>
@@ -4384,6 +4404,14 @@ LO QUE NECESITA UNA TECLA
     <message id="autodoc.notice.files.saving">
         <source>saving %1…</source>
         <translation>guardando %1…</translation>
+    </message>
+    <message id="autodoc.notice.files.the_connection_to_the_backend_was_renewed_meanwh">
+        <source>the connection to the backend was renewed meanwhile; open it again</source>
+        <translation>la conexión con el backend se renovó entretanto; vuelve a abrirlo</translation>
+    </message>
+    <message id="autodoc.notice.files.the_connection_to_the_backend_was_renewed_save_it">
+        <source>the connection to the backend was renewed meanwhile; save it again</source>
+        <translation>la conexión con el backend se renovó entretanto; vuelve a guardarlo</translation>
     </message>
     <message id="autodoc.notice.find.find_cleared">
         <source>find cleared</source>
@@ -4634,8 +4662,8 @@ LO QUE NECESITA UNA TECLA
         <translation>todos los paneles ya están en su borde</translation>
     </message>
     <message id="autodoc.notice.panelfloat.maximize_is_the_terminal_s_and_the_agents_open_o">
-        <source>Maximize is the terminal's and the agents': open one first (SPC ` or SPC g)</source>
-        <translation>Maximizar es del terminal y de los agentes: abre uno primero (SPC ` o SPC g)</translation>
+        <source>Maximize is the terminal's, the agents' and a card's that offers it: open one first (SPC ` or SPC g)</source>
+        <translation>Maximizar es del terminal, de los agentes y de una tarjeta que lo ofrezca: abre uno primero (SPC ` o SPC g)</translation>
     </message>
     <message id="autodoc.notice.panelfloat.resume_has_no_tab_to_wake_the_panel_is_empty">
         <source>Resume has no tab to wake: the panel is empty</source>
@@ -5899,6 +5927,18 @@ En una pestaña nueva del terminal, en %2. Escriba ahí la contraseña: el agent
         <source>restart the backend?</source>
         <translation>¿reiniciar el backend?</translation>
     </message>
+    <message id="autodoc.question.terminal.close_s_a_program_may_be_running_in_it">
+        <source>Close %1? A program may be running in it, and it would be stopped.</source>
+        <translation>¿Cerrar %1? Puede que haya un programa ejecutándose en él, y se detendría.</translation>
+    </message>
+    <message id="autodoc.question.terminal.close_s_the_program_running_in_it_is_stopped">
+        <source>Close %1? The program running in it is stopped.</source>
+        <translation>¿Cerrar %1? El programa que se ejecuta en él se detiene.</translation>
+    </message>
+    <message id="autodoc.question.terminal.close_the_shell">
+        <source>close the shell?</source>
+        <translation>¿cerrar el shell?</translation>
+    </message>
     <message id="autodoc.question.terminal.stop_every_shell_running_here">
         <source>%1 shells are running here. Each is hung up and its tab closed, then the terminal closes.</source>
         <translation>Aquí se ejecutan %1 shells. Cada uno se cuelga y su pestaña se cierra; después se cierra la terminal.</translation>
@@ -5906,6 +5946,10 @@ En una pestaña nueva del terminal, en %2. Escriba ahí la contraseña: el agent
     <message id="autodoc.question.terminal.stop_the_shells_and_close_the_terminal">
         <source>stop the shells and close the terminal?</source>
         <translation>¿detener los shells y cerrar la terminal?</translation>
+    </message>
+    <message id="autodoc.question.terminal.yes_close_it">
+        <source>&amp;Yes, close it</source>
+        <translation>Sí, cerrarlo (&amp;y)</translation>
     </message>
     <message id="autodoc.question.terminal.yes_stop_them">
         <source>&amp;Yes, stop them</source>
@@ -6091,10 +6135,6 @@ En una pestaña nueva del terminal, en %2. Escriba ahí la contraseña: el agent
         <source>Audit asks your agent to read this code. AutoDoc can't stop the agent from running code or changing files: pick an agent you trust, and watch its tab.</source>
         <translation>Auditar pide a tu agente que lea este código. AutoDoc no puede impedir que el agente ejecute código o cambie archivos: elige un agente de confianza y vigila su pestaña.</translation>
     </message>
-    <message id="autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_kee">
-        <source>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</source>
-        <translation>%1 cambió en el disco mientras tenía cambios sin guardar. ¿Seguir editando, recargar la versión del disco (u recupera tu texto) o sobrescribirla con la tuya?</translation>
-    </message>
     <message id="autodoc.text.files.a_name_is_required">
         <source>a name is required</source>
         <translation>se necesita un nombre</translation>
@@ -6106,10 +6146,6 @@ En una pestaña nueva del terminal, en %2. Escriba ahí la contraseña: el agent
     <message id="autodoc.text.files.changed_on_disk">
         <source>changed on disk</source>
         <translation>cambiado en el disco</translation>
-    </message>
-    <message id="autodoc.text.files.changed_on_disk_since_you_opened_it_keep_editing">
-        <source>%1 changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</source>
-        <translation>%1 cambió en el disco desde que lo abriste. ¿Seguir editando, recargar la versión del disco (u recupera tu texto) o sobrescribirla con la tuya?</translation>
     </message>
     <message id="autodoc.text.files.deleted_on_disk">
         <source>deleted on disk</source>
@@ -7485,6 +7521,10 @@ La última conexión falló:
         <source>vectors</source>
         <translation>vectores</translation>
     </message>
+    <message id="autodoc.text.terminal.starting">
+        <source>starting…</source>
+        <translation>iniciando…</translation>
+    </message>
     <message id="autodoc.text.terminal.the_page_s">
         <source>the page's</source>
         <translation>el de la página</translation>
@@ -8476,6 +8516,70 @@ Revocado, su próximo uso de %2 se rechaza y te lo vuelve a preguntar con una ta
     <message id="autodoc.cmd.agents.permissions.help">
         <source>agent permissions: what each agent and package was granted</source>
         <translation>permisos de los agentes: lo que se concedió a cada agente y paquete</translation>
+    </message>
+    <message id="autodoc.text.compare.on_disk">
+        <source>On disk</source>
+        <translation>En disco</translation>
+    </message>
+    <message id="autodoc.text.compare.your_unsaved_edits">
+        <source>Your unsaved edits</source>
+        <translation>Tus cambios sin guardar</translation>
+    </message>
+    <message id="autodoc.text.compare.title">
+        <source>Compare %1 with the disk</source>
+        <translation>Comparar %1 con el disco</translation>
+    </message>
+    <message id="autodoc.text.compare.is_gone_from_disk">
+        <source>%1 is gone from disk</source>
+        <translation>%1 ya no está en el disco</translation>
+    </message>
+    <message id="autodoc.text.compare.is_no_longer_open">
+        <source>%1 is no longer open</source>
+        <translation>%1 ya no está abierto</translation>
+    </message>
+    <message id="autodoc.text.compare.the_buffer_changed_reload">
+        <source>The buffer changed since the merge was loaded: reload it</source>
+        <translation>El búfer cambió desde que se cargó la combinación: vuelve a cargarla</translation>
+    </message>
+    <message id="autodoc.text.compare.nothing_to_merge">
+        <source>Nothing to merge</source>
+        <translation>Nada que combinar</translation>
+    </message>
+    <message id="autodoc.text.compare.the_disk_holds_your_text">
+        <source>%1 on disk holds your buffer's text. Take the disk's version, the buffer then saved?</source>
+        <translation>%1 en el disco tiene el texto de tu búfer. ¿Tomar la versión del disco y dar el búfer por guardado?</translation>
+    </message>
+    <message id="autodoc.text.compare.take_the_disk_s_version">
+        <source>&amp;Take the disk's version</source>
+        <translation>&amp;Tomar la versión del disco</translation>
+    </message>
+    <message id="autodoc.text.compare.keep_editing">
+        <source>&amp;Keep editing</source>
+        <translation>Seguir editando(&amp;k)</translation>
+    </message>
+    <message id="autodoc.notice.compare.read">
+        <source>read %1 to compare</source>
+        <translation>leer %1 para comparar</translation>
+    </message>
+    <message id="autodoc.notice.compare.took_the_disk_s_version">
+        <source>took the disk's version of %1: saved</source>
+        <translation>se tomó la versión del disco de %1: guardado</translation>
+    </message>
+    <message id="autodoc.notice.compare.merged">
+        <source>merged %1 with the disk: unsaved, u brings your text back</source>
+        <translation>%1 combinado con el disco: sin guardar, u devuelve tu texto</translation>
+    </message>
+    <message id="autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_compare">
+        <source>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), overwrite it with yours, or compare the two and merge them?</source>
+        <translation>%1 cambió en el disco mientras tenía cambios sin guardar. ¿Seguir editando, recargar la versión del disco (u recupera tu texto), sobrescribirla con la tuya o comparar las dos y combinarlas?</translation>
+    </message>
+    <message id="autodoc.text.files.changed_on_disk_since_you_opened_it_compare">
+        <source>%1 changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), overwrite it with yours, or compare the two and merge them?</source>
+        <translation>%1 cambió en el disco desde que lo abriste. ¿Seguir editando, recargar la versión del disco (u recupera tu texto), sobrescribirla con la tuya o comparar las dos y combinarlas?</translation>
+    </message>
+    <message id="autodoc.text.compare.the_merge_was_closed">
+        <source>The merge was closed before it was applied</source>
+        <translation>La combinación se cerró antes de aplicarse</translation>
     </message>
 </context>
 </TS>

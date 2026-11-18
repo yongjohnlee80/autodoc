@@ -427,8 +427,11 @@ func TestTheSettingsReopenedAtOnceShowTheSave(t *testing.T) {
 	})
 }
 
-// heldFirstList runs the TUI over a daemon with kb, where the first workspace.list after arm()
-// waits until the returned release is called; the manager is open.
+// heldFirstList runs the TUI over a daemon with kb, where the first settings open after arm()
+// has its read held until the returned release is called; the manager is open. The read held is
+// the open's embedding.providers, which only a settings open asks for: workspace.list, which it
+// asks first, is asked too by every relisting (the manager's own, a daemon's event), and holding
+// the first of those let the open under test answer at once.
 func heldFirstList(t *testing.T) (r *running, arm func(), held func() bool, release func()) {
 	t.Helper()
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
@@ -437,7 +440,7 @@ func heldFirstList(t *testing.T) (r *running, arm func(), held func() bool, rele
 	ch := make(chan struct{})
 	sess := NewSession(d.sock, nil)
 	sess.SetBeforeCall(func(method string, _ []any) {
-		if method == "workspace.list" && armed.Load() && n.Add(1) == 1 {
+		if method == "embedding.providers" && armed.Load() && n.Add(1) == 1 {
 			<-ch
 		}
 	})

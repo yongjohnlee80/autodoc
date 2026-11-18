@@ -25,12 +25,42 @@ In the code: `app/server.go`, `enterprise/config/`
 Each `[[source]]` names one `.view` file and its own tenant. Sources refresh, re-cut and delete on
 their own schedules, so sharing a tenant would let one view's refresh delete another's rows.
 
-One writer per tenant is held by a PostgreSQL advisory lock, taken on a dedicated connection the
-ingester keeps for its whole life, outside the pool. Losing that connection stops the ingester and
-exits the server non-zero, so its supervisor restarts it; it never goes on writing unlocked. The
-embedder writes a tenant only while its ingester confirms the lock.
+One writer per tenant is held by a lease: a row of `rag_writer_lease` in the server's schema,
+claimed and renewed in transactions, never an advisory lock or any other session state, so a
+dropped or recycled connection loses nothing.
 
-In the code: `enterprise/ingest/`, `core/pgstore/writer.go`
+- **Every write is fenced in its own transaction.** Its first statement confirms the lease (this
+  holder, this epoch, not expired by the database's clock) and holds the row `FOR KEY SHARE` until
+  the write ends. The embedding worker writes through the ingester's fenced store, so its writes
+  are fenced the same way.
+- **The holder's renew is never held up by its own writes.** A renew is a plain `UPDATE` of
+  columns no unique index holds, which `FOR KEY SHARE` lets through, so a write longer than the
+  lease keeps it.
+- **A takeover waits for every open write.** A claim takes the row `FOR UPDATE NOWAIT`, which a
+  fence refuses: no other server takes the tenant while a write of the holder's is open, and a
+  claimer never queues on the row. An upsert claim would lock the row only as a renew does and
+  take the lease over mid-write, so a claim is never one.
+- **Only an expired or released lease is taken over,** at the next epoch. A stopping server
+  releases its leases, so a standby takes them at its next poll; a crashed one's are taken a lease's
+  length (30 seconds) after its last renew.
+- **A holder that cannot renew stops by its own clock** before the database's lease runs out. A
+  lease lost, taken over or not renewed in time, stops the ingester and exits the server non-zero,
+  so its supervisor restarts it; it never goes on writing without the lease.
+- Every time is the database's `clock_timestamp()`; no host's clock is compared with another's.
+- **A claim within milliseconds of a stop that cut a write can wait one poll.** The cut write holds
+  the row `FOR KEY SHARE` until its backend sees its connection closed, so a claim landing then is
+  refused as busy and comes back at the next poll, up to 5 seconds later. It's harmless, and has
+  been since the lease came in: the lease was released, no second writer can start, and a
+  supervisor's restart or a standby's poll comes later anyway.
+- **A v0.3.15 server is looked for, until v0.3.18.** v0.3.15 held a tenant by a session advisory
+  lock, which the lease doesn't see. It refuses a store migrated past its scripts, so only one
+  running when the store was migrated, or its standby, can meet a newer server. Before the lease
+  is claimed, after it, and at every renew, the ingester tries that lock's key with
+  `pg_try_advisory_xact_lock`, in one statement that keeps nothing. Held, it waits (or, holding the
+  lease, stops) and says that an older server must be stopped. v0.3.18 upgrades only from v0.3.16
+  or later, and drops the check.
+
+In the code: `core/pglease/`, `core/pgstore/writer.go`, `enterprise/ingest/`
 
 ## Incremental passes and full refreshes
 
@@ -39,7 +69,9 @@ A source is read two ways, both needing only `SELECT` on the business tables:
 - **An incremental pass**, every interval, reads rows past the tenant's `(updated_at, id)` cursor,
   up to `now() − lag` (a minute by default), so a business transaction still open cannot commit a
   row behind the cursor. Each page and the new cursor commit in one transaction, so a crash replays
-  at most one page.
+  at most one page. The lag must exceed the source's longest writing transaction. A pass is not read
+  in one snapshot, and need not be: the row it could miss is one committed later than the lag after
+  the `updated_at` it carries, which is commit order, not read consistency.
 - **A full refresh**, on its schedule, renders every row and compares each document's version (a
   hash of the body, title, tags, facets and source id), so a change the view's `updated_at` missed is
   still caught. Paths the view no longer returns are deleted only after a complete, successful
@@ -49,6 +81,15 @@ A source is read two ways, both needing only `SELECT` on the business tables:
 
 A view must order by its cursor, and `export` may use only `id`; `--server --check` verifies the
 order against the live database.
+
+- **Deletes reach the index in the pass,** not only at the refresh. A row may say `deleted: true`
+  (a soft delete, ordered with the rows by `updated_at`), or a source's deletes view returns a
+  tombstone `{id, deleted_at}`, read past a cursor of its own in the same order and up to the
+  same bound. Either deletes the document only when it is no older than the document's last write
+  (`rag_document.source_at`), so the newest event wins; an equal time is a delete, since a
+  deleted record that leaks is worse than a live one that waits for the refresh. A delete takes
+  the vectors of the document's texts that no other document of the tenant shares. The refresh
+  stays the backstop for every delete a source doesn't say.
 
 In the code: `enterprise/ingest/ingest.go`, `core/pgstore/README.md`
 
@@ -71,6 +112,75 @@ apart from the query and the filter, and a query or filter that names an access 
 It is never a search facet, because facets from the query text are OR-merged and could widen it.
 
 In the code: `enterprise/search/search.go`, `core/pgstore/`
+
+## Typed facets, filtered in SQL an index answers
+
+A source declares the row fields a search may filter on, each typed: `keyword`, `number` or
+`date`. The declaration is part of the tenant's policy, read in the snapshot that reads the access
+fields. Facets never widen access: a name that is an access field (in any case), `tags`, `path`
+or `title` is refused when the configuration loads, and a filter, a range or a query word naming
+an access field is refused at search.
+
+Each predicate is one an index answers, ANDed beside the access predicate and never merged with
+it:
+
+- **keyword:** `field=value` pairs in `rag_document.facets`, beside the access pairs. A field's
+  values are one overlap, `facets && $n`, which the GIN index on `facets` answers; fields are
+  ANDed. Matching is exact, case included.
+- **number and date:** one row per value in `rag_document_value (tenant, doc_id, field, value)`,
+  each a double (a date as Unix seconds). A range is `EXISTS` over that table with the bounds
+  given, and its primary key `(tenant, field, value, doc_id)` answers it with a range scan. A
+  list value is several rows, so a document matches when any of its values is within every bound.
+  A side table and not a jsonb column, because a jsonb range needs an expression index per field,
+  which means DDL per source on a table every tenant shares.
+
+The values are replaced with their document, in its put's transaction, and go with it through
+the foreign key. They are part of the document's content hash, so a changed value writes it again.
+
+A complete refresh records the declaration it wrote its documents with (`rag_cursor.refresh_facets`).
+While that differs from the source's declaration, a refresh is due at once and the status says
+`refresh_due: "facets"`. Because the record is the store's, a change holds whichever server
+loaded the new configuration: in a rolling restart, a server still on the old declaration may
+complete a refresh after the change, and that refresh records the old declaration, so the next
+ingester of the new one still finds the refresh due. The refresh embeds nothing again: embeddings
+are keyed by the text, and the text is unchanged. A changed view is different: its documents are
+cut again at the next scheduled refresh, not at once.
+
+A request with ranges and no words is listed by the search package itself, since golib's engine
+lists only what its own filter narrows. The approximate path's small-scope count reads the same
+`where`, so a narrow range is answered exactly, without trying the index.
+
+In the code: `core/pgstore/facets.go`, `enterprise/search/search.go`, `enterprise/ingest/source.go`
+
+## GIN indexes without stale pending lists
+
+A GIN index with `fastupdate` on (PostgreSQL's default) adds each write's entries to a pending list
+that every scan reads whole until VACUUM merges it. After a bulk load, that list made every scoped
+search slower: a label's facet scan read 3 ms of list for 37 entries.
+
+- **The document's facets and tags** keep no pending list (`fastupdate = off`, script 000009,
+  which also merges the lists already there). Their entries are a few short strings per
+  document, so writing them straight into the index costs a load little.
+- **The chunks' text index** keeps its list, since a chunk's words are many. The ingester merges
+  it (`gin_clean_pending_list`) after a load: a refresh that wrote documents, or a pass that wrote
+  many. Between loads autovacuum merges what trickles in.
+
+In the code: `core/pgstore/gin.go`, `enterprise/ingest/ingest.go`
+
+## One search across several tenants
+
+A request may name several tenants, each with its own scope and filter, sharing the query, mode,
+limit and grouping. Every tenant's grants and request are checked before any search runs, and one
+refusal refuses all. The tenants are searched concurrently, each in its own snapshot under its own
+access predicate (at most 4 at once per request, and `max_tenant_searches` across requests), and
+the query is embedded once per model. The hits are merged by golib's fixed-scale relevance (the
+RRF of each tenant's own retrievers) times an optional weight, every hit naming its tenant.
+
+Fusing each arm across tenants instead (lexical by rank, semantic by distance) would need per-arm
+scores out of the engine and helps only where tenants share a model. A server-side ranker would
+rescore the merged hits anyway.
+
+In the code: `enterprise/search/global.go`, `enterprise/api/api.go`
 
 ## An HTTP API with a token per client
 
@@ -98,3 +208,46 @@ In the code: `enterprise/api/api.go`, `enterprise/config/config.go`
   a container example.
 
 In the code: `enterprise/ops/ops.go`, `enterprise/opcode/`, `app/server_health.go`
+
+## A model's index waits for its bulk load
+
+Each embedding model has one HNSW index, shared by every tenant. Inserting into a model with its
+index built costs several times what inserting into one without does, so a tenant's first import
+would pay that cost on every embedding if the index were built as soon as the tenant named the
+model.
+
+- A model's index waits, whenever it is wanted, while a tenant whose active model it is has
+  `ann_defer_backlog` (2,000) or more documents not yet ready: its first build, and a rebuild after
+  its index went missing. It is built, concurrently, once every such tenant's backlog falls below
+  that, or `ann_defer_max` (24 h) after it first waited, whatever the backlog. That deadline is
+  kept until the index leaves wanted, so a tick that can't claim it (the builder busy with another
+  build) never starts a new one, and a backlog that drains and fills again waits only for the rest
+  of it.
+- A backlog that can't be counted holds every wanted model for that tick, and the builder reports
+  the error: a load never pays the index's cost because a count failed.
+- The backlog is counted only while a model's index is wanted, capped at `ann_defer_backlog`: at a
+  full backlog the count stops after that many rows, and once drained it reads the partial index
+  of unready documents, so it stays cheap whether a load is under way or done.
+- Semantic search is exact while the index waits, as it is while any index is wanted. The status
+  says `ann-building` with the reason and the time it will be built by.
+- Measured at 1,000,000 documents, the import reaches a ready index in 14 min 39 s, the build
+  included, against 1 h 21 min with the index built first; recall is the same
+  ([operations](../enterprise/operations.md#the-approximate-searchs-index-what-it-costs)).
+- The session that builds an index sets its own `maintenance_work_mem`
+  (`ann_maintenance_work_mem`, 512 MB). A parallel build keeps that memory in the database's
+  `/dev/shm`. When that runs out (SQLSTATE 53100), the half-built index is dropped and the build
+  runs again without parallel workers, and the server logs a warning that the database's
+  container needs a larger `--shm-size`.
+
+Known limits:
+
+- A model whose index is built already doesn't wait: a tenant importing into it pays the index's
+  cost: 206 embeddings a second at 1,000,000, against 1,138 for a deferred import, its build
+  included. Dropping and rebuilding a shared index for one tenant's load would slow every other
+  tenant's searches.
+- A model that is only a tenant's target (the fill of a model switch) doesn't hold the build back:
+  the backlog counted is the active model's.
+- A failed build's retry isn't held: it is due on its own backoff, so a retry during a load pays
+  the per-insert cost.
+
+In the code: `core/pgstore/annbulk.go`, `core/pgstore/annbuild.go`

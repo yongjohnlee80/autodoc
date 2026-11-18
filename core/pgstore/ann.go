@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -35,9 +36,23 @@ type ANNConfig struct {
 	// scan's candidate list, wider than k so a tenant sharing the index with others still finds
 	// its own nearest. 0 is 1.
 	EfFactor int
+	// ExactScopeDocs answers a filtered search exactly, without trying the index, when its filter
+	// and access admit at most this many of the tenant's ready documents: the index's candidates
+	// for so few come back short, and the exact search then runs after the scan was already paid
+	// for. 0 never counts: every search past the threshold tries the index first.
+	ExactScopeDocs int
 	// M and EfConstruction are the index's build parameters (pgvector's m and ef_construction; 0
 	// is pgvector's default, 16 and 64). An index built with others is replaced while it serves.
 	M, EfConstruction int
+	// DeferBacklog and DeferMax defer a model's first build while a tenant bulk-loads it: a wanted
+	// index is not built while a tenant whose active model it is has DeferBacklog or more documents
+	// not yet ready (its backfill under way), until DeferMax after it was first deferred; inserts
+	// into a model whose index is built cost several times more. 0 DeferBacklog never defers.
+	DeferBacklog int
+	DeferMax     time.Duration
+	// MaintenanceWorkMem is the builder's session's maintenance_work_mem (a PostgreSQL size, "512MB"),
+	// so a large model's index builds in memory; "" leaves the database's own.
+	MaintenanceWorkMem string
 }
 
 // DefaultANNConfig is the server's defaults: approximate from 50,000 embeddings of a model, a
@@ -55,7 +70,8 @@ type ANNConfig struct {
 // 20 builds, 8 of them below 0.95, and no ef_search, scan budget or scan order moved it, since the
 // graph left whole regions unreachable; at 200, 0.994 to 1.000 over 5. m 32 did no better than 16.
 func DefaultANNConfig() ANNConfig {
-	return ANNConfig{Threshold: 50000, MaxScanTuples: 1000, ScanMemMultiplier: 2, EfConstruction: 200}
+	return ANNConfig{Threshold: 50000, MaxScanTuples: 1000, ScanMemMultiplier: 2, EfConstruction: 200, ExactScopeDocs: 1000,
+		DeferBacklog: 2000, DeferMax: 24 * time.Hour, MaintenanceWorkMem: "512MB"}
 }
 
 // annType is the vector type a model's index casts its embeddings to, from its fingerprint's
@@ -231,9 +247,13 @@ type ANN struct {
 	mu        sync.Mutex
 	cand      map[dao.VectorType]*chunkSchema // snapshot schemas with an ANN sort key for the type
 	underfill map[string]*atomic.Int64        // per model: candidate stages that came back short
+	scoped    map[string]*atomic.Int64        // per model: searches answered exactly for their small scope (ExactScopeDocs)
+	past      map[pastKey]time.Time           // per tenant and model: when it was last seen past the threshold (pastThreshold)
 
 	hook    dao.Hook    // the builder's statements, observed; nil in production
 	checked atomic.Bool // the ready indexes' definitions were checked once this run (verifyReady)
+	// builtSerially is a build that fell back to no parallel workers (createIndex), which Tick says
+	builtSerially atomic.Bool
 
 	// leaseFor and renewEvery are a claim's lease and how often a build renews it (annLease,
 	// annRenew; variables so a cell can shorten them)
@@ -246,8 +266,8 @@ func NewANN(conn dao.DataConn, cfg ANNConfig, run string) *ANN {
 	return &ANN{cfg: cfg, conn: conn, run: run,
 		rwIndex: newANNIndexSchema(committedConn{conn}), rwBuilder: newANNBuilderSchema(committedConn{conn}),
 		roIndex: newANNIndexSchema(snapshotConn{conn}), rwMeta: newMetaSchema(committedConn{conn}), rwEmb: newEmbSchema(committedConn{conn}),
-		cand: map[dao.VectorType]*chunkSchema{}, underfill: map[string]*atomic.Int64{},
-		leaseFor: annLease, renewEvery: annRenew}
+		cand: map[dao.VectorType]*chunkSchema{}, underfill: map[string]*atomic.Int64{}, scoped: map[string]*atomic.Int64{},
+		past: map[pastKey]time.Time{}, leaseFor: annLease, renewEvery: annRenew}
 }
 
 // candidates is t's candidate schema: the chunk schema with an ANN sort key over the embeddings
@@ -306,6 +326,9 @@ type ANNStatus struct {
 	// search answered exactly: a selective filter, a small share of a shared index, or a scan
 	// that hit its budget.
 	Underfill int64
+	// ExactScoped counts this server run's searches answered exactly without trying the index,
+	// their filter and access admitting at most ExactScopeDocs documents.
+	ExactScoped int64
 }
 
 // Status is every recorded model's index: its mode (ann when ready, ann-building while wanted or
@@ -317,7 +340,7 @@ func (a *ANN) Status(ctx context.Context) ([]ANNStatus, error) {
 	}
 	out := make([]ANNStatus, 0, len(rows))
 	for _, r := range rows {
-		s := ANNStatus{Model: r.Model, Underfill: a.underfillOf(r.Model).Load()}
+		s := ANNStatus{Model: r.Model, Underfill: a.underfillOf(r.Model).Load(), ExactScoped: a.scopedOf(r.Model).Load()}
 		switch r.State {
 		case annReady:
 			s.Mode = ModeANN
@@ -325,6 +348,9 @@ func (a *ANN) Status(ctx context.Context) ([]ANNStatus, error) {
 			s.Mode, s.Reason = ModeANN, replacingReason(r.Error)
 		case annWanted, annBuilding:
 			s.Mode = ModeANNBuilding
+			if r.State == annWanted && strings.HasPrefix(r.Error, deferredPrefix) {
+				s.Reason = r.Error // why searches stay exact meanwhile
+			}
 		case annFailed:
 			s.Mode, s.Reason = ModeANNFailed, r.Error
 		default:
@@ -336,6 +362,75 @@ func (a *ANN) Status(ctx context.Context) ([]ANNStatus, error) {
 }
 
 // --- the two-stage search --------------------------------------------------------------
+
+// pastKey is a tenant's model.
+type pastKey struct{ tenant, model string }
+
+// pastFor is how long a tenant's model seen past the threshold is taken to be past it without
+// asking again (a variable, so a cell can shorten it); pastClock is the time it is measured by.
+var (
+	pastFor   = time.Minute
+	pastClock = time.Now
+)
+
+// pastThreshold reports whether the View's tenant has at least the threshold's embeddings of
+// model: what lets its searches go through the index. Asking costs a read of the threshold's
+// embeddings (LIMIT 1 OFFSET threshold − 1: 50,000 rows at the default, about 10 ms), so a yes is
+// remembered for pastFor, and asked again only after it. A no is never remembered: a tenant's bulk
+// load crosses the threshold, and its next search should see it.
+//
+// A tenant's embeddings fall below the threshold only by a reclaim or a drop. This Store's own
+// clear the tenant's yes at once (forget); another server's are seen past pastFor. Until then a
+// search still tries the index for a tenant now below it: the candidate stage, under the tenant's
+// filter, comes back short whenever the tenant has fewer than its k embeddings left, and the
+// search is answered exactly (underfill); with more, the index answers, as it would for any tenant
+// past the threshold. Either way the answer is a right one.
+func (v *View) pastThreshold(ctx context.Context, model string) (bool, error) {
+	a := v.s.ann
+	k := pastKey{v.s.tenant, model}
+	a.mu.Lock()
+	at, ok := a.past[k]
+	a.mu.Unlock()
+	now := pastClock()
+	if ok && now.Sub(at) < pastFor {
+		return true, nil
+	}
+	rows, err := v.s.ro.emb.On(v.tx, v.opts(ctx)...).With(eTenant, v.s.tenant).With(eModel, model).
+		Offset(uint64(a.cfg.Threshold - 1)).Limit(1).Select(eHash)
+	if err != nil {
+		return false, err
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if len(rows) == 0 {
+		delete(a.past, k)
+		return false, nil
+	}
+	a.past[k] = now
+	return true, nil
+}
+
+// forget clears what pastThreshold remembers of tenant: its embeddings were reclaimed or dropped.
+func (a *ANN) forget(tenant string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for k := range a.past {
+		if k.tenant == tenant {
+			delete(a.past, k)
+		}
+	}
+}
+
+func (a *ANN) scopedOf(model string) *atomic.Int64 {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	c := a.scoped[model]
+	if c == nil {
+		c = new(atomic.Int64)
+		a.scoped[model] = c
+	}
+	return c
+}
 
 // annSettings are the candidate stage's transaction-local settings for k candidates.
 func (a *ANN) annSettings(k int) dao.QueryOption {
@@ -368,18 +463,20 @@ func (v *View) semanticANN(ctx context.Context, model string, vec []float32, f s
 	if err != nil {
 		return nil, false, err
 	}
-	past, err := v.s.ro.emb.On(v.tx, v.opts(ctx)...).With(eTenant, v.s.tenant).With(eModel, model).
-		Offset(uint64(a.cfg.Threshold - 1)).Limit(1).Select(eHash)
-	if err != nil || len(past) == 0 {
+	if past, err := v.pastThreshold(ctx, model); err != nil || !past {
 		return nil, false, err
 	}
 
+	where := v.where(f)
+	if small, err := v.smallScope(ctx, model, where); err != nil || small {
+		return nil, false, err
+	}
 	k := candidateCount(n)
-	d := v.sectioned(ctx, a.candidates(t).On(v.tx, append(v.opts(ctx), a.annSettings(k))...).With(cTenant, v.s.tenant)).
+	d := v.sectioned(ctx, a.candidates(t).On(v.tx, append(v.plain(ctx), a.annSettings(k))...).With(cTenant, v.s.tenant)).
 		Join(joinDoc, joinEmb).
 		WithPredicate(dao.Eq(qcol(tEmb, "model"), model)).
 		WithPredicate(dao.Eq(qcol(tDoc, string(dReady)), true))
-	for _, p := range v.where(f) {
+	for _, p := range where {
 		d = d.WithPredicate(p)
 	}
 	cands, err := d.OrderBy(dao.AscBy(cByANN, postgres.Vector(vec))).Limit(uint64(k)).Select(cDoc, cOrd)
@@ -407,6 +504,30 @@ func (v *View) semanticANN(ctx context.Context, model string, vec []float32, f s
 		out = append(out, candidate(r, chunk.Snippet(r.Body)))
 	}
 	return out, true, nil
+}
+
+// smallScope reports whether where (a search's filter and the View's access) admits at most
+// ExactScopeDocs of the tenant's ready documents, so the search is answered exactly: one read of
+// at most that many document ids and one more, through the indexes the predicates have (the GIN
+// indexes on facets and tags). A search with no predicate is the whole tenant's, never small.
+func (v *View) smallScope(ctx context.Context, model string, where []dao.Predicate) (bool, error) {
+	most := v.s.ann.cfg.ExactScopeDocs
+	if most <= 0 || len(where) == 0 {
+		return false, nil
+	}
+	d := v.docs(ctx).With(dReady, true)
+	for _, p := range where {
+		d = d.WithPredicate(p)
+	}
+	ids, err := d.Limit(uint64(most) + 1).Select(dID)
+	if err != nil {
+		return false, err
+	}
+	if len(ids) > most {
+		return false, nil
+	}
+	v.s.ann.scopedOf(model).Add(1)
+	return true, nil
 }
 
 // ANNMode is model's search mode for this tenant, and why: exact below the threshold or with no

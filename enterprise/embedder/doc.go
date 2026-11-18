@@ -29,10 +29,11 @@
 // # One writer per tenant
 //
 // The worker writes a tenant only while Tenant.Confirm answers nil, which the server wires to the
-// tenant's ingester (ingest.Ingester.Confirm): the tenant's writer lock is this process's. It
-// confirms before each of its writes, so a second server waiting for a tenant never touches it.
+// tenant's ingester (ingest.Ingester.Confirm): the tenant's writer lease is this process's. Its
+// Store is the ingester's fenced one (ingest.Ingester.Store), so each of its writes confirms the
+// lease in its own transaction too, and a second server waiting for a tenant never touches it.
 //
-//	w := embedder.New(build, []embedder.Tenant{{Name: "music", Store: st, Confirm: in.Confirm}},
+//	w := embedder.New(build, []embedder.Tenant{{Name: "music", Store: in.Store(), Confirm: in.Confirm}},
 //		embedder.WithSlots(4), embedder.WithLogger(log))
 //	go w.Run(ctx) // until ctx ends
 //	w.Wake()      // after an ingester commits

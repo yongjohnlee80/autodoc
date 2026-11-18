@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"regexp"
 	"runtime/debug"
+	"slices"
 	"strings"
 
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
@@ -132,6 +133,22 @@ func (c core) Prefs() feature.PrefsView { return c.h.prefs }
 // LayoutRows is Layout › for the window id (feature.LayoutRows): the host's tiling windows'.
 func (c core) LayoutRows(id string, row feature.RowMaker) []widgetcore.MenuItemModel {
 	return layoutRows(c, id, row)
+}
+
+// tileWindows are the windows the base may tile: the static ones, then one per card (tileHost's).
+func (c core) tileWindows() []tileWindow {
+	return append(slices.Clip(staticTileWindows), c.cardTileWindows()...)
+}
+
+// setTile sets a window's tiling preference (tileHost's): a static window's through its Preferences
+// row, a card's as its geometry is kept, under its panel's id; PreferencesChanged then sets the
+// card's panel (syncCards).
+func (c core) setTile(id, name, value string) {
+	if !strings.HasPrefix(id, cardPanelPrefix) {
+		c.SetPref(name, value)
+		return
+	}
+	c.h.setPref(name, value, func(p *prefs) { p.SetValue(name, value) })
 }
 
 // Env is the program's environment as it is now (seams.go): a test may change it while the

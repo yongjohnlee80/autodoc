@@ -41,6 +41,10 @@ func TestMigration000004AddsTheSourceIDOverAPopulatedSchema(t *testing.T) {
 	if got := scalar(t, conn, "SELECT title || '|' || version || '|' || generation || '|' || source_id FROM rag_document WHERE path = 'old.md'"); got != "Old|v1|2|" {
 		t.Fatalf("the 000003 row after 000004: %q", got)
 	}
+	// the store's code is the latest's: it writes the scripts after 000004 too
+	if err := Migrate(ctx, conn); err != nil {
+		t.Fatal(err)
+	}
 	s, err := New(conn, "t")
 	if err != nil {
 		t.Fatal(err)
@@ -53,6 +57,7 @@ func TestMigration000004AddsTheSourceIDOverAPopulatedSchema(t *testing.T) {
 	}
 	b := s.Begin(ctx)
 	if _, err := b.Put(ctx, Document{Path: "new.md", SourceID: "43"}); err != nil {
+		_ = b.Rollback() // its connection, or the pool's Close waits for it
 		t.Fatal(err)
 	}
 	if err := b.Commit(); err != nil {
@@ -62,8 +67,10 @@ func TestMigration000004AddsTheSourceIDOverAPopulatedSchema(t *testing.T) {
 		t.Errorf("a batch's Put again stored %q, want 43", got)
 	}
 
-	if _, err := deploy.New(migrations, deploy.Ledger(Ledger)).Revert(ctx, conn, 4); err != nil {
-		t.Fatalf("reverting 000004: %v", err)
+	for _, n := range []int{10, 9, 8, 7, 6, 5, 4} { // the latest first, down to 000004
+		if _, err := deploy.New(migrations, deploy.Ledger(Ledger)).Revert(ctx, conn, n); err != nil {
+			t.Fatalf("reverting %06d: %v", n, err)
+		}
 	}
 	if got := scalar(t, conn, "SELECT count(*) FROM information_schema.columns WHERE table_name = 'rag_document' AND column_name = 'source_id'"); got != "0" {
 		t.Errorf("the revert left source_id: %s columns", got)

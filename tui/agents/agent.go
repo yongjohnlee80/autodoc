@@ -55,7 +55,9 @@ type CrewAttention interface {
 }
 
 // agentSeams are the program's seams the agents read (seams.go), each read when used: a test may
-// change one while the program runs.
+// change one while the program runs. An agent's start runs off the loop (runAgent, and the
+// terminal's own retry), and calls ServerReady, Spawn, CodexHere and AgentBin there: an
+// implementation answers those safely while the loop changes them.
 type AgentSeams interface {
 	// Env is the program's environment: an agent's PATH, its CLI's lookup, its server's.
 	Env() procenv.Env
@@ -200,6 +202,7 @@ func (a *Agents) Commands() map[string]feature.Command {
 	return map[string]feature.Command{
 		"App.toggleAgent":             feature.None(a.ToggleAgent),
 		"App.stopAllAgents":           feature.None(a.StopAllAgents),
+		"App.closeAgentTab":           feature.OneString("a tab", a.CloseAgentTab),
 		"App.openAgentProfiles":       feature.None(a.OpenAgentProfiles),
 		"App.startAddAgent":           feature.None(a.StartAddAgent),
 		"App.startEditAgent":          feature.OneNumber("a row", a.StartEditAgent),

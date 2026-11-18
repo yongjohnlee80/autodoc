@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 54,
+  protocol = 55,
   min_protocol = 12,
   verbs = {
     ["crew.access"] = {
@@ -882,8 +882,8 @@ return {
       params = {
         { name = "info", type = "map", optional = true }
       },
-      result = "{protocol, server_protocol, min_protocol, server, version, instance, pid, addr, store_id, client, events}",
-      doc = "Opens the session at the protocol it declares. protocol is the session's, server_protocol and min_protocol the range the daemon serves, store_id the store's identity, client this connection's token, events the event log's head.",
+      result = "{protocol, server_protocol, min_protocol, server, version, instance, pid, addr, store_id, engine, schema, client, events}",
+      doc = "Opens the session at the protocol it declares. protocol is the session's, server_protocol and min_protocol the range the daemon serves, store_id the store's identity, engine and schema a store on PostgreSQL's (absent for a SQLite store), client this connection's token, events the event log's head.",
     },
     ["sys.profile"] = {
       since = 32, scope = "local-peer", audience = "internal",
@@ -1265,6 +1265,7 @@ return {
     { code = -32020, name = "rpc.protocol_mismatch", next = "the daemon serves other protocols: autodoc --version, then restart it, or reconnect declaring one it serves" },
     { code = -32021, name = "rpc.handshake_required", next = "say sys.hello first" },
     { code = -32022, name = "rpc.store_damaged", next = "the store is damaged and the daemon is stopping: autodoc --check-store reports it; restore it from a backup (docs/ops/backup-and-restore.md)" },
+    { code = -32023, name = "rpc.file_refused", next = "the message says which: a file another program holds, try again in a moment; one the system doesn't permit, change its permissions" },
     { code = -32060, name = "rpc.no_such_workspace", next = "call workspace.list and use a listed name" },
     { code = -32061, name = "rpc.not_found", next = "refresh the listing: the path is wrong or not indexed (index.list), or the provider or ranker is gone" },
     { code = -32062, name = "rpc.conflict", next = "doc.read, then merge or retry; for a name, choose another" },

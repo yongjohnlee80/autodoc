@@ -146,6 +146,7 @@ func (pl *plugins) State() map[string]any {
 func (pl *plugins) Commands() map[string]feature.Command {
 	return map[string]feature.Command{
 		"App.openPlugin":          feature.OneString("a plugin", pl.openPlugin),
+		"App.cardWindow":          feature.TwoStrings("a card and its control", pl.cardWindow),
 		"App.pluginEntry":         feature.OneString("a plugin's menu row or letter", pl.pluginEntry),
 		"App.openPluginChooser":   feature.None(pl.openPluginChooser),
 		"App.pluginChooserKey":    feature.OneString("a key on the SPC p chooser", pl.pluginChooserKey),
@@ -320,6 +321,12 @@ type pluginHost interface {
 	MenuRows() *feature.MenuRows             // the menus' added rows: a manifest's [[menu]] joins them (feature/menurows.go)
 	// SetPluginPref sets a tui.plugin.* preference, applied and stored; ErrNotPluginPref for any other
 	SetPluginPref(name, value string) error
+	// CardTiling is the card's tiling as the preferences have it now, its panel docked at edge: its
+	// Layout tiled or not, its tile's edge and size (cardtiles.go)
+	CardTiling(name, edge string) (tiled bool, tileEdge string, size int)
+	// CardHostKeys are the keys a protocol-12 card leaves to the Window: F6 and Shift+F6, and
+	// maximize's when the card lists it (cardwindow.go)
+	CardHostKeys(maximize bool) tuidecl.Keys
 	// LaunchConsent runs start for the plugin name (title its label) whose manifest says start =
 	// "launch" once the user allows it: at once when allowed before, never when refused before,
 	// else after asking (pluginlaunch.go)

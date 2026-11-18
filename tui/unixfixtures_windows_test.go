@@ -2,62 +2,35 @@
 
 package tui
 
-import (
-	"testing"
+import "testing"
 
-	"github.com/yongjohnlee80/autodoc/tui/agents"
-)
+// The fixtures below stand for what Windows has not: a cell that needs one is skipped, saying why,
+// rather than keeping every other cell in this package from compiling. A cell that needs only a
+// shell running uses the line shell (runLineShellTUI), and an agent's cells fakeAgent: both run on
+// every OS.
 
-// The fixtures below start a POSIX shell or a shell-script stand-in for an agent's CLI
-// (terminal_test.go, agent_test.go, agentswitch_test.go, agentserver_test.go, terminalkeymap_test.go).
-// They are not ported: on Windows a cell that needs one is skipped, and says so, rather than
-// keeping every other cell in this package from compiling.
+// realShell is why a cell that types shell commands (seq, printf, cat -v, $((…))) is Unix's: the line
+// shell other OSes run does not run them.
+const realShell = "types real shell commands, which only a POSIX shell runs"
 
-const unixFixture = "needs a POSIX shell fixture, not ported to Windows"
+// agentServer is why a cell that starts a crew agent's own server is Unix's: the server needs process
+// groups, so on Windows none is started (agents.CanRunAgentServers) and a Codex agent's setup asks
+// for none.
+const agentServer = "starts an agent's own server, which needs process groups (none on Windows)"
 
 func runShellTUI(t *testing.T, _ map[string]string) (*daemon, *running) {
 	t.Helper()
-	t.Skip(unixFixture)
+	t.Skip(realShell)
 	return nil, nil
-}
-
-func runAgentTUI(t *testing.T, _ string, _ []agents.AgentProfile, _ string) (*daemon, *running, string) {
-	t.Helper()
-	t.Skip(unixFixture)
-	return nil, nil, ""
-}
-
-func runAgentTUIWith(t *testing.T, _ string, _ []agents.AgentProfile, _ string, _ map[string]string, _ Options) (*daemon, *running, string) {
-	t.Helper()
-	t.Skip(unixFixture)
-	return nil, nil, ""
-}
-
-func runAgentTUIIn(t *testing.T, _ string, _ []agents.AgentProfile, _ string, _ map[string]string, _ Options, _ map[string][]string) (*daemon, *running, string) {
-	t.Helper()
-	t.Skip(unixFixture)
-	return nil, nil, ""
-}
-
-func fakeAgent(t *testing.T) (string, string) {
-	t.Helper()
-	t.Skip(unixFixture)
-	return "", ""
-}
-
-func recordingAgent(t *testing.T, _ bool) (string, string) {
-	t.Helper()
-	t.Skip(unixFixture)
-	return "", ""
 }
 
 func fakeServer(t *testing.T, _ string, _ bool) []string {
 	t.Helper()
-	t.Skip(unixFixture)
+	t.Skip(agentServer)
 	return nil
 }
 
 func catInTheTerminal(t *testing.T, _ *running) {
 	t.Helper()
-	t.Skip(unixFixture)
+	t.Skip(realShell)
 }

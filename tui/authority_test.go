@@ -248,6 +248,9 @@ func TestAGatedSaveIsHeldToTheWorkspace(t *testing.T) {
 
 	g.mustRun(t, "w") // the user's own
 	g.waitWithin(t, "the user's save", daemonWait, func() bool {
+		if g.saving() { // read once the save is in: a read holding the file would race its replace
+			return false
+		}
 		b, _ := os.ReadFile(g.probe)
 		return strings.Contains(string(b), "EVIL")
 	})
@@ -256,7 +259,7 @@ func TestAGatedSaveIsHeldToTheWorkspace(t *testing.T) {
 	g.waitFile(t, "a.md")
 	g.mustRun(t, "saveit")
 	g.waitWithin(t, "the gated save of the workspace's document", daemonWait, func() bool {
-		return strings.Contains(g.d.read(t, "kb", "a.md"), "EVIL")
+		return !g.saving() && strings.Contains(g.d.read(t, "kb", "a.md"), "EVIL")
 	})
 }
 

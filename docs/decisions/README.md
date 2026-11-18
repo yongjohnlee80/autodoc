@@ -8,6 +8,10 @@ the code ever disagree, the code is right and the page is fixed.
 ## [The store](store.md)
 
 - [A PostgreSQL engine for the store](store.md#a-postgresql-engine-for-the-store)
+- [The store on PostgreSQL](store.md#the-store-on-postgresql)
+- [Search on PostgreSQL](store.md#search-on-postgresql)
+- [The daemon on PostgreSQL](store.md#the-daemon-on-postgresql)
+- [Copying a SQLite store into PostgreSQL](store.md#copying-a-sqlite-store-into-postgresql)
 - [Workspace settings saved together](store.md#workspace-settings-saved-together)
 - [Databases attach to a workspace](store.md#databases-attach-to-a-workspace)
 - [A keyslot seals the store's secrets](store.md#a-keyslot-seals-the-stores-secrets)
@@ -248,3 +252,4 @@ the code ever disagree, the code is right and the page is fixed.
 - [Access is a separate predicate](server.md#access-is-a-separate-predicate)
 - [An HTTP API with a token per client](server.md#an-http-api-with-a-token-per-client)
 - [Operator health, status and metrics](server.md#operator-health-status-and-metrics)
+- [A model's index waits for its bulk load](server.md#a-models-index-waits-for-its-bulk-load)

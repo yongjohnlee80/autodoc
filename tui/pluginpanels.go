@@ -12,6 +12,7 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
+	"github.com/yongjohnlee80/autodoc/core/manifests"
 	"github.com/yongjohnlee80/autodoc/plugin"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 )
@@ -22,6 +23,12 @@ import (
 // Go › Arrange panel), and keeps its size and its floating rectangle in the preferences under its
 // panel's id (tui.card_<name>.*).
 //
+// A card's panel is a window of the tile manager too, as the static panels are (tilelayout.go): it
+// floats until the user tiles it from its right-click menu's Layout › or :layout card_<name>, and
+// then sits over its tile at cardTileEdge, 35% across, until floated again. Its layout, tile edge
+// and tile size are kept as its geometry is, under its panel's id (tui.card_<name>.layout,
+// .tileEdge, .tileSize: readCardTiles), never as Preferences rows.
+//
 // The panels are written into main.qml (cardPanelsQML), one for each card plugin found as the
 // program is built. Then the set follows the folder
 // (docs/decisions/plugins.md#card-panels-made-at-runtime): a card plugin added while AutoDoc runs
@@ -30,14 +37,15 @@ import (
 // reload succeeded; a refused change puts the set back (cardPanelsChanged).
 //
 // Closing the panel hides the card and never stops its plugin: Esc while the panel has the keys,
-// its right-click menu's Close, or the plugin's host.close. The plugin is told plugin.hide and runs
+// its right-click menu's Close, its _ icon, or the plugin's host.close; only its x icon stops it. The plugin is told plugin.hide and runs
 // on, its tables and its session with it; a command, its Plugins menu entry or its toggle opens the
 // panel again (plugin.show); its toggle while the panel is open closes the panel the same way. It
 // stops when the user turns it off (its Plugins menu's Turn off, Manage plugins), when it exits, or
 // when AutoDoc quits.
 
 // cardPanelsMarker is the line of main.qml the card panels are written after.
-const cardPanelsMarker = "    // ---- the card plugins' panels ----\n"
+// It is inside the TileManager, after its last static member, so the panels are its members.
+const cardPanelsMarker = "        // ---- the card plugins' panels ----\n"
 
 // cardPanelPrefix begins every card panel's id; the plugin's name follows, its - as _.
 const cardPanelPrefix = "card_"
@@ -220,18 +228,22 @@ func (pl *plugins) cardDefault(name, edge string) (size, length int) {
 	return min(max(size, 10), 90), min(max(length, 20), 100)
 }
 
-// cardState is what the document reads of every card's panel: its heading, edge, size and length.
-// The floating rectangle is every panel's (floatState).
+// cardState is what the document reads of every card's panel: its heading, edge, size and length,
+// and its tiling (pluginHost's CardTiling). The floating rectangle is every panel's (floatState).
 func (pl *plugins) cardState() map[string]any {
 	st := map[string]any{}
 	for _, c := range pl.fixCards() {
 		id := cardPanelID(c.name)
 		edge := pl.cardEdgeIn(pl.c.Prefs(), c.name)
 		size, length := pl.c.Prefs().PanelGeometry(id, edge)
+		tiled, tileEdge, tileSize := pl.c.CardTiling(c.name, edge)
 		st["App."+id+"Title"] = c.entry.label()
 		st["App."+id+"Edge"] = edge
 		st["App."+id+"Size"] = size
 		st["App."+id+"Length"] = length
+		st["App."+id+"Tiled"] = tiled
+		st["App."+id+"TileEdge"] = tileEdge
+		st["App."+id+"TileSize"] = tileSize
 	}
 	return st
 }
@@ -247,9 +259,13 @@ func (pl *plugins) syncCard(name string) {
 	id := cardPanelID(name)
 	edge := pl.cardEdgeIn(pl.c.Prefs(), name)
 	size, length := pl.c.Prefs().PanelGeometry(id, edge)
+	tiled, tileEdge, tileSize := pl.c.CardTiling(name, edge)
 	pl.c.Set("App."+id+"Edge", edge)
 	pl.c.Set("App."+id+"Size", size)
 	pl.c.Set("App."+id+"Length", length)
+	pl.c.Set("App."+id+"Tiled", tiled)
+	pl.c.Set("App."+id+"TileEdge", tileEdge)
+	pl.c.Set("App."+id+"TileSize", tileSize)
 }
 
 // showCard opens the card's panel, its plugin running: focused, when focus says so. A panel the dock
@@ -313,29 +329,111 @@ func (pl *plugins) cardClosed(name string) {
 	}
 }
 
-// cardPanelsQML is the card panels, as main.qml declares a panel, for the cards in order.
+// cardPanelsQML is the card panels, as main.qml declares a tileable panel (a member of its
+// TileManager, as the terminal's is), for the cards in order.
 func cardPanelsQML(cards []*cardPanel) string {
 	var b strings.Builder
 	for _, c := range cards {
 		id := cardPanelID(c.name)
-		fmt.Fprintf(&b, `    Panel {
-        id: %[1]s
-        heading: App.%[1]sTitle
-        edge: App.%[1]sEdge
-        size: App.%[1]sSize
-        length: App.%[1]sLength
-        floating: App.%[1]sFloating
-        floatX: App.%[1]sX; floatY: App.%[1]sY; floatWidth: App.%[1]sW; floatHeight: App.%[1]sH
-        onPlaced: App.panelPlaced(%[2]q, x, y, width, height)
-        minimumSize: 10
-        onResized: App.panelResized(%[2]q, size, length)
-        onOpened: App.panelOpened(%[2]q)
-        onClosed: App.panelClosed(%[2]q)
-        PluginCard { id: %[3]s; plugin: %[4]q }
-    }
-`, id, id, cardViewID(c.name), c.name)
+		fmt.Fprintf(&b, `        Panel {
+            id: %[1]s
+            TileManager.edge: App.%[1]sTileEdge; TileManager.edges: "left right top bottom"
+            TileManager.size: App.%[1]sTileSize
+            TileManager.minimumWidth: 20; TileManager.minimumHeight: 4
+            TileManager.tiled: App.%[1]sTiled
+            heading: App.%[1]sTitle
+            edge: App.%[1]sEdge
+            size: App.%[1]sSize
+            length: App.%[1]sLength
+            floating: App.%[1]sFloating
+            floatX: App.%[1]sX; floatY: App.%[1]sY; floatWidth: App.%[1]sW; floatHeight: App.%[1]sH
+            onPlaced: App.panelPlaced(%[2]q, x, y, width, height)
+            minimumSize: 10
+%[5]s            onResized: App.panelResized(%[2]q, size, length)
+            onOpened: App.panelOpened(%[2]q)
+            onClosed: App.panelClosed(%[2]q)
+            PluginCard { id: %[3]s; plugin: %[4]q }
+        }
+`, id, id, cardViewID(c.name), c.name, cardWindowQML(c))
 	}
 	return b.String()
+}
+
+// cardWindowOps are the Drawer's names of a card's icons ([window] controls): its hide is the
+// Drawer's minimize, a request the host answers by hiding the panel (cardWindow).
+var cardWindowOps = map[string]string{"hide": "minimize", "maximize": "maximize", "close": "close"}
+
+// cardWindowQML is a protocol-12 card's window controls, as its panel declares them: the icons its
+// manifest lists, maximizable when it lists maximize, and each icon's request to cardWindow; "" for
+// a card that lists none (or one below protocol 12, whose manifest can't).
+func cardWindowQML(c *cardPanel) string {
+	m := c.entry.m
+	if m.Protocol < 12 || len(m.Window.Controls) == 0 {
+		return ""
+	}
+	var ops []string
+	for _, ctl := range manifests.WindowControls {
+		if m.Controls(ctl) {
+			ops = append(ops, cardWindowOps[ctl])
+		}
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "            windowControls: %q\n", strings.Join(ops, " "))
+	if m.Controls("maximize") {
+		b.WriteString("            maximizable: true\n")
+	}
+	for _, s := range []struct{ signal, control string }{
+		{"onMinimizeRequested", "hide"}, {"onMaximizeRequested", "maximize"}, {"onCloseRequested", "close"},
+	} {
+		if m.Controls(s.control) {
+			fmt.Fprintf(&b, "            %s: App.cardWindow(%q, %q)\n", s.signal, c.name, s.control)
+		}
+	}
+	return b.String()
+}
+
+// windowOf is the manifest a card's window was built from: its panel's, the one cardWindowQML wrote
+// its icons from, kept until AutoDoc restarts. Everything about a card's window reads it (its
+// icons, what they do, the keys it leaves to AutoDoc, Maximize's reach), never the run's manifest,
+// which a manifest edited while AutoDoc runs makes a later one: so the icons drawn and what the
+// window does stay one list. The zero manifest for a name with no card panel.
+func (pl *plugins) windowOf(name string) *manifest {
+	if c := pl.cards[name]; c != nil {
+		return &c.entry.m
+	}
+	return &manifest{}
+}
+
+// maximizableCards are the panels Maximize reaches among the cards: those whose window lists
+// maximize (windowOf, the panel's manifest, at protocol 12).
+func (pl *plugins) maximizableCards() []string {
+	var out []string
+	for _, c := range pl.fixCards() {
+		if c.entry.m.Protocol >= 12 && c.entry.m.Controls("maximize") {
+			out = append(out, cardPanelID(c.name))
+		}
+	}
+	return out
+}
+
+// cardWindow is a press on a card's icon (App.cardWindow): hide its panel, its plugin running on, as
+// Esc does; maximize its panel over the page or restore it, as F11 does; or stop its plugin, as its
+// Plugins menu's Turn off does. A card not running has no icons to press, and a control its
+// window does not list (windowOf: the manifest its icons were drawn from) is no icon of it: refused,
+// whoever asks.
+func (pl *plugins) cardWindow(name, control string) {
+	r := pl.running[name]
+	if r == nil || r.closing || !pl.windowOf(name).Controls(control) {
+		return
+	}
+	switch control {
+	case "hide":
+		pl.hideCard(r) // cardClosed tells it plugin.hide
+	case "maximize":
+		pl.c.Keep(pl.c.View(cardPanelID(name), "toggleMaximize"))
+	case "close":
+		r.stopFor(plugin.CloseOff, "")
+	}
 }
 
 // withCardPanels is src with the card panels written after its marker; src as it is when it has

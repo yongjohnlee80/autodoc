@@ -36,7 +36,7 @@ In the code: `plugin/serve.go`, `plugin/protocol.go`, `plugin/link.go`
 
 ## Protocol versions and strict manifests
 
-A host speaks a range of plugin protocols (today 1 to 11) and speaks to each plugin the one its
+A host speaks a range of plugin protocols (today 1 to 12) and speaks to each plugin the one its
 manifest names: `plugin.open` carries it and `host.ready` must echo it. The protocol rises whenever a
 manifest can declare something an older host must not run without, when a meaning changes, or when
 a plugin must handle something new. So every protocol's additions are declared in the manifest, a
@@ -71,7 +71,17 @@ Closing a card's panel hides it and leaves its plugin running: Esc, its menu's C
 `plugin.hide`. A signed-in plugin therefore stays signed in across a hide. Only Turn off (or an
 update, a removal, a fault, or quitting) stops the process.
 
-In the code: `tui/plugincmds.go`, `tui/pluginpanels.go`, `tui/pluginview.go`
+A card's panel is a window of the tile manager, as the static panels are. It floats until the user
+tiles it, from its right-click menu's Layout › or `:layout card_<name>`, as every panel floats until
+then. Its tile docks at its placement's side, and a card at the centre takes the right, since the
+page holds the tile manager's one centre. Its layout, tile edge and tile size are kept under its
+panel's id, as its geometry is (`tui.card_<name>.layout`, `.tileEdge`, `.tileSize`), not as
+Preferences rows, since cards come and go with the plugins folder. A card added or removed while
+AutoDoc runs is spliced into the tile manager or out of it, the other panels keeping their state;
+one whose folder comes back while AutoDoc runs returns over its tile, since the card set's reload
+reads the preferences again, its tiling with its geometry.
+
+In the code: `tui/plugincmds.go`, `tui/pluginpanels.go`, `tui/pluginview.go`, `tui/tilelayout.go`
 
 ## The document feed
 
@@ -270,8 +280,53 @@ restart.
   were. A reload that failed part-way leaves a screen only a restart can rebuild, and AutoDoc says
   so.
 - An added card keeps its stored geometry (`tui.card_<name>.*`).
+- A card's window icons are read from its manifest as it was found, and a card is kept across an
+  edit of its manifest, so a changed `[window]` shows after a restart, or once the card's folder is
+  removed and added back, which builds its panel anew. Until then everything about the window
+  reads that first manifest, its panel's: the icons, what they do, the keys the card leaves to the
+  host and Maximize's reach. The plugin may restart on the edited manifest meanwhile; a window that
+  followed it would decline F11 for a panel that cannot be maximized, or draw a `+` that does
+  nothing. Only the protocol is the run's, since the plugin answers by the one it was opened at: a
+  run below 12 is sent every key, F11 included, whatever its panel draws.
 
 In the code: `tui/pluginpanels.go`, `tui/feature/panelregistry.go`
+
+## A card's window icons
+
+A protocol-12 card shows the icons its `[window] controls` lists, any of hide, maximize and close,
+on its panel's frame, as AutoDoc's own panels have them. The host draws them and does what they do;
+the plugin is sent nothing for a press on one.
+
+- `_` hides the panel and the plugin runs on, as Esc does. `x` stops the plugin, as Turn off does.
+  Hiding is what keeps a plugin's tables and connection, so it is the one that costs nothing; `x`
+  says close, and a card that only hid on `x` would read as one that cannot be closed. The plugin
+  does not choose: the same icon does the same thing on every card.
+- The icons only request: golib's panel frame emits a request for each, and the host decides what it
+  does. golib's own minimize and close are not used, because they are not AutoDoc's hide and stop;
+  maximize is the panel's own, the same call F11 makes.
+- A protocol-12 card leaves the keys that cycle AutoDoc's widgets to the host, and the maximize keys
+  too when it lists maximize, so F6 always leaves a card and F11 maximizes one. A protocol-11 card is
+  still sent every key.
+
+In the code: `core/manifests/manifests.go` (`[window]`), `tui/pluginpanels.go`, `tui/pluginview.go`
+
+## The pointer at protocol 12
+
+At protocol 12 `plugin.pointer` carries a left drag, its release, and a cancel, so a card can drag a
+divider.
+
+- A gesture is a left press, then any drags and wheel steps, then exactly one release or cancel. A
+  cancel ends it with nothing activated: the card was hidden or detached, or the host took the
+  pointer back. It is never sent as a release, which would click.
+- A drag's, release's and cancel's coordinates are the pointer's, relative to the view, off the
+  frame included, never clamped: a release outside is no click, and a clamped one would click an
+  edge control. A cancel's are the last the host saw. A kit clamps what it draws, never the event.
+- `Serve` passes the new kinds only to a plugin opened at 12, and `plugin/decl` translates by the
+  protocol it was opened at, never by the SDK's own, so a protocol-11 card sees what it always saw.
+  In decl a cancel is golib's pointer cancel: the gesture ends, and focus, menus and an editor's undo
+  stay as they were.
+
+In the code: `plugin/protocol.go`, `plugin/serve.go`, `tui/pluginview.go`, `plugin/decl/events.go`
 
 ## Shared panels and their geometry
 
@@ -339,7 +394,13 @@ was ported onto it as the proof.
 The wire did not change. `plugin.Frame` places grapheme clusters by their display width, and the
 host draws a frame a cluster at a time, so accents, emoji and wide characters line up in both kits.
 
-In the code: `plugin/card/page.go`, `plugin/card/card.go`, `plugin/frame.go`, `tui/pluginview.go`
+Panes are the kit's too: a `Split` of two titled `Pane`s, nested for rows and columns, in the one
+frame the plugin sends. A pane is not a host panel of its own: the host keeps one frame per card,
+and the plugin keeps its panes as it keeps its controls. The keys are the same in both kits: F7
+and Shift+F7 move between panes (F6 is the host's), F8 maximizes one, Tab stays within the focused
+pane.
+
+In the code: `plugin/card/page.go`, `plugin/card/card.go`, `plugin/card/panes.go`, `plugin/frame.go`, `tui/pluginview.go`
 
 ## QML cards run in the plugin
 
@@ -350,7 +411,13 @@ protocol as it is. Host notifications become the program's events (keys, resizes
 and the theme becomes `Theme.*` sources, so a layout follows AutoDoc's theme without being rebuilt.
 Esc never reaches the program.
 
-In the code: `plugin/decl/decl.go`, `plugin/decl/backend.go`, `plugin/decl/events.go`
+Its panes are `Panes` and `Pane`, QML types over golib's split, with the native kit's keys. A `Pane`
+keeps Tab within itself by stepping focus through its own subtree (golib's `FocusStepWithin`), not
+by a trapping focus scope, which would also hold the pointer and every other key at the pane. The
+outermost `Panes` takes F7 across every nested one; F8 goes to the innermost split holding the
+focus. A pane with nothing to focus is itself a stop.
+
+In the code: `plugin/decl/decl.go`, `plugin/decl/backend.go`, `plugin/decl/events.go`, `plugin/decl/panes.go`
 
 ## Pixel surfaces
 

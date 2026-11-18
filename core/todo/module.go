@@ -49,14 +49,14 @@ func (m *Manager) Name() string { return "todos" }
 func (m *Manager) Errors() []module.PublicError {
 	return []module.PublicError{
 		{Err: ErrStale, Code: CodeStale, Name: "todos.stale", Message: "the task changed since it was read",
-			Next: "todos.get it again, re-apply the change, and retry with its new rev"},
-		{Err: ErrNotFound, Code: CodeNoTask, Name: "todos.not_found", Message: "no such task", Next: "list the tasks again"},
+			Next: "todos.get it again, re-apply the change, and retry with its new rev", Detail: true},
+		{Err: ErrNotFound, Code: CodeNoTask, Name: "todos.not_found", Message: "no such task", Next: "list the tasks again", Detail: true},
 		{Err: ErrInvalid, Code: CodeInvalid, Name: "todos.invalid", Message: "a value the todo format or its rules refuse",
-			Next: "fix the field and send it again"},
+			Next: "fix the field and send it again", Detail: true},
 		{Err: ErrNotAStore, Code: CodeNotAStore, Name: "todos.not_a_store", Message: "there is no todo store there",
 			Next: "todos.scaffold one, or todos.set_dir to another"},
 		{Err: ErrExists, Code: CodeExists, Name: "todos.exists", Message: "that already exists",
-			Next: "pick another id, or another move_store target"},
+			Next: "pick another id, or another move_store target", Detail: true},
 		{Err: ErrNotWritable, Code: CodeNotWritable, Name: "todos.not_writable",
 			Message: "not a writable todo store: a workspace's or a registered root's .todo-list, or a set_dir override",
 			Next:    "todos.register the project's root, or todos.set_dir"},

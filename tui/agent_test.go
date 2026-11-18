@@ -4,7 +4,6 @@ package tui
 
 import (
 	"context"
-	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,61 +20,6 @@ import (
 // agent_test.go: the agent — SPC g starts the default profile's command in AutoDoc's own folder for
 // the workspace, told about it; hidden, it keeps running; the profiles are added, edited, made the
 // default and removed in System › Agent profiles…, and Use switches, asking first.
-
-// runAgentTUI runs the TUI with the profiles given, the default named def, its agent folder dir, on
-// agentConfig, with no autodoc installed: the autodoc it hands its agent is a fake that writes the
-// arguments it is called with to calls.
-func runAgentTUI(t *testing.T, dir string, profiles []agents.AgentProfile, def string) (d *daemon, r *running, calls string) {
-	t.Helper()
-	return runAgentTUIWith(t, dir, profiles, def, nil, Options{})
-}
-
-// runAgentTUIWith is runAgentTUI with more preferences stored and opt's options too.
-func runAgentTUIWith(t *testing.T, dir string, profiles []agents.AgentProfile, def string, more map[string]string, opt Options) (d *daemon, r *running, calls string) {
-	t.Helper()
-	return runAgentTUIIn(t, dir, profiles, def, more, opt, map[string][]string{"kb": {"a.md", "a\n"}})
-}
-
-// runAgentTUIIn is runAgentTUIWith over the daemon's workspaces files, kb's entered first.
-func runAgentTUIIn(t *testing.T, dir string, profiles []agents.AgentProfile, def string, more map[string]string, opt Options, files map[string][]string) (d *daemon, r *running, calls string) {
-	t.Helper()
-	opt.seams = seamsWithEnv(t, opt.seams, "HOME="+t.TempDir(), "PATH=/usr/bin:/bin") // a program of its own each call
-	bins := filepath.Join(t.TempDir(), "a build's dir")                               // a path the shell must have quoted
-	if err := os.Mkdir(bins, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	calls = filepath.Join(bins, "calls")
-	bin := filepath.Join(bins, "autodoc-build")
-	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho \"$@\" >> "+agents.ShellQuote(calls)+"\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	prefs := map[string]string{agents.PrefAgentProfiles: agents.AgentProfilesJSON(profiles)}
-	if def != "" {
-		prefs[prefAgentDefault] = def
-	}
-	maps.Copy(prefs, more)
-	d = startDaemonWith(t, "", files, daemonOpts{prefs: prefs})
-	opt.AgentDir, opt.ConfigPath = dir, agentConfig
-	// the program's seams, set as it is made: its agents call the build bin, and the test agents'
-	// CLIs stand for ones whose adapter reports permission prompts, so the messaging base sends what
-	// it types (agentmessaging.go); a kind without one is agentmessaging_test.go's
-	if opt.seams == nil {
-		opt.seams = seamsWithEnv(t, nil)
-	}
-	opt.seams.agentBin = bin
-	opt.seams.agentPromptsReported = func(string, bool) bool { return true }
-	r = runTUI(t, NewSession(d.sock, nil), opt)
-	r.connected(t)
-	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
-	// The stored preferences carry the profiles and the default, and their answer is not ordered
-	// with the listing's: SPC g before they land finds no default and opens the profiles.
-	r.s.WaitFor(t, "the preferences read", func(string) bool {
-		return onLoop(r, func() bool {
-			return r.h.started && r.h.agents.DefaultProfile() == def && len(r.h.agents.Profiles()) == len(profiles)
-		})
-	})
-	return d, r, calls
-}
 
 func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.T) {
 	t.Parallel()

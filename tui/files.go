@@ -79,7 +79,31 @@ type openedFile struct {
 	// crlf is a file that uses CRLF line breaks, as it was read (lineendings.go): it is written back
 	// with them. false, the default, writes LF.
 	crlf bool
+	// base is the text the buffer last agreed with on disk, at version, as the editor holds it (LF):
+	// read, written, or reloaded. Compare merges with it as the common ancestor (compare.go). baseOK
+	// is false where the version moved without the text being held (a draft named, a file gone), or
+	// the text is over compareBaseMax: Compare then merges the two sides alone.
+	base   string
+	baseOK bool
 }
+
+// compareBaseMax is the largest text kept as a buffer's base: past it, Compare merges two-way.
+const compareBaseMax = 4 << 20
+
+// setAgreed records that the buffer agrees with the disk at version, whose text is text (as the
+// editor holds it): the one writer of the version and its base together, so a later Compare never
+// merges against a base of another version.
+func (n *openedFile) setAgreed(version, text string) {
+	n.version = version
+	if len(text) > compareBaseMax {
+		n.dropBase()
+		return
+	}
+	n.base, n.baseOK = text, true
+}
+
+// dropBase forgets the base: the version moved, or will, without its text held.
+func (n *openedFile) dropBase() { n.base, n.baseOK = "", false }
 
 // untitled is the draft's name wherever a file's path would show (the kit's, feature.Untitled).
 const untitled = feature.Untitled
@@ -237,6 +261,16 @@ func (h *Host) openRefTo(ref feature.FileRef, remember bool, proceed func(), lan
 // (File › Open in a new buffer). Like land, it goes with this open, through the HTML question, and
 // with nothing else: a question cancelled takes it away with the open.
 func (h *Host) openRefWith(ref feature.FileRef, remember bool, proceed func(), land *landing, newBuffer bool) {
+	// a file outside every workspace is named by its absolute path: a relative one with no
+	// workspace (none in use yet, say) names no file, and is refused here with why, not sent to
+	// the daemon as an outside file it refuses as a bad path
+	if ref.WS == "" && !filepath.IsAbs(ref.Path) {
+		msg := h.trf("autodoc.notice.session.text", h.trf("autodoc.notice.files.open", ref.Path),
+			h.tr("autodoc.notice.files.no_workspace_is_in_use_so_a_relative_path_names"))
+		h.notify(msg)
+		h.say(msg)
+		return
+	}
 	// a file a plugin opens (its manifest's [open],
 	// docs/decisions/plugins.md#plugins-that-open-file-types) goes to that plugin's command, by its
 	// absolute path, in place of being opened: an .ipynb becomes a lab file, which it opens
@@ -399,6 +433,7 @@ func (h *Host) loadAs(ws, p string, prev *editor.JumpPos, raw bool, land *landin
 // a switch of buffer or workspace meanwhile does not drop it.
 func (h *Host) loadInto(b *openBuffer, ws, p string, prev *editor.JumpPos, raw bool, land *landing) {
 	tk := h.bufferTicket(b, true)
+	sess, gen := h.session.Gen(), b.file.gen
 	again, read := b.file.open && b.file.ws == ws && b.file.path == p, b.file.version
 	type answer struct {
 		content, version string
@@ -415,6 +450,15 @@ func (h *Host) loadInto(b *openBuffer, ws, p string, prev *editor.JumpPos, raw b
 		return answer{content: string(b), version: feature.Str(m, "version")}
 	}, func(a answer) {
 		if !tk.Current() {
+			// a later open of b, or b closed, says its own; a reconnect alone drops this one, which
+			// the status line must say: it said "opening p…", and nothing else would
+			if h.session.Gen() != sess && b.file.gen == gen && slices.Contains(h.buffers, b) {
+				h.openLost(p, sess)
+				h.dropUnloaded(b)
+			}
+			if h.seams.readDropped != nil {
+				h.seams.readDropped(p)
+			}
 			return
 		}
 		if again && b.file.version != read {
@@ -430,9 +474,7 @@ func (h *Host) loadInto(b *openBuffer, ws, p string, prev *editor.JumpPos, raw b
 			if h.restoreOpenFailed(b, ws, p) { // a kept copy's file gone: its text becomes a draft
 				return
 			}
-			if !b.file.open && !b.file.dirty && b.buf != nil && b.buf.Value() == "" && len(h.buffers) > 1 {
-				h.dropBuffer(b) // the buffer made for this file, never loaded: the page goes back
-			}
+			h.dropUnloaded(b)
 			return
 		}
 		if prev != nil && prev.Doc != docKey(feature.FileRef{WS: ws, Path: p}) {
@@ -450,6 +492,24 @@ func (h *Host) loadInto(b *openBuffer, ws, p string, prev *editor.JumpPos, raw b
 	})
 }
 
+// dropUnloaded drops b when it was made for a file that never loaded: empty, unsaved, and not the
+// only buffer. The page goes back to the one before it.
+func (h *Host) dropUnloaded(b *openBuffer) {
+	if !b.file.open && !b.file.dirty && b.buf != nil && b.buf.Value() == "" && len(h.buffers) > 1 {
+		h.dropBuffer(b)
+	}
+}
+
+// openLost says on the status line that the open of p, asked under connection generation sess,
+// was dropped by a stale answer: a reconnect since, or else another workspace entered meanwhile.
+func (h *Host) openLost(p string, sess uint64) {
+	why := h.tr("autodoc.notice.files.another_workspace_was_entered_meanwhile_open_it")
+	if h.session.Gen() != sess {
+		why = h.tr("autodoc.notice.files.the_connection_to_the_backend_was_renewed_meanwh")
+	}
+	h.say(h.trf("autodoc.notice.session.text", h.trf("autodoc.notice.files.open", p), why))
+}
+
 // show puts a file's text in buffer b, clean: p of workspace ws, or outside every one (""). b shown,
 // the page follows it; not shown, only the buffer changes, and the page is set up when it is.
 func (h *Host) show(b *openBuffer, ws, p, content, version string, raw bool) {
@@ -457,13 +517,21 @@ func (h *Host) show(b *openBuffer, ws, p, content, version string, raw bool) {
 }
 
 // adopt makes b the buffer of p, at version: with content, its text, clean (show); with nil, b keeps
-// its own text, unsaved (a draft written under p while it was edited further). Whether p is a
+// its own text, unsaved (a draft written under p while it was edited further, or a task's file
+// moved), and its base only if version is the one it had. Whether p is a
 // derived document, and so read-only, is set here for any buffer: a headless editor's edits are
 // refused as the widget's are (editorFor).
 func (h *Host) adopt(b *openBuffer, ws, p, version string, raw bool, content *string) {
-	b.file.ws, b.file.path, b.file.version, b.file.open, b.file.dirty = ws, p, version, true, content == nil
+	b.file.ws, b.file.path, b.file.open, b.file.dirty = ws, p, true, content == nil
 	if content != nil {
 		b.file.crlf = usesCRLF(*content) // a draft written under p (nil) keeps its own
+		b.file.setAgreed(version, asEditorText(*content))
+	} else if version != b.file.version {
+		// a draft written under p: the base goes with the version it was of, and the caller, which
+		// knows what it wrote, sets the new one (setAgreed). At the same version (a task's file
+		// moved), the base is still that version's text, and stays.
+		b.file.version = version
+		b.file.dropBase()
 	}
 	b.file.hint = "" // a draft named: its path is its name now
 	b.file.raw = raw
@@ -651,6 +719,7 @@ func (h *Host) recheckBuffer(b *openBuffer) {
 				return
 			}
 			b.file.version = "" // gone: a save writes it anew
+			b.file.dropBase()
 			h.guard(b, h.askBefore(ask), func() { h.dropBuffer(b) })
 		case a.err != nil:
 			h.failed(h.trf("autodoc.notice.files.check", p), a.err)
@@ -698,6 +767,7 @@ func (h *Host) edited() {
 	h.fmGen++
 	h.pageSoon()
 	h.syncPageWidth()         // a line count with another number of digits widens the gutter
+	h.compareSaw(h.active)    // an open Compare of the buffer hears the edit (compare.go)
 	h.changeSoonFor(h.active) // a script's change handlers, after the pause (luaevents.go)
 }
 
@@ -792,6 +862,7 @@ func (h *Host) write(b *openBuffer, content, want string, after func()) {
 // dropped, never re-aimed at the new one.
 func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after func()) {
 	tk, ws, p, raw := h.bufferTicket(b, false), b.file.ws, b.file.path, b.file.raw
+	sess, gen := h.session.Gen(), b.file.gen
 	if err := who.check("save " + p); err != nil {
 		h.failed(h.trf("autodoc.notice.files.save", p), err)
 		return
@@ -829,6 +900,8 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 		same    bool  // the read-back holds what was written
 	}
 	h.say(h.trf("autodoc.notice.files.saving", p))
+	// this save's own words on the status line: a later say, a later save's included, moves it on
+	saidAt := h.saidSeq
 	onDisk := withEndings(content, b.file.crlf) // the file's own line breaks, CRLF where it had them
 	do(h, func(ctx context.Context) answer {
 		ctx = withAuthority(ctx, who)
@@ -848,12 +921,22 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 		return answer{err: err, version: feature.Str(m, "version"), same: string(b) == onDisk}
 	}, func(a answer) {
 		defer settled()
+		// committed is the write known to have landed (Committed: read and compare, never send it
+		// again); landed is that, with its version and content safe to take as what is on disk
+		committed := a.err == nil || feature.Code(a.err) == rpc.CodeCommitted
+		landed := a.err == nil || committed && a.readErr == nil && a.same
 		if !tk.Current() {
+			// a stale answer is not applied to b, which keeps its unsaved marker, but the status line,
+			// which said "saving p…", says what became of the save, or it would seem under way for ever
+			if slices.Contains(h.buffers, b) { // b closed: nothing left to say it of
+				h.saveLost(p, committed, landed, a.readErr, h.session.Gen() != sess, b.file.gen != gen, h.saidSeq == saidAt)
+			}
 			return
 		}
 		switch {
-		case a.err == nil, feature.Code(a.err) == rpc.CodeCommitted && a.readErr == nil && a.same:
-			b.file.version = a.version
+		case landed:
+			// what was written is what is on disk at a.version: its text the base
+			b.file.setAgreed(a.version, content)
 			b.file.disk, b.file.diskVersion, b.file.diskAsked = diskSame, "", "" // what is on disk is what was written
 			// typing during the save leaves the file unsaved: what is on disk is what was written
 			newer := b.buf.Value() != content
@@ -892,7 +975,7 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 		case feature.Code(a.err) == rpc.CodeConflict, feature.Code(a.err) == rpc.CodeCommitted:
 			h.activate(b) // the conflict is b's: its answers act on the buffer shown
 			b.file.saveAuth = who
-			h.set("App.conflictQuestion", h.trf("autodoc.text.files.changed_on_disk_since_you_opened_it_keep_editing", p))
+			h.set("App.conflictQuestion", h.trf("autodoc.text.files.changed_on_disk_since_you_opened_it_compare", p))
 			h.open("fileConflict")
 		case feature.Code(a.err) == rpc.CodeNotFound:
 			h.markDisk(b, diskDeleted, "") // the next save creates it again
@@ -907,6 +990,39 @@ func (h *Host) writeAs(who authority, b *openBuffer, content, want string, after
 	})
 }
 
+// saveLost says what became of a save of p whose answer came stale. A write that landed is never
+// told to be saved again (Committed is never sent twice): saved, when what was read back is what
+// was written; else saved, but not read back (readErr) or differing on disk, and to reload before
+// saving again. A write that did not land says why it was dropped, the connection renewed
+// (renewed) or the buffer read again from disk (reread), and to save it again. A save that landed
+// whole asks nothing of the user: it takes the status line only while that still holds its own
+// "saving p…" (own: nothing said since, counted by say, not read from the text, which a later save
+// of p says too), so a newer word there (the read again's "opened p", a later save's) stays; the
+// notice says it either way.
+func (h *Host) saveLost(p string, committed, landed bool, readErr error, renewed, reread, own bool) {
+	var msg string
+	switch {
+	case landed:
+		msg = h.trf("autodoc.notice.files.saved", p)
+		if !own {
+			h.notify(msg)
+			return
+		}
+	case committed && readErr != nil:
+		msg = h.trf("autodoc.notice.files.saved_but_it_could_not_be_read_back_reload_befor", p, feature.WireMessage(readErr))
+	case committed:
+		msg = h.trf("autodoc.notice.files.saved_but_the_disk_differs_from_what_was_written", p)
+	default:
+		why := h.tr("autodoc.notice.files.it_was_read_again_from_disk_meanwhile_save_it_ag")
+		if renewed || !reread {
+			why = h.tr("autodoc.notice.files.the_connection_to_the_backend_was_renewed_save_it")
+		}
+		msg = h.trf("autodoc.notice.session.text", h.trf("autodoc.notice.files.save", p), why)
+	}
+	h.say(msg)
+	h.notify(msg)
+}
+
 // conflict answers the conflict dialog.
 func (h *Host) conflict(answer string) {
 	h.closeDialog("fileConflict")
@@ -917,6 +1033,10 @@ func (h *Host) conflict(answer string) {
 		h.reloadShown()
 	case "overwrite":
 		h.overwrite()
+	case "compare":
+		// the disk's text and the buffer's merged, the buffer's edits kept where they conflict:
+		// the result goes in the buffer, unsaved (compare.go)
+		h.compare()
 	default:
 		h.notify(h.tr("autodoc.notice.files.kept_your_changes_the_disk_s_version_is_newer"))
 	}
@@ -1024,6 +1144,7 @@ func (h *Host) createFile(name string) {
 			// and keeps the newer text, unsaved, and the copies it came from; what the save guarded
 			// (a close, a quit) would drop that text: ask again, over b
 			h.adopt(b, a.at.ws, a.at.path, a.version, raw, nil)
+			b.file.setAgreed(a.version, content) // what was written: a later Compare merges against it
 			if ds.then == nil {
 				h.notify(h.trf("autodoc.notice.files.saved_the_draft_as_it_changed_again_while_it_was", name))
 				return
@@ -1132,12 +1253,15 @@ func (h *Host) refuseName(name, reason string) {
 
 // createEmpty is File › New file: an empty file at name, opened in a buffer of its own.
 func (h *Host) createEmpty(name string) {
-	ws, tk := h.ws, h.ticket(nil, feature.TicketWorkspace)
+	ws, tk, sess := h.ws, h.ticket(nil, feature.TicketWorkspace), h.session.Gen()
 	root, raw := h.rootOf(ws), kind.RawText(name)
 	do(h, func(ctx context.Context) created {
 		return h.writeNew(ctx, ws, name, root, []byte{})
 	}, func(a created) {
 		if !tk.Current() {
+			if a.err == nil {
+				h.openLost(name, sess) // created, but not opened: said, or it would seem not made
+			}
 			return
 		}
 		if a.err != nil {

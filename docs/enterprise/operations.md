@@ -21,7 +21,7 @@ curl -s http://127.0.0.1:8730/v1/health
 | Check | ok | degraded | failing |
 |---|---|---|---|
 | `database` | a ping answers within 2s | | it doesn't |
-| `tenants` | every tenant's writer lock is held | a lock is held by another server (this one is a standby) | |
+| `tenants` | every tenant's writer lease is held | a lease is held by another server (this one is a standby) | |
 | `embedding` | the provider is up | it's down or failing: searches answer by words meanwhile | |
 
 - **`status`:**
@@ -53,7 +53,8 @@ curl -s http://127.0.0.1:8730/v1/status -H "Authorization: Bearer $AUTODOC_OPS_T
 ```json
 {"as_of": "2026-10-13T09:41:07Z",
  "server": {"version": "v0.1.40", "started": "2026-10-13T09:00:00Z",
-            "embedding": {"model": "openai|text-embedding-3-small||1536", "state": "up", "error": ""}},
+            "embedding": {"model": "openai|text-embedding-3-small||1536", "state": "up", "error": "",
+                          "batch": 64, "in_flight": 4, "last_call_ms": 812}},
  "tenants": [{"tenant": "music", "lock": "held",
    "cursor": {"updated_at": "2026-10-13T09:41:03Z", "id": "8812", "lag_seconds": 4},
    "last_pass": {"at": "…", "read": 12, "written": 12, "quarantined": 0, "error": ""},
@@ -62,26 +63,31 @@ curl -s http://127.0.0.1:8730/v1/status -H "Authorization: Bearer $AUTODOC_OPS_T
    "documents": {"total": 120344, "ready": 120344},
    "models": {"active": "openai|…", "target": "", "semantic": "ready", "search": "ann"},
    "error": ""}],
- "ann": [{"model": "openai|text-embedding-3-small||1536", "mode": "ann", "underfill": 3}]}
+ "ann": [{"model": "openai|text-embedding-3-small||1536", "mode": "ann", "underfill": 3, "exact_scoped": 41}]}
 ```
 
 | Field | What it tells you |
 |---|---|
+| `server.embedding` | the provider's `state` (`starting`, `up`, `down`) and its `error` code; the texts one request carries now (`batch`) and the requests in flight (`in_flight`), which are `[embedding] batch` and `slots` unless requests ran out of `call_timeout` and the pace stepped down ([server-config](server-config.md#how-the-server-embeds)); the last request's time (`last_call_ms`), and how many requests ran out of their time since the server started (`timeouts`, absent while none). A `batch` below yours that stays there means the provider is too slow for it. |
 | `lock` | `held`; `waiting` (another server holds the tenant: a standby); `none` |
-| `cursor.lag_seconds` | how far the index is behind your data, on the database's clock. It grows when passes fail or can't keep up. |
+| `lock_wait` | why a `waiting` lock waits when it isn't for another server of this release: `older_server`, a server of v0.3.15 or before holding the tenant by its advisory lock ([upgrading from v0.3.15](#upgrading-from-v0315)). Stop that server. Absent otherwise. |
+| `cursor.lag_seconds` | how far the index is behind your data, on the database's clock: now, less the bound the last pass that completed read to (the database's now less `lag` when it ran). On a quiet source it stays at most `lag` plus `interval`; it grows only while passes fail or can't keep up. Alert on it. It's absent on a standby (only the server holding the tenant's lease measures it) and before that server's first complete pass, so make absence an alarm of its own: absent on every server of a tenant for longer than an `interval` means no server is completing passes. `cursor.updated_at` and `id` are the last row read, which stays put while nothing changes. |
 | `last_pass`, `last_refresh` | when each last ran, what it read and wrote, and its error code. `complete` is false for a refresh that couldn't read every row (it deletes nothing then; see [views](views.md)). |
+| `deletes` | a source with a deletes view: its cursor (`updated_at` is the last tombstone's `deleted_at`), its `lag_seconds` measured as the rows' is (from the bound its last deletes pass that succeeded read to), and its last pass's `error` (`view`, `order`, or none). A deletes view that fails holds only the deletes; its lag grows while it does. |
+| `refresh_due` | why a refresh runs at once rather than on its schedule, until it completes: `facets` while its last refresh wrote another facet declaration than the source's. In a mixed fleet, one server on the old declaration and one on the new, each refreshes the tenant when it takes the lease, until every server has the same configuration: right, but a cost to roll out quickly ([server-config](server-config.md#sourcefacets-what-a-search-may-filter-on-optional)). Absent otherwise. |
+| `vectors_swept` | how many orphan vectors (of texts no document has any more, under any model) the tenant's ingester has deleted since the server started. It sweeps after every complete refresh, and after a pass that wrote at most once every 15 minutes, so the store no longer only grows as documents change. Absent while none. |
 | `quarantine` | rows that failed to render and wait to be fixed in your data (the log names them) |
 | `documents` | the tenant's documents, and how many can be found by meaning |
 | `models.semantic` | `ready`, `partial` (embedding), `switching` (a model change filling; searches answer by words), or `off` |
 | `models.search`, `models.search_reason` | how the tenant's searches by meaning run: `exact` (below `ann_threshold` embeddings, or a model with no index; the reason says which), `ann` (approximate, through the model's HNSW index), `ann-building` (the index is being built; exact meanwhile), or `ann-failed` (exact; the reason is the build's error) |
-| `ann` | each embedding model's index: its `mode`, the `reason` when it failed, and `underfill`, how many approximate searches came back short (a selective filter, or a scan that hit `ann_max_scan_tuples`) and were answered exactly instead, since the server started. A failed index is retried with a growing wait, up to 5 times, then left for you: fix the cause, and clear the model's row in `rag_ann_index` to retry. |
+| `ann` | each embedding model's index: its `mode`, the `reason` when it failed, and `underfill`, how many approximate searches came back short (a selective filter, or a scan that hit `ann_max_scan_tuples`) and were answered exactly instead, since the server started; and `exact_scoped`, how many searches were answered exactly without trying the index, because their filter and access admitted at most `ann_exact_scope_docs` documents. A failed index is retried with a growing wait, up to 5 times, then left for you: fix the cause, and clear the model's row in `rag_ann_index` to retry. |
 
 **`error` is a code, never an error's text,** which stays in the log:
 
 | Code | Meaning |
 |---|---|
 | `database` | the index's database failed |
-| `lock_lost` | the tenant's writer lock was lost (the server exits, and its supervisor restarts it) |
+| `lock_lost` | the tenant's writer lease was lost: taken over, or not renewed in time (the server exits, and its supervisor restarts it) |
 | `view` | the view's query failed on your database: a table, a column, a permission |
 | `order` | the view's rows aren't in `(updated_at, id)` order ([views](views.md)) |
 | `provider_unreachable` | the embedding provider doesn't answer |
@@ -125,7 +131,7 @@ scrape_configs:
 - **The series:**
   - `autodoc_server_info{version}`, `autodoc_provider_up`;
   - `autodoc_http_requests_total{path, class}` and `autodoc_http_request_duration_seconds{path}` (a histogram). They count since the server started, so take rates of them, and they're never reset by the metrics lines.
-  - Per tenant: `autodoc_tenant_documents{tenant, state}` (total, ready), `autodoc_tenant_quarantined`, `autodoc_tenant_cursor_lag_seconds` (absent until the cursor first moves), `autodoc_tenant_lock_held`, and `autodoc_tenant_errors{tenant, kind}` (pass, refresh, tenant; 0 or 1).
+  - Per tenant: `autodoc_tenant_documents{tenant, state}` (total, ready), `autodoc_tenant_quarantined`, `autodoc_tenant_cursor_lag_seconds` (`cursor.lag_seconds`: absent on a standby and before its server's first complete pass), `autodoc_tenant_lock_held`, and `autodoc_tenant_errors{tenant, kind}` (pass, refresh, tenant; 0 or 1).
 - **`path` is one of search, status, metrics, health and other.** Any other URL is counted as `other`, never by its own name.
 - **A tenant whose state can't be read** shows `autodoc_tenant_errors{kind="tenant"} 1` and its lock, and no document or quarantine figures, never a false 0.
 - **No series holds a token, a query's text, a client's name, an access value or an error's text.** Errors are 0 or 1 by kind; their text is in `/v1/status` and the log.
@@ -153,9 +159,36 @@ So at a million embeddings, ingest with the index in place is about a third as f
 64. A deployment that values ingest over recall can set a lower `ann_ef_construction`. Changing it
 rebuilds each model's index while the old one keeps serving.
 
-**A large initial import pays the per-insert cost.** A model's index is built as soon as a tenant
-names the model, before most of its embeddings are written, so every embedding of the import goes
-into an existing index. There is no path yet to build the index after a bulk load.
+**A model's index waits for a tenant's bulk load.** While a tenant whose active model it is
+has `postgres.ann_defer_backlog` (2,000) or more documents not yet ready, the model's index is not
+built, so the import's embeddings are written without paying the index's per-insert cost. Searches
+are exact meanwhile, and the status says `ann-building` with the reason and the time it will be
+built by. The index is built once the backlog drains, or `postgres.ann_defer_max` (24 h) after it
+first waited, whatever the backlog. A model whose index is built already doesn't wait: a large
+import into it still pays the per-insert cost.
+
+Measured with `TestANN_BulkLoadMeasure` (PostgreSQL 18, pgvector 0.8.7, 16-dimension embeddings,
+2 CPUs, `--shm-size 1g`): a tenant's documents written first, not ready, then their embeddings in
+batches of 20,000, each marking its documents ready.
+
+| | 200,000 documents | | 1,000,000 documents | |
+|---|---|---|---|---|
+| | index built first | deferred | index built first | deferred |
+| import until the index is ready | 5 min 20 s | 51 s | 1 h 21 min | 14 min 39 s |
+| embeddings written per second | 624 | 3,938 | 206 | 1,138 |
+| recall@10 afterwards | 1.000 | 0.990 | 0.999 | 0.998 |
+
+The deferred times include building the index after the load. The backlog is counted only while a
+model's index is wanted: at a full backlog the count stops at `ann_defer_backlog` rows (under 1 ms),
+and once drained it reads the partial index of unready documents (0.03 ms at 1,000,000) or, before
+the table's statistics catch up, scans it once (26 ms at 200,000).
+
+**Give the database's container shared memory for the build.** The building session uses
+`postgres.ann_maintenance_work_mem` (512 MB), and a parallel build keeps it in the database's
+`/dev/shm`. Docker gives a container 64 MB by default, so run PostgreSQL with `--shm-size` at
+least `ann_maintenance_work_mem` (`--shm-size 1g` for the default; `shm_size: 1g` in Compose).
+With less, the build runs out of shared memory, and the server builds the index again without
+parallel workers (slower) and logs a warning saying so.
 
 ## Behind a proxy
 
@@ -188,9 +221,55 @@ journalctl -u autodoc-server -f
 ```
 
 - **Secrets live in `server.env`** (0600), never in `server.toml`.
-- **A refused configuration (exit 2) isn't restarted,** because restarting can't mend it. Exit 1 (the database lost, a writer lock lost) is restarted after 5 seconds.
-- **On stop:** SIGTERM drains the API's requests (35s at most), then releases the writer locks. The stop timeout is 60s.
+- **A refused configuration (exit 2) isn't restarted,** because restarting can't mend it. Exit 1 (the database lost, a writer lease lost) is restarted after 5 seconds.
+- **On stop:** SIGTERM drains the API's requests (35s at most), then releases the writer leases, so a standby takes them at its next poll. The stop timeout is 60s.
 - **The unit runs as a dynamic user,** with the system read-only to it.
+
+### Writer leases
+
+Each tenant's writer is a row of `rag_writer_lease` in the server's schema: who holds it
+(`holder_info` names the host, the process id and its start), its epoch, and until when.
+
+```sql
+SELECT scope, holder, holder_info, epoch, lease_until FROM <schema>.rag_writer_lease;
+```
+
+- **A standby** waits while the lease is held, and takes it over when its holder releases it (a
+  clean stop) or 30 seconds after the holder's last renew (a crash, or a host cut off).
+- **Taking a tenant over by hand,** for a holder you know is gone or must stop, is one statement:
+  the release's own, without its holder check. It clears the holder and moves the epoch, so the
+  holder's next renew and next write both find the lease lost (it exits 1), and a standby claims
+  it at its next poll after any write the holder already has open has ended:
+
+  ```sql
+  UPDATE <schema>.rag_writer_lease SET holder = '', epoch = epoch + 1, lease_until = clock_timestamp()
+   WHERE scope = 'tenant:<name>';
+  ```
+
+  A write the holder already has open still finishes: the statement doesn't wait for it. Only the
+  holder's next transaction is refused. Setting `lease_until` alone is not a takeover: a live
+  holder's next renew extends it again.
+- **The `lag` of a source** must be longer than the longest transaction that writes its rows: a
+  row committed later than `lag` after its `updated_at` is passed over by the incremental passes and
+  found only by the next refresh. Find your longest with `SELECT max(clock_timestamp() - xact_start)
+  FROM pg_stat_activity WHERE state <> 'idle'` on the business database, under load.
+
+### Upgrading from v0.3.15
+
+**Stop every v0.3.15 server of a store before you start a v0.3.16 one.** A v0.3.15 server held each
+tenant by a PostgreSQL advisory lock, which the lease knows nothing of, so the two would write at once.
+
+- A v0.3.15 server refuses to start on a store a newer release has migrated: it says the
+  database has a newer schema. So only one already running when the store was migrated can meet
+  a newer server.
+- A v0.3.16 server looks for that lock before it takes a tenant's lease, and again at every renew.
+  - While a v0.3.15 server holds the tenant, it waits and logs that an older server holds it, and
+    the status shows `"lock": "waiting"` with `"lock_wait": "older_server"`.
+  - If an older server takes the lock while this one holds the lease (a v0.3.15 standby, already
+    waiting when you upgraded), this one stops writing and exits 1, and its supervisor restarts it
+    to wait.
+- From v0.3.16 on, upgrades are rolling: every server takes the same lease, and a standby of the
+  new release takes over as the old one stops.
 
 ## A container
 

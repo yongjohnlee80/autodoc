@@ -21,8 +21,8 @@ OpenAI-compatible endpoint works too (see [server-config](server-config.md)).
 
 ## 1. The database
 
-Save this as `docker-compose.yml`. Choose the database's password first (it is read from the
-environment, never written in the file), then start it with `docker compose up -d`:
+Save this as `docker-compose.yml`. Its password is read from the environment, never written in the
+file, so it is chosen below, before the database starts:
 
 ```yaml compose
 services:
@@ -45,8 +45,17 @@ export AUTODOC_SERVER_DSN="postgres://catalog:${POSTGRES_PASSWORD}@localhost:543
 export WEB_APP_TOKEN=$(openssl rand -hex 32)
 ```
 
+Then start the database:
+
+```sh setup
+docker compose up -d
+```
+
+Type the rest of the tutorial in this same shell: these variables are set in it alone.
+
 Now the catalog: artists, and tracks on two record labels, `A` and `B`. Every table a document is
-rendered from has an `updated_at`, which the server follows to keep the index current.
+rendered from has an `updated_at`, which the server follows to keep the index current. Save this as
+`catalog.sql`:
 
 ```sql tutorial
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -69,6 +78,14 @@ INSERT INTO track (id, label_id, title, artist_id, lyric) VALUES
   (2, 'A', 'Golden Morning', 1, 'wake me when the morning comes'),
   (3, 'B', 'Midnight Ocean', 2, 'a lullaby for the midnight ocean');
 ```
+
+Then load it into the database:
+
+```sh setup
+docker compose exec -T db psql -U catalog -d catalog < catalog.sql
+```
+
+psql prints `CREATE EXTENSION`, `CREATE TABLE` twice, `INSERT 0 2` and `INSERT 0 3`.
 
 ## 2. The view
 
@@ -159,6 +176,9 @@ Then start it, and leave it running:
 ```sh server
 autodoc --server server.toml
 ```
+
+It runs until it is stopped, and keeps the shell. To go on in the same shell, end the line with
+` &` (or ` > server.log 2>&1 &` to keep its log apart); `kill %1` stops it at the end.
 
 It creates the `autodoc_search` schema, indexes the three tracks, and embeds them. Wait until
 search can answer by meaning:
@@ -266,11 +286,19 @@ A Go web application can also search in-process, with no HTTP hop, through the
 
 ## 5. A change in the database
 
-Change track 2's title and lyric:
+Change track 2's title and lyric. Save this as `change.sql`:
 
 ```sql tutorial
 UPDATE track SET title = 'Saffron Morning', lyric = 'saffron light at the break of day', updated_at = now() WHERE id = 2;
 ```
+
+Load it as the catalog was:
+
+```sh setup
+docker compose exec -T db psql -U catalog -d catalog < change.sql
+```
+
+psql prints `UPDATE 1`.
 
 Within one `interval` the server reads the changed row, re-indexes it and embeds the new text.
 Searching by words alone (`"mode": "lexical"`), the new word finds it, marked in the snippet
@@ -293,6 +321,9 @@ curl -s http://127.0.0.1:8730/v1/search \
 "source_id":"2"
 \u0002saffron\u0003
 ```
+
+When you're done, `kill %1` stops the server and `docker compose down -v` removes the database and
+its volume.
 
 ## Where next
 

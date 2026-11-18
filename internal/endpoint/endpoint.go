@@ -33,8 +33,62 @@ type Endpoints struct {
 // Paths are the three paths a mode that runs or starts the daemon uses.
 type Paths struct {
 	Socket   string // the configured socket, where a spawned daemon binds
-	Store    string // the store file
+	Store    string // the store file (a SQLite store's; the default's path for a store on PostgreSQL)
 	StateDir string // the daemon's log, restart handoffs, the TUI's state
+	// Engine is "postgres" for a store on PostgreSQL ([store] engine), and Schema its schema: what a
+	// client matches the daemon on its socket with (CheckPostgresStore). Never its DSN: a client
+	// never reads the database.
+	Engine, Schema string
+}
+
+// Postgres reports whether p's store is on PostgreSQL.
+func (p Paths) Postgres() bool { return p.Engine == store.EngineOfPostgres }
+
+// StoreName is p's store as a message names it: a SQLite store's file, or the PostgreSQL store in
+// its schema (never its DSN).
+func (p Paths) StoreName() string {
+	if p.Postgres() {
+		return postgresStoreName(p.Schema)
+	}
+	return p.Store
+}
+
+// postgresStoreName names the store on PostgreSQL in schema.
+func postgresStoreName(schema string) string { return "the PostgreSQL store in schema " + schema }
+
+// WithStore is p with the config's [store] engine and schema.
+func (e *Endpoints) WithStore(p Paths) Paths {
+	if e.Config.Store.Postgres() {
+		p.Engine, p.Schema = store.EngineOfPostgres, e.Config.Store.Schema
+	}
+	return p
+}
+
+// StoreLocation is where the daemon's store is: the SQLite file, or the PostgreSQL database
+// [store] names, its DSN read from the variable store.dsn_env names, its key in store.key_file (or
+// store.key in the data directory). It is the daemon's alone: a client never reads the DSN.
+func (e *Endpoints) StoreLocation() (store.Location, error) {
+	path, err := e.Store()
+	if err != nil {
+		return store.Location{}, err
+	}
+	sc := e.Config.Store
+	if !sc.Postgres() {
+		return store.Location{Engine: store.EngineOfSQLite, Path: path}, nil
+	}
+	dsn := os.Getenv(sc.DSNEnv)
+	if dsn == "" {
+		return store.Location{}, fmt.Errorf("%w: store.dsn_env names $%s, which is not set: it holds the PostgreSQL store's DSN", config.ErrInvalid, sc.DSNEnv)
+	}
+	key := sc.KeyFile
+	if key == "" {
+		dir, err := e.DataDir()
+		if err != nil {
+			return store.Location{}, err
+		}
+		key = filepath.Join(dir, config.StoreKeyName)
+	}
+	return store.Location{Engine: store.EngineOfPostgres, DSN: dsn, Schema: sc.Schema, KeyFile: key}, nil
 }
 
 // Load reads the config at configPath ("" for config.DefaultPath).
@@ -85,7 +139,7 @@ func (e *Endpoints) Paths() (Paths, error) {
 	if p.Store, err = e.Store(); err != nil {
 		return Paths{}, err
 	}
-	return p, nil
+	return e.WithStore(p), nil
 }
 
 // MakeStateDir creates the state directory, 0700, for a mode that writes in it.
@@ -176,6 +230,55 @@ func holder(ctx context.Context, storePath, skip string) (string, bool) {
 	return li.Addr, true
 }
 
+// HolderOf is Holder for the store p names: for a store on PostgreSQL, the configured socket, which
+// is where its daemon serves (there is no lease-info beside it to name another).
+func HolderOf(ctx context.Context, p Paths) string {
+	if p.Postgres() {
+		return p.Socket
+	}
+	return Holder(ctx, p.Store, p.Socket)
+}
+
+// VerifiedOf is Verified for the store p names: for a store on PostgreSQL, the configured socket
+// when the daemon answering there says it serves that store (engine and schema).
+func VerifiedOf(ctx context.Context, p Paths) (string, bool) {
+	if !p.Postgres() {
+		return Verified(ctx, p.Store)
+	}
+	if _, err := ProbePaths(ctx, p.Socket, p); err != nil {
+		return "", false
+	}
+	return p.Socket, true
+}
+
+// ProbePaths is Probe for the store p names: a store on PostgreSQL is matched by the engine and
+// schema the daemon says (CheckPostgresStore), a SQLite one by its file's identity.
+func ProbePaths(ctx context.Context, addr string, p Paths) (rpc.ProbeInfo, error) {
+	if !p.Postgres() {
+		return Probe(ctx, addr, p.Store)
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, probeWait)
+	defer cancel()
+	info, err := rpc.Probe(probeCtx, ipc.Network, addr)
+	if err != nil {
+		return info, err
+	}
+	return info, CheckPostgresStore(addr, p.Schema, info.Engine, info.Schema)
+}
+
+// CheckPostgresStore refuses a daemon at addr that does not say it serves the store on PostgreSQL in
+// schema: one serving a SQLite store, or another schema's, is a *StoreMismatchError naming both.
+func CheckPostgresStore(addr, schema, engine, served string) error {
+	if engine == store.EngineOfPostgres && served == schema {
+		return nil
+	}
+	as := "a SQLite store"
+	if engine == store.EngineOfPostgres {
+		as = postgresStoreName(served)
+	}
+	return &StoreMismatchError{Addr: addr, StorePath: postgresStoreName(schema), ServedAs: as}
+}
+
 // Probe asks the daemon at addr who it is (rpc.Probe), refusing one that serves another store than
 // storePath with a *StoreMismatchError. Any other error is the probe's own: nothing answers there.
 func Probe(ctx context.Context, addr, storePath string) (rpc.ProbeInfo, error) {
@@ -220,9 +323,15 @@ func CheckStore(addr, storePath, served string, protocol int64) error {
 type StoreMismatchError struct {
 	Addr, StorePath string
 	Served, Wanted  string // store ids; Wanted "" when the config's store does not exist yet
+	// ServedAs, when set, says which store the daemon serves (a store on PostgreSQL's mismatch)
+	ServedAs string
 }
 
 func (e *StoreMismatchError) Error() string {
+	if e.ServedAs != "" {
+		return fmt.Sprintf("the daemon on %s serves %s, not %s: stop it (autodoc --call sys.shutdown with its config) or give this config its own socket",
+			e.Addr, e.ServedAs, e.StorePath)
+	}
 	return fmt.Sprintf("the daemon on %s serves another store than %s: stop it (autodoc --call sys.shutdown with its config) or give this config its own socket",
 		e.Addr, e.StorePath)
 }

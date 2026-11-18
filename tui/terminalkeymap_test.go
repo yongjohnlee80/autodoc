@@ -1,5 +1,8 @@
 //go:build linux || darwin
 
+// Unix only: these cells type real shell commands to the terminal's shell (catInTheTerminal: seq,
+// printf, cat -v), which the line shell other OSes run (dockshell_test.go) does not.
+
 package tui
 
 import (
@@ -7,14 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yongjohnlee80/autodoc/tui/agents"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 )
-
-// hintProbe is the start of the normal-mode hint as the strip draws it (terminalkeymap.go): the mode
-// key's name, which a narrow strip keeps when it cuts the rest.
-const hintProbe = "Ctrl+T or i"
 
 // catInTheTerminal opens the terminal panel on a shell with a page of output, then runs cat -v, which
 // prints every line it reads: a key typed reaches the program when its line comes back from cat.
@@ -91,21 +89,6 @@ func TestATextUsersNormalModeSaysHowToGetBack(t *testing.T) {
 	r.keys(t, key('i'))
 	r.keys(t, decltest.Type("still-there\r")...)
 	r.s.WaitFor(t, "the shell is still cat's", catPrinted("still-there"))
-}
-
-// The agent panel's terminals follow the keymap too: under the text editor's keys, its normal mode
-// says how to get back.
-func TestATextUsersAgentNormalModeSaysHowToGetBack(t *testing.T) {
-	agent, _ := fakeAgent(t)
-	_, r, _ := runAgentTUIWith(t, t.TempDir(), []agents.AgentProfile{{Name: "fake", Command: agents.ShellQuote(agent)}}, "fake",
-		map[string]string{prefKeymap: "text"}, Options{})
-	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true }) // SPC g: the text editor's keys have no SPC
-	r.s.WaitForText(t, "agent · fake")
-	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
-	r.keys(t, ctrlKey('t'))
-	r.s.WaitForText(t, hintProbe)
-	r.keys(t, ctrlKey('t'))
-	r.s.WaitFor(t, "back to typing", func(sc string) bool { return !strings.Contains(sc, hintProbe) })
 }
 
 // The terminal's strip ends in _ and x: _ hides the panel with its shell running on; x asks once while

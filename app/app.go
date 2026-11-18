@@ -187,6 +187,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	fs.Bool("check-workspaces", false, "report every workspace whose root holds AutoDoc's own config, state or data folder, or lies inside one, as the daemon serving the store lists them; JSON out, exit 1 when one does, 2 when no daemon serves the store")
 	fs.Bool("check-store", false, "check the store: SQLite's integrity_check and foreign_key_check, and every sealed secret opened with its key; JSON out, exit 1 on a problem. The daemon serving it checks it when one runs")
 	fs.Bool("compact", false, "with the daemon stopped: reclaim unused models' vectors and rewrite the store (VACUUM), after a free-space check")
+	copyFrom := fs.String("copy-store-from", "", "copy the SQLite store at this file into the config's empty store on PostgreSQL ([store] engine = \"postgres\", the server build), in one transaction, keeping its ids; with no daemon serving either. Back the file up first: this build's scripts are applied to it")
 	fs.Bool("server", false, "run the enterprise search server on the server.toml after the flags (a build with the server tag: make build-server, or a -server release archive; docs/enterprise)")
 	check := fs.Bool("check", false, "--server: validate the configuration and every view, confirm each view's order against its source, and exit")
 	logLevel := fs.String("log-level", "", "--serve and --server: the least severe record logged, over the config's [log] level: debug, info, notice, warning, error or critical")
@@ -273,6 +274,12 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 		}},
 		{flag: "compact", run: func(string) int {
 			if err := runCompact(ctx, *configPath, stdout); err != nil {
+				return failed(err, 1)
+			}
+			return 0
+		}},
+		{flag: "copy-store-from", asked: func() bool { return *copyFrom != "" }, run: func(string) int {
+			if err := runCopyStore(ctx, *configPath, *copyFrom, stdout); err != nil {
 				return failed(err, 1)
 			}
 			return 0

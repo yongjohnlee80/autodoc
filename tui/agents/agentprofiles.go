@@ -262,7 +262,7 @@ func (h *Agents) StoreAgentProfile(name, command, codename, envText, kind string
 	}
 	h.keepAgents(agents, def)
 	h.editingAgent, h.editingAgentProfile, h.formKind = "", nil, ""
-	h.c.Set("App.status", h.c.Trf("autodoc.text.agentprofiles.saved_the_agent_profile", name))
+	h.c.Say(h.c.Trf("autodoc.text.agentprofiles.saved_the_agent_profile", name))
 	return AgentProfile{Name: name, Command: command, Codename: codename, Kind: kind, Env: env}, true
 }
 
@@ -302,7 +302,7 @@ func (h *Agents) RemoveAgentConfirmed(a AgentProfile) {
 	profiles := h.Profiles()
 	i := slices.IndexFunc(profiles, a.Same)
 	if i < 0 {
-		h.c.Set("App.status", h.c.Tr("autodoc.text.agentprofiles.the_agent_profile_changed_ask_to_remove_it_again"))
+		h.c.Say(h.c.Tr("autodoc.text.agentprofiles.the_agent_profile_changed_ask_to_remove_it_again"))
 		return
 	}
 	agents := append(append([]AgentProfile(nil), profiles[:i]...), profiles[i+1:]...)
@@ -311,7 +311,7 @@ func (h *Agents) RemoveAgentConfirmed(a AgentProfile) {
 		def = ""
 	}
 	h.keepAgents(agents, def)
-	h.c.Set("App.status", h.c.Trf("autodoc.text.agentprofiles.removed_the_agent_profile", a.Name))
+	h.c.Say(h.c.Trf("autodoc.text.agentprofiles.removed_the_agent_profile", a.Name))
 }
 
 // makeAgentDefault marks profile i the one SPC g opens.
@@ -321,7 +321,7 @@ func (h *Agents) MakeAgentDefault(i int) {
 		return
 	}
 	h.keepAgents(h.Profiles(), a.Codename)
-	h.c.Set("App.status", h.c.Trf("autodoc.text.agentprofiles.spc_g_opens", a.Name))
+	h.c.Say(h.c.Trf("autodoc.text.agentprofiles.spc_g_opens", a.Name))
 }
 
 // useAgent starts or selects profile i without stopping other profiles.

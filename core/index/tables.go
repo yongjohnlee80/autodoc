@@ -1,7 +1,11 @@
 package index
 
 import (
+	"fmt"
+
 	"github.com/yongjohnlee80/golib/dao"
+	"github.com/yongjohnlee80/golib/search"
+	"github.com/yongjohnlee80/golib/search/query"
 
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
@@ -134,9 +138,46 @@ const (
 	HighlightEnd   = "\x03"
 )
 
-// ChunkFTS is the full-text index over chunk (the baseline's chunk_fts).
+// ChunkFTS is the full-text index over chunk on SQLite (the baseline's chunk_fts, FTS5).
 var ChunkFTS = dao.FullTextIndex{Name: "chunk_fts", Table: "chunk", Key: "id",
 	Columns: []string{"title", "breadcrumb", "tags", "body", store.WorkspaceColumn}}
+
+// ChunkTSV is the full-text index over chunk on PostgreSQL: the baseline's generated tsvector
+// column, title at class A, breadcrumb B, tags C and body D, under autodoc_english.
+var ChunkTSV = dao.FullTextIndex{Name: "tsv", Table: "chunk", Key: "id", Config: "autodoc_english",
+	Columns: []string{"title", "breadcrumb", "tags", "body"}, Classes: []byte("ABCD")}
+
+// fullText is the chunk's full-text search on one engine: its index, whether it is a table joined
+// to chunk (FTS5) or a column of it (tsvector), the rank's weights (BM25 title 10, breadcrumb 5,
+// tags 5, body 1 on SQLite; ts_rank_cd takes weights up to 1, so the same proportions, 1, 0.5, 0.5
+// and 0.1, on PostgreSQL), and the query's syntax for every term and for any one.
+type fullText struct {
+	ix       dao.FullTextIndex
+	join     bool
+	weights  []float64
+	all, any func([]search.Term) (string, error)
+}
+
+// fullTextOn is the full-text search of d's engine, by its name: FTS5 on SQLite, the tsvector
+// column on PostgreSQL. Lexical scores are the engine's own: BM25 on one, ts_rank_cd on the other,
+// comparable only within one store. Another engine has none declared, and a store on it is a
+// mistake in the code (OpenAt opens these two alone): it panics while the store declares its
+// tables, rather than speaking one engine's query syntax to another.
+func fullTextOn(d dao.Dialect) fullText {
+	switch d.Name() {
+	case dao.DialectSQLite:
+		return fullText{ix: ChunkFTS, join: true, weights: []float64{10, 5, 5, 1, 0},
+			all: func(ts []search.Term) (string, error) { return query.FTS5(ts), nil },
+			any: func(ts []search.Term) (string, error) { return query.FTS5Any(ts), nil }}
+	case dao.DialectPostgres:
+		return fullText{ix: ChunkTSV, weights: []float64{1, 0.5, 0.5, 0.1}, all: query.TSQuery, any: query.TSQueryAny}
+	}
+	panic(fmt.Sprintf("index: no full-text search is declared for the %s engine", d.Name()))
+}
+
+// snippetMarks are a chunk's Snippet's: the matched terms between HighlightStart and HighlightEnd,
+// about 16 words. SQLite marks a cut with the ellipsis; PostgreSQL's one fragment has none.
+var snippetMarks = dao.SnippetMarks{Open: HighlightStart, Close: HighlightEnd, Ellipsis: "…", Tokens: 16}
 
 // DocValue is one tag or alias of a document.
 type DocValue struct {
@@ -351,6 +392,7 @@ type indexTables struct {
 	tags        *dao.Schema[*DocValue, DocValueField, noSort, int64]
 	aliases     *dao.Schema[*DocValue, DocValueField, noSort, int64]
 	names       *dao.Schema[*DocName, DocNameField, noSort, int64]
+	fullText    fullText // the chunks' full-text search on this store's engine
 	linkKeys    *dao.Schema[*LinkKey, LinkKeyField, noSort, int64]
 	facets      *dao.Schema[*Facet, FacetField, noSort, int64]
 	diagnostics *dao.Schema[*Diagnostic, DiagnosticField, DiagnosticSort, int64]
@@ -365,7 +407,20 @@ type indexTables struct {
 var tables = store.Declare("index", newIndexTables)
 
 func newIndexTables(c dao.DataConn) *indexTables {
+	ft := fullTextOn(c.Dialect())
+	snippet := dao.Field[*Chunk]{Param: dao.SnippetQuery(ft.ix, "body", snippetMarks), ReadOnly: true,
+		Scan: func(x *Chunk) any { return &x.Snippet }}
+	chunkFTS := []dao.Option[*Chunk, ChunkField, ChunkSort, int64]{
+		dao.SortParam[*Chunk, ChunkField, ChunkSort, int64](ChunkByRank, dao.RankQuery(ft.ix, ft.weights...)),
+	}
+	if ft.join {
+		snippet.Join = JoinFTS
+		chunkFTS = append(chunkFTS,
+			dao.OptionalJoinExpr[*Chunk, ChunkField, ChunkSort, int64](JoinFTS, dao.FullTextJoin(ft.ix)),
+			dao.JoinForSort[*Chunk, ChunkField, ChunkSort, int64](ChunkByRank, JoinFTS))
+	}
 	return &indexTables{
+		fullText: ft,
 		documents: dao.New[*Document, DocumentField, noSort, int64](c,
 			dao.Table[*Document, DocumentField, noSort, int64]("document"),
 			dao.ID[*Document, DocumentField, noSort, int64](DocID),
@@ -388,7 +443,7 @@ func newIndexTables(c dao.DataConn) *indexTables {
 			dao.SortMap[*Document, DocumentField, noSort, int64](map[noSort]string{byPath: `"document"."path"`,
 				byUpdatedKey: `"document"."k_upd_s", "document"."k_upd_ns", "document"."path"`,
 				byIndexedKey: `"document"."k_indexed", "document"."path"`})),
-		chunks: dao.New[*Chunk, ChunkField, ChunkSort, int64](c,
+		chunks: dao.New[*Chunk, ChunkField, ChunkSort, int64](c, append([]dao.Option[*Chunk, ChunkField, ChunkSort, int64]{
 			dao.Table[*Chunk, ChunkField, ChunkSort, int64]("chunk"),
 			dao.ID[*Chunk, ChunkField, ChunkSort, int64](ChunkID),
 			dao.Fields[*Chunk, ChunkField, ChunkSort, int64](map[ChunkField]dao.Field[*Chunk]{
@@ -411,14 +466,12 @@ func newIndexTables(c dao.DataConn) *indexTables {
 				ChunkDocPath:      store.Joined("document", "path", JoinDocument, func(x *Chunk) any { return &x.DocPath }),
 				ChunkDocActiveGen: store.Joined("document", "active_gen", JoinDocument, func(x *Chunk) any { return &x.DocActiveGen }),
 				ChunkDocReady:     store.Joined("document", "semantic_ready", JoinDocument, func(x *Chunk) any { return &x.DocReady }),
-				ChunkSnippet: {Expr: dao.Snippet(ChunkFTS, "body", dao.SnippetMarks{Open: HighlightStart, Close: HighlightEnd, Ellipsis: "…", Tokens: 16}),
-					Join: JoinFTS, ReadOnly: true, Scan: func(x *Chunk) any { return &x.Snippet }},
-				ChunkEmbBits: store.Joined("embedding", "bits", JoinEmbedding, func(x *Chunk) any { return &x.EmbBits }),
-				ChunkEmbF32:  store.Joined("embedding", "f32", JoinEmbedding, func(x *Chunk) any { return &x.EmbF32 }),
+				ChunkSnippet:      snippet,
+				ChunkEmbBits:      store.Joined("embedding", "bits", JoinEmbedding, func(x *Chunk) any { return &x.EmbBits }),
+				ChunkEmbF32:       store.Joined("embedding", "f32", JoinEmbedding, func(x *Chunk) any { return &x.EmbF32 }),
 			}),
 			dao.OptionalJoinExpr[*Chunk, ChunkField, ChunkSort, int64](JoinDocument,
 				store.InnerJoin("document", "id", "chunk", "doc_id")),
-			dao.OptionalJoinExpr[*Chunk, ChunkField, ChunkSort, int64](JoinFTS, dao.FullTextJoin(ChunkFTS)),
 			dao.OptionalJoinExpr[*Chunk, ChunkField, ChunkSort, int64](JoinEmbedding,
 				store.InnerJoin("embedding", "text_hash", "chunk", "text_hash")),
 			dao.SortMap[*Chunk, ChunkField, ChunkSort, int64](map[ChunkSort]string{
@@ -427,8 +480,7 @@ func newIndexTables(c dao.DataConn) *indexTables {
 				ChunkByPath: `"document"."path", "chunk"."ord"`,
 			}),
 			dao.JoinForSort[*Chunk, ChunkField, ChunkSort, int64](ChunkByPath, JoinDocument),
-			dao.SortExpr[*Chunk, ChunkField, ChunkSort, int64](ChunkByRank, dao.Rank(ChunkFTS, 10, 5, 5, 1, 0)),
-			dao.JoinForSort[*Chunk, ChunkField, ChunkSort, int64](ChunkByRank, JoinFTS)),
+		}, chunkFTS...)...),
 		tags:    docValues(c, "doc_tag", "tag"),
 		aliases: docValues(c, "doc_alias", "alias"),
 		names: dao.New[*DocName, DocNameField, noSort, int64](c,

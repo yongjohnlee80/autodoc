@@ -2,6 +2,7 @@ package pgstore
 
 import (
 	"context"
+	"errors"
 	"math"
 	"os"
 	"slices"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/search"
 )
 
@@ -216,4 +218,124 @@ func TestANN_BudgetSweep(t *testing.T) {
 				a.underfillOf(model).Load()-before, len(qs))
 		}
 	}
+}
+
+// TestANN_BulkLoadMeasure is the measurement behind a model's first index waiting for a tenant's
+// bulk load (docs/decisions/server.md#a-models-index-waits-for-its-bulk-load). At the size in
+// AUTODOC_ANN_BULK (documents, one chunk and embedding each), a tenant imports its model as the
+// server does: its documents first, not ready, then their embeddings in batches of 20,000, each
+// batch marking its documents ready, the builder ticking after each. Once with the index built
+// first (DeferBacklog 0), once deferred (the defaults): the load's time, the time until the index
+// is ready, recall@10 against exact afterwards, whether a build fell back to serial, and the
+// backlog count's plan at a full and a drained backlog. It runs only when that variable is set.
+func TestANN_BulkLoadMeasure(t *testing.T) {
+	size, _ := strconv.Atoi(os.Getenv("AUTODOC_ANN_BULK"))
+	if size <= 0 {
+		t.Skip("AUTODOC_ANN_BULK is not set: the measurements are a separate run")
+	}
+	for _, mode := range []struct {
+		name    string
+		backlog int
+	}{{"index first", 0}, {"deferred", DefaultANNConfig().DeferBacklog}} {
+		cfg := DefaultANNConfig()
+		cfg.DeferBacklog = mode.backlog
+		conn, a := annSetup(t, cfg)
+		ctx := context.Background()
+		model := annModel(annDims)
+		bulkExec(t, conn, `INSERT INTO rag_meta (tenant, active_model) VALUES ('t', $1)`, model)
+		if err := a.Want(ctx, model); err != nil {
+			t.Fatal(err)
+		}
+		// the documents and their chunks first, none ready: the import's first pass
+		start := time.Now()
+		bulkExec(t, conn, `INSERT INTO rag_document (tenant, path, tags, semantic_ready)
+			SELECT 't', 'doc/' || lpad(g::text, 8, '0'), '{}', false FROM generate_series(1, $1) g`, size)
+		bulkExec(t, conn, `INSERT INTO rag_chunk (tenant, doc, ord, body, text_hash)
+			SELECT tenant, id, 0, 'body ' || path, sha256(convert_to(tenant || path, 'UTF8')) FROM rag_document WHERE tenant = 't'`)
+		bulkExec(t, conn, `CREATE TABLE IF NOT EXISTS bulk_centers (i int PRIMARY KEY, v real[])`)
+		bulkExec(t, conn, `INSERT INTO bulk_centers SELECT i, ARRAY(SELECT (random() - 0.5)::real FROM generate_series(1, $1) WHERE i >= 0) FROM generate_series(0, 39) i ON CONFLICT DO NOTHING`, annDims)
+		bulkExec(t, conn, `ANALYZE rag_document`)
+		bulkExec(t, conn, `ANALYZE rag_chunk`)
+		t.Logf("%s, %d: documents and chunks in %s", mode.name, size, time.Since(start).Round(time.Millisecond))
+		if mode.backlog > 0 {
+			t.Logf("%s, %d: the backlog count at a full backlog:\n%s", mode.name, size, bulkExplain(t, conn, mode.backlog))
+		}
+
+		// the embeddings in batches, each marking its documents ready, the builder ticking after
+		start = time.Now()
+		var ready time.Duration
+		var serially bool
+		tick := func() {
+			err := a.Tick(ctx)
+			if errors.Is(err, ErrBuiltSerially) {
+				serially = true
+			} else if err != nil {
+				t.Fatalf("%s: the tick: %v", mode.name, err)
+			}
+			if ready == 0 && indexOf(t, a, model).State == annReady {
+				ready = time.Since(start)
+			}
+		}
+		tick()
+		const batch = 20000
+		for lo := 1; lo <= size; lo += batch {
+			bulkExec(t, conn, `INSERT INTO rag_embedding (tenant, model, text_hash, vec)
+				SELECT k.tenant, $1, k.text_hash, ('[' || array_to_string(ARRAY(SELECT c.v[j] + (random() - 0.5) * 0.3
+				         FROM generate_series(1, `+strconv.Itoa(annDims)+`) j WHERE k.doc > 0), ',') || ']')::vector
+				  FROM rag_chunk k JOIN rag_document d ON d.id = k.doc JOIN bulk_centers c ON c.i = k.doc % 40
+				 WHERE d.tenant = 't' AND d.path BETWEEN $2 AND $3`, model, bulkPath(lo), bulkPath(lo+batch-1))
+			bulkExec(t, conn, `UPDATE rag_document SET semantic_ready = true WHERE tenant = 't' AND path BETWEEN $1 AND $2`,
+				bulkPath(lo), bulkPath(lo+batch-1))
+			tick()
+		}
+		loaded := time.Since(start)
+		for i := 0; ready == 0 && i < 3; i++ {
+			tick()
+		}
+		t.Logf("%s, %d: embeddings loaded in %s (%.0f/s); index ready %s after the load began; built serially %v",
+			mode.name, size, loaded.Round(time.Millisecond), float64(size)/loaded.Seconds(), ready.Round(time.Millisecond), serially)
+		if mode.backlog > 0 {
+			t.Logf("%s, %d: the backlog count at a drained backlog:\n%s", mode.name, size, bulkExplain(t, conn, mode.backlog))
+		}
+		bulkExec(t, conn, `ANALYZE rag_embedding`)
+		exact, _ := New(conn, "t")
+		approx, _ := New(conn, "t", WithANN(a))
+		sum := 0.0
+		qs := queryVecs(t, conn, "t", model, 100)
+		for _, q := range qs {
+			sum += recall(docsOf(semantic(t, approx, model, q, search.Filter{}, 10)), docsOf(semantic(t, exact, model, q, search.Filter{}, 10)))
+		}
+		t.Logf("%s, %d: recall@10 %.4f over %d queries", mode.name, size, sum/float64(len(qs)), len(qs))
+	}
+}
+
+func bulkPath(g int) string {
+	return "doc/" + strings.Repeat("0", max(0, 8-len(strconv.Itoa(g)))) + strconv.Itoa(g)
+}
+
+func bulkExec(t *testing.T, conn dao.DataConn, q string, args ...any) {
+	t.Helper()
+	if _, err := conn.ExecContext(context.Background(), q, args...); err != nil {
+		t.Fatalf("%s: %v", strings.Fields(q)[0], err)
+	}
+}
+
+// bulkExplain is the plan of unreadyBacklog's count, analyzed.
+func bulkExplain(t *testing.T, conn dao.DataConn, limit int) string {
+	t.Helper()
+	rows, err := conn.QueryContext(context.Background(), `EXPLAIN (ANALYZE, BUFFERS) SELECT count(*) FROM (SELECT 1 FROM rag_document
+		WHERE tenant = $1 AND NOT semantic_ready LIMIT $2) backlog`, "t", limit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var b strings.Builder
+	for rows.Next() {
+		var line string
+		if err := rows.Scan(&line); err != nil {
+			t.Fatal(err)
+		}
+		b.WriteString("    " + line + "\n")
+	}
+	return b.String()
 }

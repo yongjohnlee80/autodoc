@@ -35,7 +35,7 @@ func runCall(ctx context.Context, configPath, method, params string, out io.Writ
 		return err
 	}
 	session := client.NewSession(p.Socket, func() (string, error) { return client.SpawnServe(e.ConfigPath, p.StateDir) }).As(rpc.CLIName).WithInfo(cliWho()).
-		UseHandoffs(p.StateDir).ForStore(p.Socket, p.Store)
+		UseHandoffs(p.StateDir).ForPaths(p)
 	if err := session.Connect(ctx); err != nil {
 		return err
 	}

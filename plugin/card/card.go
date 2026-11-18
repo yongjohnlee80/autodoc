@@ -33,6 +33,15 @@ type Card struct {
 	from   int     // the body's first row in view
 	titled string  // the title last sent
 	hits   []hit   // what each frame row of the last draw holds, for Pointer
+
+	// A card of panes (NewPanes): its root, each leaf pane's card, the pane with the keys, and the
+	// last draw's panes and dividers, for the keys and the pointer; nil root is a one-pane card.
+	root     *Split
+	leaves   map[*Pane]*leaf
+	pane     *Pane
+	panes    []paneAt
+	dividers []divider
+	drag     *dragging // a divider drag in progress
 }
 
 // New is a Card showing page(), asked for afresh on every draw.
@@ -61,15 +70,39 @@ func (c *Card) Focus(focused bool) {
 	c.Draw()
 }
 
-// Focused is the control with the focus; nil when the page has none.
-func (c *Card) Focused() Control { return c.focus }
+// Focused is the control with the focus; nil when the page has none. In a card of panes, the
+// focused pane's.
+func (c *Card) Focused() Control {
+	if c.root != nil {
+		if c.pane == nil {
+			return nil
+		}
+		return c.leafOf(c.pane).card.focus
+	}
+	return c.focus
+}
 
-// FocusOn gives ctl the focus, and draws.
-func (c *Card) FocusOn(ctl Control) { c.focus = ctl; c.Draw() }
+// FocusOn gives ctl the focus, and draws. In a card of panes, the pane whose page holds ctl takes
+// the keys too.
+func (c *Card) FocusOn(ctl Control) {
+	if c.root != nil {
+		for _, a := range c.panes {
+			lf := c.leafOf(a.p)
+			if slices.Contains(controls(lf.card.page()), ctl) {
+				c.pane, lf.card.focus = a.p, ctl
+				break
+			}
+		}
+		c.Draw()
+		return
+	}
+	c.focus = ctl
+	c.Draw()
+}
 
 // Typing reports whether an Input has the focus: every printable key is then text, q too.
 func (c *Card) Typing() bool {
-	_, ok := c.focus.(*Input)
+	_, ok := c.Focused().(*Input)
 	return ok
 }
 
@@ -104,6 +137,10 @@ func (c *Card) settle(ctls []Control) {
 // title when it has changed.
 func (c *Card) Draw() {
 	if c.host == nil {
+		return
+	}
+	if c.root != nil {
+		c.drawPanes()
 		return
 	}
 	p := c.page()

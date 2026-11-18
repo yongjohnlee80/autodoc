@@ -34,6 +34,32 @@ type provider struct {
 	most     int           // the most calls in flight at once
 	hold     chan struct{} // when set, every call waits for it to close
 	arrived  chan struct{} // when set, signalled as each call arrives
+	// slowAbove, when set, is the most texts a call answers in time: a call of more waits for
+	// its own deadline, embedding nothing, as a provider too slow for its size does; -1: every call
+	slowAbove int
+	timedOut  int // the calls that waited for their deadline
+	largest   int // the most texts a call that answered carried
+}
+
+// setSlowAbove sets slowAbove while calls arrive.
+func (p *provider) setSlowAbove(n int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.slowAbove = n
+}
+
+// slowCalls is how many calls waited for their deadline.
+func (p *provider) slowCalls() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.timedOut
+}
+
+// largestAnswered is the most texts a call that answered carried.
+func (p *provider) largestAnswered() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.largest
 }
 
 func newProvider(name string) *provider {
@@ -50,6 +76,15 @@ func (p *provider) Embed(ctx context.Context, texts []string) ([][]float32, erro
 	p.calls++
 	p.inFlight++
 	p.most = max(p.most, p.inFlight)
+	if p.slowAbove != 0 && len(texts) > p.slowAbove {
+		p.timedOut++
+		p.mu.Unlock()
+		<-ctx.Done()
+		p.mu.Lock()
+		p.inFlight--
+		p.mu.Unlock()
+		return nil, ctx.Err()
+	}
 	hold, arrived := p.hold, p.arrived
 	failing := p.fail > 0
 	if failing {
@@ -65,6 +100,7 @@ func (p *provider) Embed(ctx context.Context, texts []string) ([][]float32, erro
 		delete(p.reject, texts[0])
 	}
 	if !failing && !rejected {
+		p.largest = max(p.largest, len(texts))
 		for _, t := range texts {
 			p.asked[t]++
 			p.order = append(p.order, t)

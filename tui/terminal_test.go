@@ -1,5 +1,9 @@
 //go:build linux || darwin
 
+// Unix only: most of these cells type real shell commands to /bin/sh (echo with $((…)), printf, cat,
+// stty, a hang-up's forwarding), which the line shell other OSes run (dockshell_test.go) does not;
+// the cells that need only a shell running are in the dock's and the panels' files, on every OS.
+
 package tui
 
 import (
@@ -797,7 +801,7 @@ func TestSPCZWithNoPanelOpenSaysWhatItMaximizes(t *testing.T) {
 	r := attached(t, d)
 	r.leader(t, 'z')
 	r.s.WaitFor(t, "the notice", func(string) bool {
-		return r.noticed("Maximize is the terminal's and the agents': open one first (SPC ` or SPC g)")
+		return r.noticed("Maximize is the terminal's, the agents' and a card's that offers it: open one first (SPC ` or SPC g)")
 	})
 	if onLoop(r, func() bool { return r.h.panelMax["terminal"] || r.h.panelMax["agent"] }) {
 		t.Error("a closed panel maximized")
@@ -849,36 +853,6 @@ func TestF11WorksWithTheKeyboardInTheShell(t *testing.T) {
 	r.s.WaitForText(t, "f11-never-sent-46")
 }
 
-// clickMenuRow opens panel's ≡ menu with the pointer and clicks its row label. The ≡ is the one
-// drawn inside the panel's window: the page's row of tabs has its own.
-func clickMenuRow(t *testing.T, r *running, panel, label string) {
-	t.Helper()
-	click := func(x, y int) {
-		r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y},
-			tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x, Y: y})
-	}
-	var mx, my int
-	r.s.WaitFor(t, "the "+panel+" panel's ≡", func(screen string) bool {
-		at, on := screenRectOf(r, panel)
-		if !on {
-			return false
-		}
-		for y, line := range strings.Split(screen, "\n") {
-			for x, c := range []rune(line) {
-				if c == '≡' && x >= at.X && x < at.X+at.W && y >= at.Y && y < at.Y+at.H {
-					mx, my = x, y
-					return true
-				}
-			}
-		}
-		return false
-	})
-	click(mx, my)
-	r.s.WaitForText(t, label)
-	x, y := r.textAt(label)
-	click(x+1, y)
-}
-
 // TestAClickOnMaximizeInTheTerminalsMenu: a click on Maximize in the terminal's ≡ menu maximizes
 // the panel, and a click on Restore restores it; nothing is refused. (rc2: the click was refused,
 // the row running while its menu still held the input.)
@@ -888,46 +862,6 @@ func TestAClickOnMaximizeInTheTerminalsMenu(t *testing.T) {
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
 	clickMaximizeAndRestore(t, r, "terminal")
-}
-
-// clickMaximizeAndRestore clicks Maximize, then Restore, in the open panel's ≡ menu: the panel
-// maximizes, then restores, and nothing is kept as refused.
-func clickMaximizeAndRestore(t *testing.T, r *running, panel string) {
-	t.Helper()
-	maxed := func(want bool) func(string) bool {
-		return func(string) bool { return onLoop(r, func() bool { return r.h.panelMax[panel] }) == want }
-	}
-	// the panel as drawn: the next click must find its strip where the maximized frame shows it,
-	// not where the frame before did (a bottom panel's strip moves up; a top panel's grows down)
-	r.s.WaitForText(t, "┌ "+panel)
-	docked := panelHeight(r.s.String(), panel)
-	clickMenuRow(t, r, panel, "Maximize")
-	r.s.WaitFor(t, "the "+panel+" maximized by a click", maxed(true))
-	r.s.WaitFor(t, "the maximized "+panel+" drawn", func(sc string) bool { return panelHeight(sc, panel) > docked })
-	clickMenuRow(t, r, panel, "Restore")
-	r.s.WaitFor(t, "the "+panel+" restored by a click", maxed(false))
-	r.s.WaitFor(t, "the restored "+panel+" drawn", func(sc string) bool { return panelHeight(sc, panel) == docked })
-	if errs := onLoop(r, func() []error { r.h.mu.Lock(); defer r.h.mu.Unlock(); return append([]error(nil), r.h.errs...) }); len(errs) != 0 {
-		t.Errorf("refused: %v", errs)
-	}
-}
-
-// panelHeight is how many rows the panel titled title spans on screen, both corners counted; 0 when
-// it is not drawn.
-func panelHeight(screen, title string) int {
-	lines := strings.Split(screen, "\n")
-	for y, l := range lines {
-		c := col(l, "┌ "+title)
-		if c < 0 {
-			continue
-		}
-		for y2 := y + 1; y2 < len(lines); y2++ {
-			if rs := []rune(lines[y2]); c < len(rs) && rs[c] == '└' {
-				return y2 - y + 1
-			}
-		}
-	}
-	return 0
 }
 
 // TestARefusedMaximizeSaysWhatItRefused: with a modal dialog over the page (Theme and font…), the

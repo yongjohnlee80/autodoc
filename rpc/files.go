@@ -62,8 +62,8 @@ func WithGuard(g *fsbounds.Guard) Option { return func(o *options) { o.guard = g
 // local is verb for a peer on the unix socket only: the daemon's own user (the socket is 0600),
 // for whom a path on its disk is nothing new. Over TCP a token would reach any file the daemon can
 // read (docs/decisions/editor.md#files-outside-every-workspace).
-func (s *Server) local(method string, lo, hi int, h func(context.Context, Workspace, []any) (any, error)) golibrpc.Handler {
-	inner := s.verb(lo, hi, h, false)
+func (s *Server) local(method string, lo, hi int, h func(context.Context, Workspace, []any) (any, error), refusable bool) golibrpc.Handler {
+	inner := s.verb(lo, hi, h, false, refusable)
 	return func(ctx context.Context, req *golibrpc.Request) (any, error) {
 		if !ipc.IsLocal(req.Peer) {
 			return nil, &golibrpc.Error{Code: golibrpc.CodeAccessDenied, Message: method + " is for local peers"}
@@ -192,8 +192,8 @@ func (s *Server) fileVerbs() []module.Verb {
 			return &versionJSON{Version: string(v)}, nil
 		})
 	}
-	readErrs := []int64{golibrpc.CodeAccessDenied, CodeNotFound, CodeUnsupported}
-	writeErrs := []int64{golibrpc.CodeAccessDenied, CodeNotFound, CodeConflict, CodeCommitted, CodeUnsupported}
+	readErrs := []int64{golibrpc.CodeAccessDenied, CodeNotFound, CodeUnsupported, CodeFileRefused}
+	writeErrs := []int64{golibrpc.CodeAccessDenied, CodeNotFound, CodeConflict, CodeCommitted, CodeUnsupported, CodeFileRefused}
 	return []module.Verb{
 		read(module.Contract{Verb: "file.read", Effect: module.EffectRead, Since: 17, Scope: local, Audience: module.AudienceAgent, Result: "{content, version}",
 			Errors: readErrs, Doc: "A UTF-8 text file anywhere on the daemon's disk, as doc.read; a file that is not text is invalid params."}, false),

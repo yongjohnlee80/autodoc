@@ -14,7 +14,9 @@ import (
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
+	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/module"
+	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
 var update = flag.Bool("update", false, "rewrite testdata/contracts.json from the contracts")
@@ -41,8 +43,8 @@ func TestContractsAreGolden(t *testing.T) {
 	if string(got) != string(want) {
 		t.Errorf("the contracts differ from %s: review the change, bump Protocol if a client sees it, and rewrite it with -update", golden)
 	}
-	if Protocol != 54 || MinProtocol != 12 {
-		t.Errorf("protocol %d to %d: the golden file is protocol 54's, served from 12", MinProtocol, Protocol)
+	if Protocol != 55 || MinProtocol != 12 {
+		t.Errorf("protocol %d to %d: the golden file is protocol 55's, served from 12", MinProtocol, Protocol)
 	}
 }
 
@@ -106,11 +108,11 @@ func TestCatalogFilters(t *testing.T) {
 	for _, e := range one.Errors {
 		codes = append(codes, e.Code)
 	}
-	if !reflect.DeepEqual(names(one), []string{"doc.read"}) || !reflect.DeepEqual(codes, []int64{golibrpc.CodeAccessDenied, CodeNoSuchWorkspace, CodeNotFound, CodeUnsupported, golibrpc.CodeInvalidParams}) {
+	if !reflect.DeepEqual(names(one), []string{"doc.read"}) || !reflect.DeepEqual(codes, []int64{golibrpc.CodeAccessDenied, CodeFileRefused, CodeNoSuchWorkspace, CodeNotFound, CodeUnsupported, golibrpc.CodeInvalidParams}) {
 		t.Errorf("doc.read: %v with codes %v", names(one), codes)
 	}
-	// invalid params' messages say no verb: a filter's row keeps its next step and lists none, the
-	// whole catalog every one
+	// invalid params' messages name their verbs: a filter's row keeps its next step and lists the
+	// messages of the verbs it selects, the whole catalog every one
 	invalid := func(c Catalog) CatalogError {
 		for _, e := range c.Errors {
 			if e.Code == golibrpc.CodeInvalidParams {
@@ -120,8 +122,8 @@ func TestCatalogFilters(t *testing.T) {
 		t.Fatalf("no invalid params row in %+v", c.Errors)
 		return CatalogError{}
 	}
-	if e := invalid(one); len(e.Messages) != 0 || e.Next == "" {
-		t.Errorf("doc.read's invalid params: %+v, want its next step and no message", e)
+	if e := invalid(one); len(e.Messages) == 0 || e.Next == "" {
+		t.Errorf("doc.read's invalid params: %+v, want its next step and its messages", e)
 	}
 	if e := invalid(s.Catalog(Protocol, "graph.*")); len(e.Messages) != 0 {
 		t.Errorf("graph.*'s invalid params lists %d messages, want none", len(e.Messages))
@@ -233,7 +235,7 @@ func sameJSON(t *testing.T, a, b any) bool {
 func TestCatalogMarkdown(t *testing.T) {
 	md := New(Fixed(), "v").Catalog(Protocol, "").Markdown()
 	for _, want := range []string{
-		"Verbs at protocol 54; the daemon serves sessions from protocol 12.",
+		"Verbs at protocol 55; the daemon serves sessions from protocol 12.",
 		"\n### `graph`\n\n| verb | params | result | since | audience | effect |\n",
 		"| `workspace.rename` | `name` string, `to` string | Logs `workspace.renamed`. Codes: -32060, -32062, -32065. | 2 | for people's tools |",
 		"| `file.locate` | `path` string (absolute and clean) |",
@@ -248,5 +250,84 @@ func TestCatalogMarkdown(t *testing.T) {
 	}
 	if n := strings.Count(md, "### `graph`"); n != 1 {
 		t.Errorf("graph has %d tables", n)
+	}
+}
+
+// TestInvalidParamsNameTheirVerbs: every invalid-params message of publicErrs names the verbs that
+// answer it, each an exact registered verb or a "domain.*" with at least one verb, so a filtered
+// catalog can list exactly a verb's own. It holds the names to verbs that exist, not to verbs that
+// can reach the error: that each named verb does return it is the table's author's to trace, and
+// TestAFilteredCatalogListsItsVerbsInvalidParams holds a few verbs' sets exactly.
+func TestInvalidParamsNameTheirVerbs(t *testing.T) {
+	s := New(Fixed(), "v")
+	verbs := s.Verbs()
+	for _, pe := range publicErrs {
+		if pe.Code != golibrpc.CodeInvalidParams {
+			continue
+		}
+		if len(pe.Verbs) == 0 {
+			t.Errorf("%q names no verb that answers it", pe.Message)
+		}
+		for _, v := range pe.Verbs {
+			if strings.HasSuffix(v, ".*") {
+				if !slices.ContainsFunc(verbs, func(name string) bool { return selects(v, name) }) {
+					t.Errorf("%q: %s names a domain with no verb", pe.Message, v)
+				}
+			} else if !slices.Contains(verbs, v) {
+				t.Errorf("%q: %s is not a registered verb", pe.Message, v)
+			}
+		}
+	}
+}
+
+// TestAFilteredCatalogListsItsVerbsInvalidParams: a filter lists the invalid-params messages that
+// name a verb it selects, and no other.
+func TestAFilteredCatalogListsItsVerbsInvalidParams(t *testing.T) {
+	s := New(Fixed(), "v")
+	messages := func(filter string) []string {
+		for _, e := range s.Catalog(Protocol, filter).Errors {
+			if e.Code == golibrpc.CodeInvalidParams {
+				out := slices.Clone(e.Messages)
+				slices.Sort(out)
+				return out
+			}
+		}
+		t.Fatalf("%s: no invalid params row", filter)
+		return nil
+	}
+	say := func(errs ...error) []string {
+		var out []string
+		for _, err := range errs {
+			i := slices.IndexFunc(publicErrs, func(pe module.PublicError) bool { return pe.Err == err })
+			if i < 0 {
+				t.Fatalf("%v is not in publicErrs", err)
+			}
+			out = append(out, publicErrs[i].Message)
+		}
+		slices.Sort(out)
+		return out
+	}
+	search := say(index.ErrUnknownMode, index.ErrNoRetriever, index.ErrUnknownStage, index.ErrRepeatedStage, index.ErrStagesAndMode, index.ErrUnknownFacet, index.ErrFacetValue)
+	if got := messages("search.query"); !reflect.DeepEqual(got, search) {
+		t.Errorf("search.query lists %q, want the search messages %q", got, search)
+	}
+	if got, want := messages("ranker.window"), say(ErrWindow, ErrSuppliedRanker); !reflect.DeepEqual(got, want) {
+		t.Errorf("ranker.window lists %q, want %q", got, want)
+	}
+	if got, want := messages("preference.set"), say(store.ErrNoPreferenceName, store.ErrOwnedPreference); !reflect.DeepEqual(got, want) {
+		t.Errorf("preference.set lists %q, want %q", got, want)
+	}
+	if got, want := messages("embedding.cancel_switch"), say(ErrNoSwitch); !reflect.DeepEqual(got, want) {
+		t.Errorf("embedding.cancel_switch lists %q, want %q", got, want)
+	}
+	// a domain lists the union of its verbs', and no search or provider message appears in graph.*
+	if got := messages("graph.*"); len(got) != 0 {
+		t.Errorf("graph.* lists %q, want none", got)
+	}
+	if got := messages("ranker.*"); !slices.Contains(got, say(ErrWindow)[0]) || slices.Contains(got, search[0]) {
+		t.Errorf("ranker.* lists %q", got)
+	}
+	if all := messages(""); !reflect.DeepEqual(all, messages("*")) || len(all) < len(search)+4 {
+		t.Errorf("the whole catalog lists %d messages", len(all))
 	}
 }

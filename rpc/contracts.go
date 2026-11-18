@@ -53,6 +53,7 @@ var codeDocs = []struct {
 	{CodeProviderRefused, "rpc.provider_refused", "switch provider or ranker, or fix its key or base URL"},
 	{CodeSwitching, "rpc.switching", "a new model is filling: search with lexical among the stages until it is ready"},
 	{CodeRankUnavailable, "rpc.rank_unavailable", "retry later, or leave rerank out of the stages for an unranked answer"},
+	{CodeFileRefused, "rpc.file_refused", "the message says which: a file another program holds, try again in a moment; one the system doesn't permit, change its permissions"},
 	{golibrpc.CodeMethodNotFound, "rpc.method_not_found", "the verb is unknown, or newer than the session's protocol: sys.capabilities lists the verbs it may call"},
 	{golibrpc.CodeInvalidParams, "rpc.invalid_params", "the message says which param and why; check the verb's contract. A reindex refused with held: … names the way out"},
 	{golibrpc.CodeInternal, "rpc.internal", "a failure the daemon's log details: retry, or report it"},
@@ -60,18 +61,20 @@ var codeDocs = []struct {
 
 // Catalog is the catalog at protocol p of the verbs filter names: "" or "*" for all, "domain.*" for
 // a domain's, or one verb by name. A filter lists the codes its verbs name and invalid params.
-// Invalid params' messages are rpc's own (publicErrs: no module may answer the code), and none says
-// which verbs answer it, so a filter's row lists none: its next step says the message names the
-// param. The whole catalog lists every one.
+// Invalid params' messages are rpc's own (publicErrs: no module may answer the code), and each
+// names the verbs that answer it (PublicError.Verbs), so a filter lists the messages of the verbs
+// it selects and no others. The whole catalog lists every one.
 func (s *Server) Catalog(p int64, filter string) Catalog {
 	c := Catalog{Protocol: p, MinProtocol: MinProtocol, Verbs: []module.Contract{}, Errors: []CatalogError{}}
 	codes := map[int64]bool{}
+	var chosen []string
 	for _, name := range s.Verbs() {
 		v := s.verbs[name]
 		if v.Since > p || !selects(filter, name) {
 			continue
 		}
 		c.Verbs = append(c.Verbs, v.Contract)
+		chosen = append(chosen, name)
 		codes[golibrpc.CodeInvalidParams] = true
 		for _, code := range v.Errors {
 			codes[code] = true
@@ -79,12 +82,12 @@ func (s *Server) Catalog(p int64, filter string) Catalog {
 	}
 	all := filter == "" || filter == "*"
 	byCode := map[int64]*CatalogError{}
-	add := func(code int64, name, next, message string) {
+	add := func(code int64, name, next, message string, verbs []string) {
 		if !all && !codes[code] {
 			return
 		}
-		if !all && code == golibrpc.CodeInvalidParams {
-			message = "" // every verb's, not the filter's (Catalog)
+		if !all && code == golibrpc.CodeInvalidParams && !answeredBy(verbs, chosen) {
+			message = ""
 		}
 		e, ok := byCode[code]
 		if !ok {
@@ -96,19 +99,31 @@ func (s *Server) Catalog(p int64, filter string) Catalog {
 		}
 	}
 	for _, d := range codeDocs {
-		add(d.code, d.name, d.next, "")
+		add(d.code, d.name, d.next, "", nil)
 	}
 	for _, pe := range publicErrs {
-		add(pe.Code, "", "", pe.Message)
+		add(pe.Code, "", "", pe.Message, pe.Verbs)
 	}
 	for _, e := range s.moduleErrs {
-		add(e.Code, e.Name, e.Next, e.Message)
+		add(e.Code, e.Name, e.Next, e.Message, e.Verbs)
 	}
 	for _, e := range byCode {
 		c.Errors = append(c.Errors, *e)
 	}
 	sort.Slice(c.Errors, func(i, j int) bool { return c.Errors[i].Code > c.Errors[j].Code })
 	return c
+}
+
+// answeredBy reports whether any of patterns (verb names, or "domain.*") selects a verb of chosen.
+func answeredBy(patterns, chosen []string) bool {
+	for _, pat := range patterns {
+		for _, verb := range chosen {
+			if selects(pat, verb) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // selects reports whether filter names verb.

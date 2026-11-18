@@ -1,5 +1,3 @@
-//go:build linux || darwin
-
 package tui
 
 import (
@@ -14,24 +12,6 @@ import (
 // panel tiled at its least still takes the keyboard in its view (main.qml names what each number
 // holds). Each is tiled at a 5% tile, under its least, on the edge given, so the least is what it
 // gets: across a left or right edge its columns, across a top or bottom one its rows.
-
-// screenRectOf is where window id is drawn; false while it is not on screen.
-func screenRectOf(r *running, id string) (tuicore.Rect, bool) {
-	type placed struct {
-		at tuicore.Rect
-		on bool
-	}
-	p := onLoop(r, func() placed {
-		c, _ := r.h.p.Find(id)
-		w, ok := c.(interface{ ScreenRect() (tuicore.Rect, bool) })
-		if !ok {
-			return placed{}
-		}
-		at, on := w.ScreenRect()
-		return placed{at, on}
-	})
-	return p.at, p.on
-}
 
 // atItsLeast tiles panel at edge at a 5% tile, opens it as open does, and wants it tiled at least
 // cells across the edge, the keyboard in its view. The page takes the keyboard first, so the open
@@ -92,7 +72,7 @@ func TestTheTodosTiledAtTheirLeastTakeTheKeyboard(t *testing.T) {
 // The terminal's least: 6 rows at the bottom, its edge, three of them the shell's, and 27 columns
 // at the left, SPC ` each time.
 func TestTheTerminalTiledAtItsLeastTakesTheKeyboard(t *testing.T) {
-	_, r := runShellTUI(t, nil)
+	_, r := runLineShellTUI(t, nil)
 	spcTick := func() { r.leader(t, '`') }
 	atItsLeast(t, r, "terminal", "bottom", 6, spcTick)
 	closePanel(t, r, "terminal") // its shell runs on: SPC ` opens it again
@@ -102,7 +82,7 @@ func TestTheTerminalTiledAtItsLeastTakesTheKeyboard(t *testing.T) {
 // The agent's least: 27 columns at the right, its edge, and 6 rows at the bottom, SPC g each time.
 func TestTheAgentTiledAtItsLeastTakesTheKeyboard(t *testing.T) {
 	agent, _ := fakeAgent(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron")
+	_, r, _ := runAgentTUI(t, agentsFolder(t), []agents.AgentProfile{{Name: "heron", Command: agentCall(agent), Codename: "heron"}}, "heron")
 	spcG := func() { r.leader(t, 'g') }
 	atItsLeast(t, r, "agent", "right", 27, spcG)
 	closePanel(t, r, "agent")

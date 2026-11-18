@@ -73,30 +73,43 @@ func candidateOf(r *Chunk, snippet string) search.Candidate[int64] {
 		Generation: r.DocActiveGen, ByteStart: int(r.ByteStart), ByteEnd: int(r.ByteEnd)}
 }
 
-// Lexical runs the FTS query over the alive chunks the filters admit, best first (BM25 weighs
-// title 10, breadcrumb 5, tags 5, body 1), at most n. The workspace and the filters are in the same
-// WHERE as the MATCH, so they apply before the rank and the limit. Every term must match.
+// Lexical runs the full-text query over the alive chunks the filters admit, best first (title over
+// breadcrumb and tags over body: BM25 on SQLite, ts_rank_cd on PostgreSQL), at most n. The
+// workspace and the filters are in the same WHERE as the match, so they apply before the rank and
+// the limit. Every term must match.
 func (v *View) Lexical(ctx context.Context, terms []search.Term, f search.Filter, n int) ([]search.Candidate[int64], error) {
-	return v.lexical(ctx, query.FTS5(terms), f, n)
+	return v.lexical(ctx, terms, false, f, n)
 }
 
 // LexicalAny is Lexical with any one term enough (search.LexicalAny): the engine's fallback when no
 // chunk holds every term, so a question typed whole still finds the chunks holding most of its
 // words, which BM25 ranks first (AM-8).
 func (v *View) LexicalAny(ctx context.Context, terms []search.Term, f search.Filter, n int) ([]search.Candidate[int64], error) {
-	return v.lexical(ctx, query.FTS5Any(terms), f, n)
+	return v.lexical(ctx, terms, true, f, n)
 }
 
-// lexical is the chunks matching the FTS5 expression match, as Lexical describes.
-func (v *View) lexical(ctx context.Context, match string, f search.Filter, n int) ([]search.Candidate[int64], error) {
+// lexical is the chunks matching terms (every one, or any one when anyTerm) in the store engine's
+// query syntax, as Lexical describes: the match, the rank and the snippet bind the same query.
+func (v *View) lexical(ctx context.Context, terms []search.Term, anyTerm bool, f search.Filter, n int) ([]search.Candidate[int64], error) {
+	ft := tables.In(v.tx).fullText
+	render := ft.all
+	if anyTerm {
+		render = ft.any
+	}
+	match, err := render(terms)
+	if err != nil {
+		return nil, fmt.Errorf("index: lexical search: %w", err)
+	}
 	d, ok, err := v.s.filtered(v.tx, alive(v.s.chunks(v.tx)), optsOf(ctx, f))
 	if err != nil || !ok {
 		return nil, err
 	}
-	rows, err := d.Join(JoinFTS).WithPredicate(dao.Match(ChunkFTS, match)).
-		OrderBy(dao.Asc(ChunkByRank), dao.Asc(ChunkByPath)).Limit(uint64(n)).
-		Select(ChunkDoc, ChunkOrd, ChunkDocPath, ChunkBreadcrumb, ChunkByteStart,
-			ChunkByteEnd, ChunkDocActiveGen, ChunkSnippet)
+	if ft.join {
+		d = d.Join(JoinFTS)
+	}
+	d = d.WithPredicate(dao.Match(ft.ix, match)).OrderBy(dao.AscBy(ChunkByRank, match), dao.Asc(ChunkByPath)).Limit(uint64(n))
+	rows, err := dao.Bind(d, ChunkSnippet, match).Select(ChunkDoc, ChunkOrd, ChunkDocPath, ChunkBreadcrumb, ChunkByteStart,
+		ChunkByteEnd, ChunkDocActiveGen, ChunkSnippet)
 	if err != nil {
 		return nil, fmt.Errorf("index: lexical search: %w", err)
 	}
@@ -145,23 +158,55 @@ func (v *View) SemanticState(ctx context.Context) (search.State, error) {
 // Signals are each document's in-links (the documents linking to it from their bodies, itself not
 // counted) and tags. A frontmatter relation is not an in-link: whether relations should lift a
 // document is a ranking change of its own, to be measured, so they leave the boost as it was.
+//
+// Two statements whatever the number of documents: the body links into any of them, counted by
+// distinct source per target here, and their tags in key order. One pair per document cost a
+// search on PostgreSQL a round trip each (3.1 ms of a 27 ms hybrid search for 20 documents).
 func (v *View) Signals(ctx context.Context, docs []int64) (map[int64]search.Signals, error) {
 	out := make(map[int64]search.Signals, len(docs))
+	if len(docs) == 0 {
+		return out, nil
+	}
+	ids := make([]any, len(docs))
+	for i, id := range docs {
+		ids[i] = id
+		out[id] = search.Signals{}
+	}
 	body := make([]any, len(BodyKinds))
 	for i, k := range BodyKinds {
 		body[i] = k
 	}
+	// a document's links to itself are read too, and skipped below: they are a document's own few
+	links, err := v.s.linksOut(v.tx).WithPredicate(dao.In(`"link"."dst_doc"`, ids)).
+		WithPredicate(dao.In(`"link"."kind"`, body)).Select(LinkSrc, LinkDst)
+	if err != nil {
+		return nil, err
+	}
+	from := map[int64]map[int64]bool{}
+	for _, l := range links {
+		if l.DstDoc == nil || l.SrcDoc == *l.DstDoc {
+			continue // unresolved, or a link to itself, which is not an in-link
+		}
+		if from[*l.DstDoc] == nil {
+			from[*l.DstDoc] = map[int64]bool{}
+		}
+		from[*l.DstDoc][l.SrcDoc] = true
+	}
+	tags, err := v.s.tags(v.tx).WithPredicate(dao.In(`"doc_tag"."doc_id"`, ids)).OrderBy(dao.Asc(byKey)).
+		Select(DocValueDoc, DocValueValue)
+	if err != nil {
+		return nil, err
+	}
+	byDoc := map[int64][]string{}
+	for _, t := range tags {
+		byDoc[t.DocID] = append(byDoc[t.DocID], t.Value)
+	}
 	for _, id := range docs {
-		inLinks, err := dao.CountDistinct(v.s.linksOut(v.tx).With(LinkDst, id).Excluding(LinkSrc, id).
-			WithPredicate(dao.In(`"link"."kind"`, body)), LinkSrc)
-		if err != nil {
-			return nil, err
+		t := byDoc[id]
+		if t == nil {
+			t = []string{} // as one document's read answered: no tags, not none read
 		}
-		tags, err := v.s.tagsOf(v.tx, id)
-		if err != nil {
-			return nil, err
-		}
-		out[id] = search.Signals{InLinks: int(inLinks), Tags: tags}
+		out[id] = search.Signals{InLinks: len(from[id]), Tags: t}
 	}
 	return out, nil
 }

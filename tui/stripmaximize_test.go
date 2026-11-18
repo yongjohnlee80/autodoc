@@ -63,7 +63,7 @@ func stripAt(screen string) (x, y int) {
 }
 
 func TestTheTerminalsStripMaximizesAndRestores(t *testing.T) {
-	_, r := runShellTUI(t, nil)
+	_, r := runLineShellTUI(t, nil)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
 	row0, _ := frameAt(r.s.String())
@@ -76,7 +76,7 @@ func TestTheTerminalsStripMaximizesAndRestores(t *testing.T) {
 
 func TestTheAgentsStripMaximizesAndRestores(t *testing.T) {
 	agent, _ := fakeAgent(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "fake", Command: agents.ShellQuote(agent)}}, "fake")
+	_, r, _ := runAgentTUI(t, agentsFolder(t), []agents.AgentProfile{{Name: "fake", Command: agentCall(agent)}}, "fake")
 	r.leader(t, 'g')
 	r.s.WaitForText(t, "started")
 	stripMaximizes(t, r, "agent")

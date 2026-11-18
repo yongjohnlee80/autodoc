@@ -360,8 +360,8 @@ func TestHostCloseFromACardHidesItsPanel(t *testing.T) {
 	}
 }
 
-// TestACardsRightClickMenuClosesIt: a right press on a card opens its menu; Close (Esc) closes the
-// panel as Esc does, the plugin running on.
+// TestACardsRightClickMenuClosesIt: a right press on a card opens its menu; Close (Esc), the row
+// below Layout ›, closes the panel as Esc does, the plugin running on.
 func TestACardsRightClickMenuClosesIt(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -373,7 +373,7 @@ func TestACardsRightClickMenuClosesIt(t *testing.T) {
 	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseRight, X: x + 2, Y: y + 1},
 		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseRight, X: x + 2, Y: y + 1})
 	r.s.WaitForText(t, "Close (Esc)")
-	r.keys(t, enter())
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyDown}, enter())
 	waitSaid(t, logs, "card", "hide")
 	r.s.WaitFor(t, "the panel closed", func(string) bool { return !r.panelShown("card") })
 	stillRunning(t, run, "the menu's Close")

@@ -273,7 +273,9 @@ func TestAPartialKBTypeReopensOnTheAddedWorkspace(t *testing.T) {
 	})
 }
 
-// A plan longer than one call is sent in batches, and all of it lands.
+// A plan longer than one call is sent in batches, and all of it lands. The add and its two batches
+// are the daemon's work, 71 files written: on a loaded Windows runner more than the screen's own
+// wait at times, so the cell waits for them as daemon work (daemonWait), then for the toast.
 func TestAKBTypeIsSentInBatches(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
@@ -283,7 +285,13 @@ func TestAKBTypeIsSentInBatches(t *testing.T) {
 	r.openAdd(t)
 	r.pickKB(t, 2)
 	r.saveForm(func(f *settingsForm) { f.name, f.root = "zk", root })
-	r.s.WaitForText(t, "added workspace zk as Zettelkasten")
+	r.waitWithin(t, "the type's 71 files in permanent/", daemonWait, func() bool {
+		entries, err := os.ReadDir(filepath.Join(root, "permanent"))
+		return err == nil && len(entries) == 71
+	})
+	r.waitWithin(t, "the add's toast", daemonWait, func() bool {
+		return strings.Contains(r.s.String(), "added workspace zk as Zettelkasten")
+	})
 	entries, err := os.ReadDir(filepath.Join(root, "permanent"))
 	if err != nil || len(entries) != 71 {
 		t.Fatalf("permanent/ holds %d files, want 71: %v", len(entries), err)

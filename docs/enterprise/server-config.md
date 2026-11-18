@@ -79,15 +79,20 @@ when it is missing, then applies its migrations there. Your tables are never wri
 | `ann_threshold` | `50000` | How many embeddings of its model a tenant has before its semantic searches become approximate, through the model's HNSW index. Below it they're exact. | below 1 |
 | `ann_max_scan_tuples` | `1000` | The most index tuples one approximate search scans past its first candidates (pgvector's `hnsw.max_scan_tuples`). It bounds what a filtered search spends before it answers exactly: a selective filter mostly comes back short, and at 1,000,000 embeddings under a 1% filter a budget of 40,000 made the search 7.6× slower than exact, against 1.4× at 1,000. Unfiltered searches are unaffected. | outside 1 to 2147483647 |
 | `ann_scan_mem_multiplier` | `2` | The memory one approximate search's scan may use, as a multiple of `work_mem` (pgvector's `hnsw.scan_mem_multiplier`). | outside 1 to 1000 |
+| `ann_exact_scope_docs` | `1000` | A filtered search whose filter and access admit at most this many of the tenant's ready documents is answered exactly, without trying the index: the index's candidates for so few come back short, and the exact search then runs after the scan was already paid for. At 56,000 documents and 168,000 embeddings, a search scoped to a small label took 49 ms through the index and 12 ms answered exactly up front. `0` always tries the index first. | below 0 or above 100000 |
 | `ann_ef_construction` | `200` | How wide each model's HNSW index is built (pgvector's `ef_construction`). It decides recall more than any search setting: at pgvector's default of 64, a tenant sharing the index found 0.938 to 0.990 of its exact top ten across 20 builds, and 8 of those builds were below 0.95; at 200, 0.994 to 1.000. A wider build takes longer. | outside 4 to 1000, or below twice `ann_m` |
 | `ann_m` | `16` | The links each node of the index keeps (pgvector's `m`). 32 did no better than 16 at an ef_construction of 200. | outside 2 to 100 |
+| `ann_defer_backlog` | `2000` | A model's wanted index waits while a tenant whose active model it is has this many documents or more not yet ready (its bulk load under way), so the load's inserts don't pay the index's cost. 0 never waits. | below 0 |
+| `ann_defer_max` | `"24h"` | The longest a model's wanted index waits for a bulk load: past it, the index is built whatever the backlog. | not a duration, or 0 or less |
+| `ann_maintenance_work_mem` | `"512MB"` | The memory the session building an index may use (PostgreSQL's `maintenance_work_mem`, for that session only). A parallel build keeps it in the database's shared memory (`/dev/shm`): give a database in a container `--shm-size` at least this, or the build falls back to running without parallel workers, and the server logs a warning saying so. | not a size in kB (1024 or more), MB or GB |
 
-The server opens three connection pools on the DSN:
+The server opens two connection pools on the DSN:
 
 - the index's, where every connection's `search_path` is `schema, public` (pgvector is usually
-  installed in `public`);
-- the one your views run on, with the role's own `search_path`, so a view runs as it does in `psql`;
-- one pinned connection per source, which holds that tenant's writer lock.
+  installed in `public`), and where each tenant's writer lease is a row of `rag_writer_lease`. Its
+  connections end a transaction left idle for a minute, so a hung writer never keeps a standby
+  from its tenant;
+- the one your views run on, with the role's own `search_path`, so a view runs as it does in `psql`.
 
 **Approximate semantic search.** The server builds one HNSW index per embedding model, in the
 background, one index at a time across every server on the database.
@@ -95,6 +100,8 @@ background, one index at a time across every server on the database.
   it, semantic search is exact.
 - Above the threshold it is approximate. The nearest candidates come through the index, are then
   ordered exactly, and ties are ordered within the returned set.
+- A filtered search whose scope admits at most `ann_exact_scope_docs` documents is answered
+  exactly up front, the index untried.
 - A search whose candidates come back short (a selective filter, or a scan that hit
   `ann_max_scan_tuples`) is answered exactly instead, and counted as an underfill.
 - A model of more than 4,000 dimensions has no index and stays exact.
@@ -118,12 +125,14 @@ worker.
 | `model` | (required) | The model's name. | missing or blank; `--check`: an Ollama server without it |
 | `key_env` | none | The name of the environment variable holding the provider's API key, sent as a bearer token. | given, and the variable is not set or is empty; `--check`: the provider refuses the key |
 | `slots` | `4` | How many embedding requests may be in flight at once, across every tenant. | below 1 or above 64 |
+| `batch` | `64` | How many texts one embedding request carries, at most. | below 1 or above 256 |
+| `call_timeout` | `"2m"` | How long one embedding request may take before it is given up. | below `1s` or above `30m` |
 
 ### How the server embeds
 
 - **Once per distinct text.** The worker embeds the chunk texts that have no vector under the
-  model, each distinct text once per tenant, in batches of 64 texts, at most `slots` requests at a
-  time whichever tenants they are for. Vectors are normalized and stored in the index's schema
+  model, each distinct text once per tenant, in batches of `batch` texts, at most `slots` requests
+  at a time whichever tenants they are for. Vectors are normalized and stored in the index's schema
   (pgvector).
 - **A document is ready** for search by meaning once every one of its chunks has a vector. Until
   then it is found by words, and ingestion never waits for the worker: an ingester's commit only
@@ -132,10 +141,18 @@ worker.
   after a wait that doubles from a second to a minute; the log says so each time. That includes a
   provider that does not answer when the server starts: the server runs, ingests, and answers by
   words until it does.
+- **A slow provider is asked for less at once.** A request that runs out of `call_timeout` halves
+  the batch and the requests in flight, down to one text and one request, and the texts are asked
+  for again at once at the smaller size: a provider on CPU, or loading its model, embeds
+  something rather than nothing. The log says so once, with what to change: `batch`,
+  `call_timeout`, or the provider's cores. Once four requests in a row answer in under half their
+  time, the batch doubles, then the requests in flight rise by one, back to `batch` and `slots`
+  (logged once). Only a request of one text that still runs out of time is the provider failing.
+  The status shows the pace now ([operations](operations.md)).
 - **A text the provider rejects** (too long, say) is set aside for an hour and logged, and the rest
   of its batch is embedded. Its document is found by words meanwhile.
 - **One writer per tenant.** The worker writes a tenant only while this server's ingester holds the
-  tenant's lock, so a standby server never touches it.
+  tenant's writer lease, so a standby server never touches it.
 - **Changing the model is a switch, with no gap in search.** The model's identity is its provider,
   name, digest (Ollama reports one) and dimensions, so a new `model`, or a model that now answers
   with another size, is a new model. At the next start the worker records it as the tenant's
@@ -161,6 +178,7 @@ through the library ([web-integration](web-integration.md)). With it, the server
 | Field | Default | Meaning | Refused when |
 |---|---|---|---|
 | `listen` | `127.0.0.1:8730` | The address the API listens on. | not `host:port`; not loopback with neither TLS nor `proxy` |
+| `max_tenant_searches` | the store pool's size less two | How many tenants' searches the requests naming several tenants run at once, across every request; beyond it a tenant waits its turn under its request's deadline. | outside 1 to 1000 |
 | `tls_cert`, `tls_key` | none | The certificate and key files, relative to this file: to listen beyond loopback over HTTPS. | only one given; a file can't be read |
 | `proxy` | `false` | `true`: a proxy in front terminates TLS, so the API may listen beyond loopback over plain HTTP. `--check` warns that requests cross the network between the two in clear text: keep it private ([operations](operations.md#behind-a-proxy)). | given with `tls_cert` |
 
@@ -228,21 +246,58 @@ Each source is one `.view` file, indexed into a tenant of its own. There must be
 
 | Field | Default | Meaning | Refused when |
 |---|---|---|---|
-| `tenant` | (required) | The tenant the source is indexed into. It keys every index row, names the source in the log, and keys its writer lock. | missing; not letters, digits, `.`, `_` and `-` starting with a letter or digit, at most 64; another source has it |
+| `tenant` | (required) | The tenant the source is indexed into. It keys every index row, names the source in the log, and keys its writer lease. | missing; not letters, digits, `.`, `_` and `-` starting with a letter or digit, at most 64; another source has it |
 | `view` | (required) | The `.view` file, relative to this file. | missing; the view is refused ([its rules](views.md)) |
+| `deletes` | (none) | A deletes view, relative to this file: the tombstones of the source's rows deleted outright, which every pass applies ([deletes](views.md#deletes)). Without one, such a row's document leaves the index at the next complete refresh. | the view is refused ([its rules](views.md)) |
 | `interval` | `1m` | How often the rows changed since the cursor are read. | under `1s` |
 | `refresh` | `24h` | How often every row is read again: content changes the rows' `updated_at` missed are written, and the documents of rows gone are deleted. | shorter than `interval` |
 | `refresh_retry` | `15m` | How soon a refresh that failed, or couldn't read every row, is tried again: the documents of rows gone wait only for a refresh that completes. | under `1m`; over `refresh` |
 | `lag` | `1m` | How far behind the database's clock a pass reads. A transaction open longer than this could commit a row behind the cursor, which only the next refresh would read. `"0s"` is none. | negative |
 | `access` | (required) | The row fields every search of the tenant must be scoped by: say, `["label_id"]`. Each row must carry every one. | missing or empty; a name empty, repeated or containing `=` |
 
-When the server starts it records each tenant's access fields and view name as the tenant's
-policy, which search reads: a tenant can never be searched unscoped.
+When the server starts it records each tenant's access fields, view name and declared facets as
+the tenant's policy, which search reads: a tenant can never be searched unscoped.
+
+### `[source.facets]`: what a search may filter on (optional)
+
+```toml
+[[source]]
+tenant = "releases"
+view   = "views/release.view"
+access = ["label_id"]
+[source.facets]
+status    = "keyword"
+territory = "keyword"
+released  = "date"
+bpm       = "number"
+```
+
+Each name is a row field, and each value is its type:
+
+| Type | A row's value | A search filters it by |
+|---|---|---|
+| `keyword` | a string, number or boolean, or a list of them, kept as given (case included) | `filter.facets`: equality, values ORed, fields ANDed |
+| `number` | a JSON number, or a string that parses as one (NaN and infinities refused) | `filter.ranges`: `gt`, `gte`, `lt`, `lte` |
+| `date` | `YYYY-MM-DD` (midnight UTC) or RFC 3339, or a list of them | `filter.ranges`, as for a number |
+
+- A missing key, a `null`, an empty list or an empty string is no value. A value that doesn't
+  parse as its type is the row's error, naming the facet: the row is quarantined, as any row that
+  can't be indexed is.
+- **Refused when the file loads** (exit 2), naming the source and the facet: a name that is an
+  access field (in any case), `tags`, `path` or `title`; a name that isn't a plain identifier
+  (letters, digits and `_`, not starting with a digit); a type other than the three.
+- **A changed declaration refreshes the tenant at once.** A record's facet values are kept with
+  its document, and a pass reads only changed rows, so every record is read again. The refresh
+  is due until one completes with the source's declaration, whichever server loaded the new
+  configuration, and across restarts. The status shows `"refresh_due": "facets"` until then.
+  Searches answer from the documents as they were until the refresh reaches them: a filter on a
+  value a document doesn't have yet doesn't match it. The refresh embeds nothing again, since the
+  records' text is unchanged.
 
 ## Exit codes
 
 | Code | When |
 |---|---|
-| 0 | stopped by SIGINT or SIGTERM, with every lock released; or `--check` found nothing wrong |
-| 1 | the file can't be read; the database can't be reached; a tenant's writer lock was lost (restart it: it waits for the lock and takes it again) |
+| 0 | stopped by SIGINT or SIGTERM, with every writer lease released; or `--check` found nothing wrong |
+| 1 | the file can't be read; the database can't be reached; a tenant's writer lease was lost (restart it: it waits for the lease and takes it again) |
 | 2 | the configuration or a view is refused, the field named; `--check` refused a view's order, or the embedding provider refused the key or has no such model |

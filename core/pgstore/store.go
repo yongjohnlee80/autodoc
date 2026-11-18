@@ -5,8 +5,10 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/dao/deploy"
@@ -40,9 +42,10 @@ var ErrNoTenant = errs.Sentinel(errs.ErrInvalidArgument, "pgstore: no tenant")
 // A Store is safe for concurrent use.
 type Store struct {
 	tenant string
-	rw     schemas // writes: every transaction READ COMMITTED
-	ro     schemas // views: every transaction REPEATABLE READ, READ ONLY
-	ann    *ANN    // the server's approximate search (WithANN); nil is exact only
+	conn   dao.DataConn // the pool every schema runs on (Fenced builds its own over it)
+	rw     schemas      // writes: every transaction READ COMMITTED
+	ro     schemas      // views: every transaction REPEATABLE READ, READ ONLY
+	ann    *ANN         // the server's approximate search (WithANN); nil is exact only
 }
 
 // Option configures a Store at New.
@@ -58,7 +61,7 @@ func New(conn dao.DataConn, tenant string, opts ...Option) (*Store, error) {
 	if tenant == "" {
 		return nil, ErrNoTenant
 	}
-	s := &Store{tenant: tenant, rw: newSchemas(committedConn{conn}), ro: newSchemas(snapshotConn{conn})}
+	s := &Store{tenant: tenant, conn: conn, rw: newSchemas(committedConn{conn}), ro: newSchemas(snapshotConn{conn})}
 	for _, o := range opts {
 		o(s)
 	}
@@ -82,6 +85,40 @@ type committedConn struct{ dao.DataConn }
 
 func (c committedConn) Begin(ctx context.Context) (dao.TxConn, error) {
 	return dao.BeginConnTx(ctx, c.DataConn, dao.TxOptions{Isolation: dao.TxReadCommitted})
+}
+
+// Fence is a fenced Store's first statement in each of its write transactions (Fenced): q is the
+// transaction, and an error rolls it back before anything is written.
+type Fence func(ctx context.Context, q dao.Querier) error
+
+// fencedConn is committedConn whose every transaction begins with its fence.
+type fencedConn struct {
+	committedConn
+	fence Fence
+}
+
+func (c fencedConn) Begin(ctx context.Context) (dao.TxConn, error) {
+	tx, err := c.committedConn.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.fence(ctx, tx); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	return tx, nil
+}
+
+// Fenced is s for a tenant's writer: the same Store, every write transaction of it beginning with
+// f, which confirms the writer's lease inside the transaction (core/pglease) and fails it when the
+// lease is not the writer's. Every write method runs in a transaction, so every write is fenced;
+// reads are not, and nor are the ANN builder's index writes, which go through the ANN's own
+// connection: an index is the server's, shared by every tenant, never one writer's. s itself is
+// unchanged.
+func (s *Store) Fenced(f Fence) *Store {
+	c := *s
+	c.rw = newSchemas(fencedConn{committedConn{s.conn}, f})
+	return &c
 }
 
 // View runs fn in one View: one REPEATABLE READ, READ ONLY transaction, so every retriever and
@@ -130,14 +167,18 @@ func (s *Store) ViewWithin(ctx context.Context, access map[string][]string, fn f
 // from the View would let a scope checked against the old policy read the new documents.
 func (s *Store) ViewPolicy(ctx context.Context, access map[string][]string, check func(p Policy, access map[string][]string) error, fn func(v *View) error) error {
 	return dao.RunTx(ctx, func(tx *dao.Transaction) error {
-		r, err := s.ro.policy.On(tx, dao.WithQueryContext(ctx)).With(pTenant, s.tenant).Get(pAccess, pView)
+		r, err := s.ro.policy.On(tx, dao.WithQueryContext(ctx)).With(pTenant, s.tenant).Get(pAccess, pView, pFacets)
 		switch {
 		case errors.Is(err, dao.ErrNoRows):
 			return ErrNoPolicy
 		case err != nil:
 			return fmt.Errorf("pgstore: policy: %w", err)
 		}
-		p := Policy{AccessFields: r.AccessFields, View: r.View}
+		facets, err := facetsOf(r.Facets)
+		if err != nil {
+			return err
+		}
+		p := Policy{AccessFields: r.AccessFields, View: r.View, Facets: facets}
 		if err := CheckScope(p, access); err != nil {
 			return err
 		}
@@ -203,16 +244,22 @@ func accessPredicates(access map[string][]string) ([]dao.Predicate, error) {
 		fields = append(fields, f)
 	}
 	slices.Sort(fields)
-	facets := dao.ArrayOp("facet", qcol(tDoc, string(dFacets)))
 	preds := make([]dao.Predicate, 0, len(fields))
 	for _, f := range fields {
-		ors := make([]dao.Predicate, 0, len(access[f]))
-		for _, v := range access[f] {
-			ors = append(ors, facets.Predicate(f+"="+v))
-		}
-		preds = append(preds, dao.Or(ors...))
+		preds = append(preds, anyFacet(f, access[f]))
 	}
 	return preds, nil
+}
+
+// anyFacet is "the document has one of field's vals": the facets array overlapping the field=value
+// pairs, which the GIN index on facets answers. The membership form (pair = ANY(facets)) reads the
+// same rows but no index: every scoped read then scanned the tenant's documents.
+func anyFacet(field string, vals []string) dao.Predicate {
+	pairs := make([]string, len(vals))
+	for i, v := range vals {
+		pairs[i] = field + "=" + v
+	}
+	return dao.Raw(qcol(tDoc, string(dFacets))+" && ?", pairs)
 }
 
 var _ search.Store[int64, *View] = (*Store)(nil)
@@ -232,6 +279,14 @@ type Document struct {
 	// SourceID is the source row the document was rendered from (an enterprise .view's id): a
 	// search hit links back to its record by it. "" for none.
 	SourceID string
+	// SourceAt is the updated_at of the source row it was rendered from: a delete of the row
+	// (Batch.DeleteSource) removes the document only when it is no older than this. The zero
+	// time is none, which any delete removes.
+	SourceAt time.Time
+	// Values are the document's number and date facets' values (a date as Unix seconds), by
+	// field: a list value is several. A Range filters on them. They are replaced with the
+	// document, and go with it.
+	Values map[string][]float64
 }
 
 // The kinds of chunk (000002): a document's section, or its abstract. WithSectionsOnly leaves the
@@ -240,6 +295,15 @@ const (
 	ChunkSection  = "section"
 	ChunkAbstract = "abstract"
 )
+
+// sourceAt is d.SourceAt as rag_document.source_at keeps it: NULL for none.
+func (d Document) sourceAt() *time.Time {
+	if d.SourceAt.IsZero() {
+		return nil
+	}
+	t := d.SourceAt
+	return &t
+}
 
 // kindOf is chunk i's kind in d: ChunkSection unless d says otherwise.
 func (d Document) kindOf(i int) string {
@@ -255,6 +319,16 @@ func (d Document) check() error {
 	if d.Path == "" {
 		return errs.Wrap(errs.ErrInvalidArgument, "pgstore: a document has no path")
 	}
+	for field, vals := range d.Values {
+		if !facetName.MatchString(field) {
+			return errs.Wrap(errs.ErrInvalidArgument, "pgstore: %s: %q is not a facet name", d.Path, field)
+		}
+		for _, v := range vals {
+			if math.IsNaN(v) || math.IsInf(v, 0) {
+				return errs.Wrap(errs.ErrInvalidArgument, "pgstore: %s: the facet %s has a value that is not finite", d.Path, field)
+			}
+		}
+	}
 	if len(d.Kinds) != 0 && len(d.Kinds) != len(d.Chunks) {
 		return errs.Wrap(errs.ErrInvalidArgument, "pgstore: %s has %d chunks and %d kinds", d.Path, len(d.Chunks), len(d.Kinds))
 	}
@@ -266,6 +340,9 @@ func (d Document) check() error {
 type DocInfo struct {
 	Path, Version, Indexer string
 	Generation             int64
+	// SourceAt is the source row's updated_at it was written from; the zero time for none (a
+	// document written before source_at was kept, or by a writer that has no source row).
+	SourceAt time.Time
 }
 
 // Docs pages the tenant's documents in path order: at most limit after the path after ("" from the
@@ -295,7 +372,7 @@ func (s *Store) docsPage(ctx context.Context, after string, limit int, unready b
 	if after != "" {
 		d = d.WithPredicate(dao.Gt(string(dByPath), after))
 	}
-	rows, err := d.OrderBy(dao.Asc(dByPath)).Limit(uint64(limit)+1).Select(dPath, dVersion, dIndexer, dGen)
+	rows, err := d.OrderBy(dao.Asc(dByPath)).Limit(uint64(limit)+1).Select(dPath, dVersion, dIndexer, dGen, dSrcAt)
 	if err != nil {
 		return nil, false, fmt.Errorf("pgstore: docs: %w", err)
 	}
@@ -304,7 +381,11 @@ func (s *Store) docsPage(ctx context.Context, after string, limit int, unready b
 			more = true
 			break
 		}
-		docs = append(docs, DocInfo{Path: r.Path, Version: r.Version, Indexer: r.Indexer, Generation: r.Generation})
+		info := DocInfo{Path: r.Path, Version: r.Version, Indexer: r.Indexer, Generation: r.Generation}
+		if r.SourceAt != nil {
+			info.SourceAt = *r.SourceAt
+		}
+		docs = append(docs, info)
 	}
 	return docs, more, nil
 }
@@ -363,8 +444,10 @@ var ErrWriteRace = errs.Sentinel(errs.ErrPrecondition, "pgstore: the document ch
 const putRetries = 8
 
 // Put writes a document: replaced whole when its path exists (its generation bumped, its chunks
-// and links replaced), created otherwise, in one transaction. It is not ready for semantic search
-// until MarkReady says so. It returns the document's id.
+// and links replaced), created otherwise, in one transaction. A document created is not ready for
+// semantic search until MarkReady says so; one replaced is ready at once when every text of it has
+// a vector under the active model (embedded), and otherwise waits for MarkReady too. It returns the
+// document's id.
 //
 // The generation bump and the chunk replacement are one compare-and-set: the update carries the
 // generation it read, so a concurrent Put of the same path that committed first makes this one's
@@ -422,13 +505,14 @@ var putHook func()
 // first insert two writers both made is a duplicate, and an error ends a PostgreSQL transaction.
 func (s *Store) putIn(ctx context.Context, tx *dao.Transaction, d Document, tags, facets []string, tagText string) (int64, error) {
 	var id int64
+	rewritten := false // an existing document's edit, not a first write
 	err := func() error {
 		cur, err := s.rw.doc.On(tx, dao.WithQueryContext(ctx)).With(dTenant, s.tenant).With(dPath, d.Path).Get(dID, dGen)
 		switch {
 		case errors.Is(err, dao.ErrNoRows):
 			id, err = s.rw.doc.On(tx, dao.WithQueryContext(ctx)).Set(dTenant, s.tenant).Set(dPath, d.Path).Set(dTitle, d.Title).
 				Set(dTags, tags).Set(dFacets, facets).Set(dVersion, d.Version).Set(dIndexer, d.Indexer).
-				Set(dGen, int64(1)).Set(dReady, false).Set(dSource, d.SourceID).Insert()
+				Set(dGen, int64(1)).Set(dReady, false).Set(dSource, d.SourceID).Set(dSrcAt, d.sourceAt()).Insert()
 			if err != nil {
 				// two first writers of one path both saw no row: the unique (tenant, path) makes
 				// the second's insert a duplicate — the same race, retried on the update path
@@ -449,7 +533,7 @@ func (s *Store) putIn(ctx context.Context, tx *dao.Transaction, d Document, tags
 			n, err := dao.UpdateAffected(s.rw.doc.On(tx, dao.WithQueryContext(ctx)).With(dTenant, s.tenant).With(dID, id).
 				With(dGen, cur.Generation).
 				Set(dTitle, d.Title).Set(dTags, tags).Set(dFacets, facets).Set(dVersion, d.Version).Set(dIndexer, d.Indexer).
-				Set(dGen, cur.Generation+1).Set(dReady, false).Set(dSource, d.SourceID))
+				Set(dGen, cur.Generation+1).Set(dReady, false).Set(dSource, d.SourceID).Set(dSrcAt, d.sourceAt()))
 			if err != nil {
 				return err
 			}
@@ -462,6 +546,10 @@ func (s *Store) putIn(ctx context.Context, tx *dao.Transaction, d Document, tags
 			if err := s.rw.link.On(tx, dao.WithQueryContext(ctx)).With(lTenant, s.tenant).With(lSrc, id).Delete(); err != nil {
 				return err
 			}
+			if err := s.rw.value.On(tx, dao.WithQueryContext(ctx)).With(vTenant, s.tenant).With(vDoc, id).Delete(); err != nil {
+				return err
+			}
+			rewritten = true
 		}
 		if len(d.Chunks) > 0 {
 			b := s.rw.chunk.On(tx, dao.WithQueryContext(ctx)).Batch().ForceInsert()
@@ -470,6 +558,18 @@ func (s *Store) putIn(ctx context.Context, tx *dao.Transaction, d Document, tags
 				b.Add(map[chunkField]any{cTenant: s.tenant, cDoc: id, cOrd: i, cCrumb: c.Breadcrumb, cBody: c.Body,
 					cEmb: c.Embed, cTitle: d.Title, cTags: tagText,
 					cStart: c.ByteStart, cEnd: c.ByteEnd, cHash: h[:], cKind: d.kindOf(i)})
+			}
+			if err := b.Flush(); err != nil {
+				return err
+			}
+		}
+		if len(d.Values) > 0 {
+			// a value repeated in a list is one row: the key is (tenant, field, value, doc)
+			b := s.rw.value.On(tx, dao.WithQueryContext(ctx)).Batch().ForceInsert().SkipConflicts()
+			for _, field := range sortedNames(d.Values) {
+				for _, v := range d.Values[field] {
+					b.Add(map[valueField]any{vTenant: s.tenant, vDoc: id, vField: field, vValue: v})
+				}
 			}
 			if err := b.Flush(); err != nil {
 				return err
@@ -484,9 +584,31 @@ func (s *Store) putIn(ctx context.Context, tx *dao.Transaction, d Document, tags
 				return err
 			}
 		}
+		if rewritten {
+			// an edit whose every text already has a vector under the active model stays ready in
+			// this write, rather than leaving semantic search until the embedding worker marks it
+			if _, err := dao.UpdateAffected(s.rw.doc.On(tx, dao.WithQueryContext(ctx)).With(dTenant, s.tenant).With(dID, id).
+				WithPredicate(embedded()).Set(dReady, true)); err != nil {
+				return err
+			}
+		}
 		return nil
 	}()
 	return id, err
+}
+
+// embedded is "every chunk of the document has a vector under the tenant's active model, and no
+// switch to another model is under way", MarkReady's verdict read in the writing statement, over
+// the chunks this transaction wrote. While a switch fills its target, an edit is left unready, as
+// before: the worker marks it under the model it fills. A first write is not asked: its texts are
+// new as a rule, and a load of thousands would pay a statement each for nothing.
+func embedded() dao.Predicate {
+	doc := func(c docField) string { return qcol(tDoc, string(c)) }
+	return dao.Raw("EXISTS (SELECT 1 FROM " + tMeta + " m WHERE m.tenant = " + doc(dTenant) +
+		" AND m.active_model <> '' AND COALESCE(m.target_model, '') IN ('', m.active_model)" +
+		" AND NOT EXISTS (SELECT 1 FROM " + tChunk + " k WHERE k.tenant = " + doc(dTenant) + " AND k.doc = " + doc(dID) +
+		" AND NOT EXISTS (SELECT 1 FROM " + tEmb + " e WHERE e.tenant = k.tenant AND e.model = m.active_model" +
+		" AND e.text_hash = k.text_hash)))")
 }
 
 func nonNil(s []string) []string {
@@ -508,12 +630,16 @@ func (s *Store) Embed(ctx context.Context, model string, vecs []Embedding) error
 	if len(vecs) == 0 {
 		return nil
 	}
-	b := s.rw.emb.DAO(dao.WithQueryContext(ctx)).Batch().ForceInsert().SkipConflicts()
-	for _, e := range vecs {
-		h := e.TextHash
-		b.AddRow(&embRow{Tenant: s.tenant, Model: model, TextHash: h[:], Vec: e.Vec})
-	}
-	if err := b.Flush(); err != nil {
+	// in a transaction, as every write is, so a fenced Store's (Fenced) is fenced
+	err := dao.RunTx(ctx, func(tx *dao.Transaction) error {
+		b := s.rw.emb.On(tx, dao.WithQueryContext(ctx)).Batch().ForceInsert().SkipConflicts()
+		for _, e := range vecs {
+			h := e.TextHash
+			b.AddRow(&embRow{Tenant: s.tenant, Model: model, TextHash: h[:], Vec: e.Vec})
+		}
+		return b.Flush()
+	})
+	if err != nil {
 		return fmt.Errorf("pgstore: embed: %w", err)
 	}
 	return nil
@@ -583,7 +709,10 @@ func (s *Store) MarkReady(ctx context.Context, path, model string) (bool, error)
 
 // Delete removes the document at path, with its chunks and links. A path not stored is no error.
 func (s *Store) Delete(ctx context.Context, path string) error {
-	if err := s.rw.doc.DAO(dao.WithQueryContext(ctx)).With(dTenant, s.tenant).With(dPath, path).Delete(); err != nil {
+	err := dao.RunTx(ctx, func(tx *dao.Transaction) error {
+		return s.rw.doc.On(tx, dao.WithQueryContext(ctx)).With(dTenant, s.tenant).With(dPath, path).Delete()
+	})
+	if err != nil {
 		return fmt.Errorf("pgstore: delete %s: %w", path, err)
 	}
 	return nil
@@ -620,6 +749,9 @@ func (s *Store) Drop(ctx context.Context) error {
 		}
 		return nil
 	})
+	if s.ann != nil {
+		s.ann.forget(s.tenant) // a drop that failed forgets too: a probe costs only a read
+	}
 	if err != nil {
 		return fmt.Errorf("pgstore: drop: %w", err)
 	}
@@ -631,7 +763,9 @@ func (s *Store) Drop(ctx context.Context) error {
 // model, and SemanticState is StateSwitching while target is set and differs from active. Which
 // documents are ready under the new active model is the caller's to mark again.
 func (s *Store) SetModels(ctx context.Context, active, target string) error {
-	err := s.rw.meta.DAO(dao.WithQueryContext(ctx)).Set(mTenant, s.tenant).Set(mActive, active).Set(mTarget, target).Upsert()
+	err := dao.RunTx(ctx, func(tx *dao.Transaction) error {
+		return s.rw.meta.On(tx, dao.WithQueryContext(ctx)).Set(mTenant, s.tenant).Set(mActive, active).Set(mTarget, target).Upsert()
+	})
 	if err != nil {
 		return fmt.Errorf("pgstore: set models: %w", err)
 	}
@@ -700,6 +834,9 @@ func (s *Store) ReclaimModels(ctx context.Context) (int, error) {
 			n = len(rows)
 			return nil
 		})
+		if n > 0 && s.ann != nil {
+			s.ann.forget(s.tenant) // what the approximate search remembers of its embeddings
+		}
 		if err != nil {
 			return total, fmt.Errorf("pgstore: reclaiming models: %w", err)
 		}
@@ -707,6 +844,82 @@ func (s *Store) ReclaimModels(ctx context.Context) (int, error) {
 			return total, nil
 		}
 		total += n
+	}
+}
+
+// sweepBatch bounds the embeddings one transaction of SweepEmbeddings deletes (a variable, so a
+// cell can lower it).
+var sweepBatch uint64 = 5000
+
+// sweepRead is called between a batch's read of its orphans and their delete: a cell's seam, to
+// give a text a chunk in that window.
+var sweepRead = func(context.Context) {}
+
+// orphan is "no chunk of the tenant has this embedding's text", evaluated where it is used: in the
+// statement that reads the orphans, and again in the one that deletes them, at its own snapshot.
+func orphan() dao.Predicate {
+	return dao.Raw("NOT EXISTS (SELECT 1 FROM " + tChunk + " k WHERE k.tenant = " + qcol(tEmb, string(eTenant)) +
+		" AND k.text_hash = " + qcol(tEmb, string(eHash)) + ")")
+}
+
+// SweepEmbeddings deletes the tenant's embeddings, under every model, of texts no chunk of the
+// tenant has any more: a document rewritten with other text leaves its old texts' vectors, and a
+// vector the embedding worker wrote for a text whose last chunk a delete had just taken is left
+// too. Without the sweep a store whose documents change only grows. It runs in batches of at most
+// sweepBatch, each its own transaction (a fenced Store's fenced), and returns how many it deleted.
+//
+// Each batch reads its orphans, then deletes them with the same NOT EXISTS evaluated again in the
+// deleting statement: a text that gained a chunk between the two keeps its vector. It is the
+// tenant's writer's to run, between its own writes (the ingester, under its lease), so no chunk
+// of the tenant is being written while it runs; the embedding worker writes vectors, never
+// chunks. Were a needed vector ever taken, its document would go unready and its text be
+// embedded again: a provider call, never a wrong answer.
+//
+// A search running meanwhile reads no row the sweep deletes: a search joins every vector to a
+// chunk, and an orphan has none. A model's ANN index loses the orphans' entries, which no search
+// returns either.
+func (s *Store) SweepEmbeddings(ctx context.Context) (int, error) {
+	total := 0
+	for {
+		read, deleted := 0, 0
+		err := dao.RunTx(ctx, func(tx *dao.Transaction) error {
+			rows, err := s.rw.emb.On(tx, dao.WithQueryContext(ctx)).With(eTenant, s.tenant).WithPredicate(orphan()).
+				Limit(sweepBatch).Select(eModel, eHash)
+			if err != nil || len(rows) == 0 {
+				return err
+			}
+			sweepRead(ctx)
+			byModel := map[string][]any{}
+			for _, r := range rows {
+				byModel[r.Model] = append(byModel[r.Model], r.TextHash)
+			}
+			read, deleted = len(rows), len(rows)
+			for model, hashes := range byModel {
+				these := func() dao.DAO[*embRow, embField, int64] {
+					return s.rw.emb.On(tx, dao.WithQueryContext(ctx)).With(eTenant, s.tenant).With(eModel, model).
+						WithPredicate(dao.In(qcol(tEmb, string(eHash)), hashes))
+				}
+				if err := these().WithPredicate(orphan()).Delete(); err != nil {
+					return err
+				}
+				kept, err := these().Count() // texts that gained a chunk since the read
+				if err != nil {
+					return err
+				}
+				deleted -= int(kept)
+			}
+			return nil
+		})
+		if deleted > 0 && s.ann != nil {
+			s.ann.forget(s.tenant) // what the approximate search remembers of its embeddings
+		}
+		if err != nil {
+			return total, fmt.Errorf("pgstore: sweeping embeddings: %w", err)
+		}
+		total += deleted
+		if uint64(read) < sweepBatch {
+			return total, nil
+		}
 	}
 }
 
@@ -734,22 +947,21 @@ func pathFilter(col string, paths []string) dao.Predicate {
 // ORed, facet values ORed within a field and fields ANDed.
 func filters(f search.Filter) []dao.Predicate {
 	var ps []dao.Predicate
-	tags := dao.ArrayOp("tag", qcol(tDoc, string(dTags)))
-	for _, t := range f.Tags {
-		ps = append(ps, tags.Predicate(t))
+	if len(f.Tags) > 0 { // every tag: the array containing them all, which the GIN index on tags answers
+		ps = append(ps, dao.Raw(qcol(tDoc, string(dTags))+" @> ?", slices.Clone(f.Tags)))
 	}
 	if p := pathFilter(qcol(tDoc, string(dPath)), f.Paths); p != nil {
 		ps = append(ps, p)
 	}
-	facets := dao.ArrayOp("facet", qcol(tDoc, string(dFacets)))
+	fields := make([]string, 0, len(f.Facets))
 	for field, vals := range f.Facets {
-		var ors []dao.Predicate
-		for _, v := range vals {
-			ors = append(ors, facets.Predicate(field+"="+v))
+		if len(vals) > 0 {
+			fields = append(fields, field)
 		}
-		if len(ors) > 0 {
-			ps = append(ps, dao.Or(ors...))
-		}
+	}
+	slices.Sort(fields) // one statement text per filter shape, whatever the map's order
+	for _, field := range fields {
+		ps = append(ps, anyFacet(field, f.Facets[field]))
 	}
 	return ps
 }

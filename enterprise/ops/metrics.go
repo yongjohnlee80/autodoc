@@ -119,13 +119,13 @@ func WriteMetrics(w io.Writer, s Snapshot, totals HTTPTotals) error {
 			sample(b, "autodoc_tenant_quarantined", labels("tenant", t.Tenant), float64(t.Quarantine))
 		}
 	}
-	family(b, "autodoc_tenant_cursor_lag_seconds", "gauge", "How far the tenant's cursor is behind the database's clock; absent until it first moves.")
+	family(b, "autodoc_tenant_cursor_lag_seconds", "gauge", "How far the tenant's index is behind its source, on the database's clock: now less the bound its last complete run read to; absent on a standby and before that run.")
 	for _, t := range tenants {
 		if t.Error == opcode.None && t.Cursor.LagSeconds != nil {
 			sample(b, "autodoc_tenant_cursor_lag_seconds", labels("tenant", t.Tenant), float64(*t.Cursor.LagSeconds))
 		}
 	}
-	family(b, "autodoc_tenant_lock_held", "gauge", "Whether this server holds the tenant's writer lock.")
+	family(b, "autodoc_tenant_lock_held", "gauge", "Whether this server holds the tenant's writer lease.")
 	for _, t := range tenants {
 		sample(b, "autodoc_tenant_lock_held", labels("tenant", t.Tenant), boolValue(t.Lock == "held"))
 	}

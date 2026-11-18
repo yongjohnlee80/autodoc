@@ -17,7 +17,7 @@ import (
 // folder can't be the entry itself.
 func TestAnAgentsPathHasItsOwnAutodocFirst(t *testing.T) {
 	a, c, _ := crewAgents(t, oneTwo)
-	seamsOf(a).agentBin = fakeBuild(t, filepath.Join(t.TempDir(), "build"))
+	seamsOf(a).setAgentBin(fakeBuild(t, filepath.Join(t.TempDir(), "build")))
 	p, _ := a.Profile("one")
 	instance, err := a.StartInstance(p)
 	if err != nil {

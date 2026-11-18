@@ -16,14 +16,156 @@ both engines, or as a comment on the engine it has no work on, saying why.
 - The translation: integer keys become `bigint` identities, `BLOB` becomes `bytea`, text is
   `COLLATE "C"` (byte order, as SQLite compares, which path ranges rely on), and FTS5's
   `chunk_fts` becomes `chunk.tsv`, a generated, weighted `tsvector` with a GIN index.
-- SQLite stays every AutoDoc's default. PostgreSQL is the server component's first. Opening the
-  store on PostgreSQL, searching it, sharing it between processes and copying a SQLite store into
-  it are later steps.
+- SQLite stays every AutoDoc's default. PostgreSQL is the server component's first. Searching the
+  store on PostgreSQL and copying a SQLite store into it are later steps; opening it is below.
 - A parity test applies the PostgreSQL scripts and requires SQLite's tables with the same columns
-  each; `chunk.tsv` is the one named difference.
+  each. Two differences are named: `chunk.tsv`, and the `writer_lease` table PostgreSQL alone has.
 
 In the code: `sql/deployments/deployments.go`, `sql/deployments/postgres/`,
 `sql/deployments/deployments_test.go`
+
+## The store on PostgreSQL
+
+`store.OpenAt` opens a store at a `Location`: a SQLite file, as `Open` does, or a PostgreSQL
+database and schema. On PostgreSQL:
+
+- **One writer connection, as on SQLite,** so the store's writes keep the order they have there,
+  and a pool of readers, read-only by session. The schema is made when it is missing, and the
+  PostgreSQL scripts applied in it.
+- **A writer lease in place of the file's lock.** The store claims a row of `writer_lease` (scope
+  `store`, script 000036) on a pool of its own, so a renew never waits for the writer's one
+  connection. A lease another process holds is `ErrBusy`, naming the holder: one process serves a
+  store, as on SQLite. Every write transaction confirms the lease as its first statement and holds
+  it until the write ends, and the store renews it every third of its length. The lease is the one
+  the server's tenants hold ([server decisions](server.md#a-tenant-per-source-one-writer-each)).
+- **The key is a file the location names,** since there is no store file to keep it beside.
+- **What only a SQLite file has is refused,** `ErrNotSQLite`: the quick and whole checks, the
+  damaged mark, vacuuming, compaction and the write-ahead log's checkpoint.
+- **It is the server build's.** The PostgreSQL store, its driver and its lease build only with
+  `-tags server`, as the rest of the server does, so the desktop builds carry no PostgreSQL code.
+  Without the tag, `OpenAt` of a PostgreSQL location answers `ErrNoPostgresInThisBuild`, naming the
+  server build.
+
+Lifting the one writer connection would need each write path's order checked against PostgreSQL's
+`READ COMMITTED`, where SQLite's single writer gives it for free.
+
+In the code: `core/store/postgres.go` (server build), `core/store/location.go`,
+`sql/deployments/postgres/000036_update_writer_lease.sql`
+
+## Search on PostgreSQL
+
+A store on PostgreSQL searches the same chunks with the engine's own full-text search:
+
+- **The index is a column.** `chunk.tsv` is a generated tsvector under `autodoc_english`, title at
+  class A, breadcrumb B, tags C and body D, with a GIN index. Nothing extra is joined, where SQLite
+  joins its FTS5 table.
+- **A query's words become a tsquery,** every word required (`&`) or, for the fallback, any one
+  (`|`). The text is words only, as on SQLite: no operator a user types is read as syntax.
+- **Matches rank by `ts_rank_cd`,** weighting title over breadcrumb and tags over body in the same
+  proportions as SQLite's BM25 (1, 0.5, 0.5 and 0.1, since `ts_rank_cd` takes weights up to 1).
+  Lexical scores are each engine's own, comparable within a store, never between engines.
+- **The snippet is `ts_headline`** over the body, against the query bound a second time, the
+  matched terms between the same marks. It is one fragment of at most 16 words and carries no
+  ellipsis at a cut, where SQLite's starts or ends with "…". The hit's snippet is shown by the
+  `search` result (`hits[].snippet`) and so by the Neovim picker's line: on a PostgreSQL store that
+  line has no "…" at either end.
+
+The match, the rank and the snippet bind the same query, through dao's `Match`, `RankQuery` and
+`SnippetQuery`, so one declaration of the chunk serves both engines.
+
+In the code: `core/index/tables.go` (`fullTextOn`), `core/index/engine.go`
+
+## The daemon on PostgreSQL
+
+`[store] engine = "postgres"` has the daemon open its store on PostgreSQL ([the store on
+PostgreSQL](#the-store-on-postgresql)), the DSN read from the variable `dsn_env` names, never
+written in the config. It is the server build's alone: a build without the server tag refuses it
+when the config loads, after the fields' own checks, naming the server build. Four things a SQLite
+store ties to its file have their own answer:
+
+- **The store's identity** is a random id written once into a one-row `store_identity` table
+  (script 000037) and read at every open; the daemon reports it as `store_id`. A hash of the DSN
+  would name one store twice when it is spelt two ways, and would put a value made from a secret in
+  a reported field. A database copied whole (a dump restored elsewhere) keeps its `store_id`, as it
+  keeps every other row.
+- **Finding the daemon:** a client never reads the database, so it never needs its credentials. It
+  reaches the daemon on its configured socket, and the daemon's `sys.hello` says its `engine` and
+  `schema`; a client whose config names another store refuses it, naming both. There is no
+  lease-info file, having no folder to keep it beside; `store_id` is reported, for operators, and
+  gates nothing. A client matches by engine and schema alone, so two databases that use one schema
+  name are one store to it: a config whose DSN moved to another database while the old daemon still
+  serves the socket reaches the old one. Give each database its own schema or socket, or stop the
+  old daemon before the move. A client that starts the daemon reaches it while it waits out a
+  killed predecessor's lease: the daemon binds its socket first, and the client's hello waits. The
+  client is silent for that wait, up to the lease's length and a poll; the daemon's log names the
+  holder at its first refusal.
+- **A restart** waits out its predecessor's lease, at a poll, for at most the lease's length:
+  released by a clean stop, the store opens within a poll; held by a daemon that was killed, once
+  the lease expires. The first wait is logged with its holder.
+- **The embedding's cache and setup** keep the daemon's own data directory, wherever the store is.
+  `--check-store` and `--compact` refuse a store on PostgreSQL (`ErrNotSQLite`), and the daemon's
+  start-up compaction leaves it to PostgreSQL's vacuum.
+- **Search** is the store's own on either engine. Lexical search is PostgreSQL's full-text search
+  ([search on PostgreSQL](#search-on-postgresql)). Semantic search is the same as on SQLite: the
+  vectors are the store's `embedding` rows, read through the store and scanned by the daemon in its
+  memory (1-bit codes, then an exact rerank), not pgvector; it is measured on SQLite only, and the
+  setup reports no free space for a store with no folder.
+
+In the code: `app/serve.go` (openPostgresStore), `internal/endpoint` (WithStore, StoreLocation,
+CheckPostgresStore), `internal/client` (ForPaths), `core/store/postgres.go` (OpenAtWaiting, ID)
+
+## Copying a SQLite store into PostgreSQL
+
+`autodoc --copy-store-from <file.db>` copies a SQLite store into the config's store on PostgreSQL
+(the server build), all or nothing.
+
+- **Both stores are held** for the whole copy. The destination's writer lease is held, and so is
+  the source's writer, so a daemon serving either one refuses the copy.
+- **The destination is opened first** and must be empty, from its catalog alone. A copy refused
+  for its destination leaves the file as it was.
+- **Then the file is opened,** which applies this build's scripts to it, as any start of this build
+  would. The command says which ones before it copies anything. The two stores must then name the
+  same applied scripts.
+- **The destination must be empty.** There is no merge.
+- **What is copied:**
+  - every table both stores have, with the columns read from PostgreSQL's catalog and checked
+    against SQLite's;
+  - parents before the tables that reference them.
+
+  `chunk.tsv` is generated as each row lands. Left out:
+  - FTS5's tables and `sqlite_sequence`;
+  - each store's ledger of scripts;
+  - the writer lease;
+  - `store_identity`.
+- **Values.** A value that does not fit its column is refused. The one coercion: an integral real
+  number in an integer column copies as that integer; any other real number there is refused. Examples: text in an integer column,
+  or text with a NUL byte or invalid UTF-8. Every such value is listed from one pass (table, column,
+  row key; the first 50, then a count), and nothing is committed.
+- **Ids and high-waters.** Rows keep their ids. Each identity sequence is set to the larger of its
+  column's highest id and SQLite's `sqlite_sequence`. An AUTOINCREMENT table (event, todo_change,
+  inbox_change) therefore never reuses a seq it gave out before deleting the rows above it.
+- **The copy is a new store.** It keeps the `store_id` its own first open wrote. A copy that kept
+  the file's id would make two stores answer to one name while the file still exists. A dump and
+  restore of the database is not a copy, and keeps its id.
+- **The key.** Sealed secrets are copied as their bytes, so the destination's `key_file` must hold
+  the file's key.
+  - If the destination has no key file, the file's key is written there, private to the user.
+  - If it has the same key, the copy goes ahead.
+  - If it has another key, the copy is refused before any row moves.
+
+  The key's bytes are never printed or logged.
+- **One transaction.**
+  - The source is read from one snapshot. The destination is written in one fenced transaction,
+    streamed through COPY. A batch is sent once it reaches 10,000 rows or 8 MB, so it holds at most
+    one row more than 8 MB.
+  - Before the commit, each table's row count must equal the file's and every sealed secret must
+    open with the destination's key. The lease is then fenced again: the lease renews on its own
+    connection throughout, and a copy that outlasted it is rolled back.
+  - The transaction stays busy throughout, as its batches go. The writer's session ends a
+    transaction left idle for twice the lease's length; that, too, rolls the copy back.
+  - After the commit, the copied tables are analyzed, so the first searches plan with statistics.
+
+In the code: `core/store/copy.go` (CopySQLite), `app/copystore.go`
 
 ## Workspace settings saved together
 
@@ -178,6 +320,22 @@ models again. Its writer calls it after a flip, after a change of target, and at
 PostgreSQL's own autovacuum reclaims the space; AutoDoc compacts nothing there.
 
 In the code: `core/pgstore/store.go`, `enterprise/embedder/embedder.go`
+
+## pgstore sweeps its orphans
+
+A tenant's vector of a text no chunk of the tenant has is an orphan: a document rewritten keeps its
+old texts' vectors, and a vector the embedding worker stores for a text a delete has just taken is
+left too. `SweepEmbeddings` deletes them, under every model, in batches of 5,000, each its own
+transaction that reads the orphans and deletes them with the same `NOT EXISTS` evaluated again, so
+a text that gains a chunk between the two keeps its vector.
+
+The ingester runs it under the tenant's lease, between its own writes: after every complete
+refresh, and after a pass that wrote at most once every 15 minutes. A sweep that finds nothing is
+an anti-join of the tenant's vectors against its chunks; the interval keeps a minute's passes from
+paying it each time. A search running meanwhile reads no row a sweep deletes: it joins every vector
+to a chunk. The status counts the vectors swept as `vectors_swept`.
+
+In the code: `core/pgstore/store.go`, `enterprise/ingest/ingest.go`
 
 ## Protocol 16 gates the deleting verbs
 

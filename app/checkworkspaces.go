@@ -48,11 +48,11 @@ func runCheckWorkspaces(ctx context.Context, configPath string, out io.Writer) e
 	if err != nil {
 		return err
 	}
-	addr, ok := endpoint.Verified(ctx, p.Store) // never started for a check: the one serving the store, or none
+	addr, ok := endpoint.VerifiedOf(ctx, p) // never started for a check: the one serving the store, or none
 	if !ok {
 		return errNoDaemon
 	}
-	session := client.NewSession(addr, nil).As(rpc.CLIName).WithInfo(cliWho()).ForStore(p.Socket, p.Store)
+	session := client.NewSession(addr, nil).As(rpc.CLIName).WithInfo(cliWho()).ForPaths(p)
 	if err := session.Connect(ctx); err != nil {
 		return fmt.Errorf("%w (%v)", errNoDaemon, err)
 	}

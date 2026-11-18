@@ -99,8 +99,8 @@ func (s *Server) docVerbs() []module.Verb {
 			return &versionJSON{Version: string(v)}, nil
 		})
 	}
-	readErrs := []int64{CodeNoSuchWorkspace, CodeNotFound, CodeUnsupported, golibrpc.CodeAccessDenied}
-	writeErrs := []int64{CodeNoSuchWorkspace, CodeNotFound, CodeConflict, CodeCommitted, CodeUnsupported, golibrpc.CodeAccessDenied}
+	readErrs := []int64{CodeNoSuchWorkspace, CodeNotFound, CodeUnsupported, golibrpc.CodeAccessDenied, CodeFileRefused}
+	writeErrs := []int64{CodeNoSuchWorkspace, CodeNotFound, CodeConflict, CodeCommitted, CodeUnsupported, golibrpc.CodeAccessDenied, CodeFileRefused}
 	return []module.Verb{
 		read(module.Contract{Verb: "doc.read", Effect: module.EffectRead, Since: 1, Scope: ws, Audience: agent, Result: "{content, version}", Errors: readErrs,
 			Doc: "The file's text and its version. A format a build derives (PDF, DOCX) answers its derived Markdown, read-only; when that is longer than one answer carries, it is cut at a paragraph's end and its last line, after a --- rule, begins [autodoc: truncated]: that line is AutoDoc's, not the document's."}, false),
@@ -161,7 +161,7 @@ func (s *Server) docVerbs() []module.Verb {
 				return &diagnosticsJSON{Diagnostics: diagnosticsOf(ds)}, nil
 			}),
 		module.Handle(module.Contract{Verb: "doc.rename", Effect: module.EffectWrite, Since: 1, Scope: ws, Audience: user,
-			Errors: []int64{CodeNoSuchWorkspace, CodeNotFound, CodeConflict, CodeUnsupported, golibrpc.CodeAccessDenied}},
+			Errors: []int64{CodeNoSuchWorkspace, CodeNotFound, CodeConflict, CodeUnsupported, golibrpc.CodeAccessDenied, CodeFileRefused}},
 			func(ctx context.Context, p docRename) (any, error) {
 				w := workspaceOf(ctx)
 				if err := w.Docs().Rename(ctx, p.From, p.To); err != nil {
@@ -171,7 +171,7 @@ func (s *Server) docVerbs() []module.Verb {
 				return nil, nil
 			}),
 		module.Handle(module.Contract{Verb: "doc.remove", Effect: module.EffectWrite, Since: 1, Scope: ws, Audience: user,
-			Errors: []int64{CodeNoSuchWorkspace, CodeNotFound, CodeConflict, CodeUnsupported, golibrpc.CodeAccessDenied}},
+			Errors: []int64{CodeNoSuchWorkspace, CodeNotFound, CodeConflict, CodeUnsupported, golibrpc.CodeAccessDenied, CodeFileRefused}},
 			func(ctx context.Context, p docRemove) (any, error) {
 				w := workspaceOf(ctx)
 				if err := w.Docs().Remove(ctx, p.Path, vfs.Version(p.Version)); err != nil {

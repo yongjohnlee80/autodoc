@@ -10,7 +10,7 @@ server.toml,[[source]],Required (1+),"tenant, view, interval = ""1m"", refresh =
 server.toml,[http] & [[http.client]],Optional,"listen = ""127.0.0.1:8730"", tls_cert/key, proxy, token_sha256 | token_env, grants.<tenant>.<field>","Configures the HTTP search API and per-client bearer token scope grants"
 server.toml,[[http.operator]],Optional,"name, token_sha256 | token_env, tenants = [""*""]","Authorizes operator tokens to read tenant-wide telemetry on GET /v1/status (disjoint from search tokens)"
 HTTP API,POST /v1/search,Bearer (client),"{tenant, scope, query, mode, filter, limit, group} -> {hits, mode_used, semantic}","Executes scoped hybrid/lexical/semantic search inside a REPEATABLE READ snapshot (30s budget)"
-HTTP API,GET /v1/status,Bearer (operator),"Returns {as_of, server, tenants: [{lock, cursor, quarantine, documents, models}]}","Reports per-tenant cursor lag, advisory lock state, quarantine counts, and embedding readiness"
+HTTP API,GET /v1/status,Bearer (operator),"Returns {as_of, server, tenants: [{lock, cursor, quarantine, documents, models}]}","Reports per-tenant cursor lag, writer lease state, quarantine counts, and embedding readiness"
 HTTP API,GET /v1/health,Public (no token),"Returns {status: ok|degraded|unavailable, checks: {database, tenants, embedding}}","Load-balancer probe (HTTP 200 for ok/degraded, 503 with Retry-After for unavailable)"
 CLI Flag,autodoc --server --check,Read-only check,"autodoc --server --check server.toml","Validates config, verifies (updated_at, id) keyset pagination on 2000 live rows, and probes embedder"
 CLI Flag,autodoc --server --health,Health check,"autodoc --server --health /etc/autodoc/server.toml","Queries the configured server's /v1/health over loopback or pinned TLS cert (5s timeout)"

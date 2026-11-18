@@ -66,6 +66,11 @@ type Options struct {
 }
 
 // annModer is a Store that reports its tenant's search mode for a model (*pgstore.Store).
+// deletesStore is a Store that keeps a deletes cursor (pgstore's).
+type deletesStore interface {
+	DeletesCursor(ctx context.Context) (pgstore.Cursor, error)
+}
+
 type annModer interface {
 	ANNMode(ctx context.Context, model string) (mode, reason string, err error)
 }
@@ -180,12 +185,15 @@ type Snapshot struct {
 }
 
 // ANNState is one model's approximate index: exact, ann, ann-building or ann-failed (with the
-// reason), and how many searches' candidates came back short and were answered exactly instead.
+// reason), how many searches' candidates came back short and were answered exactly instead, and
+// how many were answered exactly without trying the index, for their small scope.
 type ANNState struct {
 	Model     string `json:"model"`
 	Mode      string `json:"mode"`
 	Reason    string `json:"reason,omitempty"`
 	Underfill int64  `json:"underfill"`
+	// ExactScoped is the searches answered exactly for their small scope (postgres.ann_exact_scope_docs)
+	ExactScoped int64 `json:"exact_scoped"`
 }
 
 // ServerState is the server's own part of a status.
@@ -200,29 +208,70 @@ type EmbeddingState struct {
 	Model string      `json:"model"`
 	State string      `json:"state"`
 	Error opcode.Code `json:"error"`
+	// Batch and InFlight are the texts one embedding call carries now and the calls in flight:
+	// [embedding] batch and slots, stepped down while calls run out of call_timeout. LastCallMS is
+	// the last call's time, and Timeouts the calls that ran out of it since the server started.
+	Batch      int   `json:"batch,omitempty"`
+	InFlight   int   `json:"in_flight,omitempty"`
+	LastCallMS int64 `json:"last_call_ms,omitempty"`
+	Timeouts   int64 `json:"timeouts,omitempty"`
 }
 
 // TenantStatus is one tenant's status.
 type TenantStatus struct {
-	Tenant      string      `json:"tenant"`
-	Lock        string      `json:"lock"` // held, waiting, or none
+	Tenant string `json:"tenant"`
+	Lock   string `json:"lock"` // held, waiting, or none
+	// LockWait is why a waiting lock waits, when it is not another server of this release:
+	// "older_server", a server of v0.3.15 or before holding the tenant by its advisory lock, which
+	// must be stopped. Absent otherwise.
+	LockWait    string      `json:"lock_wait,omitempty"`
 	Cursor      CursorState `json:"cursor"`
 	LastPass    RunState    `json:"last_pass"`
 	LastRefresh RunState    `json:"last_refresh"`
-	Quarantine  uint64      `json:"quarantine"`
-	Documents   Documents   `json:"documents"`
-	Models      ModelsState `json:"models"`
-	Error       opcode.Code `json:"error"` // reading the tenant's state failed: its other figures are absent
+	// RefreshDue is why a refresh is due at once, not on its schedule, until it completes:
+	// "facets" when the tenant's declared facets changed. Absent for none.
+	RefreshDue string `json:"refresh_due,omitempty"`
+	// Deletes is the source's deletes view, when it has one: where its cursor is, how far behind
+	// the database's clock, and its last pass's error. Absent for a source without one.
+	Deletes    *DeletesState `json:"deletes,omitempty"`
+	Quarantine uint64        `json:"quarantine"`
+	// VectorsSwept is how many orphan vectors (of texts no document has any more) the tenant's
+	// ingester has deleted since the server started.
+	VectorsSwept int64       `json:"vectors_swept,omitempty"`
+	Documents    Documents   `json:"documents"`
+	Models       ModelsState `json:"models"`
+	Error        opcode.Code `json:"error"` // reading the tenant's state failed: its other figures are absent
 }
 
-// CursorState is where the tenant's cursor is, and how far behind the database's clock. The cursor
-// moves when a pass commits a page, and when a refresh finishes (its pages commit their documents
-// without it), so its figures are absent before either: before the first pass's first page
-// commits, or before the first refresh finishes.
+// CursorState is where the tenant's cursor is, and how far the index is behind the database's
+// clock. The cursor is the last row read: it moves when a pass commits a page, and when a refresh
+// finishes, so UpdatedAt and ID are absent before either. It doesn't move while the source is
+// quiet, so how far behind the index is isn't measured from it.
 type CursorState struct {
-	UpdatedAt  *time.Time `json:"updated_at"`
-	ID         string     `json:"id"`
-	LagSeconds *int64     `json:"lag_seconds"` // nil until the cursor first moves
+	UpdatedAt *time.Time `json:"updated_at"`
+	ID        string     `json:"id"`
+	// LagSeconds is how far the index is behind the source: the database's clock now, less the
+	// bound the last run that read every row did read to (ingest.State.CaughtUp). A quiet source
+	// keeps it at most the configured lag plus the interval; it grows only while runs fail or
+	// don't run. Nil on a server that doesn't hold the tenant's lease (a standby), and before
+	// this server's first such run.
+	LagSeconds *int64 `json:"lag_seconds"`
+}
+
+// lagSince is the whole seconds from caught to now, never negative; nil for the zero time.
+func lagSince(now, caught time.Time) *int64 {
+	if caught.IsZero() {
+		return nil
+	}
+	lag := int64(max(now.Sub(caught), 0) / time.Second)
+	return &lag
+}
+
+// DeletesState is a deletes view's cursor (absent before its first tombstone is applied) and its
+// last pass's error, a code.
+type DeletesState struct {
+	CursorState
+	Error opcode.Code `json:"error"`
 }
 
 // RunState is how a pass or a refresh last ended. For a refresh, Complete says whether it read every
@@ -285,7 +334,8 @@ func (c *Collector) Snapshot(ctx context.Context) Snapshot {
 	s.Tenants = make([]TenantStatus, len(c.cached.Tenants))
 	copy(s.Tenants, c.cached.Tenants)
 	p := c.o.Provider()
-	s.Server = ServerState{Version: c.o.Version, Started: c.o.Started, Embedding: EmbeddingState{Model: p.Model, State: p.State, Error: p.Error}}
+	s.Server = ServerState{Version: c.o.Version, Started: c.o.Started, Embedding: EmbeddingState{Model: p.Model, State: p.State, Error: p.Error,
+		Batch: p.Batch, InFlight: p.InFlight, LastCallMS: p.LastCall.Milliseconds(), Timeouts: p.Timeouts}}
 	for i, t := range c.o.Tenants {
 		live(&s.Tenants[i], t.State())
 	}
@@ -306,7 +356,7 @@ func (c *Collector) read(ctx context.Context) Snapshot {
 			s.ANNError = opcode.Database
 		}
 		for _, a := range st {
-			s.ANN = append(s.ANN, ANNState{Model: a.Model, Mode: a.Mode, Reason: a.Reason, Underfill: a.Underfill})
+			s.ANN = append(s.ANN, ANNState{Model: a.Model, Mode: a.Mode, Reason: a.Reason, Underfill: a.Underfill, ExactScoped: a.ExactScoped})
 		}
 	}
 	return s
@@ -326,10 +376,33 @@ func (c *Collector) tenant(ctx context.Context, t Tenant) TenantStatus {
 		ts.Error = opcode.Database
 		return ts
 	}
+	var st ingest.State
+	if t.State != nil {
+		st = t.State()
+	}
+	if !st.Locked {
+		st.CaughtUp, st.DeletesCaughtUp = time.Time{}, time.Time{} // a standby's lag is the holder's to say
+	}
 	if !cur.IsZero() {
 		at := cur.UpdatedAt
-		lag := int64(max(dbNow.Sub(at), 0) / time.Second)
-		ts.Cursor = CursorState{UpdatedAt: &at, ID: cur.ID, LagSeconds: &lag}
+		ts.Cursor = CursorState{UpdatedAt: &at, ID: cur.ID}
+	}
+	ts.Cursor.LagSeconds = lagSince(dbNow, st.CaughtUp)
+	if ds, ok := t.Store.(deletesStore); ok && t.State != nil {
+		if st.Deletes {
+			dc, err := ds.DeletesCursor(ctx)
+			if err != nil {
+				ts.Error = opcode.Database
+				return ts
+			}
+			d := &DeletesState{Error: st.DeletesError}
+			if !dc.IsZero() {
+				at := dc.UpdatedAt
+				d.CursorState = CursorState{UpdatedAt: &at, ID: dc.ID}
+			}
+			d.LagSeconds = lagSince(dbNow, st.DeletesCaughtUp)
+			ts.Deletes = d
+		}
 	}
 	ref, err := t.Store.Refreshed(ctx)
 	if err != nil {
@@ -384,6 +457,9 @@ func live(ts *TenantStatus, st ingest.State) {
 		ts.Lock = "held"
 	case st.Waiting:
 		ts.Lock = "waiting"
+		if st.OlderServer {
+			ts.LockWait = "older_server"
+		}
 	default:
 		ts.Lock = "none"
 	}
@@ -391,6 +467,8 @@ func live(ts *TenantStatus, st ingest.State) {
 	ts.LastRefresh = runState(st.LastRefresh, ts.LastRefresh.LastComplete)
 	ts.LastPass.LastComplete = nil
 	ts.LastRefresh.Complete = st.LastRefresh.Stats.Complete
+	ts.RefreshDue = st.RefreshDue
+	ts.VectorsSwept = st.VectorsSwept
 }
 
 func runState(o ingest.Outcome, lastComplete *time.Time) RunState {

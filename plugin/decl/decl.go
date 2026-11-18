@@ -74,6 +74,9 @@ type Card struct {
 	closing atomic.Bool
 	be      *frameBackend
 	known   []string // the Theme.* sources declared at the start: the only ones a theme can set
+	// protocol is plugin.open's, which a pointer event is read by (mouseEvents): never the
+	// Protocol constant, so a card built with a newer kit keeps an older host's meaning
+	protocol int
 }
 
 // New is a Card that runs the program o describes when AutoDoc opens it.
@@ -107,10 +110,12 @@ func (c *Card) Open(p *plugin.Peer, o plugin.Open) { c.open(p, p, o) }
 func (c *Card) open(to host, peer *plugin.Peer, o plugin.Open) {
 	c.ctx, c.cancel = context.WithCancel(context.Background())
 	c.done = make(chan struct{})
+	c.protocol = o.Protocol
 	sources, known := themeSources(o.Theme)
 	c.known = known
 	c.be = newFrameBackend(to, o.Width, o.Height, c.ctx, colorsOf(o.Theme))
 	opts := append(slices.Clone(c.o.Program),
+		tuidecl.Types(paneTypes()...), // Panes and Pane, every card's (panes.go)
 		tuidecl.Singleton(themeModule, themeVersion, "Theme"),
 		tuidecl.Sources(sources),
 		tuidecl.AppOptions(tui.WithBackend(c.be)))
@@ -219,10 +224,11 @@ func (c *Card) Resize(w, h int) {
 	}
 }
 
-// Pointer is plugin.pointer: a left press (a press and its release), or wheel steps.
+// Pointer is plugin.pointer: a left press, drag, release or cancel, or wheel steps, read by the
+// protocol the card was opened with (mouseEvents).
 func (c *Card) Pointer(at plugin.Pointer) {
 	if c.live() {
-		for _, e := range mouseEvents(at) {
+		for _, e := range mouseEvents(at, c.protocol) {
 			c.be.post(e)
 		}
 	}

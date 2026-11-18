@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"net/url"
 	"os"
@@ -24,22 +25,30 @@ import (
 
 // The defaults of the fields that have one.
 const (
-	DefaultSchema   = "autodoc_search"
-	DefaultListen   = "127.0.0.1:8730"
-	DefaultSlots    = 4
-	DefaultRefresh  = 24 * time.Hour
-	DefaultInterval = time.Minute
-	DefaultLag      = time.Minute
-	DefaultOpenAI   = "https://api.openai.com/v1"
-	DefaultOllama   = "http://127.0.0.1:11434"
+	DefaultSchema = "autodoc_search"
+	DefaultListen = "127.0.0.1:8730"
+	DefaultSlots  = 4
+	// DefaultBatch is how many texts one embedding call carries, and DefaultCallTimeout how long
+	// one call may take: the worker's own, which it steps down from when a call runs out of time.
+	DefaultBatch       = 64
+	DefaultCallTimeout = 2 * time.Minute
+	DefaultRefresh     = 24 * time.Hour
+	DefaultInterval    = time.Minute
+	DefaultLag         = time.Minute
+	DefaultOpenAI      = "https://api.openai.com/v1"
+	DefaultOllama      = "http://127.0.0.1:11434"
 	// DefaultMetricsInterval is how often the server logs its metrics lines.
 	DefaultMetricsInterval = time.Minute
 )
 
 // Bounds a field is refused outside of.
 const (
-	MaxSlots    = 64
-	MinInterval = time.Second
+	MaxSlots = 64
+	MaxBatch = 256
+	// MinCallTimeout and MaxCallTimeout bound [embedding] call_timeout.
+	MinCallTimeout = time.Second
+	MaxCallTimeout = 30 * time.Minute
+	MinInterval    = time.Second
 	// MinRefreshRetry is the soonest a failed refresh may be tried again.
 	MinRefreshRetry = time.Minute
 	// MinMetricsInterval is the most often the metrics lines may be logged.
@@ -73,7 +82,8 @@ type Postgres struct {
 	// Schema is the schema pgstore's tables live in, created when missing.
 	Schema string
 	// ANN is the approximate semantic search's settings (ann_threshold, ann_max_scan_tuples,
-	// ann_scan_mem_multiplier, ann_m, ann_ef_construction), pgstore's defaults for any not set.
+	// ann_scan_mem_multiplier, ann_exact_scope_docs, ann_m, ann_ef_construction, ann_defer_backlog, ann_defer_max,
+	// ann_maintenance_work_mem), pgstore's defaults for any not set.
 	ANN pgstore.ANNConfig
 }
 
@@ -90,6 +100,11 @@ type Embedding struct {
 	KeyEnv string
 	// Slots is how many embedding requests may be in flight at once, across every tenant.
 	Slots int
+	// Batch is how many texts one embedding request carries, and CallTimeout how long one may
+	// take. The worker starts at Batch and Slots and steps both down while requests run out of
+	// CallTimeout, so a slow provider still makes progress; it steps back up as they answer in time.
+	Batch       int
+	CallTimeout time.Duration
 }
 
 // Key is the provider's API key, read from the environment when called; "" when KeyEnv names none.
@@ -110,6 +125,9 @@ type HTTP struct {
 	Proxy     bool
 	Clients   []Client
 	Operators []Operator
+	// MaxTenantSearches is how many tenants' searches the requests naming several tenants run at
+	// once, across every request; 0 is the store pool's size less two (the server's choice).
+	MaxTenantSearches int
 }
 
 // Client is one caller of the HTTP API and what it may search.
@@ -155,6 +173,9 @@ type Source struct {
 	Tenant string
 	// View is the .view file's path, resolved against the configuration file's directory.
 	View string
+	// Deletes is the source's deletes view's path, resolved likewise: the tombstones of its rows
+	// deleted outright, which every pass applies. "" for none.
+	Deletes string
 	// Refresh is how often every row is read again, and documents of rows gone are deleted.
 	Refresh time.Duration
 	// Interval is how often the rows changed since the cursor are read.
@@ -167,6 +188,9 @@ type Source struct {
 	RefreshRetry time.Duration
 	// Access are the row fields every search of the tenant must be scoped by.
 	Access []string
+	// Facets are the row fields a search of the tenant may filter on, name → type: keyword,
+	// number or date ([source.facets]). nil declares none.
+	Facets map[string]string
 }
 
 // Error is one refusal: the field it is about and why.
@@ -218,20 +242,30 @@ type file struct {
 		ANNScanMemMultiplier *float64 `toml:"ann_scan_mem_multiplier"`
 		ANNEfConstruction    *int     `toml:"ann_ef_construction"`
 		ANNM                 *int     `toml:"ann_m"`
+		// a filtered search admitting at most this many documents is answered exactly, index untried
+		ANNExactScopeDocs *int `toml:"ann_exact_scope_docs"`
+		// a model's first build waits for its bulk load, and the builder's memory
+		ANNDeferBacklog       *int      `toml:"ann_defer_backlog"`
+		ANNDeferMax           *duration `toml:"ann_defer_max"`
+		ANNMaintenanceWorkMem *string   `toml:"ann_maintenance_work_mem"`
 	} `toml:"postgres"`
 	Embedding *struct {
-		Provider string `toml:"provider"`
-		BaseURL  string `toml:"base_url"`
-		Model    string `toml:"model"`
-		KeyEnv   string `toml:"key_env"`
-		Slots    *int   `toml:"slots"`
+		Provider    string    `toml:"provider"`
+		BaseURL     string    `toml:"base_url"`
+		Model       string    `toml:"model"`
+		KeyEnv      string    `toml:"key_env"`
+		Slots       *int      `toml:"slots"`
+		Batch       *int      `toml:"batch"`
+		CallTimeout *duration `toml:"call_timeout"`
 	} `toml:"embedding"`
 	HTTP *struct {
 		Listen  string `toml:"listen"`
 		TLSCert string `toml:"tls_cert"`
 		TLSKey  string `toml:"tls_key"`
 		Proxy   bool   `toml:"proxy"`
-		Clients []struct {
+		// a search across tenants' searches in flight at once, across every request
+		MaxTenantSearches *int `toml:"max_tenant_searches"`
+		Clients           []struct {
 			Name        string                         `toml:"name"`
 			TokenSHA256 string                         `toml:"token_sha256"`
 			TokenEnv    string                         `toml:"token_env"`
@@ -252,13 +286,15 @@ type file struct {
 		Enabled bool `toml:"enabled"`
 	} `toml:"metrics"`
 	Sources []struct {
-		Tenant   string    `toml:"tenant"`
-		View     string    `toml:"view"`
-		Refresh  *duration `toml:"refresh"`
-		Interval *duration `toml:"interval"`
-		Lag      *duration `toml:"lag"`
-		Retry    *duration `toml:"refresh_retry"`
-		Access   []string  `toml:"access"`
+		Tenant   string            `toml:"tenant"`
+		View     string            `toml:"view"`
+		Deletes  string            `toml:"deletes"`
+		Refresh  *duration         `toml:"refresh"`
+		Interval *duration         `toml:"interval"`
+		Lag      *duration         `toml:"lag"`
+		Retry    *duration         `toml:"refresh_retry"`
+		Access   []string          `toml:"access"`
+		Facets   map[string]string `toml:"facets"`
 	} `toml:"source"`
 }
 
@@ -394,8 +430,36 @@ func (v *validator) postgres(f file) Postgres {
 		}
 		p.ANN.EfConstruction = *n
 	}
+	if n := f.Postgres.ANNExactScopeDocs; n != nil {
+		if *n < 0 || *n > 100000 {
+			v.refuse("postgres.ann_exact_scope_docs", "%d: 0 (always try the index) to 100000 documents", *n)
+		}
+		p.ANN.ExactScopeDocs = *n
+	}
+	if n := f.Postgres.ANNDeferBacklog; n != nil {
+		if *n < 0 {
+			v.refuse("postgres.ann_defer_backlog", "%d: 0 (never defer) or more documents not yet ready", *n)
+		}
+		p.ANN.DeferBacklog = *n
+	}
+	if d := f.Postgres.ANNDeferMax; d != nil {
+		if d.Duration <= 0 {
+			v.refuse("postgres.ann_defer_max", "%s: a positive duration (\"24h\")", d.Duration)
+		}
+		p.ANN.DeferMax = d.Duration
+	}
+	if m := f.Postgres.ANNMaintenanceWorkMem; m != nil {
+		if !pgSize.MatchString(*m) {
+			v.refuse("postgres.ann_maintenance_work_mem", "%q: a PostgreSQL size from 1MB, in kB, MB or GB (\"512MB\")", *m)
+		}
+		p.ANN.MaintenanceWorkMem = *m
+	}
 	return p
 }
+
+// pgSize is a PostgreSQL memory size the builder's maintenance_work_mem takes: a whole number of
+// kB (at least 1024), MB or GB.
+var pgSize = regexp.MustCompile(`^(102[4-9]|10[3-9][0-9]|1[1-9][0-9]{2}|[2-9][0-9]{3}|[1-9][0-9]{4,})kB$|^[1-9][0-9]*(MB|GB)$`)
 
 func (v *validator) embedding(f file) Embedding {
 	if f.Embedding == nil {
@@ -403,7 +467,7 @@ func (v *validator) embedding(f file) Embedding {
 		return Embedding{}
 	}
 	e := Embedding{Provider: f.Embedding.Provider, BaseURL: f.Embedding.BaseURL, Model: f.Embedding.Model,
-		KeyEnv: f.Embedding.KeyEnv, Slots: DefaultSlots}
+		KeyEnv: f.Embedding.KeyEnv, Slots: DefaultSlots, Batch: DefaultBatch, CallTimeout: DefaultCallTimeout}
 	switch e.Provider {
 	case "openai":
 		if e.BaseURL == "" {
@@ -435,11 +499,23 @@ func (v *validator) embedding(f file) Embedding {
 			v.refuse("embedding.slots", "%d: want 1 to %d", e.Slots, MaxSlots)
 		}
 	}
+	if f.Embedding.Batch != nil {
+		e.Batch = *f.Embedding.Batch
+		if e.Batch < 1 || e.Batch > MaxBatch {
+			v.refuse("embedding.batch", "%d: want 1 to %d", e.Batch, MaxBatch)
+		}
+	}
+	if f.Embedding.CallTimeout != nil {
+		e.CallTimeout = f.Embedding.CallTimeout.Duration
+		if e.CallTimeout < MinCallTimeout || e.CallTimeout > MaxCallTimeout {
+			v.refuse("embedding.call_timeout", "%v: want %v to %v", e.CallTimeout, MinCallTimeout, MaxCallTimeout)
+		}
+	}
 	return e
 }
 
 // tenantName is a tenant as a source names it: it is a key in every pgstore table, a log label and
-// part of the writer lock's key.
+// its writer lease's scope.
 var tenantName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
 func (v *validator) sources(f file) []Source {
@@ -451,7 +527,7 @@ func (v *validator) sources(f file) []Source {
 	for i, raw := range f.Sources {
 		at := func(k string) string { return fmt.Sprintf("source[%d].%s", i, k) }
 		s := Source{Tenant: raw.Tenant, Refresh: DefaultRefresh, Interval: DefaultInterval, Lag: DefaultLag,
-			Access: raw.Access}
+			Access: raw.Access, Facets: raw.Facets}
 		switch {
 		case s.Tenant == "":
 			v.refuse(at("tenant"), "required")
@@ -469,6 +545,12 @@ func (v *validator) sources(f file) []Source {
 			s.View = raw.View
 			if !filepath.IsAbs(s.View) {
 				s.View = filepath.Join(v.dir, s.View)
+			}
+		}
+		if raw.Deletes != "" {
+			s.Deletes = raw.Deletes
+			if !filepath.IsAbs(s.Deletes) {
+				s.Deletes = filepath.Join(v.dir, s.Deletes)
 			}
 		}
 		if raw.Interval != nil {
@@ -500,6 +582,11 @@ func (v *validator) sources(f file) []Source {
 		} else if err := pgstore.CheckAccessFields(s.Access); err != nil {
 			v.refuse(at("access"), "%s", strings.TrimPrefix(err.Error(), "pgstore: "))
 		}
+		for _, name := range slices.Sorted(maps.Keys(s.Facets)) {
+			if err := pgstore.CheckFacets(s.Access, map[string]string{name: s.Facets[name]}); err != nil {
+				v.refuse(at("facets."+name), "%s", strings.TrimPrefix(err.Error(), "pgstore: not a facet declaration: "))
+			}
+		}
 		out = append(out, s)
 	}
 	return out
@@ -510,6 +597,12 @@ func (v *validator) http(f file, sources []Source) *HTTP {
 		return nil
 	}
 	h := &HTTP{Listen: f.HTTP.Listen, TLSCert: f.HTTP.TLSCert, TLSKey: f.HTTP.TLSKey, Proxy: f.HTTP.Proxy}
+	if n := f.HTTP.MaxTenantSearches; n != nil {
+		if *n < 1 || *n > 1000 {
+			v.refuse("http.max_tenant_searches", "%d: 1 to 1000 searches", *n)
+		}
+		h.MaxTenantSearches = *n
+	}
 	if h.Listen == "" {
 		h.Listen = DefaultListen
 	}

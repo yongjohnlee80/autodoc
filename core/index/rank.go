@@ -2,7 +2,6 @@ package index
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/yongjohnlee80/golib/dao"
@@ -45,37 +44,64 @@ func (x *Indexer) searchers(s search.Searcher) searchers {
 // one alive chunk, is rank.ErrStale, and the search answers in recall order.
 func (s *Store) chunkTexts(ctx context.Context, hits []search.Hit) ([]string, error) {
 	out := make([]string, len(hits))
+	if len(hits) == 0 {
+		return out, nil
+	}
+	// two reads whatever the number of hits: their documents by path, then the chunks at their
+	// byte starts, matched here to each hit's exact range and its document's generation. The second
+	// read is a superset: every hit's document crossed with every hit's start, under each
+	// generation still kept (until gc). A (document, start) has at most one chunk a generation, so
+	// it reads at most documents × distinct starts × kept generations rows, hits² × generations at
+	// worst. Starts seldom coincide across documents but at 0, so it is about (hits + documents) ×
+	// kept generations: some hundreds of rows for a window of 50.
 	err := s.read(ctx, func(tx *store.Tx) error {
-		type doc struct{ id, gen int64 }
-		docs := map[string]doc{}
-		for i, h := range hits {
-			d, ok := docs[h.Path]
-			if !ok {
-				row, err := s.documents(tx).With(DocPath, h.Path).Get(DocID, DocActiveGen)
-				if errors.Is(err, dao.ErrNoRows) {
-					return fmt.Errorf("%w: %s", rank.ErrStale, h.Path)
-				}
-				if err != nil {
-					return err
-				}
-				d = doc{row.ID, row.ActiveGen}
-				docs[h.Path] = d
-			}
-			if d.gen != h.Generation {
-				return fmt.Errorf("%w: %s is at another generation", rank.ErrStale, h.Path)
-			}
-			rows, err := s.chunks(tx).With(ChunkDoc, d.id).
-				With(ChunkByteStart, int64(h.ByteStart)).With(ChunkByteEnd, int64(h.ByteEnd)).
-				WithPredicate(dao.Lte(`"chunk"."gen_from"`, d.gen)).
-				WithPredicate(dao.Or(dao.IsNull(`"chunk"."gen_to"`), dao.Gt(`"chunk"."gen_to"`, d.gen))).
-				Limit(2).Select(ChunkBreadcrumb, ChunkBody)
+		paths, starts := make([]any, 0, len(hits)), make([]any, 0, len(hits))
+		for _, h := range hits {
+			paths, starts = append(paths, h.Path), append(starts, int64(h.ByteStart))
+		}
+		docs, err := s.documents(tx).WithPredicate(dao.In(`"document"."path"`, paths)).Select(DocID, DocPath, DocActiveGen)
+		if err != nil {
+			return err
+		}
+		byPath := make(map[string]*Document, len(docs))
+		ids := make([]any, 0, len(docs))
+		for _, d := range docs {
+			byPath[d.Path] = d
+			ids = append(ids, d.ID)
+		}
+		var chunks []*Chunk
+		if len(ids) > 0 {
+			chunks, err = s.chunks(tx).WithPredicate(dao.In(`"chunk"."doc_id"`, ids)).
+				WithPredicate(dao.In(`"chunk"."byte_start"`, starts)).
+				Select(ChunkDoc, ChunkByteStart, ChunkByteEnd, ChunkGenFrom, ChunkGenTo, ChunkBreadcrumb, ChunkBody)
 			if err != nil {
 				return err
 			}
-			if len(rows) != 1 {
-				return fmt.Errorf("%w: %s has %d chunks at bytes %d-%d", rank.ErrStale, h.Path, len(rows), h.ByteStart, h.ByteEnd)
+		}
+		type key struct{ doc, start, end int64 }
+		at := map[key][]*Chunk{}
+		for _, c := range chunks {
+			k := key{c.DocID, c.ByteStart, c.ByteEnd}
+			at[k] = append(at[k], c)
+		}
+		for i, h := range hits {
+			d, ok := byPath[h.Path]
+			if !ok {
+				return fmt.Errorf("%w: %s", rank.ErrStale, h.Path)
 			}
-			out[i] = rows[0].Breadcrumb + "\n" + rows[0].Body
+			if d.ActiveGen != h.Generation {
+				return fmt.Errorf("%w: %s is at another generation", rank.ErrStale, h.Path)
+			}
+			var alive []*Chunk
+			for _, c := range at[key{d.ID, int64(h.ByteStart), int64(h.ByteEnd)}] {
+				if c.GenFrom <= d.ActiveGen && (c.GenTo == nil || *c.GenTo > d.ActiveGen) {
+					alive = append(alive, c)
+				}
+			}
+			if len(alive) != 1 {
+				return fmt.Errorf("%w: %s has %d chunks at bytes %d-%d", rank.ErrStale, h.Path, len(alive), h.ByteStart, h.ByteEnd)
+			}
+			out[i] = alive[0].Breadcrumb + "\n" + alive[0].Body
 		}
 		return nil
 	})

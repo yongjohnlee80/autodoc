@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -94,7 +95,8 @@ func TestAGoodConfigurationLoads(t *testing.T) {
 	if s.Postgres.DSN() != "postgres://u:secret-password@db.internal/app" || s.Postgres.Schema != "autodoc_search" {
 		t.Errorf("Postgres %+v", s.Postgres)
 	}
-	if s.Embedding != (config.Embedding{Provider: "openai", BaseURL: "https://embeddings.example.internal/v1", Model: "text-embedding-3-small", KeyEnv: "TEST_EMBED_KEY", Slots: 4}) {
+	if s.Embedding != (config.Embedding{Provider: "openai", BaseURL: "https://embeddings.example.internal/v1", Model: "text-embedding-3-small", KeyEnv: "TEST_EMBED_KEY", Slots: 4,
+		Batch: config.DefaultBatch, CallTimeout: config.DefaultCallTimeout}) {
 		t.Errorf("Embedding %+v", s.Embedding)
 	}
 	if s.Embedding.Key() != "sk-embedding-secret" || (config.Embedding{}).Key() != "" {
@@ -111,6 +113,21 @@ func TestAGoodConfigurationLoads(t *testing.T) {
 	}
 	if len(s.Warnings) != 0 {
 		t.Errorf("warnings %v", s.Warnings)
+	}
+}
+
+// A source's [source.facets] loads as declared, name → type; a source without one declares none.
+func TestASourcesFacetsLoad(t *testing.T) {
+	s, err := load(t, good)
+	if err != nil || s.Sources[0].Facets != nil {
+		t.Fatalf("no [source.facets]: %v, %v", s.Sources[0].Facets, err)
+	}
+	s, err = load(t, good+"[source.facets]\nstatus = \"keyword\"\nreleased = \"date\"\nbpm = \"number\"\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := map[string]string{"status": "keyword", "released": "date", "bpm": "number"}; !maps.Equal(s.Sources[0].Facets, want) {
+		t.Errorf("Facets %v, want %v", s.Sources[0].Facets, want)
 	}
 }
 
@@ -133,7 +150,8 @@ access = ["org"]
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Postgres.Schema != config.DefaultSchema || s.Embedding.BaseURL != config.DefaultOllama || s.Embedding.Slots != config.DefaultSlots || s.HTTP != nil {
+	if s.Postgres.Schema != config.DefaultSchema || s.Embedding.BaseURL != config.DefaultOllama || s.Embedding.Slots != config.DefaultSlots ||
+		s.Embedding.Batch != config.DefaultBatch || s.Embedding.CallTimeout != config.DefaultCallTimeout || s.HTTP != nil {
 		t.Errorf("%+v", s)
 	}
 	if src := s.Sources[0]; src.View != view || src.Refresh != config.DefaultRefresh || src.Interval != config.DefaultInterval || src.Lag != config.DefaultLag {
@@ -142,6 +160,10 @@ access = ["org"]
 	s, err = load(t, strings.Replace(good, `base_url = "https://embeddings.example.internal/v1"`, "", 1))
 	if err != nil || s.Embedding.BaseURL != config.DefaultOpenAI {
 		t.Errorf("openai's default URL: %v %+v", err, s)
+	}
+	s, err = load(t, strings.Replace(good, `slots    = 4`, "slots = 4\nbatch = 16\ncall_timeout = \"5m\"", 1))
+	if err != nil || s.Embedding.Batch != 16 || s.Embedding.CallTimeout != 5*time.Minute {
+		t.Errorf("the batch and the call timeout as written: %v %+v", err, s.Embedding)
 	}
 }
 
@@ -157,13 +179,13 @@ func TestTheSearchAndMetricsSettingsLoad(t *testing.T) {
 	if s.Postgres.ANN != pgstore.DefaultANNConfig() || s.Metrics.Enabled {
 		t.Errorf("unset: ANN %+v, metrics %+v; want pgstore's defaults and none", s.Postgres.ANN, s.Metrics)
 	}
-	src := strings.Replace(good, `schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_threshold = 1\nann_max_scan_tuples = 2147483647\nann_scan_mem_multiplier = 1000\nann_m = 8\nann_ef_construction = 16", 1)
+	src := strings.Replace(good, `schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_threshold = 1\nann_max_scan_tuples = 2147483647\nann_scan_mem_multiplier = 1000\nann_m = 8\nann_ef_construction = 16\nann_exact_scope_docs = 250\nann_defer_backlog = 0\nann_defer_max = \"90m\"\nann_maintenance_work_mem = \"2048kB\"", 1)
 	src = strings.Replace(src, `listen = "127.0.0.1:8730"`, "", 1)
 	src = strings.Replace(src, "[[source]]", "[[http.operator]]\nname = \"ops\"\ntoken_env = \"TEST_OPS_TOKEN\"\ntenants = [\"*\"]\n\n[[source]]", 1) + "\n[metrics]\nenabled = true\n"
 	if s, err = load(t, src); err != nil {
 		t.Fatal(err)
 	}
-	if want := (pgstore.ANNConfig{Threshold: 1, MaxScanTuples: 2147483647, ScanMemMultiplier: 1000, M: 8, EfConstruction: 16}); s.Postgres.ANN != want {
+	if want := (pgstore.ANNConfig{Threshold: 1, MaxScanTuples: 2147483647, ScanMemMultiplier: 1000, M: 8, EfConstruction: 16, ExactScopeDocs: 250, DeferBacklog: 0, DeferMax: 90 * time.Minute, MaintenanceWorkMem: "2048kB"}); s.Postgres.ANN != want {
 		t.Errorf("ANN %+v, want %+v", s.Postgres.ANN, want)
 	}
 	if s.HTTP.Listen != config.DefaultListen || !s.Metrics.Enabled {
@@ -200,6 +222,14 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 		{"ann ef_construction 1001", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_ef_construction = 1001"), "postgres.ann_ef_construction", "4 to 1000"},
 		{"ann ef_construction under twice m", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_m = 40\nann_ef_construction = 79"), "postgres.ann_ef_construction", "at least twice m (40)"},
 		{"ann ef_construction under twice the default m", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_ef_construction = 31"), "postgres.ann_ef_construction", "at least twice m (16)"},
+		{"ann exact scope docs below 0", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_exact_scope_docs = -1"), "postgres.ann_exact_scope_docs", "0 (always try the index) to 100000"},
+		{"ann exact scope docs over 100000", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_exact_scope_docs = 100001"), "postgres.ann_exact_scope_docs", "0 (always try the index) to 100000"},
+		{"ann defer backlog below 0", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_defer_backlog = -1"), "postgres.ann_defer_backlog", "0 (never defer) or more"},
+		{"ann defer max 0", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_defer_max = \"0s\""), "postgres.ann_defer_max", "a positive duration"},
+		{"ann defer max not a duration", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_defer_max = \"a day\""), "(file)", "duration"},
+		{"ann maintenance memory without a unit", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_maintenance_work_mem = \"512\""), "postgres.ann_maintenance_work_mem", "a PostgreSQL size"},
+		{"ann maintenance memory under 1MB", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_maintenance_work_mem = \"1023kB\""), "postgres.ann_maintenance_work_mem", "a PostgreSQL size"},
+		{"ann maintenance memory in TB", sub(`schema  = "autodoc_search"`, "schema  = \"autodoc_search\"\nann_maintenance_work_mem = \"1TB\""), "postgres.ann_maintenance_work_mem", "a PostgreSQL size"},
 		{"dsn not a name", sub(`dsn_env = "TEST_SERVER_DSN"`, `dsn_env = "postgres://x"`), "postgres.dsn_env", "is not an environment variable name"},
 		{"sealed", sub(`dsn_env = "TEST_SERVER_DSN"`, `dsn_sealed = "AAAA"`), "postgres.dsn_sealed", "not supported yet"},
 		{"schema", sub(`schema  = "autodoc_search"`, `schema = "Search-1"`), "postgres.schema", "not a plain schema name"},
@@ -213,6 +243,11 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 		{"key unset", sub(`key_env  = "TEST_EMBED_KEY"`, `key_env = "TEST_UNSET_KEY"`), "embedding.key_env", "TEST_UNSET_KEY is not set"},
 		{"slots", sub(`slots    = 4`, `slots = 0`), "embedding.slots", "want 1 to 64"},
 		{"slots type", sub(`slots    = 4`, `slots = "four"`), "(file)", "slots"},
+		{"batch none", sub(`slots    = 4`, "slots = 4\nbatch = 0"), "embedding.batch", "want 1 to 256"},
+		{"batch too big", sub(`slots    = 4`, "slots = 4\nbatch = 257"), "embedding.batch", "want 1 to 256"},
+		{"call timeout short", sub(`slots    = 4`, "slots = 4\ncall_timeout = \"999ms\""), "embedding.call_timeout", "want 1s to 30m0s"},
+		{"call timeout long", sub(`slots    = 4`, "slots = 4\ncall_timeout = \"31m\""), "embedding.call_timeout", "want 1s to 30m0s"},
+		{"call timeout not a duration", sub(`slots    = 4`, "slots = 4\ncall_timeout = \"two minutes\""), "(file)", "want a duration"},
 		// http
 		{"listen", sub(`listen = "127.0.0.1:8730"`, `listen = "8730"`), "http.listen", "want host:port"},
 		{"off loopback", sub(`listen = "127.0.0.1:8730"`, `listen = "0.0.0.0:8730"`), "http.listen", "needs tls_cert and tls_key"},
@@ -249,6 +284,10 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 		{"no access", sub(`access   = ["label_id"]`, ``), "source[0].access", "required"},
 		{"access twice", sub(`access   = ["label_id"]`, `access = ["label_id", "label_id"]`), "source[0].access", "named twice"},
 		{"access with =", sub(`access   = ["label_id"]`, `access = ["label=id"]`), "source[0].access", "not an access field name"},
+		{"a facet that is an access field", good + "[source.facets]\nLabel_Id = \"keyword\"\n", "source[0].facets.Label_Id", "is an access field"},
+		{"a facet a document keeps", good + "[source.facets]\ntitle = \"keyword\"\n", "source[0].facets.title", "a document's own"},
+		{"a facet not an identifier", good + "[source.facets]\n\"bpm-max\" = \"number\"\n", "source[0].facets.bpm-max", "not a plain identifier"},
+		{"a facet of an unknown type", good + "[source.facets]\nbpm = \"integer\"\n", "source[0].facets.bpm", "want keyword, number or date"},
 		{"metrics with no operator", good + "\n[metrics]\nenabled = true\n", "metrics.enabled", "no [[http.operator]]"},
 		{"metrics with no http", good[:strings.Index(good, "[http]")] + good[strings.Index(good, "[[source]]"):] + "\n[metrics]\nenabled = true\n", "metrics.enabled", "no [http] table"},
 		{"unknown", good + "\n[telemetry]\nport = 9\n", "telemetry", "unknown field"}, // [metrics] is a known table

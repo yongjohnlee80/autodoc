@@ -18,6 +18,8 @@ const (
 	tCursor = "rag_cursor"        // 000002
 	tIngErr = "rag_ingest_error"  // 000002
 	tPolicy = "rag_tenant_policy" // 000002
+
+	tValue = "rag_document_value" // 000008
 )
 
 // --- documents -----------------------------------------------------------------
@@ -25,7 +27,8 @@ const (
 type docRow struct {
 	Tenant, Path, Title string
 	Version, Indexer    string
-	SourceID            string // 000004
+	SourceID            string     // 000004
+	SourceAt            *time.Time // 000010: the source row's updated_at when written; nil before
 	ID, Generation      int64
 	Tags, Facets        []string
 	Ready               bool
@@ -45,6 +48,7 @@ const (
 	dGen     docField = "generation"
 	dReady   docField = "semantic_ready"
 	dSource  docField = "source_id" // 000004
+	dSrcAt   docField = "source_at" // 000010
 )
 
 type docSort string
@@ -73,6 +77,7 @@ func newDocSchema(conn dao.DataConn) *docSchema {
 			dGen:     {Expr: dao.T(tDoc, dGen), Scan: func(r *docRow) any { return &r.Generation }, Value: func(r *docRow) any { return r.Generation }},
 			dReady:   {Expr: dao.T(tDoc, dReady), Scan: func(r *docRow) any { return &r.Ready }, Value: func(r *docRow) any { return r.Ready }},
 			dSource:  {Expr: dao.T(tDoc, dSource), Scan: func(r *docRow) any { return &r.SourceID }, Value: func(r *docRow) any { return r.SourceID }},
+			dSrcAt:   {Expr: dao.T(tDoc, dSrcAt), Scan: func(r *docRow) any { return &r.SourceAt }, Value: func(r *docRow) any { return r.SourceAt }},
 		})),
 		o(dao.Default[*docRow, docField, docSort, int64](dID, dPath, dTitle, dTags, dFacets, dVersion, dIndexer, dGen, dReady)),
 		o(dao.SortExpr[*docRow, docField, docSort, int64](dByPath, dao.T(tDoc, dPath))),
@@ -308,6 +313,9 @@ type cursorRow struct {
 	UpdatedAt                       *time.Time
 	ID                              string
 	RefreshStarted, RefreshFinished *time.Time
+	RefreshFacets                   string     // 000008
+	DeletesAt                       *time.Time // 000010
+	DeletesID                       *string    // 000010
 }
 
 type cursorField string
@@ -318,6 +326,9 @@ const (
 	kID       cursorField = "id"
 	kStarted  cursorField = "refresh_started"
 	kFinished cursorField = "refresh_finished"
+	kFacets   cursorField = "refresh_facets" // 000008
+	kDelAt    cursorField = "deletes_at"     // 000010
+	kDelID    cursorField = "deletes_id"     // 000010
 )
 
 type cursorSchema = dao.Schema[*cursorRow, cursorField, string, int64]
@@ -332,6 +343,9 @@ func newCursorSchema(conn dao.DataConn) *cursorSchema {
 			kID:       {Expr: dao.T(tCursor, kID), Scan: func(r *cursorRow) any { return &r.ID }},
 			kStarted:  {Expr: dao.T(tCursor, kStarted), Scan: func(r *cursorRow) any { return &r.RefreshStarted }},
 			kFinished: {Expr: dao.T(tCursor, kFinished), Scan: func(r *cursorRow) any { return &r.RefreshFinished }},
+			kFacets:   {Expr: dao.T(tCursor, kFacets), Scan: func(r *cursorRow) any { return &r.RefreshFacets }},
+			kDelAt:    {Expr: dao.T(tCursor, kDelAt), Scan: func(r *cursorRow) any { return &r.DeletesAt }},
+			kDelID:    {Expr: dao.T(tCursor, kDelID), Scan: func(r *cursorRow) any { return &r.DeletesID }},
 		})),
 		o(dao.Conflict[*cursorRow, cursorField, string, int64](kTenant)),
 	)
@@ -385,6 +399,7 @@ func newIngErrSchema(conn dao.DataConn) *ingErrSchema {
 type policyRow struct {
 	View         string
 	AccessFields []string
+	Facets       string // 000008: the declared facets, name → type, as jsonb's text
 }
 
 type policyField string
@@ -393,6 +408,7 @@ const (
 	pTenant policyField = "tenant"
 	pAccess policyField = "access_fields"
 	pView   policyField = "view_name"
+	pFacets policyField = "facets" // 000008
 )
 
 type policySchema = dao.Schema[*policyRow, policyField, string, int64]
@@ -405,8 +421,40 @@ func newPolicySchema(conn dao.DataConn) *policySchema {
 			pTenant: {Expr: dao.T(tPolicy, pTenant)},
 			pAccess: {Expr: dao.T(tPolicy, pAccess), Scan: func(r *policyRow) any { return &r.AccessFields }},
 			pView:   {Expr: dao.T(tPolicy, pView), Scan: func(r *policyRow) any { return &r.View }},
+			pFacets: {Expr: dao.T(tPolicy, pFacets), Scan: func(r *policyRow) any { return &r.Facets }},
 		})),
 		o(dao.Conflict[*policyRow, policyField, string, int64](pTenant)),
+	)
+}
+
+// --- typed facet values (000008) -----------------------------------------------------
+
+// valueRow is one value of a document's number or date facet: written by Batch.Add and deleted by
+// the document, never scanned.
+type valueRow struct{}
+
+type valueField string
+
+const (
+	vTenant valueField = "tenant"
+	vDoc    valueField = "doc_id"
+	vField  valueField = "field"
+	vValue  valueField = "value"
+)
+
+type valueSchema = dao.Schema[*valueRow, valueField, string, int64]
+
+func newValueSchema(conn dao.DataConn) *valueSchema {
+	type o = dao.Option[*valueRow, valueField, string, int64]
+	return dao.New(conn,
+		o(dao.Table[*valueRow, valueField, string, int64](tValue)),
+		o(dao.Fields[*valueRow, valueField, string, int64](map[valueField]dao.Field[*valueRow]{
+			vTenant: {Expr: dao.T(tValue, vTenant)},
+			vDoc:    {Expr: dao.T(tValue, vDoc)},
+			vField:  {Expr: dao.T(tValue, vField)},
+			vValue:  {Expr: dao.T(tValue, vValue)},
+		})),
+		o(dao.Conflict[*valueRow, valueField, string, int64](vTenant, vField, vValue, vDoc)),
 	)
 }
 
@@ -420,10 +468,11 @@ type schemas struct {
 	cursor *cursorSchema
 	ingErr *ingErrSchema
 	policy *policySchema
+	value  *valueSchema
 }
 
 func newSchemas(conn dao.DataConn) schemas {
 	return schemas{doc: newDocSchema(conn), chunk: newChunkSchema(conn), emb: newEmbSchema(conn),
 		link: newLinkSchema(conn), meta: newMetaSchema(conn), cursor: newCursorSchema(conn),
-		ingErr: newIngErrSchema(conn), policy: newPolicySchema(conn)}
+		ingErr: newIngErrSchema(conn), policy: newPolicySchema(conn), value: newValueSchema(conn)}
 }

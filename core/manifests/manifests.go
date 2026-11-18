@@ -101,6 +101,11 @@ type Plugin struct {
 	// Menus are its rows on the editor's right-click menu, each running one of its commands, under
 	// its title (protocol 11).
 	Menus []Menu `toml:"menu"`
+	// Window is a card's window (protocol 12): the icons on its frame, by what they do. A modal
+	// dialog has none; Esc closes it.
+	Window struct {
+		Controls []string `toml:"controls"` // "hide", "maximize", "close"; none when unset
+	} `toml:"window"`
 	// Calls are the command catalog's ids the plugin may run through host.call: exact ids, never a
 	// plugin's.
 	Calls []string `toml:"calls"`
@@ -284,6 +289,9 @@ func checkProtocolTwo(m *Plugin, md toml.MetaData) string {
 	if why := checkMenu(m, md); why != "" {
 		return why
 	}
+	if why := checkWindow(m, md); why != "" {
+		return why
+	}
 	switch {
 	case m.Service() && md.IsDefined("dialog"):
 		return "[dialog]: a service has no dialog"
@@ -434,6 +442,9 @@ func (m *Plugin) Declares() []string {
 		}
 		parts = append(parts, "editor menu rows: "+strings.Join(rows, ", "))
 	}
+	if controls := slices.DeleteFunc(slices.Clone(WindowControls), func(c string) bool { return !m.Controls(c) }); len(controls) > 0 {
+		parts = append(parts, "window controls: "+strings.Join(controls, ", "))
+	}
 	return parts
 }
 
@@ -509,6 +520,39 @@ func ValidPackageName(n string) bool {
 func firstLine(s string) string {
 	line, _, _ := strings.Cut(s, "\n")
 	return line
+}
+
+// WindowControls are the icons a card may show, in the order they are drawn, left to right: hide
+// (its panel, the plugin running on), maximize (its panel over the page, as the terminal's), close
+// (stop its plugin).
+var WindowControls = []string{"hide", "maximize", "close"}
+
+// Controls reports whether the card's [window] lists control (one of WindowControls).
+func (m *Plugin) Controls(control string) bool { return slices.Contains(m.Window.Controls, control) }
+
+// checkWindow is why m's [window] cannot run ("" when it can): it needs protocol = 12 and a card,
+// and its controls are each one of WindowControls, once.
+func checkWindow(m *Plugin, md toml.MetaData) string {
+	if !md.IsDefined("window") {
+		return ""
+	}
+	switch {
+	case m.Protocol < 12:
+		return "declares [window]: needs protocol = 12"
+	case !m.Card():
+		return "[window]: only a card ([dialog] modal = false) has window controls"
+	}
+	seen := map[string]bool{}
+	for _, c := range m.Window.Controls {
+		switch {
+		case !slices.Contains(WindowControls, c):
+			return "[window] controls: " + strconv.Quote(c) + ": want hide, maximize or close"
+		case seen[c]:
+			return "[window] controls: " + strconv.Quote(c) + " twice"
+		}
+		seen[c] = true
+	}
+	return ""
 }
 
 // checkMenu is why m's [[menu]] cannot run ("" when it can): it needs protocol = 11, and each row

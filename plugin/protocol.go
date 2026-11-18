@@ -238,10 +238,21 @@ type Key struct {
 	Ctrl, Alt, Shift bool
 }
 
-// Pointer is a view-local, zero-based left press or vertical wheel step. Count is capped by the
-// host, and the plugin checks the coordinates against its most recently opened/resized frame.
+// Pointer is a view-local, zero-based pointer event. Kind and Button: "press"/"left", or
+// "wheel"/"up"/"down"; from protocol 12, "drag"/"left" (the button held, moving to another cell),
+// "release"/"left", and "cancel"/"left" (the gesture ended without a release: the card was hidden,
+// closed or detached, its plugin stopped, or the host took the pointer back).
+//
+// From protocol 12 the order a plugin can rely on is: a left press, then any number of drags and
+// wheel steps, then exactly one release or cancel; no second press comes before it. A terminal that
+// reports no motion while a button is held sends the release alone, with no drag: the order holds.
+// A press's and a wheel's X and Y lie in the view, which the plugin checks against its most
+// recently opened/resized frame. A drag's and a release's are the pointer's, in the view's own
+// coordinates, and may lie outside it (negative, or at or past the frame's width or height): a
+// release there is no click. A cancel's are the last the host saw in the gesture. Count is a press's
+// clicks or a wheel's steps, 1 to 16; a drag, release or cancel carries 1, and any other is refused.
 type Pointer struct {
-	Kind, Button string // "press"/"left", or "wheel"/"up"/"down"
+	Kind, Button string
 	X, Y, Count  int
 }
 
@@ -682,9 +693,11 @@ func ReadPointer(params []any) (Pointer, error) {
 	y, yOK := num(m, "y")
 	count, countOK := num(m, "count")
 	p := Pointer{Kind: str(m, "kind"), Button: str(m, "button"), X: x, Y: y, Count: count}
-	if !xOK || !yOK || !countOK || x < 0 || y < 0 || count < 1 || count > 16 ||
-		!(p.Kind == "press" && p.Button == "left" || p.Kind == "wheel" && (p.Button == "up" || p.Button == "down")) {
-		return Pointer{}, fmt.Errorf("%w: plugin.pointer wants a left press or vertical wheel, nonnegative coordinates and 1–16 steps", ErrParams)
+	inView := p.Kind == "press" && p.Button == "left" || p.Kind == "wheel" && (p.Button == "up" || p.Button == "down")
+	gesture := (p.Kind == "drag" || p.Kind == "release" || p.Kind == "cancel") && p.Button == "left"
+	if !xOK || !yOK || !countOK || count < 1 || count > 16 || !inView && !gesture || inView && (x < 0 || y < 0) || gesture && count != 1 {
+		return Pointer{}, fmt.Errorf("%w: plugin.pointer wants a left press, drag, release or cancel or a vertical wheel, "+
+			"1–16 steps (1 for a drag, release or cancel), and nonnegative coordinates for a press or a wheel", ErrParams)
 	}
 	return p, nil
 }

@@ -8,10 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"text/template"
 	"text/template/parse"
@@ -36,6 +38,9 @@ const (
 	FieldUpdatedAt = "updated_at"
 	FieldTitle     = "title" // optional: the document's title
 	FieldTags      = "tags"  // optional: a string or a list of strings
+	// FieldDeleted is optional: true says the row is deleted (a soft delete, at its updated_at),
+	// and its document goes; false or absent is a live row; anything else is the row's error.
+	FieldDeleted = "deleted"
 )
 
 // CutVersion is how this package turns a rendered row into chunks: the chunker's own version is
@@ -65,6 +70,8 @@ type Source struct {
 	digest   string // the file's SHA-256, its first 12 hex digits
 	export   *template.Template
 	access   []string
+	facets   map[string]string // declared: name → pgstore.FacetKeyword, FacetNumber or FacetDate
+	deletes  *Deletes          // the source's deletes view (WithDeletes); nil for none
 	markdown bool
 }
 
@@ -81,36 +88,21 @@ var placeholder = regexp.MustCompile(`\$([0-9]+)`)
 //     actions only, so a document's path is known from its id before its body renders.
 //
 // The order of the rows can only be checked against a database: CheckOrder does it.
-func Load(path string, access []string) (*Source, error) {
-	src, err := os.ReadFile(path)
-	if err != nil {
-		return nil, &ViewError{Path: path, Reason: err.Error()}
+func Load(path string, access []string) (*Source, error) { return LoadDeclared(path, access, nil) }
+
+// LoadDeclared is Load for a source that declares facets beside its access fields, name → type
+// (pgstore.FacetKeyword, FacetNumber or FacetDate): each row's value for each is kept with its
+// document, which a search filters on. A declaration pgstore.CheckFacets refuses is an error.
+func LoadDeclared(path string, access []string, facets map[string]string) (*Source, error) {
+	if err := pgstore.CheckFacets(access, facets); err != nil {
+		return nil, &ViewError{Path: path, Reason: strings.TrimPrefix(err.Error(), "pgstore: ")}
 	}
-	v, err := view.New(src)
+	v, src, err := pagedView(path)
 	if err != nil {
-		return nil, &ViewError{Path: path, Reason: strings.TrimPrefix(err.Error(), "view: ")}
+		return nil, err
 	}
 	refuse := func(field, format string, args ...any) error {
 		return &ViewError{Path: path, Field: field, Reason: fmt.Sprintf(format, args...)}
-	}
-	if v.Source() != "postgres" {
-		return nil, refuse("source", "%q: an enterprise source is read from postgres", v.Source())
-	}
-	if !slices.Equal(v.Args(), Args) {
-		return nil, refuse("args", "%v: want exactly [after_ts, after_id, upto_ts], the cursor and the pass's upper bound", v.Args())
-	}
-	used := map[string]bool{}
-	for _, m := range placeholder.FindAllStringSubmatch(v.Process(), -1) {
-		used[m[1]] = true
-	}
-	for _, n := range []string{"1", "2", "3"} {
-		if !used[n] {
-			return nil, refuse("process", "$%s (%s) is never used: the rows must be bounded by the cursor and upto_ts", n, Args[int(n[0]-'1')])
-		}
-		delete(used, n)
-	}
-	if len(used) > 0 {
-		return nil, refuse("process", "uses $%s: only $1, $2 and $3 are bound", strings.Join(sortedKeys(used), ", $"))
 	}
 	if v.Export() == "" {
 		return nil, refuse("export", "required: the document's path, from the row's id ({{.id}})")
@@ -121,7 +113,45 @@ func Load(path string, access []string) (*Source, error) {
 	}
 	sum := sha256.Sum256(src)
 	return &Source{path: path, v: v, digest: hex.EncodeToString(sum[:])[:12], export: export,
-		access: slices.Clone(access), markdown: v.Format() == view.FormatMarkdown}, nil
+		access: slices.Clone(access), facets: maps.Clone(facets), markdown: v.Format() == view.FormatMarkdown}, nil
+}
+
+// pagedView reads the .view file at path and checks it can be read page by page past a cursor: its
+// source is postgres, its args are exactly [after_ts, after_id, upto_ts], and its query uses $1,
+// $2 and $3 and no other. A file that breaks a rule is a *ViewError. It returns the view and the
+// file's bytes.
+func pagedView(path string) (*view.View, []byte, error) {
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return nil, nil, &ViewError{Path: path, Reason: err.Error()}
+	}
+	v, err := view.New(src)
+	if err != nil {
+		return nil, nil, &ViewError{Path: path, Reason: strings.TrimPrefix(err.Error(), "view: ")}
+	}
+	refuse := func(field, format string, args ...any) error {
+		return &ViewError{Path: path, Field: field, Reason: fmt.Sprintf(format, args...)}
+	}
+	if v.Source() != "postgres" {
+		return nil, nil, refuse("source", "%q: an enterprise source is read from postgres", v.Source())
+	}
+	if !slices.Equal(v.Args(), Args) {
+		return nil, nil, refuse("args", "%v: want exactly [after_ts, after_id, upto_ts], the cursor and the pass's upper bound", v.Args())
+	}
+	used := map[string]bool{}
+	for _, m := range placeholder.FindAllStringSubmatch(v.Process(), -1) {
+		used[m[1]] = true
+	}
+	for _, n := range []string{"1", "2", "3"} {
+		if !used[n] {
+			return nil, nil, refuse("process", "$%s (%s) is never used: the rows must be bounded by the cursor and upto_ts", n, Args[int(n[0]-'1')])
+		}
+		delete(used, n)
+	}
+	if len(used) > 0 {
+		return nil, nil, refuse("process", "uses $%s: only $1, $2 and $3 are bound", strings.Join(sortedKeys(used), ", $"))
+	}
+	return v, src, nil
 }
 
 // idOnly compiles an export template that prints the row's id and nothing else of the row: literal
@@ -168,6 +198,19 @@ func (s *Source) File() string { return s.path }
 // Access are the tenant's access fields, which every row must carry.
 func (s *Source) Access() []string { return slices.Clone(s.access) }
 
+// WithDeletes is s with d as its deletes view (LoadDeletes), whose tombstones every pass applies.
+func (s *Source) WithDeletes(d *Deletes) *Source {
+	c := *s
+	c.deletes = d
+	return &c
+}
+
+// Deletes is the source's deletes view; nil when it has none.
+func (s *Source) Deletes() *Deletes { return s.deletes }
+
+// Facets are the source's declared facets, name → type; nil when it declares none.
+func (s *Source) Facets() map[string]string { return maps.Clone(s.facets) }
+
 // Indexer is the identity every document of the source is cut under: the view's name, its file's
 // digest, and how its rows are chunked. An edit of the view changes it, so the next refresh cuts
 // every row again.
@@ -195,6 +238,10 @@ type row struct {
 	at  time.Time // zero when the row has no usable updated_at
 	// bad is why the row's id or updated_at is missing or unusable
 	bad error
+	// deleted is a row whose deleted field is true (FieldDeleted); deletedBad is why its deleted
+	// field is neither true nor false, the row's error
+	deleted    bool
+	deletedBad error
 }
 
 // keyed reports whether the row has both parts of its cursor key.
@@ -240,6 +287,13 @@ func decode(raw []byte) row {
 	if r.at, err = parseTime(s); err != nil {
 		r.bad = fmt.Errorf("the row's updated_at %w", err)
 	}
+	switch d := m[FieldDeleted].(type) {
+	case nil:
+	case bool:
+		r.deleted = d
+	default:
+		r.deletedBad = fmt.Errorf("the row's %s is %v: want true or false", FieldDeleted, d)
+	}
 	return r
 }
 
@@ -270,6 +324,9 @@ func (s *Source) document(r row, path string) (pgstore.Document, error) {
 	if r.bad != nil {
 		return pgstore.Document{}, r.bad
 	}
+	if r.deletedBad != nil {
+		return pgstore.Document{}, r.deletedBad
+	}
 	m, err := fields(r.raw)
 	if err != nil {
 		return pgstore.Document{}, err
@@ -281,6 +338,31 @@ func (s *Source) document(r row, path string) (pgstore.Document, error) {
 			return pgstore.Document{}, fmt.Errorf("the access field %s %w", f, err)
 		}
 		facets[f] = vals
+	}
+	var typed map[string][]float64
+	for _, f := range sortedKeys(s.facets) {
+		vals, err := facetValues(m[f])
+		if err != nil {
+			return pgstore.Document{}, fmt.Errorf("the facet %s %w", f, err)
+		}
+		if len(vals) == 0 {
+			continue // a missing key, a null or an empty list: no value
+		}
+		typ := s.facets[f]
+		if typ == pgstore.FacetKeyword {
+			facets[f] = vals
+			continue
+		}
+		nums := make([]float64, len(vals))
+		for i, v := range vals {
+			if nums[i], err = pgstore.TypedValue(typ, v); err != nil {
+				return pgstore.Document{}, fmt.Errorf("the facet %s: %w", f, err)
+			}
+		}
+		if typed == nil {
+			typed = map[string][]float64{}
+		}
+		typed[f] = nums
 	}
 	title, err := text(m[FieldTitle])
 	if err != nil {
@@ -296,7 +378,7 @@ func (s *Source) document(r row, path string) (pgstore.Document, error) {
 	if err != nil {
 		return pgstore.Document{}, fmt.Errorf("render: %w", err)
 	}
-	d := pgstore.Document{Path: path, Indexer: s.Indexer(), Facets: facets, SourceID: r.id}
+	d := pgstore.Document{Path: path, Indexer: s.Indexer(), Facets: facets, Values: typed, SourceID: r.id, SourceAt: r.at}
 	if s.markdown {
 		doc := kind.ParseMarkdown([]byte(body))
 		meta := chunk.ReadMeta(doc, path)
@@ -348,6 +430,18 @@ func contentHash(body string, d pgstore.Document) string {
 		part("")
 	}
 	part(d.SourceID)
+	// the typed values, only when there are any: a document of a source that declares none hashes
+	// as it did before facets were typed, so the upgrade writes none of them again
+	if len(d.Values) > 0 {
+		part("values")
+		for _, f := range sortedKeys(d.Values) {
+			part(f)
+			for _, v := range d.Values[f] {
+				part(strconv.FormatFloat(v, 'g', -1, 64))
+			}
+			part("")
+		}
+	}
 	return hex.EncodeToString(h.Sum(nil))[:12]
 }
 
@@ -371,6 +465,27 @@ func values(v any) ([]string, error) {
 			return nil, errors.New("has an empty value")
 		}
 		out = append(out, s)
+	}
+	return out, nil
+}
+
+// facetValues reads a declared facet's value: a scalar (string, number or boolean) or a list of
+// them, as text. A missing key, a null and an empty list are none; an empty string in it is not a
+// value and is left out.
+func facetValues(v any) ([]string, error) {
+	list, isList := v.([]any)
+	if !isList {
+		list = []any{v}
+	}
+	var out []string
+	for _, item := range list {
+		s, err := text(item)
+		if err != nil {
+			return nil, err
+		}
+		if s != "" {
+			out = append(out, s)
+		}
 	}
 	return out, nil
 }

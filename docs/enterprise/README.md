@@ -60,8 +60,10 @@ flowchart LR
   render is quarantined and retried, never skipped. Each page of a pass is one transaction, with
   the cursor, so a crash in a pass replays at most one page. A refresh moves the cursor once, when
   it finishes; one interrupted by a crash starts over at the next refresh.
-- **One writer per tenant.** An ingester holds its tenant's advisory lock on a connection of its
-  own. A second server on the same tenant waits, and takes over if the first goes away.
+- **One writer per tenant.** An ingester holds its tenant's writer lease, a row it claims and
+  renews in the index's schema, and every write it makes confirms the lease in its own
+  transaction. A second server on the same tenant waits, and takes over when the first lets go,
+  or 30 seconds after it stopped renewing.
 - **The embedding worker**, one for the whole server, embeds every new chunk with your model, once
   per distinct text, and marks each document ready for search by meaning once all its chunks have
   vectors. It never holds up ingestion: a document answers by words until its vectors are in. A

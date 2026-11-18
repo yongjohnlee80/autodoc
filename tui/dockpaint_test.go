@@ -87,7 +87,7 @@ func TestTheExplorersStripHidePaintsItsDockIconLitThenDimmed(t *testing.T) {
 }
 
 func TestTheTerminalsStripHideAndEscapePaintItsDockIconLitThenDimmed(t *testing.T) {
-	_, r := runShellTUI(t, nil)
+	_, r := runLineShellTUI(t, nil)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
 	shown, after := dockIconPaints(t, r, "❯", func() { windowControl(t, r, "_") })
@@ -101,7 +101,7 @@ func TestTheTerminalsStripHideAndEscapePaintItsDockIconLitThenDimmed(t *testing.
 
 func TestTheAgentsStripHidePaintsItsDockIconLitThenDimmed(t *testing.T) {
 	agent, _ := fakeAgent(t)
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "fake", Command: agents.ShellQuote(agent)}}, "fake")
+	_, r, _ := runAgentTUI(t, agentsFolder(t), []agents.AgentProfile{{Name: "fake", Command: agentCall(agent)}}, "fake")
 	r.leader(t, 'g')
 	r.s.WaitForText(t, "started")
 	shown, after := dockIconPaints(t, r, "✦", func() { windowControl(t, r, "_") })

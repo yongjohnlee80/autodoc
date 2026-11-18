@@ -14,6 +14,7 @@ import (
 	"github.com/yongjohnlee80/golib/logger"
 
 	"github.com/yongjohnlee80/autodoc/core/clock"
+	"github.com/yongjohnlee80/autodoc/core/pglease"
 	"github.com/yongjohnlee80/autodoc/core/pgstore"
 	"github.com/yongjohnlee80/autodoc/enterprise/opcode"
 )
@@ -24,6 +25,7 @@ const (
 	DefaultRefreshRetry = 15 * time.Minute
 	DefaultInterval     = time.Minute
 	DefaultLag          = time.Minute
+	DefaultLeaseTTL     = 30 * time.Second
 	DefaultPingEvery    = 10 * time.Second
 	DefaultLockPoll     = 5 * time.Second
 )
@@ -36,12 +38,13 @@ const RetryLimit = 1000
 const countCap = 10000
 
 var (
-	// ErrLockLost is the tenant's writer lock gone from under its ingester: its connection closed
-	// or was killed. The ingester stops writing at once (a page it was writing is rolled back) and
-	// Run returns it, so the process exits non-zero and its supervisor restarts it to take the lock
-	// again; it never goes on writing unlocked. It is pgstore.ErrWriterLost.
+	// ErrLockLost is the tenant's writer lease gone from under its ingester: taken over after it
+	// expired, or not renewed in time. The ingester stops writing at once (a page it was writing is
+	// rolled back, its fence failing) and Run returns it, so the process exits non-zero and its
+	// supervisor restarts it to take the lease again; it never goes on writing without it. It is
+	// pgstore.ErrWriterLost.
 	ErrLockLost = pgstore.ErrWriterLost
-	// ErrNotLocked is a write asked of an ingester that does not hold its tenant's lock.
+	// ErrNotLocked is a write asked of an ingester that does not hold its tenant's lease.
 	ErrNotLocked = errs.Sentinel(errs.ErrPrecondition, "ingest: the tenant's writer lock is not held")
 	// ErrOrder is a page whose rows break the view's contract: not in (updated_at, id) order, or
 	// outside the cursor and upto_ts the page was asked for. Nothing of the page is written: a
@@ -54,9 +57,6 @@ var (
 
 // Options configure an Ingester. A zero duration is its default.
 type Options struct {
-	// Schema is the schema the tenant's store lives in: with the tenant, it keys the writer lock,
-	// so two servers on one schema and tenant never write at once. Required.
-	Schema string
 	// Refresh is how often Run reads every row again (DefaultRefresh).
 	Refresh time.Duration
 	// RefreshRetry is how soon Run tries a refresh again after one that failed or could not read
@@ -69,10 +69,16 @@ type Options struct {
 	// than this could commit a row behind the cursor, which only the next refresh would read.
 	// A negative Lag is none.
 	Lag time.Duration
-	// PingEvery is how often Run confirms it still holds the writer lock (DefaultPingEvery).
+	// LeaseTTL is the writer lease's length (DefaultLeaseTTL): a standby takes the tenant over this
+	// long after the holder's last renew, when the holder stopped without releasing it.
+	LeaseTTL time.Duration
+	// PingEvery is how often Run renews the writer lease (DefaultPingEvery, at most LeaseTTL/3).
 	PingEvery time.Duration
-	// LockPoll is how often Acquire tries a lock another server holds (DefaultLockPoll).
+	// LockPoll is how often Acquire tries a lease another server holds (DefaultLockPoll).
 	LockPoll time.Duration
+	// OlderSchema is the schema whose v0.3.15 writer lock Acquire and Run look for
+	// (pgstore.OlderWriterHeld): the store's. "" looks for none. It goes in v0.3.18.
+	OlderSchema string
 	// Log receives each run's summary and every failure. nil: none.
 	Log logger.Logger
 	// Now is the time a pass's upper bound is measured back from. nil: the source database's
@@ -84,7 +90,7 @@ type Options struct {
 	// chunks a page wrote are embedded without waiting for the worker's own poll. It runs on the
 	// ingester's goroutine and must not block.
 	Committed func()
-	// Locked, when set, is called once the writer lock is taken: the tenant is this server's now,
+	// Locked, when set, is called once the writer lease is taken: the tenant is this server's now,
 	// and the embedding worker, which leaves a tenant alone until then, may begin on it without
 	// waiting for its poll (a pass that finds nothing new commits nothing to wake it). Like
 	// Committed, it runs on the ingester's goroutine and must not block.
@@ -92,31 +98,51 @@ type Options struct {
 }
 
 // Ingester indexes one source into its tenant: the only writer of the tenant while it holds the
-// tenant's lock. Pass reads the rows changed since the cursor, Refresh reads every row and deletes
+// tenant's writer lease. Pass reads the rows changed since the cursor, Refresh reads every row and deletes
 // the documents of rows gone, and Run does both on their schedules.
 //
 // Every write is a pgstore.Batch, one per page of the view: its documents and its quarantined and
-// released rows commit together, after the writer lock is confirmed. A pass's page commits its
+// released rows commit together, each batch's transaction fenced on the writer lease (its first
+// statement confirms the lease and holds it against a takeover until the batch ends). A pass's page commits its
 // cursor with them; a refresh moves the cursor only when it finishes, in the batch that records it.
 // A crash replays at most the page it interrupted, and writing a page again changes nothing.
 //
 // An Ingester belongs to one goroutine; Run's own ping goroutine is the exception, and it only
-// checks the lock, as Confirm does from any goroutine.
+// renews the lease, which Confirm and the fence read from any goroutine.
 type Ingester struct {
-	st       *pgstore.Store
+	st       *pgstore.Store // the tenant's store, fenced on the lease (Store.Fenced)
 	tenant   string
 	src      *Source
 	business dao.DataConn
-	locks    dao.DataConn
+	leases   dao.DataConn
 	o        Options
-	// lock is the writer lock while it is held, nil otherwise. It is atomic because Confirm reads
-	// it from another goroutine (the embedding worker's) while this one takes and releases it.
-	lock atomic.Pointer[pgstore.WriterLock]
+	// lock is the writer lease while it is held, nil otherwise. It is atomic because Confirm and
+	// the fence read it from another goroutine (the embedding worker's) while this one takes and
+	// releases it.
+	lock atomic.Pointer[pgstore.Writer]
 	// state is the last pass's and refresh's outcome (State), and waiting whether Acquire waits for
 	// another server's lock: an operator's status reads them from another goroutine
-	state   atomic.Pointer[State]
-	waiting atomic.Bool
+	state atomic.Pointer[State]
+	// deletesErr is the last deletes pass's failure, opcode.None after one that succeeded (deletes)
+	deletesErr atomic.Pointer[opcode.Code]
+	waiting    atomic.Bool
+	// older says Acquire waits because a server of v0.3.15 or before holds the tenant (waitOlder)
+	older atomic.Bool
+	// deletesTo is the bound the last deletes pass that succeeded read the deletes view to
+	deletesTo atomic.Pointer[time.Time]
+	// lastSweep is when the ingester last swept the tenant's orphan vectors (sweep); swept is how
+	// many it has swept since it started, which State says
+	lastSweep time.Time
+	swept     atomic.Int64
+	// facetsDue says the tenant's last complete refresh wrote its documents with another facet
+	// declaration than the source's (checkDue): a refresh is due at once, and State says why
+	facetsDue atomic.Bool
 }
+
+// RefreshFacets is State.RefreshDue for a tenant whose last complete refresh wrote its documents
+// with another facet declaration than its source's: their facets' values are kept with them, and
+// each is written again with the declaration's.
+const RefreshFacets = "facets"
 
 // beforeCommit, when set, runs before each commit and fails it with its error: a test's way to
 // stop the process between a page's writes and its commit, as a crash would. It is nil in
@@ -124,19 +150,21 @@ type Ingester struct {
 var beforeCommit func() error
 
 // New is an ingester of src into st, the store of tenant. business is the database the view
-// reads, on the role's own search_path; locks is a pool of its own for the writer lock, which
-// pins one of its connections for as long as the lock is held.
-func New(st *pgstore.Store, tenant string, src *Source, business, locks dao.DataConn, o Options) *Ingester {
+// reads, on the role's own search_path; leases is the store's pool, whose schema holds the
+// writer lease's table. Every write the ingester makes through st, and through Store (the
+// embedding worker's), is fenced on the lease.
+func New(st *pgstore.Store, tenant string, src *Source, business, leases dao.DataConn, o Options) *Ingester {
 	for _, d := range []struct {
 		v   *time.Duration
 		def time.Duration
 	}{{&o.Refresh, DefaultRefresh}, {&o.RefreshRetry, DefaultRefreshRetry}, {&o.Interval, DefaultInterval},
-		{&o.Lag, DefaultLag}, {&o.PingEvery, DefaultPingEvery}, {&o.LockPoll, DefaultLockPoll}} {
+		{&o.Lag, DefaultLag}, {&o.LeaseTTL, DefaultLeaseTTL}, {&o.PingEvery, DefaultPingEvery}, {&o.LockPoll, DefaultLockPoll}} {
 		if *d.v == 0 {
 			*d.v = d.def
 		}
 	}
 	o.RefreshRetry = min(o.RefreshRetry, o.Refresh)
+	o.PingEvery = min(o.PingEvery, pgstore.RenewEvery(o.LeaseTTL))
 	if o.Lag < 0 {
 		o.Lag = 0
 	}
@@ -146,61 +174,157 @@ func New(st *pgstore.Store, tenant string, src *Source, business, locks dao.Data
 	if o.Now == nil {
 		o.Now = func(ctx context.Context) (time.Time, error) { return pgstore.Now(ctx, business) }
 	}
-	return &Ingester{st: st, tenant: tenant, src: src, business: business, locks: locks, o: o}
+	in := &Ingester{tenant: tenant, src: src, business: business, leases: leases, o: o}
+	in.st = st.Fenced(in.fence)
+	return in
 }
+
+// fence is the ingester's Store's fence: every write transaction confirms the lease first.
+func (in *Ingester) fence(ctx context.Context, q dao.Querier) error {
+	l := in.lock.Load()
+	if l == nil {
+		return ErrNotLocked
+	}
+	return l.Fence(ctx, q)
+}
+
+// Store is the tenant's store, every write of it fenced on the ingester's lease: the one the
+// embedding worker, the tenant's other writer in this process, writes through.
+func (in *Ingester) Store() *pgstore.Store { return in.st }
 
 // Tenant is the tenant the ingester writes.
 func (in *Ingester) Tenant() string { return in.tenant }
 
-// Acquire takes the tenant's writer lock, waiting while another server holds it, until ctx ends.
+// Acquire takes the tenant's writer lease, waiting while another server holds it, until ctx ends.
+// It waits too while a server of v0.3.15 or before holds the tenant (waitOlder), before it claims
+// the lease and again after: a v0.3.15 standby could take its lock between the two.
 func (in *Ingester) Acquire(ctx context.Context) error {
 	if in.lock.Load() != nil {
 		return nil
 	}
 	defer in.waiting.Store(false)
-	l, err := pgstore.AcquireWriter(ctx, in.locks, in.o.Schema, in.tenant, in.o.LockPoll, func(holder int64) {
-		in.waiting.Store(true)
-		logger.Notice(in.o.Log, fmt.Sprintf("tenant %s: waiting for its writer lock, held by backend %d (another server)", in.tenant, holder))
-	})
-	if err != nil {
-		return err
+	defer in.older.Store(false)
+	var l *pgstore.Writer
+	for l == nil {
+		if err := in.waitOlder(ctx); err != nil {
+			return err
+		}
+		var err error
+		l, err = pgstore.AcquireWriter(ctx, in.leases, in.tenant, in.o.LeaseTTL, in.o.LockPoll, func(h pglease.Holder) {
+			in.waiting.Store(true)
+			logger.Notice(in.o.Log, fmt.Sprintf("tenant %s: waiting for its writer lease, held by %s (%s; another server)", in.tenant, h.ID, h.Info))
+		})
+		if err != nil {
+			return err
+		}
+		if held, err := in.olderHeld(ctx); err != nil || held {
+			l.Release()
+			l = nil
+			if err != nil {
+				return err
+			}
+		}
 	}
 	in.lock.Store(l)
+	in.checkDue(ctx)
 	if in.o.Locked != nil {
 		in.o.Locked()
 	}
 	return nil
 }
 
-// Release lets go of the writer lock.
+// olderHeld reports whether a server of v0.3.15 or before holds the tenant (OlderSchema).
+func (in *Ingester) olderHeld(ctx context.Context) (bool, error) {
+	if in.o.OlderSchema == "" {
+		return false, nil
+	}
+	return pgstore.OlderWriterHeld(ctx, in.leases, in.o.OlderSchema, in.tenant)
+}
+
+// waitOlder waits, polling every LockPoll, while a server of v0.3.15 or before holds the tenant
+// by its advisory lock: the two would write at once, so the operator must stop that server first.
+// It says so once in the log, and the state says why it waits (State.OlderServer).
+func (in *Ingester) waitOlder(ctx context.Context) error {
+	told := false
+	for {
+		held, err := in.olderHeld(ctx)
+		if err != nil || !held {
+			return err
+		}
+		in.waiting.Store(true)
+		in.older.Store(true)
+		if !told {
+			logger.Notice(in.o.Log, fmt.Sprintf("tenant %s: an older server (v0.3.15 or before) holds it by its advisory lock: stop that server; waiting", in.tenant))
+			told = true
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		// NOTE: timed, because nothing tells this server when an older one lets go of its advisory
+		// lock: a session lock's release raises no event another session can wait on. It is asked
+		// again every LockPoll, as a held lease is.
+		case <-time.After(in.o.LockPoll):
+		}
+	}
+}
+
+// checkDue reads which facet declaration the tenant's last complete refresh wrote with, and
+// marks a refresh due when it is not the source's (facetsDue). It is a fact of the store, so it
+// holds whichever server changed the configuration, through restarts, until a refresh with this
+// declaration completes. A read that fails is logged and marks nothing: the scheduled refresh
+// still comes.
+func (in *Ingester) checkDue(ctx context.Context) {
+	r, err := in.st.Refreshed(ctx)
+	if err != nil {
+		logger.Warning(in.o.Log, err, "tenant "+in.tenant+": reading its last refresh")
+		return
+	}
+	due := r.Facets != pgstore.FacetsDigest(in.src.Facets())
+	in.facetsDue.Store(due)
+	if due {
+		logger.Info(in.o.Log, fmt.Sprintf("tenant %s: its last refresh wrote another facet declaration than the source's: refreshing it now", in.tenant))
+	}
+}
+
+// Release lets go of the writer lease.
 func (in *Ingester) Release() {
 	if l := in.lock.Swap(nil); l != nil {
 		l.Release()
 	}
 }
 
-// Confirm reports whether the ingester holds its tenant's writer lock now: nil when it does and
-// the lock answers as this session's; ErrNotLocked while it waits for the lock (another server
-// holds it) or after it let go; ErrLockLost when the lock was lost. It is for another writer of
-// the tenant in the same process, the embedding worker, which writes only while the tenant is
-// this server's, and confirms it before each of its writes as the ingester does before each
-// commit. Unlike the ingester's other methods it may be called from any goroutine.
-func (in *Ingester) Confirm(ctx context.Context) error {
+// Confirm reports whether the ingester holds its tenant's writer lease, as it knows it with no
+// I/O: nil when it does; ErrNotLocked while it waits for the lease (another server holds it) or
+// after it let go; ErrLockLost when the lease was lost. It is for another writer of the tenant in
+// the same process, the embedding worker, which leaves the tenant alone unless it is this
+// server's; its writes go through Store, and so are fenced in the database as the ingester's
+// are. Unlike the ingester's other methods it may be called from any goroutine.
+func (in *Ingester) Confirm(_ context.Context) error {
 	l := in.lock.Load()
 	if l == nil {
 		return ErrNotLocked
 	}
-	return l.Check(ctx)
+	return l.Check()
 }
 
 // Stats are what one Pass or Refresh did.
 type Stats struct {
+	// Upto is the bound on the database's clock the run read the view to (now − Lag): every row
+	// whose updated_at is at most Upto was read, once the run completed.
+	Upto        time.Time
 	Pages, Read int
 	Written     int // documents written
 	Unchanged   int // refresh: rows whose document was already current
 	Quarantined int // rows that failed and wait in quarantine
 	Released    int // quarantined rows that ingested, or that the source no longer returns
 	Deleted     int // refresh: documents of rows the source no longer returns
+	// DeletedFlag and DeletedView are documents deleted by a row's deleted field and by the
+	// deletes view's tombstones; DeleteNoop is deletes that found no document to remove (an id
+	// never indexed or already gone, or a document written after the delete).
+	DeletedFlag, DeletedView, DeleteNoop int
+	// Swept is the orphan vectors the run swept (pgstore's SweepEmbeddings): those of texts no
+	// chunk of the tenant has any more.
+	Swept int
 	// Unidentified are rows with no id: they can be neither indexed nor quarantined, and a refresh
 	// that read one deletes nothing.
 	Unidentified int
@@ -232,6 +356,7 @@ func (in *Ingester) Pass(ctx context.Context) (Stats, error) {
 	if err != nil {
 		return st, err
 	}
+	st.Upto = upto
 	if err := in.retry(ctx, upto, &st); err != nil {
 		return st, err
 	}
@@ -279,8 +404,53 @@ func (in *Ingester) Pass(ctx context.Context) (Stats, error) {
 		}
 		cur = next
 	}
+	if err := in.deletes(ctx, upto, &st); err != nil {
+		return st, err
+	}
+	if st.Written >= mergeAfter {
+		in.merge(ctx)
+	}
+	if st.Written > 0 && !in.o.Clock.Now().Before(in.lastSweep.Add(sweepEvery)) {
+		in.sweep(ctx, &st)
+	}
 	in.count(ctx, &st)
 	return st, nil
+}
+
+// sweepEvery is how often a pass that wrote sweeps the tenant's orphan vectors (a variable, so a
+// cell can shorten it); a complete refresh always sweeps. A sweep is an anti-join of the tenant's
+// vectors against its chunks: run after every pass, it would cost that every minute of a day of
+// updates; every fifteen minutes, the vectors an update leaves wait at most that long.
+var sweepEvery = 15 * time.Minute
+
+// sweep deletes the tenant's orphan vectors (pgstore's SweepEmbeddings), between the ingester's own
+// writes, under its lease. A failure is logged and the vectors wait for the next sweep; a lost lease
+// stops the ingester at its next write, as any.
+func (in *Ingester) sweep(ctx context.Context, st *Stats) {
+	in.lastSweep = in.o.Clock.Now()
+	n, err := in.st.SweepEmbeddings(ctx)
+	st.Swept += n
+	in.swept.Add(int64(n))
+	switch {
+	case err != nil && ctx.Err() == nil:
+		logger.Warning(in.o.Log, err, "tenant "+in.tenant+": sweeping its orphan vectors")
+	case n > 0:
+		logger.Info(in.o.Log, fmt.Sprintf("tenant %s: swept %d vectors of texts no document has any more", in.tenant, n))
+	}
+}
+
+// mergeAfter is how many documents a pass writes before it merges the text index's pending list
+// (a variable, so a cell can lower it): a load, such as a new tenant's first pass. A refresh that
+// wrote any merges too.
+var mergeAfter = 1000
+
+// merge merges the text index's pending list (pgstore's MergePending), which every lexical search
+// reads whole until it is merged. A failure is logged: the list stays until the next merge or
+// VACUUM, and searches are only slower meanwhile.
+func (in *Ingester) merge(ctx context.Context) {
+	if _, err := in.st.MergePending(ctx); err != nil && ctx.Err() == nil {
+		logger.Warning(in.o.Log, err, "tenant "+in.tenant+": merging the text index's pending list")
+	}
 }
 
 // retry reads the view from its start for the quarantined rows, as Pass says.
@@ -382,6 +552,7 @@ func (in *Ingester) Refresh(ctx context.Context) (Stats, error) {
 	if err != nil {
 		return st, err
 	}
+	st.Upto = upto
 	stored, err := in.st.Cursor(ctx)
 	if err != nil {
 		return st, err
@@ -469,6 +640,11 @@ func (in *Ingester) Refresh(ctx context.Context) (Stats, error) {
 		st.Complete = false
 		return st, err
 	}
+	in.facetsDue.Store(false) // this refresh wrote the source's declaration (finish)
+	if st.Written > 0 {
+		in.merge(ctx)
+	}
+	in.sweep(ctx, &st)
 	in.count(ctx, &st)
 	return st, nil
 }
@@ -551,7 +727,8 @@ func (in *Ingester) finish(ctx context.Context, st *Stats, current map[string]pg
 		}
 		st.Released++
 	}
-	if err := b.SetRefreshed(ctx, pgstore.Refresh{Started: started, Finished: in.o.Clock.Now()}); err != nil {
+	if err := b.SetRefreshed(ctx, pgstore.Refresh{Started: started, Finished: in.o.Clock.Now(),
+		Facets: pgstore.FacetsDigest(in.src.Facets())}); err != nil {
 		_ = b.Rollback()
 		return err
 	}
@@ -571,6 +748,20 @@ func (in *Ingester) finish(ctx context.Context, st *Stats, current map[string]pg
 // With current (a refresh), a document already current is left as it is. written says a document
 // was written.
 func (in *Ingester) apply(ctx context.Context, b *pgstore.Batch, r row, st *Stats, current map[string]pgstore.DocInfo) (written bool, err error) {
+	if r.deleted && r.bad == nil {
+		// a soft delete at the row's updated_at: its document goes, unless written after it, and the
+		// row leaves quarantine; nothing of it is rendered
+		gone, err := b.DeleteSource(ctx, r.id, r.at)
+		if err != nil {
+			return false, err
+		}
+		if gone {
+			st.DeletedFlag++
+		} else {
+			st.DeleteNoop++
+		}
+		return false, b.Release(ctx, r.id)
+	}
 	path, err := in.src.Path(r.id)
 	var d pgstore.Document
 	if err == nil {
@@ -581,7 +772,14 @@ func (in *Ingester) apply(ctx context.Context, b *pgstore.Batch, r row, st *Stat
 		return false, b.Quarantine(ctx, r.id, err)
 	}
 	if info, ok := current[path]; ok && info.Version == d.Version && info.Indexer == d.Indexer {
+		// current: its Version begins with the row's updated_at, so a row deleted and created again
+		// since it was written renders another Version and is written again. Its source_at is
+		// recorded when it has none (a document written before source_at was kept), as a write
+		// would have: one statement for such a document, none for the rest.
 		st.Unchanged++
+		if info.SourceAt.IsZero() {
+			return false, b.SetSourceAt(ctx, path, r.at)
+		}
 		return false, nil
 	}
 	if _, err := b.Put(ctx, d); err != nil {
@@ -591,8 +789,9 @@ func (in *Ingester) apply(ctx context.Context, b *pgstore.Batch, r row, st *Stat
 	return true, b.Release(ctx, r.id)
 }
 
-// commit commits b once the writer lock is confirmed held, and rolls it back otherwise: a server
-// that lost its lock writes nothing more.
+// commit commits b, whose transaction confirmed the writer lease as its first statement (the
+// fence) and holds it against a takeover; a lease this process knows lost rolls b back first. A
+// server that lost its lease writes nothing more.
 func (in *Ingester) commit(ctx context.Context, b *pgstore.Batch) error {
 	if beforeCommit != nil {
 		if err := beforeCommit(); err != nil {
@@ -600,7 +799,7 @@ func (in *Ingester) commit(ctx context.Context, b *pgstore.Batch) error {
 			return err
 		}
 	}
-	if err := in.lock.Load().Check(ctx); err != nil {
+	if err := in.lock.Load().Check(); err != nil {
 		_ = b.Rollback()
 		return err
 	}
@@ -660,11 +859,28 @@ type Outcome struct {
 }
 
 // State is what an ingester shows an operator (enterprise/ops): whether it holds its tenant's
-// writer lock or waits for another server's, and how its last pass and refresh ended. It is
+// writer lease or waits for another server's, and how its last pass and refresh ended. It is
 // published whole after each change, and safe to read from any goroutine.
 type State struct {
-	Locked, Waiting       bool
+	Locked, Waiting bool
+	// OlderServer says Waiting is for a server of v0.3.15 or before, which holds the tenant by its
+	// advisory lock: the operator must stop it.
+	OlderServer           bool
 	LastPass, LastRefresh Outcome
+	// RefreshDue is why a refresh is due before its schedule, until one completes: RefreshFacets;
+	// "" for none.
+	RefreshDue string
+	// Deletes says the source has a deletes view; DeletesError is its last pass's failure, None
+	// after one that succeeded (the status shows its cursor's lag beside it).
+	Deletes      bool
+	DeletesError opcode.Code
+	// CaughtUp is the bound on the database's clock the last run that read every row did read to
+	// (Stats.Upto of a pass that completed, or of a complete refresh): the index holds every row
+	// updated at or before it. DeletesCaughtUp is the same of the last deletes pass that succeeded.
+	// Both are the zero time until such a run, since this ingester started.
+	CaughtUp, DeletesCaughtUp time.Time
+	// VectorsSwept is how many orphan vectors the ingester has swept since it started (sweep).
+	VectorsSwept int64
 }
 
 // State is the ingester's state now.
@@ -675,6 +891,18 @@ func (in *Ingester) State() State {
 	}
 	st.Locked = in.lock.Load() != nil
 	st.Waiting = !st.Locked && in.waiting.Load()
+	st.OlderServer = st.Waiting && in.older.Load()
+	if in.facetsDue.Load() {
+		st.RefreshDue = RefreshFacets
+	}
+	st.Deletes = in.src.Deletes() != nil
+	st.VectorsSwept = in.swept.Load()
+	if c := in.deletesErr.Load(); c != nil {
+		st.DeletesError = *c
+	}
+	if t := in.deletesTo.Load(); t != nil {
+		st.DeletesCaughtUp = *t
+	}
 	return st
 }
 
@@ -685,6 +913,10 @@ func (in *Ingester) record(kind string, st Stats, err error) {
 		next = *p
 	}
 	o := Outcome{At: in.o.Clock.Now(), Stats: st, Error: codeOf(err)}
+	// a pass that returned no error read every row to its bound, and so did a complete refresh
+	if err == nil && (kind != "refresh" || st.Complete) && st.Upto.After(next.CaughtUp) {
+		next.CaughtUp = st.Upto
+	}
 	if kind == "refresh" {
 		next.LastRefresh = o
 	} else {
@@ -717,11 +949,11 @@ func (in *Ingester) count(ctx context.Context, st *Stats) {
 	}
 }
 
-// Run holds the tenant's writer lock and indexes on schedule until ctx ends: a refresh when the
+// Run holds the tenant's writer lease and indexes on schedule until ctx ends: a refresh when the
 // last complete one is older than Refresh (or there was none), else a pass, every Interval. A failed
 // pass is logged and tried again at the next tick; a refresh that failed or was not complete is
-// logged and tried again RefreshRetry later. It confirms the lock every PingEvery; a lost lock stops
-// it at once with ErrLockLost. It returns nil when ctx ends, with the lock released.
+// logged and tried again RefreshRetry later. It renews the lease every PingEvery; a lost lease stops
+// it at once with ErrLockLost. It returns nil when ctx ends, with the lease released.
 func (in *Ingester) Run(ctx context.Context) error {
 	if err := in.Acquire(ctx); err != nil {
 		// a wait ended by ctx is a clean stop: ctx's error, or its deadline passed, which Acquire
@@ -752,12 +984,15 @@ func (in *Ingester) Run(ctx context.Context) error {
 	return nil
 }
 
-// ping confirms the lock every PingEvery, and cancels the run with the loss.
+// ping renews the writer lease every PingEvery, and cancels the run with its loss: taken over (the
+// renew matched no row), or not renewed for most of its length (Check's silence rule), the
+// database unreachable meanwhile.
 func (in *Ingester) ping(ctx context.Context, cancel context.CancelCauseFunc) {
-	// NOTE: polled, because nothing can announce it: a session killed, or a connection dropped by
-	// the network, tells no one until the connection is next used. A ping every PingEvery bounds
-	// how long a server that lost its lock goes on believing it holds it; every commit confirms
-	// the lock as well, so no write lands in that window.
+	// NOTE: a renew failing for another reason (a timeout, a connection dropped) is not a loss by
+	// itself: the next one may land. Only the lease's own silence rule decides, by the monotonic
+	// clock, and it is read at each tick and each Check, so this server may believe it holds the
+	// lease up to a tick past the database's lease_until. What keeps that safe is the fence: every
+	// write confirms the lease in the database, in its own transaction, and holds it there.
 	t := time.NewTicker(in.o.PingEvery)
 	defer t.Stop()
 	for {
@@ -765,7 +1000,20 @@ func (in *Ingester) ping(ctx context.Context, cancel context.CancelCauseFunc) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			if err := in.lock.Load().Check(ctx); errors.Is(err, ErrLockLost) {
+			l := in.lock.Load()
+			err := l.Renew(ctx)
+			if err != nil && !errors.Is(err, ErrLockLost) && ctx.Err() == nil {
+				logger.Warning(in.o.Log, err, "tenant "+in.tenant+": renewing its writer lease")
+				err = l.Check()
+			}
+			if err == nil {
+				// a v0.3.15 standby, running since before the store was migrated, may have taken
+				// its lock since this server took the lease: both would write, so this one stops
+				if held, oerr := in.olderHeld(ctx); oerr == nil && held {
+					err = fmt.Errorf("%w: an older server (v0.3.15 or before) holds the tenant by its advisory lock: stop that server", ErrLockLost)
+				}
+			}
+			if errors.Is(err, ErrLockLost) {
 				logger.Error(in.o.Log, err, "tenant "+in.tenant+": stopping")
 				cancel(err)
 				return
@@ -780,7 +1028,7 @@ func (in *Ingester) loop(ctx context.Context) error {
 		logger.Warning(in.o.Log, err, "tenant "+in.tenant+": reading its last refresh")
 	}
 	var due time.Time // the next refresh's time; zero: at once
-	if !refreshed.Finished.IsZero() {
+	if !refreshed.Finished.IsZero() && !in.facetsDue.Load() {
 		due = refreshed.Finished.Add(in.o.Refresh)
 	}
 	for {

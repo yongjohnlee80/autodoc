@@ -20,15 +20,40 @@ import (
 // clickText clicks the screen where text begins.
 func (r *running) clickText(t *testing.T, text string) {
 	t.Helper()
+	if !r.tryClickText(t, text) {
+		t.Fatalf("%q is not on the screen:\n%s", text, r.s)
+	}
+}
+
+// tryClickText clicks the screen where text begins; false when it is not on the screen.
+func (r *running) tryClickText(t *testing.T, text string) bool {
 	for y, row := range strings.Split(r.s.String(), "\n") {
 		if j := strings.Index(row, text); j >= 0 {
 			x := len([]rune(row[:j]))
-			r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y},
+			r.s.Keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y},
 				tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x, Y: y})
-			return
+			return true
 		}
 	}
-	t.Fatalf("%q is not on the screen:\n%s", text, r.s)
+	return false
+}
+
+// clickToast clicks the toast saying text until done: a toast moves when another comes or goes
+// (the notice of what was just added is one), so a click aimed at the screen as it was read can land
+// where the toast no longer is, and does nothing. The click is repeated only once the loop has had
+// the time of a frame to act on it, and done still says no.
+func (r *running) clickToast(t *testing.T, text string, done func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for !done() {
+		if time.Now().After(deadline) {
+			t.Fatalf("clicking %q did nothing:\n%s", text, r.s)
+		}
+		r.tryClickText(t, text)
+		for settle := time.Now().Add(500 * time.Millisecond); !done() && time.Now().Before(settle); {
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
 }
 
 // namedPluginRepo is a repository of the test plugin named name, whose build runs build.
@@ -133,7 +158,7 @@ func TestAuditHandsAFreshCopyAndItsToastReopensTheCard(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r.clickText(t, "audit of echo sent")
+	r.clickToast(t, "audit of echo sent", func() bool { return r.card() != nil })
 	r.question(t)
 	if r.card() != c {
 		t.Fatal("the toast reopened another candidate")
@@ -148,7 +173,10 @@ func TestAuditHandsAFreshCopyAndItsToastReopensTheCard(t *testing.T) {
 		t.Fatalf("the second audit's copy %s is not fresh beside the first's %s", copy2, copy1)
 	}
 
-	r.clickText(t, "audit of echo sent")
+	if r.card() != nil {
+		t.Fatal("the card stayed up while the second audit was handed over")
+	}
+	r.clickToast(t, "audit of echo sent", func() bool { return r.card() != nil })
 	r.question(t)
 	r.keys(t, key('y'))
 	r.waitNotice(t, "added echo at "+full[:7])
@@ -197,7 +225,7 @@ func TestEachCandidateOwnsItsCard(t *testing.T) {
 	r.keys(t, key('y'))
 	r.waitNotice(t, "added beta at")
 
-	r.clickText(t, "the plugin alpha waits")
+	r.clickToast(t, "the plugin alpha waits", func() bool { return r.card() != nil })
 	if q := r.question(t); !strings.Contains(q, "(alpha)") || r.card() != a {
 		t.Fatalf("A's toast opened another card:\n%s", q)
 	}
@@ -491,7 +519,7 @@ func TestALuaCardReplacedWaitsOnItsToast(t *testing.T) {
 		t.Fatalf("cancelling beta reached alpha: %+v", a)
 	}
 	// alpha, replaced twice and waiting all along, reopens once beta is answered
-	r.clickText(t, "the Lua package alpha waits")
+	r.clickToast(t, "the Lua package alpha waits", func() bool { return strings.Contains(r.s.String(), "install the Lua package alpha?") })
 	r.s.WaitForText(t, "install the Lua package alpha?")
 	if a := look("lua/alpha"); a.state != opConfirming || gone(a.stage) {
 		t.Fatalf("alpha's toast after beta: %+v", a)

@@ -1,12 +1,14 @@
 package tui
 
 import (
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/yongjohnlee80/autodoc/plugin"
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	tuikey "github.com/yongjohnlee80/golib/tui/key"
 	"github.com/yongjohnlee80/golib/tui/style"
 	widgetcore "github.com/yongjohnlee80/golib/tui/widget/core"
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
@@ -79,6 +81,11 @@ type pluginView struct {
 	// precise: the backend has told a scroll precisely (MouseEvent.ScrollX, ScrollY), so it tells
 	// every one, and a wheel step that carries none adds nothing
 	precise bool
+	// dragRun is the run a protocol-12 left press went to, until the one release or cancel that
+	// follows it (endDrag): the gesture is that run's, and a later run never hears of it. dragAt is
+	// where the pointer last was in the gesture, a cancel's place.
+	dragRun *pluginRun
+	dragAt  tuicore.Point
 }
 
 // NativeView is a pixel surface's native view over the view's cells, where the window draws streams;
@@ -161,8 +168,46 @@ var _ tuicore.Focusable = (*pluginView)(nil)
 
 func (v *pluginView) AcceptsFocus() bool { return true }
 
-// attach makes the view r's: a card's panel showing a run of its plugin.
+// hostKey reports whether e is one of the keys a protocol-12 card leaves to the Window
+// (CardHostKeys): F6 and Shift+F6, and maximize's when the card's window lists maximize, as the map
+// binds them now. The window is the panel's (windowOf), so F11 is left to the Window exactly when
+// the panel can be maximized; a later edit of the manifest changes neither until AutoDoc restarts.
+func (v *pluginView) hostKey(e tuicore.KeyEvent) bool {
+	chord, ok := tuikey.Of(e.Code, e.Mods, e.Text)
+	if !ok {
+		return false
+	}
+	candidates := tuikey.Candidates(chord)
+	return slices.ContainsFunc(v.pl.c.CardHostKeys(v.pl.windowOf(v.card).Controls("maximize")), func(s tuikey.Seq) bool {
+		return slices.Contains(candidates, s)
+	})
+}
+
+// gestureAt is a protocol-12 gesture's pointer event of kind ("drag", "release" or "cancel") at p.
+func (v *pluginView) gestureAt(kind string, p tuicore.Point) plugin.Pointer {
+	return plugin.Pointer{Kind: kind, Button: "left", X: p.X, Y: p.Y, Count: 1}
+}
+
+// endDrag ends a protocol-12 gesture the view holds: a cancel to the run that saw the press (send
+// drops it once that run is closing), and the capture given back.
+func (v *pluginView) endDrag() {
+	dr := v.dragRun
+	if dr == nil {
+		return
+	}
+	v.dragRun = nil
+	dr.send(plugin.MethodPointer, plugin.PointerParams(v.gestureAt("cancel", v.dragAt)))
+	if ctx := v.Context(); ctx != nil {
+		ctx.ReleasePointer()
+	}
+}
+
+// attach makes the view r's: a card's panel showing a run of its plugin. A gesture an earlier run
+// holds ends with a cancel to it.
 func (v *pluginView) attach(r *pluginRun) {
+	if v.dragRun != r {
+		v.endDrag()
+	}
 	v.run, r.view = r, v
 	v.sentW, v.sentH = 0, 0
 	v.MarkDirty()
@@ -171,6 +216,7 @@ func (v *pluginView) attach(r *pluginRun) {
 // detach leaves the view showing nothing, when it is r's.
 func (v *pluginView) detach(r *pluginRun) {
 	if v.run == r {
+		v.endDrag()
 		v.run = nil
 		v.MarkDirty()
 	}
@@ -263,6 +309,35 @@ func (v *pluginView) RequestFocus() {
 // press on it opens its menu.
 func (v *pluginView) HandleEvent(ev tuicore.Event) bool {
 	r := v.run
+	if _, ok := ev.(tuicore.PointerCaptureLostEvent); ok {
+		if dr := v.dragRun; dr != nil {
+			// the host took the pointer back (the panel closed, a menu opened): a cancel, never a
+			// release, which would click where the pointer happens to be
+			v.dragRun = nil
+			dr.send(plugin.MethodPointer, plugin.PointerParams(v.gestureAt("cancel", v.dragAt)))
+		}
+		return false
+	}
+	if m, ok := ev.(tuicore.MouseEvent); ok && r != nil && v.dragRun == r &&
+		(m.Kind == tuicore.MouseMotion || m.Kind == tuicore.MouseRelease && m.Button == tuicore.MouseLeft) {
+		// the gesture's motion and its release, before anything else reads the pointer (a pixel
+		// surface shown mid-gesture included: the gesture began on the cells, and ends there),
+		// wherever the pointer is: unclamped, off the view included (golib keeps a captured
+		// event's coordinates). Another button's release never ends a left drag. A motion within
+		// the cell the gesture was last in sends nothing: a window reports several a cell.
+		at := tuicore.Point{X: m.X, Y: m.Y}
+		if m.Kind == tuicore.MouseMotion {
+			if at != v.dragAt {
+				v.dragAt = at
+				r.send(plugin.MethodPointer, plugin.PointerParams(v.gestureAt("drag", at)))
+			}
+			return true
+		}
+		v.dragRun, v.dragAt = nil, at // before the capture goes: giving it back is no cancel
+		r.send(plugin.MethodPointer, plugin.PointerParams(v.gestureAt("release", at)))
+		v.Context().ReleasePointer()
+		return true
+	}
 	if m, ok := ev.(tuicore.MouseEvent); ok && v.surfaceMode() {
 		hostMenu := r.e.m.Surface == nil || r.e.m.Surface.ContextMenu != "plugin"
 		if v.card != "" && hostMenu && m.Kind == tuicore.MousePress && m.Button == tuicore.MouseRight && m.Mods.Chord() == 0 {
@@ -294,7 +369,21 @@ func (v *pluginView) HandleEvent(ev tuicore.Event) bool {
 				p.Kind, p.Button = "wheel", "down"
 			}
 			if p.Kind != "" {
+				// the gesture follows the run's protocol, the one the plugin was opened at and
+				// answers by, never the panel's manifest (windowOf): a plugin opened at 12 is
+				// promised its release or cancel, whatever its window was drawn from
+				if p.Kind == "press" && r.e.m.Protocol >= 12 {
+					v.endDrag() // one release or cancel per press: a press with one in hand ends it
+				}
 				r.send(plugin.MethodPointer, plugin.PointerParams(p))
+				if p.Kind == "press" && r.e.m.Protocol >= 12 {
+					v.dragRun, v.dragAt = r, tuicore.Point{X: m.X, Y: m.Y}
+					if !v.Context().CapturePointer() {
+						// refused: no motion or release will come, so the gesture ends at once
+						v.dragRun = nil
+						r.send(plugin.MethodPointer, plugin.PointerParams(v.gestureAt("release", v.dragAt)))
+					}
+				}
 				return true
 			}
 		}
@@ -314,6 +403,11 @@ func (v *pluginView) HandleEvent(ev tuicore.Event) bool {
 	if !ok || e.Kind == tuicore.KeyRelease {
 		return false
 	}
+	// the protocol is the run's, the one the plugin was opened at: at 12 it is never sent F6 and
+	// Shift+F6, which is its protocol's promise to it; what its window lists is the panel's (hostKey)
+	if r.e.m.Protocol >= 12 && r.e.m.Card() && v.hostKey(e) {
+		return false // the Window's Shortcut runs: F6 leaves the card, F11 maximizes its panel
+	}
 	if e.Code == tuicore.KeyEscape && e.Mods.Chord() == 0 {
 		if !r.e.m.Modal() {
 			return false // the panel's Drawer closes on it: the card hides, its plugin runs on
@@ -331,18 +425,25 @@ func (v *pluginView) HandleEvent(ev tuicore.Event) bool {
 	return true
 }
 
-// openMenu is a card's right-click menu, at a point in the card: Close (Esc), which closes its
-// panel as Esc does.
+// openMenu is a card's right-click menu, at a point in the card: Layout › (its panel's tiling, as
+// every tileable panel's menu has it), then Close (Esc), which closes its panel as Esc does.
 func (v *pluginView) openMenu(at tuicore.Point) bool {
 	if v.menu == nil {
 		v.menu = editor.NewEditorMenu(v, nil)
 		v.menu.SetEnabled(true)
-		v.menu.SetRows(func() []widgetcore.MenuItemModel {
-			return []widgetcore.MenuItemModel{menuCommand("plugin.card.close", "&Close (Esc)",
-				editor.CoreMenuAction{ID: "plugin.card.close", Run: func(*editor.EditorCore) { v.closePanel() }})}
-		})
+		v.menu.SetRows(v.menuRows)
 	}
 	return v.menu.OpenAt(at)
+}
+
+// menuRows are the card's right-click menu's rows, as it opens: Layout ›, then Close (Esc).
+func (v *pluginView) menuRows() []widgetcore.MenuItemModel {
+	var rows []widgetcore.MenuItemModel
+	if v.pl != nil && v.card != "" {
+		rows = layoutRows(v.pl.c, cardPanelID(v.card), coreRowOf)
+	}
+	return append(rows, menuCommand("plugin.card.close", "&Close (Esc)",
+		editor.CoreMenuAction{ID: "plugin.card.close", Run: func(*editor.EditorCore) { v.closePanel() }}))
 }
 
 // closePanel closes the card's panel: the card hides, its plugin runs on.

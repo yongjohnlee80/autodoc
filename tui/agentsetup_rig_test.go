@@ -33,6 +33,10 @@ func init() {
 		os.Exit(fakeBuildMain())
 	case "hearing-agent":
 		os.Exit(hearingAgentMain())
+	case "fake-agent":
+		os.Exit(fakeAgentMain())
+	case "recording-agent":
+		os.Exit(recordingAgentMain())
 	case "codex":
 		os.Exit(fakeCodexMain())
 	}
@@ -209,12 +213,19 @@ func agentsFolder(t *testing.T) string {
 	return shellTempDir(t, "autodoc-agents-")
 }
 
-// runSetupTUI is runAgentTUIWith for the cells that run on every OS (the setup's, an agent's): the
+// runAgentTUI is runSetupTUI with no more preferences and no options: the TUI with the profiles
+// given, the default named def, its agent folder dir, on agentConfig, with no autodoc installed.
+func runAgentTUI(t *testing.T, dir string, profiles []agents.AgentProfile, def string) (d *daemon, r *running, calls string) {
+	t.Helper()
+	return runSetupTUI(t, dir, profiles, def, nil, Options{})
+}
+
+// runSetupTUI is the TUI for the cells that run on every OS (the setup's, an agent's): the
 // program has a home and a PATH of its own (the system's programs only), and its agents call a
 // stand-in build that records each call in calls.
 func runSetupTUI(t *testing.T, dir string, profiles []agents.AgentProfile, def string, more map[string]string, opt Options) (d *daemon, r *running, calls string) {
 	t.Helper()
-	return runSetupTUIIn(t, dir, profiles, def, more, opt, map[string][]string{"kb": {"a.md", "a\n"}}) // runAgentTUIWith's workspace
+	return runSetupTUIIn(t, dir, profiles, def, more, opt, map[string][]string{"kb": {"a.md", "a\n"}}) // the agent cells' workspace
 }
 
 // runSetupTUIIn is runSetupTUI over the daemon's workspaces files, kb's entered first.
@@ -235,7 +246,7 @@ func runSetupTUIIn(t *testing.T, dir string, profiles []agents.AgentProfile, def
 	maps.Copy(prefs, more)
 	d = startDaemonWith(t, "", files, daemonOpts{prefs: prefs})
 	opt.AgentDir, opt.ConfigPath = dir, agentConfig
-	opt.seams.agentBin = bin
+	opt.seams.setAgentBin(bin)
 	opt.seams.agentPromptsReported = func(string, bool) bool { return true }
 	r = runTUI(t, NewSession(d.sock, nil), opt)
 	r.connected(t)

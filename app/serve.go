@@ -131,7 +131,7 @@ func (s *stack) unwind() {
 // bind makes the state and data directories (the socket's, with no runtime directory, and the
 // store's) and binds the endpoint. An endpoint held by this store's daemon is errAlreadyServing.
 func (d *process) bind() error {
-	sock, storePath := d.p.Socket, d.p.Store
+	sock := d.p.Socket
 	if err := d.e.MakeStateDir(); err != nil {
 		return err
 	}
@@ -146,10 +146,10 @@ func (d *process) bind() error {
 		switch {
 		case perr != nil:
 			return fmt.Errorf("bind %s: in use by something that is not an autodoc: %v", sock, perr)
-		case servesStore(info, storePath):
+		case servesPaths(info, d.p):
 			return fmt.Errorf("%w on %s (version %s); this process is not serving", errAlreadyServing, sock, info.Version)
 		default:
-			return fmt.Errorf("bind %s: in use by an autodoc %s (protocol %d) that is not serving %s", sock, info.Version, info.Protocol, storePath)
+			return fmt.Errorf("bind %s: in use by an autodoc %s (protocol %d) that is not serving %s", sock, info.Version, info.Protocol, d.p.StoreName())
 		}
 	}
 	if err != nil {
@@ -181,6 +181,9 @@ var (
 
 // openStore opens the store, taking its lease, and applies its schema scripts.
 func (d *process) openStore() error {
+	if d.p.Postgres() {
+		return d.openPostgresStore()
+	}
 	storePath := d.p.Store
 	noteOldIndexes(d.p.StateDir, storePath, d.out)
 	db, err := store.Open(d.ctx, storePath, store.WithStartCheckWait(startCheckWait))
@@ -211,6 +214,38 @@ func (d *process) openStore() error {
 	}
 	if st := db.Schema(); len(st.Pending) > 0 {
 		fmt.Fprintf(d.out, "store %s: schema scripts applied: %s\n", storePath, strings.Join(st.Pending, ", "))
+	}
+	for _, w := range db.Schema().Warnings {
+		logger.Warning(d.log, nil, w)
+	}
+	return nil
+}
+
+// openPostgresStore opens the store on PostgreSQL [store] names (docs/decisions/store.md#the-daemon-on-postgresql),
+// waiting out its predecessor's lease for at most the lease's length: released, it opens at once;
+// held by a daemon that was killed, once it expires. The first wait is logged with its holder, and a
+// store still held after it is another daemon's, which this process leaves be.
+func (d *process) openPostgresStore() error {
+	loc, err := d.e.StoreLocation()
+	if err != nil {
+		return err
+	}
+	db, err := store.OpenAtWaiting(d.ctx, loc, func(err error) {
+		logger.Notice(d.log, fmt.Sprintf("%v: waiting for it to be let go", err))
+	}, store.WithStartCheckWait(startCheckWait))
+	if errors.Is(err, store.ErrBusy) {
+		return fmt.Errorf("%w; another daemon serves it, and this process is not serving", err)
+	}
+	if err != nil {
+		return err
+	}
+	d.db = db
+	d.stops.push(func() { _ = db.Close() })
+	if d.storeID, err = db.ID(); err != nil {
+		return err
+	}
+	if st := db.Schema(); len(st.Pending) > 0 {
+		fmt.Fprintf(d.out, "store (PostgreSQL, schema %s): schema scripts applied: %s\n", loc.Schema, strings.Join(st.Pending, ", "))
 	}
 	for _, w := range db.Schema().Warnings {
 		logger.Warning(d.log, nil, w)
@@ -537,9 +572,15 @@ func (d *process) openFiles() error {
 func (d *process) buildServer() error {
 	b, db := d.b, d.db
 	d.srv = rpc.New(d.ws, b.version, rpc.WithListener(d.ln), rpc.WithLogger(d.log), rpc.WithPreferences(db), rpc.WithEmbeddings(d.emb), rpc.WithEvents(db), rpc.WithStoreCheck(db),
-		rpc.WithRegistrations(b.reg.Tables()), rpc.WithRankers(d.ranking), rpc.WithStoreID(d.storeID), rpc.WithDisks(d.files), rpc.WithGuard(d.guard),
+		rpc.WithRegistrations(b.reg.Tables()), rpc.WithRankers(d.ranking), rpc.WithStoreID(d.storeID), rpc.WithStoreLocation(d.p.Engine, d.p.Schema), rpc.WithDisks(d.files), rpc.WithGuard(d.guard),
 		rpc.WithTaskFiles(taskFiles(d.deps.todos)), rpc.WithModules(d.mods...), rpc.WithProfiler(d.prof), rpc.WithOwnDirs(d.ownDirs()))
 	d.refreshTodos(d.deps.todos)
+	if d.p.Postgres() {
+		// no lease-info: a store on PostgreSQL has no folder to keep one beside, and its clients find
+		// its daemon on their configured socket
+		d.verifyStore()
+		return nil
+	}
 	li := store.LeaseInfo{StoreID: d.storeID, StorePath: d.p.Store, Addr: d.p.Socket, PID: int64(os.Getpid()), Instance: d.srv.Instance(),
 		Version: b.version, Protocol: rpc.Protocol, MinProtocol: rpc.MinProtocol, Since: time.Now().UTC()}
 	if err := store.WriteLeaseInfo(d.p.Store, li); err != nil {
@@ -759,6 +800,15 @@ func openAfterPredecessor(ctx context.Context, storePath string) (*store.Store, 
 			return nil, err
 		}
 	}
+}
+
+// servesPaths reports whether a probed daemon serves the store p names: a store on PostgreSQL by
+// the engine and schema it says, a SQLite store by its file's identity (servesStore).
+func servesPaths(info rpc.ProbeInfo, p endpoint.Paths) bool {
+	if p.Postgres() {
+		return endpoint.CheckPostgresStore("", p.Schema, info.Engine, info.Schema) == nil
+	}
+	return servesStore(info, p.Store)
 }
 
 // servesStore reports whether a probed daemon serves the store at storePath: its store_id is that

@@ -79,7 +79,7 @@ func startingCrewAgents(t *testing.T, profiles string) (*agents.Agents, *identit
 	t.Helper()
 	a, c, w := crewAgents(t, profiles)
 	c.panel = &modelPanel{owner: c, starts: true}
-	seamsOf(a).agentSpawn = func(pty.Cmd) (terminal.TerminalProcess, error) { return newFakeTerminal(), nil }
+	seamsOf(a).setAgentSpawn(func(pty.Cmd) (terminal.TerminalProcess, error) { return newFakeTerminal(), nil })
 	return a, c, w
 }
 

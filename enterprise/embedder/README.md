@@ -37,6 +37,10 @@ w.Wake()      // after an ingester commits (ingest.Options.Committed)
   time is up.
 - **Bounded.** At most the slots' calls are in flight, whichever tenants they are for; each call
   embeds at most a batch, and is bounded in time.
+- **Paced to the provider.** A call that runs out of its time halves the batch and the calls in
+  flight, down to one text and one call, and the round's texts are read again at once at the
+  smaller size; calls that answer in under half their time step back up to the configured batch
+  and slots (pace.go). Only a call of one text that runs out is a failure.
 - **Retries, never blocks.** A provider that fails (down, rate limited, refusing the key) is asked
   again after a wait that doubles to a minute; a text it rejects is set aside, and the rest of its
   batch is stored. Ingestion never waits on the worker: until a document's vectors are in, it

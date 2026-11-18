@@ -4,6 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
+	"regexp"
+	"slices"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/yongjohnlee80/golib/logger"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
@@ -76,8 +82,10 @@ func workspaceOf(ctx context.Context) Workspace {
 }
 
 // verb wraps a handler: it checks the parameter count (lo to hi), resolves the workspace named
-// first when ws is set, and maps the errors.
-func (s *Server) verb(lo, hi int, h func(context.Context, Workspace, []any) (any, error), ws bool) golibrpc.Handler {
+// first when ws is set, and maps the errors, the workspace's and the handler's alike: the system's
+// refusal of a file as rpc.file_refused only when the verb's contract lists it (refusable,
+// unlistedRefusal).
+func (s *Server) verb(lo, hi int, h func(context.Context, Workspace, []any) (any, error), ws, refusable bool) golibrpc.Handler {
 	return func(ctx context.Context, req *golibrpc.Request) (any, error) {
 		if err := argsBetween(req.Params, lo, hi); err != nil {
 			return nil, err
@@ -85,12 +93,12 @@ func (s *Server) verb(lo, hi int, h func(context.Context, Workspace, []any) (any
 		var w Workspace
 		if ws {
 			var err error
-			if w, err = s.workspace(req.Params); err != nil {
-				return nil, wireErr(err)
+			if w, err = s.workspace(req.Params); err != nil { // a workspace in error: its root unreadable, say
+				return nil, wireErr(unlistedRefusal(err, refusable))
 			}
 		}
 		out, err := h(withProtocol(ctx, sessionProtocol(req.Session)), w, req.Params)
-		return out, wireErr(err)
+		return out, wireErr(unlistedRefusal(err, refusable))
 	}
 }
 
@@ -101,6 +109,7 @@ func (s *Server) verb(lo, hi int, h func(context.Context, Workspace, []any) (any
 // ctx carries the session's protocol, client token and bounds too. The result is the handler's own:
 // chain carries it with module.Wire once its events are logged.
 func (s *Server) serve(v module.Verb, errs []module.PublicError) golibrpc.Handler {
+	refusable := slices.Contains(v.Errors, CodeFileRefused)
 	call := func(ctx context.Context, w Workspace, p []any) (any, error) {
 		ctx = module.WithProtocol(ctx, protocolOf(ctx))
 		if w != nil {
@@ -110,9 +119,9 @@ func (s *Server) serve(v module.Verb, errs []module.PublicError) golibrpc.Handle
 		return out, moduleErr(err, errs)
 	}
 	lo, hi := v.Required(), len(v.Params)
-	h := s.verb(lo, hi, call, v.Scope == module.ScopeWorkspace)
+	h := s.verb(lo, hi, call, v.Scope == module.ScopeWorkspace, refusable)
 	if v.Scope == module.ScopeLocalPeer {
-		h = s.local(v.Verb, lo, hi, call)
+		h = s.local(v.Verb, lo, hi, call, refusable)
 	}
 	h = bounded(h, hi, v.Verb, v.Root)
 	return func(ctx context.Context, req *golibrpc.Request) (any, error) {
@@ -144,10 +153,55 @@ func moduleErr(err error, errs []module.PublicError) error {
 	}
 	for _, e := range errs {
 		if errors.Is(err, e.Err) {
-			return &golibrpc.Error{Code: e.Code, Message: e.Message}
+			msg := e.Message
+			if d := detailOf(err, e); d != "" {
+				msg += ": " + d
+			}
+			return &golibrpc.Error{Code: e.Code, Message: msg}
 		}
 	}
 	return err
+}
+
+// maxDetail is the most of an error's detail that crosses, in bytes.
+const maxDetail = 400
+
+// detailOf is err's detail as a client may see it, for an error e marks Detail: the text after
+// e.Err's own in err's, up to where a filesystem's error wrapped beside it begins (an
+// *fs.PathError or *os.LinkError names the path it was given, which may be the host's), on one
+// line (line breaks and tabs as spaces), at most maxDetail bytes, cut at a character with "…".
+// A detail that still holds an absolute path is not sent: the rule an entry's Detail promises is
+// held against a wrap site written after it. "" when e does not send its detail, or err says
+// nothing of its own beyond e.Err. The log keeps err whole.
+func detailOf(err error, e module.PublicError) string {
+	if !e.Detail {
+		return ""
+	}
+	s, own := err.Error(), e.Err.Error()
+	i := strings.Index(s, own)
+	if i < 0 {
+		return ""
+	}
+	rest := s[i+len(own):]
+	for _, t := range causes(err, e.Err) {
+		if j := strings.Index(rest, t); t != "" && j >= 0 {
+			rest = rest[:j]
+		}
+	}
+	d := strings.TrimSpace(strings.TrimPrefix(rest, ":"))
+	d = strings.TrimSpace(strings.TrimSuffix(d, ":"))
+	d = strings.Join(strings.Fields(d), " ")
+	if absPath.MatchString(d) {
+		return ""
+	}
+	if len(d) > maxDetail {
+		cut := maxDetail
+		for cut > 0 && !utf8.RuneStart(d[cut]) {
+			cut--
+		}
+		d = d[:cut] + "…"
+	}
+	return d
 }
 
 // wired carries a verb's result as the wire does: a struct by its json tags, a hand-built map as it
@@ -165,4 +219,62 @@ func (s *Server) wired(h golibrpc.Handler) golibrpc.Handler {
 		}
 		return w, nil
 	}
+}
+
+// unlistedRefusal is err for a verb whose contract lists CodeFileRefused or not (listed): the
+// catalog promises every code a verb may answer (contracts.go), so a verb that doesn't list it
+// answers the system's refusal (wireErr's errFileInUse, errOSRefused) as any unmapped error, an
+// internal error whose detail stays in the log. A verb whose handler hands the system's errors
+// back lists the code to say what they are.
+func unlistedRefusal(err error, listed bool) error {
+	if listed || err == nil {
+		return err
+	}
+	var re *golibrpc.Error
+	if errors.As(wireErr(err), &re) && re.Code == CodeFileRefused {
+		return unmapped{err}
+	}
+	return err
+}
+
+// unmapped is an error wireErr maps to nothing: its text only, none of what it wraps.
+type unmapped struct{ err error }
+
+func (e unmapped) Error() string { return e.err.Error() }
+
+// absPath finds an absolute path in a detail: a Unix one, a word starting with '/' and holding
+// more than the slash, or a Windows one, a drive letter, a colon and a separator. A path begins
+// at the detail's start, after a space or a quote, or after one of ( = [ : , ("key:/a", "a,/b").
+var absPath = regexp.MustCompile(`(^|[\s'"(=\[:,])(/[^\s'"/][^\s'"]*|[A-Za-z]:[\\/])`)
+
+// causes are the texts of the filesystem's errors wrapped in err beside own (an *fs.PathError or
+// *os.LinkError, each with what it wraps), own and what own wraps aside.
+func causes(err, own error) []string {
+	var out []string
+	var walk func(e error)
+	walk = func(e error) {
+		if e == nil || e == own {
+			return
+		}
+		var pe *fs.PathError
+		var le *os.LinkError
+		switch x := e.(type) {
+		case *fs.PathError, *os.LinkError:
+			out = append(out, x.Error())
+			return
+		}
+		if !errors.As(e, &pe) && !errors.As(e, &le) {
+			return // nothing of the filesystem's below
+		}
+		switch u := e.(type) {
+		case interface{ Unwrap() []error }:
+			for _, x := range u.Unwrap() {
+				walk(x)
+			}
+		case interface{ Unwrap() error }:
+			walk(u.Unwrap())
+		}
+	}
+	walk(err)
+	return out
 }

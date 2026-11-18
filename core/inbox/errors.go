@@ -47,7 +47,7 @@ func (m *Manager) Errors() []module.PublicError {
 			Next: "its sender was told; nothing waits on it"},
 		{Err: mail.ErrKeyReused, Code: CodeKeyReused, Name: "inbox.key_reused",
 			Message: "the key is bound to another request or reply", Next: "retry the same reply with the same key, or use a new key"},
-		{Err: mail.ErrTooLarge, Code: CodeTooLarge, Name: "inbox.too_large", Message: "the body is past 64 KiB"},
+		{Err: mail.ErrTooLarge, Code: CodeTooLarge, Name: "inbox.too_large", Message: "the body is past 64 KiB", Detail: true},
 		// before inbox.unreachable: a handed-over send is an unreachable one too, and must answer as itself
 		{Err: mail.ErrHandedOver, Code: CodeHandedOver, Name: "inbox.handed_over",
 			Message: "the agent's doorbell didn't ring: its host carries the message as a fallback job",

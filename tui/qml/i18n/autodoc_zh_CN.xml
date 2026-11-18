@@ -792,12 +792,12 @@
         <translation>排列面板</translation>
     </message>
     <message id="autodoc.cmd.panel.maximize">
-        <source>maximize or restore the terminal or agents</source>
-        <translation>最大化或还原终端或智能体</translation>
+        <source>maximize or restore the terminal, the agents or a card that offers it</source>
+        <translation>最大化或还原终端、智能体或提供该功能的卡片</translation>
     </message>
     <message id="autodoc.cmd.panel.maximize.help">
-        <source>maximize or restore the terminal or agents</source>
-        <translation>最大化或还原终端或智能体</translation>
+        <source>maximize or restore the terminal, the agents or a card that offers it</source>
+        <translation>最大化或还原终端、智能体或提供该功能的卡片</translation>
     </message>
     <message id="autodoc.cmd.panel.reset_layout">
         <source>reset the panel layout</source>
@@ -1614,6 +1614,10 @@
     <message id="autodoc.dialog.fileConflict.overwrite">
         <source>&amp;Overwrite</source>
         <translation>覆盖(&amp;O)</translation>
+    </message>
+    <message id="autodoc.dialog.fileConflict.compare">
+        <source>&amp;Compare</source>
+        <translation>比较(&amp;c)</translation>
     </message>
     <message id="autodoc.dialog.fileConflict.reload">
         <source>&amp;Reload</source>
@@ -4277,6 +4281,10 @@ WHAT A KEY NEEDS
         <source>workspace %1 was renamed %2 %3</source>
         <translation>工作区 %1 已%3重命名为 %2</translation>
     </message>
+    <message id="autodoc.notice.files.another_workspace_was_entered_meanwhile_open_it">
+        <source>another workspace was entered meanwhile; open it again</source>
+        <translation>期间已进入另一个工作区：请重新打开</translation>
+    </message>
     <message id="autodoc.notice.files.changed_on_disk_while_the_backend_was_away_a_sav">
         <source>%1 changed on disk while the backend was away: a save asks before it overwrites it</source>
         <translation>后端离线期间 %1 在磁盘上发生了更改：保存前会先询问是否覆盖</translation>
@@ -4309,6 +4317,10 @@ WHAT A KEY NEEDS
         <source>%1: it is in no workspace: no search, links, backlinks, frontmatter check or embeddings</source>
         <translation>%1：不属于任何工作区：没有搜索、链接、反向链接、frontmatter 检查和嵌入</translation>
     </message>
+    <message id="autodoc.notice.files.it_was_read_again_from_disk_meanwhile_save_it_ag">
+        <source>it was read again from disk meanwhile; save it again</source>
+        <translation>期间已从磁盘重新读取：请重新保存</translation>
+    </message>
     <message id="autodoc.notice.files.kept_as_it_was_saved_while_it_was_read">
         <source>kept %1 as it was saved while it was read</source>
         <translation>%1 在读取时被保存，已按保存后的版本保留</translation>
@@ -4316,6 +4328,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.files.kept_your_changes_the_disk_s_version_is_newer">
         <source>kept your changes; the disk's version is newer</source>
         <translation>已保留你的更改；磁盘上的版本更新</translation>
+    </message>
+    <message id="autodoc.notice.files.no_workspace_is_in_use_so_a_relative_path_names">
+        <source>no workspace is in use, so a relative path names no file; give its full path</source>
+        <translation>没有正在使用的工作区，相对路径无法指向任何文件：请给出完整路径</translation>
     </message>
     <message id="autodoc.notice.files.open">
         <source>open %1</source>
@@ -4357,6 +4373,10 @@ WHAT A KEY NEEDS
         <source>saved %1, but it could not be read back: %2 — reload before saving again</source>
         <translation>已保存 %1，但无法回读：%2 — 再次保存前请先重新加载</translation>
     </message>
+    <message id="autodoc.notice.files.saved_but_the_disk_differs_from_what_was_written">
+        <source>saved %1, but the disk differs from what was written — reload before saving again</source>
+        <translation>已保存 %1，但磁盘上的内容与写入的不同 — 再次保存前请先重新加载</translation>
+    </message>
     <message id="autodoc.notice.files.saved_the_draft_as">
         <source>saved the draft as %1</source>
         <translation>已将草稿保存为 %1</translation>
@@ -4368,6 +4388,14 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.files.saving">
         <source>saving %1…</source>
         <translation>正在保存 %1…</translation>
+    </message>
+    <message id="autodoc.notice.files.the_connection_to_the_backend_was_renewed_meanwh">
+        <source>the connection to the backend was renewed meanwhile; open it again</source>
+        <translation>期间与后端的连接已重新建立：请重新打开</translation>
+    </message>
+    <message id="autodoc.notice.files.the_connection_to_the_backend_was_renewed_save_it">
+        <source>the connection to the backend was renewed meanwhile; save it again</source>
+        <translation>期间与后端的连接已重新建立：请重新保存</translation>
     </message>
     <message id="autodoc.notice.find.find_cleared">
         <source>find cleared</source>
@@ -4618,8 +4646,8 @@ WHAT A KEY NEEDS
         <translation>所有面板都已在边缘</translation>
     </message>
     <message id="autodoc.notice.panelfloat.maximize_is_the_terminal_s_and_the_agents_open_o">
-        <source>Maximize is the terminal's and the agents': open one first (SPC ` or SPC g)</source>
-        <translation>最大化仅适用于终端和智能体：请先打开其中之一(SPC ` 或 SPC g)</translation>
+        <source>Maximize is the terminal's, the agents' and a card's that offers it: open one first (SPC ` or SPC g)</source>
+        <translation>最大化仅适用于终端、智能体和提供该功能的卡片：请先打开其中之一(SPC ` 或 SPC g)</translation>
     </message>
     <message id="autodoc.notice.panelfloat.resume_has_no_tab_to_wake_the_panel_is_empty">
         <source>Resume has no tab to wake: the panel is empty</source>
@@ -5883,6 +5911,18 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>restart the backend?</source>
         <translation>重启后端？</translation>
     </message>
+    <message id="autodoc.question.terminal.close_s_a_program_may_be_running_in_it">
+        <source>Close %1? A program may be running in it, and it would be stopped.</source>
+        <translation>关闭 %1？其中可能有程序正在运行，它将被停止。</translation>
+    </message>
+    <message id="autodoc.question.terminal.close_s_the_program_running_in_it_is_stopped">
+        <source>Close %1? The program running in it is stopped.</source>
+        <translation>关闭 %1？其中运行的程序将被停止。</translation>
+    </message>
+    <message id="autodoc.question.terminal.close_the_shell">
+        <source>close the shell?</source>
+        <translation>关闭 shell？</translation>
+    </message>
     <message id="autodoc.question.terminal.stop_every_shell_running_here">
         <source>%1 shells are running here. Each is hung up and its tab closed, then the terminal closes.</source>
         <translation>这里有 %1 个 shell 正在运行。将逐一挂断并关闭其标签页，然后关闭终端。</translation>
@@ -5890,6 +5930,10 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
     <message id="autodoc.question.terminal.stop_the_shells_and_close_the_terminal">
         <source>stop the shells and close the terminal?</source>
         <translation>停止 shell 并关闭终端？</translation>
+    </message>
+    <message id="autodoc.question.terminal.yes_close_it">
+        <source>&amp;Yes, close it</source>
+        <translation>是，关闭(&amp;Y)</translation>
     </message>
     <message id="autodoc.question.terminal.yes_stop_them">
         <source>&amp;Yes, stop them</source>
@@ -6075,10 +6119,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>Audit asks your agent to read this code. AutoDoc can't stop the agent from running code or changing files: pick an agent you trust, and watch its tab.</source>
         <translation>“审计”会让你的智能体阅读这段代码。AutoDoc 无法阻止智能体运行代码或修改文件：请选择你信任的智能体，并留意其标签页。</translation>
     </message>
-    <message id="autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_kee">
-        <source>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</source>
-        <translation>%1 有未保存的更改时在磁盘上被修改。继续编辑、重新加载磁盘版本(按 u 可恢复你的文本)，还是用你的版本覆盖它？</translation>
-    </message>
     <message id="autodoc.text.files.a_name_is_required">
         <source>a name is required</source>
         <translation>名称为必填项</translation>
@@ -6090,10 +6130,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
     <message id="autodoc.text.files.changed_on_disk">
         <source>changed on disk</source>
         <translation>已在磁盘上更改</translation>
-    </message>
-    <message id="autodoc.text.files.changed_on_disk_since_you_opened_it_keep_editing">
-        <source>%1 changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</source>
-        <translation>%1 在你打开后已在磁盘上被修改。继续编辑、重新加载磁盘版本(按 u 可恢复你的文本)，还是用你的版本覆盖它？</translation>
     </message>
     <message id="autodoc.text.files.deleted_on_disk">
         <source>deleted on disk</source>
@@ -7469,6 +7505,10 @@ The last connect failed:
         <source>vectors</source>
         <translation>向量</translation>
     </message>
+    <message id="autodoc.text.terminal.starting">
+        <source>starting…</source>
+        <translation>正在启动…</translation>
+    </message>
     <message id="autodoc.text.terminal.the_page_s">
         <source>the page's</source>
         <translation>页面的</translation>
@@ -8460,6 +8500,70 @@ Revoked, its next use of %2 is refused, and asks you again by a card.</source>
     <message id="autodoc.cmd.agents.permissions.help">
         <source>agent permissions: what each agent and package was granted</source>
         <translation>智能体权限：授予每个智能体和包的权限</translation>
+    </message>
+    <message id="autodoc.text.compare.on_disk">
+        <source>On disk</source>
+        <translation>磁盘上</translation>
+    </message>
+    <message id="autodoc.text.compare.your_unsaved_edits">
+        <source>Your unsaved edits</source>
+        <translation>你未保存的编辑</translation>
+    </message>
+    <message id="autodoc.text.compare.title">
+        <source>Compare %1 with the disk</source>
+        <translation>将 %1 与磁盘比较</translation>
+    </message>
+    <message id="autodoc.text.compare.is_gone_from_disk">
+        <source>%1 is gone from disk</source>
+        <translation>%1 已不在磁盘上</translation>
+    </message>
+    <message id="autodoc.text.compare.is_no_longer_open">
+        <source>%1 is no longer open</source>
+        <translation>%1 已不再打开</translation>
+    </message>
+    <message id="autodoc.text.compare.the_buffer_changed_reload">
+        <source>The buffer changed since the merge was loaded: reload it</source>
+        <translation>加载合并后缓冲区已更改:请重新加载</translation>
+    </message>
+    <message id="autodoc.text.compare.nothing_to_merge">
+        <source>Nothing to merge</source>
+        <translation>没有可合并的内容</translation>
+    </message>
+    <message id="autodoc.text.compare.the_disk_holds_your_text">
+        <source>%1 on disk holds your buffer's text. Take the disk's version, the buffer then saved?</source>
+        <translation>磁盘上的 %1 与缓冲区文本相同。采用磁盘版本并将缓冲区视为已保存吗?</translation>
+    </message>
+    <message id="autodoc.text.compare.take_the_disk_s_version">
+        <source>&amp;Take the disk's version</source>
+        <translation>采用磁盘版本(&amp;t)</translation>
+    </message>
+    <message id="autodoc.text.compare.keep_editing">
+        <source>&amp;Keep editing</source>
+        <translation>继续编辑(&amp;k)</translation>
+    </message>
+    <message id="autodoc.notice.compare.read">
+        <source>read %1 to compare</source>
+        <translation>读取 %1 以比较</translation>
+    </message>
+    <message id="autodoc.notice.compare.took_the_disk_s_version">
+        <source>took the disk's version of %1: saved</source>
+        <translation>已采用 %1 的磁盘版本:已保存</translation>
+    </message>
+    <message id="autodoc.notice.compare.merged">
+        <source>merged %1 with the disk: unsaved, u brings your text back</source>
+        <translation>已将 %1 与磁盘合并:未保存,按 u 可恢复你的文本</translation>
+    </message>
+    <message id="autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_compare">
+        <source>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), overwrite it with yours, or compare the two and merge them?</source>
+        <translation>%1 有未保存的更改时在磁盘上被修改。继续编辑、重新加载磁盘版本(按 u 可恢复你的文本)、用你的版本覆盖它，还是比较两者并合并？</translation>
+    </message>
+    <message id="autodoc.text.files.changed_on_disk_since_you_opened_it_compare">
+        <source>%1 changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), overwrite it with yours, or compare the two and merge them?</source>
+        <translation>%1 在你打开后已在磁盘上被修改。继续编辑、重新加载磁盘版本(按 u 可恢复你的文本)、用你的版本覆盖它，还是比较两者并合并？</translation>
+    </message>
+    <message id="autodoc.text.compare.the_merge_was_closed">
+        <source>The merge was closed before it was applied</source>
+        <translation>合并在应用之前已关闭</translation>
     </message>
 </context>
 </TS>

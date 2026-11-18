@@ -121,6 +121,7 @@ func (c *identityHost) Prefs() feature.PrefsView { return c.p }
 func (c *identityHost) SetPref(name, value string) { c.p.values[name] = value }
 
 func (c *identityHost) Set(name string, value any) { c.state[name] = value }
+func (c *identityHost) Say(msg string)             { c.state["App.status"] = msg }
 
 func (c *identityHost) SetFormText(name, value string) { c.Set(name, value) }
 
@@ -308,6 +309,14 @@ func (p *modelPanel) Select(id terminal.TerminalTabID) error {
 	return nil
 }
 
+// StartAsync is Start, answered at once: the model spawns nothing.
+func (p *modelPanel) StartAsync(id terminal.TerminalTabID, done func(error)) {
+	err := p.Start(id)
+	if done != nil {
+		done(err)
+	}
+}
+
 func (p *modelPanel) Start(id terminal.TerminalTabID) error {
 	if p.startErr != nil {
 		return p.startErr
@@ -376,6 +385,11 @@ func (p *modelPanel) Remove(id terminal.TerminalTabID) (feature.TerminalRemoval,
 }
 
 func (*modelPanel) ForceRemove(terminal.TerminalTabID) error { return nil }
+
+// Activity is idle: a model panel's tabs run no shell whose foreground could be asked.
+func (*modelPanel) Activity(terminal.TerminalTabID) terminal.TerminalActivity {
+	return terminal.TerminalIdle
+}
 
 func (p *modelPanel) Tabs() []terminal.TerminalTab {
 	return append([]terminal.TerminalTab(nil), p.tabs...)

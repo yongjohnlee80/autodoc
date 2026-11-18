@@ -18,7 +18,7 @@ flowchart LR
 
 **It knows your workspace.** An agent starts in AutoDoc's own folder for the workspace, where AutoDoc writes `AGENTS.md` and `CLAUDE.md`: the workspace's name and root, and how to reach it. The `autodoc` on its path is yours, so `autodoc --call workspace.list` and the other verbs reach the same index you search.
 
-**Tabs.** Each agent has a tab, named by its codename. **+** starts another profile, or goes to one that's running. A tab's menu (`≡`, or a right click on the tabs) has **Go to**, **Restart**, **Close**, **Profiles…**, **Theme and font…**, **Maximize** and **Hide**.
+**Tabs.** Each agent has a tab, named by its codename. **+** starts another profile, or goes to one that's running. A tab's menu (`≡`, or a right click on the tabs) has **Go to**, **Restart**, **Close**, **Profiles…**, **Theme and font…**, **Maximize** and **Hide**. The **×** at the start of a tab, left of its name, is its **Close**: it asks first while the agent runs.
 
 **Inside the panel** every key goes to the agent, Esc too. **Ctrl+T** switches to Normal mode, to move over its history (`h j k l`, `/`, `v`, `y`); Esc there hides the panel.
 

@@ -13,6 +13,10 @@ type PanelHost interface {
 	Tr(id string) string
 	Trf(id string, args ...any) string
 	Notify(msg string)
+	// Say is Core's: a message on the status line, until the next. The status line is written
+	// only through it: the host counts what it says (a late answer reads the count before it
+	// speaks), and a write of App.status by Set would go uncounted.
+	Say(msg string)
 	Ask(q Question) Asked
 	Prefs() PrefsView
 	// Env is Core's: the program's environment, nil the process's own.

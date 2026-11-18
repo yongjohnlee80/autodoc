@@ -1,0 +1,293 @@
+//go:build server
+
+package store
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"regexp"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/yongjohnlee80/golib/dao"
+	"github.com/yongjohnlee80/golib/dao/postgres"
+
+	"github.com/yongjohnlee80/autodoc/core/clock"
+	"github.com/yongjohnlee80/autodoc/core/pglease"
+	"github.com/yongjohnlee80/autodoc/sql/deployments"
+)
+
+// THE STORE ON POSTGRESQL (docs/decisions/store.md#the-store-on-postgresql). A Location names a
+// PostgreSQL database and schema in place of a SQLite file. The store is then:
+//
+//   - one writer connection, as on SQLite, so the store's writes keep SQLite's order;
+//   - a pool of readers, read-only by session;
+//   - a writer lease (core/pglease) of scope "store" in the schema's writer_lease table: Open
+//     claims it, a live one is ErrBusy (SQLite's single instance), a ticker renews it, and every
+//     write transaction confirms it as its first statement;
+//   - the key in Location.KeyFile, since there is no file to keep it beside.
+//
+// What only a SQLite file has answers ErrNotSQLite: the quick and whole checks, the damaged mark,
+// vacuuming and compaction, the write-ahead log's checkpoint.
+
+// beforeScripts runs between the lease's claim and the scripts: nil in production, set by a cell
+// that stands for a long first start or takes the lease over in that window.
+var beforeScripts func()
+
+// leaseTableDDL is 000036's statement, run before the lease is claimed (openPostgres): a store not
+// yet at 000036 has its lease's table made, and one at it is left as it is. A cell holds the two
+// texts equal.
+const leaseTableDDL = `CREATE TABLE IF NOT EXISTS writer_lease (
+    scope       text COLLATE "C" PRIMARY KEY,
+    holder      text NOT NULL,
+    epoch       bigint NOT NULL,
+    lease_until timestamptz NOT NULL,
+    claimed_at  timestamptz,
+    renewed_at  timestamptz,
+    holder_info text
+)`
+
+// leaseTTL is a PostgreSQL store's writer lease length: a variable, so a cell can stand for a first
+// start longer than a shorter one.
+var leaseTTL = pglease.DefaultTTL
+
+var plainSchema = regexp.MustCompile(`^[a-z_][a-z0-9_]{0,62}$`)
+
+// pgStore is what a store on PostgreSQL holds beside a Store's own: its pools and its lease.
+type pgStore struct {
+	loc    Location
+	id     string // store_identity's id: what the daemon reports as store_id
+	leases dao.DataConn
+	lease  *pglease.Lease
+	stop   context.CancelFunc
+	done   chan struct{}
+	// started is whether the renew runs (startRenew): close waits for it only then, so a failure
+	// before it started never waits on a goroutine that does not exist
+	started bool
+	once    sync.Once
+}
+
+func openPostgres(ctx context.Context, loc Location, opts ...Option) (*Store, error) {
+	switch {
+	case loc.DSN == "":
+		return nil, errors.New("store: a PostgreSQL store needs its DSN")
+	case !plainSchema.MatchString(loc.Schema) || strings.HasPrefix(loc.Schema, "pg_"):
+		return nil, fmt.Errorf("store: the schema %q is not a plain name (lowercase letters, digits and _, not pg_)", loc.Schema)
+	case loc.KeyFile == "":
+		return nil, errors.New("store: a PostgreSQL store needs its key file")
+	}
+	inSchema := postgres.WithConnectHook(func(ctx context.Context, c dao.ConnectedConn) error {
+		_, err := c.ExecContext(ctx, `SET search_path TO "`+loc.Schema+`", public`)
+		return err
+	})
+	readOnly := postgres.WithConnectHook(func(ctx context.Context, c dao.ConnectedConn) error {
+		_, err := c.ExecContext(ctx, "SET default_transaction_read_only = on")
+		return err
+	})
+	var opened []dao.DataConn
+	fail := func(err error) (*Store, error) {
+		for _, c := range opened {
+			_ = c.Close()
+		}
+		return nil, err
+	}
+	open := func(name string, o ...postgres.Option) (dao.DataConn, error) {
+		c, err := postgres.OpenNamed(ctx, "store-"+name+":"+loc.Schema, loc.DSN, o...)
+		if err != nil {
+			return nil, fmt.Errorf("store: opening PostgreSQL (%s): %w", name, err)
+		}
+		opened = append(opened, c)
+		return c, nil
+	}
+	// the schema first, on a connection of its own: the pools' search_path names it
+	admin, err := open("admin", postgres.MaxOpenConns(1))
+	if err != nil {
+		return fail(err)
+	}
+	if _, err := admin.ExecContext(ctx, `CREATE SCHEMA IF NOT EXISTS "`+loc.Schema+`"`); err != nil {
+		return fail(fmt.Errorf("store: the schema %s: %w", loc.Schema, err))
+	}
+	// the lease before the scripts: a process that finds the store another's (a newer build beside an
+	// older daemon) leaves its schema as it is. The lease's table is made first when missing, with
+	// 000036's own statement, so a store not yet at 000036 can be claimed too.
+	// NOTE: a pool of its own, of two: a renew must never wait for the writer's one connection,
+	// which a write holds for its length
+	leases, err := open("lease", postgres.MaxOpenConns(2), inSchema, pglease.WriterSession(leaseTTL))
+	if err != nil {
+		return fail(err)
+	}
+	if _, err := leases.ExecContext(ctx, leaseTableDDL); err != nil {
+		return fail(fmt.Errorf("store: the writer lease's table: %w", err))
+	}
+	lease, err := pglease.Claim(ctx, leases, pglease.Options{Table: LeaseTable, Scope: LeaseScope, TTL: leaseTTL, Info: "store=" + loc.Schema})
+	var held *pglease.HeldError
+	if errors.As(err, &held) {
+		return fail(fmt.Errorf("%w (%s, held by %s %s)", ErrBusy, loc.Schema, held.Holder.ID, held.Holder.Info))
+	}
+	if err != nil {
+		return fail(err)
+	}
+	// the lease is the store's from here: renewed at once, so a long first start (scripts building
+	// an index on a large store) never outlasts it, and closed with every failure after this
+	runCtx, stop := context.WithCancel(context.Background())
+	pg := &pgStore{loc: loc, leases: leases, lease: lease, stop: stop, done: make(chan struct{})}
+	pg.startRenew(runCtx)
+	release := func() { _ = pg.close() }
+	w, err := open("w", postgres.MaxOpenConns(1), inSchema, pglease.WriterSession(leaseTTL))
+	if err != nil {
+		release()
+		return fail(err)
+	}
+	fenced := fencedConn{DataConn: w, fence: lease.Fence}
+	if beforeScripts != nil {
+		beforeScripts()
+	}
+	// the scripts through the fenced writer: their one transaction confirms the lease first and
+	// holds it against a takeover until it commits
+	st, err := deployments.Runner().Apply(ctx, fenced)
+	if err != nil {
+		release()
+		return fail(fmt.Errorf("store: the schema in %s: %w", loc.Schema, err))
+	}
+	id, err := storeIdentity(ctx, fenced)
+	if err != nil {
+		release()
+		return fail(err)
+	}
+	pg.id = id
+	r, err := open("r", inSchema, readOnly)
+	if err != nil {
+		release()
+		return fail(err)
+	}
+	_ = admin.Close()
+	snap := snapshotConn{DataConn: r}
+	s := &Store{w: fenced, r: snap, wt: newTables(fenced), rt: newTables(snap), status: st,
+		keys: &keyslot{path: loc.KeyFile}, pg: pg}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s, nil
+}
+
+// startRenew starts the lease's renew, once.
+func (pg *pgStore) startRenew(ctx context.Context) {
+	pg.started = true
+	go pg.renew(ctx)
+}
+
+// renew renews the store's lease every third of its length until the store closes.
+func (pg *pgStore) renew(ctx context.Context) {
+	defer close(pg.done)
+	for {
+		// NOTE: a timed wait: the lease lasts its TTL from each renew, so one every third of it keeps
+		// the store's while two in a row fail
+		if !clock.Sleep(ctx, leaseTTL/3) {
+			return
+		}
+		if err := pg.lease.Renew(ctx); errors.Is(err, pglease.ErrLost) {
+			return // every write fails its fence from here: the store is another's
+		}
+	}
+}
+
+// close stops the renew and releases the lease, on a context of its own: the caller's may have
+// ended as it stopped.
+func (pg *pgStore) close() error {
+	var err error
+	pg.once.Do(func() {
+		pg.stop()
+		if pg.started {
+			<-pg.done
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		err = errors.Join(pg.lease.Release(ctx), pg.leases.Close())
+	})
+	return err
+}
+
+// snapshotConn is the readers of a store on PostgreSQL: each of their transactions is REPEATABLE
+// READ and READ ONLY, so every read of one Store.Read sees one commit, as a SQLite read transaction
+// (a WAL snapshot) does; PostgreSQL's default, READ COMMITTED, would read each statement afresh.
+type snapshotConn struct{ dao.DataConn }
+
+func (c snapshotConn) Begin(ctx context.Context) (dao.TxConn, error) {
+	return dao.BeginConnTx(ctx, c.DataConn, dao.TxOptions{Access: dao.TxReadOnly, Isolation: dao.TxRepeatableRead})
+}
+
+// fencedConn is the writer of a store on PostgreSQL: each of its transactions begins with the
+// store's lease's fence, which confirms the lease and holds it against a takeover until the
+// transaction ends.
+type fencedConn struct {
+	dao.DataConn
+	fence func(ctx context.Context, q dao.Querier) error
+}
+
+func (c fencedConn) Begin(ctx context.Context) (dao.TxConn, error) {
+	tx, err := c.DataConn.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.fence(ctx, tx); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	return tx, nil
+}
+
+// fence confirms, in q's transaction, that the store's lease is still this process's and unexpired,
+// and holds it against a takeover until that transaction ends: what every write transaction's
+// Begin runs, run again by a long one (the copy) just before it commits.
+func (pg *pgStore) fence(ctx context.Context, q dao.Querier) error { return pg.lease.Fence(ctx, q) }
+
+// leaseConn is a store on PostgreSQL's lease pool, for a cell that reaches the lease's row; nil for
+// a SQLite store.
+func (s *Store) leaseConn() dao.DataConn {
+	if s.pg == nil {
+		return nil
+	}
+	return s.pg.leases
+}
+
+// storeIdentity is the store's id (000037): written once, at random, by the first open that finds
+// none, and read back by every open after; two opens racing to write it keep one. It runs in one
+// transaction of w, the store's fenced writer, so it is written only under the store's lease.
+func storeIdentity(ctx context.Context, w dao.DataConn) (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	tx, err := w.Begin(ctx)
+	if err != nil {
+		return "", fmt.Errorf("store: its identity: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `INSERT INTO store_identity (id) VALUES ($1) ON CONFLICT DO NOTHING`, hex.EncodeToString(b)); err != nil {
+		return "", fmt.Errorf("store: its identity: %w", err)
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM store_identity`)
+	if err != nil {
+		return "", fmt.Errorf("store: its identity: %w", err)
+	}
+	var id string
+	if rows.Next() {
+		err = rows.Scan(&id)
+	} else if err = rows.Err(); err == nil {
+		err = errors.New("no row")
+	}
+	if cerr := rows.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return "", fmt.Errorf("store: its identity: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return "", fmt.Errorf("store: its identity: %w", err)
+	}
+	return id, nil
+}

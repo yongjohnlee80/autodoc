@@ -35,12 +35,18 @@ var ErrNoRoom = errs.Sentinel(errs.ErrPrecondition, "store: not enough free spac
 
 // AutoVacuum is the store's auto_vacuum mode.
 func (s *Store) AutoVacuum(ctx context.Context) (int, error) {
+	if err := s.sqliteOnly(); err != nil {
+		return 0, err
+	}
 	mode, err := s.pragma(ctx, "auto_vacuum")
 	return int(mode), err
 }
 
 // FreePages is how many of the store's pages are on its freelist.
 func (s *Store) FreePages(ctx context.Context) (int64, error) {
+	if err := s.sqliteOnly(); err != nil {
+		return 0, err
+	}
 	return s.pragma(ctx, "freelist_count")
 }
 
@@ -64,6 +70,9 @@ func (s *Store) pragma(ctx context.Context, name string) (int64, error) {
 // IncrementalVacuum returns the freelist's pages to the file system. A store not yet in
 // incremental mode keeps them, to reuse: it does nothing.
 func (s *Store) IncrementalVacuum(ctx context.Context) error {
+	if err := s.sqliteOnly(); err != nil {
+		return err
+	}
 	if _, err := s.w.ExecContext(ctx, "PRAGMA incremental_vacuum"); err != nil {
 		return fmt.Errorf("store: incremental_vacuum: %w", err)
 	}
@@ -93,6 +102,9 @@ var freeSpace = func(dir string) (int64, error) {
 
 // FileSize is the store's file's size in bytes, its write-ahead log aside.
 func (s *Store) FileSize() int64 {
+	if s.pg != nil {
+		return 0 // no file
+	}
 	fi, err := os.Stat(s.path)
 	if err != nil {
 		return 0
@@ -104,6 +116,9 @@ func (s *Store) FileSize() int64 {
 // that hold older snapshots (up to the busy timeout): for a store no daemon serves, whose file then
 // shows its size (--compact).
 func (s *Store) Checkpoint(ctx context.Context) error {
+	if err := s.sqliteOnly(); err != nil {
+		return err
+	}
 	if _, err := s.w.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
 		return fmt.Errorf("store: checkpoint: %w", err)
 	}
@@ -120,6 +135,9 @@ func (s *Store) Checkpoint(ctx context.Context) error {
 // being checkpointed back into a smaller file: the store reaches its new size at the first checkpoint
 // after such reads are done. After reports the size once Compact's own checkpoint has run.
 func (s *Store) Compact(ctx context.Context) (Compaction, error) {
+	if err := s.sqliteOnly(); err != nil {
+		return Compaction{}, err
+	}
 	before := s.FileSize()
 	dir := filepath.Dir(s.path)
 	free, err := freeSpace(dir)

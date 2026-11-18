@@ -410,6 +410,7 @@ func (h *Host) markDisk(b *openBuffer, st diskState, version string) {
 		return
 	}
 	b.file.disk, b.file.diskVersion = st, version
+	h.compareSaw(b) // an open Compare of b offers to load again (compare.go)
 	if b == h.active {
 		h.setDirty(b.file.dirty) // the status line's title, with its badge
 	}
@@ -429,7 +430,7 @@ func (h *Host) askDiskOnEnter(b *openBuffer) {
 		return
 	}
 	b.file.diskAsked = b.file.diskVersion
-	h.set("App.conflictQuestion", h.trf("autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_kee", b.file.name()))
+	h.set("App.conflictQuestion", h.trf("autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_compare", b.file.name()))
 	h.open("fileConflict")
 }
 
@@ -463,7 +464,8 @@ func (h *Host) reloadFromDisk(b *openBuffer, content, version string) {
 		}
 	}
 	ed.MarkSaved()
-	b.file.version, b.file.disk, b.file.diskVersion, b.file.diskAsked = version, diskSame, "", ""
+	b.file.setAgreed(version, asEditorText(content))
+	b.file.disk, b.file.diskVersion, b.file.diskAsked = diskSame, "", ""
 	b.file.taskGone = false
 	if b == h.active {
 		h.setDirty(false)

@@ -34,10 +34,11 @@ type Cursor struct {
 // IsZero says the cursor has not moved: no pass has committed a page, and no refresh has finished.
 func (c Cursor) IsZero() bool { return c.UpdatedAt.IsZero() && c.ID == "" }
 
-// Refresh is a tenant's last full refresh: when it started and when it finished. The zero Refresh
-// is none recorded.
+// Refresh is a tenant's last full refresh: when it started and when it finished, and the facet
+// declaration it wrote its documents with (FacetsDigest). The zero Refresh is none recorded.
 type Refresh struct {
 	Started, Finished time.Time
+	Facets            string
 }
 
 // IngestError is a quarantined source row: its id in the source, why it failed last, when it first
@@ -48,10 +49,13 @@ type IngestError struct {
 }
 
 // Policy is a tenant's access policy: the document facet fields every scoped read must be given
-// values for (ViewWithin), and the view the tenant is indexed from.
+// values for (ViewWithin), and the view the tenant is indexed from. Facets are the tenant's
+// declared facets, name → type (FacetKeyword, FacetNumber, FacetDate): what a search may filter
+// on beside tags and paths. nil declares none.
 type Policy struct {
 	AccessFields []string
 	View         string
+	Facets       map[string]string
 }
 
 var (
@@ -81,11 +85,45 @@ func (b *Batch) SetCursor(ctx context.Context, c Cursor) error {
 	return nil
 }
 
+// SetDeletesCursor moves the tenant's deletes cursor to c inside the batch: the (deleted_at, id)
+// of the last tombstone of the source's deletes view a pass applied, apart from the rows' cursor
+// (SetCursor). It commits with the deletes the batch made, or not at all; the rows' cursor and the
+// last refresh are left as they are.
+func (b *Batch) SetDeletesCursor(ctx context.Context, c Cursor) error {
+	at, id := c.UpdatedAt, c.ID
+	err := b.s.rw.cursor.On(b.tx, dao.WithQueryContext(ctx)).
+		Set(kTenant, b.s.tenant).Set(kDelAt, &at).Set(kDelID, &id).Upsert()
+	if err != nil {
+		return fmt.Errorf("pgstore: set deletes cursor: %w", err)
+	}
+	return nil
+}
+
+// DeletesCursor is the tenant's committed deletes cursor (SetDeletesCursor); the zero Cursor when
+// no tombstone was applied.
+func (s *Store) DeletesCursor(ctx context.Context) (Cursor, error) {
+	r, err := s.rw.cursor.DAO(dao.WithQueryContext(ctx)).With(kTenant, s.tenant).Get(kDelAt, kDelID)
+	switch {
+	case errors.Is(err, dao.ErrNoRows):
+		return Cursor{}, nil
+	case err != nil:
+		return Cursor{}, fmt.Errorf("pgstore: deletes cursor: %w", err)
+	}
+	var c Cursor
+	if r.DeletesAt != nil {
+		c.UpdatedAt = *r.DeletesAt
+	}
+	if r.DeletesID != nil {
+		c.ID = *r.DeletesID
+	}
+	return c, nil
+}
+
 // SetRefreshed records the tenant's last full refresh inside the batch, leaving the cursor as it
 // is.
 func (b *Batch) SetRefreshed(ctx context.Context, r Refresh) error {
 	err := b.s.rw.cursor.On(b.tx, dao.WithQueryContext(ctx)).
-		Set(kTenant, b.s.tenant).Set(kStarted, &r.Started).Set(kFinished, &r.Finished).Upsert()
+		Set(kTenant, b.s.tenant).Set(kStarted, &r.Started).Set(kFinished, &r.Finished).Set(kFacets, r.Facets).Upsert()
 	if err != nil {
 		return fmt.Errorf("pgstore: set refreshed: %w", err)
 	}
@@ -136,14 +174,14 @@ func (s *Store) Cursor(ctx context.Context) (Cursor, error) {
 
 // Refreshed is the tenant's last recorded full refresh; the zero Refresh when none is.
 func (s *Store) Refreshed(ctx context.Context) (Refresh, error) {
-	r, err := s.rw.cursor.DAO(dao.WithQueryContext(ctx)).With(kTenant, s.tenant).Get(kStarted, kFinished)
+	r, err := s.rw.cursor.DAO(dao.WithQueryContext(ctx)).With(kTenant, s.tenant).Get(kStarted, kFinished, kFacets)
 	switch {
 	case errors.Is(err, dao.ErrNoRows):
 		return Refresh{}, nil
 	case err != nil:
 		return Refresh{}, fmt.Errorf("pgstore: refreshed: %w", err)
 	}
-	var out Refresh
+	out := Refresh{Facets: r.RefreshFacets}
 	if r.RefreshStarted != nil {
 		out.Started = *r.RefreshStarted
 	}
@@ -173,13 +211,23 @@ func (s *Store) Quarantined(ctx context.Context, limit int) ([]IngestError, erro
 }
 
 // SetPolicy records the tenant's access policy, replacing any it had. A policy with no access
-// field is refused (ErrNoAccess): there is no policy that turns access checking off.
+// field is refused (ErrNoAccess): there is no policy that turns access checking off. One whose
+// facets CheckFacets refuses is ErrFacetDecl.
 func (s *Store) SetPolicy(ctx context.Context, p Policy) error {
 	if err := CheckAccessFields(p.AccessFields); err != nil {
 		return err
 	}
-	err := s.rw.policy.DAO(dao.WithQueryContext(ctx)).Set(pTenant, s.tenant).
-		Set(pAccess, slices.Clone(p.AccessFields)).Set(pView, p.View).Upsert()
+	if err := CheckFacets(p.AccessFields, p.Facets); err != nil {
+		return err
+	}
+	facets, err := facetsJSON(p.Facets)
+	if err != nil {
+		return fmt.Errorf("pgstore: set policy: %w", err)
+	}
+	err = dao.RunTx(ctx, func(tx *dao.Transaction) error {
+		return s.rw.policy.On(tx, dao.WithQueryContext(ctx)).Set(pTenant, s.tenant).
+			Set(pAccess, slices.Clone(p.AccessFields)).Set(pView, p.View).Set(pFacets, facets).Upsert()
+	})
 	if err != nil {
 		return fmt.Errorf("pgstore: set policy: %w", err)
 	}
@@ -188,14 +236,18 @@ func (s *Store) SetPolicy(ctx context.Context, p Policy) error {
 
 // Policy is the tenant's access policy: ErrNoPolicy when none is recorded.
 func (s *Store) Policy(ctx context.Context) (Policy, error) {
-	r, err := s.rw.policy.DAO(dao.WithQueryContext(ctx)).With(pTenant, s.tenant).Get(pAccess, pView)
+	r, err := s.rw.policy.DAO(dao.WithQueryContext(ctx)).With(pTenant, s.tenant).Get(pAccess, pView, pFacets)
 	switch {
 	case errors.Is(err, dao.ErrNoRows):
 		return Policy{}, ErrNoPolicy
 	case err != nil:
 		return Policy{}, fmt.Errorf("pgstore: policy: %w", err)
 	}
-	return Policy{AccessFields: r.AccessFields, View: r.View}, nil
+	facets, err := facetsOf(r.Facets)
+	if err != nil {
+		return Policy{}, err
+	}
+	return Policy{AccessFields: r.AccessFields, View: r.View, Facets: facets}, nil
 }
 
 // CheckAccessFields refuses (ErrNoAccess) access fields no scope can be built on: none, an empty

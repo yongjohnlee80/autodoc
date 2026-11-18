@@ -49,6 +49,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget/editor"
 	"github.com/yongjohnlee80/golib/tui/widget/htmlview"
 	"github.com/yongjohnlee80/golib/vfs"
+	"github.com/yongjohnlee80/golib/vfs/local"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
@@ -75,11 +76,15 @@ type Host struct {
 	prefRows []feature.PrefSpec // every preference declared, the host's and the features' (feature/prefspec.go)
 	keys     feature.Keyset     // the keys and their cards, the host's and the features' (feature/keys.go)
 	started  bool               // the first preferences were applied: the program has started (applyPrefs)
+	saidSeq  uint64             // each say's count: a late answer speaks only if nothing was said since its own words
 	editor   editorWidget       // main.qml's Editor, terminal or native (editor.go)
 	core     *editor.EditorCore // its core: the text, the cursor and the modes
 	gui      bool               // in a window (Options.GUI): the theme kept is gui.theme
 	ctx      context.Context
 	cancel   context.CancelFunc
+
+	// comparing is the conflict's Compare open now, or nil (compare.go)
+	comparing *compareSource
 
 	// todoNoted are the workspaces' todo_excluded already said this session, by name and patterns
 	todoNoted map[string]bool
@@ -130,9 +135,12 @@ type Host struct {
 	prefs      prefs
 	prefWrites [][2]string // name and value, the first being written (prefs.go)
 	// prefsLoading counts the preference.lists in flight; prefsSetMeanwhile is what was stored since
-	// the first began, laid over each answer (loadPrefs)
+	// the first began, and what was still being written as it began, laid over each answer
+	// (loadPrefs); prefsReread reads the list once more after the last answers: the store refused a
+	// value while they were read (prefRefused)
 	prefsLoading                   int
 	prefsSetMeanwhile              map[string]string
+	prefsReread                    bool
 	connected                      bool // to the daemon: the status line shows while not (prefs.go)
 	mismatchOpen, mismatchRecovery bool
 	// the registrations (registrations.go): this binary's, the daemon's, and the kinds a file is
@@ -523,6 +531,7 @@ func newHost(session *Session, opt Options) *Host {
 	if opt.seams != nil {
 		h.seams = *opt.seams // a copy: nothing the caller changes later reaches this program
 	}
+	h.seams.ownHooks() // its own copies of the hooks an agent's start reads off the loop
 	h.themeCatalog = usertheme.Open(opt.ThemeDir)
 	if opt.NoteTranslator != nil {
 		opt.NoteTranslator(h.trf)
@@ -548,6 +557,7 @@ func newHost(session *Session, opt Options) *Host {
 	}
 	h.terminals = newTerminals(unboundPanelHost(core{h}))
 	h.terminals.startLua = h.startLuaShell
+	h.terminals.shellSpawn = h.shellSpawnSeam
 	h.agents = agents.NewAgents(unboundPanelHost(core{h}), &h.seams, opt.AgentDir, opt.ConfigPath)
 	h.crew = crew.NewHost(core{h}, h.seams.env, opt.AgentDir, crew.HostHooks{
 		DeliverJob:  h.agents.DeliverFallback,
@@ -631,9 +641,9 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 	var src []byte
 	if opt.Dev != "" {
 		src, _ = os.ReadFile(filepath.Join(opt.Dev, "main.qml"))
-		files := os.DirFS(opt.Dev)
+		files := local.DirFS(opt.Dev) // a save may replace or delete a file the poll is reading
 		// main.qml with the card plugins' panels written in, on every reload (pluginpanels.go)
-		opts = append(modulesFrom(files), tuidecl.Layout(cardFS{FS: files, pl: h.plugins, layout: h.windowLayout}, "main.qml"),
+		opts = append(modulesFrom(files, h.embeddedThemes()), tuidecl.Layout(cardFS{FS: files, pl: h.plugins, layout: h.windowLayout}, "main.qml"),
 			tuidecl.HotReload(tuidecl.OnReloadError(h.themeReloadError), tuidecl.OnReload(func(decl.Result) { h.reloaded(h.hotReloadedLayout()) })))
 	} else {
 		src = opt.Layout
@@ -645,7 +655,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		}
 		h.layoutBase = h.windowLayout(src)           // the GUI's relation views and its own title bar (titlebar.go)
 		src = h.plugins.withCardPanels(h.layoutBase) // a panel for each card plugin found (pluginpanels.go)
-		opts = append(modulesFrom(qmlFiles), tuidecl.LayoutSource("main.qml", src))
+		opts = append(modulesFrom(h.embeddedQML(), h.embeddedThemes()), tuidecl.LayoutSource("main.qml", src))
 		// Names added later require a restart; with no registered user modules and no key file
 		// there is nothing mutable to follow, so the normal built-in-only UI keeps no poller. A key
 		// file is followed from its first save, so its directory being named is enough.
@@ -670,7 +680,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 	}
 	opts = append(opts, tuidecl.KeyCommands(cmds...))
 	if opt.KeymapFile != "" {
-		opts = append(opts, tuidecl.Keymap(os.DirFS(filepath.Dir(opt.KeymapFile)), filepath.Base(opt.KeymapFile)))
+		opts = append(opts, tuidecl.Keymap(local.DirFS(filepath.Dir(opt.KeymapFile)), filepath.Base(opt.KeymapFile)))
 	}
 	h.plugins.syncPluginEntries() // the plugins found at newHost, now that there is a catalog
 	h.plugins.refreshPlugins()

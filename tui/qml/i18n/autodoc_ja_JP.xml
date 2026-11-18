@@ -792,12 +792,12 @@
         <translation>パネルを配置</translation>
     </message>
     <message id="autodoc.cmd.panel.maximize">
-        <source>maximize or restore the terminal or agents</source>
-        <translation>ターミナルまたはエージェントを最大化/元に戻す</translation>
+        <source>maximize or restore the terminal, the agents or a card that offers it</source>
+        <translation>ターミナル、エージェント、または最大化を提供するカードを最大化/元に戻す</translation>
     </message>
     <message id="autodoc.cmd.panel.maximize.help">
-        <source>maximize or restore the terminal or agents</source>
-        <translation>ターミナルまたはエージェントを最大化/元に戻す</translation>
+        <source>maximize or restore the terminal, the agents or a card that offers it</source>
+        <translation>ターミナル、エージェント、または最大化を提供するカードを最大化/元に戻す</translation>
     </message>
     <message id="autodoc.cmd.panel.reset_layout">
         <source>reset the panel layout</source>
@@ -1614,6 +1614,10 @@
     <message id="autodoc.dialog.fileConflict.overwrite">
         <source>&amp;Overwrite</source>
         <translation>上書き(&amp;o)</translation>
+    </message>
+    <message id="autodoc.dialog.fileConflict.compare">
+        <source>&amp;Compare</source>
+        <translation>比較(&amp;c)</translation>
     </message>
     <message id="autodoc.dialog.fileConflict.reload">
         <source>&amp;Reload</source>
@@ -4288,6 +4292,10 @@ WHAT A KEY NEEDS
         <source>workspace %1 was renamed %2 %3</source>
         <translation>ワークスペース %1 が%3 %2 に名前変更されました</translation>
     </message>
+    <message id="autodoc.notice.files.another_workspace_was_entered_meanwhile_open_it">
+        <source>another workspace was entered meanwhile; open it again</source>
+        <translation>その間に別のワークスペースに入りました: もう一度開いてください</translation>
+    </message>
     <message id="autodoc.notice.files.changed_on_disk_while_the_backend_was_away_a_sav">
         <source>%1 changed on disk while the backend was away: a save asks before it overwrites it</source>
         <translation>バックエンドの停止中に %1 がディスク上で変更されました: 保存時、上書き前に確認します</translation>
@@ -4320,6 +4328,10 @@ WHAT A KEY NEEDS
         <source>%1: it is in no workspace: no search, links, backlinks, frontmatter check or embeddings</source>
         <translation>%1: どのワークスペースにも属していません: 検索、リンク、バックリンク、フロントマター検査、埋め込みはありません</translation>
     </message>
+    <message id="autodoc.notice.files.it_was_read_again_from_disk_meanwhile_save_it_ag">
+        <source>it was read again from disk meanwhile; save it again</source>
+        <translation>その間にディスクから読み込み直されました: もう一度保存してください</translation>
+    </message>
     <message id="autodoc.notice.files.kept_as_it_was_saved_while_it_was_read">
         <source>kept %1 as it was saved while it was read</source>
         <translation>読み込み中に保存された状態のまま %1 を保持しました</translation>
@@ -4327,6 +4339,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.files.kept_your_changes_the_disk_s_version_is_newer">
         <source>kept your changes; the disk's version is newer</source>
         <translation>変更を保持しました。ディスク上のバージョンの方が新しくなっています</translation>
+    </message>
+    <message id="autodoc.notice.files.no_workspace_is_in_use_so_a_relative_path_names">
+        <source>no workspace is in use, so a relative path names no file; give its full path</source>
+        <translation>使用中のワークスペースがないため、相対パスはどのファイルも指しません: フルパスを指定してください</translation>
     </message>
     <message id="autodoc.notice.files.open">
         <source>open %1</source>
@@ -4368,6 +4384,10 @@ WHAT A KEY NEEDS
         <source>saved %1, but it could not be read back: %2 — reload before saving again</source>
         <translation>%1 を保存しましたが、読み戻せませんでした: %2 — 再度保存する前に再読み込みしてください</translation>
     </message>
+    <message id="autodoc.notice.files.saved_but_the_disk_differs_from_what_was_written">
+        <source>saved %1, but the disk differs from what was written — reload before saving again</source>
+        <translation>%1 を保存しましたが、ディスクの内容が書き込んだものと異なります — 再度保存する前に再読み込みしてください</translation>
+    </message>
     <message id="autodoc.notice.files.saved_the_draft_as">
         <source>saved the draft as %1</source>
         <translation>下書きを %1 として保存しました</translation>
@@ -4379,6 +4399,14 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.files.saving">
         <source>saving %1…</source>
         <translation>%1 を保存中…</translation>
+    </message>
+    <message id="autodoc.notice.files.the_connection_to_the_backend_was_renewed_meanwh">
+        <source>the connection to the backend was renewed meanwhile; open it again</source>
+        <translation>その間にバックエンドとの接続が更新されました: もう一度開いてください</translation>
+    </message>
+    <message id="autodoc.notice.files.the_connection_to_the_backend_was_renewed_save_it">
+        <source>the connection to the backend was renewed meanwhile; save it again</source>
+        <translation>その間にバックエンドとの接続が更新されました: もう一度保存してください</translation>
     </message>
     <message id="autodoc.notice.find.find_cleared">
         <source>find cleared</source>
@@ -4629,8 +4657,8 @@ WHAT A KEY NEEDS
         <translation>すべてのパネルはすでに端にあります</translation>
     </message>
     <message id="autodoc.notice.panelfloat.maximize_is_the_terminal_s_and_the_agents_open_o">
-        <source>Maximize is the terminal's and the agents': open one first (SPC ` or SPC g)</source>
-        <translation>最大化はターミナルとエージェント用です: 先にどちらかを開いてください (SPC ` または SPC g)</translation>
+        <source>Maximize is the terminal's, the agents' and a card's that offers it: open one first (SPC ` or SPC g)</source>
+        <translation>最大化はターミナル、エージェント、および最大化を提供するカード用です: 先にどれかを開いてください (SPC ` または SPC g)</translation>
     </message>
     <message id="autodoc.notice.panelfloat.resume_has_no_tab_to_wake_the_panel_is_empty">
         <source>Resume has no tab to wake: the panel is empty</source>
@@ -5894,6 +5922,18 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>restart the backend?</source>
         <translation>バックエンドを再起動しますか?</translation>
     </message>
+    <message id="autodoc.question.terminal.close_s_a_program_may_be_running_in_it">
+        <source>Close %1? A program may be running in it, and it would be stopped.</source>
+        <translation>%1 を閉じますか? 実行中のプログラムがあれば停止します。</translation>
+    </message>
+    <message id="autodoc.question.terminal.close_s_the_program_running_in_it_is_stopped">
+        <source>Close %1? The program running in it is stopped.</source>
+        <translation>%1 を閉じますか? 実行中のプログラムは停止します。</translation>
+    </message>
+    <message id="autodoc.question.terminal.close_the_shell">
+        <source>close the shell?</source>
+        <translation>シェルを閉じますか?</translation>
+    </message>
     <message id="autodoc.question.terminal.stop_every_shell_running_here">
         <source>%1 shells are running here. Each is hung up and its tab closed, then the terminal closes.</source>
         <translation>ここで %1 個のシェルが実行中です。それぞれを終了してタブを閉じ、その後ターミナルを閉じます。</translation>
@@ -5901,6 +5941,10 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
     <message id="autodoc.question.terminal.stop_the_shells_and_close_the_terminal">
         <source>stop the shells and close the terminal?</source>
         <translation>シェルを停止してターミナルを閉じますか?</translation>
+    </message>
+    <message id="autodoc.question.terminal.yes_close_it">
+        <source>&amp;Yes, close it</source>
+        <translation>はい、閉じる(&amp;y)</translation>
     </message>
     <message id="autodoc.question.terminal.yes_stop_them">
         <source>&amp;Yes, stop them</source>
@@ -6086,10 +6130,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
         <source>Audit asks your agent to read this code. AutoDoc can't stop the agent from running code or changing files: pick an agent you trust, and watch its tab.</source>
         <translation>監査 は、エージェントにこのコードを読ませます。AutoDoc はエージェントによるコードの実行やファイルの変更を止められません: 信頼できるエージェントを選び、そのタブを見守ってください。</translation>
     </message>
-    <message id="autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_kee">
-        <source>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</source>
-        <translation>%1 は未保存の変更があるうちにディスク上で変更されました。編集を続けるか、ディスク上のバージョンを再読み込みするか (u でテキストを戻せます)、自分の内容で上書きしますか?</translation>
-    </message>
     <message id="autodoc.text.files.a_name_is_required">
         <source>a name is required</source>
         <translation>名前が必要です</translation>
@@ -6101,10 +6141,6 @@ In a new terminal tab, in %2. Type any passphrase there: the agent sees nothing 
     <message id="autodoc.text.files.changed_on_disk">
         <source>changed on disk</source>
         <translation>ディスク上で変更済み</translation>
-    </message>
-    <message id="autodoc.text.files.changed_on_disk_since_you_opened_it_keep_editing">
-        <source>%1 changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</source>
-        <translation>%1 は開いた後にディスク上で変更されました。編集を続けるか、ディスク上のバージョンを再読み込みするか (u でテキストを戻せます)、自分の内容で上書きしますか?</translation>
     </message>
     <message id="autodoc.text.files.deleted_on_disk">
         <source>deleted on disk</source>
@@ -7480,6 +7516,10 @@ The last connect failed:
         <source>vectors</source>
         <translation>ベクトル</translation>
     </message>
+    <message id="autodoc.text.terminal.starting">
+        <source>starting…</source>
+        <translation>起動中…</translation>
+    </message>
     <message id="autodoc.text.terminal.the_page_s">
         <source>the page's</source>
         <translation>ページと同じ</translation>
@@ -8471,6 +8511,70 @@ Revoked, its next use of %2 is refused, and asks you again by a card.</source>
     <message id="autodoc.cmd.agents.permissions.help">
         <source>agent permissions: what each agent and package was granted</source>
         <translation>エージェントの権限: 各エージェントとパッケージに許可したもの</translation>
+    </message>
+    <message id="autodoc.text.compare.on_disk">
+        <source>On disk</source>
+        <translation>ディスク上</translation>
+    </message>
+    <message id="autodoc.text.compare.your_unsaved_edits">
+        <source>Your unsaved edits</source>
+        <translation>未保存の編集</translation>
+    </message>
+    <message id="autodoc.text.compare.title">
+        <source>Compare %1 with the disk</source>
+        <translation>%1 をディスクと比較</translation>
+    </message>
+    <message id="autodoc.text.compare.is_gone_from_disk">
+        <source>%1 is gone from disk</source>
+        <translation>%1 はディスクにありません</translation>
+    </message>
+    <message id="autodoc.text.compare.is_no_longer_open">
+        <source>%1 is no longer open</source>
+        <translation>%1 はもう開かれていません</translation>
+    </message>
+    <message id="autodoc.text.compare.the_buffer_changed_reload">
+        <source>The buffer changed since the merge was loaded: reload it</source>
+        <translation>マージを読み込んだ後にバッファーが変更されました: 再読み込みしてください</translation>
+    </message>
+    <message id="autodoc.text.compare.nothing_to_merge">
+        <source>Nothing to merge</source>
+        <translation>マージするものはありません</translation>
+    </message>
+    <message id="autodoc.text.compare.the_disk_holds_your_text">
+        <source>%1 on disk holds your buffer's text. Take the disk's version, the buffer then saved?</source>
+        <translation>ディスク上の %1 はバッファーと同じテキストです。ディスクの版を採用し、バッファーを保存済みにしますか?</translation>
+    </message>
+    <message id="autodoc.text.compare.take_the_disk_s_version">
+        <source>&amp;Take the disk's version</source>
+        <translation>ディスクの版を採用(&amp;t)</translation>
+    </message>
+    <message id="autodoc.text.compare.keep_editing">
+        <source>&amp;Keep editing</source>
+        <translation>編集を続ける(&amp;k)</translation>
+    </message>
+    <message id="autodoc.notice.compare.read">
+        <source>read %1 to compare</source>
+        <translation>比較のために %1 を読み込む</translation>
+    </message>
+    <message id="autodoc.notice.compare.took_the_disk_s_version">
+        <source>took the disk's version of %1: saved</source>
+        <translation>%1 のディスクの版を採用しました: 保存済み</translation>
+    </message>
+    <message id="autodoc.notice.compare.merged">
+        <source>merged %1 with the disk: unsaved, u brings your text back</source>
+        <translation>%1 をディスクとマージしました: 未保存、u で元のテキストに戻せます</translation>
+    </message>
+    <message id="autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_compare">
+        <source>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), overwrite it with yours, or compare the two and merge them?</source>
+        <translation>%1 は未保存の変更があるうちにディスク上で変更されました。編集を続けるか、ディスク上のバージョンを再読み込みするか (u でテキストを戻せます)、自分の内容で上書きするか、両方を比較してマージしますか?</translation>
+    </message>
+    <message id="autodoc.text.files.changed_on_disk_since_you_opened_it_compare">
+        <source>%1 changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), overwrite it with yours, or compare the two and merge them?</source>
+        <translation>%1 は開いた後にディスク上で変更されました。編集を続けるか、ディスク上のバージョンを再読み込みするか (u でテキストを戻せます)、自分の内容で上書きするか、両方を比較してマージしますか?</translation>
+    </message>
+    <message id="autodoc.text.compare.the_merge_was_closed">
+        <source>The merge was closed before it was applied</source>
+        <translation>適用する前にマージが閉じられました</translation>
     </message>
 </context>
 </TS>

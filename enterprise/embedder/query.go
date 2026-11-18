@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/yongjohnlee80/golib/search"
 	"github.com/yongjohnlee80/golib/search/embed"
 	"github.com/yongjohnlee80/golib/search/vector"
 
 	"github.com/yongjohnlee80/autodoc/enterprise/opcode"
+	esearch "github.com/yongjohnlee80/autodoc/enterprise/search"
 )
 
 // queryState is what a search's query needs of the worker, published whole by Run's goroutine and
@@ -53,21 +55,29 @@ func (w *Worker) QueryEmbedder(tenant string) search.QueryEmbedder {
 		case switching:
 			return "", nil, fmt.Errorf("%w: tenant %s is switching to %s", search.ErrSwitching, tenant, st.fp)
 		}
-		if err := w.lim.acquire(ctx, true); err != nil {
+		// once per model and text in a search across tenants (enterprise/search's
+		// WithQueryCache), after this tenant's own say on its model above
+		vec, err := esearch.EmbedQuery(ctx, st.fp, q, func() ([]float32, error) {
+			if err := w.lim.acquire(ctx, true); err != nil {
+				return nil, err
+			}
+			defer w.lim.release()
+			vecs, err := st.p.Embed(ctx, []string{q})
+			if ctx.Err() == nil {
+				w.answered(st.fp, err) // a query that ran out its own time says nothing of the provider
+			}
+			if err != nil {
+				return nil, fmt.Errorf("%w: %w", search.ErrEmbedFailed, err)
+			}
+			if len(vecs) != 1 {
+				return nil, fmt.Errorf("%w: the provider answered %d vectors for one query", search.ErrEmbedFailed, len(vecs))
+			}
+			return vector.Normalize(vecs[0]), nil
+		})
+		if err != nil {
 			return "", nil, err
 		}
-		defer w.lim.release()
-		vecs, err := st.p.Embed(ctx, []string{q})
-		if ctx.Err() == nil {
-			w.answered(st.fp, err) // a query that ran out its own time says nothing of the provider
-		}
-		if err != nil {
-			return "", nil, fmt.Errorf("%w: %w", search.ErrEmbedFailed, err)
-		}
-		if len(vecs) != 1 {
-			return "", nil, fmt.Errorf("%w: the provider answered %d vectors for one query", search.ErrEmbedFailed, len(vecs))
-		}
-		return st.fp, vector.Normalize(vecs[0]), nil
+		return st.fp, vec, nil
 	}
 }
 
@@ -84,14 +94,24 @@ type Health struct {
 	State string
 	Model string
 	Error opcode.Code
+	// Batch and InFlight are the worker's pace now: the texts one call carries and the calls in
+	// flight, stepped down from the configured ones while calls run out of their time (pace).
+	// LastCall is the last batch call's time, and Timeouts the calls that ran out of it since the
+	// worker started.
+	Batch, InFlight int
+	LastCall        time.Duration
+	Timeouts        int64
 }
 
-// Health is the provider's state now. It may be called from any goroutine.
+// Health is the provider's state now, with the worker's pace. It may be called from any goroutine.
 func (w *Worker) Health() Health {
-	if h := w.health.Load(); h != nil {
-		return *h
+	h := Health{State: ProviderStarting}
+	if p := w.health.Load(); p != nil {
+		h = *p
 	}
-	return Health{State: ProviderStarting}
+	ps := w.pace.state()
+	h.Batch, h.InFlight, h.LastCall, h.Timeouts = ps.batch, ps.inFlight, ps.lastCall, ps.timeouts
+	return h
 }
 
 // answered publishes how the provider's last call went: up when it answered (err nil), down with

@@ -120,13 +120,17 @@ func (f *fixture) source(edit func(string) string) *Source {
 	return s
 }
 
-// ingester is an ingester of src holding the tenant's lock, on a lock pool of its own, whose
-// clock is now with no lag unless o says otherwise.
+// leases is a pool in the store's schema, where the writer lease's table is, as a server's
+// store pool is; query adds connection parameters to its DSN.
+func (f *fixture) leases(name, query string) dao.DataConn {
+	f.t.Helper()
+	return f.open(name, query, pgstore.WithSchema(f.schema))
+}
+
+// ingester is an ingester of src holding the tenant's lease, on a pool of its own, whose clock is
+// now with no lag unless o says otherwise.
 func (f *fixture) ingester(src *Source, o Options, query string) *Ingester {
 	f.t.Helper()
-	if o.Schema == "" {
-		o.Schema = f.schema
-	}
 	if o.Now == nil {
 		o.Now = func(context.Context) (time.Time, error) { return at(1_000_000), nil }
 		if o.Lag == 0 {
@@ -136,7 +140,7 @@ func (f *fixture) ingester(src *Source, o Options, query string) *Ingester {
 	if o.LockPoll == 0 {
 		o.LockPoll = 20 * time.Millisecond
 	}
-	in := New(f.st, f.tenant, src, f.business, f.open("locks", query), o)
+	in := New(f.st, f.tenant, src, f.business, f.leases("leases", query), o)
 	if err := in.Acquire(f.ctx); err != nil {
 		f.t.Fatal(err)
 	}

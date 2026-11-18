@@ -18,6 +18,9 @@ type TerminalConfig struct {
 	// Start, when set, runs the tab's program instead of a child on a PTY: golib's WithStarter (a
 	// Lua shell, tui/luashell.go). Command and Args are then only its name.
 	Start func(pty.Cmd) (terminal.TerminalProcess, error)
+	// StartingText is what the tab says while StartAsync's start is out (golib's WithStartingText),
+	// in the user's language; "" is golib's own
+	StartingText string
 }
 
 // TerminalRemoval observes confirmed cleanup of all generations of one child.
@@ -43,6 +46,10 @@ type TerminalPanel interface {
 	Add(label string, config TerminalConfig) (terminal.TerminalTabID, error)
 	Select(terminal.TerminalTabID) error
 	Start(terminal.TerminalTabID) error
+	// StartAsync starts the tab's program off the UI loop (golib's TerminalTabs.StartAsync): the
+	// window goes on drawing and taking keys while it spawns, which on Windows is a good part of a
+	// second. done, when not nil, runs on the loop with the outcome.
+	StartAsync(id terminal.TerminalTabID, done func(error))
 	// SendBracketedPaste is a paste only to a program that asked for bracketed paste: any other is
 	// refused, nothing sent (widget.ErrTerminalPasteUnbracketed). It is the only paste here: what
 	// AutoDoc sends a tab is text the user didn't type, never keys
@@ -58,6 +65,10 @@ type TerminalPanel interface {
 	Resume(terminal.TerminalTabID) error
 	Remove(terminal.TerminalTabID) (TerminalRemoval, error)
 	ForceRemove(terminal.TerminalTabID) error
+	// Activity says whether a program runs in the tab's shell beyond its prompt (golib's
+	// TerminalTabs.Activity): idle, running, or unknown where the platform can't tell, which a caller
+	// treats as running. It is one syscall on the loop, never a wait.
+	Activity(terminal.TerminalTabID) terminal.TerminalActivity
 	Tabs() []terminal.TerminalTab
 	Active() terminal.TerminalTabID
 	Actions(add func(), menu func(terminal.TerminalTabID))
@@ -101,10 +112,19 @@ func (p terminalPanel) Add(label string, config TerminalConfig) (terminal.Termin
 	if config.Start != nil {
 		opts = append(opts, terminal.WithStarter(config.Start))
 	}
+	if config.StartingText != "" {
+		opts = append(opts, terminal.WithStartingText(config.StartingText))
+	}
 	return p.tabs.Add(label, opts...)
 }
 func (p terminalPanel) Select(id terminal.TerminalTabID) error { return p.tabs.Select(id) }
-func (p terminalPanel) Start(id terminal.TerminalTabID) error  { return p.tabs.Start(id) }
+func (p terminalPanel) Activity(id terminal.TerminalTabID) terminal.TerminalActivity {
+	return p.tabs.Activity(id)
+}
+func (p terminalPanel) Start(id terminal.TerminalTabID) error { return p.tabs.Start(id) }
+func (p terminalPanel) StartAsync(id terminal.TerminalTabID, done func(error)) {
+	p.tabs.StartAsync(id, done)
+}
 func (p terminalPanel) SendBracketedPaste(id terminal.TerminalTabID, text string) error {
 	return p.tabs.SendBracketedPaste(id, text)
 }

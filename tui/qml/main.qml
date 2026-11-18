@@ -506,6 +506,10 @@ Window {
                 onMinimizeRequested: App.toggleTerminal()
                 onMaximizeRequested: terminal.toggleMaximize()
                 onCloseRequested: App.stopAllShells()
+                // a × at the start of each tab, left of its name: its shell's Close, asked first while
+                // a program runs in it (terminal.go closeShell)
+                tabCloseButtons: true
+                onTabCloseRequested: App.closeTerminalTab(id)
                 onChanged: App.widgetsChanged() // a shell started or gone: the dock lists the terminal while one runs
                 // maximize's keys (F11) reach the Window with the keyboard in a shell: its program never gets them
                 hostKeys: App.terminalHostKeys
@@ -559,6 +563,10 @@ Window {
                 onMinimizeRequested: App.toggleAgent()
                 onMaximizeRequested: agent.toggleMaximize()
                 onCloseRequested: App.stopAllAgents()
+                // a × at the start of each tab, left of its name: its agent's Close, asked first while
+                // it runs (agenttabs.go CloseAgentTab); off where the tab's menu has no Close
+                tabCloseButtons: true
+                onTabCloseRequested: App.closeAgentTab(id)
                 // maximize's keys (F11) reach the Window with the keyboard in a shell: its program never gets them
                 hostKeys: App.terminalHostKeys
                 emptyText: "No agent running. Press + to start one of the profiles."
@@ -930,6 +938,10 @@ Window {
                 }
             }
         }
+        // the card plugins' panels (pluginpanels.go): one per card plugin found when AutoDoc starts,
+        // written in here as the program is built, each a member of the tile manager as the panels
+        // above are: it floats until its Layout says Tiled. Escape closes one, and its plugin runs on
+        // ---- the card plugins' panels ----
     }
 
     StatusBar {
@@ -993,10 +1005,7 @@ Window {
         }
     }
 
-    // the card plugins' panels (pluginpanels.go): one per card plugin found when AutoDoc starts,
-    // written in here as the program is built; Escape closes one, and its plugin runs on
     // ---- the relation views' panels (the GUI's) ----
-    // ---- the card plugins' panels ----
 
     // a script's card (autodoc.ui.card, luacard.go): its Markdown drawn Rendered in the GUI, where a
     // vega-lite fence is a chart; a terminal shows the source. One card at a time; :usage is one
@@ -1049,6 +1058,7 @@ Window {
     Recovery { id: recoveryDialog }
     OpenHTML { id: openHTML }
     FileConflict { id: fileConflict }
+    // ---- the conflict's Compare ----
     WorkspacePicker { id: workspacePicker }
     WorkspaceManager { id: workspaceManager }
     WorkspaceSettings { id: workspaceSettings }

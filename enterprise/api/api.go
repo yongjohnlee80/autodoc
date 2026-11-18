@@ -16,6 +16,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -103,6 +104,21 @@ func WithOps(c *ops.Collector) Option { return func(h *Handler) { h.ops = c } }
 // is, from the same snapshot. Without it the path is not found, and is counted as any other.
 func WithMetrics(on bool) Option { return func(h *Handler) { h.metrics = on } }
 
+// DefaultTenantSearches is how many tenants' searches the requests naming several tenants run at
+// once across every request, unless WithTenantSearches sets it.
+const DefaultTenantSearches = 8
+
+// WithTenantSearches sets how many tenants' searches the requests naming several tenants run at once,
+// across every request ([http] max_tenant_searches): a request's tenants beyond it wait their turn
+// under the request's own deadline. Below 1: DefaultTenantSearches.
+func WithTenantSearches(n int) Option {
+	return func(h *Handler) {
+		if n > 0 {
+			h.global = search.NewGlobal(n)
+		}
+	}
+}
+
 // WithOperators are the tokens that may read /v1/status.
 func WithOperators(o []Operator) Option { return func(h *Handler) { h.operators = slices.Clone(o) } }
 
@@ -126,6 +142,7 @@ type Handler struct {
 	clients   []Client
 	operators []Operator
 	tenants   map[string]Searcher
+	global    *search.Global // a search across tenants' slots (WithTenantSearches)
 	ops       *ops.Collector
 	log       logger.Logger
 	budget    Budget
@@ -206,7 +223,8 @@ func (h *Handler) count(path string, status int, took time.Duration) {
 
 // New is the API for clients over tenants.
 func New(clients []Client, tenants map[string]Searcher, opts ...Option) *Handler {
-	h := &Handler{clients: slices.Clone(clients), tenants: tenants, log: logger.New(logger.WithWriter(io.Discard)), budget: DefaultBudget}
+	h := &Handler{clients: slices.Clone(clients), tenants: tenants, log: logger.New(logger.WithWriter(io.Discard)), budget: DefaultBudget,
+		global: search.NewGlobal(DefaultTenantSearches)}
 	for _, o := range opts {
 		o(h)
 	}
@@ -225,14 +243,42 @@ type (
 		Query  string              `json:"query"`
 		Mode   string              `json:"mode"`
 		Scope  map[string][]string `json:"scope"`
-		Filter filter              `json:"filter"`
+		Filter *filter             `json:"filter"`
 		Limit  int                 `json:"limit"`
 		Group  string              `json:"group"`
+		// Tenants is a search across tenants, each with its own scope, filter and weight; it
+		// excludes Tenant, Scope and Filter
+		Tenants []tenantRequest `json:"tenants"`
+	}
+	tenantRequest struct {
+		Tenant string              `json:"tenant"`
+		Scope  map[string][]string `json:"scope"`
+		Filter *filter             `json:"filter"`
+		Weight float64             `json:"weight"`
+	}
+	// globalResponse is a search across tenants' answer: each hit names its tenant, and each
+	// tenant's mode and semantic state are said by name
+	globalResponse struct {
+		Hits    []hit                  `json:"hits"`
+		Tenants map[string]tenantState `json:"tenants"`
+	}
+	tenantState struct {
+		ModeUsed      string `json:"mode_used"`
+		Semantic      string `json:"semantic"`
+		SemanticError string `json:"semantic_error,omitempty"`
 	}
 	filter struct {
 		Tags   []string            `json:"tags"`
 		Paths  []string            `json:"paths"`
 		Facets map[string][]string `json:"facets"`
+		Ranges map[string]bounds   `json:"ranges"`
+	}
+	// bounds are a range's: each a number or a string (a date, or a number written as text)
+	bounds struct {
+		Gt  bound `json:"gt"`
+		Gte bound `json:"gte"`
+		Lt  bound `json:"lt"`
+		Lte bound `json:"lte"`
 	}
 	response struct {
 		Tenant        string `json:"tenant"`
@@ -242,6 +288,7 @@ type (
 		Hits          []hit  `json:"hits"`
 	}
 	hit struct {
+		Tenant     string   `json:"tenant,omitempty"` // a search across tenants' only
 		Path       string   `json:"path"`
 		Breadcrumb string   `json:"breadcrumb"`
 		Snippet    string   `json:"snippet"`
@@ -337,7 +384,7 @@ func refuse(status int, code, message string) answer {
 }
 
 // answer runs the request's checks and its search, in order.
-func (h *Handler) answer(ctx context.Context, w http.ResponseWriter, r *http.Request, queryLen *int) (answer, response) {
+func (h *Handler) answer(ctx context.Context, w http.ResponseWriter, r *http.Request, queryLen *int) (answer, any) {
 	if r.URL.Path != Path {
 		return refuse(http.StatusNotFound, "not_found", "the API answers "+Path+", "+HealthPath+" and "+StatusPath), response{}
 	}
@@ -360,32 +407,15 @@ func (h *Handler) answer(ctx context.Context, w http.ResponseWriter, r *http.Req
 	if a.status != 0 {
 		return a, response{}
 	}
-	grants, granted := c.Grants[req.Tenant]
-	s, served := h.tenants[req.Tenant]
-	if !granted || !served {
-		a.status, a.code, a.message = http.StatusForbidden, "forbidden", "the token may not search tenant "+req.Tenant
-		return a, response{}
+	if len(req.Tenants) > 0 {
+		return h.answerTenants(ctx, c, req, a)
 	}
-	for field, vals := range req.Scope {
-		g, ok := grants[field]
-		if !ok {
-			// a field the token has no grant for is refused, whatever the tenant's policy says now:
-			// a field added to the policy since the grants were configured is not the token's
-			a.status, a.code, a.message = http.StatusForbidden, "scope_forbidden", "the token has no grant for "+field
-			return a, response{}
-		}
-		if slices.Equal(g, []string{"*"}) {
-			continue
-		}
-		for _, v := range vals {
-			if !slices.Contains(g, v) {
-				a.status, a.code, a.message = http.StatusForbidden, "scope_forbidden", fmt.Sprintf("the token may not ask for %s %q", field, v)
-				return a, response{}
-			}
-		}
+	s, refused := h.granted(c, req.Tenant, req.Scope)
+	if refused.status != 0 {
+		refused.client, refused.tenant = a.client, a.tenant
+		return refused, response{}
 	}
-	res, err := s.Search(ctx, search.Scope(req.Scope), search.Request{Query: req.Query, Mode: gsearch.Mode(req.Mode), Limit: req.Limit, Group: req.Group,
-		Filter: gsearch.Filter{Tags: req.Filter.Tags, Paths: req.Filter.Paths, Facets: req.Filter.Facets}})
+	res, err := s.Search(ctx, search.Scope(req.Scope), searchRequest(req, req.Filter))
 	if err != nil {
 		e := failed(ctx, err)
 		e.client, e.tenant = a.client, a.tenant
@@ -393,11 +423,115 @@ func (h *Handler) answer(ctx context.Context, w http.ResponseWriter, r *http.Req
 	}
 	out := response{Tenant: req.Tenant, ModeUsed: string(res.ModeUsed), Semantic: string(res.Semantic), SemanticError: res.SemanticError, Hits: make([]hit, len(res.Hits))}
 	for i, x := range res.Hits {
-		out.Hits[i] = hit{Path: x.Path, Breadcrumb: x.Breadcrumb, Snippet: x.Snippet, Generation: x.Generation, ByteStart: x.ByteStart,
-			ByteEnd: x.ByteEnd, Score: x.Score, Relevance: x.Relevance, Via: x.Via, SourceID: x.SourceID}
+		out.Hits[i] = hitOf(x, "")
 	}
 	a.status, a.hits = http.StatusOK, len(out.Hits)
 	return a, out
+}
+
+// answerTenants answers a search across tenants (the request's tenants): each tenant is checked as
+// a single search's is, its grants and its scope within them, before any search runs, a refusal
+// naming the tenant; then the library's Global searches them all, and its own refusals name the
+// tenant too. The request's tenant, scope and filter are each tenant's, so a request giving them
+// beside tenants is refused.
+func (h *Handler) answerTenants(ctx context.Context, c *Client, req request, a answer) (answer, any) {
+	if req.Tenant != "" || req.Scope != nil || req.Filter != nil {
+		return refuse(http.StatusBadRequest, "bad_request", "tenants excludes tenant, scope and filter: give each tenant its own"), nil
+	}
+	if len(req.Tenants) > search.MaxTenants {
+		return refuse(http.StatusBadRequest, "bad_tenants", fmt.Sprintf("%d tenants (at most %d)", len(req.Tenants), search.MaxTenants)), nil
+	}
+	names := make([]string, len(req.Tenants))
+	served := make([]Searcher, len(req.Tenants))
+	for i, t := range req.Tenants { // every tenant's grants, before anything else of any
+		names[i] = t.Tenant
+		s, refused := h.granted(c, t.Tenant, t.Scope)
+		if refused.status != 0 {
+			refused.client, refused.tenant = a.client, t.Tenant
+			if refused.code == "scope_forbidden" {
+				refused.message = "tenant " + t.Tenant + ": " + refused.message
+			}
+			return refused, nil
+		}
+		served[i] = s
+	}
+	ts := make([]search.TenantSearch, len(req.Tenants))
+	for i, t := range req.Tenants {
+		sr, ok := served[i].(*search.Searcher)
+		if !ok {
+			e := refuse(http.StatusInternalServerError, "internal", "the search failed")
+			e.cause = fmt.Errorf("api: tenant %s's searcher cannot search across tenants", t.Tenant)
+			return e, nil
+		}
+		r := searchRequest(req, t.Filter)
+		ts[i] = search.TenantSearch{Tenant: t.Tenant, Searcher: sr, Scope: search.Scope(t.Scope), Filter: r.Filter, Ranges: r.Ranges, Weight: t.Weight}
+	}
+	a.tenant = strings.Join(names, ",")
+	res, err := h.global.Search(ctx, search.GlobalRequest{Query: req.Query, Mode: gsearch.Mode(req.Mode), Limit: req.Limit, Group: req.Group, Tenants: ts})
+	if err != nil {
+		e := failed(ctx, err)
+		e.client, e.tenant = a.client, a.tenant
+		var te *search.TenantError
+		if errors.As(err, &te) && !strings.Contains(e.message, "tenant "+te.Tenant) {
+			e.message = "tenant " + te.Tenant + ": " + e.message
+		}
+		return e, nil
+	}
+	out := globalResponse{Hits: make([]hit, len(res.Hits)), Tenants: make(map[string]tenantState, len(res.Tenants))}
+	for i, x := range res.Hits {
+		out.Hits[i] = hitOf(x.Hit, x.Tenant)
+	}
+	for name, t := range res.Tenants {
+		out.Tenants[name] = tenantState{ModeUsed: string(t.ModeUsed), Semantic: string(t.Semantic), SemanticError: t.SemanticError}
+	}
+	a.status, a.hits = http.StatusOK, len(out.Hits)
+	return a, out
+}
+
+// granted is the Searcher of tenant, when the client may search it with scope: the tenant granted
+// and served, every field of scope granted, and each of its values ("*" grants any). Otherwise the
+// refusal: 403 forbidden for the tenant (one that doesn't exist answers the same), 403
+// scope_forbidden for a field or a value.
+func (h *Handler) granted(c *Client, tenant string, scope map[string][]string) (Searcher, answer) {
+	grants, granted := c.Grants[tenant]
+	s, served := h.tenants[tenant]
+	if !granted || !served {
+		return nil, refuse(http.StatusForbidden, "forbidden", "the token may not search tenant "+tenant)
+	}
+	for field, vals := range scope {
+		g, ok := grants[field]
+		if !ok {
+			// a field the token has no grant for is refused, whatever the tenant's policy says now:
+			// a field added to the policy since the grants were configured is not the token's
+			return nil, refuse(http.StatusForbidden, "scope_forbidden", "the token has no grant for "+field)
+		}
+		if slices.Equal(g, []string{"*"}) {
+			continue
+		}
+		for _, v := range vals {
+			if !slices.Contains(g, v) {
+				return nil, refuse(http.StatusForbidden, "scope_forbidden", fmt.Sprintf("the token may not ask for %s %q", field, v))
+			}
+		}
+	}
+	return s, answer{}
+}
+
+// searchRequest is the library's request of the body's query, mode, limit and grouping, with f
+// (nil: none) as its filter.
+func searchRequest(req request, f *filter) search.Request {
+	r := search.Request{Query: req.Query, Mode: gsearch.Mode(req.Mode), Limit: req.Limit, Group: req.Group}
+	if f != nil {
+		r.Filter = gsearch.Filter{Tags: f.Tags, Paths: f.Paths, Facets: f.Facets}
+		r.Ranges = f.ranges()
+	}
+	return r
+}
+
+// hitOf is a hit as the body carries it, its tenant named in a search across tenants.
+func hitOf(x search.Hit, tenant string) hit {
+	return hit{Tenant: tenant, Path: x.Path, Breadcrumb: x.Breadcrumb, Snippet: x.Snippet, Generation: x.Generation, ByteStart: x.ByteStart,
+		ByteEnd: x.ByteEnd, Score: x.Score, Relevance: x.Relevance, Via: x.Via, SourceID: x.SourceID}
 }
 
 // client is the client whose token the Authorization header bears, or nil.
@@ -563,6 +697,12 @@ func failed(ctx context.Context, err error) answer {
 		return refuse(http.StatusBadRequest, "protected_facet", err.Error())
 	case errors.Is(err, search.ErrUnknownFacet):
 		return refuse(http.StatusBadRequest, "unknown_facet", err.Error())
+	case errors.Is(err, search.ErrFacetType):
+		return refuse(http.StatusBadRequest, "facet_type", err.Error())
+	case errors.Is(err, search.ErrFilter):
+		return refuse(http.StatusBadRequest, "bad_filter", err.Error())
+	case errors.Is(err, search.ErrTenants):
+		return refuse(http.StatusBadRequest, "bad_tenants", err.Error())
 	case errors.Is(err, search.ErrLimit):
 		return refuse(http.StatusBadRequest, "bad_limit", err.Error())
 	case errors.Is(err, search.ErrGroup):
@@ -586,4 +726,40 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// bound is one of a range's bounds as the body gives it: a JSON number (kept as its digits) or a
+// string, as text; absent or null is "".
+type bound string
+
+func (b *bound) UnmarshalJSON(data []byte) error {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	var v any
+	if err := dec.Decode(&v); err != nil {
+		return err
+	}
+	switch v := v.(type) {
+	case nil:
+		*b = ""
+	case string:
+		*b = bound(v)
+	case json.Number:
+		*b = bound(v.String())
+	default:
+		return errors.New("a range's bound is a number or a string")
+	}
+	return nil
+}
+
+// ranges are the body's ranges as the library takes them; nil for none.
+func (f filter) ranges() map[string]search.Range {
+	if len(f.Ranges) == 0 {
+		return nil
+	}
+	out := make(map[string]search.Range, len(f.Ranges))
+	for field, b := range f.Ranges {
+		out[field] = search.Range{Gt: string(b.Gt), Gte: string(b.Gte), Lt: string(b.Lt), Lte: string(b.Lte)}
+	}
+	return out
 }

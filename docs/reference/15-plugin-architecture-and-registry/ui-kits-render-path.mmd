@@ -1,6 +1,8 @@
 flowchart LR
   subgraph Plugin["Plugin process"]
     Page["card.Page: blocks & controls"] --> Card["card.Card: fit, theme roles, keys, pointer"]
+    Split["card.Split / card.Pane: panes, F7 / F8"] --> Card
+    Panes["QML Panes / Pane: panes, F7 / F8"] --> QML
     QML["QML layout + Theme.* palette"] --> Prog["tuidecl.Program on a frame backend"]
     Card --> Frame["plugin.Frame (grapheme cells)"]
     Prog -->|"FlushSized: diff + size drawn at"| Frame
