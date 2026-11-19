@@ -38,6 +38,12 @@ type PendingQuery struct {
 	// when every one of its chunks has a vector, so every pending text is an unready document's.
 	// It is wrong for a target model a switch fills, whose texts ready documents hold too.
 	Unready bool
+	// Edits reads only the chunks of documents edited since their first write (generation above
+	// 1) and not ready again, through an index that holds those documents alone, from the start:
+	// After is ignored. A worker reads them ahead of its scan, so an edit behind the scan's cursor
+	// is embedded at once rather than after the rest of a backlog. Like Unready, it is right for
+	// the active model only.
+	Edits bool
 	// Skip are hashes not to list: the texts a caller has set aside.
 	Skip map[[32]byte]bool
 	// Limit is the most texts listed.
@@ -80,7 +86,10 @@ func (s *Store) Pending(ctx context.Context, q PendingQuery) (texts []Text, next
 		return nil, q.After, nil
 	}
 	p := &pendingScan{s: s, q: q, cur: q.After, seen: map[[32]byte]bool{}}
-	if q.Unready {
+	if q.Edits {
+		p.cur = PendingKey{}
+	}
+	if q.Unready || q.Edits {
 		err = p.unready(ctx)
 	} else {
 		err = p.all(ctx)
@@ -128,6 +137,12 @@ func after(k PendingKey) dao.Predicate {
 // rag_document are (000003), so the planner uses them whatever a statement's parameters.
 func notReady() dao.Predicate { return dao.Raw("NOT " + qcol(tDoc, string(dReady))) }
 
+// editedNotReady is the predicate of a document edited since its first write and not ready, as
+// the partial index of those documents is written (000011).
+func editedNotReady() dao.Predicate {
+	return dao.Raw("NOT " + qcol(tDoc, string(dReady)) + " AND " + qcol(tDoc, string(dGen)) + " > 1")
+}
+
 // all scans every chunk of the tenant from cur, a page at a time.
 func (p *pendingScan) all(ctx context.Context) error {
 	for {
@@ -153,12 +168,17 @@ func (p *pendingScan) page() int {
 	return max(1, min(pendingPage, p.q.Limit-len(p.out)))
 }
 
-// unready scans the chunks of the tenant's unready documents from cur: a page of the documents in
-// id order, through the partial index of unready ones, then their pending chunks.
+// unready scans the chunks of the tenant's unready documents from cur (with Edits, its edited
+// unready documents alone): a page of the documents in id order, through the partial index of
+// those documents, then their pending chunks.
 func (p *pendingScan) unready(ctx context.Context) error {
+	which := notReady()
+	if p.q.Edits {
+		which = editedNotReady()
+	}
 	first := true
 	for {
-		d := p.s.rw.doc.DAO(pendingOpts(ctx)...).With(dTenant, p.s.tenant).WithPredicate(notReady())
+		d := p.s.rw.doc.DAO(pendingOpts(ctx)...).With(dTenant, p.s.tenant).WithPredicate(which)
 		switch {
 		case first && !p.cur.IsZero():
 			d = d.WithPredicate(dao.Gte(string(dID), p.cur.Doc)) // the document the scan stopped in

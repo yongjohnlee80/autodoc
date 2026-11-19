@@ -37,9 +37,10 @@ type provider struct {
 	// slowAbove, when set, is the most texts a call answers in time: a call of more waits for
 	// its own deadline, embedding nothing, as a provider too slow for its size does; -1: every call
 	slowAbove int
-	timedOut  int   // the calls that waited for their deadline
-	largest   int   // the most texts a call that answered carried
-	sizes     []int // every call's number of texts, in the order the calls arrived
+	delay     time.Duration // when set, every call that answers takes this long first
+	timedOut  int           // the calls that waited for their deadline
+	largest   int           // the most texts a call that answered carried
+	sizes     []int         // every call's number of texts, in the order the calls arrived
 }
 
 // callSizes are every call's number of texts, in the order the calls arrived.
@@ -94,7 +95,7 @@ func (p *provider) Embed(ctx context.Context, texts []string) ([][]float32, erro
 		p.mu.Unlock()
 		return nil, ctx.Err()
 	}
-	hold, arrived := p.hold, p.arrived
+	hold, arrived, delay := p.hold, p.arrived, p.delay
 	failing := p.fail > 0
 	if failing {
 		p.fail--
@@ -131,6 +132,13 @@ func (p *provider) Embed(ctx context.Context, texts []string) ([][]float32, erro
 	if hold != nil {
 		select {
 		case <-hold:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	if delay > 0 {
+		select {
+		case <-time.After(delay):
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
@@ -201,6 +209,7 @@ type store struct {
 	pending []map[[32]byte]bool
 	afters  []pgstore.PendingKey // every Pending's After, in order
 	unready []bool               // every Pending's Unready, in order
+	edits   int                  // the Pending calls with Edits, kept apart from the three above
 	nextID  int64
 	// markErr is what MarkReady answers for a path, once, before it marks it: a document written
 	// again (pgstore.ErrWriteRace) or deleted (dao.ErrNoRows) while the worker decided
@@ -305,9 +314,14 @@ func (s *store) ReclaimModels(context.Context) (int, error) {
 func (s *store) Pending(_ context.Context, q pgstore.PendingQuery) ([]pgstore.Text, pgstore.PendingKey, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.pending = append(s.pending, q.Skip)
-	s.afters = append(s.afters, q.After)
-	s.unready = append(s.unready, q.Unready)
+	if q.Edits {
+		s.edits++
+		q.After = pgstore.PendingKey{} // read from the start, as pgstore does
+	} else {
+		s.pending = append(s.pending, q.Skip)
+		s.afters = append(s.afters, q.After)
+		s.unready = append(s.unready, q.Unready)
+	}
 	docs := make([]*doc, 0, len(s.docs))
 	for _, d := range s.docs {
 		docs = append(docs, d)
@@ -316,7 +330,7 @@ func (s *store) Pending(_ context.Context, q pgstore.PendingQuery) ([]pgstore.Te
 	seen := map[[32]byte]bool{}
 	var out []pgstore.Text
 	for _, d := range docs {
-		if q.Unready && d.ready {
+		if (q.Unready || q.Edits) && d.ready || q.Edits && d.gen <= 1 {
 			continue
 		}
 		for ord, t := range d.texts {

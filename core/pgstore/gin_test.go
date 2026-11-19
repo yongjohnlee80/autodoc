@@ -123,7 +123,7 @@ func TestMigration000009MergesTheListsAlreadyThere(t *testing.T) {
 	if !strings.Contains(scalar(t, conn, "SELECT string_agg(script, ',') FROM autodoc_schema"), "000009_update_gin_without_pending_lists.sql") {
 		t.Fatal("000009 is not in the ledger")
 	}
-	for _, n := range []int{10, 9} { // the latest first, down to 000009
+	for _, n := range []int{11, 10, 9} { // the latest first, down to 000009
 		if _, err := deploy.New(migrations, deploy.Ledger(Ledger)).Revert(ctx, conn, n); err != nil {
 			t.Fatal(err)
 		}
