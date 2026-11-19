@@ -337,10 +337,33 @@ func (w *Worker) round(ctx context.Context, t *tenant) (bool, error) {
 	// those alone; a switch's target is missing from ready documents too.
 	from := t.cursor
 	batch, inFlight := w.pace.now()
+	limit := batch * inFlight * roundBatches
+	// the edited documents' texts first, up to a batch: an edit behind the cursor would otherwise
+	// wait for the scan to reach the end of a backlog and start again
+	var edits []pgstore.Text
+	if !t.switching {
+		var err error
+		if edits, _, err = t.Store.Pending(ctx, pgstore.PendingQuery{Model: w.fp, Edits: true, Skip: skip, Limit: batch}); err != nil {
+			return false, err
+		}
+		if len(edits) > 0 {
+			taken := make(map[[32]byte]bool, len(skip)+len(edits))
+			for h := range skip {
+				taken[h] = true
+			}
+			for _, e := range edits {
+				taken[e.TextHash] = true
+			}
+			skip, limit = taken, limit-len(edits)
+		}
+	}
 	texts, next, err := t.Store.Pending(ctx, pgstore.PendingQuery{Model: w.fp, After: from, Unready: !t.switching,
-		Skip: skip, Limit: batch * inFlight * roundBatches})
+		Skip: skip, Limit: limit})
 	if err != nil {
 		return false, err
+	}
+	if len(edits) > 0 {
+		texts = append(edits, texts...)
 	}
 	t.cursor = next
 	if len(texts) == 0 {
