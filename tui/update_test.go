@@ -111,7 +111,8 @@ func TestUpdateRunsUpdateShAndOffersTheRestart(t *testing.T) {
 	})
 	r.connected(t)
 	r.h.p.Post(r.h.updateAutoDoc)
-	r.s.WaitForText(t, "update-sh-42")
+	// the script's own words, once its program has started: a start's bound, not a frame's
+	r.waitWithin(t, "the script's output", shellStartWait, func() bool { return strings.Contains(r.s.String(), "update-sh-42") })
 	r.s.WaitForText(t, "restart AutoDoc?")
 	r.s.WaitForText(t, "AutoDoc v9.9.9 is installed (this is v9.9.8)")
 

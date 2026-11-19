@@ -10,6 +10,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/enterprise/embedder"
 	"github.com/yongjohnlee80/autodoc/enterprise/opcode"
+	"github.com/yongjohnlee80/autodoc/enterprise/ranker"
 )
 
 // THE METRICS EXPOSITION: GET /v1/metrics in Prometheus's text format 0.0.4,
@@ -104,6 +105,10 @@ func WriteMetrics(w io.Writer, s Snapshot, totals HTTPTotals) error {
 		sample(b, "autodoc_http_request_duration_seconds_count", labels("path", p), float64(t.Count))
 	}
 
+	if r := s.Server.rank; r != nil {
+		writeRank(b, *r)
+	}
+
 	tenants := append([]TenantStatus(nil), s.Tenants...)
 	sort.Slice(tenants, func(i, j int) bool { return tenants[i].Tenant < tenants[j].Tenant })
 	family(b, "autodoc_tenant_documents", "gauge", "The tenant's documents, in total and ready for semantic search.")
@@ -119,7 +124,7 @@ func WriteMetrics(w io.Writer, s Snapshot, totals HTTPTotals) error {
 			sample(b, "autodoc_tenant_quarantined", labels("tenant", t.Tenant), float64(t.Quarantine))
 		}
 	}
-	family(b, "autodoc_tenant_cursor_lag_seconds", "gauge", "How far the tenant's index is behind its source, on the database's clock: now less the bound its last complete run read to; absent on a standby and before that run.")
+	family(b, "autodoc_tenant_cursor_lag_seconds", "gauge", "How far the tenant's index is behind its source, on the source database's clock: now less the bound its last complete run read to; absent on a standby and before that run.")
 	for _, t := range tenants {
 		if t.Error == opcode.None && t.Cursor.LagSeconds != nil {
 			sample(b, "autodoc_tenant_cursor_lag_seconds", labels("tenant", t.Tenant), float64(*t.Cursor.LagSeconds))
@@ -188,4 +193,42 @@ func boolValue(b bool) float64 {
 		return 1
 	}
 	return 0
+}
+
+// writeRank is the ranker's series ([ranker]): its calls by result, their durations, the texts
+// sent, and the searches answered unranked by code. Results and codes are fixed sets.
+func writeRank(b *strings.Builder, r ranker.Health) {
+	family(b, "autodoc_rank_up", "gauge", "Whether the ranker's last probe or call answered.")
+	sample(b, "autodoc_rank_up", "", boolValue(r.State == ranker.Up))
+	family(b, "autodoc_rank_calls_total", "counter", "The searches' ranker calls since the server started, by result: ok, or why it failed.")
+	for _, k := range sortedKeys(r.Calls) {
+		sample(b, "autodoc_rank_calls_total", labels("result", k), float64(r.Calls[k]))
+	}
+	family(b, "autodoc_rank_seconds", "histogram", "The ranker calls' durations, those that sent texts.")
+	for i, le := range ranker.DurationBuckets {
+		var n int64
+		if i < len(r.Buckets) {
+			n = r.Buckets[i]
+		}
+		sample(b, "autodoc_rank_seconds_bucket", labels("le", formatFloat(le)), float64(n))
+	}
+	sample(b, "autodoc_rank_seconds_bucket", labels("le", "+Inf"), float64(r.Count))
+	sample(b, "autodoc_rank_seconds_sum", "", r.Sum.Seconds())
+	sample(b, "autodoc_rank_seconds_count", "", float64(r.Count))
+	family(b, "autodoc_rank_texts_total", "counter", "The texts sent to the ranker since the server started, distinct within each call: a hosted ranker's bill.")
+	sample(b, "autodoc_rank_texts_total", "", float64(r.Texts))
+	family(b, "autodoc_searches_unranked_total", "counter", "The searches answered in recall order since the server started, by why the ranker could not rank them.")
+	for _, k := range sortedKeys(r.Unranked) {
+		sample(b, "autodoc_searches_unranked_total", labels("reason", k), float64(r.Unranked[k]))
+	}
+}
+
+// sortedKeys are m's keys in order, so the series are written in a fixed order.
+func sortedKeys(m map[string]int64) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }

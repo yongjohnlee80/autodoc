@@ -28,6 +28,16 @@ const checkEmbeddingTimeout = 30 * time.Second
 func providerOf(e config.Embedding) embedder.Build {
 	client := &http.Client{}
 	return func(ctx context.Context) (embed.Provider, error) {
+		if e.Provider == "vertex" {
+			// no key to hide, and the client itself: a wrapper would hide its query format
+			// (embed.Querier)
+			p, err := embed.NewVertex(ctx, embed.VertexConfig{Endpoint: e.BaseURL, Project: e.Project, Location: e.Location,
+				Model: e.Model, Dimensions: e.Dimensions}, gcpTokens.token, client)
+			if err != nil {
+				return nil, err // never a typed nil in the interface
+			}
+			return p, nil
+		}
 		key := e.Key()
 		if e.Provider == "ollama" {
 			p, err := embed.NewOllama(ctx, e.BaseURL, key, e.Model, client)
@@ -91,17 +101,29 @@ func checkEmbedding(ctx context.Context, path string, e config.Embedding, out io
 	ctx, cancel := context.WithTimeout(ctx, checkEmbeddingTimeout)
 	defer cancel()
 	p, err := providerOf(e)(ctx)
+	at := e.BaseURL
+	if e.Provider == "vertex" && at == "" {
+		at = embed.VertexHost(e.Location)
+	}
 	switch {
 	case err == nil:
 		m := p.Model()
-		fmt.Fprintf(out, "embedding: %s at %s answered: %s, %d dimensions\n", e.Provider, e.BaseURL, m.Fingerprint(), m.Dims)
+		fmt.Fprintf(out, "embedding: %s at %s answered: %s, %d dimensions\n", e.Provider, at, m.Fingerprint(), m.Dims)
+	case errors.Is(err, errNoCredentials):
+		return config.Refuse(path, "embedding.provider", "vertex: "+err.Error()+": attach a service account to the VM, or set GOOGLE_APPLICATION_CREDENTIALS")
+	case errors.Is(err, errCredentialsRefused):
+		return config.Refuse(path, "embedding.provider", "vertex: "+err.Error())
+	case errors.Is(err, embed.ErrAPIDisabled):
+		return config.Refuse(path, "embedding.project", "Google refused: "+err.Error()+": enable it in the project")
+	case errors.Is(err, embed.ErrUnauthorized) && e.Provider == "vertex":
+		return config.Refuse(path, "embedding.project", "Google refused the credentials (the service account needs Vertex AI User in the project): "+err.Error())
 	case errors.Is(err, embed.ErrUnauthorized):
 		return config.Refuse(path, "embedding.key_env", "the provider refused the key: "+err.Error())
 	case errors.Is(err, embed.ErrNoModel):
 		return config.Refuse(path, "embedding.model", err.Error())
 	default:
 		fmt.Fprintf(out, "warning: embedding: %s at %s did not answer the probe: %v: the server starts without it, answers searches by words, and keeps trying it\n",
-			e.Provider, e.BaseURL, err)
+			e.Provider, at, err)
 	}
 	return nil
 }

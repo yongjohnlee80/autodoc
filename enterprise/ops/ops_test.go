@@ -365,3 +365,120 @@ func TestTheStatusCarriesTheEmbeddingPace(t *testing.T) {
 		}
 	}
 }
+
+// With the index in a database of its own, the lags are on the source's clock, which set each
+// pass's bound, not the index's: a source clock 30 s behind the index's makes a bound 4 s behind
+// the source 4 s of lag, not 34 s less. A source that doesn't answer leaves the lag out, and the
+// tenant's other figures stand. The mutant, named here: the lag on the index's clock.
+func TestTheLagIsOnTheSourcesClock(t *testing.T) {
+	f := newFixture()
+	srcNow := dbNow.Add(-30 * time.Second)
+	var srcErr atomic.Pointer[error]
+	f.c.o.SourceNow = func(ctx context.Context) (time.Time, error) {
+		if p := srcErr.Load(); p != nil {
+			return time.Time{}, *p
+		}
+		return srcNow, ctx.Err()
+	}
+	f.state.Store(&ingest.State{Locked: true, CaughtUp: srcNow.Add(-4 * time.Second)})
+	ts := f.c.Snapshot(context.Background()).Tenants[0]
+	if ts.Cursor.LagSeconds == nil || *ts.Cursor.LagSeconds != 4 {
+		t.Errorf("the lag %v, want 4 s on the source's clock", deref(ts.Cursor.LagSeconds))
+	}
+	g := newFixture()
+	failed := errors.New("the source does not answer")
+	srcErr.Store(&failed)
+	g.c.o.SourceNow = f.c.o.SourceNow
+	g.state.Store(&ingest.State{Locked: true, CaughtUp: srcNow.Add(-4 * time.Second)})
+	ts = g.c.Snapshot(context.Background()).Tenants[0]
+	if ts.Cursor.LagSeconds != nil || ts.Error != opcode.None || ts.Documents.Total != 10 {
+		t.Errorf("a source not answering: lag %v, error %q, documents %+v; want no lag, the rest as it is", deref(ts.Cursor.LagSeconds), ts.Error, ts.Documents)
+	}
+}
+
+// Health pings with Ping when it is set, never with Now: the server gives Ping a connection the
+// searches can't take, so a Now that waits (its pool held by searches) can't make a busy server's
+// health read unavailable. Ping's failure is health's database failing, as Now's is. The mutant,
+// named here: the ping made with Now whatever Ping is.
+func TestHealthPingsWithPingWhenItIsSet(t *testing.T) {
+	f := newFixture()
+	held := errors.New("every connection held")
+	f.dbErr.Store(&held) // Now as on a pool searches hold: it never answers in time
+	var pings atomic.Int64
+	var pingErr atomic.Pointer[error]
+	f.c.o.Ping = func(ctx context.Context) error {
+		pings.Add(1)
+		if p := pingErr.Load(); p != nil {
+			return *p
+		}
+		return ctx.Err()
+	}
+	ctx := context.Background()
+	if h := f.c.Health(ctx); h.Status != StatusOK || h.Checks["database"] != CheckOK {
+		t.Errorf("Now held, Ping answering: %+v, want ok", h)
+	}
+	if n, p := f.nows.Load(), pings.Load(); n != 0 || p != 1 {
+		t.Errorf("health called Now %d times and Ping %d, want 0 and 1", n, p)
+	}
+	lost := errors.New("connection refused")
+	pingErr.Store(&lost)
+	f.advance(PingFor)
+	if h := f.c.Health(ctx); h.Status != StatusUnavailable || h.Checks["database"] != CheckFailing {
+		t.Errorf("Ping failing: %+v, want unavailable", h)
+	}
+}
+
+// Health polled hard costs the database one ping at a time, and none while the last is younger
+// than PingFor: fifty callers at once, the ping held until they have all asked, make one ping,
+// and every caller gets its answer. The server's ping takes one of the leases' two connections,
+// so however hard health is polled (it is public), a renew always has the other. The mutant,
+// named here: the lock let go before the ping is made (every caller pings at once).
+func TestHealthPolledHardPingsOneAtATime(t *testing.T) {
+	f := newFixture()
+	release := make(chan struct{})
+	var out, most, pings atomic.Int64
+	f.c.o.Ping = func(ctx context.Context) error {
+		pings.Add(1)
+		n := out.Add(1)
+		defer out.Add(-1)
+		for {
+			m := most.Load()
+			if n <= m || most.CompareAndSwap(m, n) {
+				break
+			}
+		}
+		select {
+		case <-release:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	var wg sync.WaitGroup
+	var asked sync.WaitGroup
+	statuses := make(chan string, 50)
+	for range 50 {
+		wg.Add(1)
+		asked.Add(1)
+		go func() {
+			defer wg.Done()
+			asked.Done()
+			statuses <- f.c.Health(context.Background()).Status
+		}()
+	}
+	asked.Wait()
+	// NOTE: can't announce: a caller blocked on the ping's lock says nothing; a short sleep lets
+	// the fifty reach it before the ping is let go. A ping released early only weakens the count.
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	wg.Wait()
+	close(statuses)
+	for s := range statuses {
+		if s != StatusOK {
+			t.Errorf("a caller's health: %s, want ok", s)
+		}
+	}
+	if m, p := most.Load(), pings.Load(); m != 1 || p != 1 {
+		t.Errorf("fifty callers at once: %d pings in flight at most, %d in all; want 1 and 1", m, p)
+	}
+}

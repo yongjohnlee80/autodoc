@@ -20,6 +20,7 @@ func catInTheTerminal(t *testing.T, r *running) {
 	t.Helper()
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	waitShellStarted(t, r, 1)
 	r.keys(t, decltest.Type("seq 1 40; printf 'cat-%s\\n' ready; cat -v\r")...)
 	r.s.WaitForText(t, "cat-ready")
 }

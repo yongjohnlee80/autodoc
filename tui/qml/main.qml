@@ -564,7 +564,8 @@ Window {
                 onMaximizeRequested: agent.toggleMaximize()
                 onCloseRequested: App.stopAllAgents()
                 // a × at the start of each tab, left of its name: its agent's Close, asked first while
-                // it runs (agenttabs.go CloseAgentTab); off where the tab's menu has no Close
+                // it runs (agenttabs.go CloseAgentTab); a request does nothing where the tab's menu has
+                // no Close (no agent behind it, or one already closing, which golib draws no × on)
                 tabCloseButtons: true
                 onTabCloseRequested: App.closeAgentTab(id)
                 // maximize's keys (F11) reach the Window with the keyboard in a shell: its program never gets them

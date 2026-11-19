@@ -223,8 +223,8 @@ func TestScriptsSendTextToAnAgent(t *testing.T) {
 	agent, report := recordingAgent(t, true)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
-	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
-	r.s.WaitForText(t, "ready")
+	r.waitAgentRunning(t)
+	r.waitAgentSays(t, "ready")
 	r.luaLoad(t, `
 autodoc.command{ name = "ag", run = function()
   local all = autodoc.agents.list()
@@ -294,8 +294,8 @@ func TestAPageIsHandedOverByItsPathNeverItsText(t *testing.T) {
 	_, r, _ := runSetupTUIIn(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron",
 		nil, Options{}, map[string][]string{"kb": {"a.md", "a\n", "plan.md", "the-saved-page-text\n"}})
 	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
-	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
-	r.s.WaitForText(t, "ready")
+	r.waitAgentRunning(t)
+	r.waitAgentSays(t, "ready")
 	r.h.p.Post(func() { r.h.openPath("plan.md") })
 	r.s.WaitFor(t, "plan.md open", func(string) bool {
 		return onLoop(r, func() bool { return r.h.core.Value() == "the-saved-page-text\n" })
@@ -373,8 +373,8 @@ func TestScriptsAskALineAndSendARequest(t *testing.T) {
 	agent, report := recordingAgent(t, true)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
-	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
-	r.s.WaitForText(t, "ready")
+	r.waitAgentRunning(t)
+	r.waitAgentSays(t, "ready")
 	r.luaLoad(t, `
 autodoc.command{ name = "ask", run = function()
   autodoc.ui.input({ title = "a bird", label = "which bird?", text = "kes" }, function(v, err) autodoc.notify("answered " .. tostring(v) .. " " .. tostring(err)) end)
@@ -426,8 +426,8 @@ func TestScriptsSendALongRichTextThroughLua(t *testing.T) {
 	agent, report := recordingAgent(t, true)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
-	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
-	r.s.WaitForText(t, "ready")
+	r.waitAgentRunning(t)
+	r.waitAgentSays(t, "ready")
 	cb := `function(ok, err) autodoc.notify("%s " .. tostring(ok) .. " " .. tostring(err)) end`
 
 	if err := r.luaRun(`:lua autodoc.agents.send("heron", string.rep("x", 2600), ` + fmt.Sprintf(cb, "long") + `)`); err != nil {
@@ -475,8 +475,8 @@ func TestScriptsSendNothingToAnUnbracketedAgent(t *testing.T) {
 	agent, report := recordingAgent(t, false)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
-	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
-	r.s.WaitForText(t, "ready")
+	r.waitAgentRunning(t)
+	r.waitAgentSays(t, "ready")
 	r.luaLoad(t, `
 autodoc.command{ name = "ag", run = function()
   autodoc.agents.send("heron", "never-keys", function(ok, err) autodoc.notify("sent " .. tostring(ok) .. " " .. tostring(err)) end)
@@ -534,8 +534,8 @@ func TestTheAgentsCardSendsThePage(t *testing.T) {
 	agent, report := recordingAgent(t, true)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
-	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
-	r.s.WaitForText(t, "ready")
+	r.waitAgentRunning(t)
+	r.waitAgentSays(t, "ready")
 	onLoop(r, func() bool {
 		r.h.core.SetValue("card-sent-page")
 		return r.h.p.Call("editor", "forceActiveFocus") == nil

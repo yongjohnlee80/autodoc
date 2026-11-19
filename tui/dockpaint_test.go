@@ -90,6 +90,7 @@ func TestTheTerminalsStripHideAndEscapePaintItsDockIconLitThenDimmed(t *testing.
 	_, r := runLineShellTUI(t, nil)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	waitShellStarted(t, r, 1) // the dock keeps a hidden terminal's icon only while its shell runs
 	shown, after := dockIconPaints(t, r, "❯", func() { windowControl(t, r, "_") })
 	litThenDimmed(t, "the terminal's _", shown, after)
 
@@ -103,7 +104,7 @@ func TestTheAgentsStripHidePaintsItsDockIconLitThenDimmed(t *testing.T) {
 	agent, _ := fakeAgent(t)
 	_, r, _ := runAgentTUI(t, agentsFolder(t), []agents.AgentProfile{{Name: "fake", Command: agentCall(agent)}}, "fake")
 	r.leader(t, 'g')
-	r.s.WaitForText(t, "started")
+	r.waitAgentSays(t, "started")
 	shown, after := dockIconPaints(t, r, "✦", func() { windowControl(t, r, "_") })
 	litThenDimmed(t, "the agents' _", shown, after)
 }

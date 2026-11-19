@@ -12,15 +12,21 @@ import (
 // asked for less at once, so some size answers in time and the texts get embedded, where a fixed
 // size would time out every call and store nothing while the provider kept computing the calls it
 // was left with. Calls that answer in well under their time step back up: the batch first, then
-// the calls in flight, to the configured values.
+// the calls in flight, to the configured values. The pace that last ran out of time is remembered:
+// the step back up to it waits for many more calls answered in time (ceilingAfter) than a step
+// below it does, so a provider that answers one size and not the next isn't asked for the next
+// every few calls, each a call lost to its timeout.
 
 // errSteppedDown is a batch that ran out of its time and stepped the pace down: its texts wait for
 // the next round, at the smaller size, which is no failure to back off after.
 var errSteppedDown = errors.New("embedding: the call ran out of time, and the pace stepped down")
 
 // growAfter is how many calls in a row must answer in under half their time before the pace steps
-// up once.
-const growAfter = 4
+// up once; ceilingAfter, before it steps up to the pace that last ran out of time.
+const (
+	growAfter    = 4
+	ceilingAfter = 8 * growAfter
+)
 
 // pace is the worker's batch size and calls in flight now, shared by every tenant's rounds (the
 // provider is one).
@@ -29,9 +35,12 @@ type pace struct {
 	batch, inFlight    int // now
 	maxBatch, maxSlots int // configured: where it starts, and what it grows back to
 	inTime             int // calls in a row that answered in under half their time
-	timeouts           int64
-	lastCall           time.Duration
-	down               bool // stepped down since it was last at full, for the log
+	// ceilBatch and ceilInFlight are the pace that last ran out of time (0: none since the last
+	// time it was reached again): the step up to it waits ceilingAfter calls in time
+	ceilBatch, ceilInFlight int
+	timeouts                int64
+	lastCall                time.Duration
+	down                    bool // stepped down since it was last at full, for the log
 }
 
 func newPace(batch, slots int) *pace {
@@ -69,6 +78,7 @@ func (p *pace) timedOut(size, inFlight int, took time.Duration) (s step, ok bool
 	if p.batch == 1 && p.inFlight == 1 {
 		return step{batch: 1, inFlight: 1}, false
 	}
+	p.ceilBatch, p.ceilInFlight = p.batch, p.inFlight // this pace ran out: remembered
 	p.batch, p.inFlight = max(1, p.batch/2), max(1, p.inFlight/2)
 	first := !p.down
 	p.down = true
@@ -77,7 +87,9 @@ func (p *pace) timedOut(size, inFlight int, took time.Duration) (s step, ok bool
 
 // answered records a call that answered after took, of timeout. growAfter calls in a row in under
 // half their time step the pace up once: the batch doubles, else the calls in flight rise by one,
-// to the configured values. ok says it stepped up; full that it is back at the configured pace.
+// to the configured values. The step that reaches the pace that last ran out of time waits for
+// ceilingAfter of them instead, then forgets it. ok says it stepped up; full that it is back at
+// the configured pace.
 func (p *pace) answered(took, timeout time.Duration) (s step, ok bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -87,15 +99,26 @@ func (p *pace) answered(took, timeout time.Duration) (s step, ok bool) {
 		return step{}, false
 	}
 	p.inTime++
-	if p.inTime < growAfter || (p.batch == p.maxBatch && p.inFlight == p.maxSlots) {
+	if p.batch == p.maxBatch && p.inFlight == p.maxSlots {
 		return step{}, false
 	}
-	p.inTime = 0
-	if p.batch < p.maxBatch {
-		p.batch = min(2*p.batch, p.maxBatch)
+	batch, inFlight := p.batch, p.inFlight
+	if batch < p.maxBatch {
+		batch = min(2*batch, p.maxBatch)
 	} else {
-		p.inFlight++
+		inFlight++
 	}
+	// the step that reaches the pace that last ran out waits longer: a provider that answers just
+	// under it would otherwise be asked for it again every growAfter calls
+	reaches := p.ceilBatch > 0 && batch >= p.ceilBatch && inFlight >= p.ceilInFlight
+	if p.inTime < growAfter || reaches && p.inTime < ceilingAfter {
+		return step{}, false
+	}
+	if reaches {
+		p.ceilBatch, p.ceilInFlight = 0, 0 // tried again: remembered again if it runs out again
+	}
+	p.inTime = 0
+	p.batch, p.inFlight = batch, inFlight
 	full := p.batch == p.maxBatch && p.inFlight == p.maxSlots && p.down
 	if full {
 		p.down = false

@@ -43,7 +43,7 @@ func TestTheShellsTextIsAViewOfItsOwnInTheGUI(t *testing.T) {
 	r.s.WaitForText(t, "agent · fake")
 	// without its view the agent's text is in the grid: what it printed has reached the terminal
 	onLoop(r, func() bool { tabs.SetTerminalViews(nil); return true })
-	r.s.WaitForText(t, "started")
+	r.waitAgentSays(t, "started")
 	// the views given again (as to a rebuilt panel), the same text leaves the grid
 	onLoop(r, func() bool { r.h.panelText.panels["agentView"].tabs = nil; r.h.setAgentScaleIndex(1); return true })
 	r.s.WaitFor(t, "the agent's text off the grid", func(sc string) bool { return !strings.Contains(sc, "started") })

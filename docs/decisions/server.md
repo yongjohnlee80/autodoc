@@ -46,6 +46,9 @@ dropped or recycled connection loses nothing.
 - **A holder that cannot renew stops by its own clock** before the database's lease runs out. A
   lease lost, taken over or not renewed in time, stops the ingester and exits the server non-zero,
   so its supervisor restarts it; it never goes on writing without the lease.
+- **The leases have a pool of their own** (two connections), never the one searches use. On the
+  shared pool, a renew waited behind a flood of searches past the lease's length, and the server
+  stopped.
 - Every time is the database's `clock_timestamp()`; no host's clock is compared with another's.
 - **A claim within milliseconds of a stop that cut a write can wait one poll.** The cut write holds
   the row `FOR KEY SHARE` until its backend sees its connection closed, so a claim landing then is
@@ -182,6 +185,34 @@ rescore the merged hits anyway.
 
 In the code: `enterprise/search/global.go`, `enterprise/api/api.go`
 
+## A reranker after recall
+
+A `[ranker]` section adds a second stage to every search: a cross-encoder (a TEI server, or a
+Cohere-style rerank API) reorders recall's best candidates, the window (40 by default, 10 to 100).
+A test on a 55,000-document catalog met its bar only with one: recall at 1 went from 0.47 to
+0.76.
+
+- **The texts are the search's own.** Each candidate's text is its chunk's breadcrumb and body,
+  kept by the snapshot the search read it in, under its access predicate, as the rows are read.
+  Nothing is read again, so a text can't come from another generation or outside the scope.
+- **One call per search, after the merge.** A search across tenants reranks the merged top window
+  once, each hit's text from its own tenant's snapshot. The ranker scores every candidate on one
+  scale, which the merge by rank-based relevance lacks; a weight then decides which candidates
+  enter the window. By default the window across tenants is at least 4 a tenant (at most 100), and
+  a request may set its own.
+- **A ranker never fails a search.** Unreachable, refused, rate limited, a bad answer, past its
+  budget (`timeout`, 750 ms, the ranker's call alone), or no slot free in time: the search answers
+  in recall order, and its `rank` says why. A ranker that is down is asked nothing while a prober
+  brings it back, backing off to once a minute.
+- **What leaves.** The ranker receives each reranked search's query and its window's texts; a
+  hosted one receives them under its own terms. The log and the status carry codes and counts,
+  never a query, a text or an answer.
+
+Reranking each tenant and merging by the ranker's scores was rejected: a call per tenant, and a
+cross-encoder's scores compare only within one call.
+
+In the code: `enterprise/search/rank.go`, `enterprise/ranker/`, `core/pgstore/view.go`
+
 ## An HTTP API with a token per client
 
 The same search package serves Go applications directly and `POST /v1/search` over HTTP/JSON.
@@ -198,7 +229,8 @@ In the code: `enterprise/api/api.go`, `enterprise/config/config.go`
 ## Operator health, status and metrics
 
 - `GET /v1/health` is public and minimal: ok, degraded or unavailable, with no tenant names or
-  version, 200 or 503.
+  version, 200 or 503. Its database ping runs on the leases' pool, never the searches': on theirs,
+  a flood of searches made a busy server read unavailable, which a supervisor would restart.
 - `GET /v1/status` answers only an operator's token (`[[http.operator]]`), for that operator's
   tenants: cursor and lag, passes and refreshes, quarantine, documents, models, lock and provider
   state. A search token is refused there, and one token in both roles is refused at load.

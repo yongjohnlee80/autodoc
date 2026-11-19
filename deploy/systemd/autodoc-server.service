@@ -1,8 +1,9 @@
 # autodoc --server as a systemd service: docs/enterprise/operations.md.
 #
+#   useradd --system --no-create-home --shell /usr/sbin/nologin autodoc
 #   install -m 0755 autodoc /usr/local/bin/autodoc
-#   install -d -m 0750 /etc/autodoc && install -m 0640 server.toml /etc/autodoc/   (+ views/)
-#   install -m 0600 server.env /etc/autodoc/server.env      # AUTODOC_SERVER_DSN=…, WEB_APP_TOKEN=…
+#   install -d -m 0750 -g autodoc /etc/autodoc && install -m 0640 -g autodoc server.toml /etc/autodoc/   (+ views/, TLS files)
+#   install -m 0600 server.env /etc/autodoc/server.env      # read by systemd, as root: AUTODOC_SERVER_DSN=…, WEB_APP_TOKEN=…
 #   cp autodoc-server.service /etc/systemd/system/ && systemctl enable --now autodoc-server
 
 [Unit]
@@ -27,8 +28,13 @@ RestartSec=5s
 KillSignal=SIGTERM
 TimeoutStopSec=60
 
-DynamicUser=yes
+# A system user of its own, which reads /etc/autodoc through its group: the files are root's, 0640,
+# group autodoc. (A dynamic user is in no group the files could name, so it couldn't read them.)
+User=autodoc
+Group=autodoc
 NoNewPrivileges=yes
+RestrictSUIDSGID=yes
+RemoveIPC=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes

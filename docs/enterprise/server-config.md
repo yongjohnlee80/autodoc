@@ -40,6 +40,10 @@ model    = "text-embedding-3-small"
 key_env  = "AUTODOC_EMBED_KEY"
 slots    = 4
 
+[ranker]
+kind     = "tei"
+base_url = "http://127.0.0.1:8081"
+
 [http]
 listen = "127.0.0.1:8730"
 
@@ -68,12 +72,14 @@ Durations are strings Go's `time.ParseDuration` reads: `"90s"`, `"5m"`, `"24h"`.
 
 ## `[postgres]`: where the index lives
 
-The index is kept in a schema of its own in your business database. The server creates the schema
-when it is missing, then applies its migrations there. Your tables are never written.
+The index is kept in a schema of its own, in your business database or in a database of its own
+(`index_dsn_env`). The server creates the schema when it is missing, then applies its migrations
+there. Your tables are never written.
 
 | Field | Default | Meaning | Refused when |
 |---|---|---|---|
 | `dsn_env` | (required) | The name of the environment variable holding the PostgreSQL connection string (a URL or `key=value` form). | missing; not a variable name; the variable is not set or is empty |
+| `index_dsn_env` | | The name of the environment variable holding the index's own connection string. Set, the index's schema, its writes, the writer leases and the vectors go there, and the views are read through `dsn_env` alone ([below](#the-index-in-a-database-of-its-own)). Unset, both are the one database. | not a variable name; the variable is not set or is empty; the same variable as `dsn_env` |
 | `dsn_sealed` | | A DSN sealed with AutoDoc's keyslot. | always, for now: the keyslot keeps its key beside a local store, which the server doesn't have. Use `dsn_env`. |
 | `schema` | `autodoc_search` | The schema the index lives in. | not a plain identifier: lowercase letters, digits and `_`, not starting with a digit or `pg_`, at most 63 bytes |
 | `ann_threshold` | `50000` | How many embeddings of its model a tenant has before its semantic searches become approximate, through the model's HNSW index. Below it they're exact. | below 1 |
@@ -86,13 +92,54 @@ when it is missing, then applies its migrations there. Your tables are never wri
 | `ann_defer_max` | `"24h"` | The longest a model's wanted index waits for a bulk load: past it, the index is built whatever the backlog. | not a duration, or 0 or less |
 | `ann_maintenance_work_mem` | `"512MB"` | The memory the session building an index may use (PostgreSQL's `maintenance_work_mem`, for that session only). A parallel build keeps it in the database's shared memory (`/dev/shm`): give a database in a container `--shm-size` at least this, or the build falls back to running without parallel workers, and the server logs a warning saying so. | not a size in kB (1024 or more), MB or GB |
 
-The server opens two connection pools on the DSN:
+The server opens three connection pools:
 
-- the index's, where every connection's `search_path` is `schema, public` (pgvector is usually
-  installed in `public`), and where each tenant's writer lease is a row of `rag_writer_lease`. Its
-  connections end a transaction left idle for a minute, so a hung writer never keeps a standby
-  from its tenant;
-- the one your views run on, with the role's own `search_path`, so a view runs as it does in `psql`.
+- the index's, on `index_dsn_env`'s DSN when it is set, else on `dsn_env`'s. Every connection's
+  `search_path` is `schema, public` (pgvector is usually installed in `public`). Searches,
+  ingestion and embedding share it. Its connections end a transaction left idle for a minute, so a
+  hung writer never keeps a standby from its tenant;
+- the writer leases', two connections on the same DSN with the same `search_path`, where each
+  tenant's writer lease is a row of `rag_writer_lease`. The leases are renewed there, never behind
+  the searches, so a flood of searches can't make the server lose its tenants. Count these two
+  when you size the index role's or the database's connection limit;
+- the one your views run on, on `dsn_env`'s DSN, with the role's own `search_path`, so a view runs
+  as it does in `psql`.
+
+### The index in a database of its own
+
+When the business database may only be read (a production database, a replica), give the index a
+database of its own with `index_dsn_env`:
+
+```toml
+[postgres]
+dsn_env       = "AUTODOC_SOURCE_DSN"   # the views: read only
+index_dsn_env = "AUTODOC_INDEX_DSN"    # the index: its schema, leases and vectors
+schema        = "autodoc_search"
+```
+
+What each connection's role needs:
+
+- **the source** (`dsn_env`): `SELECT` on the tables the views read and `USAGE` on their schema,
+  nothing else. A read-only user is enough, and pgvector isn't needed there;
+- **the index** (`index_dsn_env`): pgvector installed in its database, once, by a superuser or the
+  database's owner (`CREATE EXTENSION vector`), and the schema: one the role owns, or `CREATE` on
+  the database to let the server create it. [views](views.md#the-grants) has the statements; run the
+  index's half in the index's database.
+
+`--check` checks each, reading only:
+
+- the index's database: it answers, pgvector is installed there or the role can install it, and the
+  role can create the index's tables in the schema, or the schema. It says
+  `index: a database of its own: vector 0.8.1, schema autodoc_search`, or refuses naming
+  `postgres.index_dsn_env` and saying what's missing;
+- the source: each view's order, as without it.
+
+Both may be databases on one PostgreSQL server, or on one managed instance (AlloyDB, Cloud SQL):
+the two connections are independent. A pass reads a page of the source, then writes it to the
+index; nothing spans the two databases in one transaction. The database check in
+[`/v1/health`](operations.md#health-get-v1health) is the index's: a source that stops answering
+shows in `/v1/status` as its tenants' `last_pass.error`, and their `cursor.lag_seconds` left out.
+The lags are measured on the source's clock, which set each pass's bound.
 
 **Approximate semantic search.** The server builds one HNSW index per embedding model, in the
 background, one index at a time across every server on the database.
@@ -120,13 +167,16 @@ worker.
 
 | Field | Default | Meaning | Refused when |
 |---|---|---|---|
-| `provider` | (required) | `"openai"` (any OpenAI-compatible endpoint) or `"ollama"`. | missing, or another value |
-| `base_url` | `https://api.openai.com/v1` for openai, `http://127.0.0.1:11434` for ollama | The provider's endpoint. For openai, the API's root or its `/v1`: either way the server asks `<root>/v1/embeddings`. | not an `http` or `https` URL with a host |
+| `provider` | (required) | `"openai"` (any OpenAI-compatible endpoint), `"ollama"`, or `"vertex"` (Vertex AI's gemini-embedding-2, [below](#vertex-ai-on-google-cloud)). | missing, or another value |
+| `base_url` | `https://api.openai.com/v1` for openai, `http://127.0.0.1:11434` for ollama, the location's Google host for vertex | The provider's endpoint. For openai, the API's root or its `/v1`: either way the server asks `<root>/v1/embeddings`. | not an `http` or `https` URL with a host |
 | `model` | (required) | The model's name. | missing or blank; `--check`: an Ollama server without it |
-| `key_env` | none | The name of the environment variable holding the provider's API key, sent as a bearer token. | given, and the variable is not set or is empty; `--check`: the provider refuses the key |
+| `key_env` | none | The name of the environment variable holding the provider's API key, sent as a bearer token. Not for vertex, which authenticates with Application Default Credentials. | given, and the variable is not set or is empty; given for vertex; `--check`: the provider refuses the key |
 | `slots` | `4` | How many embedding requests may be in flight at once, across every tenant. | below 1 or above 64 |
-| `batch` | `64` | How many texts one embedding request carries, at most. | below 1 or above 256 |
+| `batch` | `64`; `1` for vertex | How many texts one embedding request carries, at most. Vertex embeds one text a request, so `slots` sets its throughput. | below 1 or above 256; other than 1 for vertex |
 | `call_timeout` | `"2m"` | How long one embedding request may take before it is given up. | below `1s` or above `30m` |
+| `project` | (required for vertex) | vertex only: the Google Cloud project the calls are made in and billed to. | missing for vertex; given for another provider; `--check`: Google refuses the credentials, or the API isn't enabled in it |
+| `location` | (required for vertex) | vertex only: `"global"`, `"us"` or `"eu"`, where gemini-embedding-2 is served. | missing or another value for vertex; given for another provider |
+| `dimensions` | `3072` | vertex only: the vectors' size, 128 to 3072. Google normalizes a vector it reduces; 1536 halves the index for a small loss. A change is a model switch. | outside 128 to 3072; given for another provider |
 
 ### How the server embeds
 
@@ -169,6 +219,83 @@ model and its dimensions. A key the provider refuses (`401`/`403`) is refused, n
 provider that can't be reached, or fails otherwise, is a warning: the server would start without
 it and keep trying.
 
+## `[ranker]`: a reranker after recall (optional)
+
+With a `[ranker]`, every search gets a second stage: a cross-encoder reorders recall's best
+candidates, the window. Without one, searches answer in recall order, as they always have.
+
+| Field | Default | Meaning | Refused when |
+|---|---|---|---|
+| `kind` | (required) | `"tei"` (a Hugging Face Text Embeddings Inference server serving a reranker), `"rerank-api"` (a Cohere-style `POST <base_url>/rerank`: Cohere, Jina, Voyage, vLLM, Infinity, llama.cpp's server), or `"vertex"` (the Vertex AI Ranking API, [below](#vertex-ai-on-google-cloud)). There is no Ollama kind: Ollama has no rerank API. | missing, or another value |
+| `base_url` | (required; Google's host for vertex) | The ranker's endpoint. For rerank-api, with its version (`https://api.cohere.com/v2`). | missing for tei and rerank-api, or not an `http` or `https` URL with a host |
+| `model` | none | rerank-api's: the model the endpoint serves; vertex's: the ranking model, pinned (`semantic-ranker-default-005`, or `-fast-005`). A TEI server serves one and names it. | missing for rerank-api or vertex; an `@` alias for vertex; given for tei |
+| `key_env` | none | The name of the environment variable holding the ranker's API key, sent as a bearer token. Not for vertex. | given, and the variable is not set or is empty; given for vertex; `--check`: the ranker refuses the key |
+| `project` | (required for vertex) | vertex only: the Google Cloud project the calls are made in and billed to. | missing for vertex; given for another kind |
+| `window` | `40` | How many of recall's best candidates a search reranks. | below 10 or above 100 |
+| `timeout` | `"750ms"` | How long a search's ranker call may take. Past it, the search answers in recall order. | below `100ms` or above `10s` |
+| `slots` | `4` | How many ranker calls may be in flight across every search. | below 1 or above 64 |
+
+### How the server reranks
+
+- **The texts are the search's own.** Each candidate's text is its chunk's breadcrumb and body, as
+  the search read it, in its own snapshot and scope: nothing is read again, and a ranker is never
+  sent a text the search's scope doesn't admit. Two candidates with the same text cost one.
+- **The window, then recall.** The search asks recall for the larger of the window and its limit,
+  the ranker reorders the window, and any hits past it follow in recall order, unscored. A
+  request may set its own `window`, or skip the ranker with `"rerank": false`
+  ([web-integration](web-integration.md#the-request)).
+- **Across tenants, once.** A search across tenants reranks the merged top window in one call, each
+  hit's text from its own tenant. Its window is at least 4 a tenant by default, at most 100.
+- **A ranker that fails never fails a search.** Unreachable, refused, rate limited, a bad answer,
+  past `timeout`, or no slot free within it: the search answers in recall order, and its `rank`
+  says why. A ranker that is down, or refused, is asked nothing until a probe answers again: the
+  server probes it at start, and after a failure, waiting from a second to a minute between
+  probes.
+- **What the ranker receives.** Every reranked search sends it its query and its window's texts. A
+  TEI server on the server's own machine keeps them there; a hosted rerank API receives them under
+  its provider's terms. The log and the status carry codes and counts, never a query, a text or an
+  answer; the key is taken out of every error, as the embedding provider's is.
+
+`--check` makes the ranker as the server does and ranks a two-text probe. A key the ranker refuses
+is refused, naming `ranker.key_env`; a model it doesn't serve, or a TEI server serving another kind
+of model (an embedding model, say), is refused, naming `ranker.model`. A ranker that can't be
+reached, or fails otherwise, is a warning: the server would start without it and keep probing.
+
+## Vertex AI on Google Cloud
+
+On a GCP VM, `provider = "vertex"` embeds with gemini-embedding-2 and `kind = "vertex"` reranks
+with the Ranking API, inside the project:
+
+```toml
+[embedding]
+provider   = "vertex"
+project    = "my-project"
+location   = "us"                # global, us or eu
+model      = "gemini-embedding-2"
+dimensions = 1536
+slots      = 16
+
+[ranker]
+kind    = "vertex"
+project = "my-project"
+model   = "semantic-ranker-default-005"
+```
+
+- **No key in the configuration.** The server asks for short-lived OAuth tokens through
+  Application Default Credentials: on the VM, its attached service account; elsewhere, the file
+  `GOOGLE_APPLICATION_CREDENTIALS` names, or `gcloud auth application-default login`. A token
+  never reaches the log.
+- **Each side in Google's prompt format.** A document is sent as `title: none | text: <chunk>`,
+  a query as `task: search result | query: <query>`, as Google's documentation gives them for
+  retrieval. The format is part of the model's identity (`vertex|gemini-embedding-2|doc-v1|1536`),
+  so a later format is a model switch, as another `dimensions` is.
+- **One text a request.** The model's method takes one text, so `batch` is 1 and `slots` is the
+  throughput: about 70,000 chunks take some ten minutes at 16 slots.
+- **A down ranker is probed once a minute**, never faster: each probe is a billed count.
+
+The service account, its roles, the APIs to enable and what it costs are in
+[operations](operations.md#on-google-cloud-vertex-ai).
+
 ## `[http]` and `[[http.client]]`: the search API (optional)
 
 Without an `[http]` table the server answers no HTTP request. A Go web application can still search
@@ -189,7 +316,7 @@ be at least one.
 |---|---|---|
 | `name` | Names the client in the log. | missing; another client has it |
 | `token_sha256` | The lowercase hex SHA-256 of the client's bearer token. The token itself is never in the file. | not 64 hex digits (a token pasted here by mistake is refused without being echoed) |
-| `token_env` | Instead: the name of the environment variable holding the token. | the variable is not set or is empty |
+| `token_env` | Instead: the name of the environment variable holding the token. | the variable is not set or is empty; its value is shorter than 32 bytes and the API is reached beyond this host |
 | `grants.<tenant>.<field>` | The values of each access field the client may ask for, in that tenant. `["*"]` allows any value, which a request must still name. | see below |
 
 Exactly one of `token_sha256` and `token_env` is given. The grants are refused, naming the client
@@ -210,8 +337,10 @@ token=$(openssl rand -hex 32)
 printf %s "$token" | sha256sum | cut -d' ' -f1    # → token_sha256
 ```
 
-A hash protects where the token is stored, not a token short enough to guess. `--check` warns when
-a `token_env` value is shorter than 32 bytes.
+A hash protects where the token is stored, not a token short enough to guess, and the server
+doesn't limit a caller's tries. So a `token_env` value shorter than 32 bytes is refused when the API
+is reached beyond this host (`listen` off loopback, or `proxy = true`). On loopback, `--check`
+warns about it. A `token_sha256` can't be checked this way: make its token as above.
 
 ## `[[http.operator]]`: who reads the status
 

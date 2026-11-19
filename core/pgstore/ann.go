@@ -501,7 +501,7 @@ func (v *View) semanticANN(ctx context.Context, model string, vec []float32, f s
 	}
 	out = make([]search.Candidate[int64], 0, len(rows))
 	for _, r := range rows {
-		out = append(out, candidate(r, chunk.Snippet(r.Body)))
+		out = append(out, v.candidate(r, chunk.Snippet(r.Body)))
 	}
 	return out, true, nil
 }

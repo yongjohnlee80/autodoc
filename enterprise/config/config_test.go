@@ -205,7 +205,7 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 		}
 		return strings.Replace(good, old, new, 1)
 	}
-	lmWebGrant := "[http.client.grants.music]\nlabel_id = [\"*\"]\n\n[[http.client]]\nname      = \"admin-app\""
+	webGrant := "[http.client.grants.music]\nlabel_id = [\"*\"]\n\n[[http.client]]\nname      = \"admin-app\""
 	for _, c := range []struct {
 		name, src, field, says string
 	}{
@@ -233,10 +233,13 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 		{"dsn not a name", sub(`dsn_env = "TEST_SERVER_DSN"`, `dsn_env = "postgres://x"`), "postgres.dsn_env", "is not an environment variable name"},
 		{"sealed", sub(`dsn_env = "TEST_SERVER_DSN"`, `dsn_sealed = "AAAA"`), "postgres.dsn_sealed", "not supported yet"},
 		{"schema", sub(`schema  = "autodoc_search"`, `schema = "Search-1"`), "postgres.schema", "not a plain schema name"},
+		{"index dsn unset", sub(`schema  = "autodoc_search"`, "schema = \"autodoc_search\"\nindex_dsn_env = \"TEST_UNSET_INDEX_DSN\""), "postgres.index_dsn_env", "TEST_UNSET_INDEX_DSN is not set"},
+		{"index dsn not a name", sub(`schema  = "autodoc_search"`, "schema = \"autodoc_search\"\nindex_dsn_env = \"postgres://x\""), "postgres.index_dsn_env", "is not an environment variable name"},
+		{"index dsn the source's", sub(`schema  = "autodoc_search"`, "schema = \"autodoc_search\"\nindex_dsn_env = \"TEST_SERVER_DSN\""), "postgres.index_dsn_env", "the same variable as dsn_env"},
 		{"plaintext dsn", sub(`schema  = "autodoc_search"`, `dsn = "postgres://u:pw@h/db"`), "postgres.dsn", "unknown field"},
 		// embedding
 		{"no embedding", sub("[embedding]", "[embeddings]"), "embedding", "required"},
-		{"provider", sub(`provider = "openai"`, `provider = "cohere"`), "embedding.provider", `want "openai" or "ollama"`},
+		{"provider", sub(`provider = "openai"`, `provider = "cohere"`), "embedding.provider", `want "openai", "ollama" or "vertex"`},
 		{"no provider", sub(`provider = "openai"`, ``), "embedding.provider", "required"},
 		{"base url", sub(`base_url = "https://embeddings.example.internal/v1"`, `base_url = "embeddings.internal"`), "embedding.base_url", "http or https URL"},
 		{"model", sub(`model    = "text-embedding-3-small"`, `model = " "`), "embedding.model", "required"},
@@ -263,7 +266,7 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 		{"the hash of no token, upper case", sub(hashOf("a long random token, as openssl rand -hex 32 makes"), strings.ToUpper(hashOf(""))), "http.client[0] (web-app).token_sha256", "no token at all"},
 		{"a short hash", sub(hashOf("a long random token, as openssl rand -hex 32 makes"), strings.Repeat("ab", 16)), "http.client[0] (web-app).token_sha256", "64 hex digits"},
 		{"token unset", sub(`token_env = "TEST_ADMIN_TOKEN"`, `token_env = "TEST_UNSET_TOKEN"`), "http.client[1] (admin-app).token_env", "TEST_UNSET_TOKEN is not set"},
-		{"unknown tenant", sub(lmWebGrant, strings.Replace(lmWebGrant, "grants.music", "grants.other-music", 1)), "http.client[0] (web-app).grants.other-music", "not a configured source's tenant"},
+		{"unknown tenant", sub(webGrant, strings.Replace(webGrant, "grants.music", "grants.other-music", 1)), "http.client[0] (web-app).grants.other-music", "not a configured source's tenant"},
 		{"missing grant", sub(`label_id = ["A", "B"]`, `region = ["ca"]`), "http.client[1] (admin-app).grants.music.label_id", "every access field of a granted tenant needs a grant"},
 		{"a field not an access field", sub(`label_id = ["A", "B"]`, "label_id = [\"A\"]\nregion = [\"ca\"]"), "http.client[1] (admin-app).grants.music.region", "not one of the tenant's access fields"},
 		{"star and a value", sub(`label_id = ["A", "B"]`, `label_id = ["*", "A"]`), "http.client[1] (admin-app).grants.music.label_id", `"*" stands alone`},
@@ -274,7 +277,7 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 		// sources
 		{"no source", strings.SplitN(good, "[[source]]", 2)[0], "source", "at least one"},
 		{"no tenant", sub(`tenant   = "music"`, ``), "source[0].tenant", "required"},
-		{"bad tenant", sub(`tenant   = "music"`, `tenant = "lm catalog"`), "source[0].tenant", "letters, digits"},
+		{"bad tenant", sub(`tenant   = "music"`, `tenant = "a catalog"`), "source[0].tenant", "letters, digits"},
 		{"duplicate tenant", good + "[[source]]\ntenant = \"music\"\nview = \"v.view\"\naccess = [\"x\"]\n", "source[1].tenant", "a tenant of its own"},
 		{"no view", sub(`view     = "views/track.view"`, ``), "source[0].view", "required"},
 		{"interval", sub(`interval = "1m"`, `interval = "10ms"`), "source[0].interval", "want at least 1s"},
@@ -315,10 +318,12 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 	}
 }
 
-// A token read from the environment shorter than 32 bytes is allowed, and warned of; TLS files
-// that exist admit a listener beyond loopback; a refusal of one field reads as the file's.
+// A token read from the environment shorter than 32 bytes is allowed on loopback, and warned of,
+// and refused where the API is reached beyond this host; TLS files that exist admit a listener
+// beyond loopback; a refusal of one field reads as the file's.
 func TestWarningsAndTLS(t *testing.T) {
 	t.Setenv("TEST_SHORT", "short")
+	t.Setenv("TEST_LONG", strings.Repeat("y", config.MinTokenBytes))
 	s, err := load(t, strings.Replace(good, `token_env = "TEST_ADMIN_TOKEN"`, `token_env = "TEST_SHORT"`, 1))
 	if err != nil {
 		t.Fatal(err)
@@ -343,8 +348,54 @@ func TestWarningsAndTLS(t *testing.T) {
 	if s, err := load(t, strings.Replace(good, `listen = "127.0.0.1:8730"`, `listen = "localhost:8730"`, 1)); err != nil || s.HTTP.Listen != "localhost:8730" {
 		t.Errorf("localhost: %v", err)
 	}
+	// the short token is refused where the API is reached beyond this host: off loopback, or
+	// behind a proxy; the refusal names the variable, never the token
+	short := func(src string) string {
+		return strings.Replace(src, `token_env = "TEST_ADMIN_TOKEN"`, `token_env = "TEST_SHORT"`, 1)
+	}
+	for name, src := range map[string]string{
+		"off loopback":      short(tls),
+		"behind a proxy":    short(strings.Replace(good, `listen = "127.0.0.1:8730"`, "listen = \"127.0.0.1:8730\"\nproxy = true", 1)),
+		"a proxy, off loop": short(strings.Replace(good, `listen = "127.0.0.1:8730"`, "listen = \"0.0.0.0:8730\"\nproxy = true", 1)),
+	} {
+		_, err := load(t, src)
+		var r *config.Refusal
+		if !errors.As(err, &r) {
+			t.Errorf("%s: a short token: %v, want a refusal", name, err)
+			continue
+		}
+		i := slices.Index(r.Fields(), "http.client[1] (admin-app).token_env")
+		if i < 0 || !strings.Contains(r.Errors[i].Reason, "shorter than 32 bytes") || !strings.Contains(r.Errors[i].Reason, "TEST_SHORT") ||
+			strings.Contains(err.Error(), "short\"") || strings.Contains(err.Error(), " short ") {
+			t.Errorf("%s: refused %v (%v)", name, r.Fields(), err)
+		}
+	}
+	if s, err := load(t, strings.Replace(tls, `token_env = "TEST_ADMIN_TOKEN"`, `token_env = "TEST_LONG"`, 1)); err != nil || len(s.Warnings) != 0 {
+		t.Errorf("a 32-byte token off loopback: %v, warnings %v", err, s.Warnings)
+	}
 	r := config.Refuse("server.toml", "source[0].view", "args: want exactly")
 	if r.Error() != "server.toml: source[0].view: args: want exactly" || !config.IsRefusal(r) {
 		t.Errorf("Refuse: %v", r)
+	}
+}
+
+// [postgres] index_dsn_env gives the index a database of its own: IndexDSN reads it, and DSN stays
+// the source's. Unset, the index's DSN is the source's.
+func TestTheIndexMayHaveADatabaseOfItsOwn(t *testing.T) {
+	s, err := load(t, good)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Postgres.SeparateIndex() || s.Postgres.IndexDSN() != s.Postgres.DSN() {
+		t.Fatalf("no index_dsn_env: separate %v, the index's DSN not the source's", s.Postgres.SeparateIndex())
+	}
+	t.Setenv("TEST_INDEX_DSN", "postgres://idx:index-password@index.internal/search")
+	s, err = load(t, strings.Replace(good, `schema  = "autodoc_search"`, "schema = \"autodoc_search\"\nindex_dsn_env = \"TEST_INDEX_DSN\"", 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.Postgres.SeparateIndex() || s.Postgres.IndexDSN() != "postgres://idx:index-password@index.internal/search" ||
+		s.Postgres.DSN() != "postgres://u:secret-password@db.internal/app" {
+		t.Fatalf("index_dsn_env: separate %v, the DSNs not as set", s.Postgres.SeparateIndex())
 	}
 }

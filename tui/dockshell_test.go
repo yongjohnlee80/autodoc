@@ -133,9 +133,31 @@ func shellInTheTerminal(t *testing.T, r *running) {
 	r.waitWithin(t, "the shell's prompt", daemonWait, func() bool { return strings.Contains(r.s.String(), "$ ") })
 }
 
-// waitShellStarted waits for n shells running: a program's start (on a loaded Windows runner, more
-// than the screen's own wait at times), bounded as one, not as a frame's change.
+// waitShellStarted waits for n shells running: for each start's end, its program running or its
+// start failed (a tab's StartError fails the cell at once). A program's start has no progress to
+// watch, and on a loaded Windows runner one took more than daemonWait, so a start in flight is
+// waited for up to shellStartWait, the bound of a start that never ends.
 func waitShellStarted(t *testing.T, r *running, n int) {
 	t.Helper()
-	r.waitWithin(t, fmt.Sprintf("%d shell(s) running", n), daemonWait, func() bool { return r.shellsRunning() == n })
+	for deadline := time.Now().Add(shellStartWait); ; time.Sleep(5 * time.Millisecond) {
+		running := 0
+		for _, tab := range r.shellTabs() {
+			if tab.StartError != nil {
+				t.Fatalf("shell %s did not start: %v", tab.Label, tab.StartError)
+			}
+			if tab.Running {
+				running++
+			}
+		}
+		if running == n {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d shell(s) running, want %d: a start still in flight after %s:\n%s", running, n, shellStartWait, r.s.String())
+		}
+	}
 }
+
+// shellStartWait bounds one shell's start: a program spawned on a loaded Windows runner, its
+// binary scanned as it starts, well past a frame's wait.
+var shellStartWait = 5 * daemonWait

@@ -107,7 +107,7 @@ func TestLayoutIsRightAboveGoToOnTheAgentsMenu(t *testing.T) {
 	agent, _ := fakeAgent(t)
 	_, r, _ := runAgentTUI(t, agentsFolder(t), []agents.AgentProfile{{Name: "heron", Command: agentCall(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
-	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
+	r.waitAgentRunning(t)
 	tab := onLoop(r, func() terminal.TerminalTabID { return r.h.agents.Snapshot().Instances["heron"].Tab })
 	wantLayoutAbove(t, "the agent", onLoop(r, func() []widgetcore.MenuItemModel { return r.h.agents.TabRows(tab) }), "tabs.goto", false)
 }

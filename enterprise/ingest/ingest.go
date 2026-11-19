@@ -150,8 +150,9 @@ const RefreshFacets = "facets"
 var beforeCommit func() error
 
 // New is an ingester of src into st, the store of tenant. business is the database the view
-// reads, on the role's own search_path; leases is the store's pool, whose schema holds the
-// writer lease's table. Every write the ingester makes through st, and through Store (the
+// reads, on the role's own search_path; leases is a pool in the store's schema, which holds the
+// writer lease's table, kept for the leases: the lease is taken, renewed and released on it, and a
+// renew must not wait behind the store's own work (the server's leases pool). Every write the ingester makes through st, and through Store (the
 // embedding worker's), is fenced on the lease.
 func New(st *pgstore.Store, tenant string, src *Source, business, leases dao.DataConn, o Options) *Ingester {
 	for _, d := range []struct {
@@ -1008,8 +1009,14 @@ func (in *Ingester) ping(ctx context.Context, cancel context.CancelCauseFunc) {
 			}
 			if err == nil {
 				// a v0.3.15 standby, running since before the store was migrated, may have taken
-				// its lock since this server took the lease: both would write, so this one stops
-				if held, oerr := in.olderHeld(ctx); oerr == nil && held {
+				// its lock since this server took the lease: both would write, so this one stops.
+				// The probe is bounded as a renew is (a sixth of the lease): unbounded, a probe
+				// waiting for a connection of a held pool stopped this loop, so neither another
+				// renew nor the silence rule ever ran, and the server went on without its lease
+				octx, ocancel := context.WithTimeout(ctx, in.o.LeaseTTL/6)
+				held, oerr := in.olderHeld(octx)
+				ocancel()
+				if oerr == nil && held {
 					err = fmt.Errorf("%w: an older server (v0.3.15 or before) holds the tenant by its advisory lock: stop that server", ErrLockLost)
 				}
 			}

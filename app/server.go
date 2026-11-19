@@ -26,6 +26,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/enterprise/embedder"
 	"github.com/yongjohnlee80/autodoc/enterprise/ingest"
 	"github.com/yongjohnlee80/autodoc/enterprise/ops"
+	"github.com/yongjohnlee80/autodoc/enterprise/ranker"
 )
 
 // runServer is --server: the enterprise search server, headless, with no socket, no TUI and no
@@ -76,9 +77,11 @@ type server struct {
 	log     logger.Logger
 	stops   stack
 
-	// store is pgstore's pool, every connection in the configured schema, which holds the tenants'
-	// writer leases too; business reads the views on the role's own search_path.
-	store, business dao.DataConn
+	// store is pgstore's pool, every connection in the configured schema: the searches', the
+	// ingesters' and the worker's, and every write's fence on its tenant's lease; business reads
+	// the views on the role's own search_path; leases is the writer leases' own pool (leaseConns),
+	// in the same schema, so no load on the store's can starve a lease's renew.
+	store, business, leases dao.DataConn
 	// failed carries the first ingester, or the HTTP server, that stopped with an error
 	failed chan error
 	// ingesters are the sources' ingesters, in the configuration's order: the embedding worker
@@ -95,6 +98,8 @@ type server struct {
 	ops     *ops.Collector
 	api     atomic.Pointer[api.Handler]
 	version string
+	// ranker is [ranker]'s, every search's; nil when the server has none
+	ranker *ranker.Ranker
 }
 
 // serverSteps are --server's subsystems in the order they start. The schema must exist before
@@ -110,15 +115,28 @@ var serverSteps = []struct {
 	{"policy", (*server).setPolicies},
 	{"ingesters", (*server).startIngesters},
 	{"embedder", (*server).startEmbedder},
+	{"ranker", (*server).startRanker},
 	{"ops", (*server).startOps},
 	{"http", (*server).startHTTP},
 }
 
-// openPostgres opens the three pools on the configured database. The DSN is a secret: an error
-// opening it is redacted of it.
+// leaseConns is the leases' pool's size: a lease's acquire, renew and the older-server probe are
+// one short statement each, a renew every few seconds per tenant.
+//
+// NOTE: a pool of their own, never the store's. A renew waiting for one of the store's connections
+// behind a flood of searches (each holding one up to its budget) went silent past the lease's
+// length, and losing the lease stopped the server: one client's 512 searches in flight on a pool
+// of four did it in about 30 s.
+const leaseConns = 2
+
+// leaseTTL is the ingesters' writer leases' length, and the writer session's idle-transaction
+// bound is twice it (pglease.WriterSession): DefaultLeaseTTL, which a cell shortens.
+var leaseTTL = ingest.DefaultLeaseTTL
+
+// openPostgres opens the store's and the leases' pools on the index's DSN and the business pool on
+// the source's. A DSN is a secret: an error opening it is redacted of it.
 func (s *server) openPostgres() error {
-	dsn := s.cfg.Postgres.DSN()
-	open := func(opts ...postgres.Option) (dao.DataConn, error) {
+	open := func(dsn string, opts ...postgres.Option) (dao.DataConn, error) {
 		conn, err := postgres.OpenNamed(s.ctx, "autodoc-server", dsn, opts...)
 		if err != nil {
 			return nil, redact(err, dsn)
@@ -128,21 +146,26 @@ func (s *server) openPostgres() error {
 	}
 	var err error
 	// a writer's transaction left idle twice a lease's length is ended, so a hung one's fence
-	// never keeps a standby from its tenant. The ingesters' leases are DefaultLeaseTTL long (their
-	// Options leave LeaseTTL at its default): a configurable length changes both together
-	if s.store, err = open(pgstore.WithSchema(s.cfg.Postgres.Schema), pglease.WriterSession(ingest.DefaultLeaseTTL)); err != nil {
+	// never keeps a standby from its tenant. The ingesters' leases are leaseTTL long: a
+	// configurable length changes both together. The index, its leases and its vectors go through
+	// the index's DSN; the views are read through the source's, the same database unless
+	// [postgres] index_dsn_env names one of the index's own
+	if s.store, err = open(s.cfg.Postgres.IndexDSN(), pgstore.WithSchema(s.cfg.Postgres.Schema), pglease.WriterSession(leaseTTL)); err != nil {
 		return err
 	}
-	s.business, err = open()
+	if s.leases, err = open(s.cfg.Postgres.IndexDSN(), pgstore.WithSchema(s.cfg.Postgres.Schema), pglease.WriterSession(leaseTTL), postgres.MaxOpenConns(leaseConns)); err != nil {
+		return err
+	}
+	s.business, err = open(s.cfg.Postgres.DSN())
 	return err
 }
 
 // migrate creates the schema, then applies pgstore's migrations in it.
 func (s *server) migrate() error {
 	if err := pgstore.EnsureSchema(s.ctx, s.store, s.cfg.Postgres.Schema); err != nil {
-		return redact(err, s.cfg.Postgres.DSN())
+		return redact(err, s.cfg.Postgres.IndexDSN())
 	}
-	return redact(pgstore.Migrate(s.ctx, s.store), s.cfg.Postgres.DSN())
+	return redact(pgstore.Migrate(s.ctx, s.store), s.cfg.Postgres.IndexDSN())
 }
 
 // annTick is how often the ANN builder looks for an index to build, recover or retire.
@@ -206,7 +229,7 @@ func (s *server) startIngesters() error {
 		if err != nil {
 			return err
 		}
-		in := ingest.New(st, src.Tenant, s.sources[i], s.business, s.store, ingest.Options{
+		in := ingest.New(st, src.Tenant, s.sources[i], s.business, s.leases, ingest.Options{LeaseTTL: leaseTTL,
 			Refresh: src.Refresh, RefreshRetry: src.RefreshRetry, Interval: src.Interval, Lag: lagOf(src.Lag), Log: s.log, Committed: s.wakeEmbedder, Locked: s.wakeEmbedder,
 			OlderSchema: s.cfg.Postgres.Schema})
 		s.ingesters = append(s.ingesters, in)
@@ -297,6 +320,11 @@ func checkServer(ctx context.Context, path string, cfg *config.Server, sources [
 	for _, w := range cfg.Warnings {
 		fmt.Fprintln(out, "warning:", w)
 	}
+	if cfg.Postgres.SeparateIndex() {
+		if err := checkIndex(ctx, path, cfg.Postgres, out); err != nil {
+			return err
+		}
+	}
 	dsn := cfg.Postgres.DSN()
 	business, err := postgres.OpenNamed(ctx, "autodoc-server", dsn)
 	if err != nil {
@@ -329,21 +357,70 @@ func checkServer(ctx context.Context, path string, cfg *config.Server, sources [
 	if err := checkEmbedding(ctx, path, cfg.Embedding, out); err != nil {
 		return err
 	}
+	if cfg.Ranker != nil {
+		if err := checkRanker(ctx, path, *cfg.Ranker, out); err != nil {
+			return err
+		}
+	}
 	fmt.Fprintf(out, "%s: ok\n", path)
 	return nil
 }
 
-// redact is err with every appearance of the DSN, and of its password, replaced: a driver's error
-// may quote the connection string it failed on, and the log is not a place for a secret. It keeps
-// err's identity (errors.Is and As) only when nothing was replaced.
-func redact(err error, dsn string) error {
-	if err == nil || dsn == "" {
+// checkIndex is --check of the index's own database ([postgres] index_dsn_env): it answers, the
+// vector extension is installed or the role can install it, and the role can create the index's
+// tables in its schema, or the schema. It reads only, and writes one line saying what it found.
+func checkIndex(ctx context.Context, path string, p config.Postgres, out io.Writer) error {
+	dsn := p.IndexDSN()
+	conn, err := postgres.OpenNamed(ctx, "autodoc-server", dsn)
+	if err != nil {
+		return fmt.Errorf("the index's database: %w", redact(err, dsn))
+	}
+	defer conn.Close()
+	db, err := pgstore.ReadIndexDatabase(ctx, conn, p.Schema)
+	if err != nil {
+		return fmt.Errorf("the index's database: %w", redact(err, dsn))
+	}
+	version, available, canInstall, schemaExists, canCreate := db.Vector, db.VectorAvailable, db.CanInstallVector, db.SchemaExists, db.CanCreate
+	const field = "postgres.index_dsn_env"
+	switch {
+	case version == "" && !available:
+		return config.Refuse(path, field, "the index's database has no vector extension to install: it needs pgvector")
+	case version == "" && !canInstall:
+		return config.Refuse(path, field, "pgvector is not installed in the index's database, and this role can't install it: CREATE EXTENSION vector there once, as its owner or a superuser")
+	case !canCreate && schemaExists:
+		return config.Refuse(path, field, fmt.Sprintf("this role can't create tables in schema %s of the index's database: GRANT CREATE ON SCHEMA %s, or make the role its owner", p.Schema, p.Schema))
+	case !canCreate:
+		return config.Refuse(path, field, fmt.Sprintf("schema %s is not in the index's database, and this role can't create it: CREATE SCHEMA %s AUTHORIZATION the role, or GRANT CREATE ON DATABASE", p.Schema, p.Schema))
+	}
+	vector := "vector " + version
+	if version == "" {
+		vector = "vector installed at the first start"
+	}
+	schema := "schema " + p.Schema
+	if !schemaExists {
+		schema += " created at the first start"
+	}
+	fmt.Fprintf(out, "index: a database of its own: %s, %s\n", vector, schema)
+	return nil
+}
+
+// redact is err with every appearance of each DSN given, and of its password, replaced: a driver's
+// error may quote the connection string it failed on, and the log is not a place for a secret. It
+// keeps err's identity (errors.Is and As) only when nothing was replaced.
+func redact(err error, dsns ...string) error {
+	if err == nil {
 		return err
 	}
 	msg := err.Error()
-	clean := strings.ReplaceAll(msg, dsn, "[the DSN]")
-	if pw := passwordOf(dsn); pw != "" {
-		clean = strings.ReplaceAll(clean, pw, "[REDACTED]")
+	clean := msg
+	for _, dsn := range dsns {
+		if dsn == "" {
+			continue
+		}
+		clean = strings.ReplaceAll(clean, dsn, "[the DSN]")
+		if pw := passwordOf(dsn); pw != "" {
+			clean = strings.ReplaceAll(clean, pw, "[REDACTED]")
+		}
 	}
 	if clean == msg {
 		return err

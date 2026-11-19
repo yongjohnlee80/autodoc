@@ -20,6 +20,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/enterprise/embedder"
 	"github.com/yongjohnlee80/autodoc/enterprise/ingest"
 	"github.com/yongjohnlee80/autodoc/enterprise/opcode"
+	"github.com/yongjohnlee80/autodoc/enterprise/ranker"
 )
 
 // The collector's bounds.
@@ -56,8 +57,19 @@ type Options struct {
 	Tenants []Tenant
 	// Provider is the embedding worker's published health.
 	Provider func() embedder.Health
-	// Now is the database's clock, and health's ping (pgstore.Now on the server's pool).
-	Now     func(ctx context.Context) (time.Time, error)
+	// Ranker is the ranker's health ([ranker]); nil when the server has none.
+	Ranker func() ranker.Health
+	// Now is the database's clock (pgstore.Now on the server's pool), and health's ping when Ping
+	// is nil.
+	Now func(ctx context.Context) (time.Time, error)
+	// SourceNow, when set, is the source database's clock ([postgres] index_dsn_env: the index in a
+	// database of its own): the cursors' lags are measured on it, since a pass's bound is the
+	// source's now less its lag. A failing one leaves the lags out. nil: Now.
+	SourceNow func(ctx context.Context) (time.Time, error)
+	// Ping is health's ping of the database: on a connection the searches can't take (the
+	// server's leases pool), so a server busy with searches still answers health, its database
+	// check honest. nil pings with Now.
+	Ping    func(ctx context.Context) error
 	Version string
 	Started time.Time
 	Clock   clock.Clock // the cache's clock; nil: time.Now
@@ -163,7 +175,12 @@ func (c *Collector) ping(ctx context.Context) error {
 		return c.pingErr
 	}
 	pctx, cancel := context.WithTimeout(ctx, Deadline)
-	_, err := c.o.Now(pctx)
+	var err error
+	if c.o.Ping != nil {
+		err = c.o.Ping(pctx)
+	} else {
+		_, err = c.o.Now(pctx)
+	}
 	cancel()
 	if ctx.Err() != nil {
 		return err // the caller left, or its deadline passed: that is no answer of the database's to keep
@@ -201,6 +218,24 @@ type ServerState struct {
 	Version   string         `json:"version"`
 	Started   time.Time      `json:"started"`
 	Embedding EmbeddingState `json:"embedding"`
+	// Ranker is [ranker]'s state; absent when the server has none
+	Ranker *RankerState `json:"ranker,omitempty"`
+
+	// rank is the ranker's counts for the metrics (WriteMetrics)
+	rank *ranker.Health
+}
+
+// RankerState is the ranker's state, and what it has done since the server started: searches
+// ranked, answered unranked by code, and skipped (rerank false).
+type RankerState struct {
+	Kind     string           `json:"kind"`
+	Model    string           `json:"model"`
+	State    string           `json:"state"`
+	Error    string           `json:"error,omitempty"`
+	Window   int              `json:"window"`
+	Ranked   int64            `json:"ranked"`
+	Unranked map[string]int64 `json:"unranked"`
+	Skipped  int64            `json:"skipped"`
 }
 
 // EmbeddingState is the provider's state.
@@ -336,6 +371,12 @@ func (c *Collector) Snapshot(ctx context.Context) Snapshot {
 	p := c.o.Provider()
 	s.Server = ServerState{Version: c.o.Version, Started: c.o.Started, Embedding: EmbeddingState{Model: p.Model, State: p.State, Error: p.Error,
 		Batch: p.Batch, InFlight: p.InFlight, LastCallMS: p.LastCall.Milliseconds(), Timeouts: p.Timeouts}}
+	if c.o.Ranker != nil {
+		r := c.o.Ranker()
+		s.Server.Ranker = &RankerState{Kind: r.Kind, Model: r.Model, State: r.State, Error: r.Error, Window: r.Window,
+			Ranked: r.Ranked, Unranked: r.Unranked, Skipped: r.Skipped}
+		s.Server.rank = &r
+	}
 	for i, t := range c.o.Tenants {
 		live(&s.Tenants[i], t.State())
 	}
@@ -371,6 +412,13 @@ func (c *Collector) tenant(ctx context.Context, t Tenant) TenantStatus {
 		ts.Error = opcode.Database
 		return ts
 	}
+	// the lags are on the source's clock, which set each pass's bound: the index's database may be
+	// another server, its clock skewed from the source's. A source that doesn't answer leaves them out
+	srcNow, srcOK := dbNow, true
+	if c.o.SourceNow != nil {
+		n, err := c.o.SourceNow(ctx)
+		srcNow, srcOK = n, err == nil
+	}
 	cur, err := t.Store.Cursor(ctx)
 	if err != nil {
 		ts.Error = opcode.Database
@@ -380,14 +428,14 @@ func (c *Collector) tenant(ctx context.Context, t Tenant) TenantStatus {
 	if t.State != nil {
 		st = t.State()
 	}
-	if !st.Locked {
+	if !st.Locked || !srcOK {
 		st.CaughtUp, st.DeletesCaughtUp = time.Time{}, time.Time{} // a standby's lag is the holder's to say
 	}
 	if !cur.IsZero() {
 		at := cur.UpdatedAt
 		ts.Cursor = CursorState{UpdatedAt: &at, ID: cur.ID}
 	}
-	ts.Cursor.LagSeconds = lagSince(dbNow, st.CaughtUp)
+	ts.Cursor.LagSeconds = lagSince(srcNow, st.CaughtUp)
 	if ds, ok := t.Store.(deletesStore); ok && t.State != nil {
 		if st.Deletes {
 			dc, err := ds.DeletesCursor(ctx)
@@ -400,7 +448,7 @@ func (c *Collector) tenant(ctx context.Context, t Tenant) TenantStatus {
 				at := dc.UpdatedAt
 				d.CursorState = CursorState{UpdatedAt: &at, ID: dc.ID}
 			}
-			d.LagSeconds = lagSince(dbNow, st.DeletesCaughtUp)
+			d.LagSeconds = lagSince(srcNow, st.DeletesCaughtUp)
 			ts.Deletes = d
 		}
 	}

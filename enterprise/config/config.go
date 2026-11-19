@@ -21,6 +21,7 @@ import (
 	coreconfig "github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/pgstore"
 	"github.com/yongjohnlee80/golib/logger"
+	"github.com/yongjohnlee80/golib/search/embed"
 )
 
 // The defaults of the fields that have one.
@@ -39,6 +40,11 @@ const (
 	DefaultOllama      = "http://127.0.0.1:11434"
 	// DefaultMetricsInterval is how often the server logs its metrics lines.
 	DefaultMetricsInterval = time.Minute
+	// DefaultRankWindow is how many candidates [ranker] reranks a search, DefaultRankTimeout a
+	// search's ranker call, and DefaultRankSlots the calls in flight across every search.
+	DefaultRankWindow  = 40
+	DefaultRankTimeout = 750 * time.Millisecond
+	DefaultRankSlots   = 4
 )
 
 // Bounds a field is refused outside of.
@@ -53,9 +59,15 @@ const (
 	MinRefreshRetry = time.Minute
 	// MinMetricsInterval is the most often the metrics lines may be logged.
 	MinMetricsInterval = 10 * time.Second
-	// MinTokenBytes is the shortest bearer token --server --check accepts without a warning: 32
-	// random bytes, as `openssl rand -hex 32` makes. A token's hash protects where it is stored,
-	// not a token short enough to guess.
+	// The bounds of [ranker] window, timeout and slots.
+	MinRankWindow  = 10
+	MaxRankWindow  = 100
+	MinRankTimeout = 100 * time.Millisecond
+	MaxRankTimeout = 10 * time.Second
+	// MinTokenBytes is the shortest bearer token in token_env: 32 random bytes, as `openssl rand
+	// -hex 32` makes. A token's hash protects where it is stored, not a token short enough to
+	// guess, and nothing limits a caller's tries: a shorter one is refused when the API is reached
+	// beyond this host (a listener off loopback, or proxy = true), and warned of on loopback.
 	MinTokenBytes = 32
 )
 
@@ -63,6 +75,9 @@ const (
 type Server struct {
 	Postgres  Postgres
 	Embedding Embedding
+	// Ranker is [ranker]: the reranker after recall; nil when the file has none, and searches
+	// answer in recall order.
+	Ranker *Ranker
 	// HTTP is the HTTP API; nil when the file has no [http] table: the server then answers no
 	// request, and a web application reaches the index through the Go library alone.
 	HTTP    *HTTP
@@ -78,7 +93,12 @@ type Server struct {
 // Postgres is where the server keeps its index: a schema of its own in the business database.
 type Postgres struct {
 	// DSNEnv names the environment variable holding the DSN. Load checked it is set; DSN reads it.
+	// The views are read through it; the index too, unless IndexDSNEnv names a database of its own.
 	DSNEnv string
+	// IndexDSNEnv, when set, names the environment variable holding the index's own DSN: its
+	// schema, its writes, the writer leases and the vectors go there, and the source database is
+	// only read (a read-only user is enough). Unset, the index lives in the source database.
+	IndexDSNEnv string
 	// Schema is the schema pgstore's tables live in, created when missing.
 	Schema string
 	// ANN is the approximate semantic search's settings (ann_threshold, ann_max_scan_tuples,
@@ -91,11 +111,30 @@ type Postgres struct {
 // it, and never put it in an error.
 func (p Postgres) DSN() string { return os.Getenv(p.DSNEnv) }
 
+// IndexDSN is the index's connection string: IndexDSNEnv's, else the source's (DSN). A secret, as
+// DSN is.
+func (p Postgres) IndexDSN() string {
+	if p.IndexDSNEnv == "" {
+		return p.DSN()
+	}
+	return os.Getenv(p.IndexDSNEnv)
+}
+
+// SeparateIndex reports whether the index has a database connection of its own.
+func (p Postgres) SeparateIndex() bool { return p.IndexDSNEnv != "" }
+
 // Embedding is the enterprise's embedding provider, which embeds every tenant's chunks centrally.
 type Embedding struct {
-	Provider string // "openai" or "ollama"
-	BaseURL  string
-	Model    string
+	Provider string // "openai", "ollama" or "vertex"
+	// BaseURL is the provider's endpoint; for vertex, "" is the location's Google host
+	BaseURL string
+	Model   string
+	// Project, Location and Dimensions are vertex's: the Google Cloud project the calls are billed
+	// to, where the model is served (global, us or eu), and the vectors' size (0 is the model's
+	// own, 3072). Vertex authenticates with Application Default Credentials, never a key.
+	Project    string
+	Location   string
+	Dimensions int
 	// KeyEnv names the environment variable holding the provider's API key; "" for none.
 	KeyEnv string
 	// Slots is how many embedding requests may be in flight at once, across every tenant.
@@ -114,6 +153,37 @@ func (e Embedding) Key() string {
 		return ""
 	}
 	return os.Getenv(e.KeyEnv)
+}
+
+// Ranker is the server's one reranker, for every tenant: golib's TEI or Cohere-style rerank API
+// client (Kind "tei" or "rerank-api").
+type Ranker struct {
+	Kind string
+	// BaseURL is the ranker's endpoint; for vertex, "" is Google's Ranking API host
+	BaseURL string
+	// Model is rerank-api's (the model the server serves) and vertex's (the ranking model,
+	// pinned); TEI serves one, and names it
+	Model string
+	// Project is vertex's: the Google Cloud project the calls are billed to. Vertex authenticates
+	// with Application Default Credentials, never a key.
+	Project string
+	// KeyEnv names the environment variable holding the ranker's API key; "" for none.
+	KeyEnv string
+	// Window is how many of recall's best candidates a search reranks, Timeout how long its
+	// ranker call may take (past it, the search answers in recall order), and Slots how many
+	// ranker calls may be in flight across every search.
+	Window  int
+	Timeout time.Duration
+	Slots   int
+}
+
+// Key is the ranker's API key, read from the environment when called; "" when KeyEnv names none.
+// It is a secret: never log it, and never put it in an error.
+func (r Ranker) Key() string {
+	if r.KeyEnv == "" {
+		return ""
+	}
+	return os.Getenv(r.KeyEnv)
 }
 
 // HTTP is the HTTP API: where it listens and who may call it.
@@ -235,7 +305,9 @@ type file struct {
 	Postgres struct {
 		DSNEnv    string `toml:"dsn_env"`
 		DSNSealed string `toml:"dsn_sealed"`
-		Schema    string `toml:"schema"`
+		// the index's own database; "" keeps the index in the source's
+		IndexDSNEnv string `toml:"index_dsn_env"`
+		Schema      string `toml:"schema"`
 		// the approximate search (pgstore.ANNConfig); nil is the default
 		ANNThreshold         *int     `toml:"ann_threshold"`
 		ANNMaxScanTuples     *int     `toml:"ann_max_scan_tuples"`
@@ -257,7 +329,20 @@ type file struct {
 		Slots       *int      `toml:"slots"`
 		Batch       *int      `toml:"batch"`
 		CallTimeout *duration `toml:"call_timeout"`
+		Project     string    `toml:"project"`
+		Location    string    `toml:"location"`
+		Dimensions  *int      `toml:"dimensions"`
 	} `toml:"embedding"`
+	Ranker *struct {
+		Kind    string    `toml:"kind"`
+		BaseURL string    `toml:"base_url"`
+		Model   string    `toml:"model"`
+		KeyEnv  string    `toml:"key_env"`
+		Project string    `toml:"project"`
+		Window  *int      `toml:"window"`
+		Timeout *duration `toml:"timeout"`
+		Slots   *int      `toml:"slots"`
+	} `toml:"ranker"`
 	HTTP *struct {
 		Listen  string `toml:"listen"`
 		TLSCert string `toml:"tls_cert"`
@@ -331,6 +416,7 @@ func Load(path string) (*Server, error) {
 	s.Postgres = v.postgres(f)
 	s.Sources = v.sources(f)
 	s.Embedding = v.embedding(f)
+	s.Ranker = v.ranker(f)
 	s.HTTP = v.http(f, s.Sources)
 	s.Log = v.log(f)
 	s.Metrics = v.metrics(f)
@@ -377,7 +463,7 @@ func (v *validator) envSet(field, name string) bool {
 var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 func (v *validator) postgres(f file) Postgres {
-	p := Postgres{DSNEnv: f.Postgres.DSNEnv, Schema: f.Postgres.Schema}
+	p := Postgres{DSNEnv: f.Postgres.DSNEnv, IndexDSNEnv: f.Postgres.IndexDSNEnv, Schema: f.Postgres.Schema}
 	switch {
 	case f.Postgres.DSNSealed != "":
 		// NOTE: AutoDoc's keyslot seals secrets with a key kept beside a local store, which the
@@ -388,6 +474,13 @@ func (v *validator) postgres(f file) Postgres {
 		v.refuse("postgres.dsn_env", "required: the name of the environment variable holding the DSN")
 	default:
 		v.envSet("postgres.dsn_env", p.DSNEnv)
+	}
+	switch {
+	case p.IndexDSNEnv == "":
+	case p.IndexDSNEnv == p.DSNEnv:
+		v.refuse("postgres.index_dsn_env", "names the same variable as dsn_env: leave index_dsn_env out to keep the index in the source database")
+	default:
+		v.envSet("postgres.index_dsn_env", p.IndexDSNEnv)
 	}
 	if p.Schema == "" {
 		p.Schema = DefaultSchema
@@ -467,7 +560,8 @@ func (v *validator) embedding(f file) Embedding {
 		return Embedding{}
 	}
 	e := Embedding{Provider: f.Embedding.Provider, BaseURL: f.Embedding.BaseURL, Model: f.Embedding.Model,
-		KeyEnv: f.Embedding.KeyEnv, Slots: DefaultSlots, Batch: DefaultBatch, CallTimeout: DefaultCallTimeout}
+		KeyEnv: f.Embedding.KeyEnv, Slots: DefaultSlots, Batch: DefaultBatch, CallTimeout: DefaultCallTimeout,
+		Project: f.Embedding.Project, Location: f.Embedding.Location}
 	switch e.Provider {
 	case "openai":
 		if e.BaseURL == "" {
@@ -477,10 +571,22 @@ func (v *validator) embedding(f file) Embedding {
 		if e.BaseURL == "" {
 			e.BaseURL = DefaultOllama
 		}
+	case "vertex":
+		v.vertexEmbedding(f, &e)
 	case "":
-		v.refuse("embedding.provider", `required: "openai" or "ollama"`)
+		v.refuse("embedding.provider", `required: "openai", "ollama" or "vertex"`)
 	default:
-		v.refuse("embedding.provider", `%q: want "openai" or "ollama"`, e.Provider)
+		v.refuse("embedding.provider", `%q: want "openai", "ollama" or "vertex"`, e.Provider)
+	}
+	if e.Provider != "vertex" {
+		for _, x := range []struct {
+			field string
+			set   bool
+		}{{"project", e.Project != ""}, {"location", e.Location != ""}, {"dimensions", f.Embedding.Dimensions != nil}} {
+			if x.set {
+				v.refuse("embedding."+x.field, "vertex's only: provider is %q", e.Provider)
+			}
+		}
 	}
 	if e.BaseURL != "" {
 		if u, err := url.Parse(e.BaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
@@ -501,8 +607,11 @@ func (v *validator) embedding(f file) Embedding {
 	}
 	if f.Embedding.Batch != nil {
 		e.Batch = *f.Embedding.Batch
-		if e.Batch < 1 || e.Batch > MaxBatch {
+		switch {
+		case e.Batch < 1 || e.Batch > MaxBatch:
 			v.refuse("embedding.batch", "%d: want 1 to %d", e.Batch, MaxBatch)
+		case e.Provider == "vertex" && e.Batch != 1:
+			v.refuse("embedding.batch", "%d: vertex embeds one text a call, so batch is 1: slots sets how many calls are in flight", e.Batch)
 		}
 	}
 	if f.Embedding.CallTimeout != nil {
@@ -512,6 +621,105 @@ func (v *validator) embedding(f file) Embedding {
 		}
 	}
 	return e
+}
+
+func (v *validator) ranker(f file) *Ranker {
+	if f.Ranker == nil {
+		return nil
+	}
+	r := &Ranker{Kind: f.Ranker.Kind, BaseURL: f.Ranker.BaseURL, Model: f.Ranker.Model, KeyEnv: f.Ranker.KeyEnv, Project: f.Ranker.Project,
+		Window: DefaultRankWindow, Timeout: DefaultRankTimeout, Slots: DefaultRankSlots}
+	switch r.Kind {
+	case "tei":
+		if r.Model != "" {
+			v.refuse("ranker.model", "a TEI server serves one model, and names it: leave model out")
+		}
+	case "rerank-api":
+		if strings.TrimSpace(r.Model) == "" {
+			v.refuse("ranker.model", "required for rerank-api: the model the server serves")
+		}
+	case "vertex":
+		switch {
+		case strings.TrimSpace(r.Model) == "":
+			v.refuse("ranker.model", "required for vertex: the ranking model, pinned (semantic-ranker-default-005)")
+		case strings.Contains(r.Model, "@"):
+			v.refuse("ranker.model", "%q: pin a version (semantic-ranker-default-005): an alias moves under a running server", r.Model)
+		}
+		if strings.TrimSpace(r.Project) == "" {
+			v.refuse("ranker.project", "required for vertex: the Google Cloud project the calls are billed to")
+		}
+		if r.KeyEnv != "" {
+			v.refuse("ranker.key_env", "vertex authenticates with Application Default Credentials (the VM's service account): leave key_env out")
+			r.KeyEnv = ""
+		}
+	case "":
+		v.refuse("ranker.kind", `required: "tei", "rerank-api" or "vertex"`)
+	default:
+		v.refuse("ranker.kind", `%q: want "tei", "rerank-api" or "vertex"`, r.Kind)
+	}
+	if r.Kind != "vertex" && r.Project != "" {
+		v.refuse("ranker.project", "vertex's only: kind is %q", r.Kind)
+	}
+	switch {
+	case r.BaseURL == "" && r.Kind != "vertex":
+		v.refuse("ranker.base_url", "required: where the ranker answers")
+	case r.BaseURL != "":
+		if u, err := url.Parse(r.BaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			v.refuse("ranker.base_url", "want an http or https URL with a host")
+		}
+	}
+	if r.KeyEnv != "" {
+		v.envSet("ranker.key_env", r.KeyEnv)
+	}
+	if f.Ranker.Window != nil {
+		r.Window = *f.Ranker.Window
+		if r.Window < MinRankWindow || r.Window > MaxRankWindow {
+			v.refuse("ranker.window", "%d: want %d to %d", r.Window, MinRankWindow, MaxRankWindow)
+		}
+	}
+	if f.Ranker.Timeout != nil {
+		r.Timeout = f.Ranker.Timeout.Duration
+		if r.Timeout < MinRankTimeout || r.Timeout > MaxRankTimeout {
+			v.refuse("ranker.timeout", "%v: want %v to %v", r.Timeout, MinRankTimeout, MaxRankTimeout)
+		}
+	}
+	if f.Ranker.Slots != nil {
+		r.Slots = *f.Ranker.Slots
+		if r.Slots < 1 || r.Slots > MaxSlots {
+			v.refuse("ranker.slots", "%d: want 1 to %d", r.Slots, MaxSlots)
+		}
+	}
+	return r
+}
+
+// vertexEmbedding checks [embedding] for provider "vertex": a project, a location gemini-embedding-2
+// is served at, its one model, dimensions within its sizes, no key (Application Default
+// Credentials), one text a call.
+func (v *validator) vertexEmbedding(f file, e *Embedding) {
+	e.Batch = 1
+	if strings.TrimSpace(e.Project) == "" {
+		v.refuse("embedding.project", "required for vertex: the Google Cloud project the calls are billed to")
+	}
+	switch e.Location {
+	case "global", "us", "eu":
+	case "":
+		v.refuse("embedding.location", `required for vertex: "global", "us" or "eu", where %s is served`, embed.VertexModel)
+	default:
+		v.refuse("embedding.location", `%q: want "global", "us" or "eu", where %s is served`, e.Location, embed.VertexModel)
+	}
+	if e.Model != "" && e.Model != embed.VertexModel {
+		v.refuse("embedding.model", "%q: want %q, the Vertex model the server speaks", e.Model, embed.VertexModel)
+	}
+	if f.Embedding.Dimensions != nil {
+		e.Dimensions = *f.Embedding.Dimensions
+		if e.Dimensions < embed.VertexMinDims || e.Dimensions > embed.VertexMaxDims {
+			v.refuse("embedding.dimensions", "%d: want %d to %d", e.Dimensions, embed.VertexMinDims, embed.VertexMaxDims)
+		}
+	}
+	if e.KeyEnv != "" {
+		v.refuse("embedding.key_env", "vertex authenticates with Application Default Credentials (the VM's service account): leave key_env out")
+		e.KeyEnv = ""
+	}
 }
 
 // tenantName is a tenant as a source names it: it is a key in every pgstore table, a log label and
@@ -632,6 +840,8 @@ func (v *validator) http(f file, sources []Source) *HTTP {
 	case err == nil && !loopback(host):
 		v.warnings = append(v.warnings, fmt.Sprintf("http.proxy: %s serves plain HTTP off loopback: every request crosses the network from your proxy in clear text, so keep that network private", h.Listen))
 	}
+	// public: the API is reached beyond this host, where a short token can be guessed by trying
+	public := err == nil && (!loopback(host) || h.Proxy)
 	access := map[string][]string{}
 	for _, s := range sources {
 		access[s.Tenant] = s.Access
@@ -656,7 +866,7 @@ func (v *validator) http(f file, sources []Source) *HTTP {
 			}
 			names[c.Name] = fmt.Sprintf("http.client[%d]", i)
 		}
-		v.token(at, c.TokenSHA256, c.TokenEnv)
+		v.token(at, c.TokenSHA256, c.TokenEnv, public)
 		if id := tokenIdentity(c.TokenSHA256, c.TokenEnv); id != "" {
 			tokens[id] = fmt.Sprintf("http.client[%d]", i)
 		}
@@ -701,7 +911,7 @@ func (v *validator) http(f file, sources []Source) *HTTP {
 			}
 			names[o.Name] = fmt.Sprintf("http.operator[%d]", i)
 		}
-		v.token(at, o.TokenSHA256, o.TokenEnv)
+		v.token(at, o.TokenSHA256, o.TokenEnv, public)
 		if id := tokenIdentity(o.TokenSHA256, o.TokenEnv); id != "" {
 			if holder, both := tokens[id]; both {
 				// never the token: only who holds it twice
@@ -715,8 +925,9 @@ func (v *validator) http(f file, sources []Source) *HTTP {
 	return h
 }
 
-// token checks a token given one way or the other, as a client's is.
-func (v *validator) token(at func(string) string, sha, env string) {
+// token checks a token given one way or the other, as a client's is; public is the API reached
+// beyond this host, where a token_env shorter than MinTokenBytes is refused rather than warned of.
+func (v *validator) token(at func(string) string, sha, env string, public bool) {
 	switch {
 	case sha != "" && env != "":
 		v.refuse(at("token_sha256"), "give token_sha256 or token_env, not both")
@@ -730,7 +941,12 @@ func (v *validator) token(at func(string) string, sha, env string) {
 			v.refuse(at("token_sha256"), "is the SHA-256 of no token at all (an empty string): hash the real token (printf %%s \"$TOKEN\" | sha256sum)")
 		}
 	default:
-		if v.envSet(at("token_env"), env) && len(os.Getenv(env)) < MinTokenBytes {
+		short := v.envSet(at("token_env"), env) && len(os.Getenv(env)) < MinTokenBytes
+		switch {
+		case short && public:
+			v.refuse(at("token_env"), "the token in %s is shorter than %d bytes, and the API is reached beyond this host, where nothing limits a caller's tries: use a random token of at least 32 bytes (openssl rand -hex 32)",
+				env, MinTokenBytes)
+		case short:
 			v.warnings = append(v.warnings, fmt.Sprintf("%s: the token in %s is shorter than %d bytes: use a random token of at least 32 bytes (openssl rand -hex 32)",
 				at("token_env"), env, MinTokenBytes))
 		}

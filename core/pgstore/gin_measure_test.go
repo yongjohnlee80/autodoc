@@ -13,7 +13,7 @@ import (
 
 // TestMeasureABulkLoadsGINCost measures what fastupdate = off on the document's GIN indexes costs a
 // bulk load, AUTODOC_MEASURE_GIN=1 (a separate run): AUTODOC_MEASURE_GIN_DOCS documents (default
-// 20,000) of LabelManager's facets (a label, a status, one to three territories, two tags) and a
+// 20,000) of a music catalog's facets (a label, a status, one to three territories, two tags) and a
 // chunk each, written in batches of 250 as the ingester writes a page, with the option on and then
 // off, each on a fresh database. With it on, the load leaves a pending list, whose merge (what a
 // later VACUUM or MergePending does) is timed too.

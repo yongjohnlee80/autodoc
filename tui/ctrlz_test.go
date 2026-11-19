@@ -50,8 +50,8 @@ func runSuspendingAgent(t *testing.T) *running {
 	agent := suspendingAgent(t)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "heron", Command: agents.ShellQuote(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
-	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
-	r.s.WaitForText(t, "ready")
+	r.waitAgentRunning(t)
+	r.waitAgentSays(t, "ready")
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
 	return r
 }

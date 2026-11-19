@@ -20,7 +20,7 @@ curl -s http://127.0.0.1:8730/v1/health
 
 | Check | ok | degraded | failing |
 |---|---|---|---|
-| `database` | a ping answers within 2s | | it doesn't |
+| `database` | the index's database answers a ping within 2s, on a connection searches don't use, so a server busy with searches still reads ok (the source's database is checked by the passes: see `/v1/status`) | | it doesn't |
 | `tenants` | every tenant's writer lease is held | a lease is held by another server (this one is a standby) | |
 | `embedding` | the provider is up | it's down or failing: searches answer by words meanwhile | |
 
@@ -29,7 +29,7 @@ curl -s http://127.0.0.1:8730/v1/health
   - `degraded`: searches still answer, by words or for the other tenants;
   - `unavailable`: the database fails, or the server is stopping.
 - **HTTP status:** 200 for ok and degraded, 503 (with `Retry-After`) for unavailable. Keep a degraded server in rotation: it still answers.
-- **Every request is fresh.** It pings the database itself; nothing is cached.
+- **The states are read at each request; the database's ping is kept for a second.** Anyone may ask for health, so a caller asking in a loop costs the database at most one ping a second. The tenants' leases and the provider's state are read as they are now.
 
 ## Status: `GET /v1/status`
 
@@ -54,7 +54,9 @@ curl -s http://127.0.0.1:8730/v1/status -H "Authorization: Bearer $AUTODOC_OPS_T
 {"as_of": "2026-10-13T09:41:07Z",
  "server": {"version": "v0.1.40", "started": "2026-10-13T09:00:00Z",
             "embedding": {"model": "openai|text-embedding-3-small||1536", "state": "up", "error": "",
-                          "batch": 64, "in_flight": 4, "last_call_ms": 812}},
+                          "batch": 64, "in_flight": 4, "last_call_ms": 812},
+            "ranker": {"kind": "tei", "model": "BAAI/bge-reranker-v2-m3", "state": "up", "window": 40,
+                       "ranked": 5120, "unranked": {"timeout": 3}, "skipped": 210}},
  "tenants": [{"tenant": "music", "lock": "held",
    "cursor": {"updated_at": "2026-10-13T09:41:03Z", "id": "8812", "lag_seconds": 4},
    "last_pass": {"at": "…", "read": 12, "written": 12, "quarantined": 0, "error": ""},
@@ -69,9 +71,10 @@ curl -s http://127.0.0.1:8730/v1/status -H "Authorization: Bearer $AUTODOC_OPS_T
 | Field | What it tells you |
 |---|---|
 | `server.embedding` | the provider's `state` (`starting`, `up`, `down`) and its `error` code; the texts one request carries now (`batch`) and the requests in flight (`in_flight`), which are `[embedding] batch` and `slots` unless requests ran out of `call_timeout` and the pace stepped down ([server-config](server-config.md#how-the-server-embeds)); the last request's time (`last_call_ms`), and how many requests ran out of their time since the server started (`timeouts`, absent while none). A `batch` below yours that stays there means the provider is too slow for it. |
+| `server.ranker` | with a `[ranker]` only: its `kind` and `model`, its `state` (`starting`, `up`, `down`) and a down state's `error` code, the configured `window`, and since the server started the searches it reranked (`ranked`), answered in recall order by why (`unranked`: the codes of a search's `rank.error`), and skipped for `"rerank": false` (`skipped`). A `timeout` or `busy` count that grows means the ranker is too slow for `timeout` or `slots` ([server-config](server-config.md#how-the-server-reranks)). |
 | `lock` | `held`; `waiting` (another server holds the tenant: a standby); `none` |
 | `lock_wait` | why a `waiting` lock waits when it isn't for another server of this release: `older_server`, a server of v0.3.15 or before holding the tenant by its advisory lock ([upgrading from v0.3.15](#upgrading-from-v0315)). Stop that server. Absent otherwise. |
-| `cursor.lag_seconds` | how far the index is behind your data, on the database's clock: now, less the bound the last pass that completed read to (the database's now less `lag` when it ran). On a quiet source it stays at most `lag` plus `interval`; it grows only while passes fail or can't keep up. Alert on it. It's absent on a standby (only the server holding the tenant's lease measures it) and before that server's first complete pass, so make absence an alarm of its own: absent on every server of a tenant for longer than an `interval` means no server is completing passes. `cursor.updated_at` and `id` are the last row read, which stays put while nothing changes. |
+| `cursor.lag_seconds` | how far the index is behind your data, on your (the source) database's clock: now, less the bound the last pass that completed read to (the database's now less `lag` when it ran). On a quiet source it stays at most `lag` plus `interval`; it grows only while passes fail or can't keep up. Alert on it. It's absent on a standby (only the server holding the tenant's lease measures it) and before that server's first complete pass, so make absence an alarm of its own: absent on every server of a tenant for longer than an `interval` means no server is completing passes. `cursor.updated_at` and `id` are the last row read, which stays put while nothing changes. |
 | `last_pass`, `last_refresh` | when each last ran, what it read and wrote, and its error code. `complete` is false for a refresh that couldn't read every row (it deletes nothing then; see [views](views.md)). |
 | `deletes` | a source with a deletes view: its cursor (`updated_at` is the last tombstone's `deleted_at`), its `lag_seconds` measured as the rows' is (from the bound its last deletes pass that succeeded read to), and its last pass's `error` (`view`, `order`, or none). A deletes view that fails holds only the deletes; its lag grows while it does. |
 | `refresh_due` | why a refresh runs at once rather than on its schedule, until it completes: `facets` while its last refresh wrote another facet declaration than the source's. In a mixed fleet, one server on the old declaration and one on the new, each refreshes the tenant when it takes the lease, until every server has the same configuration: right, but a cost to roll out quickly ([server-config](server-config.md#sourcefacets-what-a-search-may-filter-on-optional)). Absent otherwise. |
@@ -130,6 +133,7 @@ scrape_configs:
 - **An operator's token, as `/v1/status`.** A search client's token is refused (403), and a missing or wrong one is refused (401). An operator sees the server's series, and its own tenants' only.
 - **The series:**
   - `autodoc_server_info{version}`, `autodoc_provider_up`;
+  - With a `[ranker]`: `autodoc_rank_up`; `autodoc_rank_calls_total{result}` (the searches' ranker calls, `ok` or the code of why one failed, a call answered at once while the ranker is down included); `autodoc_rank_seconds` (a histogram of the calls that sent texts); `autodoc_rank_texts_total` (the texts sent, distinct within each call: what a hosted ranker bills); and `autodoc_searches_unranked_total{reason}`.
   - `autodoc_http_requests_total{path, class}` and `autodoc_http_request_duration_seconds{path}` (a histogram). They count since the server started, so take rates of them, and they're never reset by the metrics lines.
   - Per tenant: `autodoc_tenant_documents{tenant, state}` (total, ready), `autodoc_tenant_quarantined`, `autodoc_tenant_cursor_lag_seconds` (`cursor.lag_seconds`: absent on a standby and before its server's first complete pass), `autodoc_tenant_lock_held`, and `autodoc_tenant_errors{tenant, kind}` (pass, refresh, tenant; 0 or 1).
 - **`path` is one of search, status, metrics, health and other.** Any other URL is counted as `other`, never by its own name.
@@ -190,6 +194,45 @@ least `ann_maintenance_work_mem` (`--shm-size 1g` for the default; `shm_size: 1g
 With less, the build runs out of shared memory, and the server builds the index again without
 parallel workers (slower) and logs a warning saying so.
 
+## On Google Cloud: Vertex AI
+
+With `provider = "vertex"` and `kind = "vertex"` ([server-config](server-config.md#vertex-ai-on-google-cloud)),
+the server calls Vertex AI and the Ranking API as the VM's service account.
+
+- **The service account.** Attach one to the VM, with the `cloud-platform` access scope: a VM's
+  default scopes don't reach Vertex AI. Grant it, in the project:
+  - Vertex AI User (`roles/aiplatform.user`), for the embeddings;
+  - Discovery Engine User (`roles/discoveryengine.user`), for the ranking.
+  Check both against your project once, with `--check`.
+- **The APIs.** Enable `aiplatform.googleapis.com` and `discoveryengine.googleapis.com` in the
+  project. `--check` names an API that isn't enabled, from Google's answer.
+- **The location.** gemini-embedding-2 is served at `global`, `us` and `eu`; pick the one nearest the
+  VM. The Ranking API is global.
+- **`--check`** fetches a token and probes each, and refuses with what it met: no credentials (no
+  service account, no `GOOGLE_APPLICATION_CREDENTIALS`), Google refusing the credentials (a key
+  revoked, or a role missing), or an API not enabled. A good probe prints the model and its size.
+- **What leaves.** Every chunk embedded and every query go to Vertex AI in the configured location;
+  every reranked search sends its query and its window's texts to the Ranking API. Both stay
+  within the project's terms with Google.
+- **What it costs** (Google's list prices, November 2026; check them before you budget):
+  - embedding, gemini-embedding-2: $0.20 per million tokens. A corpus of 11 million tokens costs
+    about $2 to embed once, then only what changes, and each query's few tokens.
+  - ranking: $1.00 per 1,000 searches of up to 100 candidates (the default window is 40), after a
+    free allowance per project a month.
+  - A down ranker's probe is a billed search: the server probes it at most once a minute.
+  - `autodoc_rank_texts_total` and the ranker's `ranked` count in the status are what the bill
+    counts.
+- **AlloyDB.** The index can live on the AlloyDB instance your application already uses, in a
+  database of its own, while the views read your application's database through a read-only user
+  ([server-config](server-config.md#the-index-in-a-database-of-its-own)): `dsn_env` names the
+  read-only user's DSN to your database, and `index_dsn_env` a DSN to the index's database on the
+  same instance. AlloyDB's `vector` extension is pgvector with Google's additions: Google's
+  documentation lists HNSW indexes and the `hnsw.iterative_scan`, `hnsw.max_scan_tuples` and
+  `hnsw.scan_mem_multiplier` settings the approximate search uses (vector 0.8.0.google-3 or later).
+  It doesn't name `halfvec`, which the server uses for a model above 2,000 dimensions: at 3,072,
+  check the index is built (`ann` in the status) before relying on it. Install the extension in the
+  index's database once, as the database's owner, and `--check` says what it found.
+
 ## Behind a proxy
 
 The server listens on loopback by default. To serve beyond it, either give it a certificate (`tls_cert`, `tls_key`), or put a proxy that terminates TLS in front and say so:
@@ -211,19 +254,24 @@ the server build (a `linux-<arch>-server` release archive, or `make build-server
 refuses `--server`:
 
 ```sh
+useradd --system --no-create-home --shell /usr/sbin/nologin autodoc
 install -m 0755 autodoc /usr/local/bin/autodoc
-install -d -m 0750 /etc/autodoc
-install -m 0640 server.toml /etc/autodoc/          # and views/
-install -m 0600 server.env /etc/autodoc/server.env # AUTODOC_SERVER_DSN=…, the key, the tokens
+install -d -m 0750 -g autodoc /etc/autodoc
+install -m 0640 -g autodoc server.toml /etc/autodoc/   # and views/, and the TLS certificate and key
+install -m 0600 server.env /etc/autodoc/server.env     # AUTODOC_SERVER_DSN=…, the key, the tokens
 cp deploy/systemd/autodoc-server.service /etc/systemd/system/
 systemctl enable --now autodoc-server
 journalctl -u autodoc-server -f
 ```
 
-- **Secrets live in `server.env`** (0600), never in `server.toml`.
+- **Secrets live in `server.env`** (0600, root's), never in `server.toml`. systemd reads it as root
+  and hands its values to the service; the service itself can't read the file.
+- **The files the service reads** (`server.toml`, the views, the TLS certificate and key) are root's,
+  0640, group `autodoc`, in a directory of the same: the service reads them through its group, and
+  can write none of them.
 - **A refused configuration (exit 2) isn't restarted,** because restarting can't mend it. Exit 1 (the database lost, a writer lease lost) is restarted after 5 seconds.
 - **On stop:** SIGTERM drains the API's requests (35s at most), then releases the writer leases, so a standby takes them at its next poll. The stop timeout is 60s.
-- **The unit runs as a dynamic user,** with the system read-only to it.
+- **The unit runs as the `autodoc` system user,** with the system read-only to it.
 
 ### Writer leases
 

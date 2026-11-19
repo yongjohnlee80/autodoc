@@ -57,14 +57,22 @@ func (s *server) startHTTP() error {
 	w := s.worker.Load()
 	tenants := make(map[string]api.Searcher, len(s.cfg.Sources))
 	for _, src := range s.cfg.Sources {
-		sr, err := search.Open(s.ctx, s.store, src.Tenant, w.QueryEmbedder(src.Tenant), search.WithANN(s.ann))
+		opts := []search.Option{search.WithANN(s.ann)}
+		if s.ranker != nil {
+			opts = append(opts, search.WithRanker(s.ranker, s.cfg.Ranker.Window, s.cfg.Ranker.Timeout))
+		}
+		sr, err := search.Open(s.ctx, s.store, src.Tenant, w.QueryEmbedder(src.Tenant), opts...)
 		if err != nil {
-			return redact(err, s.cfg.Postgres.DSN())
+			return redact(err, s.cfg.Postgres.IndexDSN())
 		}
 		tenants[src.Tenant] = sr
 	}
-	h := api.New(clients, tenants, api.WithLogger(s.log), api.WithOps(s.ops), api.WithOperators(operators),
-		api.WithMetrics(s.cfg.Metrics.Enabled), api.WithTenantSearches(tenantSearches(s.cfg)))
+	hopts := []api.Option{api.WithLogger(s.log), api.WithOps(s.ops), api.WithOperators(operators),
+		api.WithMetrics(s.cfg.Metrics.Enabled), api.WithTenantSearches(tenantSearches(s.cfg))}
+	if s.ranker != nil {
+		hopts = append(hopts, api.WithRanker(s.ranker, s.cfg.Ranker.Window, s.cfg.Ranker.Timeout), api.WithRankCounter(s.ranker))
+	}
+	h := api.New(clients, tenants, hopts...)
 	ln, err := net.Listen("tcp", s.cfg.HTTP.Listen)
 	if err != nil {
 		return err
@@ -157,9 +165,26 @@ func (s *server) startOps() error {
 		}
 		tenants[i] = ops.Tenant{Name: in.Tenant(), Store: st, State: in.State}
 	}
-	s.ops = ops.New(ops.Options{Tenants: tenants, Provider: s.worker.Load().Health,
+	o := ops.Options{Tenants: tenants, Provider: s.worker.Load().Health,
 		Now: func(ctx context.Context) (time.Time, error) { return pgstore.Now(ctx, s.store) }, Version: s.version, Started: time.Now(),
-		ANN: s.ann.Status})
+		ANN: s.ann.Status}
+	if s.cfg.Postgres.SeparateIndex() {
+		o.SourceNow = func(ctx context.Context) (time.Time, error) { return pgstore.Now(ctx, s.business) }
+	}
+	// health's ping is on the leases' pool, which no search takes: on the store's, a flood of
+	// searches held every connection and health answered unavailable for a server only busy, which
+	// a supervisor would restart. At most one ping is out at a time (ops pings under a lock), and a
+	// renew's bound outlasts a ping's Deadline, so the leases keep a connection for their renews.
+	// It pings the index's database, as the store's pool did: a source that stops answering shows
+	// in the status, as its tenants' passes failing
+	o.Ping = func(ctx context.Context) error {
+		_, err := pgstore.Now(ctx, s.leases)
+		return err
+	}
+	if s.ranker != nil {
+		o.Ranker = s.ranker.Health
+	}
+	s.ops = ops.New(o)
 	if every := s.cfg.Log.MetricsInterval; every > 0 {
 		ctx, cancel := context.WithCancel(s.ctx)
 		done := make(chan struct{})
@@ -207,7 +232,7 @@ func tenantSearches(cfg *config.Server) int {
 	if n := cfg.HTTP.MaxTenantSearches; n > 0 {
 		return n
 	}
-	return max(poolSize(cfg.Postgres.DSN())-2, 1)
+	return max(poolSize(cfg.Postgres.IndexDSN())-2, 1)
 }
 
 // poolSize is the size of the pool a DSN opens: its pool_max_conns, in a URL's query or among a
