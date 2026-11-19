@@ -36,7 +36,7 @@ func TestAnAgentIsToldOfAWorkspaceSwitch(t *testing.T) {
 		Options{EditorDir: t.TempDir(), Workspace: "kb"}, files)
 	r.s.WaitFor(t, "kb entered", func(string) bool { return onLoop(r, func() bool { return r.h.ws == "kb" }) })
 	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
-	r.s.WaitForText(t, "ready")
+	r.waitAgentSays(t, "ready")
 	r.h.p.Post(func() { r.h.openIn("kb", "a.md") })
 	r.s.WaitFor(t, "a.md open", func(string) bool { n := r.file(); return n.open && n.path == "a.md" })
 

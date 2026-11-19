@@ -28,5 +28,5 @@ func TestAnAgentsSpawnHookSetOnTheLoopWhileItStarts(t *testing.T) {
 		}
 		return true
 	})
-	r.waitWithin(t, "the agent running", daemonWait, func() bool { return r.agentRunningNow() })
+	r.waitAgentRunning(t)
 }
