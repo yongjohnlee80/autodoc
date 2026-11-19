@@ -77,9 +77,11 @@ type server struct {
 	log     logger.Logger
 	stops   stack
 
-	// store is pgstore's pool, every connection in the configured schema, which holds the tenants'
-	// writer leases too; business reads the views on the role's own search_path.
-	store, business dao.DataConn
+	// store is pgstore's pool, every connection in the configured schema: the searches', the
+	// ingesters' and the worker's, and every write's fence on its tenant's lease; business reads
+	// the views on the role's own search_path; leases is the writer leases' own pool (leaseConns),
+	// in the same schema, so no load on the store's can starve a lease's renew.
+	store, business, leases dao.DataConn
 	// failed carries the first ingester, or the HTTP server, that stopped with an error
 	failed chan error
 	// ingesters are the sources' ingesters, in the configuration's order: the embedding worker
@@ -118,8 +120,21 @@ var serverSteps = []struct {
 	{"http", (*server).startHTTP},
 }
 
-// openPostgres opens the three pools on the configured database. The DSN is a secret: an error
-// opening it is redacted of it.
+// leaseConns is the leases' pool's size: a lease's acquire, renew and the older-server probe are
+// one short statement each, a renew every few seconds per tenant.
+//
+// NOTE: a pool of their own, never the store's. A renew waiting for one of the store's connections
+// behind a flood of searches (each holding one up to its budget) went silent past the lease's
+// length, and losing the lease stopped the server: one client's 512 searches in flight on a pool
+// of four did it in about 30 s.
+const leaseConns = 2
+
+// leaseTTL is the ingesters' writer leases' length, and the writer session's idle-transaction
+// bound is twice it (pglease.WriterSession): DefaultLeaseTTL, which a cell shortens.
+var leaseTTL = ingest.DefaultLeaseTTL
+
+// openPostgres opens the store's and the leases' pools on the index's DSN and the business pool on
+// the source's. A DSN is a secret: an error opening it is redacted of it.
 func (s *server) openPostgres() error {
 	open := func(dsn string, opts ...postgres.Option) (dao.DataConn, error) {
 		conn, err := postgres.OpenNamed(s.ctx, "autodoc-server", dsn, opts...)
@@ -131,11 +146,14 @@ func (s *server) openPostgres() error {
 	}
 	var err error
 	// a writer's transaction left idle twice a lease's length is ended, so a hung one's fence
-	// never keeps a standby from its tenant. The ingesters' leases are DefaultLeaseTTL long (their
-	// Options leave LeaseTTL at its default): a configurable length changes both together
-	// the index, its leases and its vectors go through the index's DSN; the views are read through
-	// the source's, the same database unless [postgres] index_dsn_env names one of the index's own
-	if s.store, err = open(s.cfg.Postgres.IndexDSN(), pgstore.WithSchema(s.cfg.Postgres.Schema), pglease.WriterSession(ingest.DefaultLeaseTTL)); err != nil {
+	// never keeps a standby from its tenant. The ingesters' leases are leaseTTL long: a
+	// configurable length changes both together. The index, its leases and its vectors go through
+	// the index's DSN; the views are read through the source's, the same database unless
+	// [postgres] index_dsn_env names one of the index's own
+	if s.store, err = open(s.cfg.Postgres.IndexDSN(), pgstore.WithSchema(s.cfg.Postgres.Schema), pglease.WriterSession(leaseTTL)); err != nil {
+		return err
+	}
+	if s.leases, err = open(s.cfg.Postgres.IndexDSN(), pgstore.WithSchema(s.cfg.Postgres.Schema), pglease.WriterSession(leaseTTL), postgres.MaxOpenConns(leaseConns)); err != nil {
 		return err
 	}
 	s.business, err = open(s.cfg.Postgres.DSN())
@@ -211,7 +229,7 @@ func (s *server) startIngesters() error {
 		if err != nil {
 			return err
 		}
-		in := ingest.New(st, src.Tenant, s.sources[i], s.business, s.store, ingest.Options{
+		in := ingest.New(st, src.Tenant, s.sources[i], s.business, s.leases, ingest.Options{LeaseTTL: leaseTTL,
 			Refresh: src.Refresh, RefreshRetry: src.RefreshRetry, Interval: src.Interval, Lag: lagOf(src.Lag), Log: s.log, Committed: s.wakeEmbedder, Locked: s.wakeEmbedder,
 			OlderSchema: s.cfg.Postgres.Schema})
 		s.ingesters = append(s.ingesters, in)

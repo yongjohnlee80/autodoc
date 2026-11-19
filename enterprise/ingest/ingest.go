@@ -150,8 +150,9 @@ const RefreshFacets = "facets"
 var beforeCommit func() error
 
 // New is an ingester of src into st, the store of tenant. business is the database the view
-// reads, on the role's own search_path; leases is the store's pool, whose schema holds the
-// writer lease's table. Every write the ingester makes through st, and through Store (the
+// reads, on the role's own search_path; leases is a pool in the store's schema, which holds the
+// writer lease's table, kept for the leases: the lease is taken, renewed and released on it, and a
+// renew must not wait behind the store's own work (the server's leases pool). Every write the ingester makes through st, and through Store (the
 // embedding worker's), is fenced on the lease.
 func New(st *pgstore.Store, tenant string, src *Source, business, leases dao.DataConn, o Options) *Ingester {
 	for _, d := range []struct {

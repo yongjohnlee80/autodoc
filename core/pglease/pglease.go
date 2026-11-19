@@ -311,9 +311,8 @@ func (l *Lease) markLost(err error) error {
 }
 
 // Renew extends the lease by a TTL from now, in the database's clock, bounded by a sixth of the
-// TTL. It runs on the holder's pool, beside its writes: a pool too small for the writes that may
-// hold its connections at once (an ingester's and the embedding worker's) can hold a renew up past
-// its bound, and a holder silent for most of the TTL counts its lease lost. A lease taken over (its epoch moved) or released is ErrLost, and stays so; any other
+// TTL. It runs on the pool the lease was acquired on: one that other work shares (a store's
+// searches and writes, all holding its connections at once) can hold a renew up past its bound, and a holder silent for most of the TTL counts its lease lost. A lease taken over (its epoch moved) or released is ErrLost, and stays so; any other
 // failure is returned as it is, leaving the lease to Check's silence rule.
 func (l *Lease) Renew(ctx context.Context) error {
 	l.mu.Lock()

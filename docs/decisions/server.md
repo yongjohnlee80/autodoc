@@ -46,6 +46,9 @@ dropped or recycled connection loses nothing.
 - **A holder that cannot renew stops by its own clock** before the database's lease runs out. A
   lease lost, taken over or not renewed in time, stops the ingester and exits the server non-zero,
   so its supervisor restarts it; it never goes on writing without the lease.
+- **The leases have a pool of their own** (two connections), never the one searches use. On the
+  shared pool, a renew waited behind a flood of searches past the lease's length, and the server
+  stopped.
 - Every time is the database's `clock_timestamp()`; no host's clock is compared with another's.
 - **A claim within milliseconds of a stop that cut a write can wait one poll.** The cut write holds
   the row `FOR KEY SHARE` until its backend sees its connection closed, so a claim landing then is
