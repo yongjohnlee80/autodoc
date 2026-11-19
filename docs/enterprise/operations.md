@@ -233,6 +233,21 @@ the server calls Vertex AI and the Ranking API as the VM's service account.
   check the index is built (`ann` in the status) before relying on it. Install the extension in the
   index's database once, as the database's owner, and `--check` says what it found.
 
+## Renewing the certificate
+
+With `tls_cert` and `tls_key`, the server reads the two files again when either changes: their
+modification times and sizes, followed through symlinks, are looked at by a TLS handshake at most
+once every 10 seconds. A renewal tool that writes the files, or repoints links to them, needs no
+restart and no reload hook.
+
+- **The log** says `http: the TLS certificate's files changed: serving the new certificate`, with
+  its names and when it expires.
+- **Files that change and don't load** (a key not yet written beside its new certificate, a broken
+  file) keep the previous certificate served. The server logs one error saying so, then nothing
+  more until the files change again; a key written a moment later is read at the next check.
+- **At the start** a pair that doesn't load stops the server, as before: there is no previous
+  certificate to keep.
+
 ## Behind a proxy
 
 The server listens on loopback by default. To serve beyond it, either give it a certificate (`tls_cert`, `tls_key`), or put a proxy that terminates TLS in front and say so:
