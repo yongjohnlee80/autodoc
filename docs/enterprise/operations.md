@@ -29,7 +29,7 @@ curl -s http://127.0.0.1:8730/v1/health
   - `degraded`: searches still answer, by words or for the other tenants;
   - `unavailable`: the database fails, or the server is stopping.
 - **HTTP status:** 200 for ok and degraded, 503 (with `Retry-After`) for unavailable. Keep a degraded server in rotation: it still answers.
-- **Every request is fresh.** It pings the database itself; nothing is cached.
+- **The states are read at each request; the database's ping is kept for a second.** Anyone may ask for health, so a caller asking in a loop costs the database at most one ping a second. The tenants' leases and the provider's state are read as they are now.
 
 ## Status: `GET /v1/status`
 
