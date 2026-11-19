@@ -282,6 +282,11 @@ GRANT USAGE ON SCHEMA public TO autodoc_search;
 GRANT SELECT ON track, artist TO autodoc_search;
 ```
 
+With the index in a database of its own ([server-config](server-config.md#the-index-in-a-database-of-its-own)),
+split these: the role of `dsn_env` gets `CONNECT` and the read-only grants on your database, and
+nothing else; in the index's database, its role gets its schema and pgvector (the index's half,
+above). They may be one role or two.
+
 The server then finds its schema, creates its tables there, and never writes anywhere else. To let
 the server create the schema itself instead, also `GRANT CREATE ON DATABASE app TO autodoc_search`.
 

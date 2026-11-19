@@ -233,6 +233,9 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 		{"dsn not a name", sub(`dsn_env = "TEST_SERVER_DSN"`, `dsn_env = "postgres://x"`), "postgres.dsn_env", "is not an environment variable name"},
 		{"sealed", sub(`dsn_env = "TEST_SERVER_DSN"`, `dsn_sealed = "AAAA"`), "postgres.dsn_sealed", "not supported yet"},
 		{"schema", sub(`schema  = "autodoc_search"`, `schema = "Search-1"`), "postgres.schema", "not a plain schema name"},
+		{"index dsn unset", sub(`schema  = "autodoc_search"`, "schema = \"autodoc_search\"\nindex_dsn_env = \"TEST_UNSET_INDEX_DSN\""), "postgres.index_dsn_env", "TEST_UNSET_INDEX_DSN is not set"},
+		{"index dsn not a name", sub(`schema  = "autodoc_search"`, "schema = \"autodoc_search\"\nindex_dsn_env = \"postgres://x\""), "postgres.index_dsn_env", "is not an environment variable name"},
+		{"index dsn the source's", sub(`schema  = "autodoc_search"`, "schema = \"autodoc_search\"\nindex_dsn_env = \"TEST_SERVER_DSN\""), "postgres.index_dsn_env", "the same variable as dsn_env"},
 		{"plaintext dsn", sub(`schema  = "autodoc_search"`, `dsn = "postgres://u:pw@h/db"`), "postgres.dsn", "unknown field"},
 		// embedding
 		{"no embedding", sub("[embedding]", "[embeddings]"), "embedding", "required"},
@@ -346,5 +349,26 @@ func TestWarningsAndTLS(t *testing.T) {
 	r := config.Refuse("server.toml", "source[0].view", "args: want exactly")
 	if r.Error() != "server.toml: source[0].view: args: want exactly" || !config.IsRefusal(r) {
 		t.Errorf("Refuse: %v", r)
+	}
+}
+
+// [postgres] index_dsn_env gives the index a database of its own: IndexDSN reads it, and DSN stays
+// the source's. Unset, the index's DSN is the source's.
+func TestTheIndexMayHaveADatabaseOfItsOwn(t *testing.T) {
+	s, err := load(t, good)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Postgres.SeparateIndex() || s.Postgres.IndexDSN() != s.Postgres.DSN() {
+		t.Fatalf("no index_dsn_env: separate %v, the index's DSN not the source's", s.Postgres.SeparateIndex())
+	}
+	t.Setenv("TEST_INDEX_DSN", "postgres://idx:index-password@index.internal/search")
+	s, err = load(t, strings.Replace(good, `schema  = "autodoc_search"`, "schema = \"autodoc_search\"\nindex_dsn_env = \"TEST_INDEX_DSN\"", 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.Postgres.SeparateIndex() || s.Postgres.IndexDSN() != "postgres://idx:index-password@index.internal/search" ||
+		s.Postgres.DSN() != "postgres://u:secret-password@db.internal/app" {
+		t.Fatalf("index_dsn_env: separate %v, the DSNs not as set", s.Postgres.SeparateIndex())
 	}
 }

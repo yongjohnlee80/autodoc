@@ -60,10 +60,14 @@ type Options struct {
 	// Ranker is the ranker's health ([ranker]); nil when the server has none.
 	Ranker func() ranker.Health
 	// Now is the database's clock, and health's ping (pgstore.Now on the server's pool).
-	Now     func(ctx context.Context) (time.Time, error)
-	Version string
-	Started time.Time
-	Clock   clock.Clock // the cache's clock; nil: time.Now
+	Now func(ctx context.Context) (time.Time, error)
+	// SourceNow, when set, is the source database's clock ([postgres] index_dsn_env: the index in a
+	// database of its own): the cursors' lags are measured on it, since a pass's bound is the
+	// source's now less its lag. A failing one leaves the lags out. nil: Now.
+	SourceNow func(ctx context.Context) (time.Time, error)
+	Version   string
+	Started   time.Time
+	Clock     clock.Clock // the cache's clock; nil: time.Now
 	// ANN is the approximate search's indexes (pgstore.ANN.Status); nil when the server has none.
 	ANN func(ctx context.Context) ([]pgstore.ANNStatus, error)
 }
@@ -398,6 +402,13 @@ func (c *Collector) tenant(ctx context.Context, t Tenant) TenantStatus {
 		ts.Error = opcode.Database
 		return ts
 	}
+	// the lags are on the source's clock, which set each pass's bound: the index's database may be
+	// another server, its clock skewed from the source's. A source that doesn't answer leaves them out
+	srcNow, srcOK := dbNow, true
+	if c.o.SourceNow != nil {
+		n, err := c.o.SourceNow(ctx)
+		srcNow, srcOK = n, err == nil
+	}
 	cur, err := t.Store.Cursor(ctx)
 	if err != nil {
 		ts.Error = opcode.Database
@@ -407,14 +418,14 @@ func (c *Collector) tenant(ctx context.Context, t Tenant) TenantStatus {
 	if t.State != nil {
 		st = t.State()
 	}
-	if !st.Locked {
+	if !st.Locked || !srcOK {
 		st.CaughtUp, st.DeletesCaughtUp = time.Time{}, time.Time{} // a standby's lag is the holder's to say
 	}
 	if !cur.IsZero() {
 		at := cur.UpdatedAt
 		ts.Cursor = CursorState{UpdatedAt: &at, ID: cur.ID}
 	}
-	ts.Cursor.LagSeconds = lagSince(dbNow, st.CaughtUp)
+	ts.Cursor.LagSeconds = lagSince(srcNow, st.CaughtUp)
 	if ds, ok := t.Store.(deletesStore); ok && t.State != nil {
 		if st.Deletes {
 			dc, err := ds.DeletesCursor(ctx)
@@ -427,7 +438,7 @@ func (c *Collector) tenant(ctx context.Context, t Tenant) TenantStatus {
 				at := dc.UpdatedAt
 				d.CursorState = CursorState{UpdatedAt: &at, ID: dc.ID}
 			}
-			d.LagSeconds = lagSince(dbNow, st.DeletesCaughtUp)
+			d.LagSeconds = lagSince(srcNow, st.DeletesCaughtUp)
 			ts.Deletes = d
 		}
 	}
