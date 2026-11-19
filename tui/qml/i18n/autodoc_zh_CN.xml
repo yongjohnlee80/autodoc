@@ -4905,6 +4905,10 @@ WHAT A KEY NEEDS
         <source>the results were not exported: %1; %2 not written</source>
         <translation>结果未导出：%1；%2 未写入</translation>
     </message>
+    <message id="autodoc.notice.plugintable_export.could_not_be_replaced_it_may_be_open">
+        <source>%1 could not be replaced: it may be open in another program, or the folder may not be writable. The old file is kept.</source>
+        <translation>无法替换 %1：它可能在另一个程序中打开，或者该文件夹不可写。旧文件已保留。</translation>
+    </message>
     <message id="autodoc.notice.prefs.editor_mode">
         <source>editor mode: %1</source>
         <translation>编辑器模式：%1</translation>

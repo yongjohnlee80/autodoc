@@ -5143,6 +5143,10 @@ WHAT A KEY NEEDS
         <source>%1: the results ended early: %2</source>
         <translation>%1: the results ended early: %2</translation>
     </message>
+    <message id="autodoc.notice.plugintable_export.could_not_be_replaced_it_may_be_open">
+        <source>%1 could not be replaced: it may be open in another program, or the folder may not be writable. The old file is kept.</source>
+        <translation>%1 could not be replaced: it may be open in another program, or the folder may not be writable. The old file is kept.</translation>
+    </message>
     <message id="autodoc.notice.plugintable_export.exporting_loaded_rows_as_shown_to">
         <source>exporting %1 loaded rows, as shown, to %2…</source>
         <translation>exporting %1 loaded rows, as shown, to %2…</translation>
