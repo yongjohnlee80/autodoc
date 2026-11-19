@@ -427,3 +427,58 @@ func TestHealthPingsWithPingWhenItIsSet(t *testing.T) {
 		t.Errorf("Ping failing: %+v, want unavailable", h)
 	}
 }
+
+// Health polled hard costs the database one ping at a time, and none while the last is younger
+// than PingFor: fifty callers at once, the ping held until they have all asked, make one ping,
+// and every caller gets its answer. The server's ping takes one of the leases' two connections,
+// so however hard health is polled (it is public), a renew always has the other. The mutant,
+// named here: the lock let go before the ping is made (every caller pings at once).
+func TestHealthPolledHardPingsOneAtATime(t *testing.T) {
+	f := newFixture()
+	release := make(chan struct{})
+	var out, most, pings atomic.Int64
+	f.c.o.Ping = func(ctx context.Context) error {
+		pings.Add(1)
+		n := out.Add(1)
+		defer out.Add(-1)
+		for {
+			m := most.Load()
+			if n <= m || most.CompareAndSwap(m, n) {
+				break
+			}
+		}
+		select {
+		case <-release:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	var wg sync.WaitGroup
+	var asked sync.WaitGroup
+	statuses := make(chan string, 50)
+	for range 50 {
+		wg.Add(1)
+		asked.Add(1)
+		go func() {
+			defer wg.Done()
+			asked.Done()
+			statuses <- f.c.Health(context.Background()).Status
+		}()
+	}
+	asked.Wait()
+	// NOTE: can't announce: a caller blocked on the ping's lock says nothing; a short sleep lets
+	// the fifty reach it before the ping is let go. A ping released early only weakens the count.
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	wg.Wait()
+	close(statuses)
+	for s := range statuses {
+		if s != StatusOK {
+			t.Errorf("a caller's health: %s, want ok", s)
+		}
+	}
+	if m, p := most.Load(), pings.Load(); m != 1 || p != 1 {
+		t.Errorf("fifty callers at once: %d pings in flight at most, %d in all; want 1 and 1", m, p)
+	}
+}
