@@ -92,12 +92,16 @@ there. Your tables are never written.
 | `ann_defer_max` | `"24h"` | The longest a model's wanted index waits for a bulk load: past it, the index is built whatever the backlog. | not a duration, or 0 or less |
 | `ann_maintenance_work_mem` | `"512MB"` | The memory the session building an index may use (PostgreSQL's `maintenance_work_mem`, for that session only). A parallel build keeps it in the database's shared memory (`/dev/shm`): give a database in a container `--shm-size` at least this, or the build falls back to running without parallel workers, and the server logs a warning saying so. | not a size in kB (1024 or more), MB or GB |
 
-The server opens two connection pools:
+The server opens three connection pools:
 
 - the index's, on `index_dsn_env`'s DSN when it is set, else on `dsn_env`'s. Every connection's
-  `search_path` is `schema, public` (pgvector is usually installed in `public`), and each tenant's
-  writer lease is a row of `rag_writer_lease`. Its connections end a transaction left idle for a
-  minute, so a hung writer never keeps a standby from its tenant;
+  `search_path` is `schema, public` (pgvector is usually installed in `public`). Searches,
+  ingestion and embedding share it. Its connections end a transaction left idle for a minute, so a
+  hung writer never keeps a standby from its tenant;
+- the writer leases', two connections on the same DSN with the same `search_path`, where each
+  tenant's writer lease is a row of `rag_writer_lease`. The leases are renewed there, never behind
+  the searches, so a flood of searches can't make the server lose its tenants. Count these two
+  when you size the index role's or the database's connection limit;
 - the one your views run on, on `dsn_env`'s DSN, with the role's own `search_path`, so a view runs
   as it does in `psql`.
 

@@ -35,7 +35,8 @@ func LeaseScope(tenant string) string { return "tenant:" + tenant }
 // renews it on a ticker of its own while its writes, and the embedding worker's, fence on it.
 type Writer struct{ l *pglease.Lease }
 
-// AcquireWriter takes tenant's writer lease on conn, the store's pool, trying every poll while
+// AcquireWriter takes tenant's writer lease on conn, a pool in the store's schema kept for the
+// leases (never one a search can fill: a renew waiting on it loses the lease), trying every poll while
 // another writer holds it, until ctx ends (ctx's error then). ttl is the lease's length
 // (pglease.DefaultTTL when 0); its holder renews it every ttl/3 (Renew). waiting is called once,
 // with the holder, when the lease is first found held.
