@@ -18,6 +18,7 @@ import (
 // ping's deadline. The mutant, named here: the ping on the store's pool (it waits out its 2 s
 // deadline, and health answers 503 unavailable).
 func TestHealthAnswersWhileEveryStoreConnectionIsHeld(t *testing.T) {
+	quickBuilder(t)
 	f := newServerFixture(t, serverView)
 	f.storePool(minIndexConns) // the fewest the server takes, both of which the test then holds
 	t.Setenv("AUTODOC_TEST_HTTP_TOKEN", httpToken)
