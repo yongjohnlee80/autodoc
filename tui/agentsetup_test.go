@@ -47,7 +47,7 @@ func TestSetUpSavesAndStartsTypingNothing(t *testing.T) {
 	r.s.WaitForText(t, "Claude (claude)")
 	r.keys(t, key('s')) // &Set up
 	storedPref(t, d, r, agents.PrefAgentSetup, "done")
-	r.s.WaitFor(t, "the agent started", func(string) bool { return r.agentRunningNow() })
+	r.waitAgentRunning(t)
 	time.Sleep(300 * time.Millisecond) // a line would be typed within a moment of the start
 	if got := heardLines(heard); len(got) != 0 {
 		t.Fatalf("the setup typed into the agent: %q", got)

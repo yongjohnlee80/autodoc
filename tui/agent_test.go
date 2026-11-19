@@ -38,7 +38,7 @@ func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
 	// In AutoDoc's folder for the workspace, never the workspace's, its guides beside it; {root}
 	// and {workspace} filled in, one shell word each; the environment naming the workspace.
-	r.s.WaitForText(t, "started --root")
+	r.waitAgentSays(t, "started --root")
 	if b, err := os.ReadFile(report); err != nil {
 		t.Fatal(err)
 	} else if want := "cwd=" + folder + "\nargs=--root " + root + " --ws kb\nenv=kb|" + root + "|hi" +
@@ -298,7 +298,7 @@ func TestUsingAnotherAgentKeepsBothInstancesRunning(t *testing.T) {
 		{Name: "two", Command: agent + " second"},
 	}, "one")
 	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
-	r.s.WaitForText(t, "started first")
+	r.waitAgentSays(t, "started first")
 	// The profiles mark the default and the one running; Use on the one running only shows it.
 	onLoop(r, func() bool { r.h.agents.ToggleAgent(); r.h.agents.OpenAgentProfiles(); return true })
 	r.s.WaitForText(t, "●▶   one")
@@ -308,7 +308,7 @@ func TestUsingAnotherAgentKeepsBothInstancesRunning(t *testing.T) {
 	})
 	onLoop(r, func() bool { r.h.agents.OpenAgentProfiles(); r.h.agents.UseAgent(1); return true })
 	r.s.WaitForText(t, "agent · two")
-	r.s.WaitForText(t, "started second")
+	r.waitAgentSays(t, "started second")
 	entries := onLoop(r, func() []feature.AgentEntry { return r.h.agents.AgentEntries() })
 	if len(entries) != 2 || !entries[0].Running || !entries[1].Running || entries[0].Ref.Instance == entries[1].Ref.Instance {
 		t.Fatalf("independent live instances lost: %+v", entries)
@@ -336,7 +336,7 @@ func TestUsingAnotherAgentKeepsBothInstancesRunning(t *testing.T) {
 		t.Fatalf("task intended for first instance leaked to second: %q", got)
 	}
 	onLoop(r, func() bool { r.h.agents.UseAgent(1); return true })
-	r.s.WaitForText(t, "started second")
+	r.waitAgentSays(t, "started second")
 	if n := onLoop(r, func() string { return r.h.agents.Snapshot().Running }); n != "two" {
 		t.Fatalf("after Yes %q is running, want two", n)
 	}
@@ -428,6 +428,7 @@ func TestAnAgentsCleanExitClosesItsPanel(t *testing.T) {
 	r.leader(t, 'g')
 	r.s.WaitForText(t, "agent · fake")
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
+	r.waitAgentRunning(t) // typed into a CLI still starting, the exit would land only once it runs
 	r.keys(t, decltest.Type("exit 0\r")...)
 	r.s.WaitFor(t, "the panel closed", func(sc string) bool { return !strings.Contains(sc, "agent · fake") })
 	r.s.WaitFor(t, "the exit in the notifications", func(string) bool { return r.noticed("fake exited:") })
@@ -445,7 +446,7 @@ func TestF11WorksWithTheKeyboardInARunningAgent(t *testing.T) {
 	agent, _ := fakeAgent(t)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "fake", Command: agents.ShellQuote(agent)}}, "fake")
 	r.leader(t, 'g')
-	r.s.WaitForText(t, "started")
+	r.waitAgentSays(t, "started")
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
 	maximized := func() bool { return onLoop(r, func() bool { return r.h.panelMax["agent"] }) }
 	f11 := tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyF11}
@@ -469,7 +470,7 @@ func TestCtrlTTogglesTheAgentsModeAndEscIsTheAgents(t *testing.T) {
 	agent, _ := fakeAgent(t)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "fake", Command: agents.ShellQuote(agent)}}, "fake")
 	r.leader(t, 'g')
-	r.s.WaitForText(t, "started")
+	r.waitAgentSays(t, "started")
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
 	r.keys(t, esc(), esc())
 	time.Sleep(150 * time.Millisecond)
@@ -504,7 +505,7 @@ func TestTheFocusedAgentReceivesDroppedPathsAsAnOrdinaryPaste(t *testing.T) {
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agents.AgentProfile{{Name: "fake", Command: agents.ShellQuote(agent)}}, "fake")
 	r.leader(t, 'g')
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
-	r.s.WaitForText(t, "started")
+	r.waitAgentSays(t, "started")
 	paths := "'/tmp/screen shot.png' /tmp/second.png"
 	r.keys(t, tuicore.PasteEvent{Text: paths})
 	if !r.focused("agentView") {
@@ -550,7 +551,7 @@ read line
 	_, r, _ := runAgentTUI(t, dir, []agents.AgentProfile{{Name: "kitty", Command: agents.ShellQuote(agent)}}, "kitty")
 	r.leader(t, 'g')
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
-	r.s.WaitForText(t, "ready")
+	r.waitAgentSays(t, "ready")
 	r.keys(t, tuicore.KeyEvent{Code: tuicore.KeyEnter, Mods: tuicore.ModShift})
 	// ESC [ 1 3 ; 2 u: Shift+Enter in the protocol the agent asked for. A plain \r here (0d) is
 	// the bug: the agent would have sent the prompt.

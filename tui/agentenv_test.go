@@ -108,7 +108,7 @@ func TestAProfilesEnvReachesItsAgent(t *testing.T) {
 func envReported(t *testing.T, r *running, report string) map[string]string {
 	t.Helper()
 	var env map[string]string
-	r.s.WaitFor(t, "the environment written", func(string) bool {
+	r.waitWithin(t, "the environment written", agentStartWait, func() bool { // written once the agent has started
 		b, err := os.ReadFile(report)
 		if err != nil {
 			return false

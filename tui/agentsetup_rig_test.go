@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -199,6 +200,20 @@ func programsPath() string {
 // this test binary), not a frame's change, which decltest's WaitTimeout bounds. The clock only turns
 // a start that never comes into a failure rather than a hang.
 var agentStartWait = 10 * time.Second * raceFactor
+
+// waitAgentRunning waits for the selected agent's start to end, its program running: a program's
+// start, waited for on agentStartWait, not a frame's change, which a loaded runner's start outran.
+func (r *running) waitAgentRunning(t *testing.T) {
+	t.Helper()
+	r.waitWithin(t, "the agent running", agentStartWait, func() bool { return r.agentRunningNow() })
+}
+
+// waitAgentSays waits for text the agent's program says once it has started ("started", "ready"):
+// on agentStartWait, as its start is.
+func (r *running) waitAgentSays(t *testing.T, text string) {
+	t.Helper()
+	r.waitWithin(t, "the agent's "+strconv.Quote(text), agentStartWait, func() bool { return strings.Contains(r.s.String(), text) })
+}
 
 // waitAgentStarted waits for hearingAgent's agent name to say it started.
 func (r *running) waitAgentStarted(t *testing.T, name string) {
