@@ -532,6 +532,12 @@ func installTestPlugin(t *testing.T, dir, name, mode string, w, h int) {
 
 // installPlugin2 writes a protocol-2 manifest for the test plugin in mode: kind, then extra, the
 // rest of the manifest (its tables).
+// pluginStartWait bounds what waits on a plugin's start: its process started (this test binary,
+// on a loaded Windows runner a fresh one that is scanned as it starts) and its first answer, not a
+// frame's change, which decltest's WaitTimeout bounds. The clock only turns a start that never comes
+// into a failure rather than a hang.
+var pluginStartWait = 10 * time.Second * raceFactor
+
 func installPlugin2(t *testing.T, dir, name, kind, mode, extra string) {
 	t.Helper()
 	exe, err := os.Executable()
