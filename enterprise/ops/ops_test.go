@@ -395,3 +395,35 @@ func TestTheLagIsOnTheSourcesClock(t *testing.T) {
 		t.Errorf("a source not answering: lag %v, error %q, documents %+v; want no lag, the rest as it is", deref(ts.Cursor.LagSeconds), ts.Error, ts.Documents)
 	}
 }
+
+// Health pings with Ping when it is set, never with Now: the server gives Ping a connection the
+// searches can't take, so a Now that waits (its pool held by searches) can't make a busy server's
+// health read unavailable. Ping's failure is health's database failing, as Now's is. The mutant,
+// named here: the ping made with Now whatever Ping is.
+func TestHealthPingsWithPingWhenItIsSet(t *testing.T) {
+	f := newFixture()
+	held := errors.New("every connection held")
+	f.dbErr.Store(&held) // Now as on a pool searches hold: it never answers in time
+	var pings atomic.Int64
+	var pingErr atomic.Pointer[error]
+	f.c.o.Ping = func(ctx context.Context) error {
+		pings.Add(1)
+		if p := pingErr.Load(); p != nil {
+			return *p
+		}
+		return ctx.Err()
+	}
+	ctx := context.Background()
+	if h := f.c.Health(ctx); h.Status != StatusOK || h.Checks["database"] != CheckOK {
+		t.Errorf("Now held, Ping answering: %+v, want ok", h)
+	}
+	if n, p := f.nows.Load(), pings.Load(); n != 0 || p != 1 {
+		t.Errorf("health called Now %d times and Ping %d, want 0 and 1", n, p)
+	}
+	lost := errors.New("connection refused")
+	pingErr.Store(&lost)
+	f.advance(PingFor)
+	if h := f.c.Health(ctx); h.Status != StatusUnavailable || h.Checks["database"] != CheckFailing {
+		t.Errorf("Ping failing: %+v, want unavailable", h)
+	}
+}

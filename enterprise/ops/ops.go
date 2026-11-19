@@ -59,15 +59,20 @@ type Options struct {
 	Provider func() embedder.Health
 	// Ranker is the ranker's health ([ranker]); nil when the server has none.
 	Ranker func() ranker.Health
-	// Now is the database's clock, and health's ping (pgstore.Now on the server's pool).
+	// Now is the database's clock (pgstore.Now on the server's pool), and health's ping when Ping
+	// is nil.
 	Now func(ctx context.Context) (time.Time, error)
 	// SourceNow, when set, is the source database's clock ([postgres] index_dsn_env: the index in a
 	// database of its own): the cursors' lags are measured on it, since a pass's bound is the
 	// source's now less its lag. A failing one leaves the lags out. nil: Now.
 	SourceNow func(ctx context.Context) (time.Time, error)
-	Version   string
-	Started   time.Time
-	Clock     clock.Clock // the cache's clock; nil: time.Now
+	// Ping is health's ping of the database: on a connection the searches can't take (the
+	// server's leases pool), so a server busy with searches still answers health, its database
+	// check honest. nil pings with Now.
+	Ping    func(ctx context.Context) error
+	Version string
+	Started time.Time
+	Clock   clock.Clock // the cache's clock; nil: time.Now
 	// ANN is the approximate search's indexes (pgstore.ANN.Status); nil when the server has none.
 	ANN func(ctx context.Context) ([]pgstore.ANNStatus, error)
 }
@@ -170,7 +175,12 @@ func (c *Collector) ping(ctx context.Context) error {
 		return c.pingErr
 	}
 	pctx, cancel := context.WithTimeout(ctx, Deadline)
-	_, err := c.o.Now(pctx)
+	var err error
+	if c.o.Ping != nil {
+		err = c.o.Ping(pctx)
+	} else {
+		_, err = c.o.Now(pctx)
+	}
 	cancel()
 	if ctx.Err() != nil {
 		return err // the caller left, or its deadline passed: that is no answer of the database's to keep
