@@ -103,7 +103,7 @@ func TestTheAgentsStripHidePaintsItsDockIconLitThenDimmed(t *testing.T) {
 	agent, _ := fakeAgent(t)
 	_, r, _ := runAgentTUI(t, agentsFolder(t), []agents.AgentProfile{{Name: "fake", Command: agentCall(agent)}}, "fake")
 	r.leader(t, 'g')
-	r.s.WaitForText(t, "started")
+	r.waitAgentSays(t, "started")
 	shown, after := dockIconPaints(t, r, "✦", func() { windowControl(t, r, "_") })
 	litThenDimmed(t, "the agents' _", shown, after)
 }

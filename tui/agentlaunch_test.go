@@ -49,7 +49,9 @@ func TestAnAgentRetriedWhileStartedAgainReadsNoLiveState(t *testing.T) {
 	r.leader(t, 'g')
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
 	starting := 0
-	r.s.WaitFor(t, "the failed start shown", func(screen string) bool {
+	// a start's end, its failure, on a start's bound
+	r.waitWithin(t, "the failed start shown", agentStartWait, func() bool {
+		screen := r.s.String()
 		starting = strings.Count(screen, "[starting")
 		return strings.Contains(screen, "no such program") && starting > 0
 	})
@@ -76,7 +78,7 @@ func TestAnAgentRetriedWhileStartedAgainReadsNoLiveState(t *testing.T) {
 	if why != "" {
 		t.Fatal(why)
 	}
-	r.waitWithin(t, "the agent running", daemonWait, func() bool { return r.agentRunningNow() })
+	r.waitAgentRunning(t)
 	if n := spawns.Load(); n != 2 {
 		t.Fatalf("%d spawns, want 2: the window's start joins the retry's in flight", n)
 	}

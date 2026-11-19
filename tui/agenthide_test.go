@@ -14,7 +14,7 @@ func TestHideClosesTheAgentPanelAndKeepsTheAgents(t *testing.T) {
 	agent, _ := fakeAgent(t)
 	_, r, _ := runAgentTUI(t, agentsFolder(t), []agents.AgentProfile{{Name: "heron", Command: agentCall(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
-	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
+	r.waitAgentRunning(t)
 	shown := func() bool { return onLoop(r, func() bool { return r.h.panelOpen["agent"] }) }
 	token := func() string {
 		return onLoop(r, func() string { return r.h.agents.Snapshot().Instances["heron"].Token })
@@ -58,7 +58,7 @@ func TestAClickOnMaximizeInTheAgentsMenu(t *testing.T) {
 	agent, _ := fakeAgent(t)
 	_, r, _ := runAgentTUI(t, agentsFolder(t), []agents.AgentProfile{{Name: "heron", Command: agentCall(agent), Codename: "heron"}}, "heron")
 	onLoop(r, func() bool { r.h.agents.ToggleAgent(); return true })
-	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
+	r.waitAgentRunning(t)
 	r.s.WaitFor(t, "the agents' panel open", func(string) bool { return onLoop(r, func() bool { return r.h.panelOpen["agent"] }) })
 	clickMaximizeAndRestore(t, r, "agent")
 }

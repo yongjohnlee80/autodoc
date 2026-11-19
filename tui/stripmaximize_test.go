@@ -78,7 +78,7 @@ func TestTheAgentsStripMaximizesAndRestores(t *testing.T) {
 	agent, _ := fakeAgent(t)
 	_, r, _ := runAgentTUI(t, agentsFolder(t), []agents.AgentProfile{{Name: "fake", Command: agentCall(agent)}}, "fake")
 	r.leader(t, 'g')
-	r.s.WaitForText(t, "started")
+	r.waitAgentSays(t, "started")
 	stripMaximizes(t, r, "agent")
 }
 
