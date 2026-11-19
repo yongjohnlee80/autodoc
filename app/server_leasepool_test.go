@@ -6,6 +6,7 @@ import (
 	"context"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -31,8 +32,20 @@ func TestTheLeaseRenewsWhileEveryStoreConnectionIsHeld(t *testing.T) {
 	ctx, cancel := context.WithCancel(f.ctx)
 	defer cancel()
 	done, stderr := f.serve(ctx)
-	f.started(stderr)
-	f.waitFor("both rows written", func() bool { return f.documents() == "2" })
+	// up: a server that exits instead (its lease lost) says so with its log, not as a timeout
+	up := func(what string, cond func() bool) {
+		t.Helper()
+		f.waitFor(what, func() bool {
+			select {
+			case code := <-done:
+				t.Fatalf("waiting for %s, the server exited %d: %s", what, code, stderr)
+			default:
+			}
+			return cond()
+		})
+	}
+	up("the server serving", func() bool { return strings.Contains(stderr.String(), "serving enterprise search") })
+	up("both rows written", func() bool { return f.documents() == "2" })
 
 	// the store's one connection waits on a lock the test holds: the next pass writes a new row
 	// into rag_document, which the lock keeps it from, its connection held while it waits
@@ -45,7 +58,7 @@ func TestTheLeaseRenewsWhileEveryStoreConnectionIsHeld(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.exec(`INSERT INTO track VALUES (3, 'A', 'wren song', now())`)
-	f.waitFor("a store connection waiting on the lock", func() bool {
+	up("a store connection waiting on the lock", func() bool {
 		return f.scalar(`SELECT count(*)::text FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'
 			AND query ILIKE '%rag_document%'`) != "0"
 	})
@@ -63,12 +76,7 @@ func TestTheLeaseRenewsWhileEveryStoreConnectionIsHeld(t *testing.T) {
 	if err := tx.Rollback(); err != nil {
 		t.Fatal(err)
 	}
-	f.waitFor("the row that waited written", func() bool { return f.documents() == "3" })
-	select {
-	case code := <-done:
-		t.Fatalf("the server exited %d: %s", code, stderr)
-	default:
-	}
+	up("the row that waited written", func() bool { return f.documents() == "3" })
 	cancel()
 	if code := exitOf(t, done, stderr); code != 0 {
 		t.Errorf("--server exited %d after its lease was held throughout: %s", code, stderr)
