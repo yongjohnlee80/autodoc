@@ -405,7 +405,10 @@ func TestExportingTheLoadedRowsAsCSV(t *testing.T) {
 		t.Fatal("the file was written before the question was answered")
 	}
 	onLoop(r, func() bool { r.h.asker.Accepted(); return true })
-	r.s.WaitFor(t, "the file replaced", func(string) bool { b, _ := os.ReadFile(path); return len(b) > 4 })
+	// the replace is the export's own work, rows written, synced and renamed into place, which a
+	// loaded Windows runner takes longer than a screen's wait over: its end is its notice. Reading
+	// the file meanwhile would hold it open, which on Windows refuses the rename.
+	r.waitNotice(t, fmt.Sprintf("%d loaded rows exported to %s", loaded+resultsPage, path))
 	if records := readCSV(path); len(records) != loaded+resultsPage+1 {
 		t.Fatalf("the replaced file holds %d records", len(records))
 	}
