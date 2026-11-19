@@ -35,14 +35,18 @@ func TestTheLeaseRenewsWhileEveryStoreConnectionIsHeld(t *testing.T) {
 	// up: a server that exits instead (its lease lost) says so with its log, not as a timeout
 	up := func(what string, cond func() bool) {
 		t.Helper()
-		f.waitFor(what, func() bool {
+		deadline := time.Now().Add(15 * time.Second)
+		for !cond() {
 			select {
 			case code := <-done:
 				t.Fatalf("waiting for %s, the server exited %d: %s", what, code, stderr)
 			default:
 			}
-			return cond()
-		})
+			if time.Now().After(deadline) {
+				t.Fatalf("%s: not within 15 s; the server said: %s", what, stderr)
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
 	}
 	up("the server serving", func() bool { return strings.Contains(stderr.String(), "serving enterprise search") })
 	up("both rows written", func() bool { return f.documents() == "2" })
