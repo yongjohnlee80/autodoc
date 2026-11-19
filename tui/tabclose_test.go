@@ -43,7 +43,7 @@ func (r *running) openTerminalShell(t *testing.T) terminal.TerminalTabID {
 	t.Helper()
 	r.leader(t, '`')
 	r.s.WaitForText(t, "┌ terminal")
-	r.s.WaitFor(t, "the shell running", func(string) bool { return r.shellsRunning() == 1 })
+	waitShellStarted(t, r, 1)
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
 	return r.shellTabs()[0].ID
 }
@@ -67,7 +67,7 @@ func TestATabsXClosesAShellAtItsPromptAtOnce(t *testing.T) {
 	_, r := runShellTUI(t, nil)
 	first := r.openTerminalShell(t)
 	onLoop(r, func() bool { r.h.terminals.newShell(); return true })
-	r.s.WaitFor(t, "two shells running", func(string) bool { return r.shellsRunning() == 2 })
+	waitShellStarted(t, r, 2)
 	second := r.shellTabs()[1].ID
 	r.s.WaitFor(t, "the second shell at its prompt", func(string) bool { return r.shellActivity(second) == terminal.TerminalIdle })
 
@@ -93,7 +93,7 @@ func TestABackgroundTabsXLeavesTheKeyboardInTheActiveShell(t *testing.T) {
 	_, r := runShellTUI(t, nil)
 	first := r.openTerminalShell(t)
 	onLoop(r, func() bool { r.h.terminals.newShell(); return true })
-	r.s.WaitFor(t, "two shells running", func(string) bool { return r.shellsRunning() == 2 })
+	waitShellStarted(t, r, 2)
 	r.s.WaitFor(t, "the new shell's keyboard", func(string) bool { return r.focused("terminalView") })
 	r.s.WaitFor(t, "the first shell at its prompt", func(string) bool { return r.shellActivity(first) == terminal.TerminalIdle })
 	r.pressTabX(t, "shell")
