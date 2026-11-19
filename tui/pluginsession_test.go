@@ -59,7 +59,8 @@ func (r *running) remove(t *testing.T, dir, name string) {
 
 func waitSlot(t *testing.T, r *running, name string, want map[string]string) {
 	t.Helper()
-	r.s.WaitFor(t, fmt.Sprintf("%s's slot %v", name, want), func(string) bool { return reflect.DeepEqual(slotOf(r, name), want) })
+	// a plugin's first slot is written once it has started: a start's bound, not a frame's
+	r.waitWithin(t, fmt.Sprintf("%s's slot %v", name, want), pluginStartWait, func() bool { return reflect.DeepEqual(slotOf(r, name), want) })
 }
 
 func waitExited(t *testing.T, run *pluginRun) {
@@ -356,12 +357,12 @@ func TestQuitClearsTheSlotsOfEveryRun(t *testing.T) {
 	r.pluginCommand("mute", "echo") // started; it never answers
 
 	r.pluginCommand("flood", "flood")
-	r.s.WaitFor(t, "the flood", func(string) bool { return slotOf(r, "flood") != nil })
+	r.waitWithin(t, "the flood", pluginStartWait, func() bool { return slotOf(r, "flood") != nil }) // its first command starts it
 	run := runOf(r, "flood")
 	r.turnOff("flood")
 	waitExited(t, run)
 	r.pluginCommand("flood", "flood")
-	r.s.WaitFor(t, "the flood again", func(string) bool {
+	r.waitWithin(t, "the flood again", pluginStartWait, func() bool { // a second start
 		return onLoop(r, func() bool {
 			again := r.h.plugins.running["flood"]
 			return again != nil && again != run && again.ready

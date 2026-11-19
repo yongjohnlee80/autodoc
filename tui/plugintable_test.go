@@ -208,7 +208,8 @@ func waitSaidN(t *testing.T, logs, name, prefix string, n int) []string {
 // waitResults waits until the results panel shows table id with at least rows rows.
 func (r *running) waitResults(t *testing.T, id string, rows int) {
 	t.Helper()
-	r.s.WaitFor(t, fmt.Sprintf("the table %s with %d rows", id, rows), func(string) bool {
+	// the first table often waits on its plugin's start: a start's bound, not a frame's
+	r.waitWithin(t, fmt.Sprintf("the table %s with %d rows", id, rows), pluginStartWait, func() bool {
 		return onLoop(r, func() bool { return r.h.plugins.results.id == id && len(r.h.plugins.results.model.rows) >= rows })
 	})
 }
@@ -824,7 +825,7 @@ func TestThePanelHoldsAtMostItsCap(t *testing.T) {
 	})
 	// the reader walks to the last row loaded, again as each page lands: the table asks for more
 	// each time, until the cap
-	r.s.WaitFor(t, "the panel filled to its cap", func(string) bool {
+	r.waitWithin(t, "the panel filled to its cap", pluginStartWait, func() bool { // from the plugin's first answer
 		return onLoop(r, func() bool {
 			if tc := r.h.plugins.c.TableCore(resultsView); tc != nil && tc.Len() > 0 {
 				tc.SetCursor(table.TablePos{Row: tc.Len() - 1})
