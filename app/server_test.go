@@ -261,6 +261,33 @@ func (f *serverFixture) waitFor(what string, cond func() bool) {
 	}
 }
 
+// waitServing waits for cond as waitFor does, on a server serve started: a server that exits
+// instead says so with its log, and a timeout says what the server said and what each of the
+// database's other sessions was doing, so a wait that ran out tells a slow server from a stuck one.
+func (f *serverFixture) waitServing(done <-chan int, stderr *syncBuffer, what string, cond func() bool) {
+	f.t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	for !cond() {
+		select {
+		case code := <-done:
+			f.t.Fatalf("waiting for %s, the server exited %d: %s", what, code, stderr)
+		default:
+		}
+		if time.Now().After(deadline) {
+			f.t.Fatalf("%s: not within 15 s; the database's sessions: %s; the server said: %s", what, f.sessions(), stderr)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// sessions is what each session on the fixture's database other than the test's own is doing:
+// its state, what it waits on, how long its transaction has been open, and its statement.
+func (f *serverFixture) sessions() string {
+	return f.scalar(`SELECT coalesce(string_agg(format('[%s %s/%s xact %s] %s', state, wait_event_type, wait_event,
+		date_trunc('millisecond', clock_timestamp() - xact_start), left(regexp_replace(query, '\s+', ' ', 'g'), 160)), ' | '), 'none')
+		FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid() AND backend_type = 'client backend'`)
+}
+
 // syncBuffer is a buffer the server writes from its goroutines while the test reads it.
 type syncBuffer struct {
 	mu sync.Mutex
