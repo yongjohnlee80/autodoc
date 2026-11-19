@@ -120,3 +120,46 @@ func TestAnOlderServerTakingTheTenantStopsTheRun(t *testing.T) {
 		t.Fatal("the run still goes 5 s after an older server took the tenant's lock")
 	}
 }
+
+// A run whose leases pool is held (every connection taken: a renew can't start, nor the
+// older-server probe after it) stops by the lease's silence rule with ErrLockLost, within a lease's
+// length or so and its release's 5 s bound (the release waits on the held pool too), rather than
+// going on without its lease. The mutant, named here: the probe
+// at the renew unbounded (it waits for the held pool, the loop never ticks again, and the run never
+// stops).
+func TestARunWhoseLeasesPoolIsHeldStopsBySilence(t *testing.T) {
+	f := newFixture(t)
+	leases := f.leases("leases-one", "pool_max_conns=1")
+	ttl := 1500 * time.Millisecond
+	in := New(f.st, f.tenant, f.source(nil), f.business, leases, Options{LeaseTTL: ttl, LockPoll: 20 * time.Millisecond, OlderSchema: f.schema,
+		Now: func(context.Context) (time.Time, error) { return at(1_000_000), nil }, Lag: -1})
+	if err := in.Acquire(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(in.Release)
+	ctx, cancel := context.WithCancel(f.ctx)
+	done := make(chan error, 1)
+	go func() { done <- in.Run(ctx) }()
+	t.Cleanup(func() { cancel(); <-done }) // first of the cleanups: Run ends before its pools close
+	time.Sleep(ttl / 2)                    // a renew or two land
+	select {
+	case err := <-done:
+		done <- err
+		t.Fatalf("the run stopped with its pool free: %v", err)
+	default:
+	}
+	tx, err := leases.Begin(f.ctx) // the pool's one connection, held
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	select {
+	case err := <-done:
+		done <- err
+		if !errors.Is(err, ErrLockLost) {
+			t.Errorf("the run stopped with %v; want ErrLockLost", err)
+		}
+	case <-time.After(12 * time.Second):
+		t.Fatal("the run still goes 12 s after its leases pool was taken: it never noticed its lease's silence")
+	}
+}
