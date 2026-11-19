@@ -5,6 +5,7 @@ package app
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -78,12 +79,21 @@ func (s *server) startHTTP() error {
 		return err
 	}
 	srv := newHTTPServer(h)
+	if s.cfg.HTTP.TLSCert != "" {
+		// the certificate is read again when its files change: a renewal needs no restart
+		certs, err := newCertReloader(s.cfg.HTTP.TLSCert, s.cfg.HTTP.TLSKey, tlsCheckEvery, s.log)
+		if err != nil {
+			_ = ln.Close()
+			return err
+		}
+		srv.TLSConfig = &tls.Config{GetCertificate: certs.GetCertificate, MinVersion: tls.VersionTLS12}
+	}
 	served := make(chan struct{})
 	go func() {
 		defer close(served)
 		var err error
-		if s.cfg.HTTP.TLSCert != "" {
-			err = srv.ServeTLS(ln, s.cfg.HTTP.TLSCert, s.cfg.HTTP.TLSKey)
+		if srv.TLSConfig != nil {
+			err = srv.ServeTLS(ln, "", "")
 		} else {
 			err = srv.Serve(ln)
 		}
