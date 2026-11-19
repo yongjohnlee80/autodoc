@@ -59,6 +59,7 @@ type serverFixture struct {
 	emb    *fakeEmbeddings
 	url    string // the endpoint's base URL, as server.toml names it
 	extra  string // more of server.toml, after the source ([http], say)
+	pg     string // more of [postgres] (index_dsn_env, say)
 }
 
 // embedKey is the embedding endpoint's API key, which the fixture's server.toml names through
@@ -152,7 +153,7 @@ func (f *serverFixture) configure(model, baseURL string) {
 [postgres]
 dsn_env = "AUTODOC_TEST_SERVER_DSN"
 schema  = "` + f.schema + `"
-
+` + f.pg + `
 [embedding]
 provider = "openai"
 base_url = "` + baseURL + `"

@@ -90,3 +90,42 @@ func EnsureSchema(ctx context.Context, conn dao.DataConn, schema string) error {
 
 // quoteIdent quotes a name CheckSchema admitted: it holds no quote to escape.
 func quoteIdent(name string) string { return `"` + name + `"` }
+
+// IndexDatabase is what a database holds for an index to live in it, as its role sees it.
+type IndexDatabase struct {
+	Vector           string // the vector extension's installed version; "" when not installed
+	VectorAvailable  bool   // the server has the extension to install
+	CanInstallVector bool   // the role may install it: a superuser, or a trusted extension and CREATE on the database
+	SchemaExists     bool   // the index's schema is there
+	CanCreate        bool   // the role may create tables in the schema or, when it is missing, create it
+}
+
+// indexDatabaseQuery reads an IndexDatabase, read-only; $1 is the schema.
+const indexDatabaseQuery = `SELECT
+	coalesce((SELECT extversion FROM pg_extension WHERE extname = 'vector'), ''),
+	EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'vector'),
+	(SELECT rolsuper FROM pg_roles WHERE rolname = current_user)
+		OR (coalesce((SELECT bool_or(trusted) FROM pg_available_extension_versions WHERE name = 'vector'), false)
+			AND has_database_privilege(current_database(), 'CREATE')),
+	EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = $1),
+	CASE WHEN EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = $1)
+		THEN has_schema_privilege($1, 'CREATE')
+		ELSE has_database_privilege(current_database(), 'CREATE') END`
+
+// ReadIndexDatabase reads, without writing anything, whether conn's database can hold an index in
+// schema: pgvector installed or installable by the role, and the schema's tables, or the schema,
+// creatable by it. A server's --check asks it of an index's database of its own.
+func ReadIndexDatabase(ctx context.Context, conn dao.DataConn, schema string) (IndexDatabase, error) {
+	var d IndexDatabase
+	if err := CheckSchema(schema); err != nil {
+		return d, err
+	}
+	rows, err := conn.QueryContext(ctx, indexDatabaseQuery, schema)
+	if err != nil {
+		return d, fmt.Errorf("pgstore: read the index's database: %w", err)
+	}
+	if err := scanRows(rows, &d.Vector, &d.VectorAvailable, &d.CanInstallVector, &d.SchemaExists, &d.CanCreate); err != nil {
+		return d, fmt.Errorf("pgstore: read the index's database: %w", err)
+	}
+	return d, nil
+}

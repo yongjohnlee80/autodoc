@@ -93,7 +93,12 @@ type Server struct {
 // Postgres is where the server keeps its index: a schema of its own in the business database.
 type Postgres struct {
 	// DSNEnv names the environment variable holding the DSN. Load checked it is set; DSN reads it.
+	// The views are read through it; the index too, unless IndexDSNEnv names a database of its own.
 	DSNEnv string
+	// IndexDSNEnv, when set, names the environment variable holding the index's own DSN: its
+	// schema, its writes, the writer leases and the vectors go there, and the source database is
+	// only read (a read-only user is enough). Unset, the index lives in the source database.
+	IndexDSNEnv string
 	// Schema is the schema pgstore's tables live in, created when missing.
 	Schema string
 	// ANN is the approximate semantic search's settings (ann_threshold, ann_max_scan_tuples,
@@ -105,6 +110,18 @@ type Postgres struct {
 // DSN is the connection string, read from the environment when called. It is a secret: never log
 // it, and never put it in an error.
 func (p Postgres) DSN() string { return os.Getenv(p.DSNEnv) }
+
+// IndexDSN is the index's connection string: IndexDSNEnv's, else the source's (DSN). A secret, as
+// DSN is.
+func (p Postgres) IndexDSN() string {
+	if p.IndexDSNEnv == "" {
+		return p.DSN()
+	}
+	return os.Getenv(p.IndexDSNEnv)
+}
+
+// SeparateIndex reports whether the index has a database connection of its own.
+func (p Postgres) SeparateIndex() bool { return p.IndexDSNEnv != "" }
 
 // Embedding is the enterprise's embedding provider, which embeds every tenant's chunks centrally.
 type Embedding struct {
@@ -288,7 +305,9 @@ type file struct {
 	Postgres struct {
 		DSNEnv    string `toml:"dsn_env"`
 		DSNSealed string `toml:"dsn_sealed"`
-		Schema    string `toml:"schema"`
+		// the index's own database; "" keeps the index in the source's
+		IndexDSNEnv string `toml:"index_dsn_env"`
+		Schema      string `toml:"schema"`
 		// the approximate search (pgstore.ANNConfig); nil is the default
 		ANNThreshold         *int     `toml:"ann_threshold"`
 		ANNMaxScanTuples     *int     `toml:"ann_max_scan_tuples"`
@@ -444,7 +463,7 @@ func (v *validator) envSet(field, name string) bool {
 var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 func (v *validator) postgres(f file) Postgres {
-	p := Postgres{DSNEnv: f.Postgres.DSNEnv, Schema: f.Postgres.Schema}
+	p := Postgres{DSNEnv: f.Postgres.DSNEnv, IndexDSNEnv: f.Postgres.IndexDSNEnv, Schema: f.Postgres.Schema}
 	switch {
 	case f.Postgres.DSNSealed != "":
 		// NOTE: AutoDoc's keyslot seals secrets with a key kept beside a local store, which the
@@ -455,6 +474,13 @@ func (v *validator) postgres(f file) Postgres {
 		v.refuse("postgres.dsn_env", "required: the name of the environment variable holding the DSN")
 	default:
 		v.envSet("postgres.dsn_env", p.DSNEnv)
+	}
+	switch {
+	case p.IndexDSNEnv == "":
+	case p.IndexDSNEnv == p.DSNEnv:
+		v.refuse("postgres.index_dsn_env", "names the same variable as dsn_env: leave index_dsn_env out to keep the index in the source database")
+	default:
+		v.envSet("postgres.index_dsn_env", p.IndexDSNEnv)
 	}
 	if p.Schema == "" {
 		p.Schema = DefaultSchema

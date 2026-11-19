@@ -74,7 +74,7 @@ curl -s http://127.0.0.1:8730/v1/status -H "Authorization: Bearer $AUTODOC_OPS_T
 | `server.ranker` | with a `[ranker]` only: its `kind` and `model`, its `state` (`starting`, `up`, `down`) and a down state's `error` code, the configured `window`, and since the server started the searches it reranked (`ranked`), answered in recall order by why (`unranked`: the codes of a search's `rank.error`), and skipped for `"rerank": false` (`skipped`). A `timeout` or `busy` count that grows means the ranker is too slow for `timeout` or `slots` ([server-config](server-config.md#how-the-server-reranks)). |
 | `lock` | `held`; `waiting` (another server holds the tenant: a standby); `none` |
 | `lock_wait` | why a `waiting` lock waits when it isn't for another server of this release: `older_server`, a server of v0.3.15 or before holding the tenant by its advisory lock ([upgrading from v0.3.15](#upgrading-from-v0315)). Stop that server. Absent otherwise. |
-| `cursor.lag_seconds` | how far the index is behind your data, on the database's clock: now, less the bound the last pass that completed read to (the database's now less `lag` when it ran). On a quiet source it stays at most `lag` plus `interval`; it grows only while passes fail or can't keep up. Alert on it. It's absent on a standby (only the server holding the tenant's lease measures it) and before that server's first complete pass, so make absence an alarm of its own: absent on every server of a tenant for longer than an `interval` means no server is completing passes. `cursor.updated_at` and `id` are the last row read, which stays put while nothing changes. |
+| `cursor.lag_seconds` | how far the index is behind your data, on your (the source) database's clock: now, less the bound the last pass that completed read to (the database's now less `lag` when it ran). On a quiet source it stays at most `lag` plus `interval`; it grows only while passes fail or can't keep up. Alert on it. It's absent on a standby (only the server holding the tenant's lease measures it) and before that server's first complete pass, so make absence an alarm of its own: absent on every server of a tenant for longer than an `interval` means no server is completing passes. `cursor.updated_at` and `id` are the last row read, which stays put while nothing changes. |
 | `last_pass`, `last_refresh` | when each last ran, what it read and wrote, and its error code. `complete` is false for a refresh that couldn't read every row (it deletes nothing then; see [views](views.md)). |
 | `deletes` | a source with a deletes view: its cursor (`updated_at` is the last tombstone's `deleted_at`), its `lag_seconds` measured as the rows' is (from the bound its last deletes pass that succeeded read to), and its last pass's `error` (`view`, `order`, or none). A deletes view that fails holds only the deletes; its lag grows while it does. |
 | `refresh_due` | why a refresh runs at once rather than on its schedule, until it completes: `facets` while its last refresh wrote another facet declaration than the source's. In a mixed fleet, one server on the old declaration and one on the new, each refreshes the tenant when it takes the lease, until every server has the same configuration: right, but a cost to roll out quickly ([server-config](server-config.md#sourcefacets-what-a-search-may-filter-on-optional)). Absent otherwise. |
@@ -222,6 +222,16 @@ the server calls Vertex AI and the Ranking API as the VM's service account.
   - A down ranker's probe is a billed search: the server probes it at most once a minute.
   - `autodoc_rank_texts_total` and the ranker's `ranked` count in the status are what the bill
     counts.
+- **AlloyDB.** The index can live on the AlloyDB instance your application already uses, in a
+  database of its own, while the views read your application's database through a read-only user
+  ([server-config](server-config.md#the-index-in-a-database-of-its-own)): `dsn_env` names the
+  read-only user's DSN to your database, and `index_dsn_env` a DSN to the index's database on the
+  same instance. AlloyDB's `vector` extension is pgvector with Google's additions: Google's
+  documentation lists HNSW indexes and the `hnsw.iterative_scan`, `hnsw.max_scan_tuples` and
+  `hnsw.scan_mem_multiplier` settings the approximate search uses (vector 0.8.0.google-3 or later).
+  It doesn't name `halfvec`, which the server uses for a model above 2,000 dimensions: at 3,072,
+  check the index is built (`ann` in the status) before relying on it. Install the extension in the
+  index's database once, as the database's owner, and `--check` says what it found.
 
 ## Behind a proxy
 

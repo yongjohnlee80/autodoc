@@ -72,12 +72,14 @@ Durations are strings Go's `time.ParseDuration` reads: `"90s"`, `"5m"`, `"24h"`.
 
 ## `[postgres]`: where the index lives
 
-The index is kept in a schema of its own in your business database. The server creates the schema
-when it is missing, then applies its migrations there. Your tables are never written.
+The index is kept in a schema of its own, in your business database or in a database of its own
+(`index_dsn_env`). The server creates the schema when it is missing, then applies its migrations
+there. Your tables are never written.
 
 | Field | Default | Meaning | Refused when |
 |---|---|---|---|
 | `dsn_env` | (required) | The name of the environment variable holding the PostgreSQL connection string (a URL or `key=value` form). | missing; not a variable name; the variable is not set or is empty |
+| `index_dsn_env` | | The name of the environment variable holding the index's own connection string. Set, the index's schema, its writes, the writer leases and the vectors go there, and the views are read through `dsn_env` alone ([below](#the-index-in-a-database-of-its-own)). Unset, both are the one database. | not a variable name; the variable is not set or is empty; the same variable as `dsn_env` |
 | `dsn_sealed` | | A DSN sealed with AutoDoc's keyslot. | always, for now: the keyslot keeps its key beside a local store, which the server doesn't have. Use `dsn_env`. |
 | `schema` | `autodoc_search` | The schema the index lives in. | not a plain identifier: lowercase letters, digits and `_`, not starting with a digit or `pg_`, at most 63 bytes |
 | `ann_threshold` | `50000` | How many embeddings of its model a tenant has before its semantic searches become approximate, through the model's HNSW index. Below it they're exact. | below 1 |
@@ -90,13 +92,50 @@ when it is missing, then applies its migrations there. Your tables are never wri
 | `ann_defer_max` | `"24h"` | The longest a model's wanted index waits for a bulk load: past it, the index is built whatever the backlog. | not a duration, or 0 or less |
 | `ann_maintenance_work_mem` | `"512MB"` | The memory the session building an index may use (PostgreSQL's `maintenance_work_mem`, for that session only). A parallel build keeps it in the database's shared memory (`/dev/shm`): give a database in a container `--shm-size` at least this, or the build falls back to running without parallel workers, and the server logs a warning saying so. | not a size in kB (1024 or more), MB or GB |
 
-The server opens two connection pools on the DSN:
+The server opens two connection pools:
 
-- the index's, where every connection's `search_path` is `schema, public` (pgvector is usually
-  installed in `public`), and where each tenant's writer lease is a row of `rag_writer_lease`. Its
-  connections end a transaction left idle for a minute, so a hung writer never keeps a standby
-  from its tenant;
-- the one your views run on, with the role's own `search_path`, so a view runs as it does in `psql`.
+- the index's, on `index_dsn_env`'s DSN when it is set, else on `dsn_env`'s. Every connection's
+  `search_path` is `schema, public` (pgvector is usually installed in `public`), and each tenant's
+  writer lease is a row of `rag_writer_lease`. Its connections end a transaction left idle for a
+  minute, so a hung writer never keeps a standby from its tenant;
+- the one your views run on, on `dsn_env`'s DSN, with the role's own `search_path`, so a view runs
+  as it does in `psql`.
+
+### The index in a database of its own
+
+When the business database may only be read (a production database, a replica), give the index a
+database of its own with `index_dsn_env`:
+
+```toml
+[postgres]
+dsn_env       = "AUTODOC_SOURCE_DSN"   # the views: read only
+index_dsn_env = "AUTODOC_INDEX_DSN"    # the index: its schema, leases and vectors
+schema        = "autodoc_search"
+```
+
+What each connection's role needs:
+
+- **the source** (`dsn_env`): `SELECT` on the tables the views read and `USAGE` on their schema,
+  nothing else. A read-only user is enough, and pgvector isn't needed there;
+- **the index** (`index_dsn_env`): pgvector installed in its database, once, by a superuser or the
+  database's owner (`CREATE EXTENSION vector`), and the schema: one the role owns, or `CREATE` on
+  the database to let the server create it. [views](views.md#the-grants) has the statements; run the
+  index's half in the index's database.
+
+`--check` checks each, reading only:
+
+- the index's database: it answers, pgvector is installed there or the role can install it, and the
+  role can create the index's tables in the schema, or the schema. It says
+  `index: a database of its own: vector 0.8.1, schema autodoc_search`, or refuses naming
+  `postgres.index_dsn_env` and saying what's missing;
+- the source: each view's order, as without it.
+
+Both may be databases on one PostgreSQL server, or on one managed instance (AlloyDB, Cloud SQL):
+the two connections are independent. A pass reads a page of the source, then writes it to the
+index; nothing spans the two databases in one transaction. The database check in
+[`/v1/health`](operations.md#health-get-v1health) is the index's: a source that stops answering
+shows in `/v1/status` as its tenants' `last_pass.error`, and their `cursor.lag_seconds` left out.
+The lags are measured on the source's clock, which set each pass's bound.
 
 **Approximate semantic search.** The server builds one HNSW index per embedding model, in the
 background, one index at a time across every server on the database.
