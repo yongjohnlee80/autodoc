@@ -64,9 +64,10 @@ const (
 	MaxRankWindow  = 100
 	MinRankTimeout = 100 * time.Millisecond
 	MaxRankTimeout = 10 * time.Second
-	// MinTokenBytes is the shortest bearer token --server --check accepts without a warning: 32
-	// random bytes, as `openssl rand -hex 32` makes. A token's hash protects where it is stored,
-	// not a token short enough to guess.
+	// MinTokenBytes is the shortest bearer token in token_env: 32 random bytes, as `openssl rand
+	// -hex 32` makes. A token's hash protects where it is stored, not a token short enough to
+	// guess, and nothing limits a caller's tries: a shorter one is refused when the API is reached
+	// beyond this host (a listener off loopback, or proxy = true), and warned of on loopback.
 	MinTokenBytes = 32
 )
 
@@ -813,6 +814,8 @@ func (v *validator) http(f file, sources []Source) *HTTP {
 	case err == nil && !loopback(host):
 		v.warnings = append(v.warnings, fmt.Sprintf("http.proxy: %s serves plain HTTP off loopback: every request crosses the network from your proxy in clear text, so keep that network private", h.Listen))
 	}
+	// public: the API is reached beyond this host, where a short token can be guessed by trying
+	public := err == nil && (!loopback(host) || h.Proxy)
 	access := map[string][]string{}
 	for _, s := range sources {
 		access[s.Tenant] = s.Access
@@ -837,7 +840,7 @@ func (v *validator) http(f file, sources []Source) *HTTP {
 			}
 			names[c.Name] = fmt.Sprintf("http.client[%d]", i)
 		}
-		v.token(at, c.TokenSHA256, c.TokenEnv)
+		v.token(at, c.TokenSHA256, c.TokenEnv, public)
 		if id := tokenIdentity(c.TokenSHA256, c.TokenEnv); id != "" {
 			tokens[id] = fmt.Sprintf("http.client[%d]", i)
 		}
@@ -882,7 +885,7 @@ func (v *validator) http(f file, sources []Source) *HTTP {
 			}
 			names[o.Name] = fmt.Sprintf("http.operator[%d]", i)
 		}
-		v.token(at, o.TokenSHA256, o.TokenEnv)
+		v.token(at, o.TokenSHA256, o.TokenEnv, public)
 		if id := tokenIdentity(o.TokenSHA256, o.TokenEnv); id != "" {
 			if holder, both := tokens[id]; both {
 				// never the token: only who holds it twice
@@ -896,8 +899,9 @@ func (v *validator) http(f file, sources []Source) *HTTP {
 	return h
 }
 
-// token checks a token given one way or the other, as a client's is.
-func (v *validator) token(at func(string) string, sha, env string) {
+// token checks a token given one way or the other, as a client's is; public is the API reached
+// beyond this host, where a token_env shorter than MinTokenBytes is refused rather than warned of.
+func (v *validator) token(at func(string) string, sha, env string, public bool) {
 	switch {
 	case sha != "" && env != "":
 		v.refuse(at("token_sha256"), "give token_sha256 or token_env, not both")
@@ -911,7 +915,12 @@ func (v *validator) token(at func(string) string, sha, env string) {
 			v.refuse(at("token_sha256"), "is the SHA-256 of no token at all (an empty string): hash the real token (printf %%s \"$TOKEN\" | sha256sum)")
 		}
 	default:
-		if v.envSet(at("token_env"), env) && len(os.Getenv(env)) < MinTokenBytes {
+		short := v.envSet(at("token_env"), env) && len(os.Getenv(env)) < MinTokenBytes
+		switch {
+		case short && public:
+			v.refuse(at("token_env"), "the token in %s is shorter than %d bytes, and the API is reached beyond this host, where nothing limits a caller's tries: use a random token of at least 32 bytes (openssl rand -hex 32)",
+				env, MinTokenBytes)
+		case short:
 			v.warnings = append(v.warnings, fmt.Sprintf("%s: the token in %s is shorter than %d bytes: use a random token of at least 32 bytes (openssl rand -hex 32)",
 				at("token_env"), env, MinTokenBytes))
 		}

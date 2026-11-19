@@ -315,10 +315,12 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 	}
 }
 
-// A token read from the environment shorter than 32 bytes is allowed, and warned of; TLS files
-// that exist admit a listener beyond loopback; a refusal of one field reads as the file's.
+// A token read from the environment shorter than 32 bytes is allowed on loopback, and warned of,
+// and refused where the API is reached beyond this host; TLS files that exist admit a listener
+// beyond loopback; a refusal of one field reads as the file's.
 func TestWarningsAndTLS(t *testing.T) {
 	t.Setenv("TEST_SHORT", "short")
+	t.Setenv("TEST_LONG", strings.Repeat("y", config.MinTokenBytes))
 	s, err := load(t, strings.Replace(good, `token_env = "TEST_ADMIN_TOKEN"`, `token_env = "TEST_SHORT"`, 1))
 	if err != nil {
 		t.Fatal(err)
@@ -342,6 +344,31 @@ func TestWarningsAndTLS(t *testing.T) {
 	}
 	if s, err := load(t, strings.Replace(good, `listen = "127.0.0.1:8730"`, `listen = "localhost:8730"`, 1)); err != nil || s.HTTP.Listen != "localhost:8730" {
 		t.Errorf("localhost: %v", err)
+	}
+	// the short token is refused where the API is reached beyond this host: off loopback, or
+	// behind a proxy; the refusal names the variable, never the token
+	short := func(src string) string {
+		return strings.Replace(src, `token_env = "TEST_ADMIN_TOKEN"`, `token_env = "TEST_SHORT"`, 1)
+	}
+	for name, src := range map[string]string{
+		"off loopback":      short(tls),
+		"behind a proxy":    short(strings.Replace(good, `listen = "127.0.0.1:8730"`, "listen = \"127.0.0.1:8730\"\nproxy = true", 1)),
+		"a proxy, off loop": short(strings.Replace(good, `listen = "127.0.0.1:8730"`, "listen = \"0.0.0.0:8730\"\nproxy = true", 1)),
+	} {
+		_, err := load(t, src)
+		var r *config.Refusal
+		if !errors.As(err, &r) {
+			t.Errorf("%s: a short token: %v, want a refusal", name, err)
+			continue
+		}
+		i := slices.Index(r.Fields(), "http.client[1] (admin-app).token_env")
+		if i < 0 || !strings.Contains(r.Errors[i].Reason, "shorter than 32 bytes") || !strings.Contains(r.Errors[i].Reason, "TEST_SHORT") ||
+			strings.Contains(err.Error(), "short\"") || strings.Contains(err.Error(), " short ") {
+			t.Errorf("%s: refused %v (%v)", name, r.Fields(), err)
+		}
+	}
+	if s, err := load(t, strings.Replace(tls, `token_env = "TEST_ADMIN_TOKEN"`, `token_env = "TEST_LONG"`, 1)); err != nil || len(s.Warnings) != 0 {
+		t.Errorf("a 32-byte token off loopback: %v, warnings %v", err, s.Warnings)
 	}
 	r := config.Refuse("server.toml", "source[0].view", "args: want exactly")
 	if r.Error() != "server.toml: source[0].view: args: want exactly" || !config.IsRefusal(r) {
