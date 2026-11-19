@@ -244,19 +244,24 @@ the server build (a `linux-<arch>-server` release archive, or `make build-server
 refuses `--server`:
 
 ```sh
+useradd --system --no-create-home --shell /usr/sbin/nologin autodoc
 install -m 0755 autodoc /usr/local/bin/autodoc
-install -d -m 0750 /etc/autodoc
-install -m 0640 server.toml /etc/autodoc/          # and views/
-install -m 0600 server.env /etc/autodoc/server.env # AUTODOC_SERVER_DSN=…, the key, the tokens
+install -d -m 0750 -g autodoc /etc/autodoc
+install -m 0640 -g autodoc server.toml /etc/autodoc/   # and views/, and the TLS certificate and key
+install -m 0600 server.env /etc/autodoc/server.env     # AUTODOC_SERVER_DSN=…, the key, the tokens
 cp deploy/systemd/autodoc-server.service /etc/systemd/system/
 systemctl enable --now autodoc-server
 journalctl -u autodoc-server -f
 ```
 
-- **Secrets live in `server.env`** (0600), never in `server.toml`.
+- **Secrets live in `server.env`** (0600, root's), never in `server.toml`. systemd reads it as root
+  and hands its values to the service; the service itself can't read the file.
+- **The files the service reads** (`server.toml`, the views, the TLS certificate and key) are root's,
+  0640, group `autodoc`, in a directory of the same: the service reads them through its group, and
+  can write none of them.
 - **A refused configuration (exit 2) isn't restarted,** because restarting can't mend it. Exit 1 (the database lost, a writer lease lost) is restarted after 5 seconds.
 - **On stop:** SIGTERM drains the API's requests (35s at most), then releases the writer leases, so a standby takes them at its next poll. The stop timeout is 60s.
-- **The unit runs as a dynamic user,** with the system read-only to it.
+- **The unit runs as the `autodoc` system user,** with the system read-only to it.
 
 ### Writer leases
 
