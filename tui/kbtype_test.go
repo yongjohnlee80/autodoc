@@ -274,8 +274,9 @@ func TestAPartialKBTypeReopensOnTheAddedWorkspace(t *testing.T) {
 }
 
 // A plan longer than one call is sent in batches, and all of it lands. The add and its two batches
-// are the daemon's work, 71 files written: on a loaded Windows runner more than the screen's own
-// wait at times, so the cell waits for them as daemon work (daemonWait), then for the toast.
+// are the daemon's work, 71 files written: on a loaded Windows runner more than a fixed bound at
+// times (6 s ran out with the files still arriving), so the cell waits for them for as long as they
+// keep landing, a stretch of daemonWait with none failing it, then for the toast.
 func TestAKBTypeIsSentInBatches(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
@@ -285,9 +286,9 @@ func TestAKBTypeIsSentInBatches(t *testing.T) {
 	r.openAdd(t)
 	r.pickKB(t, 2)
 	r.saveForm(func(f *settingsForm) { f.name, f.root = "zk", root })
-	r.waitWithin(t, "the type's 71 files in permanent/", daemonWait, func() bool {
-		entries, err := os.ReadDir(filepath.Join(root, "permanent"))
-		return err == nil && len(entries) == 71
+	r.waitProgress(t, "the type's files in permanent/", daemonWait, 71, func() int {
+		entries, _ := os.ReadDir(filepath.Join(root, "permanent"))
+		return len(entries)
 	})
 	r.waitWithin(t, "the add's toast", daemonWait, func() bool {
 		return strings.Contains(r.s.String(), "added workspace zk as Zettelkasten")

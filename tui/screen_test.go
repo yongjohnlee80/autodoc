@@ -90,6 +90,27 @@ func (r *running) waitWithin(t *testing.T, what string, d time.Duration, cond fu
 	}
 }
 
+// waitProgress waits for count to reach want for as long as it keeps rising: it fails only when
+// count stays where it is for d, so a writer that is slow but working (a loaded Windows runner) is
+// waited for, and one that stopped is not.
+func (r *running) waitProgress(t *testing.T, what string, d time.Duration, want int, count func() int) {
+	t.Helper()
+	last, moved := -1, time.Now()
+	for {
+		n := count()
+		if n >= want {
+			return
+		}
+		if n != last {
+			last, moved = n, time.Now()
+		}
+		if time.Since(moved) > d {
+			t.Fatalf("%s: %d of %d, and no more within %s:\n%s", what, n, want, d, r.s.String())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 // focused says whether the widget the document declares as id has the keyboard.
 // searchReady waits for the search dialog with its query field focused: a key typed before the
 // focus lands there reaches the page instead (a race a loaded CI runner loses). The field's id is
