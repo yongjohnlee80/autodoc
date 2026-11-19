@@ -365,3 +365,33 @@ func TestTheStatusCarriesTheEmbeddingPace(t *testing.T) {
 		}
 	}
 }
+
+// With the index in a database of its own, the lags are on the source's clock, which set each
+// pass's bound, not the index's: a source clock 30 s behind the index's makes a bound 4 s behind
+// the source 4 s of lag, not 34 s less. A source that doesn't answer leaves the lag out, and the
+// tenant's other figures stand. The mutant, named here: the lag on the index's clock.
+func TestTheLagIsOnTheSourcesClock(t *testing.T) {
+	f := newFixture()
+	srcNow := dbNow.Add(-30 * time.Second)
+	var srcErr atomic.Pointer[error]
+	f.c.o.SourceNow = func(ctx context.Context) (time.Time, error) {
+		if p := srcErr.Load(); p != nil {
+			return time.Time{}, *p
+		}
+		return srcNow, ctx.Err()
+	}
+	f.state.Store(&ingest.State{Locked: true, CaughtUp: srcNow.Add(-4 * time.Second)})
+	ts := f.c.Snapshot(context.Background()).Tenants[0]
+	if ts.Cursor.LagSeconds == nil || *ts.Cursor.LagSeconds != 4 {
+		t.Errorf("the lag %v, want 4 s on the source's clock", deref(ts.Cursor.LagSeconds))
+	}
+	g := newFixture()
+	failed := errors.New("the source does not answer")
+	srcErr.Store(&failed)
+	g.c.o.SourceNow = f.c.o.SourceNow
+	g.state.Store(&ingest.State{Locked: true, CaughtUp: srcNow.Add(-4 * time.Second)})
+	ts = g.c.Snapshot(context.Background()).Tenants[0]
+	if ts.Cursor.LagSeconds != nil || ts.Error != opcode.None || ts.Documents.Total != 10 {
+		t.Errorf("a source not answering: lag %v, error %q, documents %+v; want no lag, the rest as it is", deref(ts.Cursor.LagSeconds), ts.Error, ts.Documents)
+	}
+}

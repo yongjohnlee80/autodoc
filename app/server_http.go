@@ -63,7 +63,7 @@ func (s *server) startHTTP() error {
 		}
 		sr, err := search.Open(s.ctx, s.store, src.Tenant, w.QueryEmbedder(src.Tenant), opts...)
 		if err != nil {
-			return redact(err, s.cfg.Postgres.DSN())
+			return redact(err, s.cfg.Postgres.IndexDSN())
 		}
 		tenants[src.Tenant] = sr
 	}
@@ -168,6 +168,9 @@ func (s *server) startOps() error {
 	o := ops.Options{Tenants: tenants, Provider: s.worker.Load().Health,
 		Now: func(ctx context.Context) (time.Time, error) { return pgstore.Now(ctx, s.store) }, Version: s.version, Started: time.Now(),
 		ANN: s.ann.Status}
+	if s.cfg.Postgres.SeparateIndex() {
+		o.SourceNow = func(ctx context.Context) (time.Time, error) { return pgstore.Now(ctx, s.business) }
+	}
 	if s.ranker != nil {
 		o.Ranker = s.ranker.Health
 	}
@@ -219,7 +222,7 @@ func tenantSearches(cfg *config.Server) int {
 	if n := cfg.HTTP.MaxTenantSearches; n > 0 {
 		return n
 	}
-	return max(poolSize(cfg.Postgres.DSN())-2, 1)
+	return max(poolSize(cfg.Postgres.IndexDSN())-2, 1)
 }
 
 // poolSize is the size of the pool a DSN opens: its pool_max_conns, in a URL's query or among a
