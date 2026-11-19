@@ -273,7 +273,7 @@ be at least one.
 |---|---|---|
 | `name` | Names the client in the log. | missing; another client has it |
 | `token_sha256` | The lowercase hex SHA-256 of the client's bearer token. The token itself is never in the file. | not 64 hex digits (a token pasted here by mistake is refused without being echoed) |
-| `token_env` | Instead: the name of the environment variable holding the token. | the variable is not set or is empty |
+| `token_env` | Instead: the name of the environment variable holding the token. | the variable is not set or is empty; its value is shorter than 32 bytes and the API is reached beyond this host |
 | `grants.<tenant>.<field>` | The values of each access field the client may ask for, in that tenant. `["*"]` allows any value, which a request must still name. | see below |
 
 Exactly one of `token_sha256` and `token_env` is given. The grants are refused, naming the client
@@ -294,8 +294,10 @@ token=$(openssl rand -hex 32)
 printf %s "$token" | sha256sum | cut -d' ' -f1    # → token_sha256
 ```
 
-A hash protects where the token is stored, not a token short enough to guess. `--check` warns when
-a `token_env` value is shorter than 32 bytes.
+A hash protects where the token is stored, not a token short enough to guess, and the server
+doesn't limit a caller's tries. So a `token_env` value shorter than 32 bytes is refused when the API
+is reached beyond this host (`listen` off loopback, or `proxy = true`). On loopback, `--check`
+warns about it. A `token_sha256` can't be checked this way: make its token as above.
 
 ## `[[http.operator]]`: who reads the status
 
