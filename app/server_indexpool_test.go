@@ -4,9 +4,11 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // An index pool under two connections is refused, exit 2, at the start and by --check alike, naming
@@ -19,8 +21,12 @@ func TestAnIndexPoolUnderTwoConnectionsIsRefused(t *testing.T) {
 	dsn := os.Getenv("AUTODOC_TEST_SERVER_DSN")
 	run2 := func(args ...string) (int, string) {
 		t.Helper()
+		// a start that isn't refused serves until its context ends: bounded, it says so as an exit
+		// that isn't 2, rather than running until the test's own timeout
+		ctx, cancel := context.WithTimeout(f.ctx, 10*time.Second)
+		defer cancel()
 		var stdout, stderr bytes.Buffer
-		code := run(f.ctx, append([]string{"--server"}, append(args, f.path)...), testOptions, &stdout, &stderr)
+		code := run(ctx, append([]string{"--server"}, append(args, f.path)...), testOptions, &stdout, &stderr)
 		return code, stderr.String()
 	}
 	refused := func(what, field string, args ...string) {
