@@ -20,6 +20,7 @@ func TestTheLeaseRenewsWhileEveryStoreConnectionIsHeld(t *testing.T) {
 	ttl := leaseTTL
 	leaseTTL = 1500 * time.Millisecond // a renew every 500 ms; silent for most of 1.5 s, it is lost
 	t.Cleanup(func() { leaseTTL = ttl })
+	quickBuilder(t)
 	f := newServerFixture(t, serverView)
 	f.storePool(minIndexConns) // the fewest the server takes, both of which the test then holds
 	t.Setenv("AUTODOC_TEST_HTTP_TOKEN", httpToken)

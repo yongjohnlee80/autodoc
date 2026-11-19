@@ -302,13 +302,28 @@ func withPool(t *testing.T, dsn string, n int) string {
 	return u.String()
 }
 
+// quickBuilder has the server's index builder look for work every 100 ms, so a cell that holds the
+// store's pool (holdStore) can wait for the model's index to be built first.
+func quickBuilder(t *testing.T) {
+	tick := annTick
+	annTick = 100 * time.Millisecond
+	t.Cleanup(func() { annTick = tick })
+}
+
 // holdStore holds every connection of the store's pool, which storePool(minIndexConns) makes the
 // fewest the server takes: with rag_document and rag_chunk locked, the ingester's write of a new
-// row waits on the lock on one connection and a search through addr's API on the other. It returns
-// once both wait, with release, which lets the lock go, and the search's status, sent once it is
-// answered.
+// row waits on the lock on one connection and a search through addr's API on the other. It first
+// waits for both rows embedded and the model's index built (quickBuilder), so that neither the
+// worker nor the index builder, which pins a session for its DDL, holds a connection the two
+// don't account for. It returns once both wait, with release, which lets the lock go, and the
+// search's status, sent once it is answered.
 func (f *serverFixture) holdStore(done <-chan int, stderr *syncBuffer, addr string) (release func(), searched <-chan int) {
 	f.t.Helper()
+	const model = "openai|fake-model||4"
+	f.waitServing(done, stderr, "both rows embedded and the model's index built", func() bool {
+		return f.embedded(model) && f.scalar(`SELECT coalesce((SELECT state = 'ready' FROM `+f.schema+`.rag_ann_index
+			WHERE model = '`+model+`'), false)::text`) == "true"
+	})
 	tx, err := f.plain.Begin(f.ctx)
 	if err != nil {
 		f.t.Fatal(err)

@@ -171,8 +171,9 @@ func (s *server) migrate() error {
 	return redact(pgstore.Migrate(s.ctx, s.store), s.cfg.Postgres.IndexDSN())
 }
 
-// annTick is how often the ANN builder looks for an index to build, recover or retire.
-const annTick = 30 * time.Second
+// annTick is how often the ANN builder looks for an index to build, recover or retire: 30 s, which
+// a cell shortens.
+var annTick = 30 * time.Second
 
 // startANN makes the approximate search every tenant's store shares, and runs its builder until
 // the server stops: the per-model HNSW indexes, one built at a time across every server on the
