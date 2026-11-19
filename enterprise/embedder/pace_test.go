@@ -2,6 +2,7 @@ package embedder_test
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -171,5 +172,43 @@ func TestAProviderThatNeverAnswersEndsDownWithNothingSpinning(t *testing.T) {
 	}
 	if p.texts() != 0 {
 		t.Errorf("%d texts embedded by a provider that never answers", p.texts())
+	}
+}
+
+// A provider that answers 8 texts in time and never 16: once the pace has stepped down to 8, it
+// asks for more than 8 again only after many calls at 8 have answered in time (the pace that ran
+// out is remembered), not every few calls, each such call lost to its timeout; every text ends
+// embedded, none twice. The mutant, named here: the pace that ran out forgotten (16 tried again
+// after growAfter calls, a swing between 8 and 16 for as long as the load lasts).
+func TestAPaceThatRanOutIsTriedAgainOnlyAfterManyCallsInTime(t *testing.T) {
+	st, paths, texts := paceStore(120, 5)
+	p := newProvider("m")
+	p.slowAbove = 8
+	w := embedder.New(built(p), []embedder.Tenant{{Name: "t", Store: st}}, embedder.WithBatch(64), embedder.WithSlots(1),
+		embedder.WithCallTimeout(paceTimeout), embedder.WithRetry(time.Hour, time.Hour))
+	stop := run(t, w)
+	waitFor(t, "every document ready", allReady(st, paths))
+	stop()
+	for _, x := range texts {
+		if n := p.times(x); n != 1 {
+			t.Fatalf("%q embedded %d times, want once", x, n)
+		}
+	}
+	sizes := p.callSizes()
+	at := slices.IndexFunc(sizes, func(n int) bool { return n <= 8 })
+	if at < 0 {
+		t.Fatalf("no call of 8 texts or fewer: %v", sizes)
+	}
+	run := 0 // calls of 8 or fewer since the pace reached 8, or since the last call above it
+	for i, n := range sizes[at:] {
+		if n <= 8 {
+			run++
+			continue
+		}
+		if run < embedder.CeilingAfter {
+			t.Fatalf("call %d asked for %d texts after %d calls of 8 or fewer, want at least %d (the sizes from the step-down: %v)",
+				at+i, n, run, embedder.CeilingAfter, sizes[at:])
+		}
+		run = 0
 	}
 }
