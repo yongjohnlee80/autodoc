@@ -171,6 +171,16 @@ func (s *server) startOps() error {
 	if s.cfg.Postgres.SeparateIndex() {
 		o.SourceNow = func(ctx context.Context) (time.Time, error) { return pgstore.Now(ctx, s.business) }
 	}
+	// health's ping is on the leases' pool, which no search takes: on the store's, a flood of
+	// searches held every connection and health answered unavailable for a server only busy, which
+	// a supervisor would restart. At most one ping is out at a time (ops pings under a lock), and a
+	// renew's bound outlasts a ping's Deadline, so the leases keep a connection for their renews.
+	// It pings the index's database, as the store's pool did: a source that stops answering shows
+	// in the status, as its tenants' passes failing
+	o.Ping = func(ctx context.Context) error {
+		_, err := pgstore.Now(ctx, s.leases)
+		return err
+	}
 	if s.ranker != nil {
 		o.Ranker = s.ranker.Health
 	}

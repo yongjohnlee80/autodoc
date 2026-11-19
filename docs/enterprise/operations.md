@@ -20,7 +20,7 @@ curl -s http://127.0.0.1:8730/v1/health
 
 | Check | ok | degraded | failing |
 |---|---|---|---|
-| `database` | a ping answers within 2s | | it doesn't |
+| `database` | a ping answers within 2s, on a connection searches don't use, so a server busy with searches still reads ok | | it doesn't |
 | `tenants` | every tenant's writer lease is held | a lease is held by another server (this one is a standby) | |
 | `embedding` | the provider is up | it's down or failing: searches answer by words meanwhile | |
 
