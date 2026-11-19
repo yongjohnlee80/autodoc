@@ -90,6 +90,7 @@ func TestTheTerminalsStripHideAndEscapePaintItsDockIconLitThenDimmed(t *testing.
 	_, r := runLineShellTUI(t, nil)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	waitShellStarted(t, r, 1) // the dock keeps a hidden terminal's icon only while its shell runs
 	shown, after := dockIconPaints(t, r, "❯", func() { windowControl(t, r, "_") })
 	litThenDimmed(t, "the terminal's _", shown, after)
 
