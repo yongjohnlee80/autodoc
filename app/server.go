@@ -47,6 +47,9 @@ func runServer(ctx context.Context, path string, check bool, level logger.Severi
 	if err != nil {
 		return err
 	}
+	if err := refuseSmallIndexPool(path, cfg.Postgres); err != nil {
+		return err
+	}
 	if check {
 		return checkServer(ctx, path, cfg, sources, stdout)
 	}
@@ -311,6 +314,27 @@ func loadSources(path string, cfg *config.Server) ([]*ingest.Source, error) {
 		return nil, &refused
 	}
 	return out, nil
+}
+
+// minIndexConns is the fewest connections the index's pool may have: an index build holds two at
+// once, the session it pins for the DDL and a transaction beside it that renews the build's lease
+// while the DDL runs. With one, the first build waits for its second connection for good, and every
+// search, write and embedding waits behind it.
+const minIndexConns = 2
+
+// refuseSmallIndexPool refuses an index DSN whose pool_max_conns is under minIndexConns, naming the
+// field whose variable holds it. The start and --check both ask it, before anything is opened.
+func refuseSmallIndexPool(path string, p config.Postgres) error {
+	n := poolSize(p.IndexDSN())
+	if n >= minIndexConns {
+		return nil
+	}
+	field := "postgres.dsn_env"
+	if p.SeparateIndex() {
+		field = "postgres.index_dsn_env"
+	}
+	return config.Refuse(path, field, fmt.Sprintf("its DSN sets pool_max_conns=%d: the index's pool needs at least %d, since an index build holds two connections at once; set pool_max_conns=%d or more, or leave it out",
+		n, minIndexConns, minIndexConns))
 }
 
 // checkServer is --server --check, after the configuration and the views loaded: each view's order

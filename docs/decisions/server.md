@@ -49,6 +49,10 @@ dropped or recycled connection loses nothing.
 - **The leases have a pool of their own** (two connections), never the one searches use. On the
   shared pool, a renew waited behind a flood of searches past the lease's length, and the server
   stopped.
+- **The index's pool is refused under two connections.** An index build pins a session for its
+  DDL and renews its lease in a transaction beside it, so it holds two at once: on a pool of one,
+  the first build waited for good and every search and write with it. A refusal at the start was
+  chosen over a builder on one connection, which can't renew while its DDL runs.
 - Every time is the database's `clock_timestamp()`; no host's clock is compared with another's.
 - **A claim within milliseconds of a stop that cut a write can wait one poll.** The cut write holds
   the row `FOR KEY SHARE` until its backend sees its connection closed, so a claim landing then is

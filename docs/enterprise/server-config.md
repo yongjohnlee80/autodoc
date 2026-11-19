@@ -97,7 +97,9 @@ The server opens three connection pools:
 - the index's, on `index_dsn_env`'s DSN when it is set, else on `dsn_env`'s. Every connection's
   `search_path` is `schema, public` (pgvector is usually installed in `public`). Searches,
   ingestion and embedding share it. Its connections end a transaction left idle for a minute, so a
-  hung writer never keeps a standby from its tenant;
+  hung writer never keeps a standby from its tenant. Its `pool_max_conns`, when the DSN sets one,
+  must be 2 or more: an index build holds two connections at once, and the server refuses fewer at
+  its start and in `--check`;
 - the writer leases', two connections on the same DSN with the same `search_path`, where each
   tenant's writer lease is a row of `rag_writer_lease`. The leases are renewed there, never behind
   the searches, so a flood of searches can't make the server lose its tenants. Count these two
