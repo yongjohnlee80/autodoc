@@ -53,7 +53,7 @@ func TestAPluginsNotices(t *testing.T) {
 
 	r.pluginCommand("a", "notifywith", "sync", "1", "a syncing")
 	r.pluginCommand("b", "notifywith", "sync", "1", "b syncing")
-	r.s.WaitFor(t, "both ongoing", func(string) bool { return shows(r, "a syncing") && shows(r, "b syncing") })
+	r.waitWithin(t, "both ongoing", pluginStartWait, func() bool { return shows(r, "a syncing") && shows(r, "b syncing") }) // b's first command starts it
 	r.pluginCommand("a", "notifywith", "sync", "0", "a synced")
 	r.waitNotice(t, "a synced")
 	if !shows(r, "b syncing") || kept(r, "b syncing") != 0 {
