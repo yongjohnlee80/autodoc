@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/yongjohnlee80/autodoc/internal/fileinuse"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget/table"
@@ -268,6 +269,8 @@ func (pl *plugins) exportEnded(x *resultsExport, rows int, err error) {
 	pl.showResultsTitle()
 	more := pl.c.Tr("autodoc.notice.plugintable_export.the_result_has_more_change_the_query_a_limit_a_w")
 	switch {
+	case errors.As(err, new(*notReplaced)):
+		pl.c.NotifyDone(toastExport, pl.c.Trf("autodoc.notice.plugintable_export.could_not_be_replaced_it_may_be_open", x.path))
 	case err != nil:
 		pl.c.NotifyDone(toastExport, pl.c.Trf("autodoc.notice.plugintable_export.the_results_were_not_exported_not_written", err.Error(), x.path))
 	case x.from > 0 && x.partial:
@@ -341,7 +344,7 @@ func (x *resultsExport) write(post func(func()), wrote func(*resultsExport, int)
 				err = cerr
 			}
 			if err == nil {
-				err = os.Rename(x.part, x.path)
+				err = x.rename()
 			}
 			if err != nil {
 				_ = os.Remove(x.part)
@@ -633,3 +636,25 @@ func exportFormatsModel() *tuidecl.ListModel {
 	m.Reset(rows)
 	return m
 }
+
+// rename puts the written .part in the chosen file's place. A rename over a regular file that is
+// still there, refused as one held open may be (fileinuse.ReplaceRefused: on Windows, a file
+// another program holds without delete sharing, or a folder that isn't writable), is notReplaced:
+// the old file is kept, and the notice says what is known, no more. A folder in the file's place
+// is refused the same way on Windows, and is said as any failure is: it is no file held open.
+func (x *resultsExport) rename() error {
+	err := os.Rename(x.part, x.path)
+	if err == nil || !fileinuse.ReplaceRefused(err) {
+		return err
+	}
+	if fi, serr := os.Stat(x.path); serr != nil || !fi.Mode().IsRegular() {
+		return err // no file was there to keep
+	}
+	return &notReplaced{err: err}
+}
+
+// notReplaced is an export's rename over an existing file refused: the old file is kept.
+type notReplaced struct{ err error }
+
+func (e *notReplaced) Error() string { return "not replaced: " + e.err.Error() }
+func (e *notReplaced) Unwrap() error { return e.err }

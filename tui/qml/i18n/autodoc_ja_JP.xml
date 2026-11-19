@@ -4916,6 +4916,10 @@ WHAT A KEY NEEDS
         <source>the results were not exported: %1; %2 not written</source>
         <translation>結果をエクスポートできませんでした: %1。%2 は書き込まれていません</translation>
     </message>
+    <message id="autodoc.notice.plugintable_export.could_not_be_replaced_it_may_be_open">
+        <source>%1 could not be replaced: it may be open in another program, or the folder may not be writable. The old file is kept.</source>
+        <translation>%1 を置き換えられませんでした: 別のプログラムで開かれているか、フォルダーに書き込めない可能性があります。元のファイルはそのままです。</translation>
+    </message>
     <message id="autodoc.notice.prefs.editor_mode">
         <source>editor mode: %1</source>
         <translation>エディターモード: %1</translation>
