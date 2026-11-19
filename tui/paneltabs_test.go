@@ -53,6 +53,7 @@ func TestCtrlTabMovesBetweenTheTerminalsTabs(t *testing.T) {
 		t.Fatal("Ctrl+Tab with one shell moved the tab or the keyboard")
 	}
 	onLoop(r, func() bool { r.h.terminals.newShell(); r.h.terminals.newShell(); return true })
+	waitShellStarted(t, r, 3) // the shells running, so what is typed reaches them
 	tabs := func() []terminal.TerminalTabID {
 		return onLoop(r, func() []terminal.TerminalTabID {
 			p, _ := r.h.terminals.panel()

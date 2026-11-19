@@ -95,6 +95,7 @@ func TestTheTerminalTogglesFromTheLeaderAndGivesTheKeyboardBack(t *testing.T) {
 	r.leader(t, '`')
 	r.s.WaitForText(t, "┌ terminal")
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	waitShellStarted(t, r, 1)
 	r.keys(t, decltest.Type("pwd\r")...)
 	r.s.WaitFor(t, "the shell in the workspace's folder", func(sc string) bool {
 		return strings.Contains(sc, root[max(0, len(root)-30):])
@@ -214,6 +215,7 @@ func TestCtrlTTogglesTheTerminalsModeAndEscIsTheProgramsInEitherKeymap(t *testin
 	_, r := runShellTUI(t, nil) // the Vim keymap, the default
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	waitShellStarted(t, r, 1)
 	r.keys(t, decltest.Type("printf 'cat-%s\\n' ready; cat -v\r")...)
 	r.s.WaitForText(t, "cat-ready")
 	// escTo types Esc, then text and Enter, and waits for cat's ^[text: the Esc reached it.
@@ -263,6 +265,7 @@ func TestTheTerminalClosesWhenItsShellExits(t *testing.T) {
 		r.leader(t, '`')
 		r.s.WaitForText(t, "┌ terminal")
 		r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+		waitShellStarted(t, r, 1)
 	}
 	closed := func(why string) {
 		t.Helper()
@@ -300,6 +303,7 @@ func TestQuittingHangsTheShellUpWithItsJobs(t *testing.T) {
 	_, r := runTUIWithShell(t, bash, nil)
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	waitShellStarted(t, r, 1)
 	// +H: no history expansion of the $! below (macOS's bash 3.2 applies it).
 	r.keys(t, decltest.Type("set +H; sleep 1000 & echo J''OB=$!\r")...)
 	var job int
@@ -350,7 +354,7 @@ func TestTheTerminalRetriesAShellThatFailedToStart(t *testing.T) {
 	t.Parallel()
 	_, r := runTUIWithShell(t, "/nonexistent/shell", nil)
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
-	r.s.WaitFor(t, "the failure noticed", func(string) bool {
+	r.waitWithin(t, "the failure noticed", shellStartWait, func() bool { // a start's end, its failure
 		return onLoop(r, func() bool {
 			for _, n := range r.h.noticeLog.Items {
 				if strings.Contains(n.Text, "could not start") {
@@ -371,7 +375,9 @@ func TestTheTerminalRetriesAShellThatFailedToStart(t *testing.T) {
 	}) // hide
 	r.s.WaitFor(t, "hidden", func(string) bool { return !r.termShown() })
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true }) // open again
-	r.s.WaitFor(t, "the shell started on the retry", func(string) bool {
+	// a start's end on a start's bound; not waitShellStarted, whose StartError is the first
+	// start's until the retry's lands
+	r.waitWithin(t, "the shell started on the retry", shellStartWait, func() bool {
 		tabs := r.shellTabs()
 		return len(tabs) == 1 && tabs[0].Running
 	})
@@ -439,7 +445,7 @@ func TestTheTerminalsShellsAreTabs(t *testing.T) {
 	}
 
 	menu("terminal.new")
-	r.s.WaitFor(t, "two shells running", func(string) bool { return r.shellsRunning() == 2 })
+	waitShellStarted(t, r, 2)
 	if got := labels(); !slices.Equal(got, []string{"shell", "shell 2"}) {
 		t.Fatalf("tabs %v", got)
 	}
@@ -459,7 +465,7 @@ func TestTheTerminalsShellsAreTabs(t *testing.T) {
 
 	// Go to › selects a tab
 	menu("terminal.new")
-	r.s.WaitFor(t, "two shells again", func(string) bool { return r.shellsRunning() == 2 })
+	waitShellStarted(t, r, 2) // two shells again
 	first := r.shellTabs()[0].ID
 	menu("tabs.goto." + string(first))
 	r.s.WaitFor(t, "the first selected", func(string) bool {
@@ -481,7 +487,7 @@ func TestTheTerminalsShellsAreTabs(t *testing.T) {
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	r.s.WaitFor(t, "hidden", func(string) bool { return !r.termShown() })
 	r.leader(t, '`')
-	r.s.WaitFor(t, "a fresh shell", func(string) bool { return r.shellsRunning() == 1 })
+	waitShellStarted(t, r, 1) // a fresh shell
 }
 
 // TestABackgroundShellLeavingKeepsTheActiveOne: with three shells and the last active, a background
@@ -514,7 +520,7 @@ func TestABackgroundShellLeavingKeepsTheActiveOne(t *testing.T) {
 		return out
 	}
 	onLoop(r, func() bool { r.h.terminals.newShell(); r.h.terminals.newShell(); return true })
-	r.s.WaitFor(t, "three shells", func(string) bool { return r.shellsRunning() == 3 })
+	waitShellStarted(t, r, 3)
 	ids := live()
 	a, b, c := ids[0], ids[1], ids[2]
 	if active() != c {
@@ -556,6 +562,7 @@ func TestTheTerminalsThemeIsTheirsAlone(t *testing.T) {
 	_, r := runShellTUI(t, map[string]string{"tui.terminal.theme": "light"}) // on the dark page
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	waitShellStarted(t, r, 1)
 	// a pale grey: unreadable on light's background, plain on dark's; typed split, so only the
 	// output says PALE
 	r.keys(t, decltest.Type("printf '\\033[38;2;240;240;240mPA''LE\\033[0m\\n'\r")...)
@@ -628,7 +635,7 @@ func TestHideClosesThePanelAndKeepsTheShells(t *testing.T) {
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
 	onLoop(r, func() bool { r.h.terminals.newShell(); return true })
-	r.s.WaitFor(t, "two shells", func(string) bool { return r.shellsRunning() == 2 })
+	waitShellStarted(t, r, 2)
 	active := func() (id terminal.TerminalTabID) {
 		return onLoop(r, func() terminal.TerminalTabID {
 			c, _ := r.h.p.Find("terminalView")
@@ -709,6 +716,7 @@ func TestMaximizeFromThePanelMenus(t *testing.T) {
 	_, r := runShellTUI(t, nil)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	waitShellStarted(t, r, 1)
 	row0, _ := frameAt(r.s.String())
 	maximize := func(want string) {
 		t.Helper()
@@ -840,6 +848,7 @@ func TestF11WorksWithTheKeyboardInTheShell(t *testing.T) {
 	_, r := runShellTUI(t, nil)
 	r.leader(t, '`')
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	waitShellStarted(t, r, 1)
 	maximized := func() bool { return onLoop(r, func() bool { return r.h.panelMax["terminal"] }) }
 	f11 := tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyF11}
 	r.keys(t, f11)
