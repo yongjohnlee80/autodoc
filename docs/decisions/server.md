@@ -229,7 +229,8 @@ In the code: `enterprise/api/api.go`, `enterprise/config/config.go`
 ## Operator health, status and metrics
 
 - `GET /v1/health` is public and minimal: ok, degraded or unavailable, with no tenant names or
-  version, 200 or 503.
+  version, 200 or 503. Its database ping runs on the leases' pool, never the searches': on theirs,
+  a flood of searches made a busy server read unavailable, which a supervisor would restart.
 - `GET /v1/status` answers only an operator's token (`[[http.operator]]`), for that operator's
   tenants: cursor and lag, passes and refreshes, quarantine, documents, models, lock and provider
   state. A search token is refused there, and one token in both roles is refused at load.
