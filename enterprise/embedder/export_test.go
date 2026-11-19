@@ -12,3 +12,7 @@ func SetSleep(fn func(ctx context.Context, d time.Duration) bool) (restore func(
 	sleep = fn
 	return func() { sleep = was }
 }
+
+// CeilingAfter is how many calls in time the pace waits before it steps back up to the pace that
+// last ran out of time.
+const CeilingAfter = ceilingAfter

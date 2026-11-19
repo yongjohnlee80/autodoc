@@ -37,8 +37,16 @@ type provider struct {
 	// slowAbove, when set, is the most texts a call answers in time: a call of more waits for
 	// its own deadline, embedding nothing, as a provider too slow for its size does; -1: every call
 	slowAbove int
-	timedOut  int // the calls that waited for their deadline
-	largest   int // the most texts a call that answered carried
+	timedOut  int   // the calls that waited for their deadline
+	largest   int   // the most texts a call that answered carried
+	sizes     []int // every call's number of texts, in the order the calls arrived
+}
+
+// callSizes are every call's number of texts, in the order the calls arrived.
+func (p *provider) callSizes() []int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]int(nil), p.sizes...)
 }
 
 // setSlowAbove sets slowAbove while calls arrive.
@@ -74,6 +82,7 @@ func (p *provider) Model() embed.Model {
 func (p *provider) Embed(ctx context.Context, texts []string) ([][]float32, error) {
 	p.mu.Lock()
 	p.calls++
+	p.sizes = append(p.sizes, len(texts))
 	p.inFlight++
 	p.most = max(p.most, p.inFlight)
 	if p.slowAbove != 0 && len(texts) > p.slowAbove {
