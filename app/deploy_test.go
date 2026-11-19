@@ -73,6 +73,19 @@ func TestTheDeploymentExamplesHoldTrue(t *testing.T) {
 			}
 		}
 	}
+	// the unit runs as a user the files' group lets read them: a dynamic user is in no group, and
+	// the docs install the files root's, 0640
+	if !regexp.MustCompile(`(?m)^User=autodoc$`).Match(unit) || regexp.MustCompile(`(?m)^DynamicUser=yes`).Match(unit) {
+		t.Error("the unit doesn't run as the autodoc user its files' group names")
+	}
+	ops, err := os.ReadFile("../docs/enterprise/operations.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`(?m)^install -m 0640 -g autodoc server\.toml /etc/autodoc/`).Match(ops) ||
+		!regexp.MustCompile(`(?m)^install -d -m 0750 -g autodoc /etc/autodoc$`).Match(ops) {
+		t.Error("operations.md doesn't install /etc/autodoc and server.toml for the autodoc group the unit runs in")
+	}
 	if stopTimeout <= shutdownGrace {
 		t.Errorf("the unit's TimeoutStopSec %v does not outlast the API's drain %v", stopTimeout, shutdownGrace)
 	}
