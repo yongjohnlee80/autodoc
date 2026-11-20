@@ -368,9 +368,12 @@ func readFile(files *local.FS, p string, limit int64) ([]byte, error) {
 }
 
 // tableFit is how much of a table a page shows: its rows (0: maxTableRows), and the width, in
-// characters, its columns are fit in (0: any width, within maxTableColumns).
+// characters, its columns are fit in (0: any width, within maxTableColumns). marked puts
+// class="table-cut" on the last row of a table that is cut (Fragment's), so a caller finds it; a
+// page's table is as it always was.
 type tableFit struct {
 	rows, width int
+	marked      bool
 }
 
 // csvTable is a CSV file as a table, its first row the header, as fit allows: the columns that fit
@@ -399,7 +402,11 @@ func csvTable(data []byte, fit tableFit) (string, bool) {
 			cells("td", row)
 		}
 		if t.hidden != "" {
-			b.WriteString(`<tr><td colspan="` + strconv.Itoa(len(t.header)) + `">` + t.hidden + "</td></tr>\n")
+			row := `<tr>`
+			if fit.marked {
+				row = `<tr class="table-cut">`
+			}
+			b.WriteString(row + `<td colspan="` + strconv.Itoa(len(t.header)) + `">` + t.hidden + "</td></tr>\n")
 		}
 		b.WriteString("</tbody>\n")
 	}

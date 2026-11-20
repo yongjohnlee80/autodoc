@@ -166,6 +166,9 @@ type Options struct {
 	// page's policy lets it load images and media from its own site. nil: a page on its own, every
 	// image inlined and every video its alt text.
 	Media func(file string) (url string, ok bool)
+
+	// markCuts is Fragment's: a table that is cut says so with a class (tableFit.marked).
+	markCuts bool
 }
 
 // Chrome is a site page's frame, drawn by the page in its palette: the site's title, the
@@ -207,7 +210,7 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 		if !ok {
 			return nil, fmt.Errorf("export: no theme %q (the themes are %s)", theme, strings.Join(Themes(), ", "))
 		}
-		embedder := newEmbedder(options.Document, tableFit{rows: options.TableRows, width: options.TableWidth})
+		embedder := newEmbedder(options.Document, tableFit{rows: options.TableRows, width: options.TableWidth, marked: options.markCuts})
 		if embedder != nil {
 			embedder.media = options.Media
 			defer embedder.close()
@@ -338,7 +341,7 @@ func renderBody(document *markdown.Document, source []byte, theme string, option
 		}
 		return `<pre class="vega-lite"` + m[1] + `>` + m[2] + `</pre>`
 	})
-	fit := tableFit{rows: options.TableRows, width: options.TableWidth}
+	fit := tableFit{rows: options.TableRows, width: options.TableWidth, marked: options.markCuts}
 	rendered = csvBlock.ReplaceAllStringFunc(rendered, func(block string) string {
 		m := csvBlock.FindStringSubmatch(block)
 		table, ok := csvTable([]byte(stdhtml.UnescapeString(m[2])), fit)

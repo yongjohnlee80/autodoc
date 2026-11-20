@@ -56,7 +56,9 @@ type FragmentOptions struct {
 // The bounds a render can need, and whose they are:
 //   - diagrams and charts in a document: FragmentOptions.MaxDiagrams, which only the render sees;
 //   - a table (an embedded .csv or a csv fence): fixed, 1000 rows, 64 columns and 20,000 cells
-//     shown of a file of at most 1 MiB, the rest counted in a last row (maxTableRows, embed.go);
+//     shown of a file of at most 1 MiB (maxTableRows, embed.go). A table that is cut says so in a
+//     last row, <tr class="table-cut">, with how many rows and columns are not shown; a file over
+//     1 MiB is drawn as its alt text;
 //   - nested embeds: none can nest. An embed draws a diagram, a chart, a table or an image, never
 //     a document's Markdown, so its depth is one;
 //   - a chart spec's size: the caller's, in its Chart, which is handed every spec;
@@ -127,7 +129,7 @@ func Fragment(source []byte, opts FragmentOptions) ([]byte, FragmentInfo, error)
 	var embedder *embedder
 	if opts.Embeds != "" {
 		var err error
-		if embedder, err = newEmbedderIn(opts.Embeds, tableFit{}); err != nil {
+		if embedder, err = newEmbedderIn(opts.Embeds, tableFit{marked: true}); err != nil {
 			return nil, FragmentInfo{}, fmt.Errorf("export: the embeds' directory: %w", err)
 		}
 		defer embedder.close()
@@ -144,7 +146,7 @@ func Fragment(source []byte, opts FragmentOptions) ([]byte, FragmentInfo, error)
 	if info.Title == "" && len(info.Headings) > 0 {
 		info.Title = info.Headings[0].Text
 	}
-	b, err := renderBody(document, source, opts.Theme, Options{Chart: opts.Chart}, embedder)
+	b, err := renderBody(document, source, opts.Theme, Options{Chart: opts.Chart, markCuts: true}, embedder)
 	if err != nil {
 		return nil, FragmentInfo{}, err
 	}

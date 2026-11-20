@@ -3,6 +3,7 @@ package export_test
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"net/url"
 	"os"
 	"os/exec"
@@ -368,6 +369,41 @@ func TestMaxDiagramsBoundsWhatADocumentAsksToDraw(t *testing.T) {
 	}
 	if _, _, err := export.Fragment([]byte(source.String()), opts(0)); err != nil {
 		t.Errorf("no limit: %v", err)
+	}
+}
+
+// A table cut at its bound says so where a caller can find it: in a fragment, the last row of an
+// embedded table and of a csv fence over 1000 rows is <tr class="table-cut"> with how many rows are
+// not shown, and the class is among the fragment's classes. A page RenderWith writes keeps its
+// table as it was, with no class. The mutant, named here: the fragment's tables not marked.
+func TestATableCutInAFragmentSaysSoWithAClass(t *testing.T) {
+	_, embeds := fragmentTree(t)
+	var rows strings.Builder
+	rows.WriteString("n\n")
+	for i := range 1002 {
+		fmt.Fprintf(&rows, "%d\n", i)
+	}
+	if err := os.WriteFile(filepath.Join(embeds, "rows.csv"), []byte(rows.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	source := "![rows](rows.csv)\n\n```csv\n" + rows.String() + "```\n\n![deep](sub/deep.csv)\n"
+	body, info := fragment(t, source, export.FragmentOptions{Embeds: embeds})
+	cut := `<tr class="table-cut"><td colspan="1">… 2 more rows</td></tr>`
+	if n := strings.Count(body, cut); n != 2 {
+		t.Errorf("%d tables marked as cut, want 2 (the embed and the fence):\n%s", n, body)
+	}
+	if n := strings.Count(body, "table-cut"); n != 2 {
+		t.Errorf("table-cut appears %d times, want 2: the table that is whole is not marked", n)
+	}
+	if !slices.Contains(info.Classes, "table-cut") {
+		t.Errorf("the classes %v lack table-cut", info.Classes)
+	}
+	page, err := export.RenderWith([]byte(source), export.HTML, "light", export.Options{Document: filepath.Join(embeds, "doc.md")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(page), "table-cut") || strings.Count(string(page), `<tr><td colspan="1">… 2 more rows</td></tr>`) != 2 {
+		t.Errorf("a page's cut tables changed:\n%s", page)
 	}
 }
 
