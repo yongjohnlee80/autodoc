@@ -246,9 +246,13 @@ func runSetupTUI(t *testing.T, dir string, profiles []agents.AgentProfile, def s
 // runSetupTUIIn is runSetupTUI over the daemon's workspaces files, kb's entered first.
 func runSetupTUIIn(t *testing.T, dir string, profiles []agents.AgentProfile, def string, more map[string]string, opt Options, files map[string][]string) (d *daemon, r *running, calls string) {
 	t.Helper()
-	home := t.TempDir()
+	// The agent's home and the stand-in build's folder (a fresh copy of the test binary) are
+	// shellTempDir's, as the agent's own folder is: on a Windows runner something can still hold a
+	// file in one of them as the cell ends, and t.TempDir's root then failed its removal ("The
+	// directory is not empty") though every assertion had passed.
+	home := shellTempDir(t, "autodoc-agent-home-")
 	opt.seams = seamsWithEnv(t, opt.seams, "HOME="+home, "USERPROFILE="+home, "PATH="+programsPath())
-	bins := filepath.Join(t.TempDir(), "a build's dir") // a path the shell must have quoted
+	bins := filepath.Join(shellTempDir(t, "autodoc-agent-build-"), "a build's dir") // a path the shell must have quoted
 	if err := os.Mkdir(bins, 0o700); err != nil {
 		t.Fatal(err)
 	}
