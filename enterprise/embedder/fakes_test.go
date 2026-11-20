@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"sort"
 	"sync"
@@ -210,7 +211,9 @@ type store struct {
 	afters  []pgstore.PendingKey // every Pending's After, in order
 	unready []bool               // every Pending's Unready, in order
 	edits   int                  // the Pending calls with Edits, kept apart from the three above
-	nextID  int64
+	// looked is, for every Pending with Edits, how many edited documents it looked through
+	looked []int
+	nextID int64
 	// markErr is what MarkReady answers for a path, once, before it marks it: a document written
 	// again (pgstore.ErrWriteRace) or deleted (dao.ErrNoRows) while the worker decided
 	markErr map[string]error
@@ -310,13 +313,15 @@ func (s *store) ReclaimModels(context.Context) (int, error) {
 
 // Pending is pgstore's: the texts after q.After in (doc id, ord) order with no vector under the
 // model, distinct, not skipped, of unready documents when asked, up to the limit; next is the last
-// text's key when the limit stops it, and the zero key at the end.
+// text's key when the limit stops it, the last document's when q.MaxDocs of them were looked
+// through first, and the zero key at the end.
 func (s *store) Pending(_ context.Context, q pgstore.PendingQuery) ([]pgstore.Text, pgstore.PendingKey, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	looked, last := 0, int64(0)
 	if q.Edits {
 		s.edits++
-		q.After = pgstore.PendingKey{} // read from the start, as pgstore does
+		defer func() { s.looked = append(s.looked, looked) }()
 	} else {
 		s.pending = append(s.pending, q.Skip)
 		s.afters = append(s.afters, q.After)
@@ -330,9 +335,13 @@ func (s *store) Pending(_ context.Context, q pgstore.PendingQuery) ([]pgstore.Te
 	seen := map[[32]byte]bool{}
 	var out []pgstore.Text
 	for _, d := range docs {
-		if (q.Unready || q.Edits) && d.ready || q.Edits && d.gen <= 1 {
+		if (q.Unready || q.Edits) && d.ready || q.Edits && d.gen <= 1 || d.id < q.After.Doc {
 			continue
 		}
+		if q.MaxDocs > 0 && looked == q.MaxDocs {
+			return out, pgstore.PendingKey{Doc: last, Ord: math.MaxInt32}, nil
+		}
+		looked, last = looked+1, d.id
 		for ord, t := range d.texts {
 			k := pgstore.PendingKey{Doc: d.id, Ord: ord}
 			if k.Doc < q.After.Doc || (k.Doc == q.After.Doc && k.Ord <= q.After.Ord) {
