@@ -99,6 +99,7 @@ func TestMain(m *testing.M) {
 	defaultSeams.registry = registrySource{url: "http://127.0.0.1:1/index.json", cacheDir: func() (string, error) { return cache, nil }}
 	defaultSeams.offerAgentSetup = false  // the setup cells turn it on (agentsetup_test.go)
 	defaultSeams.offerVimQuestion = false // the Vim question's cells turn it on (vimquestion_test.go)
+	watchConsoleEvents()                  // on Windows, a console event that ends the run says so
 	code := m.Run()
 	_ = os.RemoveAll(cache)
 	os.Exit(code)
