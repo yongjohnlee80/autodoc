@@ -113,7 +113,7 @@ func TestAFragmentIsTheBodyAlone(t *testing.T) {
 
 // Raw HTML in the source, as a block and inline (a script, a style, an iframe, an event handler, a
 // javascript: link, a form), is text in the fragment: no such element and no on* attribute reaches
-// it. FragmentOptions has no way to let HTML through: its fields are the five this cell names, so
+// it. FragmentOptions has no way to let HTML through: its fields are the six this cell names, so
 // an option added later is looked at here first. The mutant, named here: the renderer's unsafe
 // mode (raw HTML written as it is).
 func TestAFragmentKeepsRawHTMLEscaped(t *testing.T) {
@@ -138,7 +138,7 @@ func TestAFragmentKeepsRawHTMLEscaped(t *testing.T) {
 	for typ, i := reflect.TypeFor[export.FragmentOptions](), 0; i < typ.NumField(); i++ {
 		fields = append(fields, typ.Field(i).Name)
 	}
-	if want := []string{"Theme", "Chart", "Embeds", "Link", "MaxDiagrams"}; !slices.Equal(fields, want) {
+	if want := []string{"Theme", "Chart", "Embeds", "Link", "MaxDiagrams", "MaxDiagramSource"}; !slices.Equal(fields, want) {
 		t.Errorf("FragmentOptions has %v, want %v: an option that lets raw HTML through is not to be one", fields, want)
 	}
 }
@@ -368,6 +368,47 @@ func TestMaxDiagramsBoundsWhatADocumentAsksToDraw(t *testing.T) {
 		t.Errorf("%d charts drawn by a render that was refused", charts)
 	}
 	if _, _, err := export.Fragment([]byte(source.String()), opts(0)); err != nil {
+		t.Errorf("no limit: %v", err)
+	}
+}
+
+// MaxDiagramSource bounds one Mermaid diagram's source: a mermaid fence's text or a .mmd embed's
+// file at the figure is drawn; one byte past it the render is refused with ErrDiagramTooLarge,
+// naming the diagram, its size and the bound, before any chart is drawn. A Vega-Lite spec is not
+// bound by it (the caller's Chart is), and 0 is no limit. The mutants, named here: the bound
+// checked with >= (the figure refused), and an embed's file not measured.
+func TestMaxDiagramSourceBoundsAMermaidDiagram(t *testing.T) {
+	_, embeds := fragmentTree(t)
+	at, past := strings.Repeat("a", 63)+"\n", strings.Repeat("a", 64)+"\n" // 64 and 65 bytes
+	for name, text := range map[string]string{"at.mmd": at, "past.mmd": past} {
+		if err := os.WriteFile(filepath.Join(embeds, name), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	spec := "```vega-lite\n{\"mark\": \"bar\", \"description\": \"" + strings.Repeat("b", 200) + "\"}\n```\n\n"
+	charts := 0
+	render := func(source string, most int) error {
+		_, _, err := export.Fragment([]byte(spec+source), export.FragmentOptions{Theme: "light", Embeds: embeds, MaxDiagramSource: most,
+			Chart: func([]byte, string) (string, error) { charts++; return "<svg></svg>", nil }})
+		return err
+	}
+	if err := render("```mermaid\n"+at+"```\n\n![at](at.mmd)\n", 64); err != nil {
+		t.Errorf("a fence and an embed of 64 bytes, at most 64: %v", err)
+	}
+	charts = 0
+	for _, c := range []struct{ source, says string }{
+		{"```mermaid\n" + past + "```\n", "a mermaid fence holds 65 bytes, at most 64"},
+		{"![past](past.mmd)\n", `the embed "past.mmd" holds 65 bytes, at most 64`},
+	} {
+		err := render(c.source, 64)
+		if !errors.Is(err, export.ErrDiagramTooLarge) || !strings.Contains(err.Error(), c.says) {
+			t.Errorf("%q, at most 64: %v, want ErrDiagramTooLarge saying %q", c.source, err, c.says)
+		}
+	}
+	if charts != 0 {
+		t.Errorf("%d charts drawn by renders that were refused", charts)
+	}
+	if err := render("```mermaid\n"+past+"```\n\n![past](past.mmd)\n", 0); err != nil {
 		t.Errorf("no limit: %v", err)
 	}
 }

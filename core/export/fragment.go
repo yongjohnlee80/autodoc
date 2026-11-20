@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/yongjohnlee80/golib/parse/html"
@@ -51,10 +52,17 @@ type FragmentOptions struct {
 	// fences, and its .mmd and .chart.json embeds drawn as blocks (Embeds set). Past it the render
 	// is refused with ErrTooManyDiagrams, before any is drawn. 0: no limit, as RenderWith has none.
 	MaxDiagrams int
+	// MaxDiagramSource is how many bytes one Mermaid diagram's source may hold: a mermaid fence's
+	// text, or a .mmd embed's file. Past it the render is refused with ErrDiagramTooLarge, before
+	// any is drawn. 0: no limit beyond an embed's 1 MiB. A Vega-Lite spec is the caller's Chart's to
+	// bound.
+	MaxDiagramSource int
 }
 
 // The bounds a render can need, and whose they are:
 //   - diagrams and charts in a document: FragmentOptions.MaxDiagrams, which only the render sees;
+//   - a Mermaid diagram's source: FragmentOptions.MaxDiagramSource, which only the render sees
+//     before the source is escaped into the body;
 //   - a table (an embedded .csv or a csv fence): fixed, 1000 rows, 64 columns and 20,000 cells
 //     shown of a file of at most 1 MiB (maxTableRows, embed.go). A table that is cut says so in a
 //     last row, <tr class="table-cut">, with how many rows and columns are not shown; a file over
@@ -67,6 +75,9 @@ type FragmentOptions struct {
 // ErrTooManyDiagrams is a document that asks for more diagrams and charts than
 // FragmentOptions.MaxDiagrams.
 var ErrTooManyDiagrams = errors.New("export: too many diagrams and charts")
+
+// ErrDiagramTooLarge is a Mermaid diagram whose source is over FragmentOptions.MaxDiagramSource.
+var ErrDiagramTooLarge = errors.New("export: a diagram's source is too large")
 
 // FragmentInfo is what a page around a fragment needs to know of it.
 type FragmentInfo struct {
@@ -136,8 +147,16 @@ func Fragment(source []byte, opts FragmentOptions) ([]byte, FragmentInfo, error)
 		embedder.media = embedder.relative
 	}
 	document := kind.ParseMarkdown(source)
-	if n := diagramsAsked(document, embedder != nil); opts.MaxDiagrams > 0 && n > opts.MaxDiagrams {
+	n, mermaids := diagramsAsked(document, embedder != nil)
+	if opts.MaxDiagrams > 0 && n > opts.MaxDiagrams {
 		return nil, FragmentInfo{}, fmt.Errorf("%w: the document asks for %d, at most %d", ErrTooManyDiagrams, n, opts.MaxDiagrams)
+	}
+	if opts.MaxDiagramSource > 0 {
+		for _, m := range mermaids {
+			if size, ok := m.size(embedder); ok && size > opts.MaxDiagramSource {
+				return nil, FragmentInfo{}, fmt.Errorf("%w: %s holds %d bytes, at most %d", ErrDiagramTooLarge, m.where(), size, opts.MaxDiagramSource)
+			}
+		}
 	}
 	info := FragmentInfo{Title: frontmatterTitle(document), MermaidTheme: mermaidTheme(colors)}
 	for _, h := range outline.Read(source, kind.Markdown, "").Headings() {
@@ -160,9 +179,9 @@ func Fragment(source []byte, opts FragmentOptions) ([]byte, FragmentInfo, error)
 
 // diagramsAsked counts what a render of document would draw as a diagram or a chart: a mermaid or
 // vega-lite fence (its info's first word, as the renderer names its language), and, when embeds
-// are read, a .mmd or .chart.json embed alone in its paragraph.
-func diagramsAsked(document *markdown.Document, embeds bool) int {
-	n := 0
+// are read, a .mmd or .chart.json embed alone in its paragraph. mermaids are the Mermaid diagrams
+// among them, in document order.
+func diagramsAsked(document *markdown.Document, embeds bool) (n int, mermaids []mermaidAsked) {
 	forEach(document.Root, func(node *markdown.Node) {
 		switch node.Kind {
 		case markdown.KindCodeBlock:
@@ -173,17 +192,52 @@ func diagramsAsked(document *markdown.Document, embeds bool) int {
 			if lang == "mermaid" || lang == "vega-lite" {
 				n++
 			}
+			if lang == "mermaid" {
+				mermaids = append(mermaids, mermaidAsked{fence: node.Literal})
+			}
 		case markdown.KindImage:
 			parent := node.Parent
 			if !embeds || parent == nil || parent.Kind != markdown.KindParagraph || parent.FirstChild != node || parent.LastChild != node {
 				return
 			}
-			if p, ok := embedPath(string(node.Dest())); ok && (strings.ToLower(filepath.Ext(p)) == ".mmd" || isChart(p)) {
+			p, ok := embedPath(string(node.Dest()))
+			if !ok {
+				return
+			}
+			if mmd := strings.ToLower(filepath.Ext(p)) == ".mmd"; mmd || isChart(p) {
 				n++
+				if mmd {
+					mermaids = append(mermaids, mermaidAsked{embed: p})
+				}
 			}
 		}
 	})
-	return n
+	return n, mermaids
+}
+
+// mermaidAsked is a Mermaid diagram a document asks for: a fence's text, or an embed's path.
+type mermaidAsked struct {
+	fence []byte
+	embed string
+}
+
+// size is the diagram's source in bytes: the fence's, or the embed's file as the render would
+// read it. ok is false for an embed the render draws as its alt text (missing, refused, or over
+// 1 MiB), which draws no diagram.
+func (m mermaidAsked) size(e *embedder) (int, bool) {
+	if m.embed == "" {
+		return len(m.fence), true
+	}
+	data, ok := e.read(m.embed, maxEmbedText)
+	return len(data), ok
+}
+
+// where names the diagram in an error: the fence, or the embed's path.
+func (m mermaidAsked) where() string {
+	if m.embed == "" {
+		return "a mermaid fence"
+	}
+	return "the embed " + strconv.Quote(m.embed)
 }
 
 // relative is the URL a fragment links a file in its embeds' directory at: its path there, each
