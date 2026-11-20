@@ -39,6 +39,12 @@ const (
 	pageSize = 500
 )
 
+// editsDocs is the most edited documents a round's read of the edits looks through (a variable, so
+// a test can take smaller steps). Edited documents whose texts are all set aside yield nothing and
+// stay edited: the read passes them editsDocs at a time from its own cursor, never all of them in
+// every round.
+var editsDocs = 128
+
 // Store is a tenant's index as the worker reads and writes it: a *pgstore.Store.
 type Store interface {
 	Models(ctx context.Context) (active, target string, err error)
@@ -154,6 +160,9 @@ type tenant struct {
 	// fill reads the tenant once, not once a round. The zero key is the start. Run's goroutine
 	// alone uses it.
 	cursor pgstore.PendingKey
+	// edits is where the read of the edited documents resumes: the start, unless the last round's
+	// stopped at editsDocs documents. Run's goroutine alone uses it.
+	edits pgstore.PendingKey
 
 	mu sync.Mutex // guards refused: a round's batches set texts aside concurrently
 	// refused are the texts the provider rejected, by hash, and when each may be tried again.
@@ -324,7 +333,7 @@ func (w *Worker) round(ctx context.Context, t *tenant) (bool, error) {
 	skip, expired := t.skip(w.o.clock.Now())
 	if expired {
 		// the set-aside texts are behind the cursor: the scan begins again
-		t.waiting, t.cursor = map[string]int64{}, pgstore.PendingKey{}
+		t.waiting, t.cursor, t.edits = map[string]int64{}, pgstore.PendingKey{}, pgstore.PendingKey{}
 	}
 	if !t.switching && !expired {
 		// a tenant whose documents are all ready has nothing pending: Pending is not asked
@@ -335,15 +344,17 @@ func (w *Worker) round(ctx context.Context, t *tenant) (bool, error) {
 	}
 	// Under the active model only unready documents can hold a pending text, so the scan reads
 	// those alone; a switch's target is missing from ready documents too.
-	from := t.cursor
+	from, editsFrom := t.cursor, t.edits
 	batch, inFlight := w.pace.now()
 	limit := batch * inFlight * roundBatches
 	// the edited documents' texts first, up to a batch: an edit behind the cursor would otherwise
-	// wait for the scan to reach the end of a backlog and start again
+	// wait for the scan to reach the end of a backlog and start again. The read resumes where the
+	// last stopped, and looks through at most editsDocs documents
 	var edits []pgstore.Text
 	if !t.switching {
 		var err error
-		if edits, _, err = t.Store.Pending(ctx, pgstore.PendingQuery{Model: w.fp, Edits: true, Skip: skip, Limit: batch}); err != nil {
+		if edits, t.edits, err = t.Store.Pending(ctx, pgstore.PendingQuery{Model: w.fp, Edits: true, After: t.edits,
+			MaxDocs: editsDocs, Skip: skip, Limit: batch}); err != nil {
 			return false, err
 		}
 		if len(edits) > 0 {
@@ -381,7 +392,7 @@ func (w *Worker) round(ctx context.Context, t *tenant) (bool, error) {
 	if err != nil {
 		// a batch that failed is read again: its texts have no vector, and the next round
 		// resumes where this one began
-		t.cursor = from
+		t.cursor, t.edits = from, editsFrom
 	}
 	if steppedDownOnly(err) {
 		// calls ran out of their time, and the pace stepped down: the next round sends smaller
@@ -447,7 +458,7 @@ func (w *Worker) prepare(ctx context.Context, t *tenant) error {
 	if err := w.reclaim(ctx, t); err != nil {
 		return err
 	}
-	t.waiting, t.cursor = map[string]int64{}, pgstore.PendingKey{}
+	t.waiting, t.cursor, t.edits = map[string]int64{}, pgstore.PendingKey{}, pgstore.PendingKey{}
 	t.prepared = true
 	w.publish()
 	return nil
@@ -479,7 +490,7 @@ func (w *Worker) flip(ctx context.Context, t *tenant) error {
 	if err := t.Store.SetModels(ctx, w.fp, ""); err != nil {
 		return err
 	}
-	t.switching, t.cursor = false, pgstore.PendingKey{}
+	t.switching, t.cursor, t.edits = false, pgstore.PendingKey{}, pgstore.PendingKey{}
 	w.publish()
 	logger.Notice(w.o.log, fmt.Sprintf("tenant %s: %s is active: every text is embedded", t.Name, w.fp))
 	return w.reclaim(ctx, t)
