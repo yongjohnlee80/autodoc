@@ -1114,7 +1114,7 @@ func TestASaveNeverDropsANewerEdit(t *testing.T) {
 		t.Fatalf("after the save: %s, dirty %v, text %q", n.path, n.dirty, r.editorText())
 	}
 	r.keys(t, key('s')) // save the newer edit too; then the close goes ahead
-	r.s.WaitFor(t, "a.md closed", func(string) bool {
+	r.waitSave(t, "a.md closed", func() bool {
 		return onLoop(r, func() bool { return r.h.bufferOf(feature.FileRef{WS: "kb", Path: "a.md"}) == nil })
 	})
 	if got := d.read(t, "kb", "a.md"); !strings.Contains(got, "Y") || !strings.Contains(got, "X") {
