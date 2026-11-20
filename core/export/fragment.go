@@ -55,7 +55,8 @@ type FragmentOptions struct {
 	// MaxDiagramSource is how many bytes one Mermaid diagram's source may hold: a mermaid fence's
 	// text, or a .mmd embed's file. Past it the render is refused with ErrDiagramTooLarge, before
 	// any is drawn. 0: no limit beyond an embed's 1 MiB. A Vega-Lite spec is the caller's Chart's to
-	// bound.
+	// bound. An embed's file is read once for the check and again by the render, so one that grows
+	// between the two is drawn over the bound: the Embeds directory is the caller's to keep still.
 	MaxDiagramSource int
 }
 
