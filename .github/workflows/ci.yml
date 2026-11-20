@@ -254,8 +254,44 @@ jobs:
           # the whole module's vet, not only the ported packages': it compiles every package's tests
           # for Windows, so a neutral test can't come to lean on a helper in a Unix-tagged file
           go vet ./...
-          mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep .)
-          go test -count=1 -timeout 20m "${pkgs[@]}"
+          # ./tui runs beside the others with -json into a file, kept as an artifact when the job
+          # fails: a test binary that ends with no word (one ended at 28 s on 2026-11-20, FAIL and
+          # nothing else) is then named by the cells it had started and not ended. The step's exit
+          # is go test's own, for both runs: never a pipe's, a tee's or the report's.
+          mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep . | grep -vx './tui')
+          tuijson="$RUNNER_TEMP/tui.json" tuierr="$RUNNER_TEMP/tui.err"
+          go test -count=1 -timeout 20m -json ./tui > "$tuijson" 2> "$tuierr" &
+          tuipid=$!
+          rest=0
+          go test -count=1 -timeout 20m "${pkgs[@]}" || rest=$?
+          tui=0
+          wait "$tuipid" || tui=$?
+          echo "== ./tui, its -json in $tuijson: go test exited $tui"
+          jq -r 'select(.Test == null and (.Action == "pass" or .Action == "fail" or .Action == "skip")) | "\(.Action)\t\(.Package)\t\(.Elapsed)s"' "$tuijson" || true
+          if [ "$tui" -ne 0 ]; then
+            echo "== each failed cell's output"
+            jq -r 'select(.Action == "fail" and .Test != null) | .Test' "$tuijson" | sort -u > "$RUNNER_TEMP/tui.failed" || true
+            jq -j --rawfile failed "$RUNNER_TEMP/tui.failed" '($failed | split("\n") | map(select(length > 0))) as $f
+              | select(.Action == "output" and .Test != null and (.Test as $t | $f | index($t)) != null) | .Output' "$tuijson" | tr -d '\r' || true
+            echo "== cells running when the binary ended: started or resumed, and not paused or ended"
+            jq -r 'select(.Test != null and (.Action | test("^(run|cont|pause|pass|fail|skip)$"))) | [.Action, .Test] | @tsv' "$tuijson" | tr -d '\r' \
+              | awk -F '\t' '$1 == "run" || $1 == "cont" { open[$2] = 1; next } { delete open[$2] } END { for (t in open) print t }' | sort || true
+            echo "== the package's own output (no cell's), its last 400 lines"
+            jq -j 'select(.Action == "output" and .Test == null) | .Output' "$tuijson" | tr -d '\r' | tail -n 400 || true
+            echo "== go test's standard error, its last 80 lines"
+            tail -n 80 "$tuierr" || true
+          fi
+          [ "$rest" -eq 0 ] && [ "$tui" -eq 0 ]
+      - name: keep ./tui's -json when the job fails
+        if: ${{ failure() && !inputs.discover }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-tui-json-attempt-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/tui.json
+            ${{ runner.temp }}/tui.err
+          retention-days: 14
+          if-no-files-found: ignore
       - name: discover which packages pass on Windows
         if: ${{ inputs.discover }}
         continue-on-error: true
