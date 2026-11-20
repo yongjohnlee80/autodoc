@@ -184,7 +184,7 @@ func TestFrontmatterDiagnosticsFollowTheText(t *testing.T) {
 		r.h.edited()
 		r.h.save()
 	})
-	r.s.WaitFor(t, "saved despite the diagnostic", func(string) bool {
+	r.waitSave(t, "saved despite the diagnostic", func() bool {
 		b, _ := os.ReadFile(filepath.Join(root, "memo.md"))
 		return string(b) == "---\ntype: memo\n---\nbody\n" && !r.file().dirty
 	})

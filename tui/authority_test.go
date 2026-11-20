@@ -372,7 +372,7 @@ func TestAQuestionsAnswerContinuesTheScriptsStep(t *testing.T) {
 	g.waitFile(t, "a.md")
 	g.d.write(t, "kb", "a.md", "changed on disk\n") // the shown version is stale now
 	g.mustRun(t, "saveit")
-	g.s.WaitFor(t, "the conflict", func(string) bool {
+	g.waitSave(t, "the conflict", func() bool {
 		return onLoop(g.running, func() bool { return g.h.file.saveAuth.gated() })
 	})
 	onLoop(g.running, func() bool { g.h.ws = "kb2"; g.h.overwrite(); return true })
