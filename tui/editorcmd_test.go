@@ -36,7 +36,7 @@ func TestTheCommandLineSavesAndQuits(t *testing.T) {
 	r.command(t, "wq")
 	select {
 	case <-r.s.Quit():
-	case <-time.After(3 * time.Second):
+	case <-time.After(daemonWait): // the save is the daemon's work (waitSave)
 		t.Fatal(":wq did not quit")
 	}
 	if got := d.read(t, "kb", "a.md"); got != "YXaaa\n" {
