@@ -3,9 +3,11 @@
 package tui
 
 import (
+	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -72,6 +74,43 @@ func liveProcessesNaming(s string) []string {
 		}
 	}
 	return out
+}
+
+// serversNaming are the live processes naming s whose parent doesn't: the servers, not their
+// children. The stand-in server is a shell, so a child it forks names s too until it execs (a fork
+// copies the command line), and the touch that makes its socket names s until it ends; under load
+// either is seen beside the server, which made a cell count two servers where one ran.
+func serversNaming(s string) []string {
+	named := liveProcessesNaming(s)
+	var out []string
+	for _, p := range named {
+		if !slices.Contains(named, parentOf(p)) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// parentOf is pid's parent's pid, "" when pid is gone: /proc's stat where there is a /proc, ps's
+// answer where there is none (macOS).
+func parentOf(pid string) string {
+	if b, err := os.ReadFile("/proc/" + pid + "/stat"); err == nil {
+		// the fields after the command's name, which may hold spaces and parentheses: state, ppid
+		if i := bytes.LastIndexByte(b, ')'); i >= 0 {
+			if f := strings.Fields(string(b[i+1:])); len(f) >= 2 {
+				return f[1]
+			}
+		}
+		return ""
+	}
+	if _, err := os.Stat("/proc/self/stat"); err == nil {
+		return "" // gone
+	}
+	b, err := exec.Command("ps", "-o", "ppid=", "-p", pid).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
 }
 
 // processesNaming are the live processes whose command line names s (/proc, as stopStaleServer reads).
