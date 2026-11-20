@@ -28,7 +28,7 @@ func TestTheCommandLineSavesAndQuits(t *testing.T) {
 	r.waitFile(t, "a.md")
 	r.typeInEditor(t, "X")
 	r.command(t, "w")
-	r.s.WaitForText(t, "saved a.md")
+	r.waitSaveAnswer(t, "saved a.md")
 	if got := d.read(t, "kb", "a.md"); got != "Xaaa\n" {
 		t.Fatalf("on disk after :w: %q", got)
 	}
@@ -118,7 +118,7 @@ func TestCtrlSemicolonOpensTheCommandLineInTheTextMode(t *testing.T) {
 	r.s.WaitForText(t, "VIM Commands")
 	r.keys(t, decltest.Type("w")...)
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyEnter})
-	r.s.WaitForText(t, "saved a.md")
+	r.waitSaveAnswer(t, "saved a.md")
 	if got := d.read(t, "kb", "a.md"); got != "Xaaa\n" {
 		t.Fatalf("on disk after Ctrl+; w: %q", got)
 	}

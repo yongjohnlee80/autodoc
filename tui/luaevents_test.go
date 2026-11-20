@@ -74,7 +74,7 @@ func TestLuaHearsThePagesEvents(t *testing.T) {
 	}
 
 	r.command(t, "w")
-	wait("save", "save path=a.md workspace=kb")
+	r.waitSave(t, "save", func() bool { return strings.Contains(events(), "save path=a.md workspace=kb") })
 }
 
 // TestARegistrationRefreshKeepsAPendingChange: readPage runs again on an open page when the

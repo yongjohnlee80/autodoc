@@ -168,7 +168,7 @@ func TestASaveThatFindsItsNoteDeletedSaysTheNextSaveMakesIt(t *testing.T) {
 	t.Parallel()
 	r := answeringNote(t, &golibrpc.Error{Code: rpc.CodeNotFound, Message: "a.md is not there"}, nil)
 	r.h.p.Post(r.h.save)
-	r.waitStatus(t, "a.md was deleted on disk: its text is kept; saving creates it again")
+	r.waitSaveStatus(t, "a.md was deleted on disk: its text is kept; saving creates it again")
 }
 
 // TestASaveWrittenButNotReadBackSaysSo: a write that landed (committed) whose read-back failed says
@@ -177,7 +177,7 @@ func TestASaveWrittenButNotReadBackSaysSo(t *testing.T) {
 	t.Parallel()
 	r := answeringNote(t, &golibrpc.Error{Code: rpc.CodeCommitted, Message: "written; a follow-up failed"}, errors.New("no read today"))
 	r.h.p.Post(r.h.save)
-	r.waitStatus(t, "saved a.md, but it could not be read back: no read today — reload before saving again")
+	r.waitSaveStatus(t, "saved a.md, but it could not be read back: no read today — reload before saving again")
 }
 
 // committedHeldRead is a window on a daemon serving kb's a.md, opened and edited, whose session

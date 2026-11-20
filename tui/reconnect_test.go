@@ -81,7 +81,7 @@ func TestUnsavedEditsSurviveAReconnect(t *testing.T) {
 		}
 	}
 	x.r.h.p.Post(x.r.h.save)
-	x.r.waitNoticed(t, "saved a.md")
+	x.r.waitSaveNoticed(t, "saved a.md")
 	if got := x.d.read(t, "kb", "a.md"); got != text {
 		t.Fatalf("the save wrote %q, want %q", got, text)
 	}
@@ -105,7 +105,7 @@ func TestAChangeOnDiskMeetsUnsavedEditsAtTheSave(t *testing.T) {
 		t.Fatalf("the edits went: open %v dirty %v, %q", f.open, f.dirty, x.r.editorText())
 	}
 	x.r.h.p.Post(x.r.h.save)
-	x.r.s.WaitFor(t, "the conflict question", func(sc string) bool { return strings.Contains(flat(sc), "a.md changed on disk since you opened it") })
+	x.r.waitSave(t, "the conflict question", func() bool { return strings.Contains(flat(x.r.s.String()), "a.md changed on disk since you opened it") })
 	if got := x.d.read(t, "kb", "a.md"); got != "# A\n\nchanged while the backend was away\n" {
 		t.Fatalf("the save overwrote the disk's version: %q", got)
 	}
@@ -150,7 +150,7 @@ func TestAReconnectAsksBeforeItDropsEdits(t *testing.T) {
 			t.Fatal("the edits went before the question was answered")
 		}
 		x.r.h.p.Post(func() { x.r.h.unsaved("save") })
-		x.r.waitNoticed(t, "saved a.md")
+		x.r.waitSaveNoticed(t, "saved a.md")
 		if got := x.d.read(t, "kb", "a.md"); got != text {
 			t.Fatalf("the save wrote %q, want %q", got, text)
 		}
@@ -235,7 +235,7 @@ func TestAnOlderReadNeverUndoesASave(t *testing.T) {
 			x.r.typeOnPage(t, "saved edit ")
 			want := x.r.editorText()
 			x.r.h.p.Post(x.r.h.save)
-			x.r.waitNoticed(t, "saved a.md")
+			x.r.waitSaveNoticed(t, "saved a.md")
 			x.release()
 			x.steady(t, want)
 		})
@@ -261,6 +261,6 @@ func TestACheckAnsweredBeforeASaveLeavesItAlone(t *testing.T) {
 		}
 	}
 	x.r.h.p.Post(x.r.h.save)
-	x.r.waitNoticed(t, "saved a.md")
+	x.r.waitSaveNoticed(t, "saved a.md")
 	x.steady(t, want)
 }

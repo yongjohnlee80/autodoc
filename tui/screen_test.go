@@ -80,13 +80,27 @@ func (r *running) waitOpened(t *testing.T, text string) {
 	r.waitWithin(t, fmt.Sprintf("the opened note's %q", text), daemonWait, func() bool { return strings.Contains(r.s.String(), text) })
 }
 
-// waitSaveAnswer waits for text a save's answer shows: "saved p", or the question a refused save
-// opens. A save is the daemon's work (a round trip, the write, and on Windows a wait on a reader
-// holding the file), so it waits on daemonWait, not a frame's clock: a loaded Windows runner still
-// read "saving a.md…" at WaitTimeout.
+// waitSave waits for what a save's answer does (cond). A save is the daemon's work (a round trip,
+// the write, and on Windows a wait on a reader holding the file), and its answer comes off the
+// loop, so it waits on daemonWait, not a frame's clock: a loaded Windows runner still read
+// "saving a.md…" at WaitTimeout. With every save 4 s late, each cell that waited for one on a
+// frame's clock failed.
+func (r *running) waitSave(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	r.waitWithin(t, what, daemonWait, cond)
+}
+
+// waitSaveAnswer waits, as waitSave, for text a save's answer shows on the screen: "saved p", or
+// the question a refused save opens.
 func (r *running) waitSaveAnswer(t *testing.T, text string) {
 	t.Helper()
-	r.waitWithin(t, fmt.Sprintf("the save's %q", text), daemonWait, func() bool { return strings.Contains(r.s.String(), text) })
+	r.waitSave(t, fmt.Sprintf("the save's %q", text), func() bool { return strings.Contains(r.s.String(), text) })
+}
+
+// waitSaveNoticed waits, as waitSave, for a toast holding text (waitNoticed's reading).
+func (r *running) waitSaveNoticed(t *testing.T, text string) {
+	t.Helper()
+	r.waitSave(t, "the notification "+text, func() bool { return noticedIn(r.s.String(), text) })
 }
 
 // waitWithin polls cond until it holds, and fails after d with the screen.
@@ -2152,9 +2166,12 @@ func TestFindInThePanes(t *testing.T) {
 // is blank: a page's words there would come between the toast's rows.
 func (r *running) waitNoticed(t *testing.T, text string) {
 	t.Helper()
-	r.s.WaitFor(t, "the notification "+text, func(sc string) bool {
-		return strings.Contains(noticeText(sc), text) || strings.Contains(toastText(sc), text)
-	})
+	r.s.WaitFor(t, "the notification "+text, func(sc string) bool { return noticedIn(sc, text) })
+}
+
+// noticedIn reports whether screen sc shows a toast holding text, as waitNoticed reads one.
+func noticedIn(sc, text string) bool {
+	return strings.Contains(noticeText(sc), text) || strings.Contains(toastText(sc), text)
 }
 
 // toastText is the text inside each toast's frame (╭ … ╯) on one line: the words of a toast that

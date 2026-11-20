@@ -360,10 +360,7 @@ func TestCompareMergesACRLFFile(t *testing.T) {
 	r.compareGone(t)
 	r.keys(t, decltest.Ctrl('s'))
 	want := "ONE\r\ntwo\r\nTHREE mine\r\n"
-	// the save is the daemon's work (a round trip, the write, Windows' wait on a reader holding the
-	// file), so it is waited for on daemonWait, not a frame's clock: a loaded Windows runner still
-	// read "saving a.md…" at WaitTimeout
-	r.waitWithin(t, "the save on disk", daemonWait, func() bool {
+	r.waitSave(t, "the save on disk", func() bool {
 		b, _ := os.ReadFile(filepath.Join(root, "a.md"))
 		return string(b) == want
 	})

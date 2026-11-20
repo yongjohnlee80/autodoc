@@ -30,7 +30,7 @@ func TestAFailedSaveSaysSoOnTheStatusLine(t *testing.T) {
 		r.h.edited()
 		r.h.save()
 	})
-	r.waitStatus(t, "save a.md: refused by the cell")
+	r.waitSaveStatus(t, "save a.md: refused by the cell")
 	if !onLoop(r, func() bool { return r.h.file.dirty }) {
 		t.Fatal("the note lost its unsaved marker though its save failed")
 	}
