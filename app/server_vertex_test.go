@@ -10,6 +10,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -440,8 +441,8 @@ func TestGoogleTokensRefreshBypassesTheCache(t *testing.T) {
 	}
 	ended, cancel := context.WithCancel(ctx)
 	cancel()
-	if _, err := gcpTokens.token(ended, true); err == nil {
-		t.Error("a call whose context has ended answered a token")
+	if tok, err := gcpTokens.token(ended, true); tok != "" || !errors.Is(err, context.Canceled) {
+		t.Errorf("a call whose context has ended: %q, %v; want the context's end and no token", tok, err)
 	}
 }
 

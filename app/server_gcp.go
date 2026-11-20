@@ -47,26 +47,42 @@ type googleTokens struct {
 // gcpTokens is the server's: vertex's embedding provider and ranker share it, one identity.
 var gcpTokens = &googleTokens{}
 
-// token is a TokenFunc (golib's embed and rank).
+// token is a TokenFunc (golib's embed and rank). A call whose context has already ended is
+// answered so: the credentials are not found again and no fetch is started.
 func (g *googleTokens) token(ctx context.Context, refresh bool) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	src, err := g.source(refresh)
 	if err != nil {
 		return "", err
 	}
-	type answer struct {
-		tok *oauth2.Token
-		err error
-	}
 	// a token source takes no context: its fetch is bounded by its client's timeout, and a caller
 	// whose context ends first is answered at once; the fetch it gave up on keeps its goroutine
 	// until that client returns, googleTokenTimeout at most
-	got := make(chan answer, 1)
+	got := make(chan tokenAnswer, 1)
 	go func() {
 		t, err := src.Token()
-		got <- answer{t, err}
+		got <- tokenAnswer{t, err}
 	}()
+	return answered(ctx, got)
+}
+
+// tokenAnswer is a token source's fetch, done.
+type tokenAnswer struct {
+	tok *oauth2.Token
+	err error
+}
+
+// answered is the fetch's answer, or the end of the caller's context, whichever comes first. A
+// context that has ended by the time the answer is there wins too: a select that finds both ready
+// takes either, and a caller that gave up is never handed a token.
+func answered(ctx context.Context, got <-chan tokenAnswer) (string, error) {
 	select {
 	case a := <-got:
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
 		if a.err != nil {
 			return "", tokenError(a.err)
 		}
