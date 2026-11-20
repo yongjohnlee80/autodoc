@@ -108,7 +108,7 @@ func TestTheTUIsOwnSaveIsNoChange(t *testing.T) {
 	r.typeInEditor(t, "X")
 	r.waitTyped(t)
 	r.keys(t, decltest.Ctrl('s'))
-	r.s.WaitForText(t, "saved a.md")
+	r.waitSaveAnswer(t, "saved a.md")
 	time.Sleep(diskWait + 500*time.Millisecond) // the event and its check, had they made a change
 	if f := r.file(); f.disk != diskSame || f.dirty || !strings.HasPrefix(r.editorText(), "X") {
 		t.Fatalf("after its own save: disk %v, dirty %v, text %q", f.disk, f.dirty, r.editorText())
@@ -167,7 +167,7 @@ func TestAFileDeletedOnDiskKeepsItsBuffer(t *testing.T) {
 	r.typeInEditor(t, "X")
 	r.waitTyped(t)
 	r.keys(t, decltest.Ctrl('s'))
-	r.s.WaitForText(t, "saved a.md")
+	r.waitSaveAnswer(t, "saved a.md")
 	if b, _ := os.ReadFile(filepath.Join(root, "a.md")); string(b) != "Xone\ntwo\nthree\n" || diskOf(r, "a.md") != diskSame {
 		t.Fatalf("the save did not create it again: %q, disk %v", b, diskOf(r, "a.md"))
 	}
@@ -182,7 +182,7 @@ func TestAFileDeletedOnDiskKeepsItsBuffer(t *testing.T) {
 	r.s.WaitFor(t, "the file made again seen", func(string) bool { return diskOf(r, "a.md") == diskChanged })
 	onLoop(r, func() bool { r.h.active.file.disk = diskDeleted; return true }) // as if the save beat the event
 	r.keys(t, decltest.Ctrl('s'))
-	r.s.WaitForText(t, "changed on disk since you opened it")
+	r.waitSaveAnswer(t, "changed on disk since you opened it")
 	if b, _ := os.ReadFile(filepath.Join(root, "a.md")); string(b) != "someone else's\n" {
 		t.Fatalf("the save wrote over the file made again: %q", b)
 	}
@@ -390,7 +390,7 @@ func TestACheckOverlappingASaveIsStale(t *testing.T) {
 	<-held // the check's read is out
 	before := reads.Load()
 	r.keys(t, decltest.Ctrl('s'))
-	r.s.WaitForText(t, "saved a.md")
+	r.waitSaveAnswer(t, "saved a.md")
 	r.typeInEditor(t, "Y") // modified again: a stale read taking the save for an outside change would badge it
 	r.s.WaitFor(t, "Y typed", func(string) bool {
 		return onLoop(r, func() bool { return strings.HasPrefix(r.h.core.Value(), "Y") && r.h.core.Mode() == editor.ModeNormal })

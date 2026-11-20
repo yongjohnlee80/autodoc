@@ -64,7 +64,7 @@ func TestTheNextStartOffersAKeptCopyBack(t *testing.T) {
 	r.s.WaitForText(t, "kept text")
 	r.s.WaitFor(t, "the restored text unsaved", func(string) bool { return r.file().dirty })
 	r.keys(t, decltest.Ctrl('s'))
-	r.s.WaitForText(t, "saved a.md")
+	r.waitSaveAnswer(t, "saved a.md")
 	if got := d.read(t, "kb", "a.md"); got != "kept text\n" {
 		t.Fatalf("on disk: %q", got)
 	}
