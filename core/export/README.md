@@ -54,15 +54,22 @@ alt text.
 **A fragment** (`Fragment`) is the body `RenderWith`'s page holds, drawn by the same path, with no
 `<html>`, `<head>`, stylesheet, script or style attribute:
 - `FragmentOptions`: `Theme` (a chart's palette), `Chart` (as `Options.Chart`), `Embeds` (the one
-  directory embeds are read from; `""` reads none) and `Link` (the caller's rule for every URL in
-  the body);
+  directory embeds are read from; `""` reads none), `Link` (the caller's rule for every URL in
+  the body) and `MaxDiagrams` (how many diagrams and charts a document may ask for; past it the
+  render is refused with `ErrTooManyDiagrams`; 0 is no limit);
+- the bounds: a table is cut at 1000 rows, 64 columns and 20,000 cells, as in a page; embeds don't
+  nest; a chart spec's size is the caller's `Chart`'s to bound, and the body's size the caller's
+  to check on what `Fragment` returns;
 - raw HTML stays escaped; there is no option to let it through;
 - an embed is read in `Embeds` and nowhere else: a path out, an absolute path, a URL and a symlink
   out are its alt text. An image there is linked by its path in `Embeds`, each segment escaped,
-  never inlined; a video alone in its paragraph is a `<video>` of its path;
+  `./` first when its first segment holds a colon, never inlined; a video alone in its paragraph
+  is a `<video>` of its path;
 - `Link` is applied last, to every URL attribute of the finished body (links, wikilinks, tags,
   embeds' generated paths, a chart's SVG): the URL it answers is written, and one it refuses is
-  dropped (a link keeps its text, an image its alt);
+  dropped (a link keeps its text, an image its alt). A body holding a raw-text element (a chart's
+  `<title>`, `<style>`, `<script>`…), whose content a browser reads as markup inside `<svg>`, is
+  refused;
 - `FragmentInfo`: the title (the frontmatter's, else the first heading's), the headings with the
   IDs their tags carry, whether the body has a Mermaid diagram, Mermaid's theme for the page's
   `data-mermaid` attribute, and the class names the body uses. A page with a diagram adds

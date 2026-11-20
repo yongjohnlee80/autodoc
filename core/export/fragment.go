@@ -2,6 +2,7 @@ package export
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	stdhtml "html"
 	"net/url"
@@ -46,7 +47,24 @@ type FragmentOptions struct {
 	// written, or false to drop the attribute (a link keeps its text, an image its alt). nil keeps
 	// every URL as it is.
 	Link func(href string) (string, bool)
+	// MaxDiagrams is how many diagrams and charts a document may ask for: its mermaid and vega-lite
+	// fences, and its .mmd and .chart.json embeds drawn as blocks (Embeds set). Past it the render
+	// is refused with ErrTooManyDiagrams, before any is drawn. 0: no limit, as RenderWith has none.
+	MaxDiagrams int
 }
+
+// The bounds a render can need, and whose they are:
+//   - diagrams and charts in a document: FragmentOptions.MaxDiagrams, which only the render sees;
+//   - a table (an embedded .csv or a csv fence): fixed, 1000 rows, 64 columns and 20,000 cells
+//     shown of a file of at most 1 MiB, the rest counted in a last row (maxTableRows, embed.go);
+//   - nested embeds: none can nest. An embed draws a diagram, a chart, a table or an image, never
+//     a document's Markdown, so its depth is one;
+//   - a chart spec's size: the caller's, in its Chart, which is handed every spec;
+//   - the rendered body's size: the caller's, on what Fragment returns.
+
+// ErrTooManyDiagrams is a document that asks for more diagrams and charts than
+// FragmentOptions.MaxDiagrams.
+var ErrTooManyDiagrams = errors.New("export: too many diagrams and charts")
 
 // FragmentInfo is what a page around a fragment needs to know of it.
 type FragmentInfo struct {
@@ -87,6 +105,14 @@ var urlAttrs = map[string]bool{
 	"ping": true, "data": true, "codebase": true, "usemap": true, "manifest": true, "profile": true,
 }
 
+// rawText are the elements whose content an HTML parser reads as text, not markup, but a browser
+// parses as markup inside an <svg>: a URL in one would pass linkLast unread. The renderer writes
+// none of them (raw HTML is escaped), so one in a body came from Chart, and the body is refused.
+var rawText = map[string]bool{
+	"script": true, "style": true, "title": true, "textarea": true, "xmp": true, "iframe": true,
+	"noembed": true, "noframes": true, "noscript": true, "plaintext": true,
+}
+
 // fragmentLimits bound the tokenizer that reads the finished body for Link: as large as a body
 // can be (a chart's SVG holds long attribute values), so a body is never refused for its size.
 var fragmentLimits = html.Limits{MaxSource: 1 << 30, MaxAttrs: 1 << 12, MaxAttr: 1 << 30}
@@ -108,6 +134,9 @@ func Fragment(source []byte, opts FragmentOptions) ([]byte, FragmentInfo, error)
 		embedder.media = embedder.relative
 	}
 	document := kind.ParseMarkdown(source)
+	if n := diagramsAsked(document, embedder != nil); opts.MaxDiagrams > 0 && n > opts.MaxDiagrams {
+		return nil, FragmentInfo{}, fmt.Errorf("%w: the document asks for %d, at most %d", ErrTooManyDiagrams, n, opts.MaxDiagrams)
+	}
 	info := FragmentInfo{Title: frontmatterTitle(document), MermaidTheme: mermaidTheme(colors)}
 	for _, h := range outline.Read(source, kind.Markdown, "").Headings() {
 		info.Headings = append(info.Headings, Heading{Level: h.Level, Text: h.Text, ID: h.ID})
@@ -127,21 +156,51 @@ func Fragment(source []byte, opts FragmentOptions) ([]byte, FragmentInfo, error)
 	return out, info, nil
 }
 
+// diagramsAsked counts what a render of document would draw as a diagram or a chart: a mermaid or
+// vega-lite fence (its info's first word, as the renderer names its language), and, when embeds
+// are read, a .mmd or .chart.json embed alone in its paragraph.
+func diagramsAsked(document *markdown.Document, embeds bool) int {
+	n := 0
+	forEach(document.Root, func(node *markdown.Node) {
+		switch node.Kind {
+		case markdown.KindCodeBlock:
+			lang := string(node.Info())
+			if i := strings.IndexAny(lang, " \t"); i >= 0 {
+				lang = lang[:i]
+			}
+			if lang == "mermaid" || lang == "vega-lite" {
+				n++
+			}
+		case markdown.KindImage:
+			parent := node.Parent
+			if !embeds || parent == nil || parent.Kind != markdown.KindParagraph || parent.FirstChild != node || parent.LastChild != node {
+				return
+			}
+			if p, ok := embedPath(string(node.Dest())); ok && (strings.ToLower(filepath.Ext(p)) == ".mmd" || isChart(p)) {
+				n++
+			}
+		}
+	})
+	return n
+}
+
 // relative is the URL a fragment links a file in its embeds' directory at: its path there, each
-// segment escaped. file is under e.dir: the embedder found it there.
+// segment escaped, and "./" before it when its first segment holds a colon (a folder named
+// "https:"), so a browser never reads it as a URL with a scheme. file is under e.dir: the embedder
+// found it there.
 func (e *embedder) relative(file string) (string, bool) {
 	rel, err := filepath.Rel(e.dir, file)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
 		return "", false
 	}
-	return (&url.URL{Path: filepath.ToSlash(rel)}).EscapedPath(), true
+	return (&url.URL{Path: filepath.ToSlash(rel)}).String(), true
 }
 
 // linkLast is the finished body with link applied to every URL attribute of every tag, an
 // attribute it refuses dropped, and the class names the body uses. A tag with no URL attribute is
 // kept byte for byte; one with any is written again, its attributes in their order, each value
 // escaped. The body's text is escaped by the renderer, so every tag the tokenizer finds is one the
-// body holds.
+// body holds; a body with a raw-text element (rawText) is refused, as its content is not read.
 func linkLast(body []byte, link func(string) (string, bool)) ([]byte, []string, error) {
 	t := html.NewTokenizer(body, fragmentLimits)
 	var out bytes.Buffer
@@ -155,6 +214,9 @@ func linkLast(body []byte, link func(string) (string, bool)) ([]byte, []string, 
 		}
 		if tok.Kind != html.StartTag && tok.Kind != html.SelfClosing {
 			continue
+		}
+		if rawText[tok.Name] {
+			return nil, nil, fmt.Errorf("export: the fragment holds a <%s> (from a chart), whose content is not read for its links", tok.Name)
 		}
 		for _, a := range tok.Attrs {
 			if a.Name == "class" {

@@ -2,10 +2,13 @@ package export_test
 
 import (
 	"bytes"
+	"errors"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -109,7 +112,7 @@ func TestAFragmentIsTheBodyAlone(t *testing.T) {
 
 // Raw HTML in the source, as a block and inline (a script, a style, an iframe, an event handler, a
 // javascript: link, a form), is text in the fragment: no such element and no on* attribute reaches
-// it. FragmentOptions has no way to let HTML through: its fields are the four this cell names, so
+// it. FragmentOptions has no way to let HTML through: its fields are the five this cell names, so
 // an option added later is looked at here first. The mutant, named here: the renderer's unsafe
 // mode (raw HTML written as it is).
 func TestAFragmentKeepsRawHTMLEscaped(t *testing.T) {
@@ -134,7 +137,7 @@ func TestAFragmentKeepsRawHTMLEscaped(t *testing.T) {
 	for typ, i := reflect.TypeFor[export.FragmentOptions](), 0; i < typ.NumField(); i++ {
 		fields = append(fields, typ.Field(i).Name)
 	}
-	if want := []string{"Theme", "Chart", "Embeds", "Link"}; !slices.Equal(fields, want) {
+	if want := []string{"Theme", "Chart", "Embeds", "Link", "MaxDiagrams"}; !slices.Equal(fields, want) {
 		t.Errorf("FragmentOptions has %v, want %v: an option that lets raw HTML through is not to be one", fields, want)
 	}
 }
@@ -174,9 +177,10 @@ func fragmentTree(t *testing.T) (root, embeds string) {
 // Embeds are read in the Embeds directory and nowhere else: a path that climbs out (written
 // plainly or escaped), an absolute path, a URL, and a symlink out (to a file, an image, or a folder
 // above) are each drawn as their alt text, and nothing of the files outside is in the fragment. An
-// image there is linked by its path in the directory, escaped, never inlined. With no Embeds, every
-// embed is its alt text. The mutants, named here: the embeds read in the directory's parent, and an
-// image inlined as a data: URI.
+// image there is linked by its path in the directory, escaped, never inlined, and never as a URL
+// with a scheme (a folder named "https:" is "./https:/…"). With no Embeds, every embed is its alt
+// text. The mutants, named here: the embeds read in the directory's parent, an image inlined as a
+// data: URI, and the path without its "./" (EscapedPath).
 func TestAFragmentReadsEmbedsOnlyFromItsDirectory(t *testing.T) {
 	root, embeds := fragmentTree(t)
 	out := map[string]string{
@@ -206,6 +210,31 @@ func TestAFragmentReadsEmbedsOnlyFromItsDirectory(t *testing.T) {
 	if !info.HasMermaid {
 		t.Error("the embedded diagram is not counted")
 	}
+	for _, tok := range tags(t, body) {
+		for _, a := range tok.Attrs {
+			if a.Name != "src" {
+				continue
+			}
+			if u, err := url.Parse(a.Value); err != nil || u.Scheme != "" || u.Host != "" {
+				t.Errorf("an image's src %q is not a relative path:\n%s", a.Value, body)
+			}
+		}
+	}
+	// a folder named "https:" (a name Windows doesn't allow): its image is linked as a path in it,
+	// "./" first, never as a URL with a scheme
+	if err := os.MkdirAll(filepath.Join(embeds, "https:", "evil.com"), 0o755); err != nil {
+		if runtime.GOOS == "windows" {
+			return
+		}
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(embeds, "https:", "evil.com", "x.png"), []byte("\x89PNG colon"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	colon, _ := fragment(t, "![x](%68ttps://evil.com/x.png)\n", export.FragmentOptions{Embeds: embeds})
+	if want := `<img src="./https:/evil.com/x.png" alt="x" />`; !strings.Contains(colon, want) {
+		t.Errorf("an image in a folder named https: is not %s:\n%s", want, colon)
+	}
 	if body, _ := fragment(t, "![near](near.mmd)\n\n![pic](pic.png)\n", export.FragmentOptions{}); !strings.Contains(body, "<em>near</em>") || !strings.Contains(body, "<em>pic</em>") {
 		t.Errorf("with no Embeds an embed was drawn:\n%s", body)
 	}
@@ -221,8 +250,9 @@ var urlAttributes = []string{"href", "xlink:href", "src", "srcset", "poster", "d
 // absolute one, a wikilink, a tag, an embedded image's generated path, and an href in a chart's
 // SVG. Each is handed to Link once, as the body holds it, and every URL attribute of the fragment
 // is Link's answer. A Link that refuses drops each attribute: the links keep their text, the image
-// its alt, and no URL attribute is left. The mutants, named here: Link not applied, and src left
-// out of the attributes it is applied to.
+// its alt, and no URL attribute is left. A chart holding a raw-text element (a <title> whose
+// content a browser reads as markup inside <svg>) is refused. The mutants, named here: Link not
+// applied, src left out of the attributes it is applied to, and no raw-text check.
 func TestLinkIsAppliedLastToEveryURL(t *testing.T) {
 	_, embeds := fragmentTree(t)
 	source := "# Top\n\nRead [the guide](guide.md), [the site](https://example.com/a), [top](#top), [[Other note]], #tagged and <https://auto.example>.\n\n" +
@@ -268,6 +298,16 @@ func TestLinkIsAppliedLastToEveryURL(t *testing.T) {
 			t.Errorf("with every URL refused, the fragment lacks %q:\n%s", want, refused)
 		}
 	}
+	// inside an <svg> a browser reads a <title>'s content as markup, where an HTML tokenizer reads
+	// text: a chart holding one, or any raw-text element, is refused rather than passed unread
+	for _, el := range []string{"title", "style", "script", "textarea"} {
+		hidden := func([]byte, string) (string, error) {
+			return `<svg><` + el + `><a href="javascript:alert(1)">x</a></` + el + `></svg>`, nil
+		}
+		if body, _, err := export.Fragment([]byte(source), export.FragmentOptions{Theme: "light", Chart: hidden, Link: mapped}); err == nil {
+			t.Errorf("a chart with a <%s> was not refused:\n%s", el, body)
+		}
+	}
 }
 
 // Fragment and RenderWith draw one body: a page RenderWith writes holds, between its <body> and
@@ -291,6 +331,43 @@ func TestAFragmentIsTheBodyRenderWithsPageHolds(t *testing.T) {
 		if string(inner) != body {
 			t.Errorf("%s: the page's body and the fragment differ:\npage\n%s\nfragment\n%s", theme, inner, body)
 		}
+	}
+}
+
+// MaxDiagrams bounds what a document asks to draw: mermaid and vega-lite fences and .mmd and
+// .chart.json embeds alone in their paragraphs, counted together. At the figure the fragment is
+// drawn; one past it the render is refused with ErrTooManyDiagrams, before any chart is drawn. An
+// embed beside text (drawn as its alt text) and a fence of another language are not counted; 0 is
+// no limit. The mutants, named here: the bound checked with >= (the figure refused), and the
+// embeds not counted.
+func TestMaxDiagramsBoundsWhatADocumentAsksToDraw(t *testing.T) {
+	_, embeds := fragmentTree(t)
+	if err := os.WriteFile(filepath.Join(embeds, "sales.chart.json"), []byte(`{"mark": "bar"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var source strings.Builder
+	for range 2 {
+		source.WriteString("```mermaid\ngraph TD\n  a --> b\n```\n\n```vega-lite\n{\"mark\": \"line\"}\n```\n\n![near](near.mmd)\n\n![sales](sales.chart.json)\n\n")
+	}
+	source.WriteString("Beside ![near](near.mmd) text.\n\n```go\nmermaid()\n```\n") // neither counted
+	charts := 0
+	chart := func([]byte, string) (string, error) { charts++; return "<svg></svg>", nil }
+	opts := func(most int) export.FragmentOptions {
+		return export.FragmentOptions{Theme: "light", Embeds: embeds, Chart: chart, MaxDiagrams: most}
+	}
+	if _, info, err := export.Fragment([]byte(source.String()), opts(8)); err != nil || !info.HasMermaid {
+		t.Fatalf("8 asked, at most 8: %v", err)
+	}
+	charts = 0
+	_, _, err := export.Fragment([]byte(source.String()), opts(7))
+	if !errors.Is(err, export.ErrTooManyDiagrams) || !strings.Contains(err.Error(), "asks for 8, at most 7") {
+		t.Errorf("8 asked, at most 7: %v, want ErrTooManyDiagrams naming both", err)
+	}
+	if charts != 0 {
+		t.Errorf("%d charts drawn by a render that was refused", charts)
+	}
+	if _, _, err := export.Fragment([]byte(source.String()), opts(0)); err != nil {
+		t.Errorf("no limit: %v", err)
 	}
 }
 
