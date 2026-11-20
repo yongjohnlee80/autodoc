@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -109,7 +110,7 @@ func leafOf(c *tls.Certificate) string {
 	if c.Leaf == nil {
 		return ""
 	}
-	names := c.Leaf.DNSNames
+	names := slices.Clone(c.Leaf.DNSNames) // appended to below: never the leaf's own array
 	for _, ip := range c.Leaf.IPAddresses {
 		names = append(names, ip.String())
 	}
