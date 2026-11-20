@@ -99,7 +99,30 @@ func newEmbedder(doc string, fit tableFit) *embedder {
 	return &embedder{files: files, dir: filepath.Dir(abs), resources: name, fit: fit}
 }
 
+// newEmbedderIn is the embedder of a directory of embeds: every embed is read in dir and nowhere
+// else, with no resources folder (Fragment's Embeds). An error when dir does not open.
+func newEmbedderIn(dir string, fit tableFit) (*embedder, error) {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, err
+	}
+	files, err := local.New(abs)
+	if err != nil {
+		return nil, err
+	}
+	return &embedder{files: files, dir: abs, fit: fit}, nil
+}
+
 func (e *embedder) close() { e.files.Close() }
+
+// candidates are where p is looked for: beside the document, then in its resources folder when
+// it has one.
+func (e *embedder) candidates(p string) []string {
+	if e.resources == "" {
+		return []string{p}
+	}
+	return []string{p, path.Join(e.resources, p)}
+}
 
 // RenderWith takes no context: an embed is read from the document's own folder, and a render is
 // not cancelled.
@@ -261,7 +284,7 @@ func (e *embedder) read(p string, limit int64) ([]byte, bool) {
 // is over limit.
 func (e *embedder) readErr(p string, limit int64) ([]byte, error) {
 	err := error(fs.ErrNotExist)
-	for _, candidate := range []string{p, path.Join(e.resources, p)} {
+	for _, candidate := range e.candidates(p) {
 		data, rerr := e.readAt(candidate, limit)
 		if rerr == nil {
 			return data, nil
@@ -277,7 +300,7 @@ func (e *embedder) readErr(p string, limit int64) ([]byte, error) {
 // locate is where p is, beside the document or else in its resources folder, when it is a file
 // there.
 func (e *embedder) locate(p string) (string, bool) {
-	for _, candidate := range []string{p, path.Join(e.resources, p)} {
+	for _, candidate := range e.candidates(p) {
 		err := e.has(candidate)
 		if err == nil {
 			return candidate, true
