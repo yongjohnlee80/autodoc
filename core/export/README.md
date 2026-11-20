@@ -57,8 +57,8 @@ alt text.
   directory embeds are read from; `""` reads none), `Link` (the caller's rule for every URL in
   the body) and `MaxDiagrams` (how many diagrams and charts a document may ask for; past it the
   render is refused with `ErrTooManyDiagrams`; 0 is no limit);
-- the bounds: a table is cut at 1000 rows, 64 columns and 20,000 cells, as in a page; embeds don't
-  nest; a chart spec's size is the caller's `Chart`'s to bound, and the body's size the caller's
+- the bounds: a table is cut at 1000 rows, 64 columns and 20,000 cells, as in a page, and its last
+  row, `<tr class="table-cut">`, says how many rows and columns are not shown; embeds don't nest; a chart spec's size is the caller's `Chart`'s to bound, and the body's size the caller's
   to check on what `Fragment` returns;
 - raw HTML stays escaped; there is no option to let it through;
 - an embed is read in `Embeds` and nowhere else: a path out, an absolute path, a URL and a symlink
