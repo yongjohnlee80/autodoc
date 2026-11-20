@@ -80,6 +80,15 @@ func (r *running) waitOpened(t *testing.T, text string) {
 	r.waitWithin(t, fmt.Sprintf("the opened note's %q", text), daemonWait, func() bool { return strings.Contains(r.s.String(), text) })
 }
 
+// waitSaveAnswer waits for text a save's answer shows: "saved p", or the question a refused save
+// opens. A save is the daemon's work (a round trip, the write, and on Windows a wait on a reader
+// holding the file), so it waits on daemonWait, not a frame's clock: a loaded Windows runner still
+// read "saving a.md…" at WaitTimeout.
+func (r *running) waitSaveAnswer(t *testing.T, text string) {
+	t.Helper()
+	r.waitWithin(t, fmt.Sprintf("the save's %q", text), daemonWait, func() bool { return strings.Contains(r.s.String(), text) })
+}
+
 // waitWithin polls cond until it holds, and fails after d with the screen.
 func (r *running) waitWithin(t *testing.T, what string, d time.Duration, cond func() bool) {
 	t.Helper()
@@ -1361,7 +1370,7 @@ func TestTheTextKeymap(t *testing.T) {
 	r.keys(t, esc())
 	r.s.WaitFor(t, "the card closed", func(sc string) bool { return !strings.Contains(sc, "SPC — commands") })
 	r.keys(t, decltest.Ctrl('s'))
-	r.s.WaitForText(t, "saved a.md")
+	r.waitSaveAnswer(t, "saved a.md")
 	if got := d.read(t, "kb", "a.md"); got != "hi there aaa\n" {
 		t.Fatalf("a.md holds %q", got)
 	}

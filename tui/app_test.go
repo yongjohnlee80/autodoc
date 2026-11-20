@@ -669,7 +669,7 @@ func TestSearchesOpensEditsSaves(t *testing.T) {
 	r.typeInEditor(t, "EDITED ")
 	r.s.WaitFor(t, "unsaved mark", func(sc string) bool { return strings.Contains(sc, "a.md [+]") })
 	r.keys(t, decltest.Ctrl('s'))
-	r.s.WaitForText(t, "saved a.md")
+	r.waitSaveAnswer(t, "saved a.md")
 	if got := d.read(t, "kb", "a.md"); !strings.Contains(got, "EDITED ") || !strings.Contains(got, "kestrel notes") {
 		t.Errorf("the file after the save: %q", got)
 	}
@@ -706,7 +706,7 @@ func TestAConflictAsks(t *testing.T) {
 	conflict := func() {
 		t.Helper()
 		r.keys(t, decltest.Ctrl('s'))
-		r.s.WaitForText(t, "file changed on disk")
+		r.waitSaveAnswer(t, "file changed on disk")
 	}
 	// keep: the edits stay, unsaved, and the disk is untouched
 	d.write(t, "kb", "a.md", "theirs\n")
@@ -836,14 +836,14 @@ func TestCommittedIsReadBack(t *testing.T) {
 	r.waitFile(t, "a.md")
 	r.typeInEditor(t, "two ")
 	r.keys(t, decltest.Ctrl('s'))
-	r.s.WaitForText(t, "saved a.md")
+	r.waitSaveAnswer(t, "saved a.md")
 	if r.file().dirty || d.read(t, "kb", "a.md") != "two one\n" {
 		t.Fatalf("dirty %v, disk %q", r.file().dirty, d.read(t, "kb", "a.md"))
 	}
 	// the adopted version is the disk's: the next save is not a conflict
 	r.typeInEditor(t, "three ")
 	r.keys(t, decltest.Ctrl('s'))
-	r.s.WaitFor(t, "the second save", func(sc string) bool { return strings.Contains(d.read(t, "kb", "a.md"), "three") })
+	r.waitWithin(t, "the second save", daemonWait, func() bool { return strings.Contains(d.read(t, "kb", "a.md"), "three") })
 	if strings.Contains(r.s.String(), "file changed on disk") {
 		t.Error("the adopted version conflicted")
 	}
@@ -1046,7 +1046,7 @@ func TestCommittedThenOverwrittenIsAConflict(t *testing.T) {
 	r.waitFile(t, "a.md")
 	r.typeInEditor(t, "mine ")
 	r.keys(t, decltest.Ctrl('s'))
-	r.s.WaitForText(t, "file changed on disk")
+	r.waitSaveAnswer(t, "file changed on disk")
 	if !r.file().dirty {
 		t.Error("the note reads as saved")
 	}
@@ -1125,7 +1125,7 @@ func TestAFailedReloadKeepsTheEditsUnsaved(t *testing.T) {
 	d.write(t, "kb", "a.md", "theirs\n")
 	r.typeInEditor(t, "mine ")
 	r.keys(t, decltest.Ctrl('s'))
-	r.s.WaitForText(t, "file changed on disk")
+	r.waitSaveAnswer(t, "file changed on disk")
 	if err := d.fs["kb"].Remove(context.Background(), "a.md"); err != nil {
 		t.Fatal(err)
 	}

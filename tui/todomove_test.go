@@ -106,7 +106,7 @@ func TestAnOpenTaskFollowsItsStatusMove(t *testing.T) {
 	r.typeInEditor(t, "X")
 	r.waitTyped(t)
 	r.keys(t, decltest.Ctrl('s'))
-	r.s.WaitForText(t, "saved "+to)
+	r.waitSaveAnswer(t, "saved "+to)
 	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(from))); !os.IsNotExist(err) {
 		t.Fatalf("the save wrote the task in its old folder too: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestAModifiedTaskFollowsItsMoveAndAsks(t *testing.T) {
 	}
 	waitNoticed(t, r, from+" moved to "+to)
 	r.keys(t, decltest.Ctrl('s'))
-	r.s.WaitForText(t, "file changed on disk") // the question: keep, reload or overwrite
+	r.waitSaveAnswer(t, "file changed on disk") // the question: keep, reload or overwrite
 	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(from))); !os.IsNotExist(err) {
 		t.Fatalf("the save wrote the task in its old folder: %v", err)
 	}
