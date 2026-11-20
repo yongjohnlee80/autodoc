@@ -55,8 +55,10 @@ alt text.
 `<html>`, `<head>`, stylesheet, script or style attribute:
 - `FragmentOptions`: `Theme` (a chart's palette), `Chart` (as `Options.Chart`), `Embeds` (the one
   directory embeds are read from; `""` reads none), `Link` (the caller's rule for every URL in
-  the body) and `MaxDiagrams` (how many diagrams and charts a document may ask for; past it the
-  render is refused with `ErrTooManyDiagrams`; 0 is no limit);
+  the body), `MaxDiagrams` (how many diagrams and charts a document may ask for; past it the
+  render is refused with `ErrTooManyDiagrams`; 0 is no limit) and `MaxDiagramSource` (how many
+  bytes one Mermaid diagram's source, a fence's or a `.mmd` embed's, may hold; past it the render
+  is refused with `ErrDiagramTooLarge`; 0 is no limit);
 - the bounds: a table is cut at 1000 rows, 64 columns and 20,000 cells, as in a page, and its last
   row, `<tr class="table-cut">`, says how many rows and columns are not shown; embeds don't nest; a chart spec's size is the caller's `Chart`'s to bound, and the body's size the caller's
   to check on what `Fragment` returns;
