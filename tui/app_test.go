@@ -720,7 +720,7 @@ func TestAConflictAsks(t *testing.T) {
 	// overwrite: the disk gets mine
 	conflict()
 	r.keys(t, key('o'))
-	r.s.WaitForText(t, "saved a.md")
+	r.waitSaveAnswer(t, "saved a.md")
 	if got := d.read(t, "kb", "a.md"); got != "mine one\n" {
 		t.Fatalf("after overwrite: disk %q", got)
 	}
