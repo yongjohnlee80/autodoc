@@ -78,6 +78,9 @@ of its own.
   request/response-only client can use every verb. Clients follow changes by pulling cursors
   (`index.changes`, `sys.events`, `todos.changes`), and an expired cursor tells the client to re-list
   and resume.
+- **No order between requests.** The daemon handles each request on its own as it arrives, so two
+  requests on one connection may be handled, and answered, in either order. A client that needs
+  one done before the next waits for its answer.
 - **Error codes say what to do next.** Each code is chosen by the client's next step (say hello,
   re-list the workspaces, read and merge, search lexically), and only a fixed message crosses the
   wire, never an internal error's text.
