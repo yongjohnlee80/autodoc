@@ -36,6 +36,7 @@ type schemaHolder struct {
 	fp      string // the active schema's fingerprint; "" for none
 	loadErr error  // why the file is not a valid schema now; nil when it is
 	stamp   string // the file's size and modification time at the last read
+	gen     uint64 // counts setPath's changes: a read begun before one is dropped (reload)
 	cancel  func() // stops the poll
 }
 
@@ -76,6 +77,7 @@ func (h *schemaHolder) resolved() string { return schema.ResolvePath(h.root, h.p
 func (h *schemaHolder) setPath(p string) {
 	h.mu.Lock()
 	h.path, h.stamp = p, ""
+	h.gen++
 	if p == "" {
 		changed := h.active != nil
 		h.active, h.fp, h.loadErr = nil, "", nil
@@ -97,10 +99,17 @@ func (h *schemaHolder) reload(force bool) {
 		h.mu.Unlock()
 		return
 	}
-	file := h.resolved()
+	file, gen := h.resolved(), h.gen
 	h.mu.Unlock()
-	stamp, src, err := readSchema(file)
+	stamp, src, err := readSchemaFile(file)
 	h.mu.Lock()
+	if h.gen != gen {
+		// the path changed while the file was read (a poll's read, a setPath's own after it): the
+		// read is of a file no longer the schema's, and kept, it would undo the change, a removal
+		// for good (with no path, no poll reads again)
+		h.mu.Unlock()
+		return
+	}
 	if !force && stamp == h.stamp {
 		h.mu.Unlock()
 		return
@@ -127,6 +136,9 @@ func (h *schemaHolder) reload(force bool) {
 		h.onChange()
 	}
 }
+
+// readSchemaFile is readSchema; a cell holds a read with it.
+var readSchemaFile = readSchema
 
 // readSchema reads a schema file, bounded: its stamp (size and modification time, "" when it
 // cannot be read) and its bytes.
