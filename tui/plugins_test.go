@@ -1240,10 +1240,33 @@ func (r *running) question(t *testing.T) string {
 			return q
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("PluginConfirm never opened; the history: %v", onLoop(r, func() []feature.Notice { return r.h.noticeLog.Items }))
+			t.Fatalf("PluginConfirm never opened; %s; the history: %v\nthe screen:\n%s", onLoop(r, r.cardsState),
+				onLoop(r, func() []feature.Notice { return r.h.noticeLog.Items }), r.s.String())
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+// cardsState is where the cards stand, for a failure's message: the candidate on PluginConfirm, the
+// one whose card is up, the yes-or-no question, and every live candidate's state (opState). Read on
+// the loop, which owns them.
+func (r *running) cardsState() string {
+	name := func(c *candidate) string {
+		if c == nil {
+			return "none"
+		}
+		return c.key()
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "on PluginConfirm: %s, its question set: %v; the card up: %s; a question asked: %v %q",
+		name(r.h.plugins.pendingPlugin), r.h.plugins.pendingPlugin != nil && func() bool {
+			v, _ := r.h.p.Tree().Source("App.pluginQuestion")
+			return v.Raw != ""
+		}(), name(r.h.cands.onCard), r.h.asker.Pending, r.h.asker.Current.Title)
+	for _, k := range slices.Sorted(maps.Keys(r.h.cands.ops)) {
+		fmt.Fprintf(&b, "; %s: state %d", k, r.h.cands.ops[k].state)
+	}
+	return b.String()
 }
 
 func entries(t *testing.T, dir string) []string {

@@ -259,14 +259,47 @@ jobs:
           # nothing else) is then named by the cells it had started and not ended. The step's exit
           # is go test's own, for both runs: never a pipe's, a tee's or the report's.
           mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep . | grep -vx './tui')
-          tuijson="$RUNNER_TEMP/tui.json" tuierr="$RUNNER_TEMP/tui.err"
-          go test -count=1 -timeout 20m -json ./tui > "$tuijson" 2> "$tuierr" &
+          tuijson="$RUNNER_TEMP/tui.json" tuierr="$RUNNER_TEMP/tui.err" tuicode="$RUNNER_TEMP/tui.code"
+          # go test prints no exit status for a test binary that wrote anything, so ./tui's binary is
+          # built and run here as go test -json runs it (in its package's folder, its output through
+          # test2json), by a runner that writes its exit code in full: how a process ended with no
+          # word (a Windows status such as 0xC0000409 or 0xC000013A, a TerminateProcess's own code).
+          cat > "$RUNNER_TEMP/exitcode.go" <<'EOF'
+          package main
+
+          import (
+              "fmt"
+              "os"
+              "os/exec"
+          )
+
+          // exitcode runs os.Args[2:] on its own output and writes the program's exit code to
+          // os.Args[1], in decimal and hex; it exits 1 when the program did not exit 0.
+          func main() {
+              cmd := exec.Command(os.Args[2], os.Args[3:]...)
+              cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+              err := cmd.Run()
+              code := fmt.Sprintf("not started: %v", err)
+              if cmd.ProcessState != nil {
+                  c := cmd.ProcessState.ExitCode()
+                  code = fmt.Sprintf("%d (%#x)", c, uint32(c))
+              }
+              _ = os.WriteFile(os.Args[1], []byte(code+"\n"), 0o644)
+              if err != nil {
+                  os.Exit(1)
+              }
+          }
+          EOF
+          go build -o "$RUNNER_TEMP/exitcode.exe" "$RUNNER_TEMP/exitcode.go"
+          go test -c -o "$RUNNER_TEMP/tui.test.exe" ./tui
+          (cd tui && "$RUNNER_TEMP/exitcode.exe" "$tuicode" "$RUNNER_TEMP/tui.test.exe" -test.paniconexit0 -test.v=test2json -test.count=1 -test.timeout=20m 2>&1 \
+            | go tool test2json -t -p github.com/yongjohnlee80/autodoc/tui > "$tuijson" 2> "$tuierr") &
           tuipid=$!
           rest=0
           go test -count=1 -timeout 20m "${pkgs[@]}" || rest=$?
           tui=0
           wait "$tuipid" || tui=$?
-          echo "== ./tui, its -json in $tuijson: go test exited $tui"
+          echo "== ./tui, its -json in $tuijson: exited $tui; the test binary's exit code: $(cat "$tuicode" 2>/dev/null || echo unknown)"
           jq -r 'select(.Test == null and (.Action == "pass" or .Action == "fail" or .Action == "skip")) | "\(.Action)\t\(.Package)\t\(.Elapsed)s"' "$tuijson" || true
           if [ "$tui" -ne 0 ]; then
             echo "== each failed cell's output"
@@ -278,7 +311,7 @@ jobs:
               | awk -F '\t' '$1 == "run" || $1 == "cont" { open[$2] = 1; next } { delete open[$2] } END { for (t in open) print t }' | sort || true
             echo "== the package's own output (no cell's), its last 400 lines"
             jq -j 'select(.Action == "output" and .Test == null) | .Output' "$tuijson" | tr -d '\r' | tail -n 400 || true
-            echo "== go test's standard error, its last 80 lines"
+            echo "== test2json's standard error, its last 80 lines"
             tail -n 80 "$tuierr" || true
           fi
           [ "$rest" -eq 0 ] && [ "$tui" -eq 0 ]
@@ -290,6 +323,7 @@ jobs:
           path: |
             ${{ runner.temp }}/tui.json
             ${{ runner.temp }}/tui.err
+            ${{ runner.temp }}/tui.code
           retention-days: 14
           if-no-files-found: ignore
       - name: discover which packages pass on Windows
