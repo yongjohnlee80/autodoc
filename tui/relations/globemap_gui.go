@@ -136,6 +136,7 @@ type globeDots struct {
 	look   *globeLook
 	groups *relGroups
 	bucket int
+	fit    float32     // the map's fit when they were made: a dot's size reads it (dotRadius)
 	fills  []globeFill // one per colour, in the order the documents first wear it
 	rings  *gui.Path   // a ring round each superseded document
 }
@@ -152,14 +153,14 @@ func zoomBucket(z float32) int {
 }
 
 // dotsAt is gl's dots and rings at zoom z in look l and groups gs, the map fitted at fit: d itself
-// when it is already for that frame, step, look and groups.
+// when it is already for that frame, step, fit, look and groups.
 func dotsAt(d globeDots, gl *globe, l *globeLook, gs *relGroups, z, fit float32) globeDots {
 	b := zoomBucket(z)
-	if d.of == gl && d.look == l && d.groups == gs && d.bucket == b {
+	if d.of == gl && d.look == l && d.groups == gs && d.bucket == b && d.fit == fit {
 		return d
 	}
 	bz := float32(math.Pow(globeZoomStep, float64(b))) // the step's zoom: the dots are its size until the next
-	d = globeDots{of: gl, look: l, groups: gs, bucket: b, rings: &gui.Path{}}
+	d = globeDots{of: gl, look: l, groups: gs, bucket: b, fit: fit, rings: &gui.Path{}}
 	fill := map[color.NRGBA]int{}
 	for i, n := range gl.m.Nodes {
 		c := l.colourOf(n, gs)
