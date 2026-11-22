@@ -191,6 +191,12 @@ type Host struct {
 	// none), and the stages the boxes last asked for
 	stageRankerID, stageRanker string
 	stagesSent                 string
+	// stageRankerSeq numbers the ranker's reads (loadStageRanker): only the latest is shown, so one
+	// read before a ranker change never names the old ranker after it; stageRankerLoading counts
+	// those in flight; stageRankerRefresh is a search again owed by any of them, the latest's to do
+	stageRankerSeq     uint64
+	stageRankerLoading int
+	stageRankerRefresh bool
 
 	// the workspace in use, and the epoch: moved by a switch and a reconnect, so an answer asked
 	// under another workspace or connection is dropped (workspace.go)
