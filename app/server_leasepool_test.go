@@ -4,6 +4,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -16,9 +17,13 @@ import (
 // lock is let go the row that waited is written and the search answered. The mutant, named here:
 // the ingesters given the store's pool for their leases (the renew waits for a held connection,
 // the lease is lost, and the server exits 1).
+//
+// The lease is 3 s: a renew every second, each bounded by half a second, and silent for 2.5 s the
+// lease is lost. At 1.5 s a renew had a quarter second, which two renews in a row overran under
+// -race on a loaded runner: the lease was lost and given up, and the server exited.
 func TestTheLeaseRenewsWhileEveryStoreConnectionIsHeld(t *testing.T) {
 	ttl := leaseTTL
-	leaseTTL = 1500 * time.Millisecond // a renew every 500 ms; silent for most of 1.5 s, it is lost
+	leaseTTL = 3 * time.Second
 	t.Cleanup(func() { leaseTTL = ttl })
 	quickBuilder(t)
 	f := newServerFixture(t, serverView)
@@ -36,15 +41,40 @@ func TestTheLeaseRenewsWhileEveryStoreConnectionIsHeld(t *testing.T) {
 		t.Fatalf("the server does not say where it listens: %s", stderr)
 	}
 
+	// leaseUntil is the lease's lease_until while a server holds it. A lease with no holder was given
+	// up: the server lost it, its ingester said it is stopping, and the server exits once its
+	// requests in flight end (shutdownGrace; the search this cell holds on the lock keeps it that
+	// long). That is reported with what the server said. A lease with no holder, the ingester not
+	// stopping and the server not exiting past that grace, would be the fault itself.
+	leaseUntil := func(when string) string {
+		t.Helper()
+		if v := f.scalar(`SELECT coalesce((SELECT lease_until::text FROM ` + f.schema + `.rag_writer_lease WHERE holder <> ''), '')`); v != "" {
+			return v
+		}
+		grace := time.After(shutdownGrace + 5*time.Second)
+		for {
+			if strings.Contains(stderr.String(), "tenant music: stopping") {
+				t.Fatalf("%s: the lease has no holder: the server lost it and is stopping: %s", when, stderr)
+			}
+			select {
+			case code := <-done:
+				t.Fatalf("%s: the lease has no holder: the server lost it and exited %d: %s", when, code, stderr)
+			case <-grace:
+				t.Fatalf("%s: the lease has no holder, and the server goes on: %s", when, stderr)
+			case <-time.After(100 * time.Millisecond):
+			}
+		}
+	}
+
 	release, searched := f.holdStore(done, stderr, m[1])
-	before := f.scalar(`SELECT lease_until::text FROM ` + f.schema + `.rag_writer_lease WHERE holder <> ''`)
+	before := leaseUntil("every store connection held")
 	hold := time.NewTimer(4 * leaseTTL)
 	select {
 	case code := <-done:
 		t.Fatalf("the server exited %d while every store connection was held: %s", code, stderr)
 	case <-hold.C:
 	}
-	after := f.scalar(`SELECT lease_until::text FROM ` + f.schema + `.rag_writer_lease WHERE holder <> ''`)
+	after := leaseUntil(fmt.Sprintf("after %v held", 4*leaseTTL))
 	if after == before {
 		t.Errorf("the lease was not renewed in %v with every store connection held (lease_until %s)", 4*leaseTTL, after)
 	}
