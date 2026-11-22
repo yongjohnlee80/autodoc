@@ -260,7 +260,7 @@ jobs:
           # -test.v=test2json, its output through test2json. It runs under a runner that writes its
           # exit code in full, which says how a process ended with no word (a Windows status such as
           # 0xC0000409 or 0xC000013A, a TerminateProcess's own code). A console's Ctrl+C or Break
-          # reaches every process on the console: the runner ignores it, so the code is written, and
+          # reaches every process on the console: the runner takes it, so the code is written, and
           # keeps a raw copy of the output, so what the binary printed (TestMain's stacks on such an
           # event) outlives a test2json that dies of it. The report is the next step's, printed even
           # when this shell does not live to the end. This step fails when either run fails.
@@ -296,10 +296,11 @@ jobs:
 
           // exitcode runs os.Args[3:], its output written to the file os.Args[2] and to its own
           // standard output, and writes the program's exit code to os.Args[1] in decimal and hex.
-          // It ignores a console's Ctrl+C, Break and Close, which reach every process on the
-          // console, so it outlives them. It exits 1 when the program did not exit 0.
+          // A console's Ctrl+C, Break and Close reach every process on the console. It takes
+          // them (signal.Notify: on Windows signal.Ignore does nothing, and the console's default
+          // ends the process), so it outlives them. It exits 1 when the program did not exit 0.
           func main() {
-              signal.Ignore(os.Interrupt, syscall.SIGTERM)
+              signal.Notify(make(chan os.Signal, 1), os.Interrupt, syscall.SIGTERM)
               raw, err := os.Create(os.Args[2])
               if err != nil {
                   fmt.Fprintln(os.Stderr, err)
@@ -347,6 +348,12 @@ jobs:
           # test2json did not finish, the -json is made again from the raw copy, its times the
           # conversion's (the cells' own elapsed times come from their lines).
           t="$RUNNER_TEMP"
+          # a console event can end the step's shell while the binary still prints and exits:
+          # the runner writes the code once it has, so it is waited for, a minute at most
+          for _ in $(seq 60); do
+            [ -s "$t/tui.code" ] && break
+            sleep 1
+          done
           code=$(cat "$t/tui.code" 2>/dev/null || echo "unknown: not written")
           t2j=$(cat "$t/tui.t2j" 2>/dev/null || echo "unknown: its shell did not finish")
           echo "== ./tui: the test binary's exit code: $code; test2json's: $t2j"
