@@ -66,8 +66,25 @@ func TestAnEarlierChecksModelsAreDropped(t *testing.T) {
 
 // A model's context maximum asked of one server, then of another with the same model name (the
 // base URL edited, or the kind changed), answering last, is dropped: the hint is the server in the
-// form's. The mutant, named here: the guard on the model name alone (the first server's maximum).
+// form's. Asked, then the kind chosen anew with no window and nothing asked, the answer is dropped
+// too: no maximum, hint or window for a kind sent none. The mutants, named here: the guard on the
+// model name alone (the first server's maximum); maxAsked kept when the kind changes unasked.
 func TestAnEarlierContextMaximumIsDropped(t *testing.T) {
+	t.Run("kind with no window", func(t *testing.T) {
+		c := newScripted("kb")
+		p := newProviders(c)
+		c.Answers["embedding.model_context"] = func([]any) (any, error) { return map[string]any{"maximum": int64(2048)}, nil }
+		c.Deferred = true
+		p.kind = 0
+		p.checkModelContext("http://first:1", "k", "m")
+		p.kindChosen(2, "http://first:1") // OpenAI-compatible: sent no window
+		hint, window := c.Sets["App.providerContextHint"], c.Sets["App.providerContext"]
+		c.Deliver(0)
+		if p.max != 0 || c.Sets["App.providerContextHint"] != hint || c.Sets["App.providerContext"] != window {
+			t.Fatalf("the earlier answer applied to a kind with no window: max %d, hint %v (was %v), window %v (was %v)",
+				p.max, c.Sets["App.providerContextHint"], hint, c.Sets["App.providerContext"], window)
+		}
+	})
 	for _, change := range []string{"base URL", "kind"} {
 		t.Run(change, func(t *testing.T) {
 			c := newScripted("kb")
