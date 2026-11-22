@@ -53,6 +53,7 @@ type Bridges struct {
 	rows   *feature.Rows[crewBridgeRow]
 	shown  bool   // the dialog is open
 	gen    uint64 // bumped by each open and close: an earlier opening's refreshes stop
+	listed uint64 // bumped by each listing: only the latest one's answer is shown
 	cursor int
 	now    func() time.Time
 }
@@ -118,9 +119,13 @@ func (b *Bridges) refreshLater(gen uint64) {
 	})
 }
 
-// load lists the helpers; an answer for an earlier opening, or after the dialog closed, is dropped.
+// load lists the helpers; an answer for an earlier opening, after the dialog closed, or for a
+// listing since asked again is dropped: a refresh in flight landing after a kill's relist would
+// list the killed helper again.
 func (b *Bridges) load() {
 	gen := b.gen
+	b.listed++
+	n := b.listed
 	b.c.Go(func(ctx context.Context) any {
 		res, err := b.c.Call(ctx, "crew.bridges")
 		if err != nil {
@@ -143,7 +148,7 @@ func (b *Bridges) load() {
 		}
 		return out
 	}, func(v any) {
-		if !b.shown || b.gen != gen {
+		if !b.shown || b.gen != gen || b.listed != n {
 			return
 		}
 		if err, ok := v.(error); ok {
