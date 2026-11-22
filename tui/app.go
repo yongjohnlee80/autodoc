@@ -109,6 +109,11 @@ type Host struct {
 	wsProviders         *tuidecl.ListModel
 	kbTypes             *tuidecl.ListModel       // the add dialog's KB type field (kbtype.go)
 	vectors             *feature.Rows[vectorRow] // the workspace's models (vectors.go)
+	// vectorsSeq numbers the vectors listings (loadVectors): only the latest is shown, so an open's
+	// listing answering after a purge's never shows the purged model again; vectorsLoading counts
+	// those in flight, a stale one too until its answer is dropped
+	vectorsSeq     uint64
+	vectorsLoading int
 
 	// the pickers (feature/pick.go): the search's, File › Open's and the draft's name (the outline's is
 	// outline.go's); the search's own state, and its words

@@ -31,8 +31,12 @@ func (h *Host) openVectors() {
 	h.open("vectorsDialog")
 }
 
+// loadVectors lists the workspace's models and their room. The latest listing wins: the dialog
+// opens before its listing answers, still showing the last one's rows, and a purge from those rows
+// lists again; the open's listing answering after that one is dropped, never shown over it.
 func (h *Host) loadVectors() {
-	tk, ws := h.ticket(nil, feature.TicketWorkspace), h.ws
+	tk, ws := h.ticket(&h.vectorsSeq, feature.TicketWorkspace), h.ws
+	h.vectorsLoading++
 	type answer struct {
 		rows     []vectorRow
 		refusals []map[string]any // index.status's refused texts
@@ -60,6 +64,7 @@ func (h *Host) loadVectors() {
 		}
 		return answer{rows: rows, refusals: refusals}
 	}, func(a answer) {
+		h.vectorsLoading--
 		if !tk.Current() {
 			return
 		}
