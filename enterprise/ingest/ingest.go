@@ -76,9 +76,6 @@ type Options struct {
 	PingEvery time.Duration
 	// LockPoll is how often Acquire tries a lease another server holds (DefaultLockPoll).
 	LockPoll time.Duration
-	// OlderSchema is the schema whose v0.3.15 writer lock Acquire and Run look for
-	// (pgstore.OlderWriterHeld): the store's. "" looks for none. It goes in v0.3.18.
-	OlderSchema string
 	// Log receives each run's summary and every failure. nil: none.
 	Log logger.Logger
 	// Now is the time a pass's upper bound is measured back from. nil: the source database's
@@ -126,8 +123,6 @@ type Ingester struct {
 	// deletesErr is the last deletes pass's failure, opcode.None after one that succeeded (deletes)
 	deletesErr atomic.Pointer[opcode.Code]
 	waiting    atomic.Bool
-	// older says Acquire waits because a server of v0.3.15 or before holds the tenant (waitOlder)
-	older atomic.Bool
 	// deletesTo is the bound the last deletes pass that succeeded read the deletes view to
 	deletesTo atomic.Pointer[time.Time]
 	// lastSweep is when the ingester last swept the tenant's orphan vectors (sweep); swept is how
@@ -197,34 +192,17 @@ func (in *Ingester) Store() *pgstore.Store { return in.st }
 func (in *Ingester) Tenant() string { return in.tenant }
 
 // Acquire takes the tenant's writer lease, waiting while another server holds it, until ctx ends.
-// It waits too while a server of v0.3.15 or before holds the tenant (waitOlder), before it claims
-// the lease and again after: a v0.3.15 standby could take its lock between the two.
 func (in *Ingester) Acquire(ctx context.Context) error {
 	if in.lock.Load() != nil {
 		return nil
 	}
 	defer in.waiting.Store(false)
-	defer in.older.Store(false)
-	var l *pgstore.Writer
-	for l == nil {
-		if err := in.waitOlder(ctx); err != nil {
-			return err
-		}
-		var err error
-		l, err = pgstore.AcquireWriter(ctx, in.leases, in.tenant, in.o.LeaseTTL, in.o.LockPoll, func(h pglease.Holder) {
-			in.waiting.Store(true)
-			logger.Notice(in.o.Log, fmt.Sprintf("tenant %s: waiting for its writer lease, held by %s (%s; another server)", in.tenant, h.ID, h.Info))
-		})
-		if err != nil {
-			return err
-		}
-		if held, err := in.olderHeld(ctx); err != nil || held {
-			l.Release()
-			l = nil
-			if err != nil {
-				return err
-			}
-		}
+	l, err := pgstore.AcquireWriter(ctx, in.leases, in.tenant, in.o.LeaseTTL, in.o.LockPoll, func(h pglease.Holder) {
+		in.waiting.Store(true)
+		logger.Notice(in.o.Log, fmt.Sprintf("tenant %s: waiting for its writer lease, held by %s (%s; another server)", in.tenant, h.ID, h.Info))
+	})
+	if err != nil {
+		return err
 	}
 	in.lock.Store(l)
 	in.checkDue(ctx)
@@ -232,41 +210,6 @@ func (in *Ingester) Acquire(ctx context.Context) error {
 		in.o.Locked()
 	}
 	return nil
-}
-
-// olderHeld reports whether a server of v0.3.15 or before holds the tenant (OlderSchema).
-func (in *Ingester) olderHeld(ctx context.Context) (bool, error) {
-	if in.o.OlderSchema == "" {
-		return false, nil
-	}
-	return pgstore.OlderWriterHeld(ctx, in.leases, in.o.OlderSchema, in.tenant)
-}
-
-// waitOlder waits, polling every LockPoll, while a server of v0.3.15 or before holds the tenant
-// by its advisory lock: the two would write at once, so the operator must stop that server first.
-// It says so once in the log, and the state says why it waits (State.OlderServer).
-func (in *Ingester) waitOlder(ctx context.Context) error {
-	told := false
-	for {
-		held, err := in.olderHeld(ctx)
-		if err != nil || !held {
-			return err
-		}
-		in.waiting.Store(true)
-		in.older.Store(true)
-		if !told {
-			logger.Notice(in.o.Log, fmt.Sprintf("tenant %s: an older server (v0.3.15 or before) holds it by its advisory lock: stop that server; waiting", in.tenant))
-			told = true
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		// NOTE: timed, because nothing tells this server when an older one lets go of its advisory
-		// lock: a session lock's release raises no event another session can wait on. It is asked
-		// again every LockPoll, as a held lease is.
-		case <-time.After(in.o.LockPoll):
-		}
-	}
 }
 
 // checkDue reads which facet declaration the tenant's last complete refresh wrote with, and
@@ -863,10 +806,7 @@ type Outcome struct {
 // writer lease or waits for another server's, and how its last pass and refresh ended. It is
 // published whole after each change, and safe to read from any goroutine.
 type State struct {
-	Locked, Waiting bool
-	// OlderServer says Waiting is for a server of v0.3.15 or before, which holds the tenant by its
-	// advisory lock: the operator must stop it.
-	OlderServer           bool
+	Locked, Waiting       bool
 	LastPass, LastRefresh Outcome
 	// RefreshDue is why a refresh is due before its schedule, until one completes: RefreshFacets;
 	// "" for none.
@@ -892,7 +832,6 @@ func (in *Ingester) State() State {
 	}
 	st.Locked = in.lock.Load() != nil
 	st.Waiting = !st.Locked && in.waiting.Load()
-	st.OlderServer = st.Waiting && in.older.Load()
 	if in.facetsDue.Load() {
 		st.RefreshDue = RefreshFacets
 	}
@@ -1006,19 +945,6 @@ func (in *Ingester) ping(ctx context.Context, cancel context.CancelCauseFunc) {
 			if err != nil && !errors.Is(err, ErrLockLost) && ctx.Err() == nil {
 				logger.Warning(in.o.Log, err, "tenant "+in.tenant+": renewing its writer lease")
 				err = l.Check()
-			}
-			if err == nil {
-				// a v0.3.15 standby, running since before the store was migrated, may have taken
-				// its lock since this server took the lease: both would write, so this one stops.
-				// The probe is bounded as a renew is (a sixth of the lease): unbounded, a probe
-				// waiting for a connection of a held pool stopped this loop, so neither another
-				// renew nor the silence rule ever ran, and the server went on without its lease
-				octx, ocancel := context.WithTimeout(ctx, in.o.LeaseTTL/6)
-				held, oerr := in.olderHeld(octx)
-				ocancel()
-				if oerr == nil && held {
-					err = fmt.Errorf("%w: an older server (v0.3.15 or before) holds the tenant by its advisory lock: stop that server", ErrLockLost)
-				}
 			}
 			if errors.Is(err, ErrLockLost) {
 				logger.Error(in.o.Log, err, "tenant "+in.tenant+": stopping")
