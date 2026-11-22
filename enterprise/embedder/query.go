@@ -63,9 +63,10 @@ func (w *Worker) QueryEmbedder(tenant string) search.QueryEmbedder {
 			}
 			defer w.lim.release()
 			// in the model's format for a query (embed.Query): a document's for most providers
+			call := w.calls.Add(1)
 			vec, err := embed.Query(ctx, st.p, q)
 			if ctx.Err() == nil {
-				w.answered(st.fp, err) // a query that ran out its own time says nothing of the provider
+				w.answered(st.fp, call, err) // a query that ran out its own time says nothing of the provider
 			}
 			if err != nil {
 				return nil, fmt.Errorf("%w: %w", search.ErrEmbedFailed, err)
@@ -105,23 +106,42 @@ type Health struct {
 func (w *Worker) Health() Health {
 	h := Health{State: ProviderStarting}
 	if p := w.health.Load(); p != nil {
-		h = *p
+		h = p.h
 	}
 	ps := w.pace.state()
 	h.Batch, h.InFlight, h.LastCall, h.Timeouts = ps.batch, ps.inFlight, ps.lastCall, ps.timeouts
 	return h
 }
 
-// answered publishes how the provider's last call went: up when it answered (err nil), down with
-// err's code when it failed. Only a provider call (its setup, a batch, a query) publishes, so a round
-// that called nothing leaves the health as the last call left it. model is the fingerprint the
-// caller holds ("" before the provider is set up); any goroutine may call it.
-func (w *Worker) answered(model string, err error) {
+// published is a Health with the number of the provider call it reports (Worker.calls).
+type published struct {
+	h    Health
+	call uint64
+}
+
+// answered publishes how the provider's call numbered call went: up when it answered (err nil),
+// down with err's code when it failed. Only a provider call (its setup, a batch, a query) publishes,
+// so a round that called nothing leaves the health as the last call left it. model is the
+// fingerprint the caller holds ("" before the provider is set up); any goroutine may call it.
+//
+// A call that began before the one published says nothing: batches and queries run at once, so
+// one begun while the provider failed can answer after a later one found it up, and published,
+// would leave it down with nothing to correct it on an idle server.
+func (w *Worker) answered(model string, call uint64, err error) {
 	h := Health{State: ProviderUp, Model: model}
 	if err != nil {
 		h.State, h.Error = ProviderDown, providerCode(err)
 	}
-	w.health.Store(&h)
+	next := &published{h: h, call: call}
+	for {
+		cur := w.health.Load()
+		if cur != nil && cur.call > call {
+			return
+		}
+		if w.health.CompareAndSwap(cur, next) {
+			return
+		}
+	}
 }
 
 // providerCode is a worker's failure as an operator's code: the provider's three, the index's

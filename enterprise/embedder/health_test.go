@@ -111,3 +111,42 @@ func TestAnIdleRoundLeavesAFailedProviderDown(t *testing.T) {
 		t.Errorf("after a query that succeeds: %+v", h)
 	}
 }
+
+// A call that began before another says nothing once that one has answered: a query begun while
+// the provider failed, held inside it until a later query has found the provider up, fails last,
+// and the health stays up (on an idle server nothing else would correct it). The mutant, named
+// here: every answer published, whenever its call began.
+func TestAnEarlierCallsLateFailureLeavesTheHealthUp(t *testing.T) {
+	st := newStore()
+	st.put("a.md", "alpha")
+	p := newProvider("m")
+	w := embedder.New(built(p), []embedder.Tenant{{Name: "t", Store: st}}, embedder.WithPoll(10*time.Millisecond), embedder.WithSlots(4))
+	run(t, w)
+	waitFor(t, "a.md ready, the provider up", func() bool { return st.isReady("a.md") && w.Health().State == embedder.ProviderUp })
+	hold, arrived := make(chan struct{}), make(chan struct{})
+	p.mu.Lock()
+	p.fail, p.hold, p.arrived = 1, hold, arrived
+	p.mu.Unlock()
+	early := make(chan error, 1)
+	go func() {
+		_, _, err := w.QueryEmbedder("t")(context.Background(), "the earlier query")
+		early <- err
+	}()
+	<-arrived // the earlier query is in the provider, failing, held
+	p.mu.Lock()
+	p.hold, p.arrived = nil, nil
+	p.mu.Unlock()
+	if _, _, err := w.QueryEmbedder("t")(context.Background(), "the later query"); err != nil {
+		t.Fatalf("the later query: %v", err)
+	}
+	if h := w.Health(); h.State != embedder.ProviderUp {
+		t.Fatalf("after the later query answered: %+v", h)
+	}
+	close(hold)
+	if err := <-early; err == nil {
+		t.Fatal("the earlier query, begun while the provider failed, answered")
+	}
+	if h := w.Health(); h.State != embedder.ProviderUp || h.Error != "" {
+		t.Errorf("the earlier query's late failure replaced the later one's answer: %+v", h)
+	}
+}

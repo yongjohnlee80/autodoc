@@ -140,8 +140,10 @@ type Worker struct {
 	// qs is what the queries read: published by Run's goroutine whenever the provider or a
 	// tenant's switch changes, nil before the provider is set up and after Run returns.
 	qs atomic.Pointer[queryState]
-	// health is the provider's state for an operator (Health), published by Run's goroutine
-	health atomic.Pointer[Health]
+	// health is the provider's state for an operator (Health), as the latest provider call to
+	// begin left it (answered); calls numbers the calls as they begin
+	health atomic.Pointer[published]
+	calls  atomic.Uint64
 	// pace is the batch size and the calls in flight the worker sends now
 	pace *pace
 }
@@ -261,19 +263,20 @@ func (w *Worker) setUp(ctx context.Context) bool {
 	wait := w.o.retry
 	for {
 		sctx, cancel := context.WithTimeout(ctx, setupTimeout)
+		call := w.calls.Add(1)
 		p, err := w.build(sctx)
 		cancel()
 		if err == nil {
 			w.p, w.fp, w.dims = p, p.Model().Fingerprint(), p.Model().Dims
 			w.publish()
-			w.answered(w.fp, nil)
+			w.answered(w.fp, call, nil)
 			logger.Info(w.o.log, fmt.Sprintf("embedding with %s: %d dimensions, %d slots", w.fp, w.dims, w.o.slots))
 			return true
 		}
 		if ctx.Err() != nil {
 			return false
 		}
-		w.answered("", err)
+		w.answered("", call, err)
 		logger.Warning(w.o.log, err, fmt.Sprintf("embedding: the provider is not set up, so searches answer by words; trying again in %v", wait))
 		// NOTE: a provider that cannot be set up (down, or refusing the key or the model) is
 		// asked again after a wait that doubles to the longest, so an outage at start costs
@@ -673,6 +676,7 @@ func (w *Worker) embedBatch(ctx context.Context, t *tenant, batch []pgstore.Text
 		in[i] = x.Text
 	}
 	start := time.Now() // the call's own time, whatever clock the worker schedules by
+	call := w.calls.Add(1)
 	vecs, rejected, err := embed.Bisect(ctx, w.p, in, w.dims, w.o.callTimeout)
 	took := time.Since(start)
 	if ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
@@ -690,7 +694,7 @@ func (w *Worker) embedBatch(ctx context.Context, t *tenant, batch []pgstore.Text
 	}
 	if ctx.Err() == nil {
 		// the provider answered, or failed on its own: a texts' rejection is an answer, per text
-		w.answered(w.fp, err)
+		w.answered(w.fp, call, err)
 	}
 	if err != nil {
 		return nil, err
