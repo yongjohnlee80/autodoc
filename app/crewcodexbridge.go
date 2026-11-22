@@ -181,13 +181,11 @@ func (b *codexBridge) look(ctx context.Context, st *codexLookState, log io.Write
 	var callErr error
 	switch {
 	case showing && asks != st.raised:
-		if _, callErr = b.call(lctx, "crew.attention", b.c.Credential, "raise", "permission", asks); callErr == nil {
-			st.raised, st.unknown = asks, false
-		}
+		_, callErr = b.call(lctx, "crew.attention", b.c.Credential, "raise", "permission", asks)
+		st.raised, st.unknown = attentionTold(asks, callErr)
 	case !showing && (st.raised != "" || st.unknown):
-		if _, callErr = b.call(lctx, "crew.attention", b.c.Credential, "clear"); callErr == nil {
-			st.raised, st.unknown = "", false
-		}
+		_, callErr = b.call(lctx, "crew.attention", b.c.Credential, "clear")
+		st.raised, st.unknown = attentionTold("", callErr)
 	}
 	if callErr == nil {
 		// the look read the thread's status: the prompts are reported (crew.list's prompts_reported)
