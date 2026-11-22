@@ -180,9 +180,11 @@ type Todos struct {
 	folderAs string // what the folder chosen is for: "load", "new" or "move"
 	// labelling is the store L is labelling, while its prompt is open
 	labelling *todoStore
-	// assignPick is A's picker of AutoDoc's agents; assigning the A in progress (todos_assign.go)
+	// assignPick is A's picker of AutoDoc's agents; assigning the A in progress (todos_assign.go);
+	// assignSeq numbers the A presses: only the latest opens the picker
 	assignPick *feature.Pick[feature.AgentEntry]
 	assigning  *todoAssign
+	assignSeq  uint64
 	// statusPick is s's picker of the statuses; statusing is the task it is for, while it is open
 	statusPick *feature.Pick[todoStatusChoice]
 	statusing  *todoStatusing

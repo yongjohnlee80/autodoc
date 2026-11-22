@@ -231,3 +231,89 @@ func TestTodosAssignSendsNoPeerTaskFromAWindowWithoutACrew(t *testing.T) {
 		t.Errorf("a window without a crew noticed %v", ac.Notes[before:])
 	}
 }
+
+// queuedPeerCore holds every peerAgents answer until the cell runs it, as crew.lists in flight do:
+// several A presses, each answered when the cell says.
+type queuedPeerCore struct {
+	*peerCore
+	pending []func()
+}
+
+func (c *queuedPeerCore) peerAgents(then func([]feature.AgentEntry)) {
+	c.pending = append(c.pending, func() { c.peerCore.peerAgents(then) })
+}
+
+// twoTaskPeerCore is newPeerCore's window over a store with two open tasks, t1 (Ship) and t2 (Mend).
+func twoTaskPeerCore(t *testing.T) (*queuedPeerCore, *[][]any) {
+	t.Helper()
+	pc, assigned := newPeerCore("autodoc:0123456789abcdef", peer("jarvis", "autovim:plugins", "plugins", true, ""))
+	list := pc.Answers["todos.list"]
+	pc.Answers["todos.list"] = func(p []any) (any, error) {
+		if b := p[1].(map[string]any)["buckets"].([]any)[0].(string); b == "open" {
+			return map[string]any{"tasks": []any{
+				map[string]any{"id": "t1", "rev": "r1", "title": "Ship", "status": "open", "path": "open/t1.md"},
+				map[string]any{"id": "t2", "rev": "r1", "title": "Mend", "status": "open", "path": "open/t2.md"}}}, nil
+		}
+		return list(p)
+	}
+	return &queuedPeerCore{peerCore: pc}, assigned
+}
+
+// assignedIDs are the task ids todos.assign was called with, in order.
+func assignedIDs(assigned [][]any) []string {
+	var ids []string
+	for _, p := range assigned {
+		ids = append(ids, p[1].(string))
+	}
+	return ids
+}
+
+// TestTodosAssignAnsweredAfterALaterAOpensNothing: A on t1, then A on t2, the crew answering t2's
+// first; the agent chosen and the Instructions: line open for t2 when t1's answer comes. That late
+// answer is dropped: the picker does not open again, and the assignment written is t2's, the task
+// the user is assigning. The mutant, named here: assign's open checking the workspace's ticket
+// alone (t1's answer opens its picker over t2's, and the line accepted assigns t1).
+func TestTodosAssignAnsweredAfterALaterAOpensNothing(t *testing.T) {
+	c, assigned := twoTaskPeerCore(t)
+	v := New(c)
+	v.list()
+	onTask(t, v, "open")
+	v.assign() // t1, row 0
+	v.moved(0, 1)
+	if _, x := v.cursor(); feature.Str(x, "id") != "t2" {
+		t.Fatalf("the cursor is on %v, want t2", x)
+	}
+	v.assign() // t2
+	if len(c.pending) != 2 {
+		t.Fatalf("%d crew asks in flight, want 2 (one per A)", len(c.pending))
+	}
+	c.pending[1]() // t2's answers first: its picker opens
+	v.assignPick.Accept(0, "")
+	opened := len(c.Opened)
+	c.pending[0]() // t1's, after the agent was chosen for t2
+	if got := c.Opened[opened:]; slices.Contains(got, "agentAssignPicker") {
+		t.Errorf("t1's late answer opened the picker again: %v", got)
+	}
+	v.assignSet("Go.")
+	if ids := assignedIDs(*assigned); !slices.Equal(ids, []string{"t2"}) {
+		t.Fatalf("assigned %v, want [t2]: the task whose picker the agent was chosen in", ids)
+	}
+}
+
+// TestTodosAssignGoesToTheTaskItsPickerWasOpenedFor: A on t1, the picker open, then the cursor moved
+// to t2 before the agent is chosen: the assignment is t1's, the task A was pressed on, not the row
+// under the cursor when the line is accepted.
+func TestTodosAssignGoesToTheTaskItsPickerWasOpenedFor(t *testing.T) {
+	c, assigned := twoTaskPeerCore(t)
+	v := New(c)
+	v.list()
+	onTask(t, v, "open")
+	v.assign()
+	c.pending[0]()
+	v.moved(0, 1)
+	v.assignPick.Accept(0, "")
+	v.assignSet("Go.")
+	if ids := assignedIDs(*assigned); !slices.Equal(ids, []string{"t1"}) {
+		t.Fatalf("assigned %v, want [t1]: the task A was pressed on", ids)
+	}
+}
