@@ -127,6 +127,7 @@ func (h *Host) activate(b *openBuffer) {
 	}
 	h.active, h.file = b, &b.file
 	h.bufRecent = append([]*openBuffer{b}, slices.DeleteFunc(h.bufRecent, func(o *openBuffer) bool { return o == b })...)
+	h.tellNoteFile(b.file.ws, b.file.path, b.file.raw) // before SetBuffer, which lays b's visible blocks
 	h.core.SetBuffer(b.buf)
 	if b.ed != nil {
 		b.ed.SetReadOnly(false) // the shown editor edits it now; its headless one rests
