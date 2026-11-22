@@ -422,3 +422,52 @@ func TestTheCodexBridgeStopsWhenItsAgentEnds(t *testing.T) {
 		})
 	}
 }
+
+// TestACodexBridgeCallThatFailsLeavesTheAttentionUnknown: a raise or clear whose answer is lost (the
+// daemon applied it, then the call failed, as one does at its deadline) is taken for unknown, so the
+// next look says again what it sees: none showing after a lost raise is cleared, and the same prompt
+// showing after a lost clear is raised again (the mutant: a failed call leaves what the bridge knew
+// as it stood).
+func TestACodexBridgeCallThatFailsLeavesTheAttentionUnknown(t *testing.T) {
+	approval, idle := `{"type":"active","activeFlags":["waitingOnApproval"]}`, `{"type":"idle"}`
+	raise, clear, alive := "crew.attention raise permission Codex waits on an approval", "crew.attention clear", "crew.attention alive"
+	for _, c := range []struct {
+		name, lost string
+		before     []string // the looks before the one checked, the lost call among them
+		last       string
+		want       []string
+	}{
+		{"none showing after a lost raise", raise, []string{idle, approval}, idle, []string{clear, alive}},
+		{"the same prompt after a lost clear", clear, []string{idle, approval, idle}, approval, []string{raise, alive}},
+	} {
+		conn := &codexStatusConn{}
+		d, dials := &daemonCalls{}, 0
+		lost := false
+		d.refuse = func(call string) error {
+			if call == c.lost && !lost && len(d.got) > 1 { // not the first look's clear
+				lost = true
+				return context.DeadlineExceeded // applied: it is in d.got, the daemon's record
+			}
+			return nil
+		}
+		b := testCodexBridge(conn, d, &dials)
+		st := &codexLookState{unknown: true}
+		for _, s := range c.before {
+			conn.mu.Lock()
+			conn.statuses, conn.n = []string{s}, 0
+			conn.mu.Unlock()
+			looks(t, b, st, 1)
+		}
+		if !lost {
+			t.Fatalf("%s: the call %q was never made, so never lost: %q", c.name, c.lost, d.take())
+		}
+		d.take()
+		conn.mu.Lock()
+		conn.statuses, conn.n = []string{c.last}, 0
+		conn.mu.Unlock()
+		looks(t, b, st, 1)
+		if got := d.take(); !slices.Equal(got, c.want) {
+			t.Errorf("%s: the next look told the daemon %q, want %q", c.name, got, c.want)
+		}
+	}
+}
