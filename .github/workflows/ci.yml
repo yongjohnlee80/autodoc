@@ -254,67 +254,130 @@ jobs:
           # the whole module's vet, not only the ported packages': it compiles every package's tests
           # for Windows, so a neutral test can't come to lean on a helper in a Unix-tagged file
           go vet ./...
-          # ./tui runs beside the others with -json into a file, kept as an artifact when the job
-          # fails: a test binary that ends with no word (one ended at 28 s on 2026-11-20, FAIL and
-          # nothing else) is then named by the cells it had started and not ended. The step's exit
-          # is go test's own, for both runs: never a pipe's, a tee's or the report's.
+          # ./tui runs beside the others. go test prints no exit status for a test binary that wrote
+          # anything (one ended at 28 s on 2026-11-20 with FAIL and nothing else), so ./tui's binary
+          # is built and run here as go test -json runs it: in its package's folder, with
+          # -test.v=test2json, its output through test2json. It runs under a runner that writes its
+          # exit code in full, which says how a process ended with no word (a Windows status such as
+          # 0xC0000409 or 0xC000013A, a TerminateProcess's own code). A console's Ctrl+C or Break
+          # reaches every process on the console: the runner ignores it, so the code is written, and
+          # keeps a raw copy of the output, so what the binary printed (TestMain's stacks on such an
+          # event) outlives a test2json that dies of it. The report is the next step's, printed even
+          # when this shell does not live to the end. This step fails when either run fails.
           mapfile -t pkgs < <(grep -v '^#' .github/windows-packages.txt | grep . | grep -vx './tui')
-          tuijson="$RUNNER_TEMP/tui.json" tuierr="$RUNNER_TEMP/tui.err" tuicode="$RUNNER_TEMP/tui.code"
-          # go test prints no exit status for a test binary that wrote anything, so ./tui's binary is
-          # built and run here as go test -json runs it (in its package's folder, its output through
-          # test2json), by a runner that writes its exit code in full: how a process ended with no
-          # word (a Windows status such as 0xC0000409 or 0xC000013A, a TerminateProcess's own code).
-          cat > "$RUNNER_TEMP/exitcode.go" <<'EOF'
+          t="$RUNNER_TEMP"
+          cat > "$t/exitcode.go" <<'EOF'
           package main
 
           import (
               "fmt"
+              "io"
               "os"
               "os/exec"
+              "os/signal"
+              "syscall"
           )
 
-          // exitcode runs os.Args[2:] on its own output and writes the program's exit code to
-          // os.Args[1], in decimal and hex; it exits 1 when the program did not exit 0.
+          // bestEffort writes to w until its first error and then drops what follows: the raw copy
+          // is the record, the pipe to test2json a convenience that may die before the program.
+          type bestEffort struct {
+              w      io.Writer
+              failed bool
+          }
+
+          func (b *bestEffort) Write(p []byte) (int, error) {
+              if !b.failed {
+                  if _, err := b.w.Write(p); err != nil {
+                      b.failed = true
+                  }
+              }
+              return len(p), nil
+          }
+
+          // exitcode runs os.Args[3:], its output written to the file os.Args[2] and to its own
+          // standard output, and writes the program's exit code to os.Args[1] in decimal and hex.
+          // It ignores a console's Ctrl+C, Break and Close, which reach every process on the
+          // console, so it outlives them. It exits 1 when the program did not exit 0.
           func main() {
-              cmd := exec.Command(os.Args[2], os.Args[3:]...)
-              cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
-              err := cmd.Run()
+              signal.Ignore(os.Interrupt, syscall.SIGTERM)
+              raw, err := os.Create(os.Args[2])
+              if err != nil {
+                  fmt.Fprintln(os.Stderr, err)
+                  os.Exit(1)
+              }
+              out := io.MultiWriter(raw, &bestEffort{w: os.Stdout})
+              cmd := exec.Command(os.Args[3], os.Args[4:]...)
+              cmd.Stdout, cmd.Stderr = out, out
+              err = cmd.Run()
               code := fmt.Sprintf("not started: %v", err)
               if cmd.ProcessState != nil {
                   c := cmd.ProcessState.ExitCode()
                   code = fmt.Sprintf("%d (%#x)", c, uint32(c))
               }
+              _ = raw.Close()
               _ = os.WriteFile(os.Args[1], []byte(code+"\n"), 0o644)
               if err != nil {
                   os.Exit(1)
               }
           }
           EOF
-          go build -o "$RUNNER_TEMP/exitcode.exe" "$RUNNER_TEMP/exitcode.go"
-          go test -c -o "$RUNNER_TEMP/tui.test.exe" ./tui
-          (cd tui && "$RUNNER_TEMP/exitcode.exe" "$tuicode" "$RUNNER_TEMP/tui.test.exe" -test.paniconexit0 -test.v=test2json -test.count=1 -test.timeout=20m 2>&1 \
-            | go tool test2json -t -p github.com/yongjohnlee80/autodoc/tui > "$tuijson" 2> "$tuierr") &
+          go build -o "$t/exitcode.exe" "$t/exitcode.go"
+          (
+            set +e
+            go test -c -o "$t/tui.test.exe" ./tui > "$t/tui.build" 2>&1 || exit 1
+            cd tui
+            "$t/exitcode.exe" "$t/tui.code" "$t/tui.raw" "$t/tui.test.exe" -test.paniconexit0 -test.v=test2json -test.count=1 -test.timeout=20m \
+              | go tool test2json -t -p github.com/yongjohnlee80/autodoc/tui > "$t/tui.json" 2> "$t/tui.err"
+            st=("${PIPESTATUS[@]}")
+            echo "${st[1]}" > "$t/tui.t2j"
+            exit "${st[0]}"
+          ) &
           tuipid=$!
           rest=0
           go test -count=1 -timeout 20m "${pkgs[@]}" || rest=$?
           tui=0
           wait "$tuipid" || tui=$?
-          echo "== ./tui, its -json in $tuijson: exited $tui; the test binary's exit code: $(cat "$tuicode" 2>/dev/null || echo unknown)"
-          jq -r 'select(.Test == null and (.Action == "pass" or .Action == "fail" or .Action == "skip")) | "\(.Action)\t\(.Package)\t\(.Elapsed)s"' "$tuijson" || true
-          if [ "$tui" -ne 0 ]; then
+          echo "== ./tui exited $tui, the test binary's exit code: $(cat "$t/tui.code" 2>/dev/null || echo unknown); a failure's report is the next step's"
+          [ "$rest" -eq 0 ] && [ "$tui" -eq 0 ]
+      - name: ./tui's report when the job fails
+        if: ${{ failure() && !inputs.discover }}
+        run: |
+          # what ./tui left: its exit code, its build's output, and from its -json the failed cells'
+          # output, the cells running when the binary ended, and the package's own output. When
+          # test2json did not finish, the -json is made again from the raw copy, its times the
+          # conversion's (the cells' own elapsed times come from their lines).
+          t="$RUNNER_TEMP"
+          code=$(cat "$t/tui.code" 2>/dev/null || echo "unknown: not written")
+          t2j=$(cat "$t/tui.t2j" 2>/dev/null || echo "unknown: its shell did not finish")
+          echo "== ./tui: the test binary's exit code: $code; test2json's: $t2j"
+          if [ -s "$t/tui.build" ]; then
+            echo "== ./tui's build"
+            tail -n 80 "$t/tui.build"
+          fi
+          json="$t/tui.json"
+          if [ "$t2j" != 0 ] && [ -s "$t/tui.raw" ]; then
+            go tool test2json -p github.com/yongjohnlee80/autodoc/tui < "$t/tui.raw" > "$t/tui-from-raw.json" || true
+            json="$t/tui-from-raw.json"
+            echo "== test2json did not finish: this report reads $json, made from the raw output"
+          fi
+          if [ ! -s "$json" ]; then
+            echo "== no ./tui output to report"
+            exit 0
+          fi
+          jq -r 'select(.Test == null and (.Action == "pass" or .Action == "fail" or .Action == "skip")) | "\(.Action)\t\(.Package)\t\(.Elapsed)s"' "$json" || true
+          if [ "$code" != "0 (0x0)" ]; then
             echo "== each failed cell's output"
-            jq -r 'select(.Action == "fail" and .Test != null) | .Test' "$tuijson" | sort -u > "$RUNNER_TEMP/tui.failed" || true
-            jq -j --rawfile failed "$RUNNER_TEMP/tui.failed" '($failed | split("\n") | map(select(length > 0))) as $f
-              | select(.Action == "output" and .Test != null and (.Test as $t | $f | index($t)) != null) | .Output' "$tuijson" | tr -d '\r' || true
+            jq -r 'select(.Action == "fail" and .Test != null) | .Test' "$json" | sort -u > "$t/tui.failed" || true
+            jq -j --rawfile failed "$t/tui.failed" '($failed | split("\n") | map(select(length > 0))) as $f
+              | select(.Action == "output" and .Test != null and (.Test as $t | $f | index($t)) != null) | .Output' "$json" | tr -d '\r' || true
             echo "== cells running when the binary ended: started or resumed, and not paused or ended"
-            jq -r 'select(.Test != null and (.Action | test("^(run|cont|pause|pass|fail|skip)$"))) | [.Action, .Test] | @tsv' "$tuijson" | tr -d '\r' \
+            jq -r 'select(.Test != null and (.Action | test("^(run|cont|pause|pass|fail|skip)$"))) | [.Action, .Test] | @tsv' "$json" | tr -d '\r' \
               | awk -F '\t' '$1 == "run" || $1 == "cont" { open[$2] = 1; next } { delete open[$2] } END { for (t in open) print t }' | sort || true
             echo "== the package's own output (no cell's), its last 400 lines"
-            jq -j 'select(.Action == "output" and .Test == null) | .Output' "$tuijson" | tr -d '\r' | tail -n 400 || true
+            jq -j 'select(.Action == "output" and .Test == null) | .Output' "$json" | tr -d '\r' | tail -n 400 || true
             echo "== test2json's standard error, its last 80 lines"
-            tail -n 80 "$tuierr" || true
+            tail -n 80 "$t/tui.err" || true
           fi
-          [ "$rest" -eq 0 ] && [ "$tui" -eq 0 ]
       - name: keep ./tui's -json when the job fails
         if: ${{ failure() && !inputs.discover }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -324,6 +387,10 @@ jobs:
             ${{ runner.temp }}/tui.json
             ${{ runner.temp }}/tui.err
             ${{ runner.temp }}/tui.code
+            ${{ runner.temp }}/tui.t2j
+            ${{ runner.temp }}/tui.raw
+            ${{ runner.temp }}/tui-from-raw.json
+            ${{ runner.temp }}/tui.build
           retention-days: 14
           if-no-files-found: ignore
       - name: discover which packages pass on Windows
