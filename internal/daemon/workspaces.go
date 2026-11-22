@@ -61,7 +61,10 @@ type Workspaces struct {
 	// overrides are the providers workspaces use instead of the daemon's, built once each, by the
 	// provider's name, under mu; build makes one (the Embedding's, with its key and meter)
 	overrides map[string]embed.Provider
-	build     func(ctx context.Context, name string) (embed.Provider, error)
+	// overrideGen counts each provider's edits (providerChanged), under mu: a build begun before
+	// one is never kept (override)
+	overrideGen map[string]uint64
+	build       func(ctx context.Context, name string) (embed.Provider, error)
 
 	// todoStores lists the todo registry (under mu), stores is what every workspace's modes read of
 	// it, and modes are the workspaces' graph_only settings by id (under mu):
@@ -189,7 +192,7 @@ func New(ctx context.Context, db *store.Store, o Options) *Workspaces {
 	}
 	m := &Workspaces{db: db, ctx: ctx, opts: o, served: map[string]*served{}, restarting: map[string]bool{},
 		schemas: map[int64]*schemaHolder{}, texts: map[int64]*textExtensions{}, collided: map[int64]string{}, slots: slots,
-		overrides: map[string]embed.Provider{}, modes: map[int64]*modes{}, storesDirty: make(chan struct{}, 1), storesRead: make(chan struct{})}
+		overrides: map[string]embed.Provider{}, overrideGen: map[string]uint64{}, modes: map[int64]*modes{}, storesDirty: make(chan struct{}, 1), storesRead: make(chan struct{})}
 	m.queue = newEmbeddingQueue(m)
 	if o.Guard != nil {
 		o.Guard.SetServed(m.boundsRoots)

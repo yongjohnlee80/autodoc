@@ -57,7 +57,7 @@ func (m *Workspaces) admitted(ctx context.Context, fn func() error) error {
 func (m *Workspaces) override(ctx context.Context, name string) (embed.Provider, error) {
 	m.mu.Lock()
 	p, ok := m.overrides[name]
-	build := m.build
+	build, gen := m.build, m.overrideGen[name]
 	m.mu.Unlock()
 	if !ok {
 		if build == nil {
@@ -68,11 +68,15 @@ func (m *Workspaces) override(ctx context.Context, name string) (embed.Provider,
 			return nil, err
 		}
 		m.mu.Lock()
-		if prev, raced := m.overrides[name]; raced {
+		switch prev, raced := m.overrides[name]; {
+		case raced:
 			p = prev
-		} else {
+		case m.overrideGen[name] == gen:
 			m.overrides[name] = p
 		}
+		// NOTE: a build the provider's edit overtook (providerChanged dropped the cached one before
+		// this was kept) is answered but never kept: it set up the provider as the store said before
+		// the edit, and kept, every workspace naming it would embed with that until its next edit
 		m.mu.Unlock()
 	}
 	return withSharedSlots(p, m.slots), nil
@@ -111,6 +115,7 @@ func (m *Workspaces) providerChanged(from string) {
 	defer m.chg.Unlock()
 	m.mu.Lock()
 	delete(m.overrides, from)
+	m.overrideGen[from]++
 	var using []string
 	for n, s := range m.served {
 		if s.override == from {

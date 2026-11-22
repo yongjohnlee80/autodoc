@@ -189,3 +189,39 @@ func mustID(t *testing.T, m *Workspaces, name string) int64 {
 	}
 	return s.id
 }
+
+// A poll's read that a change of the path overtakes is dropped: a schema removed while the poll
+// read its file stays removed (with no path, no poll would ever read it again). The mutant, named
+// here: the read applied whatever the path is by then.
+func TestASchemaRemovedDuringAPollsReadStaysRemoved(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "s.yaml"), []byte(daemonSchema), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	h := newSchemaHolder(root, nil)
+	h.setPath("s.yaml")
+	if s, _ := h.get(); s == nil {
+		t.Fatal("the schema never became active")
+	}
+	read, release := make(chan struct{}), make(chan struct{})
+	orig := readSchemaFile
+	readSchemaFile = func(file string) (string, []byte, error) { // the poll's read, held once it has read
+		stamp, src, err := orig(file)
+		close(read)
+		<-release
+		return stamp, src, err
+	}
+	done := make(chan struct{})
+	go func() { defer close(done); h.reload(false) }()
+	<-read
+	h.setPath("") // removed while the poll's read is held
+	close(release)
+	<-done
+	readSchemaFile = orig
+	if s, _ := h.get(); s != nil {
+		t.Fatal("the poll's read, begun before the schema was removed, made it active again")
+	}
+	if st := h.status(); st.Active || st.Path != "" {
+		t.Fatalf("after the removal: %+v", st)
+	}
+}
