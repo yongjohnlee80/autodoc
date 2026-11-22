@@ -170,6 +170,40 @@ t.section("session.request across a connect", function()
   t.eq(session.workspace("kb") and session.workspace("kb").root, kb, "a workspace is found by name in the kept listing")
 end)
 
+-- A workspace.list sent before a rename and answered after one sent since: the daemon answers each
+-- request on its own goroutine, so the order is forced here by holding the first answer.
+t.section("a listing sent before a rename never puts the old name back in the kept listing", function()
+  local function call_await(m, p) return t.await(10000, function(done) session.call(m, p, done) end) end
+  local live = session.client()
+  local real = live.call
+  local hold, held, stale = true, nil, nil
+  live.call = function(self, method, params, cb, opts)
+    if method == "workspace.list" and hold then
+      hold = false
+      return real(self, method, params, function(res, err)
+        stale = res
+        held = function() cb(res, err) end
+      end, opts)
+    end
+    return real(self, method, params, cb, opts)
+  end
+  local first = false
+  session.workspaces(function() first = true end)
+  t.ok(t.wait(10000, function() return held ~= nil end), "the first listing is answered, and held")
+  t.ok(vim.tbl_contains(vim.tbl_map(function(w) return w.name end, stale or {}), "kb"), "it names kb", vim.inspect(stale))
+  local _, rerr = call_await("workspace.rename", { "kb", "kb-renamed" })
+  t.ok(rerr == nil, "kb is renamed", vim.inspect(rerr))
+  local fresh = t.await(10000, function(done) session.workspaces(done) end)
+  t.ok(fresh and session.workspace("kb-renamed") ~= nil, "a listing sent after it keeps the new name")
+  held()
+  t.ok(t.wait(5000, function() return first end), "the first listing's answer lands last")
+  t.eq(session.workspace("kb"), nil, "the old name is not kept")
+  t.ok(session.workspace("kb-renamed") ~= nil, "the new one still is")
+  t.ok(not vim.tbl_contains(session.cached_workspaces(), "kb"), "and completion does not offer kb", vim.inspect(session.cached_workspaces()))
+  live.call = real
+  call_await("workspace.rename", { "kb-renamed", "kb" })
+end)
+
 t.section("a listed KB's managed files are brought up to date, once", function()
   local scaffold = require("autodoc.kb.scaffold")
   local okp, perr = require("autodoc.kb.managed").provide()
