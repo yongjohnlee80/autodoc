@@ -210,6 +210,11 @@ type Host struct {
 	kbResume    *kbResume                                  // a partial add's type, kept for its Save to finish (kbtype.go)
 	// dialogSeq numbers the manager dialogs' opens (withCurrent): only the latest shows
 	dialogSeq uint64
+	// wsListSeq numbers the workspace listings (loadWorkspaces): only the latest is shown, so one
+	// read before a rename and answering after it never puts the old name back; wsListing counts
+	// those in flight, a stale one too until its answer is dropped
+	wsListSeq uint64
+	wsListing int
 	// the open file's frontmatter check (frontmatter.go): fmGen numbers the checks, the latest wins
 	fmGen         uint64
 	fmDiagnostics []fmDiagnostic

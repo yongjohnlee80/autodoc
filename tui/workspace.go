@@ -48,13 +48,16 @@ func workspacePatterns(value any) []string {
 }
 
 // loadWorkspaces lists the daemon's workspaces and uses the current one if it is still served,
-// else the first that is.
+// else the first that is. The latest listing wins: an earlier one answering after it (read before
+// a rename, say, which keeps the workspace and so the epoch) is dropped, never shown over it.
 func (h *Host) loadWorkspaces() {
-	tk := h.ticket(nil, feature.TicketWorkspace)
+	tk := h.ticket(&h.wsListSeq, feature.TicketWorkspace)
+	h.wsListing++
 	do(h, func(ctx context.Context) feature.AnswerOf[[]wsInfo] {
 		list, err := h.listWorkspaces(ctx)
 		return feature.Answered(list, err)
 	}, func(a feature.AnswerOf[[]wsInfo]) {
+		h.wsListing--
 		if !tk.Current() {
 			return
 		}
