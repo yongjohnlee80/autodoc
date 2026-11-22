@@ -576,31 +576,52 @@ func TestTheManagerDetail(t *testing.T) {
 
 // After a rename, and before the relisting answers, Delete… and Edit… act on the workspace by its
 // new name: the list holds it at once (a delete asked for by the old name was refused as no such
-// workspace).
+// workspace). The manager's own listing, read before the rename and answering after it, is dropped:
+// it is held here once the daemon has answered it, and let go only after the save. The mutant,
+// named here: loadWorkspaces' ticket with no sequence (the old listing puts kb back, and enters it).
 func TestARenameIsInTheListBeforeTheRelisting(t *testing.T) {
 	t.Parallel()
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
-	var holding atomic.Bool
-	release := make(chan struct{})
+	var holding, holdAnswer atomic.Bool
+	release, answerHeld, answerGo := make(chan struct{}), make(chan struct{}, 1), make(chan struct{})
 	sess := NewSession(d.sock, nil)
 	sess.SetBeforeCall(func(method string, _ []any) {
 		if method == "workspace.list" && holding.Load() {
 			<-release
 		}
 	})
+	sess.SetAfterCall(func(method string) {
+		if method == "workspace.list" && holdAnswer.CompareAndSwap(true, false) {
+			answerHeld <- struct{}{}
+			<-answerGo
+		}
+	})
 	r := runTUI(t, sess, Options{})
+	t.Cleanup(func() { close(release); close(answerGo) }) // a failed cell never leaves a worker held
 	r.waitAttached(t, "kb")
+	listing := func() int { return onLoop(r, func() int { return r.h.wsListing }) }
+	r.waitWithin(t, "the start's listings answered", daemonWait, func() bool { return listing() == 0 })
+	holdAnswer.Store(true)
 	r.h.p.Post(r.h.manageWorkspaces)
+	select {
+	case <-answerHeld:
+	case <-time.After(daemonWait):
+		t.Fatal("the manager's listing: never answered")
+	}
 	r.s.WaitForText(t, "Advanced…")
 	r.openSettings(t, "kb", 0)
 	holding.Store(true) // from here every listing waits
-	defer close(release)
 	r.saveForm(func(f *settingsForm) { f.name = "docs" })
 	r.waitNoticed(t, "docs: saved name")
+	answerGo <- struct{}{} // the manager's listing, of kb, answers after the save
+	r.waitWithin(t, "the manager's listing answered", daemonWait, func() bool { return listing() == 1 })
 	r.h.p.Post(func() { r.h.startRemoveWorkspace(0) })
 	r.s.WaitForText(t, "Delete the workspace docs?")
 	if got := onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.askText"); return v.Raw }); !strings.HasPrefix(got, "Delete the workspace docs?") {
 		t.Fatalf("Delete… asked %q, want about docs", got)
+	}
+	if ws := onLoop(r, func() string { return r.h.ws }); ws != "docs" {
+		t.Fatalf("the workspace in use is %q once the old listing answered, want docs", ws)
 	}
 }
 
