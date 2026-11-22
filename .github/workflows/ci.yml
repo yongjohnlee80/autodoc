@@ -379,7 +379,21 @@ jobs:
               | select(.Action == "output" and .Test != null and (.Test as $t | $f | index($t)) != null) | .Output' "$json" | tr -d '\r' || true
             echo "== cells running when the binary ended: started or resumed, and not paused or ended"
             jq -r 'select(.Test != null and (.Action | test("^(run|cont|pause|pass|fail|skip)$"))) | [.Action, .Test] | @tsv' "$json" | tr -d '\r' \
-              | awk -F '\t' '$1 == "run" || $1 == "cont" { open[$2] = 1; next } { delete open[$2] } END { for (t in open) print t }' | sort || true
+              | awk -F '\t' '$1 == "run" || $1 == "cont" { open[$2] = 1; next } { delete open[$2] } END { for (t in open) print t }' | sort > "$t/tui.running" || true
+            cat "$t/tui.running"
+            # what the binary printed last lands in a running cell's output: TestMain's stacks on a
+            # console event among it
+            echo "== the running cells' output: its first 30 lines and its last 600"
+            jq -j --rawfile running "$t/tui.running" '($running | split("\n") | map(select(length > 0))) as $r
+              | select(.Action == "output" and .Test != null and (.Test as $t | $r | index($t)) != null) | .Output' "$json" | tr -d '\r' > "$t/tui.running.out" || true
+            n=$(wc -l < "$t/tui.running.out")
+            if [ "$n" -le 630 ]; then
+              cat "$t/tui.running.out"
+            else
+              head -n 30 "$t/tui.running.out"
+              echo "… $((n - 630)) lines (the artifact's tui.raw has them all) …"
+              tail -n 600 "$t/tui.running.out"
+            fi
             echo "== the package's own output (no cell's), its last 400 lines"
             jq -j 'select(.Action == "output" and .Test == null) | .Output' "$json" | tr -d '\r' | tail -n 400 || true
             echo "== test2json's standard error, its last 80 lines"
