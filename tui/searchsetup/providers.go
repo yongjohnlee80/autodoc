@@ -35,7 +35,13 @@ type providers struct {
 	// model's context window maximum (0 unknown)
 	base, key, model string
 	max              int64
+	// maxAsked is the latest maximum asked for, the request whole: an answer for any other (another
+	// base URL, kind, key or stored entry with the same model name) is not this form's
+	maxAsked contextAsk
 }
+
+// contextAsk is one embedding.model_context request: everything its answer depends on.
+type contextAsk struct{ kind, base, model, key, stored string }
 
 func newProviders(c feature.Core) *providers {
 	p := &providers{models: tuidecl.NewListModel("key", "name")}
@@ -287,13 +293,17 @@ func (p *providers) checkModelContext(base, key, model string) {
 	if key == "" && p.editing != "" {
 		stored = p.editing
 	}
+	ask := contextAsk{kind: k.kind, base: strings.TrimSpace(base), model: strings.TrimSpace(model), key: key, stored: stored}
+	p.maxAsked = ask
 	tk := p.c.Ticket(nil, feature.TicketSession)
 	p.c.Go(func(ctx context.Context) any {
 		v, err := p.c.Call(ctx, "embedding.model_context", stored, spec)
 		return feature.Answered(feature.Num(feature.AsMap(v), "maximum"), err)
 	}, func(v any) {
 		a := v.(feature.AnswerOf[int64])
-		if !tk.Current() || p.model != model {
+		// the guard is the request's whole identity, not its model name alone: a base URL or a kind
+		// changed with the model kept asks again, and the earlier answer is another server's
+		if !tk.Current() || p.model != model || p.maxAsked != ask {
 			return
 		}
 		if a.Err() != nil || a.Value <= 0 {
