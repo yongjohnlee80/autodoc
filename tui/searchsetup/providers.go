@@ -36,7 +36,9 @@ type providers struct {
 	base, key, model string
 	max              int64
 	// maxAsked is the latest maximum asked for, the request whole: an answer for any other (another
-	// base URL, kind, key or stored entry with the same model name) is not this form's
+	// base URL, kind, key or stored entry with the same model name) is not this form's. It is
+	// cleared wherever the form changes with nothing asked (a kind with no window, another entry's
+	// form, the kind chosen anew), so an answer still in flight then matches nothing
 	maxAsked contextAsk
 }
 
@@ -215,7 +217,7 @@ func (p *providers) formOpened(r EndpointRow) {
 		window = store.DefaultContext
 	}
 	feature.SetField(p.c, "App.providerContext", strconv.FormatInt(window, 10))
-	p.max = 0
+	p.max, p.maxAsked = 0, contextAsk{} // another entry's form: an ask in flight from the last is not this one's
 	p.c.Set("App.providerContextHint", p.c.Tr("autodoc.text.providers.list_models_shows_max_more_uses_gpu_memory"))
 	section := int64(store.SectionTokensDefault)
 	for _, w := range p.c.Workspaces() {
@@ -233,6 +235,9 @@ func (p *providers) formOpened(r EndpointRow) {
 // kindShown shows the key field for a kind that takes one, its label in the UI's language (one
 // sealed is endpoints.showKind's), and the window for a kind sent one.
 func (p *providers) kindShown(k endpointKind) {
+	if p.maxAsked.kind != k.kind {
+		p.maxAsked = contextAsk{} // the kind changed with nothing asked of it: no answer in flight is the form's
+	}
 	p.c.Set("App.providerContextShown", k.window)
 	p.c.Set("App.providerKeyShown", k.keyLabel != "")
 	if k.keyLabel != "" && (p.editing == "" || !p.hasKey) {
@@ -281,6 +286,7 @@ func (p *providers) pickModel(i int) {
 func (p *providers) checkModelContext(base, key, model string) {
 	k := p.spec.kinds[p.kind]
 	if model == "" || !k.window {
+		p.maxAsked = contextAsk{} // nothing asked for the form as it is now: an answer in flight matches nothing
 		return
 	}
 	p.max = 0
