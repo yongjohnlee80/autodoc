@@ -140,3 +140,28 @@ func TestATerminalSurfaceIsCellsWhereItCantShowPictures(t *testing.T) {
 		})
 	}
 }
+
+// TestASurfaceCardRunAgainGetsItsSurface: a surface card closed and opened again keeps its panel's
+// view, at the same size. The new run's surface has never been told a geometry, so its first paint
+// tells it one: generation 1, a frame, the card's picture; never a blank card until a resize.
+func TestASurfaceCardRunAgainGetsItsSurface(t *testing.T) {
+	r, logs, run := surfaceTerminal(t, tuicore.TriYes, nil)
+	waitSaid(t, logs, "card", "surface gen 1")
+	waitSaid(t, logs, "card", "frame.done drawn")
+	waitImages(t, r, "the first run's frame", 1)
+	view := onLoop(r, func() *pluginView { return run.view })
+
+	onLoop(r, func() bool { run.close("closed by the test"); return true })
+	waitImages(t, r, "the first run closed", 0)
+	again := r.openPlugin("card") // its log starts again with this run
+	if again == nil || again == run {
+		t.Fatal("the card did not run again")
+	}
+	if got := onLoop(r, func() *pluginView { return again.view }); got != view {
+		t.Fatalf("the second run has view %p; want the card's own %p, kept", got, view)
+	}
+	waitSaid(t, logs, "card", "open ")
+	waitSaid(t, logs, "card", "surface gen 1") // fails after 20 s on a view that kept the first run's geometry
+	waitSaid(t, logs, "card", "frame.done drawn")
+	waitImages(t, r, "the second run's frame", 1)
+}

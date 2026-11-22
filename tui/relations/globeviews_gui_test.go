@@ -120,7 +120,8 @@ func TestTheGlobeMapsNamesCostOneDrawTextARow(t *testing.T) {
 
 // A dot is about the same size on screen whatever the zoom (a little larger past the fit, never in
 // proportion): zoomed in eightfold, the space between two documents grows eightfold and the dots
-// barely, so a cluster comes apart. Its paths are made again only when the zoom changes its step.
+// barely, so a cluster comes apart. Its paths are made again only when the zoom changes its step,
+// or the map's fit (a resize).
 func TestTheGlobeMapsDotsKeepTheirSizeOnScreen(t *testing.T) {
 	t.Parallel()
 	gl := settledGlobe(t, relMapOf(40))
@@ -137,6 +138,10 @@ func TestTheGlobeMapsDotsKeepTheirSizeOnScreen(t *testing.T) {
 	}
 	if dotsAt(d1, gl, newGlobeLook(mapPrefs(nil), defaultPalette()), nil, 1, 1).fills[0].path == d1.fills[0].path {
 		t.Fatal("another look kept the dots made for the first")
+	}
+	// a resize within the zoom's step: the fit changes, and a dot's size reads it (dotRadius)
+	if dotsAt(d1, gl, l, nil, 1, 0.5).fills[0].path == d1.fills[0].path {
+		t.Fatal("a new fit kept the dots sized for the old one")
 	}
 	// the path itself: one document's dot, in layout units, shrinks with the zoom (a little less)
 	one := settledGlobe(t, relMapOf(1))
