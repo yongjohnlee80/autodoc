@@ -83,7 +83,9 @@ beforeEach(() => {
     join(fake, "autodoc"),
     `#!/bin/sh
 d=$(dirname "$0"); id="$4"
-if [ "$2" = attention ]; then echo "$3 $4 $5" >> "$d/attention"
+if [ "$2" = attention ]; then
+  if [ "$3" = alive ] && [ -e "$d/alive-slow" ]; then sleep 0.2; fi
+  echo "$3 $4 $5" >> "$d/attention"
   if [ -e "$d/attention-fail" ]; then echo "crew attention takes raise <permission|blocked> [text], or clear" >&2; exit 2; fi
   exit 0
 fi
@@ -400,6 +402,22 @@ test("the plugin says it is alive while it runs, and stops once disposed", async
   plugin = null;
   const after = alive();
   await Bun.sleep(150);
+  expect(alive()).toBe(after);
+});
+
+test("dispose waits for a heartbeat in flight, and none starts after it", async () => {
+  writeFileSync(join(fake, "alive-slow"), ""); // each heartbeat's run says alive 0.2 s after it starts
+  await start({ heartbeatMs: 30 });
+  const alive = () => attentions().filter((l) => l.trimEnd() === "alive").length;
+  await until(() => alive() >= 1); // one run has said alive; the next is running, more wait their turn
+  const before = alive();
+  await plugin.dispose();
+  plugin = null;
+  const after = alive();
+  // dispose waited for the run in flight, which may say alive (one more if it ended just as dispose
+  // began); the runs waiting their turn, five or so, said nothing
+  expect(after - before).toBeLessThanOrEqual(2);
+  await Bun.sleep(500);
   expect(alive()).toBe(after);
 });
 

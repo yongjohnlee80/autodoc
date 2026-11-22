@@ -216,6 +216,8 @@ export const AutodocCrew = async ({ client }, options = {}) => {
     const run = attentionRuns.then(
       () =>
         new Promise((done) => {
+          // a heartbeat still waiting its turn when dispose came says nothing: the plugin has gone
+          if (disposed && args[0] === "alive") return done(null);
           let p;
           try {
             p = Bun.spawn(["autodoc", "crew", "attention", ...args], {
@@ -411,6 +413,10 @@ export const AutodocCrew = async ({ client }, options = {}) => {
       if (heartbeat) clearInterval(heartbeat);
       attemptAbort?.abort();
       await worker;
+      // the attention running now (a heartbeat among them) ends before dispose returns, so nothing
+      // says this session is alive once it has gone; those waiting their turn still run, but for
+      // a heartbeat. Each run is bounded (registerMs), so this wait is too.
+      await attentionRuns;
       server.stop(true);
       remove();
     },
