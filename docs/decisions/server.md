@@ -59,13 +59,13 @@ dropped or recycled connection loses nothing.
   refused as busy and comes back at the next poll, up to 5 seconds later. It's harmless, and has
   been since the lease came in: the lease was released, no second writer can start, and a
   supervisor's restart or a standby's poll comes later anyway.
-- **A v0.3.15 server is looked for, until v0.3.18.** v0.3.15 held a tenant by a session advisory
-  lock, which the lease doesn't see. It refuses a store migrated past its scripts, so only one
-  running when the store was migrated, or its standby, can meet a newer server. Before the lease
-  is claimed, after it, and at every renew, the ingester tries that lock's key with
-  `pg_try_advisory_xact_lock`, in one statement that keeps nothing. Held, it waits (or, holding the
-  lease, stops) and says that an older server must be stopped. v0.3.18 upgrades only from v0.3.16
-  or later, and drops the check.
+- **v0.3.16 and v0.3.17 looked for a v0.3.15 server; v0.3.18 doesn't.** v0.3.15 held a tenant by
+  a session advisory lock, which the lease doesn't see. It refuses a store migrated past its
+  scripts, so only one running when the store was migrated, or its standby, can meet a newer
+  server. Those two releases tried that lock's key before the lease was claimed, after it, and at
+  every renew, and waited (or, holding the lease, stopped) while it was held. v0.3.18 upgrades only
+  from v0.3.16 or later and has no such check: a v0.3.15 server still running beside it writes the
+  tenant too, since the fence stops only servers that take the lease.
 
 In the code: `core/pglease/`, `core/pgstore/writer.go`, `enterprise/ingest/`
 

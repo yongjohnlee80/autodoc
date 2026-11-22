@@ -123,8 +123,8 @@ var serverSteps = []struct {
 	{"http", (*server).startHTTP},
 }
 
-// leaseConns is the leases' pool's size: a lease's acquire, renew and the older-server probe are
-// one short statement each, a renew every few seconds per tenant.
+// leaseConns is the leases' pool's size: a lease's acquire and renew and the health check's ping
+// are one short statement each, a renew every few seconds per tenant.
 //
 // NOTE: a pool of their own, never the store's. A renew waiting for one of the store's connections
 // behind a flood of searches (each holding one up to its budget) went silent past the lease's
@@ -234,8 +234,7 @@ func (s *server) startIngesters() error {
 			return err
 		}
 		in := ingest.New(st, src.Tenant, s.sources[i], s.business, s.leases, ingest.Options{LeaseTTL: leaseTTL,
-			Refresh: src.Refresh, RefreshRetry: src.RefreshRetry, Interval: src.Interval, Lag: lagOf(src.Lag), Log: s.log, Committed: s.wakeEmbedder, Locked: s.wakeEmbedder,
-			OlderSchema: s.cfg.Postgres.Schema})
+			Refresh: src.Refresh, RefreshRetry: src.RefreshRetry, Interval: src.Interval, Lag: lagOf(src.Lag), Log: s.log, Committed: s.wakeEmbedder, Locked: s.wakeEmbedder})
 		s.ingesters = append(s.ingesters, in)
 		wg.Add(1)
 		go func() {
