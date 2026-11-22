@@ -107,6 +107,10 @@ type Inbox struct {
 	// user of itself
 	fallbacks map[string]string
 	took      func(job string) bool
+	// reading is each job's latest inbox.fallback read, by ask (asked counts them): two changes for
+	// one job read twice, and only the later read's answer is shown, whichever lands last
+	reading map[string]uint64
+	asked   uint64
 	// view is the inbox dialog, told how much is open and when that may have changed
 	// (crewinboxview.go); nil: none
 	view *InboxView
@@ -126,7 +130,7 @@ func NewInbox(c interface {
 func newCrewInbox(c crewInboxCore, raise func(string) bool, took func(job string) bool) *Inbox {
 	return &Inbox{c: c, raise: raise, took: took, open: map[string]crewOpen{}, reports: map[string]bool{},
 		requests: map[string]crewRequest{}, drafts: map[string]string{}, sending: map[string]uint64{}, now: time.Now,
-		fallbacks: map[string]string{}}
+		fallbacks: map[string]string{}, reading: map[string]uint64{}}
 }
 
 func (*Inbox) Name() string            { return "crewInbox" }

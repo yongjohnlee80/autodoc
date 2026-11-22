@@ -74,6 +74,7 @@ type plugins struct {
 	pendingPlugin  *candidate // the candidate on PluginConfirm, and it alone (candidate.go)
 	cands          *candidates
 	managedPlugins *feature.Rows[managedPlugin]
+	managedSeq     uint64 // the manager's listings: only the latest one's answer is shown
 	// the results panel's table, a plugin's (plugintable.go), and its export while one runs, in
 	// the format last chosen (plugintable_export.go)
 	results      *resultsTable

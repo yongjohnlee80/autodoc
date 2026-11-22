@@ -39,8 +39,9 @@ var rankerKinds = []endpointKind{
 // window the one in use ranks.
 type rankers struct {
 	*endpoints
-	supplied string // the build's own ranker: shown, read-only, in place of the one in use
-	listed   func() // the dialog's buttons follow the list (aimodels.go)
+	supplied  string // the build's own ranker: shown, read-only, in place of the one in use
+	listed    func() // the dialog's buttons follow the list (aimodels.go)
+	windowSeq uint64 // the window field's openings: only the latest opens it
 }
 
 func newRankers(c feature.Core, listed func()) *rankers {
@@ -130,21 +131,27 @@ func (r *rankers) stop() {
 		func() { r.c.Notify(r.c.Tr("autodoc.notice.rankers.search_is_not_re_ranked_the_hits_are_in_recall_o")) })
 }
 
-// startWindow opens the window's field on the one in use.
+// startWindow opens the window's field on the one in use, once it is read: a field opened before
+// would take what the user types and then the answer over it.
 func (r *rankers) startWindow() {
 	if r.supplied != "" {
 		return
 	}
-	r.c.Set("App.rankerWindowError", r.c.Trf("autodoc.text.rankers.to_more_ranks_deeper_and_takes_longer_a_cpu_rank", rank.MinWindow, rank.MaxWindow))
-	feature.SetField(r.c, "App.rankerWindow", "")
-	r.c.Open("rankerWindow")
+	tk := r.c.Ticket(&r.windowSeq, feature.TicketSession)
 	r.c.Go(func(ctx context.Context) any {
 		res, err := r.c.Call(ctx, "ranker.list")
 		if err != nil {
 			return int64(rank.DefaultWindow)
 		}
 		return feature.Num(feature.AsMap(res), "window")
-	}, func(v any) { feature.SetField(r.c, "App.rankerWindow", strconv.FormatInt(v.(int64), 10)) })
+	}, func(v any) {
+		if !tk.Current() {
+			return
+		}
+		r.c.Set("App.rankerWindowError", r.c.Trf("autodoc.text.rankers.to_more_ranks_deeper_and_takes_longer_a_cpu_rank", rank.MinWindow, rank.MaxWindow))
+		feature.SetField(r.c, "App.rankerWindow", strconv.FormatInt(v.(int64), 10))
+		r.c.Open("rankerWindow")
+	})
 }
 
 // saveWindow sets the window; one outside the bounds opens the field again, saying why.
