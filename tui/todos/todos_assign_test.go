@@ -47,11 +47,11 @@ type agentCore struct {
 
 func (c *agentCore) switchWorkspace() { c.wsGen++ }
 func (c *agentCore) Ticket(seq *uint64, scope feature.TicketScope) feature.Ticket {
-	if seq != nil || scope != feature.TicketWorkspace {
+	if scope != feature.TicketWorkspace {
 		return c.ScriptedCore.Ticket(seq, scope)
 	}
-	gen := c.wsGen
-	return feature.NewTicket(func() bool { return c.wsGen == gen })
+	latest, gen := c.ScriptedCore.Ticket(seq, scope), c.wsGen // a switch drops it, sequence or not, as the host's does
+	return feature.NewTicket(func() bool { return c.wsGen == gen && latest.Current() })
 }
 
 type handOverCall struct {
