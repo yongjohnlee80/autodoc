@@ -38,16 +38,23 @@ func alive(pid int) bool {
 }
 
 // replace starts the program on this process's handles and waits for it, then exits with its code.
-// A console's Ctrl+C reaches both, and is the program's to answer: this process, which is only
-// waiting, ignores it, or the shell would take the console back while the program still runs.
+// A console's Ctrl+C and Ctrl+Break (os.Interrupt) reach both, and are the program's to answer: this
+// process, which is only waiting, takes them on a channel nobody reads and lives on, or the shell
+// would take the console back while the program still runs. signal.Ignore would not do: on Windows
+// it leaves the console's default handler, which ends the process. The channel has one slot, as
+// signal.Notify asks; Notify never blocks on it, so an event while one waits there is dropped, and
+// none is read. A console's Close, logoff or shutdown is not taken: Windows ends every process on
+// the console for those once its handlers return, the program with it, so nothing would be gained.
 func replace(path string, args, env []string) error {
 	cmd := &exec.Cmd{Path: path, Args: args, Env: env, Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr}
-	signal.Ignore(os.Interrupt)
+	interrupts := make(chan os.Signal, 1)
+	signal.Notify(interrupts, os.Interrupt)
 	if err := cmd.Start(); err != nil {
-		signal.Reset(os.Interrupt)
+		signal.Stop(interrupts)
 		return err
 	}
 	_ = cmd.Wait() // its exit code is the answer, read below
+	signal.Stop(interrupts)
 	code := 1
 	if cmd.ProcessState != nil {
 		code = cmd.ProcessState.ExitCode()
