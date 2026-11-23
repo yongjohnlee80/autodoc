@@ -97,7 +97,7 @@ gui	plugins	host	Host.post	method
 gui	plugins	host	Host.prefs	field
 gui	plugins	host	Host.readFile	method
 gui	plugins	host	Host.reg	field
-gui	plugins	host	Host.registryLoaded	method
+gui	plugins	host	Host.registryLoad	method
 gui	plugins	host	Host.reloadCards	field
 gui	plugins	host	Host.reloadScripts	method
 gui	plugins	host	Host.reloaded	method
@@ -336,7 +336,7 @@ term	plugins	host	Host.post	method
 term	plugins	host	Host.prefs	field
 term	plugins	host	Host.readFile	method
 term	plugins	host	Host.reg	field
-term	plugins	host	Host.registryLoaded	method
+term	plugins	host	Host.registryLoad	method
 term	plugins	host	Host.reloadCards	field
 term	plugins	host	Host.reloadScripts	method
 term	plugins	host	Host.reloaded	method

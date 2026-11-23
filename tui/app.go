@@ -216,6 +216,8 @@ type Host struct {
 	cands *candidates
 	// registryNow is the registry's list as last loaded (registry.go); nil before any list opened
 	registryNow *registryList
+	// registrySeq numbers the registry's fetches for that list (registryLoad): the latest begun is kept
+	registrySeq uint64
 	kbStaged    *stagedKBType
 	kbStage     func(context.Context, string) stagedKBType // a test's stager; nil is stageKBType's clone
 	kbResume    *kbResume                                  // a partial add's type, kept for its Save to finish (kbtype.go)
