@@ -20,11 +20,16 @@ import (
 
 type GraphStore struct {
 	c        feature.Core
-	files    AbsoluteFiles // the daemon's files by path (core's)
-	userFile string        // graph.toml beside the config; "" for none
-	byWS     map[string]*graphWS
+	files    AbsoluteFiles       // the daemon's files by path (core's)
+	userFile string              // graph.toml beside the config; "" for none
+	byWS     map[wsRoot]*graphWS // by name and root: one removed and added again elsewhere has another file
 	rnd      *rand.Rand
 }
+
+// wsRoot is a workspace as the store keeps it: its name and its root, so a name taken again by a
+// workspace with another root (removed, then added again elsewhere) never reads or writes the file
+// of the root it had before.
+type wsRoot struct{ name, root string }
 
 // graphWS is one workspace's graph file, as read and written.
 type graphWS struct {
@@ -47,20 +52,23 @@ type AbsoluteFiles interface {
 
 func NewGraphStore(c feature.Core, files AbsoluteFiles, userFile string) *GraphStore {
 	now := uint64(time.Now().UnixNano())
-	return &GraphStore{c: c, files: files, userFile: userFile, byWS: map[string]*graphWS{}, rnd: rand.New(rand.NewPCG(now, now>>17|1))}
+	return &GraphStore{c: c, files: files, userFile: userFile, byWS: map[wsRoot]*graphWS{}, rnd: rand.New(rand.NewPCG(now, now>>17|1))}
 }
 
 // with runs fn with ws's graph file once it is read: at once when it has been. Nothing for a
-// workspace the daemon does not list.
+// workspace the daemon does not list. The file is the one at ws's root as last listed.
 func (s *GraphStore) with(ws string, fn func(*graphWS)) {
-	g := s.byWS[ws]
+	list := s.c.Workspaces()
+	i := slices.IndexFunc(list, func(w feature.Workspace) bool { return w.Name == ws })
+	if i < 0 || list[i].Root == "" {
+		return
+	}
+	root := list[i].Root
+	key := wsRoot{ws, root}
+	g := s.byWS[key]
 	if g == nil {
-		i := slices.IndexFunc(s.c.Workspaces(), func(w feature.Workspace) bool { return w.Name == ws })
-		if i < 0 || s.c.Workspaces()[i].Root == "" {
-			return
-		}
-		g = &graphWS{file: GraphFile(s.c.Workspaces()[i].Root)}
-		s.byWS[ws] = g
+		g = &graphWS{file: GraphFile(root)}
+		s.byWS[key] = g
 	}
 	if g.read {
 		fn(g)
