@@ -19,7 +19,7 @@ const relationMenuQML, relationViewsQML = "", ""
 // relationViewFeatures are the terminal's GlobeMap and Mindmap, in cells, made once.
 func (h *Host) relationViewFeatures() []feature.Feature {
 	if h.relationViews == nil {
-		h.relationViews = relations.CellViews(core{h}, core{h}, h.graphUserFile, h.seams.globeMapPage)
+		h.relationViews = relations.CellViews(core{h}, h.graphFiles(), h.graphUserFile, h.seams.globeMapPage)
 	}
 	return h.relationViews
 }

@@ -32,6 +32,9 @@ type GroupEditor struct {
 	// loading: ws's groups are being read, and every edit is refused until they are listed, so
 	// nothing is saved into another workspace's file, nor over ws's before its own are read
 	loading bool
+	// edits counts the edits made: a read of the groups begun before the last one holds the file as
+	// it was before it, older than the list (GlobeMap.readGroups)
+	edits uint64
 }
 
 // loadingFor binds the editor to ws, whose groups are being read: no rows, and no edits, until
@@ -86,6 +89,7 @@ func (e *GroupEditor) edit(list []Group) {
 	if e.loading {
 		return
 	}
+	e.edits++
 	e.list = list
 	if e.store != nil && e.ws != "" {
 		e.store.save(e.ws, e.view, list)

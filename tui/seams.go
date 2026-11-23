@@ -13,6 +13,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/internal/procenv"
 	"github.com/yongjohnlee80/autodoc/internal/usershell"
 	"github.com/yongjohnlee80/autodoc/tui/feature"
+	"github.com/yongjohnlee80/autodoc/tui/relations"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
 	"github.com/yongjohnlee80/golib/tui/pty"
@@ -129,6 +130,9 @@ type seams struct {
 	// globeMapPage is the documents a page of the GlobeMap's map asks for; 0 is the daemon's
 	// default. A test makes it small, to read a map of a few documents over several pages.
 	globeMapPage int
+	// graphFiles, when a test sets it, is what the relation views read and write their graph files
+	// through, given the daemon's: a read the test holds, say. nil is the daemon's.
+	graphFiles func(relations.AbsoluteFiles) relations.AbsoluteFiles
 
 	// surfaceSinkOf is where a plugin run's frames go; nil is the window's stream
 	// (pluginsurface_gui.go), or none in a terminal. A cell sets its own, so the host's whole surface
@@ -282,4 +286,13 @@ func (h *Host) embeddedThemes() fs.FS {
 		return tuidecl.Static(h.seams.embeddedThemes)
 	}
 	return tuidecl.Static(themes.FS())
+}
+
+// graphFiles is what the relation views read and write their graph files through: the daemon's, or
+// a test's over them (seams.graphFiles).
+func (h *Host) graphFiles() relations.AbsoluteFiles {
+	if wrap := h.seams.graphFiles; wrap != nil {
+		return wrap(core{h})
+	}
+	return core{h}
 }

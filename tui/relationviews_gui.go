@@ -71,9 +71,9 @@ func relationPanelQML(id, view, typ, what, colours string) string {
 func (h *Host) relationViewFeatures() []feature.Feature {
 	if h.relationViews == nil {
 		if h.gui {
-			h.relationViews = relations.WindowViews(core{h}, core{h}, h.graphUserFile, h.seams.globeMapPage, func() any { return h.backend })
+			h.relationViews = relations.WindowViews(core{h}, h.graphFiles(), h.graphUserFile, h.seams.globeMapPage, func() any { return h.backend })
 		} else {
-			h.relationViews = relations.CellViews(core{h}, core{h}, h.graphUserFile, h.seams.globeMapPage)
+			h.relationViews = relations.CellViews(core{h}, h.graphFiles(), h.graphUserFile, h.seams.globeMapPage)
 		}
 	}
 	return h.relationViews
