@@ -500,13 +500,16 @@ func newGlobeMap(c feature.Core, present func() globePublisher, page int) *Globe
 }
 
 // readGroups takes ws's groups from the store, as its map is read: its graph file's, or its first,
-// made of types and the workspace's folders. The frame on screen draws in them at once.
+// made of types and the workspace's folders. The frame on screen draws in them at once. A read the
+// settings edited during is dropped: it began before the edit (the file read again after a save
+// conflict, say), so it holds the groups as they were, and the edit, written after it, is newer.
 func (g *GlobeMap) readGroups(ws string, types []string) {
 	if g.store == nil {
 		return
 	}
+	since := g.editor.edits
 	g.store.Groups(ws, viewGlobeMap, types, g.currentLook().pal.background, func(list []Group) {
-		if ws == g.c.Workspace() {
+		if ws == g.c.Workspace() && g.editor.edits == since {
 			g.editor.listed(ws, types, list)
 			g.groupsEdited(list)
 		}
