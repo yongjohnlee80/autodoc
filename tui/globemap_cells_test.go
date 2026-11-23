@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"image/color"
 	"os"
 	"path/filepath"
@@ -202,4 +203,68 @@ func TestTheGlobeMapSettingsListACachedWorkspacesGroups(t *testing.T) {
 	onLoop(r, func() bool { g.EditGroups().SetColour("#123456"); return true })
 	file := func() string { bs, _ := os.ReadFile(relations.GraphFile(b)); return string(bs) }
 	r.waitWithin(t, "the edit written to b", daemonWait, func() bool { return strings.Contains(file(), `colour = "#123456"`) })
+}
+
+// A workspace removed and added again under its name with another root has the graph file of its
+// new root: its groups are read from there, and an edit is written there, never into the old
+// root's file. The mutant, named here: the store keeps each workspace's file by its name alone.
+func TestAWorkspaceAddedAgainWithAnotherRootHasItsNewRootsGroups(t *testing.T) {
+	old := groupsKB(t, "[[globemap.groups]]\nquery = \"path:notes/\"\ncolour = \"#edc948\"\n")
+	moved := groupsKB(t, "[[globemap.groups]]\nquery = \"path:notes/\"\ncolour = \"#4e79a7\"\n")
+	other := fileDir(t, "o.md", "# Other\n")
+	d := startManaged(t, map[string]string{"kb": old, "other": other})
+	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 120, 36)
+	r.h.p.Post(func() { r.h.enter("kb") })
+	r.waitAttached(t, "kb")
+	g := onLoop(r, func() *relations.CellGlobeMap {
+		for _, f := range r.h.reg.Features {
+			if g, ok := f.(*relations.CellGlobeMap); ok {
+				return g
+			}
+		}
+		return nil
+	})
+	colour := func() color.NRGBA {
+		return onLoop(r, func() color.NRGBA {
+			if s := g.Snapshot(); s.Loaded && s.Workspace == "kb" && len(s.Groups) > 0 {
+				return s.Groups[0].Colour
+			}
+			return color.NRGBA{}
+		})
+	}
+	onLoop(r, func() bool { g.Toggle(); return true })
+	r.waitWithin(t, "the old root's groups", daemonWait, func() bool { return colour() == relations.HexColour(0xedc948) })
+
+	r.h.p.Post(func() { r.h.removeWorkspaceConfirmed("kb") })
+	r.waitAttached(t, "other")
+	if _, err := (core{r.h}).Call(context.Background(), "workspace.add", "kb", moved); err != nil {
+		t.Fatal(err)
+	}
+	r.h.p.Post(r.h.loadWorkspaces)
+	r.waitWithin(t, "kb listed at its new root", daemonWait, func() bool {
+		return onLoop(r, func() bool {
+			for _, w := range (core{r.h}).Workspaces() {
+				if w.Name == "kb" && w.Root == moved && w.State == "ready" {
+					return true
+				}
+			}
+			return false
+		})
+	})
+	r.h.p.Post(func() { r.h.enter("kb") })
+	r.waitAttached(t, "kb")
+	r.waitWithin(t, "the new root's groups", daemonWait, func() bool {
+		return colour() == relations.HexColour(0x4e79a7) || colour() == relations.HexColour(0xedc948)
+	})
+	if c := colour(); c != relations.HexColour(0x4e79a7) {
+		t.Errorf("kb's groups after it was added again at another root: %v, the old root's; want its new root's #4e79a7", c)
+	}
+	onLoop(r, func() bool { g.EditGroups().SetColour("#123456"); return true })
+	file := func(root string) string { b, _ := os.ReadFile(relations.GraphFile(root)); return string(b) }
+	r.waitWithin(t, "the edit written", daemonWait, func() bool {
+		return strings.Contains(file(moved), `colour = "#123456"`) || strings.Contains(file(old), `colour = "#123456"`)
+	})
+	if strings.Contains(file(old), `colour = "#123456"`) {
+		t.Fatalf("the edit was written into the old root's graph file:\n%s", file(old))
+	}
 }
