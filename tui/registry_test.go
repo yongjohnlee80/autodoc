@@ -8,8 +8,10 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -401,5 +403,67 @@ func TestARegistryEntrysPreviewNamesItsKindAndAudits(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Errorf("the audited entry's preview lacks %q:\n%s", want, text)
 		}
+	}
+}
+
+// A fetch of the registry that fails after a later one has read the list (the network back by
+// then) never replaces that list: the KB type field keeps the registry's types, not the built-ins
+// said offline. The first fetch's request is held until the second's list is kept. The mutant,
+// named here: every fetch's list kept as it lands.
+func TestARegistryFetchThatFailsLateKeepsTheListALaterOneRead(t *testing.T) {
+	team := testEntry("kb-type", "team.kb", "https://github.com/example/team.kb")
+	body := testIndex(t, team)
+	arrived, release, failed := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var n atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if n.Add(1) == 1 { // the first fetch: held, then failed
+			close(arrived)
+			<-release
+			w.WriteHeader(http.StatusServiceUnavailable)
+			close(failed)
+			return
+		}
+		w.Header().Set("ETag", `"v1"`)
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+	cache := t.TempDir()
+	tune(t).registry = registrySource{url: srv.URL + "/index.json", cacheDir: func() (string, error) { return cache, nil }}
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitFor(t, "the workspaces", func(string) bool { return len(r.listed()) > 0 })
+	types := func() []string {
+		return onLoop(r, func() []string {
+			var out []string
+			for _, c := range r.h.kbTypeChoices() {
+				out = append(out, c.name)
+			}
+			return out
+		})
+	}
+	r.h.p.Post(r.h.loadKBTypes)
+	select {
+	case <-arrived:
+	case <-time.After(20 * time.Second):
+		t.Fatal("the first fetch never asked the registry")
+	}
+	r.h.p.Post(r.h.loadKBTypes)
+	r.waitWithin(t, "the second fetch's list kept", 20*time.Second, func() bool { return slices.Equal(types(), []string{"team.kb"}) })
+	close(release)
+	select {
+	case <-failed:
+	case <-time.After(20 * time.Second):
+		t.Fatal("the first fetch was never answered")
+	}
+	time.Sleep(500 * time.Millisecond) // the failure's fallback handed back to the loop, were it kept
+	if got := types(); !slices.Equal(got, []string{"team.kb"}) {
+		t.Fatalf("the KB types after the first fetch failed late: %q; want the later fetch's team.kb", got)
 	}
 }

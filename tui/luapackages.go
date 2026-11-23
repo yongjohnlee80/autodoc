@@ -106,7 +106,7 @@ func (h *Host) installPackage(url string) error {
 	url = strings.TrimSpace(url)
 	if isRegistryName(url) && h.luaDir != "" { // a name: the registry's package of that name
 		h.notify(h.trf("autodoc.notice.luapackages.looking_up_in_the_registry", url))
-		resolveRegistry(core{h}, h.seams.registry, regindex.KindLua, url, h.registryLoaded, func(repo string, err error) {
+		resolveRegistry(core{h}, h.seams.registry, regindex.KindLua, url, h.registryLoad(), func(repo string, err error) {
 			if err != nil {
 				h.notify(h.trf("autodoc.notice.luapackages.lua_install_not_installed", err.Error()))
 				return
