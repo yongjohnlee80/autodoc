@@ -175,16 +175,26 @@ func (s *server) migrate() error {
 // a cell shortens.
 var annTick = 30 * time.Second
 
+// noTempWarning is the start's one line for an index role that can't create temporary tables.
+const noTempWarning = "ann: this role can't create temporary tables in the index's database, so the approximate search's index can't be built and searches by meaning stay exact: GRANT TEMPORARY ON DATABASE to the role (PostgreSQL grants it to every role unless it was revoked from PUBLIC)"
+
 // startANN makes the approximate search every tenant's store shares, and runs its builder until
 // the server stops: the per-model HNSW indexes, one built at a time across every server on the
 // database. A builder's error is logged and retried at the next tick; searches stay exact
-// meanwhile.
+// meanwhile. A role that can't create temporary tables, so can build no index, is warned of once.
 func (s *server) startANN() error {
 	var run [8]byte
 	if _, err := rand.Read(run[:]); err != nil {
 		return err
 	}
 	s.ann = pgstore.NewANN(s.store, s.cfg.Postgres.ANN, hex.EncodeToString(run[:]))
+	// One line at the start when the index's role can't create temporary tables, which every index
+	// build needs. The server runs all the same: a deployment in that state searches exactly today,
+	// and must not stop at an upgrade. But the builder's own warnings come a minute apart, then
+	// less often, then stop, and a tenant too small to want the index reads "exact" either way.
+	if db, err := pgstore.ReadIndexDatabase(s.ctx, s.store, s.cfg.Postgres.Schema); err == nil && !db.CanTemp {
+		logger.Warning(s.log, nil, noTempWarning)
+	}
 	ctx, cancel := context.WithCancel(s.ctx)
 	done := make(chan struct{})
 	s.stops.push(func() {
