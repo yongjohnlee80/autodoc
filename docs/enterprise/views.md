@@ -287,6 +287,13 @@ split these: the role of `dsn_env` gets `CONNECT` and the read-only grants on yo
 nothing else; in the index's database, its role gets its schema and pgvector (the index's half,
 above). They may be one role or two.
 
+The index's role also creates temporary tables in its database: an index build uses one.
+PostgreSQL grants that to every role by default. Where it was revoked (`REVOKE TEMPORARY ON
+DATABASE … FROM PUBLIC`), grant it back to the role: `GRANT TEMPORARY ON DATABASE … TO
+autodoc_search`. Without it the server runs, and the approximate search's index fails to build
+(`ann-failed` in the status, with PostgreSQL's reason). `--check` of an index's own database
+refuses a role without it.
+
 The server then finds its schema, creates its tables there, and never writes anywhere else. To let
 the server create the schema itself instead, also `GRANT CREATE ON DATABASE app TO autodoc_search`.
 
