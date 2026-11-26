@@ -75,6 +75,24 @@ type Options struct {
 	Clock   clock.Clock // the cache's clock; nil: time.Now
 	// ANN is the approximate search's indexes (pgstore.ANN.Status); nil when the server has none.
 	ANN func(ctx context.Context) ([]pgstore.ANNStatus, error)
+	// Refused is the HTTP API's requests refused unread since the server started; nil when the
+	// server has no API.
+	Refused func() Refused
+}
+
+// Refused are the API's requests refused before they were read, since the server started, by
+// reason: a client at its searches in flight, a client over its rate, and no valid token (among
+// them the requests of an address that had sent too many without one). By reason and never by
+// client: a client's name is the log's.
+type Refused struct {
+	InFlight     uint64 `json:"in_flight"`
+	Rate         uint64 `json:"rate"`
+	Unauthorized uint64 `json:"unauthorized"`
+}
+
+// HTTPState is the HTTP API's part of a status.
+type HTTPState struct {
+	Refused Refused `json:"refused"`
 }
 
 // annModer is a Store that reports its tenant's search mode for a model (*pgstore.Store).
@@ -220,6 +238,8 @@ type ServerState struct {
 	Embedding EmbeddingState `json:"embedding"`
 	// Ranker is [ranker]'s state; absent when the server has none
 	Ranker *RankerState `json:"ranker,omitempty"`
+	// HTTP is the HTTP API's state; absent when the server has none
+	HTTP *HTTPState `json:"http,omitempty"`
 
 	// rank is the ranker's counts for the metrics (WriteMetrics)
 	rank *ranker.Health
@@ -372,6 +392,9 @@ func (c *Collector) Snapshot(ctx context.Context) Snapshot {
 		s.Server.Ranker = &RankerState{Kind: r.Kind, Model: r.Model, State: r.State, Error: r.Error, Window: r.Window,
 			Ranked: r.Ranked, Unranked: r.Unranked, Skipped: r.Skipped}
 		s.Server.rank = &r
+	}
+	if c.o.Refused != nil {
+		s.Server.HTTP = &HTTPState{Refused: c.o.Refused()}
 	}
 	for i, t := range c.o.Tenants {
 		live(&s.Tenants[i], t.State())

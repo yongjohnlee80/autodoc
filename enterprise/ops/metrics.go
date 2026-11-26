@@ -105,6 +105,14 @@ func WriteMetrics(w io.Writer, s Snapshot, totals HTTPTotals) error {
 		sample(b, "autodoc_http_request_duration_seconds_count", labels("path", p), float64(t.Count))
 	}
 
+	if h := s.Server.HTTP; h != nil {
+		// by reason, never by client: a client's name is the log's
+		family(b, "autodoc_http_refused_total", "counter", "The API's requests refused before they were read, since the server started, by reason: a client at its searches in flight, a client over its rate, no valid token.")
+		sample(b, "autodoc_http_refused_total", labels("reason", "in_flight"), float64(h.Refused.InFlight))
+		sample(b, "autodoc_http_refused_total", labels("reason", "rate"), float64(h.Refused.Rate))
+		sample(b, "autodoc_http_refused_total", labels("reason", "unauthorized"), float64(h.Refused.Unauthorized))
+	}
+
 	if r := s.Server.rank; r != nil {
 		writeRank(b, *r)
 	}

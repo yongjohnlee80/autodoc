@@ -323,19 +323,22 @@ func TestTheAnswerIsTheSearchsResult(t *testing.T) {
 }
 
 // The log names the client, the tenant, the status and the query's length, never the token or the
-// query's text, for an answered request and a refused one alike.
+// query's text, for an answered request and a refused one alike. A request without a valid token
+// has no line of its own: it is counted, and said in the unauthorized requests' summary (here, at
+// the handler's stop), which holds no token either.
 func TestNeitherTheTokenNorTheQueryIsLogged(t *testing.T) {
-	srv, _, log := api(t, &fake{})
+	srv, h, log := api(t, &fake{})
 	post(t, srv, bearer, "application/json", `{"tenant": "music", "query": "a private matter", "scope": {"label_id": ["A"]}}`)
 	post(t, srv, "Bearer "+token+"x", "application/json", valid)
 	post(t, srv, bearer, "application/json", `{"tenant": "secret", "query": "a private matter", "scope": {"label_id": ["A"]}}`)
+	h.Wait()
 	got := log.String()
 	for _, secret := range []string{token, "a private matter"} {
 		if strings.Contains(got, secret) {
 			t.Errorf("the log holds %q:\n%s", secret, got)
 		}
 	}
-	for _, said := range []string{"client web-app, tenant music: 200", "client -, tenant -: 401", "403 forbidden", "a query of 16 bytes"} {
+	for _, said := range []string{"client web-app, tenant music: 200", "http: 1 unauthorized requests in 1m0s, from 1 address", "403 forbidden", "a query of 16 bytes"} {
 		if !strings.Contains(got, said) {
 			t.Errorf("the log does not say %q:\n%s", said, got)
 		}

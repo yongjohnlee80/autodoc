@@ -73,6 +73,10 @@ func (s *server) startHTTP() error {
 	if s.ranker != nil {
 		hopts = append(hopts, api.WithRanker(s.ranker, s.cfg.Ranker.Window, s.cfg.Ranker.Timeout), api.WithRankCounter(s.ranker))
 	}
+	if s.cfg.HTTP.Proxy {
+		// every request comes from the proxy's address: an address's tries would be everyone's
+		hopts = append(hopts, api.WithoutAddressTries())
+	}
 	h := api.New(clients, tenants, hopts...)
 	ln, err := net.Listen("tcp", s.cfg.HTTP.Listen)
 	if err != nil {
@@ -194,6 +198,9 @@ func (s *server) startOps() error {
 	if s.ranker != nil {
 		o.Ranker = s.ranker.Health
 	}
+	if s.cfg.HTTP != nil {
+		o.Refused = s.httpRefused
+	}
 	s.ops = ops.New(o)
 	if every := s.cfg.Log.MetricsInterval; every > 0 {
 		ctx, cancel := context.WithCancel(s.ctx)
@@ -217,6 +224,15 @@ func (s *server) httpCounts() ops.HTTPCounts {
 		return h.TakeCounts()
 	}
 	return ops.HTTPCounts{}
+}
+
+// httpRefused are the API's requests refused unread since the server started; none before the API
+// serves.
+func (s *server) httpRefused() ops.Refused {
+	if h := s.api.Load(); h != nil {
+		return h.Refused()
+	}
+	return ops.Refused{}
 }
 
 // maxHeaderBytes is how much of a request's header the API reads: a token and a few fields, far
