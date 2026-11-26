@@ -104,7 +104,7 @@ Protocol 10 (`[surface]`) lets a card or dialog draw pixels: in AutoDoc's GUI it
 - The plugin presents a buffer it holds credit for.
 - The host answers each frame's outcome, then the buffer's credit, so every buffer has at most one frame in flight.
 
-The pointer arrives in dp. The host keeps IME composition, drawing the preedit at the caret the plugin reports and sending committed text as keys. A malformed side-channel message closes the plugin. Linux ships first; macOS and plugin-exported DMA-BUFs follow ([pixel surfaces](../decisions/plugins.md#pixel-surfaces)).
+The pointer arrives in dp. The host keeps IME composition, drawing the preedit at the caret the plugin reports and sending committed text as keys. A malformed side-channel message closes the plugin. On Linux a plugin may also register DMA-BUFs it exported, which the host admits or refuses before any is shown. Linux ships first; macOS follows ([pixel surfaces](../decisions/plugins.md#pixel-surfaces)).
 
 ### Protocol 11: Editor Menu Rows
 

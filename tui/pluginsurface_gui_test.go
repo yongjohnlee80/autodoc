@@ -4,22 +4,29 @@ package tui
 
 import (
 	"image"
+	"slices"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/plugin"
 	"github.com/yongjohnlee80/gio/op/extimage"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
-// Until the SDK's DMA-BUF registration comes with its cells, a window offers its plugins memory
-// frames only, whatever its caps import: a dmabuf tuple is not announced.
-func TestASurfaceOffersMemoryFramesOnly(t *testing.T) {
+// The window's caps offer a plugin memory frames and LINEAR DMA-BUFs: a DMA-BUF tuple of another
+// modifier is one a registration would be refused for as a violation, so it isn't offered.
+func TestASurfaceOffersMemoryFramesAndLinearDMABufs(t *testing.T) {
 	caps := extimage.Caps{Tuples: []extimage.Tuple{
-		{Kind: extimage.KindDMABuf, Format: extimage.FormatBGRA8, Path: extimage.PathZeroCopy},
+		{Kind: extimage.KindDMABuf, Format: extimage.FormatBGRA8, Path: extimage.PathZeroCopy, MaxSize: image.Pt(4096, 4096)},
+		{Kind: extimage.KindDMABuf, Format: extimage.FormatBGRA8, Modifier: 0x0300000000606010, Path: extimage.PathZeroCopy},
 		{Kind: extimage.KindMemory, Format: extimage.FormatRGBA8, Path: extimage.PathCPU, MaxSize: image.Pt(8192, 8192)},
 	}}
 	kinds := surfaceKinds(caps)
-	if len(kinds) != 1 || kinds[0].Kind != "memory" || kinds[0].Format != "rgba8" || kinds[0].MaxW != 8192 {
-		t.Errorf("kinds %+v, want the memory rgba8 tuple alone", kinds)
+	want := []plugin.SurfaceKind{
+		{Kind: "dmabuf", Format: "bgra8", MaxW: 4096, MaxH: 4096},
+		{Kind: "memory", Format: "rgba8", MaxW: 8192, MaxH: 8192},
+	}
+	if !slices.Equal(kinds, want) {
+		t.Errorf("kinds %+v, want %+v", kinds, want)
 	}
 }
 
