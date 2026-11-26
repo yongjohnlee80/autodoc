@@ -240,9 +240,9 @@ mode, limit and grouping are shared:
   carries `rank` once, for the request.
 - **What it costs, and what bounds it:** a request naming 16 tenants is one request with up to 16
   searches' work. The server bounds it server-wide, its tenants' searches each waiting for one of
-  `max_tenant_searches` ([server-config](server-config.md)), and per request, by its 25 s deadline.
-  No limit counts a client's calls or tenants: an application that fans its users' searches out
-  across tenants bounds its own calls.
+  `max_searches` ([server-config](server-config.md)), and per request, by its 25 s deadline. A
+  client's own limits count its requests, never the tenants a request names: an application that
+  fans its users' searches out across tenants bounds that itself.
 - **The answer** names each hit's tenant, and each tenant's mode and semantic state:
 
 ```json
@@ -266,7 +266,10 @@ caller without a valid token learns nothing about tenants or bodies:
 |---|---|---|
 | 404 | `not_found` | Any path but `/v1/search`, `/v1/health` or `/v1/status`. |
 | 405 | `method_not_allowed` | A method other than POST for `/v1/search` (`Allow: POST`), or GET for `/v1/health` and `/v1/status` (`Allow: GET`). |
+| 429 | `too_many_requests` | The address has sent too many requests without a valid token (20 at once, then 5 a second): refused before any token is compared, with `Retry-After`. Not kept behind a proxy. |
 | 401 | `unauthorized` | No `Authorization: Bearer …`, or no client has that token (`WWW-Authenticate: Bearer`). |
+| 429 | `too_many_requests` | The client is over its `rate` ([server-config](server-config.md#a-clients-limits)). `Retry-After` is the whole seconds until a search is allowed again. |
+| 429 | `too_many_in_flight` | The client has `max_in_flight` searches in flight already. `Retry-After: 1`. |
 | 415 | `unsupported_media_type` | The body isn't `application/json`. |
 | 413 | `too_large` | The body is over 64 KiB. |
 | 408 | `request_timeout` | The body didn't arrive within 5 s. |
@@ -283,13 +286,21 @@ caller without a valid token learns nothing about tenants or bodies:
 This table describes search requests. `GET /v1/health` is public, and `GET /v1/status` requires an
 operator's token; their answers and errors are described in [operations](operations.md).
 
+**The two 429s are refusals for load, not for the request.** Both come before the body is read,
+and neither says anything about the search asked for. On `too_many_in_flight`, wait for one of
+your own searches to finish, or for `Retry-After`; on `too_many_requests`, wait for `Retry-After`.
+A client that sends as many searches at once as its `max_in_flight`, each after the last was
+answered, is never refused for it. The codes are new names: `rate_limited`, in a search's `rank`
+or `semantic_error`, still means your embedding provider or ranker refused the server.
+
 ### Time and shutdown
 
 - **Each request has 30 s:** its body by 5 s, its search by 25 s, and its answer written by 30 s.
 - **On SIGTERM the server stops taking requests and answers those in flight** before it closes
   anything they use.
 - **Tokens and query text never reach the log.** It names the client, the tenant, the status, the
-  hit count and the query's length.
+  hit count and the query's length. A request refused before it is read (a 429, or no valid token)
+  has no line of its own: it is counted, and said in a summary once a minute.
 
 ## Highlighting
 

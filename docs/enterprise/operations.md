@@ -56,7 +56,8 @@ curl -s http://127.0.0.1:8730/v1/status -H "Authorization: Bearer $AUTODOC_OPS_T
             "embedding": {"model": "openai|text-embedding-3-small||1536", "state": "up", "error": "",
                           "batch": 64, "in_flight": 4, "last_call_ms": 812},
             "ranker": {"kind": "tei", "model": "BAAI/bge-reranker-v2-m3", "state": "up", "window": 40,
-                       "ranked": 5120, "unranked": {"timeout": 3}, "skipped": 210}},
+                       "ranked": 5120, "unranked": {"timeout": 3}, "skipped": 210},
+            "http": {"refused": {"in_flight": 12, "rate": 0, "unauthorized": 41}}},
  "tenants": [{"tenant": "music", "lock": "held",
    "cursor": {"updated_at": "2026-10-13T09:41:03Z", "id": "8812", "lag_seconds": 4},
    "last_pass": {"at": "…", "read": 12, "written": 12, "quarantined": 0, "error": ""},
@@ -72,6 +73,7 @@ curl -s http://127.0.0.1:8730/v1/status -H "Authorization: Bearer $AUTODOC_OPS_T
 |---|---|
 | `server.embedding` | the provider's `state` (`starting`, `up`, `down`) and its `error` code; the texts one request carries now (`batch`) and the requests in flight (`in_flight`), which are `[embedding] batch` and `slots` unless requests ran out of `call_timeout` and the pace stepped down ([server-config](server-config.md#how-the-server-embeds)); the last request's time (`last_call_ms`), and how many requests ran out of their time since the server started (`timeouts`, absent while none). A `batch` below yours that stays there means the provider is too slow for it. |
 | `server.ranker` | with a `[ranker]` only: its `kind` and `model`, its `state` (`starting`, `up`, `down`) and a down state's `error` code, the configured `window`, and since the server started the searches it reranked (`ranked`), answered in recall order by why (`unranked`: the codes of a search's `rank.error`), and skipped for `"rerank": false` (`skipped`). A `timeout` or `busy` count that grows means the ranker is too slow for `timeout` or `slots` ([server-config](server-config.md#how-the-server-reranks)). |
+| `server.http.refused` | with an `[http]` table only: the requests refused before they were read, since the server started, by reason. `in_flight`: a client at its `max_in_flight`. `rate`: a client over its `rate`. `unauthorized`: no valid token, among them the requests of an address that had sent too many without one. Never by client: the log's summary names the client ([below](#refused-requests)). |
 | `lock` | `held`; `waiting` (another server holds the tenant: a standby); `none` |
 | `cursor.lag_seconds` | how far the index is behind your data, on your (the source) database's clock: now, less the bound the last pass that completed read to (the database's now less `lag` when it ran). On a quiet source it stays at most `lag` plus `interval`; it grows only while passes fail or can't keep up. Alert on it. It's absent on a standby (only the server holding the tenant's lease measures it) and before that server's first complete pass, so make absence an alarm of its own: absent on every server of a tenant for longer than an `interval` means no server is completing passes. `cursor.updated_at` and `id` are the last row read, which stays put while nothing changes. |
 | `last_pass`, `last_refresh` | when each last ran, what it read and wrote, and its error code. `complete` is false for a refresh that couldn't read every row (it deletes nothing then; see [views](views.md)). |
@@ -112,6 +114,21 @@ metrics scope=tenant tenant=music lock=held documents=120344 ready=120344 quaran
 - **They're logfmt,** for your log pipeline to parse.
 - **The HTTP counts cover the interval:** requests by status class, and the slowest.
 - **No line holds a token, a query's text or a client's name.** Each request's own log line names its client.
+
+### Refused requests
+
+A request refused before it is read has no log line of its own: a line a request is a line anyone can write, and a flood's lines bury every other. It is counted, and said once a minute, a minute after the first one counted:
+
+```
+search: client web-app: 37 refused in 1m0s: 30 over its searches in flight (too_many_in_flight), 7 over its rate (too_many_requests)
+http: 120 unauthorized requests in 1m0s, from 3 addresses; 95 of them refused unread, their address over its tries
+```
+
+- **A client's line** is for the limits you gave it ([server-config](server-config.md#a-clients-limits)). A client that reads it every minute needs a higher `max_in_flight` or `rate`, or sends more than you meant it to.
+- **The unauthorized line** counts requests with no valid token, on any path that takes one. "Refused unread" are the requests of an address that had no try left, refused before their token was compared. Behind a proxy the line names no address.
+- **A server stopping says what it had counted and not yet said.**
+- **They're logged at `Info`,** as the requests' own lines are.
+- **The counts since the start** are the status's `server.http.refused` and the metrics' `autodoc_http_refused_total{reason}`.
 - **They're logged at `Info`:** a `[log] level` of `notice` or above leaves them out.
 
 ## Metrics for a scraper: `GET /v1/metrics`
@@ -134,6 +151,7 @@ scrape_configs:
   - `autodoc_server_info{version}`, `autodoc_provider_up`;
   - With a `[ranker]`: `autodoc_rank_up`; `autodoc_rank_calls_total{result}` (the searches' ranker calls, `ok` or the code of why one failed, a call answered at once while the ranker is down included); `autodoc_rank_seconds` (a histogram of the calls that sent texts); `autodoc_rank_texts_total` (the texts sent, distinct within each call: what a hosted ranker bills); and `autodoc_searches_unranked_total{reason}`.
   - `autodoc_http_requests_total{path, class}` and `autodoc_http_request_duration_seconds{path}` (a histogram). They count since the server started, so take rates of them, and they're never reset by the metrics lines.
+  - `autodoc_http_refused_total{reason}`: the requests refused before they were read, by `in_flight`, `rate` and `unauthorized` (`server.http.refused`). They are counted in `autodoc_http_requests_total` too, as `4xx`. A rate of `unauthorized` that stays up is someone trying tokens.
   - Per tenant: `autodoc_tenant_documents{tenant, state}` (total, ready), `autodoc_tenant_quarantined`, `autodoc_tenant_cursor_lag_seconds` (`cursor.lag_seconds`: absent on a standby and before its server's first complete pass), `autodoc_tenant_lock_held`, and `autodoc_tenant_errors{tenant, kind}` (pass, refresh, tenant; 0 or 1).
 - **`path` is one of search, status, metrics, health and other.** Any other URL is counted as `other`, never by its own name.
 - **A tenant whose state can't be read** shows `autodoc_tenant_errors{kind="tenant"} 1` and its lock, and no document or quarantine figures, never a false 0.
