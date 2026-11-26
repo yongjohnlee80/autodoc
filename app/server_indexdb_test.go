@@ -7,6 +7,8 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
@@ -265,5 +267,82 @@ func TestTheServerCheckNamesTheSourceDatabaseThatDoesNotAnswer(t *testing.T) {
 	}
 	if strings.Contains(said, wrong) || strings.Contains(said, right) || strings.Contains(said, u.String()) {
 		t.Errorf("--check shows the source's DSN or a password: %q", said)
+	}
+}
+
+// A server whose index role can't create temporary tables starts and serves, and says so once at
+// its start: the state --check now refuses, met by a deployment already running. Every index build
+// then fails, which the status reports for the model (ann-failed, with PostgreSQL's reason) while
+// the tenant, too small to want the index, reads exact. The line comes once, not at every try of
+// the builder. With the grant made before the start, it doesn't come. The mutant, named here: the
+// start saying nothing.
+func TestTheServerSaysAtItsStartThatTheIndexRoleCantMakeTemporaryTables(t *testing.T) {
+	f := newServerFixture(t, serverView)
+	t.Setenv("AUTODOC_TEST_HTTP_TOKEN", httpToken)
+	t.Setenv("AUTODOC_TEST_OPS_TOKEN", opsToken)
+	f.extra = httpBlock + `
+[[http.operator]]
+name      = "ops"
+token_env = "AUTODOC_TEST_OPS_TOKEN"
+tenants   = ["music"]
+`
+	quickBuilder(t)
+	readOnlySource(t, f)
+	idx := indexDatabase(t, f)
+	role, _, database := hardenedIndexRole(t, f, idx)
+
+	ctx, cancel := context.WithCancel(f.ctx)
+	done, stderr := f.serve(ctx)
+	f.waitServing(done, stderr, "the server serving", func() bool { return strings.Contains(stderr.String(), "serving enterprise search") })
+	m := listening.FindStringSubmatch(stderr.String())
+	if m == nil {
+		t.Fatalf("the server does not say where it listens: %s", stderr)
+	}
+	status := func() string {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodGet, "http://"+m[1]+"/v1/status", nil)
+		req.Header.Set("Authorization", "Bearer "+opsToken)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return string(b)
+	}
+	var body string
+	f.waitServing(done, stderr, "the model's index failed in status", func() bool {
+		body = status()
+		return strings.Contains(body, `"mode":"ann-failed"`)
+	})
+	if !strings.Contains(body, "permission denied to create temporary tables") {
+		t.Errorf("status's reason for the failed index is not PostgreSQL's: %s", body)
+	}
+	if !strings.Contains(body, `"search":"exact"`) {
+		t.Errorf("the tenant, under the threshold, does not read exact: %s", body)
+	}
+	// the start's own words, not the builder's (PostgreSQL's "permission denied to create …")
+	const startsLine = "ann: this role can't create temporary tables in the index's database"
+	if n := strings.Count(stderr.String(), startsLine); n != 1 {
+		t.Errorf("the start's line about temporary tables came %d times, want once: %s", n, stderr)
+	}
+	cancel()
+	if code := exitOf(t, done, stderr); code != 0 {
+		t.Fatalf("--server exited %d: %s", code, stderr)
+	}
+
+	// the grant made: a start says nothing of it
+	if _, err := idx.ExecContext(f.ctx, `GRANT TEMPORARY ON DATABASE `+database+` TO `+role); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel = context.WithCancel(f.ctx)
+	done, stderr = f.serve(ctx)
+	f.waitServing(done, stderr, "the server serving again", func() bool { return strings.Contains(stderr.String(), "serving enterprise search") })
+	cancel()
+	if code := exitOf(t, done, stderr); code != 0 {
+		t.Fatalf("--server exited %d: %s", code, stderr)
+	}
+	if strings.Contains(stderr.String(), startsLine) {
+		t.Errorf("the start warns of temporary tables with the grant made: %s", stderr)
 	}
 }
