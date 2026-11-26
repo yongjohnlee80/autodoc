@@ -653,7 +653,7 @@ func (w *Worker) embed(ctx context.Context, t *tenant, texts []pgstore.Text, siz
 		go func() {
 			defer wg.Done()
 			defer func() { <-ours }()
-			defer w.lim.release()
+			defer w.lim.release(false)
 			hashes, err := w.embedBatch(ctx, t, batch, size, inFlight)
 			mu.Lock()
 			defer mu.Unlock()

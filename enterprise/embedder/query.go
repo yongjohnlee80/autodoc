@@ -38,8 +38,8 @@ func (w *Worker) publish() {
 }
 
 // QueryEmbedder embeds tenant's search queries with the worker's provider, in the worker's slots,
-// ahead of its batches: the fingerprint and the normalized vector, as the worker stores the
-// texts'. With the provider not set up it answers search.ErrEmbedFailed, and while the tenant
+// ahead of its batches, and in all of them but one, which is the worker's (limiter): the
+// fingerprint and the normalized vector, as the worker stores the texts'. With the provider not set up it answers search.ErrEmbedFailed, and while the tenant
 // switches models search.ErrSwitching, so a search answers by words; a tenant this worker does not
 // embed is search.ErrEmbedFailed too. It may be called from any goroutine.
 func (w *Worker) QueryEmbedder(tenant string) search.QueryEmbedder {
@@ -61,7 +61,7 @@ func (w *Worker) QueryEmbedder(tenant string) search.QueryEmbedder {
 			if err := w.lim.acquire(ctx, true); err != nil {
 				return nil, err
 			}
-			defer w.lim.release()
+			defer w.lim.release(true)
 			// in the model's format for a query (embed.Query): a document's for most providers
 			call := w.calls.Add(1)
 			vec, err := embed.Query(ctx, st.p, q)
