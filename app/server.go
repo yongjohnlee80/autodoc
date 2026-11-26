@@ -350,14 +350,20 @@ func checkServer(ctx context.Context, path string, cfg *config.Server, sources [
 		}
 	}
 	dsn := cfg.Postgres.DSN()
+	// which database didn't answer is said, as the index's is: with two DSNs, the driver's words
+	// (a user, an address) leave the reader to work out which variable to mend
+	source := "the source's database"
+	if !cfg.Postgres.SeparateIndex() {
+		source = "the database"
+	}
 	business, err := postgres.OpenNamed(ctx, "autodoc-server", dsn)
 	if err != nil {
-		return redact(err, dsn)
+		return fmt.Errorf("%s (postgres.dsn_env): %w", source, redact(err, dsn))
 	}
 	defer business.Close()
 	now, err := pgstore.Now(ctx, business)
 	if err != nil {
-		return redact(err, dsn)
+		return fmt.Errorf("%s (postgres.dsn_env): %w", source, redact(err, dsn))
 	}
 	for i, src := range cfg.Sources {
 		rep, err := sources[i].CheckOrder(ctx, business, now.Add(-src.Lag))
@@ -391,8 +397,9 @@ func checkServer(ctx context.Context, path string, cfg *config.Server, sources [
 }
 
 // checkIndex is --check of the index's own database ([postgres] index_dsn_env): it answers, the
-// vector extension is installed or the role can install it, and the role can create the index's
-// tables in its schema, or the schema. It reads only, and writes one line saying what it found.
+// vector extension is installed or the role can install it, the role can create the index's
+// tables in its schema, or the schema, and it can create temporary tables, which an index build
+// uses. It reads only, and writes one line saying what it found.
 func checkIndex(ctx context.Context, path string, p config.Postgres, out io.Writer) error {
 	dsn := p.IndexDSN()
 	conn, err := postgres.OpenNamed(ctx, "autodoc-server", dsn)
@@ -415,6 +422,11 @@ func checkIndex(ctx context.Context, path string, p config.Postgres, out io.Writ
 		return config.Refuse(path, field, fmt.Sprintf("this role can't create tables in schema %s of the index's database: GRANT CREATE ON SCHEMA %s, or make the role its owner", p.Schema, p.Schema))
 	case !canCreate:
 		return config.Refuse(path, field, fmt.Sprintf("schema %s is not in the index's database, and this role can't create it: CREATE SCHEMA %s AUTHORIZATION the role, or GRANT CREATE ON DATABASE", p.Schema, p.Schema))
+	case !db.CanTemp:
+		// Without it the server starts and searches exactly, and the approximate search's index
+		// fails to build once a tenant is large enough to want it (the status says ann-failed):
+		// long after the grants were made. So it is refused here, where they are being made.
+		return config.Refuse(path, field, "this role can't create temporary tables in the index's database, which building the approximate search's index needs: GRANT TEMPORARY ON DATABASE to the role (PostgreSQL grants it to every role unless it was revoked from PUBLIC)")
 	}
 	vector := "vector " + version
 	if version == "" {
