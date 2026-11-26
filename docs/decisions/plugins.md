@@ -454,6 +454,20 @@ In the code: `plugin/surfaceconn_linux.go`, `plugin/surfacewire.go`, `tui/plugin
   paced by the plugin's acknowledgement, and retires earlier buffers on both sides. The plugin
   matches `plugin.surface` and its buffers by generation, never by arrival order, since they come on
   separate channels.
+- **A plugin's own buffers.** On Linux a plugin may register DMA-BUFs it exported, where the
+  window's kinds list them: LINEAR, one plane.
+  - The host checks the object before anything maps or imports it (it is a DMA-BUF, and its real
+    size fits its frame), and answers once: the acceptance credit `buffer.free`, or `buffer.refused`
+    for size or budget, which is not a violation.
+  - A registered buffer is unavailable until its acceptance, and the SDK enforces that: it hands a
+    buffer out only once credited, so no frame can cross its own registration.
+  - Ids are the plugin's odd ones, rising for the surface's lifetime and never reused. So an answer
+    names exactly one registration, and one that comes late (after its generation ended), twice, or
+    for an id never registered, finds nothing waiting and changes nothing.
+  - A refusal falls back to the memory pool, which every generation has whether or not the plugin
+    registers anything.
+  - The registered fd stays the plugin's on every path. The host has its own copy from the
+    datagram, and closes it on every path that doesn't admit the buffer.
 
 In the code: `tui/pluginsurface_linux.go`, `plugin/surface_linux.go`
 

@@ -700,6 +700,21 @@ text_input   = true      # the surface takes keys and IME text, and reports a ca
   drawn, superseded, not_shown, unsupported, closed or retired), then the buffer's credit
   (`buffer.free`), in that order. A frame of a retired generation, in transit across a resize, is
   answered `retired`.
+- **Your own buffers (Linux).** Where `kinds` lists `dmabuf`, a plugin that renders on a GPU may
+  register DMA-BUFs it exported and present those, so a frame never crosses memory. Send
+  `buffer.add {gen, id, kind: "dmabuf", format, w, h, modifier, planes: [{offset, pitch}]}` with the
+  buffer's fd on the same datagram: one plane, starting at offset 0, of a format and modifier
+  `kinds` lists (the modifier is LINEAR, 0, today), at most three a generation.
+  - `id` is yours: odd, and rising for the surface's lifetime. Never use one twice.
+  - The host answers each registration once. `buffer.free {buffer: id}` accepts it: only from then
+    on may a frame name it, and each frame's credit comes as for any buffer. `buffer.refused {id,
+    reason}` doesn't: `size` when the object is larger than its frame allows, `budget` when the
+    surface's memory is full for now. A refusal closes nothing. Draw into the memory buffers, which
+    the host sends every generation regardless, and register again under a new id if you like.
+  - A registration still unanswered when its generation ends gets no answer. A new generation
+    starts with none of your buffers: register them again for it.
+  - Ignore a `buffer.free` that names neither a registration you are waiting on nor a frame you
+    presented.
 - **Input.** The pointer comes as `plugin.surface.pointer {kind, button, x, y, dx, dy, count,
   ctrl, alt, shift, super, t}`, in frame-local dp: move, press and release of left, middle and
   right, scroll and leave. A scroll's `dx` and `dy` are its precise distance in dp, the part a
@@ -715,7 +730,7 @@ text_input   = true      # the surface takes keys and IME text, and reports a ca
   `not-allowed`. A name the host doesn't know is the default.
 - **What closes the plugin.** A malformed side-channel message, a frame for a buffer it has no
   credit for, a repeated `seq`, or a side channel it stops reading. The close is the usual one.
-- **Today:** Linux, with shared memory; macOS and plugin-exported DMA-BUFs follow.
+- **Today:** Linux, with shared memory and plugin-exported DMA-BUFs; macOS follows.
 
 In Go, a `Handler` that implements `plugin.SurfaceHandler` gets the surface:
 
@@ -734,6 +749,23 @@ func (s *spike) Surface(sf *plugin.Surface, info plugin.SurfaceInfo) {
 }
 func (s *spike) SurfacePointer(p plugin.SurfacePointer) { /* p.X, p.Y in dp */ }
 ```
+
+`Buffer` grants the host's memory buffers, always. A plugin with its own DMA-BUFs registers each
+with `AddBuffer`, which waits for the host's answer, and takes them from `AddedBuffer`:
+
+```go
+b, err := sf.AddBuffer(ctx, plugin.SurfaceDMABuf{FD: fd, Gen: info.Gen, W: w, H: h, Pitch: pitch, Format: "rgba8"})
+var refused *plugin.SurfaceRefused
+switch {
+case errors.As(err, &refused): // "size" or "budget": draw with sf.Buffer instead
+case err != nil:               // plugin.ErrSurfaceRetired: the size changed meanwhile; register for the new one
+default:
+	b, _ = sf.AddedBuffer(ctx) // render into your own image for b.ID, then sf.Present(b, …)
+}
+```
+
+The fd stays yours: the SDK neither closes it nor keeps one. After a resize, `AddedBuffer` answers
+`plugin.ErrSurfaceBuffers` until you register buffers for the new generation.
 
 [`examples/surface-go`](../examples/surface-go) is a complete example (Linux only, as surfaces are
 today): an animated test pattern with every input event drawn over it, and its frame rate and

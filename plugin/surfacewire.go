@@ -184,3 +184,12 @@ func ReadBufferFreeMsg(m map[string]any) (int, error) {
 	}
 	return id, nil
 }
+
+// ReadBufferRefusedMsg reads a buffer.refused op.
+func ReadBufferRefusedMsg(m map[string]any) (id int, reason string, err error) {
+	id, ok := num(m, "id")
+	if !ok {
+		return 0, "", fmt.Errorf("%w: buffer.refused wants id", ErrSurfaceWire)
+	}
+	return id, str(m, "reason"), nil
+}
