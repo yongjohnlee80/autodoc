@@ -20,15 +20,6 @@ type SurfaceBuffer struct {
 	Pix         []byte
 }
 
-// SurfaceDMABuf is a DMA-BUF to register; there is nowhere to register one here.
-type SurfaceDMABuf struct {
-	FD          int
-	Gen         int
-	W, H, Pitch int
-	Format      string
-	Modifier    uint64
-}
-
 func (*Surface) AddBuffer(context.Context, SurfaceDMABuf) (*SurfaceBuffer, error) {
 	return nil, errNoSurface
 }

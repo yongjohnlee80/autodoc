@@ -193,3 +193,43 @@ func ReadBufferRefusedMsg(m map[string]any) (id int, reason string, err error) {
 	}
 	return id, str(m, "reason"), nil
 }
+
+// A PLUGIN'S OWN BUFFERS: the names every system has, though only Linux registers any.
+
+// SurfaceDMABuf is a DMA-BUF to register: one plane of W×H pixels of Format ("rgba8" or "bgra8"),
+// Pitch bytes a row, starting at the object's first byte, for generation Gen (the SurfaceInfo it
+// was sized for). The window's kinds must list "dmabuf" with Format and Modifier.
+type SurfaceDMABuf struct {
+	FD          int
+	Gen         int
+	W, H, Pitch int
+	Format      string
+	Modifier    uint64
+}
+
+// MaxAddedBuffers is how many buffers a plugin may have registered, or waiting for the host's
+// answer, in one generation.
+const MaxAddedBuffers = 3
+
+// SurfaceRefused is the host's refusal of a registration: Reason is "size" (the object is larger
+// than its frame allows) or "budget" (the surface's memory is full for now: a later registration
+// may be taken). The plugin draws into memory buffers meanwhile.
+type SurfaceRefused struct{ Reason string }
+
+func (e *SurfaceRefused) Error() string {
+	return fmt.Sprintf("plugin: the host refused the buffer (%s)", e.Reason)
+}
+
+var (
+	// ErrSurfaceRetired is a registration whose generation ended before the host answered it, or
+	// one made for a generation already past. Register again for the new one.
+	ErrSurfaceRetired = errors.New("plugin: the surface's generation ended")
+	// ErrSurfaceKind is a registration of a kind the window doesn't offer: nothing was sent.
+	ErrSurfaceKind = errors.New("plugin: the window doesn't offer this buffer kind")
+	// ErrSurfaceBuffers is a registration beyond MaxAddedBuffers, or an AddedBuffer with none
+	// registered: nothing was sent.
+	ErrSurfaceBuffers = errors.New("plugin: too many registered buffers, or none")
+)
+
+// ErrSurfaceClosed is a side channel whose peer went, or that was closed.
+var ErrSurfaceClosed = errors.New("plugin: the side channel is closed")

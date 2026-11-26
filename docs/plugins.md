@@ -757,14 +757,26 @@ with `AddBuffer`, which waits for the host's answer, and takes them from `AddedB
 b, err := sf.AddBuffer(ctx, plugin.SurfaceDMABuf{FD: fd, Gen: info.Gen, W: w, H: h, Pitch: pitch, Format: "rgba8"})
 var refused *plugin.SurfaceRefused
 switch {
-case errors.As(err, &refused): // "size" or "budget": draw with sf.Buffer instead
-case err != nil:               // plugin.ErrSurfaceRetired: the size changed meanwhile; register for the new one
-default:
-	b, _ = sf.AddedBuffer(ctx) // render into your own image for b.ID, then sf.Present(b, …)
+case errors.As(err, &refused):
+	// "size" or "budget": draw with sf.Buffer instead
+case errors.Is(err, plugin.ErrSurfaceRetired):
+	// the size changed meanwhile: register for the new generation
+case err != nil:
+	return err
 }
+images[b.ID] = myImage // which of your images the host knows by this id
+
+next, err := sf.AddedBuffer(ctx) // a registered buffer you have credit for
+if err != nil {
+	return err
+}
+render(images[next.ID])
+sf.Present(next, image.Rectangle{}, lastInputT)
 ```
 
-The fd stays yours: the SDK neither closes it nor keeps one. After a resize, `AddedBuffer` answers
+The fd stays yours: the SDK neither closes it nor keeps one. Give `AddBuffer` a context that ends
+with the surface, not a short deadline: a registration whose caller stops waiting is abandoned,
+never granted, and still counts toward the three until the generation ends. After a resize, `AddedBuffer` answers
 `plugin.ErrSurfaceBuffers` until you register buffers for the new generation.
 
 [`examples/surface-go`](../examples/surface-go) is a complete example (Linux only, as surfaces are

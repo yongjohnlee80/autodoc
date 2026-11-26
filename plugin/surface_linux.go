@@ -2,8 +2,6 @@ package plugin
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"image"
 	"sync"
 
@@ -29,6 +27,7 @@ type Surface struct {
 	adds    map[int]*surfaceAdd    // the plugin's registrations the host hasn't answered, by id
 	added   map[int]*SurfaceBuffer // the current generation's registered buffers, by id
 	addID   int                    // the last registration's id + 1: odd ids, rising
+	lost    int                    // abandoned registrations the host accepted, this generation
 	turn    chan struct{}          // closed, and replaced, when the registered buffers change
 	wake    chan struct{}
 	acked   int
@@ -380,45 +379,14 @@ func openSurface() *Surface {
 // registration once: it accepts the buffer, or refuses it. Until it accepts, the buffer can't be
 // presented; refused, the plugin draws into the host's memory buffers, which Buffer always grants.
 
-// SurfaceDMABuf is a DMA-BUF to register: one plane of W×H pixels of Format ("rgba8" or "bgra8"),
-// Pitch bytes a row, starting at the object's first byte, for generation Gen (the SurfaceInfo it
-// was sized for). The window's kinds must list "dmabuf" with Format and Modifier.
-type SurfaceDMABuf struct {
-	FD          int
-	Gen         int
-	W, H, Pitch int
-	Format      string
-	Modifier    uint64
-}
-
-// MaxAddedBuffers is how many buffers a plugin may have registered, or waiting for the host's
-// answer, in one generation.
-const MaxAddedBuffers = 3
-
-// SurfaceRefused is the host's refusal of a registration: Reason is "size" (the object is larger
-// than its frame allows) or "budget" (the surface's memory is full for now: a later registration
-// may be taken). The plugin draws into memory buffers meanwhile.
-type SurfaceRefused struct{ Reason string }
-
-func (e *SurfaceRefused) Error() string {
-	return fmt.Sprintf("plugin: the host refused the buffer (%s)", e.Reason)
-}
-
-var (
-	// ErrSurfaceRetired is a registration whose generation ended before the host answered it, or
-	// one made for a generation already past. Register again for the new one.
-	ErrSurfaceRetired = errors.New("plugin: the surface's generation ended")
-	// ErrSurfaceKind is a registration of a kind the window doesn't offer: nothing was sent.
-	ErrSurfaceKind = errors.New("plugin: the window doesn't offer this buffer kind")
-	// ErrSurfaceBuffers is a registration beyond MaxAddedBuffers, or an AddedBuffer with none
-	// registered: nothing was sent.
-	ErrSurfaceBuffers = errors.New("plugin: too many registered buffers, or none")
-)
-
 // surfaceAdd is a registration the host hasn't answered: its buffer is unavailable until it does.
 type surfaceAdd struct {
 	buf *SurfaceBuffer
 	ans chan error // one answer: nil accepted, *SurfaceRefused, ErrSurfaceRetired or ErrSurfaceClosed
+	// abandoned: its caller stopped waiting (under mu). It is never granted, since the caller
+	// never learned which of its buffers the id names; the host may still accept it, so it stays
+	// counted against MaxAddedBuffers until its generation ends.
+	abandoned bool
 }
 
 // AddBuffer registers d with the host and waits for its answer. Accepted, the buffer is returned
@@ -426,6 +394,10 @@ type surfaceAdd struct {
 // error is a *SurfaceRefused, and a retry is a new registration. The fd stays the caller's on
 // every path: the host has its own once the registration is sent, so the caller may close its
 // own whenever it no longer needs it.
+//
+// If ctx ends before the answer, the registration is abandoned: it is never granted, whatever the
+// host answers, and it counts against MaxAddedBuffers until the generation ends (the host may
+// have taken it). So give AddBuffer a ctx that ends with the surface, not a short deadline.
 func (s *Surface) AddBuffer(ctx context.Context, d SurfaceDMABuf) (*SurfaceBuffer, error) {
 	a, err := s.startAdd(ctx, d)
 	if err != nil {
@@ -449,8 +421,18 @@ func (s *Surface) AddBuffer(ctx context.Context, d SurfaceDMABuf) (*SurfaceBuffe
 		}
 		return a.buf, nil
 	case <-ctx.Done():
-		// The caller stopped waiting, the registration didn't stop: its answer still decides the
-		// buffer, so one the host accepts is granted by AddedBuffer.
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		select {
+		case err := <-a.ans: // answered as the caller gave up: the answer stands
+			if err != nil {
+				return nil, err
+			}
+			return a.buf, nil
+		default:
+		}
+		a.abandoned = true
+		s.turned() // an AddedBuffer waiting on this registration alone has nothing to wait for
 		return nil, ctx.Err()
 	}
 }
@@ -472,7 +454,7 @@ func (s *Surface) startAdd(ctx context.Context, d SurfaceDMABuf) (*surfaceAdd, e
 			if !offersDMABuf(s.info.Kinds, d) {
 				return nil, ErrSurfaceKind
 			}
-			if len(s.adds)+len(s.added) >= MaxAddedBuffers {
+			if len(s.adds)+len(s.added)+s.lost >= MaxAddedBuffers {
 				return nil, ErrSurfaceBuffers
 			}
 			// ids are the plugin's odd ones, rising for the surface's lifetime: one is never used
@@ -518,7 +500,13 @@ func (s *Surface) AddedBuffer(ctx context.Context) (*SurfaceBuffer, error) {
 			s.mu.Unlock()
 			return nil, ErrSurfaceClosed
 		}
-		if len(s.adds)+len(s.added) == 0 {
+		waiting := 0
+		for _, a := range s.adds {
+			if !a.abandoned {
+				waiting++
+			}
+		}
+		if waiting+len(s.added) == 0 {
 			s.mu.Unlock()
 			return nil, ErrSurfaceBuffers
 		}
@@ -557,7 +545,13 @@ func (s *Surface) answerAdd(id int, err error) bool {
 		return false
 	}
 	delete(s.adds, id)
-	if err == nil {
+	switch {
+	case a.abandoned:
+		if err == nil {
+			s.lost++ // the host holds it: it keeps its place in the generation's count
+		}
+		return true
+	case err == nil:
 		a.buf.state = addedFree
 		s.added[id] = a.buf
 	}
@@ -575,6 +569,7 @@ func (s *Surface) dropAdds(err error) {
 		a.ans <- err
 	}
 	clear(s.added)
+	s.lost = 0
 	s.turned()
 }
 

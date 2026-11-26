@@ -25,9 +25,6 @@ type SurfaceConn struct {
 	buf, oob  []byte
 }
 
-// ErrSurfaceClosed is a side channel whose peer went, or that was closed.
-var ErrSurfaceClosed = errors.New("plugin: the side channel is closed")
-
 // NewSurfacePair is the host's end and the file to hand the plugin as fd 3 (exec.Cmd.ExtraFiles).
 // Both are close-on-exec; ExtraFiles clears it on the child's fd 3 alone.
 func NewSurfacePair() (*SurfaceConn, *os.File, error) {
