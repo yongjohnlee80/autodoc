@@ -165,3 +165,105 @@ func TestTheServerChecksTheIndexDatabase(t *testing.T) {
 		t.Errorf("--check shows the index's DSN or its password: %q", said)
 	}
 }
+
+// hardenedIndexRole makes the index's database as a DBA who trusts no default does: pgvector
+// installed, a login role of the test's own that owns the index's schema there and nothing else,
+// and TEMPORARY revoked from PUBLIC. It points AUTODOC_TEST_INDEX_DSN at that role, and returns
+// the role, its password and the database's name; the role is dropped when the test ends.
+func hardenedIndexRole(t *testing.T, f *serverFixture, idx dao.DataConn) (role, password, database string) {
+	t.Helper()
+	b := make([]byte, 6)
+	if _, err := rand.Read(b); err != nil {
+		t.Fatal(err)
+	}
+	role = "autodoc_ix_" + hex.EncodeToString(b)
+	password = "ix-" + hex.EncodeToString(b) + "-password"
+	database = scalarOn(t, idx, `SELECT current_database()::text`)
+	f.exec(`CREATE ROLE ` + role + ` LOGIN PASSWORD '` + password + `'`)
+	t.Cleanup(func() {
+		ctx := context.Background()
+		_, _ = idx.ExecContext(ctx, `DROP OWNED BY `+role)
+		_, _ = f.plain.ExecContext(ctx, `DROP ROLE IF EXISTS `+role)
+	})
+	for _, q := range []string{
+		`CREATE EXTENSION IF NOT EXISTS vector`,
+		`REVOKE CONNECT, TEMPORARY ON DATABASE ` + database + ` FROM PUBLIC`,
+		`GRANT CONNECT ON DATABASE ` + database + ` TO ` + role,
+		`CREATE SCHEMA ` + f.schema + ` AUTHORIZATION ` + role,
+	} {
+		if _, err := idx.ExecContext(f.ctx, q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	u, err := url.Parse(os.Getenv("AUTODOC_TEST_INDEX_DSN"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	u.User = url.UserPassword(role, password)
+	t.Setenv("AUTODOC_TEST_INDEX_DSN", u.String())
+	return role, password, database
+}
+
+// An index role that can't create temporary tables is refused by --check, exit 2, naming
+// postgres.index_dsn_env and the grant: a database whose owner revoked TEMPORARY from PUBLIC, with
+// everything else the index needs in place (pgvector, a schema the role owns). An index build
+// makes a temporary table, so without the grant the server starts and searches, and the
+// approximate search's index fails to build once a tenant is large enough to want it, long after
+// the grants were made. With the grant, --check passes. The mutants, named here: the temporary
+// tables not checked (--check says ok); the database's CREATE read in place of TEMPORARY (the
+// grant made, --check still refuses).
+func TestTheServerChecksTheIndexRoleCanMakeTemporaryTables(t *testing.T) {
+	f := newServerFixture(t, serverView)
+	readOnlySource(t, f)
+	idx := indexDatabase(t, f)
+	role, password, database := hardenedIndexRole(t, f, idx)
+	check := func() (int, string, string) {
+		var stdout, stderr bytes.Buffer
+		code := run(f.ctx, []string{"--server", "--check", f.path}, testOptions, &stdout, &stderr)
+		return code, stdout.String(), stderr.String()
+	}
+	code, stdout, stderr := check()
+	if code != 2 || !strings.Contains(stderr, "postgres.index_dsn_env") || !strings.Contains(stderr, "temporary tables") ||
+		!strings.Contains(stderr, "GRANT TEMPORARY ON DATABASE") {
+		t.Fatalf("--check of an index role that can't make temporary tables: exit %d, said %q %q", code, stdout, stderr)
+	}
+	if said := stdout + stderr; strings.Contains(said, password) {
+		t.Errorf("--check shows the index role's password: %q", said)
+	}
+	if _, err := idx.ExecContext(f.ctx, `GRANT TEMPORARY ON DATABASE `+database+` TO `+role); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr = check()
+	if code != 0 || !strings.Contains(stdout, "index: a database of its own: vector") || !strings.Contains(stdout, "schema "+f.schema+"\n") ||
+		!strings.Contains(stdout, "order confirmed over 2 rows") {
+		t.Fatalf("--check with the grant made: exit %d, said %q %q", code, stdout, stderr)
+	}
+}
+
+// --check says which database didn't answer. With the index in a database of its own there are
+// two DSNs, and the driver's words (a user, an address) leave the reader to work out which
+// variable to mend: the index's was named, the source's wasn't. Exit 1, the source's database and
+// its field named, and neither the DSN nor a password in what it says. The mutant, named here:
+// the source's failure passed on as the driver gave it.
+func TestTheServerCheckNamesTheSourceDatabaseThatDoesNotAnswer(t *testing.T) {
+	f := newServerFixture(t, serverView)
+	ro := readOnlySource(t, f)
+	indexDatabase(t, f)
+	u, err := url.Parse(ro)
+	if err != nil {
+		t.Fatal(err)
+	}
+	right, _ := u.User.Password()
+	const wrong = "not-the-password-0123456789"
+	u.User = url.UserPassword(u.User.Username(), wrong)
+	t.Setenv("AUTODOC_TEST_SERVER_DSN", u.String())
+	var stdout, stderr bytes.Buffer
+	code := run(f.ctx, []string{"--server", "--check", f.path}, testOptions, &stdout, &stderr)
+	said := stdout.String() + stderr.String()
+	if code != 1 || !strings.Contains(stderr.String(), "the source's database (postgres.dsn_env)") {
+		t.Fatalf("--check with a source that refuses the password: exit %d, said %q", code, said)
+	}
+	if strings.Contains(said, wrong) || strings.Contains(said, right) || strings.Contains(said, u.String()) {
+		t.Errorf("--check shows the source's DSN or a password: %q", said)
+	}
+}
