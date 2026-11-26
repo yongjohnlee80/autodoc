@@ -83,3 +83,58 @@ func TestEveryLimitRefusalNamesItsField(t *testing.T) {
 		}
 	}
 }
+
+// withHTTP is the good file with a line added to its [http] table.
+func withHTTP(line string) string {
+	return strings.Replace(good, "listen = \"127.0.0.1:8730\"\n", "listen = \"127.0.0.1:8730\"\n"+line+"\n", 1)
+}
+
+// The searches in flight across every request load as max_searches, and as max_tenant_searches,
+// the name the field had when only the searches across tenants were counted: the old name loads
+// the same number, with a warning that says the new one. Unset is 0, the server's choice. Both
+// names at once are refused, and each is held to 1 to 1000 under its own name. The mutants, named
+// here: the old name no longer read (0 loads); the old name read with no warning.
+func TestTheSearchesInFlightLoadUnderEitherName(t *testing.T) {
+	s, err := load(t, good)
+	if err != nil || s.HTTP.MaxSearches != 0 {
+		t.Fatalf("unset: %v, %d searches (want 0, the server's choice)", err, s.HTTP.MaxSearches)
+	}
+	s, err = load(t, withHTTP("max_searches = 3"))
+	if err != nil || s.HTTP.MaxSearches != 3 {
+		t.Fatalf("max_searches = 3: %v, %+v", err, s.HTTP)
+	}
+	for _, w := range s.Warnings {
+		if strings.Contains(w, "max_searches") {
+			t.Errorf("max_searches warns: %q", w)
+		}
+	}
+	s, err = load(t, withHTTP("max_tenant_searches = 3"))
+	if err != nil || s.HTTP.MaxSearches != 3 {
+		t.Fatalf("max_tenant_searches = 3: %v, %+v", err, s.HTTP)
+	}
+	warned := false
+	for _, w := range s.Warnings {
+		warned = warned || strings.HasPrefix(w, "http.max_tenant_searches is now max_searches")
+	}
+	if !warned {
+		t.Errorf("the old name loads with no warning naming the new one: %q", s.Warnings)
+	}
+	for _, c := range []struct {
+		line, field, says string
+	}{
+		{"max_searches = 0", "http.max_searches", "1 to 1000"},
+		{"max_searches = 1001", "http.max_searches", "1 to 1000"},
+		{"max_tenant_searches = 0", "http.max_tenant_searches", "1 to 1000"},
+		{"max_tenant_searches = 1001", "http.max_tenant_searches", "1 to 1000"},
+		{"max_searches = 4\nmax_tenant_searches = 4", "http.max_tenant_searches", "give max_searches alone"},
+	} {
+		_, err := load(t, withHTTP(c.line))
+		if err == nil {
+			t.Errorf("%q loaded", c.line)
+			continue
+		}
+		if !strings.Contains(err.Error(), c.field+": ") || !strings.Contains(err.Error(), c.says) {
+			t.Errorf("%q: the refusal doesn't name %s with %q: %v", c.line, c.field, c.says, err)
+		}
+	}
+}

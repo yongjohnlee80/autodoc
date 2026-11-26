@@ -120,20 +120,30 @@ func WithClock(c clock.Clock) Option { return func(h *Handler) { h.now = c } }
 // is, from the same snapshot. Without it the path is not found, and is counted as any other.
 func WithMetrics(on bool) Option { return func(h *Handler) { h.metrics = on } }
 
-// DefaultTenantSearches is how many tenants' searches the requests naming several tenants run at
-// once across every request, unless WithTenantSearches sets it.
-const DefaultTenantSearches = 8
+// DefaultSearches is how many searches run at once across every request, unless WithSearches sets
+// it. DefaultTenantSearches is its name from when only the searches across tenants were counted.
+const (
+	DefaultSearches       = 8
+	DefaultTenantSearches = DefaultSearches
+)
 
-// WithTenantSearches sets how many tenants' searches the requests naming several tenants run at once,
-// across every request ([http] max_tenant_searches): a request's tenants beyond it wait their turn
-// under the request's own deadline. Below 1: DefaultTenantSearches.
-func WithTenantSearches(n int) Option {
+// WithSearches sets how many searches run at once across every request and every client ([http]
+// max_searches): one for a search of a single tenant, and one for each tenant of a search across
+// several. A search beyond it waits its turn under its request's own deadline. Below 1:
+// DefaultSearches.
+func WithSearches(n int) Option {
 	return func(h *Handler) {
 		if n > 0 {
 			h.inFlight = n
 		}
 	}
 }
+
+// WithTenantSearches is WithSearches under its name from when only the searches across tenants
+// were counted.
+//
+// Deprecated: use WithSearches.
+func WithTenantSearches(n int) Option { return WithSearches(n) }
 
 // WithRanker reranks a search across tenants once, after the merge (search.WithGlobalRanker),
 // with the ranker each tenant's Searcher has (search.WithRanker): the server's one.
@@ -176,7 +186,7 @@ type Handler struct {
 	now        clock.Clock
 	operators  []Operator
 	tenants    map[string]Searcher
-	global     *search.Global // a search across tenants' slots (WithTenantSearches)
+	global     *search.Global // the searches in flight across every request (WithSearches)
 	inFlight   int            // its slots
 	globalOpts []search.GlobalOption
 	ranks      RankCounter // nil counts nothing
@@ -261,7 +271,7 @@ func (h *Handler) count(path string, status int, took time.Duration) {
 // New is the API for clients over tenants.
 func New(clients []Client, tenants map[string]Searcher, opts ...Option) *Handler {
 	h := &Handler{clients: slices.Clone(clients), tenants: tenants, log: logger.New(logger.WithWriter(io.Discard)), budget: DefaultBudget,
-		inFlight: DefaultTenantSearches}
+		inFlight: DefaultSearches}
 	for _, o := range opts {
 		o(h)
 	}
@@ -491,7 +501,12 @@ func (h *Handler) answer(ctx context.Context, w http.ResponseWriter, r *http.Req
 		refused.client, refused.tenant = a.client, a.tenant
 		return refused, response{}
 	}
-	res, err := s.Search(ctx, search.Scope(req.Scope), searchRequest(req, req.Filter))
+	// one of the searches in flight across every request, waited for within this one's budget
+	var res search.Result
+	err := h.global.One(ctx, func() (err error) {
+		res, err = s.Search(ctx, search.Scope(req.Scope), searchRequest(req, req.Filter))
+		return err
+	})
 	if err != nil {
 		e := failed(ctx, err)
 		e.client, e.tenant = a.client, a.tenant

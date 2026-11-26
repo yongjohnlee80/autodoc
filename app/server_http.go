@@ -69,7 +69,7 @@ func (s *server) startHTTP() error {
 		tenants[src.Tenant] = sr
 	}
 	hopts := []api.Option{api.WithLogger(s.log), api.WithOps(s.ops), api.WithOperators(operators),
-		api.WithMetrics(s.cfg.Metrics.Enabled), api.WithTenantSearches(tenantSearches(s.cfg))}
+		api.WithMetrics(s.cfg.Metrics.Enabled), api.WithSearches(searches(s.cfg))}
 	if s.ranker != nil {
 		hopts = append(hopts, api.WithRanker(s.ranker, s.cfg.Ranker.Window, s.cfg.Ranker.Timeout), api.WithRankCounter(s.ranker))
 	}
@@ -235,11 +235,12 @@ func newHTTPServer(h http.Handler) *http.Server {
 	}
 }
 
-// tenantSearches is how many tenants' searches the requests naming several tenants run at once
-// ([http] max_tenant_searches): the configured number, or the store pool's size less two, so a
-// burst of them leaves connections for the ingesters and the single searches.
-func tenantSearches(cfg *config.Server) int {
-	if n := cfg.HTTP.MaxTenantSearches; n > 0 {
+// searches is how many searches run at once across every request ([http] max_searches), one for a
+// single tenant's and one for each tenant of a search across several: the configured number, or
+// the store pool's size less two, so that whatever the clients ask for, two connections are left
+// for the ingesters, the embedding worker's writes and an index build.
+func searches(cfg *config.Server) int {
+	if n := cfg.HTTP.MaxSearches; n > 0 {
 		return n
 	}
 	return max(poolSize(cfg.Postgres.IndexDSN())-2, 1)

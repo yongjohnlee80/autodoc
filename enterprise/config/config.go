@@ -196,9 +196,10 @@ type HTTP struct {
 	Proxy     bool
 	Clients   []Client
 	Operators []Operator
-	// MaxTenantSearches is how many tenants' searches the requests naming several tenants run at
-	// once, across every request; 0 is the store pool's size less two (the server's choice).
-	MaxTenantSearches int
+	// MaxSearches is how many searches run at once across every request: one for a search of a
+	// single tenant, one for each tenant of a search across several. 0 is the store pool's size
+	// less two (the server's choice).
+	MaxSearches int
 }
 
 // Client is one caller of the HTTP API and what it may search.
@@ -367,7 +368,9 @@ type file struct {
 		TLSCert string `toml:"tls_cert"`
 		TLSKey  string `toml:"tls_key"`
 		Proxy   bool   `toml:"proxy"`
-		// a search across tenants' searches in flight at once, across every request
+		// the searches in flight at once, across every request; max_tenant_searches is its name
+		// from when only the searches across tenants were counted
+		MaxSearches       *int `toml:"max_searches"`
 		MaxTenantSearches *int `toml:"max_tenant_searches"`
 		Clients           []struct {
 			Name        string                         `toml:"name"`
@@ -827,11 +830,20 @@ func (v *validator) http(f file, sources []Source) *HTTP {
 		return nil
 	}
 	h := &HTTP{Listen: f.HTTP.Listen, TLSCert: f.HTTP.TLSCert, TLSKey: f.HTTP.TLSKey, Proxy: f.HTTP.Proxy}
-	if n := f.HTTP.MaxTenantSearches; n != nil {
+	switch n, old := f.HTTP.MaxSearches, f.HTTP.MaxTenantSearches; {
+	case n != nil && old != nil:
+		v.refuse("http.max_tenant_searches", "is max_searches' old name: give max_searches alone")
+	case n != nil:
 		if *n < 1 || *n > 1000 {
-			v.refuse("http.max_tenant_searches", "%d: 1 to 1000 searches", *n)
+			v.refuse("http.max_searches", "%d: 1 to 1000 searches", *n)
 		}
-		h.MaxTenantSearches = *n
+		h.MaxSearches = *n
+	case old != nil:
+		if *old < 1 || *old > 1000 {
+			v.refuse("http.max_tenant_searches", "%d: 1 to 1000 searches", *old)
+		}
+		h.MaxSearches = *old
+		v.warnings = append(v.warnings, "http.max_tenant_searches is now max_searches, and counts the searches of a single tenant too: the old name is read for now, so rename it")
 	}
 	if h.Listen == "" {
 		h.Listen = DefaultListen

@@ -454,12 +454,65 @@ func TestASearchInFlightEndsOnEveryWayOut(t *testing.T) {
 // limits answers as it always did: forty searches at once, all answered.
 func TestAClientWithNoLimitsIsNeverRefusedForThem(t *testing.T) {
 	held, quick := &fake{hold: make(chan struct{})}, &fake{}
-	srv, _, _ := limited(t, held, quick, Client{})
+	srv, _, _ := limited(t, held, quick, Client{}, WithSearches(64))
 	answers := inFlight(t, srv, held, 40)
 	close(held.hold)
 	for range 40 {
 		if r := <-answers; r.status != http.StatusOK {
 			t.Fatalf("a search of a client with no cap was answered %d", r.status)
 		}
+	}
+}
+
+// The searches of a single tenant share the searches in flight across every request, as the
+// tenants of a search across several do. With two at most (WithSearches) and two searches held,
+// from two clients: a third search is not run. It waits its turn within its own budget and, the
+// budget spent, is answered 503 unavailable, its searcher never asked. Once the two are answered,
+// a search runs again. Neither client has a cap of its own here: the bound is the server's,
+// whoever asks. The mutant, named here: a single tenant's search run without a slot (the third is
+// run while the two are held).
+func TestTheSearchesOfASingleTenantShareTheSearchesInFlight(t *testing.T) {
+	// the held searches end when the cell says, not when their own budget does: they must hold
+	// their slots for longer than the third search waits
+	var entered atomic.Int32
+	release := make(chan struct{})
+	held := &ways{}
+	held.set(func(context.Context) (search.Result, error) {
+		entered.Add(1)
+		<-release
+		return search.Result{}, nil
+	})
+	quick := &fake{}
+	srv, _, _ := limited(t, held, quick, Client{}, WithSearches(2), WithBudget(Budget{Search: 300 * time.Millisecond}))
+	// the held searches are let go however the cell ends: the server's own cleanup, which runs
+	// after this one, waits for them
+	var once sync.Once
+	letGo := func() { once.Do(func() { close(release) }) }
+	t.Cleanup(letGo)
+	answers := make(chan reply, 2)
+	for _, tok := range []string{floodToken, otherToken} {
+		go func() { answers <- searchAs(t, srv, tok, heldBody) }()
+	}
+	eventually(t, "the two searches in flight", func() bool { return entered.Load() == 2 })
+
+	start := time.Now()
+	r := searchAs(t, srv, otherToken, quickBody)
+	if r.status != http.StatusServiceUnavailable || r.code() != "unavailable" {
+		t.Fatalf("a third search with the two slots held: %d %s (want 503 unavailable, its budget spent waiting)", r.status, r.code())
+	}
+	if took := time.Since(start); took < 250*time.Millisecond {
+		t.Errorf("the third search was answered in %v: it did not wait its turn for its budget", took)
+	}
+	if n := quick.calls(); n != 0 {
+		t.Errorf("the third search was run %d times while the two slots were held", n)
+	}
+	letGo()
+	for range 2 {
+		if r := <-answers; r.status != http.StatusOK {
+			t.Errorf("a held search was answered %d %s", r.status, r.code())
+		}
+	}
+	if r := searchAs(t, srv, otherToken, quickBody); r.status != http.StatusOK {
+		t.Errorf("a search once the slots were free: %d %s", r.status, r.code())
 	}
 }
