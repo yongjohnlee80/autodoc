@@ -125,7 +125,7 @@ func resolveClients(cfg []config.Client) ([]api.Client, error) {
 		if err != nil {
 			return nil, err
 		}
-		out[i] = api.Client{Name: c.Name, Token: tok, Grants: c.Grants}
+		out[i] = api.Client{Name: c.Name, Token: tok, Grants: c.Grants, MaxInFlight: c.MaxInFlight, Rate: c.Rate, Burst: c.Burst}
 	}
 	return out, nil
 }

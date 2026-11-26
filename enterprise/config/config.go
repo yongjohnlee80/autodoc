@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"math"
 	"net"
 	"net/url"
 	"os"
@@ -210,7 +211,25 @@ type Client struct {
 	// Grants are, by tenant, the values of each of the tenant's access fields the client may ask
 	// for: ["*"] for any value, which a request must still name.
 	Grants map[string]map[string][]string
+	// MaxInFlight is how many of the client's searches may be in flight at once: one more is
+	// refused at once (DefaultMaxInFlight unless set).
+	MaxInFlight int
+	// Rate is the client's searches a second, and Burst how many may come at once (the rate
+	// rounded up, at least 1, unless set). Rate 0, the default, is no rate.
+	Rate  float64
+	Burst int
 }
+
+// A client's limits and their bounds.
+const (
+	// DefaultMaxInFlight is a client's searches in flight at most unless it says otherwise: the
+	// embedding provider's default slots. More of one client's searches than that only wait
+	// inside the server, for a slot every other client's search needs too.
+	DefaultMaxInFlight = 4
+	MaxMaxInFlight     = 256
+	MaxRate            = 10000 // searches a second
+	MaxBurst           = 100000
+)
 
 // Metrics is [metrics]. Enabled serves GET /v1/metrics, behind the operators' tokens, so it needs
 // an [http] table with at least one operator; off by default.
@@ -355,6 +374,9 @@ type file struct {
 			TokenSHA256 string                         `toml:"token_sha256"`
 			TokenEnv    string                         `toml:"token_env"`
 			Grants      map[string]map[string][]string `toml:"grants"`
+			MaxInFlight *int                           `toml:"max_in_flight"`
+			Rate        *float64                       `toml:"rate"`
+			Burst       *int                           `toml:"burst"`
 		} `toml:"client"`
 		Operators []struct {
 			Name        string   `toml:"name"`
@@ -853,9 +875,33 @@ func (v *validator) http(f file, sources []Source) *HTTP {
 	tokens := map[string]string{} // a token's identity → the client that holds it
 	for i, raw := range f.HTTP.Clients {
 		at := func(k string) string { return fmt.Sprintf("http.client[%d].%s", i, k) }
-		c := Client{Name: raw.Name, TokenSHA256: strings.ToLower(raw.TokenSHA256), TokenEnv: raw.TokenEnv, Grants: raw.Grants}
+		c := Client{Name: raw.Name, TokenSHA256: strings.ToLower(raw.TokenSHA256), TokenEnv: raw.TokenEnv, Grants: raw.Grants,
+			MaxInFlight: DefaultMaxInFlight}
 		if c.Name != "" {
 			at = func(k string) string { return fmt.Sprintf("http.client[%d] (%s).%s", i, c.Name, k) }
+		}
+		if n := raw.MaxInFlight; n != nil {
+			if *n < 1 || *n > MaxMaxInFlight {
+				v.refuse(at("max_in_flight"), "%d: 1 to %d searches in flight", *n, MaxMaxInFlight)
+			}
+			c.MaxInFlight = *n
+		}
+		if r := raw.Rate; r != nil {
+			if math.IsNaN(*r) || *r < 0 || *r > MaxRate {
+				v.refuse(at("rate"), "%v: 0 (no rate) to %d searches a second", *r, MaxRate)
+			} else {
+				c.Rate = *r
+			}
+		}
+		switch b := raw.Burst; {
+		case b != nil && c.Rate == 0:
+			v.refuse(at("burst"), "burst is the rate's: give rate too, or leave burst out")
+		case b != nil && (*b < 1 || *b > MaxBurst):
+			v.refuse(at("burst"), "%d: 1 to %d searches at once", *b, MaxBurst)
+		case b != nil:
+			c.Burst = *b
+		case c.Rate > 0:
+			c.Burst = max(int(math.Ceil(c.Rate)), 1)
 		}
 		switch {
 		case c.Name == "":

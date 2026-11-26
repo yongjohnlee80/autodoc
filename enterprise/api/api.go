@@ -5,10 +5,12 @@
 //  1. the method and the path (405, 404);
 //  2. the bearer token, its SHA-256 compared with every client's in constant time (401), so a
 //     caller without a valid token learns nothing of tenants or bodies;
-//  3. the body: JSON of at most 64 KiB, no unknown field, a query of at most 1 KiB (400, 413, 415);
-//  4. the tenant, among the client's grants (403; a tenant that does not exist answers the same);
-//  5. the scope, every field and value granted to the client (403);
-//  6. the search itself, which holds the scope to the tenant's policy again (400 for a refusal).
+//  3. the client's limits, its rate and then its searches in flight (429, limit.go), refused at
+//     once, before the body is read;
+//  4. the body: JSON of at most 64 KiB, no unknown field, a query of at most 1 KiB (400, 413, 415);
+//  5. the tenant, among the client's grants (403; a tenant that does not exist answers the same);
+//  6. the scope, every field and value granted to the client (403);
+//  7. the search itself, which holds the scope to the tenant's policy again (400 for a refusal).
 //
 // The token is never logged or kept; neither is the query's text, which may itself be private.
 // Each request has one budget (Budget): its body read by the first deadline, its search ended by
@@ -27,6 +29,7 @@ import (
 	"mime"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -36,6 +39,7 @@ import (
 	gsearch "github.com/yongjohnlee80/golib/search"
 	"github.com/yongjohnlee80/golib/search/rank"
 
+	"github.com/yongjohnlee80/autodoc/core/clock"
 	"github.com/yongjohnlee80/autodoc/enterprise/ops"
 	"github.com/yongjohnlee80/autodoc/enterprise/search"
 )
@@ -76,6 +80,14 @@ type Client struct {
 	Name   string
 	Token  [sha256.Size]byte
 	Grants map[string]map[string][]string
+	// MaxInFlight is how many of the client's searches may be in flight at once, from its token
+	// matched to its answer written: one more is refused at once, 429 too_many_in_flight. 0 is no
+	// cap.
+	MaxInFlight int
+	// Rate is the client's searches a second and Burst how many may come at once (below 1: 1): one
+	// more is refused, 429 too_many_requests, with when to come again. Rate 0 is no rate.
+	Rate  float64
+	Burst int
 }
 
 // Operator is one reader of the API's status as the server resolved it: its name for the log, its
@@ -100,6 +112,9 @@ func WithLogger(l logger.Logger) Option { return func(h *Handler) { h.log = l } 
 
 // WithOps serves health and status from c: without it, /v1/health and /v1/status are not found.
 func WithOps(c *ops.Collector) Option { return func(h *Handler) { h.ops = c } }
+
+// WithClock is the time the clients' rates are measured by; the default is time.Now.
+func WithClock(c clock.Clock) Option { return func(h *Handler) { h.now = c } }
 
 // WithMetrics serves GET /v1/metrics, behind the operators' tokens as /v1/status
 // is, from the same snapshot. Without it the path is not found, and is counted as any other.
@@ -155,7 +170,10 @@ func WithBudget(b Budget) Option {
 
 // Handler is the API. It is safe for concurrent use.
 type Handler struct {
-	clients    []Client
+	clients []Client
+	// limits is each client's limits, by its place in clients (limit.go)
+	limits     map[*Client]*limit
+	now        clock.Clock
 	operators  []Operator
 	tenants    map[string]Searcher
 	global     *search.Global // a search across tenants' slots (WithTenantSearches)
@@ -248,6 +266,10 @@ func New(clients []Client, tenants map[string]Searcher, opts ...Option) *Handler
 		o(h)
 	}
 	h.global = search.NewGlobal(h.inFlight, h.globalOpts...)
+	h.limits = make(map[*Client]*limit, len(h.clients))
+	for i := range h.clients {
+		h.limits[&h.clients[i]] = newLimit(h.clients[i], h.now.Now())
+	}
 	return h
 }
 
@@ -353,6 +375,8 @@ type answer struct {
 	tenant  string
 	hits    int
 	cause   error // logged, never answered
+	// retry is a refusal's Retry-After, in seconds: a client over one of its limits; 0 for none
+	retry int
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -384,7 +408,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		counted = ops.PathSearch
 	}
 	var queryLen int
-	a, res := h.answer(ctx, w, r, &queryLen)
+	// leave is the client's search in flight ended (limit.leave), set once the request is counted
+	// among them. It runs when this returns, so after the answer is written, and on every way out
+	// of here: an answer, a client gone, a write that ran out of its time, a panic in the search.
+	var leave func()
+	defer func() {
+		if leave != nil {
+			leave()
+		}
+	}()
+	a, res := h.answer(ctx, w, r, &queryLen, &leave)
 	defer func() { h.count(counted, a.status, time.Since(start)) }()
 	if a.status == http.StatusOK {
 		writeJSON(w, http.StatusOK, res)
@@ -393,6 +426,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.Error.Code, f.Error.Message = a.code, a.message
 		if a.status == http.StatusUnauthorized {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="autodoc"`)
+		}
+		if a.retry > 0 {
+			w.Header().Set("Retry-After", strconv.Itoa(a.retry))
 		}
 		writeJSON(w, a.status, f)
 	}
@@ -419,8 +455,9 @@ func refuse(status int, code, message string) answer {
 	return answer{status: status, code: code, message: message}
 }
 
-// answer runs the request's checks and its search, in order.
-func (h *Handler) answer(ctx context.Context, w http.ResponseWriter, r *http.Request, queryLen *int) (answer, any) {
+// answer runs the request's checks and its search, in order. A request counted among its client's
+// searches in flight sets leave, which the caller runs once its answer is written.
+func (h *Handler) answer(ctx context.Context, w http.ResponseWriter, r *http.Request, queryLen *int, leave *func()) (answer, any) {
 	if r.URL.Path != Path {
 		return refuse(http.StatusNotFound, "not_found", "the API answers "+Path+", "+HealthPath+" and "+StatusPath), response{}
 	}
@@ -431,6 +468,9 @@ func (h *Handler) answer(ctx context.Context, w http.ResponseWriter, r *http.Req
 	c := h.client(r.Header.Get("Authorization"))
 	if c == nil {
 		return refuse(http.StatusUnauthorized, "unauthorized", "a valid bearer token is required"), response{}
+	}
+	if a, over := h.limited(c, leave); over {
+		return a, response{}
 	}
 	if mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mt != "application/json" {
 		a := refuse(http.StatusUnsupportedMediaType, "unsupported_media_type", "the body must be application/json")
@@ -465,6 +505,32 @@ func (h *Handler) answer(ctx context.Context, w http.ResponseWriter, r *http.Req
 	h.counted(req, res.Rank)
 	a.status, a.hits = http.StatusOK, len(out.Hits)
 	return a, out
+}
+
+// limited holds the request to its client's limits: the rate first, so a request it refuses takes
+// no place among those in flight, then the searches in flight. over is a refusal, 429 with its
+// Retry-After; otherwise the request is counted in flight, and leave set to end that.
+func (h *Handler) limited(c *Client, leave *func()) (a answer, over bool) {
+	lim := h.limits[c]
+	if lim == nil {
+		return answer{}, false
+	}
+	if lim.rate != nil {
+		if wait, ok := lim.rate.take(h.now.Now()); !ok {
+			after := retryAfter(wait)
+			a = refuse(http.StatusTooManyRequests, "too_many_requests",
+				fmt.Sprintf("this client is over its rate of %s searches a second: again in %d s", strconv.FormatFloat(c.Rate, 'g', -1, 64), after))
+			a.client, a.retry = c.Name, after
+			return a, true
+		}
+	}
+	if !lim.enter() {
+		a = refuse(http.StatusTooManyRequests, "too_many_in_flight", fmt.Sprintf("this client has %d searches in flight (at most %d)", lim.max, lim.max))
+		a.client, a.retry = c.Name, 1
+		return a, true
+	}
+	*leave = lim.leave
+	return answer{}, false
 }
 
 // answerTenants answers a search across tenants (the request's tenants): each tenant is checked as

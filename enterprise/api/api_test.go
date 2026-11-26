@@ -48,11 +48,12 @@ type asked struct {
 func (f *fake) Search(ctx context.Context, scope search.Scope, r search.Request) (search.Result, error) {
 	f.mu.Lock()
 	f.asked = append(f.asked, asked{scope, r})
+	hold := f.hold // read with the lock: a cell may hold the searcher again between searches
 	f.mu.Unlock()
 	time.Sleep(f.pause)
-	if f.hold != nil {
+	if hold != nil {
 		select {
-		case <-f.hold:
+		case <-hold:
 		case <-ctx.Done():
 			if f.wrap != nil {
 				return search.Result{}, f.wrap(ctx.Err())
