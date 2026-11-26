@@ -265,11 +265,13 @@ proxy  = true
 
 [`deploy/systemd/autodoc-server.service`](../../deploy/systemd/autodoc-server.service). The binary is
 the server build (a `linux-<arch>-server` release archive, or `make build-server`); any other build
-refuses `--server`:
+refuses `--server`. A release archive holds one file, named as the archive is
+(`autodoc-<version>-linux-<arch>-server`); `make build-server` writes `bin/autodoc`. Install it as
+`autodoc`:
 
 ```sh
 useradd --system --no-create-home --shell /usr/sbin/nologin autodoc
-install -m 0755 autodoc /usr/local/bin/autodoc
+install -m 0755 autodoc-<version>-linux-<arch>-server /usr/local/bin/autodoc
 install -d -m 0750 -g autodoc /etc/autodoc
 install -m 0640 -g autodoc server.toml /etc/autodoc/   # and views/, and the TLS certificate and key
 install -m 0600 server.env /etc/autodoc/server.env     # AUTODOC_SERVER_DSN=…, the key, the tokens
@@ -284,6 +286,7 @@ journalctl -u autodoc-server -f
   0640, group `autodoc`, in a directory of the same: the service reads them through its group, and
   can write none of them.
 - **A refused configuration (exit 2) isn't restarted,** because restarting can't mend it. Exit 1 (the database lost, a writer lease lost) is restarted after 5 seconds.
+- **`systemctl start` and `enable --now` return at once,** before the server has read its configuration: a refused one shows in `systemctl status autodoc-server` (`failed`, status 2) and in the journal, not in the command's exit code. Run `--check` first.
 - **On stop:** SIGTERM drains the API's requests (35s at most), then releases the writer leases, so a standby takes them at its next poll. The stop timeout is 60s.
 - **The unit runs as the `autodoc` system user,** with the system read-only to it.
 

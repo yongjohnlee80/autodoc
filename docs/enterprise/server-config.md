@@ -125,16 +125,21 @@ What each connection's role needs:
   nothing else. A read-only user is enough, and pgvector isn't needed there;
 - **the index** (`index_dsn_env`): pgvector installed in its database, once, by a superuser or the
   database's owner (`CREATE EXTENSION vector`), and the schema: one the role owns, or `CREATE` on
-  the database to let the server create it. [views](views.md#the-grants) has the statements; run the
-  index's half in the index's database.
+  the database to let the server create it. It also creates temporary tables there, which
+  PostgreSQL lets every role do unless the database's owner revoked `TEMPORARY` from `PUBLIC`: an
+  index build uses one. [views](views.md#the-grants) has the statements; run the index's half in
+  the index's database.
 
 `--check` checks each, reading only:
 
-- the index's database: it answers, pgvector is installed there or the role can install it, and the
-  role can create the index's tables in the schema, or the schema. It says
-  `index: a database of its own: vector 0.8.1, schema autodoc_search`, or refuses naming
-  `postgres.index_dsn_env` and saying what's missing;
+- the index's database: it answers, pgvector is installed there or the role can install it, the
+  role can create the index's tables in the schema, or the schema, and it can create temporary
+  tables. It says `index: a database of its own: vector 0.8.1, schema autodoc_search`, or refuses
+  naming `postgres.index_dsn_env` and saying what's missing;
 - the source: each view's order, as without it.
+
+A database that doesn't answer is exit 1, and the message says which: `the index's database`, or
+`the source's database (postgres.dsn_env)`.
 
 Both may be databases on one PostgreSQL server, or on one managed instance (AlloyDB, Cloud SQL):
 the two connections are independent. A pass reads a page of the source, then writes it to the
