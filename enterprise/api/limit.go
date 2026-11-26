@@ -18,6 +18,15 @@ import (
 // Refused, never queued: a queue would hold a connection and a handler for every request waiting,
 // and the time it waited would come out of the budget of the searches behind it. The rate is
 // checked first, so a request it refuses takes no place among those in flight.
+//
+// The handler reads nothing of a refused request's body. Over HTTP/1.1, net/http then reads what
+// the client announced of one before it writes the answer, so that the connection can carry the
+// next request: at most 256 KiB (its own bound: a body announced larger is not read, and the
+// connection is closed after the answer), and no longer than the request's body deadline
+// (Budget.Body). A client that sent its body with its headers, as clients do, is answered at
+// once; one that announced a body and withheld it is answered when that deadline ends. The
+// connection is kept on purpose: closing it on every refusal would answer the withheld body at
+// once, and cost a new handshake for each refused request of every client that behaves.
 
 // limit is one client's limits and where it stands against them.
 type limit struct {

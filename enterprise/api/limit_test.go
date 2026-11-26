@@ -1,11 +1,13 @@
 package api
 
 import (
+	"bufio"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -515,4 +517,60 @@ func TestTheSearchesOfASingleTenantShareTheSearchesInFlight(t *testing.T) {
 	if r := searchAs(t, srv, otherToken, quickBody); r.status != http.StatusOK {
 		t.Errorf("a search once the slots were free: %d %s", r.status, r.code())
 	}
+}
+
+// What the server reads of a refused request's body is bounded. The handler reads none of it
+// (TestARefusedRequestTakesNoPlaceAndItsBodyIsNotRead). Over HTTP/1.1, net/http then reads what
+// the client announced before it writes the answer, so the connection can carry the next request:
+// 256 KiB at most, and no longer than the request's body deadline. Three requests of a client at
+// its cap, each refused 429:
+//
+//   - a body sent with its headers: answered at once, the connection kept;
+//   - a body announced larger than net/http reads for a connection's sake: not read, answered at
+//     once, the connection closed;
+//   - a small body announced and never sent: answered when the body's deadline ends (three
+//     seconds here), the connection closed. The wait is the caller's own, who withheld the body.
+//
+// A refusal that closed every connection would answer the third at once too, at the price of a new
+// handshake for each refused request of the first kind, which is every refused request of a client
+// that behaves.
+func TestWhatTheServerReadsOfARefusedRequestsBodyIsBounded(t *testing.T) {
+	held, quick := &fake{hold: make(chan struct{})}, &fake{}
+	// "at once" and "at the deadline" are told apart by two seconds, on any runner
+	srv, _, _ := limited(t, held, quick, Client{MaxInFlight: 1}, WithBudget(Budget{Body: 3 * time.Second}))
+	answers := inFlight(t, srv, held, 1)
+
+	refused := func(what string, announced int, sent string) (closed bool, took time.Duration) {
+		t.Helper()
+		conn, err := net.Dial("tcp", srv.Listener.Addr().String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		start := time.Now()
+		fmt.Fprintf(conn, "POST %s HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer %s\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n%s",
+			Path, floodToken, announced, sent)
+		_ = conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+		res, err := http.ReadResponse(bufio.NewReader(conn), nil)
+		if err != nil {
+			t.Fatalf("%s: no answer: %v", what, err)
+		}
+		defer res.Body.Close()
+		took = time.Since(start)
+		if res.StatusCode != http.StatusTooManyRequests {
+			t.Fatalf("%s: answered %d, want 429", what, res.StatusCode)
+		}
+		return res.Close, took
+	}
+	if closed, took := refused("a body sent whole", len(heldBody), heldBody); closed || took > 2*time.Second {
+		t.Errorf("a body sent whole: the connection closed %v, answered in %v; want it kept, and answered at once", closed, took)
+	}
+	if closed, took := refused("a body announced over 256 KiB", 1<<20, ""); !closed || took > 2*time.Second {
+		t.Errorf("a body announced over 256 KiB: the connection closed %v, answered in %v; want it closed, and answered at once", closed, took)
+	}
+	if closed, took := refused("a small body never sent", 500, ""); !closed || took < 2700*time.Millisecond || took > 20*time.Second {
+		t.Errorf("a small body never sent: the connection closed %v, answered in %v; want it closed, at the body's deadline of 3 s", closed, took)
+	}
+	close(held.hold)
+	<-answers
 }
