@@ -91,7 +91,7 @@ this build.
 3. Check both against your database, read-only, and your embedding provider with one probe:
 
    ```sh
-   export AUTODOC_SERVER_DSN='postgres://autodoc_search@db.internal/app'
+   export AUTODOC_SERVER_DSN='postgres://autodoc_search@db.internal/app?connect_timeout=10'
    autodoc --server --check server.toml
    ```
 
