@@ -423,6 +423,66 @@ func TestARegistrationNeitherClosesNorKeepsItsFD(t *testing.T) {
 	}
 }
 
+// A registration whose caller stopped waiting is abandoned: the caller never learned its id, so it
+// couldn't tell which of its buffers a grant would be. The host's acceptance, arriving afterwards,
+// grants nothing; and since the host holds the buffer, it keeps its place among the generation's
+// three, so a registration that would be the host's fourth is still never sent.
+func TestARegistrationItsCallerGaveUpOnIsNeverGranted(t *testing.T) {
+	h := newAddHost(t)
+	h.generation(1)
+	fd := memfd(t)
+	t.Cleanup(func() { unix.Close(fd) })
+	d := SurfaceDMABuf{FD: fd, Gen: 1, W: 16, H: 8, Pitch: 64, Format: "rgba8"}
+	ctx, cancel := context.WithCancel(context.Background())
+	gaveUp := make(chan error, 1)
+	h.adds.Go(func() { _, err := h.s.AddBuffer(ctx, d); gaveUp <- err })
+	given := idOf(t, h.next(OpBufferAdd)) // sent, and not answered
+	cancel()
+	select {
+	case err := <-gaveUp:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("AddBuffer, its ctx cancelled before the answer: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("AddBuffer never returned at its ctx's end")
+	}
+	h.send(BufferFreeMsg(given)) // the host accepted it all the same
+	h.settled()
+	if b, err := h.s.AddedBuffer(context.Background()); !errors.Is(err, ErrSurfaceBuffers) {
+		t.Fatalf("after the abandoned registration's acceptance AddedBuffer answered %+v, %v; want ErrSurfaceBuffers: nothing the plugin knows is registered", b, err)
+	}
+
+	for range 2 { // the generation's other two
+		ans, _ := h.add(1)
+		h.send(BufferFreeMsg(idOf(t, h.next(OpBufferAdd))))
+		if a := h.answer(ans); a.err != nil {
+			t.Fatal(a.err)
+		}
+	}
+	// NOTE: a bound on a failing run alone: refused before it is sent, AddBuffer answers at once.
+	fourth, stop := context.WithTimeout(context.Background(), 10*time.Second)
+	defer stop()
+	if _, err := h.s.AddBuffer(fourth, d); !errors.Is(err, ErrSurfaceBuffers) {
+		t.Fatalf("a registration the host would count its fourth: %v, want ErrSurfaceBuffers, unsent", err)
+	}
+	select {
+	case o := <-h.ops:
+		t.Fatalf("the plugin sent %v: the host's fourth DMA-BUF of the generation, a violation", o.m)
+	default:
+	}
+	for range 2 {
+		if b := h.granted("with two registered"); b.ID == given {
+			t.Fatalf("AddedBuffer granted the abandoned registration's buffer %d", given)
+		}
+	}
+	h.waits("with both registered buffers being drawn into")
+
+	h.generation(2) // the count ends with the generation
+	ans, _ := h.add(2)
+	h.next(OpBufferAdd)
+	h.unanswered(ans, "in the next generation")
+}
+
 // A registration answered between its send and its wait is not lost: the answer is kept for it.
 func TestAnAnswerBeforeAddBufferWaitsIsItsAnswer(t *testing.T) {
 	h := newAddHost(t)
