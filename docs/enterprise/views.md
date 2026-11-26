@@ -291,8 +291,8 @@ The index's role also creates temporary tables in its database: an index build u
 PostgreSQL grants that to every role by default. Where it was revoked (`REVOKE TEMPORARY ON
 DATABASE … FROM PUBLIC`), grant it back to the role: `GRANT TEMPORARY ON DATABASE … TO
 autodoc_search`. Without it the server runs, and the approximate search's index fails to build
-(`ann-failed` in the status, with PostgreSQL's reason). `--check` of an index's own database
-refuses a role without it.
+(`ann-failed` for the model in the status's `ann`, with PostgreSQL's reason, and one warning in
+the log at each start). `--check` of an index's own database refuses a role without it.
 
 The server then finds its schema, creates its tables there, and never writes anywhere else. To let
 the server create the schema itself instead, also `GRANT CREATE ON DATABASE app TO autodoc_search`.

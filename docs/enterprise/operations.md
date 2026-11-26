@@ -286,6 +286,7 @@ journalctl -u autodoc-server -f
   0640, group `autodoc`, in a directory of the same: the service reads them through its group, and
   can write none of them.
 - **A refused configuration (exit 2) isn't restarted,** because restarting can't mend it. Exit 1 (the database lost, a writer lease lost) is restarted after 5 seconds.
+- **A database that drops packets holds each start for about two minutes** unless its DSN has a `connect_timeout` ([server-config](server-config.md#postgres-where-the-index-lives)): put `?connect_timeout=10` in each DSN in `server.env`.
 - **`systemctl start` and `enable --now` return at once,** before the server has read its configuration: a refused one shows in `systemctl status autodoc-server` (`failed`, status 2) and in the journal, not in the command's exit code. Run `--check` first.
 - **On stop:** SIGTERM drains the API's requests (35s at most), then releases the writer leases, so a standby takes them at its next poll. The stop timeout is 60s.
 - **The unit runs as the `autodoc` system user,** with the system read-only to it.

@@ -107,6 +107,11 @@ The server opens three connection pools:
 - the one your views run on, on `dsn_env`'s DSN, with the role's own `search_path`, so a view runs
   as it does in `psql`.
 
+**Give each DSN a `connect_timeout`** (`…?connect_timeout=10`, in seconds). Without one, a
+database whose address drops packets (a firewall, an allow-list that doesn't hold this machine)
+holds `--check` and the server's start for about two minutes before they say so, and a supervisor
+that starts the server again waits that long at each try.
+
 ### The index in a database of its own
 
 When the business database may only be read (a production database, a replica), give the index a
