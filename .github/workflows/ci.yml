@@ -399,6 +399,35 @@ jobs:
             echo "== test2json's standard error, its last 80 lines"
             tail -n 80 "$t/tui.err" || true
           fi
+      - name: what Windows logged when the job fails
+        if: ${{ failure() && !inputs.discover }}
+        shell: pwsh
+        run: |
+          # A process that ends with no word of its own may have left one with Windows. A fail-fast
+          # or an access violation, in the binary or in a system DLL, leaves an Application Error
+          # event naming the program, the faulting module and the exception code, and a Windows
+          # Error Reporting event beside it; the System log says when memory ran out or a service
+          # ended. This prints the last 30 minutes of both: every error and warning, and Windows
+          # Error Reporting's events whatever their level. Nothing here fails the step.
+          $since = (Get-Date).AddMinutes(-30)
+          foreach ($log in 'Application', 'System') {
+            Write-Output "== the $log log since $($since.ToString('HH:mm:ss')): errors, warnings, and Windows Error Reporting's events"
+            $events = @(Get-WinEvent -FilterHashtable @{ LogName = $log; StartTime = $since } -ErrorAction SilentlyContinue |
+              Where-Object { $_.Level -in 1, 2, 3 -or $_.ProviderName -eq 'Windows Error Reporting' } |
+              Sort-Object TimeCreated | Select-Object -Last 40)
+            if ($events.Count -eq 0) { Write-Output "(none)" }
+            foreach ($e in $events) {
+              $text = (("$($e.Message)" -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -First 14) -join ' | ')
+              Write-Output ("{0:HH:mm:ss} {1} {2}: {3}" -f $e.TimeCreated, $e.ProviderName, $e.Id, $text)
+            }
+          }
+          Write-Output "== Windows Error Reporting's reports written since then"
+          $dirs = "$env:ProgramData\Microsoft\Windows\WER\ReportQueue", "$env:ProgramData\Microsoft\Windows\WER\ReportArchive",
+            "$env:LOCALAPPDATA\Microsoft\Windows\WER\ReportQueue", "$env:LOCALAPPDATA\Microsoft\Windows\WER\ReportArchive"
+          $reports = @(Get-ChildItem $dirs -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt $since })
+          if ($reports.Count -eq 0) { Write-Output "(none)" }
+          foreach ($r in $reports) { Write-Output $r.FullName }
+          exit 0
       - name: keep ./tui's -json when the job fails
         if: ${{ failure() && !inputs.discover }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
