@@ -371,6 +371,18 @@ func checkServer(ctx context.Context, path string, cfg *config.Server, sources [
 		return fmt.Errorf("%s (postgres.dsn_env): %w", source, redact(err, dsn))
 	}
 	defer business.Close()
+	if !cfg.Postgres.SeparateIndex() {
+		// one database for both: its role is the index's too, and builds the index there. Only
+		// the temporary tables are read here: the rest of what an index's own database is
+		// checked for (checkIndex), the start itself meets in this one, at its first step.
+		db, err := pgstore.ReadIndexDatabase(ctx, business, cfg.Postgres.Schema)
+		if err != nil {
+			return fmt.Errorf("%s (postgres.dsn_env): %w", source, redact(err, dsn))
+		}
+		if !db.CanTemp {
+			return config.Refuse(path, "postgres.dsn_env", noTempRefusal("the database"))
+		}
+	}
 	now, err := pgstore.Now(ctx, business)
 	if err != nil {
 		return fmt.Errorf("%s (postgres.dsn_env): %w", source, redact(err, dsn))
@@ -436,7 +448,7 @@ func checkIndex(ctx context.Context, path string, p config.Postgres, out io.Writ
 		// Without it the server starts and searches exactly, and the approximate search's index
 		// fails to build once a tenant is large enough to want it (the status says ann-failed):
 		// long after the grants were made. So it is refused here, where they are being made.
-		return config.Refuse(path, field, "this role can't create temporary tables in the index's database, which building the approximate search's index needs: GRANT TEMPORARY ON DATABASE to the role (PostgreSQL grants it to every role unless it was revoked from PUBLIC)")
+		return config.Refuse(path, field, noTempRefusal("the index's database"))
 	}
 	vector := "vector " + version
 	if version == "" {
@@ -448,6 +460,12 @@ func checkIndex(ctx context.Context, path string, p config.Postgres, out io.Writ
 	}
 	fmt.Fprintf(out, "index: a database of its own: %s, %s\n", vector, schema)
 	return nil
+}
+
+// noTempRefusal is --check's refusal of a role that can't create temporary tables in database, as
+// the sentence names it.
+func noTempRefusal(database string) string {
+	return "this role can't create temporary tables in " + database + ", which building the approximate search's index needs: GRANT TEMPORARY ON DATABASE to the role (PostgreSQL grants it to every role unless it was revoked from PUBLIC)"
 }
 
 // redact is err with every appearance of each DSN given, and of its password, replaced: a driver's
