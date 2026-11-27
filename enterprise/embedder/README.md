@@ -37,6 +37,9 @@ w.Wake()      // after an ingester commits (ingest.Options.Committed)
   time is up.
 - **Bounded.** At most the slots' calls are in flight, whichever tenants they are for; each call
   embeds at most a batch, and is bounded in time.
+- **A slot the queries can't take.** The searches' queries are embedded in the same slots, ahead
+  of every batch, and in all of them but one: that one is the worker's, so a flood of searches
+  never stops the embedding (limiter.go). With one slot there is none to keep.
 - **Paced to the provider.** A call that runs out of its time halves the batch and the calls in
   flight, down to one text and one call, and the round's texts are read again at once at the
   smaller size; calls that answer in under half their time step back up to the configured batch

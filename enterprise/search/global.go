@@ -91,7 +91,8 @@ func (e *TenantError) Error() string { return "tenant " + e.Tenant + ": " + e.Er
 func (e *TenantError) Unwrap() error { return e.Err }
 
 // Global searches across tenants: every request of every tenant shares one pool of searches in
-// flight, so concurrent requests cannot take a database pool whole. It is safe for concurrent use.
+// flight, so concurrent requests cannot take a database pool whole. A single tenant's search
+// takes one of the same slots (One). It is safe for concurrent use.
 type Global struct {
 	slots chan struct{}
 	rank  *stage // WithGlobalRanker's; nil is none
@@ -117,6 +118,19 @@ func NewGlobal(inFlight int, opts ...GlobalOption) *Global {
 		}
 	}
 	return g
+}
+
+// One runs search, one tenant's, holding one of the Global's slots, which it waits for under ctx:
+// the searches of a single tenant and the tenants of the searches across several share the
+// searches in flight, so together they leave the store's pool what the ingesters, the embedding
+// worker and health need, whatever the callers ask for. A wait that outlasts ctx answers ctx's
+// cause, and search is not run.
+func (g *Global) One(ctx context.Context, search func() error) error {
+	if !take(ctx, g.slots) {
+		return context.Cause(ctx)
+	}
+	defer func() { <-g.slots }()
+	return search()
 }
 
 // tenantWindow is how many candidates a ranked search across tenants admits by default: four a

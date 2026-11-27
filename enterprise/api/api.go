@@ -4,11 +4,15 @@
 //
 //  1. the method and the path (405, 404);
 //  2. the bearer token, its SHA-256 compared with every client's in constant time (401), so a
-//     caller without a valid token learns nothing of tenants or bodies;
-//  3. the body: JSON of at most 64 KiB, no unknown field, a query of at most 1 KiB (400, 413, 415);
-//  4. the tenant, among the client's grants (403; a tenant that does not exist answers the same);
-//  5. the scope, every field and value granted to the client (403);
-//  6. the search itself, which holds the scope to the tenant's policy again (400 for a refusal).
+//     caller without a valid token learns nothing of tenants or bodies; once its address has sent
+//     too many such requests it is answered 429 in place of 401 (refused.go). A valid token is
+//     never refused for what its address has sent;
+//  3. the client's limits, its rate and then its searches in flight (429, limit.go), refused at
+//     once, before the body is read;
+//  4. the body: JSON of at most 64 KiB, no unknown field, a query of at most 1 KiB (400, 413, 415);
+//  5. the tenant, among the client's grants (403; a tenant that does not exist answers the same);
+//  6. the scope, every field and value granted to the client (403);
+//  7. the search itself, which holds the scope to the tenant's policy again (400 for a refusal).
 //
 // The token is never logged or kept; neither is the query's text, which may itself be private.
 // Each request has one budget (Budget): its body read by the first deadline, its search ended by
@@ -27,6 +31,7 @@ import (
 	"mime"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -36,6 +41,7 @@ import (
 	gsearch "github.com/yongjohnlee80/golib/search"
 	"github.com/yongjohnlee80/golib/search/rank"
 
+	"github.com/yongjohnlee80/autodoc/core/clock"
 	"github.com/yongjohnlee80/autodoc/enterprise/ops"
 	"github.com/yongjohnlee80/autodoc/enterprise/search"
 )
@@ -76,6 +82,14 @@ type Client struct {
 	Name   string
 	Token  [sha256.Size]byte
 	Grants map[string]map[string][]string
+	// MaxInFlight is how many of the client's searches may be in flight at once, from its token
+	// matched to its answer written: one more is refused at once, 429 too_many_in_flight. 0 is no
+	// cap.
+	MaxInFlight int
+	// Rate is the client's searches a second and Burst how many may come at once (below 1: 1): one
+	// more is refused, 429 too_many_requests, with when to come again. Rate 0 is no rate.
+	Rate  float64
+	Burst int
 }
 
 // Operator is one reader of the API's status as the server resolved it: its name for the log, its
@@ -101,24 +115,42 @@ func WithLogger(l logger.Logger) Option { return func(h *Handler) { h.log = l } 
 // WithOps serves health and status from c: without it, /v1/health and /v1/status are not found.
 func WithOps(c *ops.Collector) Option { return func(h *Handler) { h.ops = c } }
 
+// WithClock is the time the clients' rates and the addresses' tries are measured by; the default
+// is time.Now.
+func WithClock(c clock.Clock) Option { return func(h *Handler) { h.now = c } }
+
+// WithoutAddressTries keeps no count of the unauthorized requests by address: for a server behind
+// a proxy, where every request comes from the proxy's address, and the proxy has its own limit.
+func WithoutAddressTries() Option { return func(h *Handler) { h.noTries = true } }
+
 // WithMetrics serves GET /v1/metrics, behind the operators' tokens as /v1/status
 // is, from the same snapshot. Without it the path is not found, and is counted as any other.
 func WithMetrics(on bool) Option { return func(h *Handler) { h.metrics = on } }
 
-// DefaultTenantSearches is how many tenants' searches the requests naming several tenants run at
-// once across every request, unless WithTenantSearches sets it.
-const DefaultTenantSearches = 8
+// DefaultSearches is how many searches run at once across every request, unless WithSearches sets
+// it. DefaultTenantSearches is its name from when only the searches across tenants were counted.
+const (
+	DefaultSearches       = 8
+	DefaultTenantSearches = DefaultSearches
+)
 
-// WithTenantSearches sets how many tenants' searches the requests naming several tenants run at once,
-// across every request ([http] max_tenant_searches): a request's tenants beyond it wait their turn
-// under the request's own deadline. Below 1: DefaultTenantSearches.
-func WithTenantSearches(n int) Option {
+// WithSearches sets how many searches run at once across every request and every client ([http]
+// max_searches): one for a search of a single tenant, and one for each tenant of a search across
+// several. A search beyond it waits its turn under its request's own deadline. Below 1:
+// DefaultSearches.
+func WithSearches(n int) Option {
 	return func(h *Handler) {
 		if n > 0 {
 			h.inFlight = n
 		}
 	}
 }
+
+// WithTenantSearches is WithSearches under its name from when only the searches across tenants
+// were counted.
+//
+// Deprecated: use WithSearches.
+func WithTenantSearches(n int) Option { return WithSearches(n) }
 
 // WithRanker reranks a search across tenants once, after the merge (search.WithGlobalRanker),
 // with the ranker each tenant's Searcher has (search.WithRanker): the server's one.
@@ -155,10 +187,18 @@ func WithBudget(b Budget) Option {
 
 // Handler is the API. It is safe for concurrent use.
 type Handler struct {
-	clients    []Client
+	clients []Client
+	// limits is each client's limits, by the client as clients holds it (limit.go)
+	limits map[*Client]*limit
+	now    clock.Clock
+	// refused counts the requests refused unread and says them in the log; tries is the
+	// unauthorized requests' budget by address, nil when it is not kept (refused.go)
+	refused    *refusals
+	tries      *tries
+	noTries    bool
 	operators  []Operator
 	tenants    map[string]Searcher
-	global     *search.Global // a search across tenants' slots (WithTenantSearches)
+	global     *search.Global // the searches in flight across every request (WithSearches)
 	inFlight   int            // its slots
 	globalOpts []search.GlobalOption
 	ranks      RankCounter // nil counts nothing
@@ -243,18 +283,33 @@ func (h *Handler) count(path string, status int, took time.Duration) {
 // New is the API for clients over tenants.
 func New(clients []Client, tenants map[string]Searcher, opts ...Option) *Handler {
 	h := &Handler{clients: slices.Clone(clients), tenants: tenants, log: logger.New(logger.WithWriter(io.Discard)), budget: DefaultBudget,
-		inFlight: DefaultTenantSearches}
+		inFlight: DefaultSearches}
 	for _, o := range opts {
 		o(h)
 	}
 	h.global = search.NewGlobal(h.inFlight, h.globalOpts...)
+	h.refused = newRefusals(h.log)
+	if !h.noTries {
+		h.tries = newTries()
+	}
+	h.limits = make(map[*Client]*limit, len(h.clients))
+	for i := range h.clients {
+		h.limits[&h.clients[i]] = newLimit(h.clients[i], h.now.Now())
+	}
 	return h
 }
 
 // Wait returns once every request the Handler is answering has been answered: a server stopping
 // waits for it, after its http.Server stopped taking requests, before it closes what the searches
-// use.
-func (h *Handler) Wait() { h.active.Wait() }
+// use. The refusals counted and not yet said in the log are said then.
+func (h *Handler) Wait() {
+	h.active.Wait()
+	h.refused.close()
+}
+
+// Refused are the requests refused unread since the server started, by reason: the status's and
+// the metrics' figures.
+func (h *Handler) Refused() ops.Refused { return h.refused.totals() }
 
 // The request and response bodies.
 type (
@@ -353,6 +408,10 @@ type answer struct {
 	tenant  string
 	hits    int
 	cause   error // logged, never answered
+	// retry is a refusal's Retry-After, in seconds: a client over one of its limits; 0 for none
+	retry int
+	// quiet is a refusal counted for the log's summary (refusals), which has no line of its own
+	quiet bool
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -384,7 +443,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		counted = ops.PathSearch
 	}
 	var queryLen int
-	a, res := h.answer(ctx, w, r, &queryLen)
+	// leave is the client's search in flight ended (limit.leave), set once the request is counted
+	// among them. It runs when this returns, so after the answer is written, and on every way out
+	// of here: an answer, a client gone, a write that ran out of its time, a panic in the search.
+	var leave func()
+	defer func() {
+		if leave != nil {
+			leave()
+		}
+	}()
+	a, res := h.answer(ctx, w, r, &queryLen, &leave)
 	defer func() { h.count(counted, a.status, time.Since(start)) }()
 	if a.status == http.StatusOK {
 		writeJSON(w, http.StatusOK, res)
@@ -394,7 +462,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if a.status == http.StatusUnauthorized {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="autodoc"`)
 		}
+		if a.retry > 0 {
+			w.Header().Set("Retry-After", strconv.Itoa(a.retry))
+		}
 		writeJSON(w, a.status, f)
+	}
+	if a.quiet {
+		return
 	}
 	line := fmt.Sprintf("search: client %s, tenant %s: %d", orDash(a.client), orDash(a.tenant), a.status)
 	if a.code != "" {
@@ -419,8 +493,9 @@ func refuse(status int, code, message string) answer {
 	return answer{status: status, code: code, message: message}
 }
 
-// answer runs the request's checks and its search, in order.
-func (h *Handler) answer(ctx context.Context, w http.ResponseWriter, r *http.Request, queryLen *int) (answer, any) {
+// answer runs the request's checks and its search, in order. A request counted among its client's
+// searches in flight sets leave, which the caller runs once its answer is written.
+func (h *Handler) answer(ctx context.Context, w http.ResponseWriter, r *http.Request, queryLen *int, leave *func()) (answer, any) {
 	if r.URL.Path != Path {
 		return refuse(http.StatusNotFound, "not_found", "the API answers "+Path+", "+HealthPath+" and "+StatusPath), response{}
 	}
@@ -430,7 +505,10 @@ func (h *Handler) answer(ctx context.Context, w http.ResponseWriter, r *http.Req
 	}
 	c := h.client(r.Header.Get("Authorization"))
 	if c == nil {
-		return refuse(http.StatusUnauthorized, "unauthorized", "a valid bearer token is required"), response{}
+		return h.noToken(r, "a valid bearer token is required"), response{}
+	}
+	if a, over := h.limited(c, leave); over {
+		return a, response{}
 	}
 	if mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mt != "application/json" {
 		a := refuse(http.StatusUnsupportedMediaType, "unsupported_media_type", "the body must be application/json")
@@ -451,7 +529,12 @@ func (h *Handler) answer(ctx context.Context, w http.ResponseWriter, r *http.Req
 		refused.client, refused.tenant = a.client, a.tenant
 		return refused, response{}
 	}
-	res, err := s.Search(ctx, search.Scope(req.Scope), searchRequest(req, req.Filter))
+	// one of the searches in flight across every request, waited for within this one's budget
+	var res search.Result
+	err := h.global.One(ctx, func() (err error) {
+		res, err = s.Search(ctx, search.Scope(req.Scope), searchRequest(req, req.Filter))
+		return err
+	})
 	if err != nil {
 		e := failed(ctx, err)
 		e.client, e.tenant = a.client, a.tenant
@@ -465,6 +548,69 @@ func (h *Handler) answer(ctx context.Context, w http.ResponseWriter, r *http.Req
 	h.counted(req, res.Rank)
 	a.status, a.hits = http.StatusOK, len(out.Hits)
 	return a, out
+}
+
+// limited holds the request to its client's limits: the rate first, so a request it refuses takes
+// no place among those in flight, then the searches in flight. over is a refusal, 429 with its
+// Retry-After; otherwise the request is counted in flight, and leave set to end that.
+func (h *Handler) limited(c *Client, leave *func()) (a answer, over bool) {
+	lim := h.limits[c]
+	if lim == nil {
+		return answer{}, false
+	}
+	if lim.rate != nil {
+		if wait, ok := lim.rate.take(h.now.Now()); !ok {
+			after := retryAfter(wait)
+			a = refuse(http.StatusTooManyRequests, "too_many_requests",
+				fmt.Sprintf("this client is over its rate of %s searches a second: again in %d s", strconv.FormatFloat(c.Rate, 'g', -1, 64), after))
+			a.client, a.retry, a.quiet = c.Name, after, true
+			h.refused.limited(c.Name, true)
+			return a, true
+		}
+	}
+	if !lim.enter() {
+		a = refuse(http.StatusTooManyRequests, "too_many_in_flight", fmt.Sprintf("this client has %d searches in flight (at most %d)", lim.max, lim.max))
+		a.client, a.retry, a.quiet = c.Name, 1, true
+		h.refused.limited(c.Name, false)
+		return a, true
+	}
+	*leave = lim.leave
+	return answer{}, false
+}
+
+// noToken answers a request whose token no client or operator holds, and counts it: 401 with
+// message, taking a try from its address; or, its address having none left, 429 with when one is
+// back (tries). The token was compared first: a request with a valid one never comes here,
+// whatever its address has sent, so no one who shares an address with a client can have it
+// refused. The answer has no log line of its own.
+func (h *Handler) noToken(r *http.Request, message string) answer {
+	addr := ""
+	if h.tries != nil {
+		addr = addressOf(r.RemoteAddr)
+		now := h.now.Now()
+		if wait, spent := h.tries.spent(addr, now); spent {
+			h.refused.unauthorizedFrom(addr, true)
+			a := refuse(http.StatusTooManyRequests, "too_many_requests", fmt.Sprintf("too many requests without a valid token from this address: again in %d s", retryAfter(wait)))
+			a.retry, a.quiet = retryAfter(wait), true
+			return a
+		}
+		h.tries.take(addr, now)
+	}
+	h.refused.unauthorizedFrom(addr, false)
+	a := refuse(http.StatusUnauthorized, "unauthorized", message)
+	a.quiet = true
+	return a
+}
+
+// refuseNoToken writes noToken's answer on the status and metrics paths, and returns its status.
+func (h *Handler) refuseNoToken(w http.ResponseWriter, r *http.Request) int {
+	a := h.noToken(r, "an operator's bearer token is required")
+	if a.retry > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(a.retry))
+	} else {
+		w.Header().Set("WWW-Authenticate", `Bearer realm="autodoc"`)
+	}
+	return refuseNow(w, a.status, a.code, a.message)
 }
 
 // answerTenants answers a search across tenants (the request's tenants): each tenant is checked as
@@ -663,8 +809,7 @@ func (h *Handler) serveStatus(ctx context.Context, w http.ResponseWriter, r *htt
 	case client != nil:
 		name, status = client.Name, refuseNow(w, http.StatusForbidden, "forbidden", "status is for an operator's token: a search client's grants do not cover it")
 	default:
-		w.Header().Set("WWW-Authenticate", `Bearer realm="autodoc"`)
-		status = refuseNow(w, http.StatusUnauthorized, "unauthorized", "an operator's bearer token is required")
+		return h.refuseNoToken(w, r) // counted for the log's summary, with no line of its own
 	}
 	logger.Info(h.log, fmt.Sprintf("status: %s: %d, in %v", name, status, time.Since(start).Round(time.Millisecond)))
 	return status
@@ -694,8 +839,7 @@ func (h *Handler) serveMetrics(ctx context.Context, w http.ResponseWriter, r *ht
 	case client != nil:
 		name, status = client.Name, refuseNow(w, http.StatusForbidden, "forbidden", "metrics are for an operator's token: a search client's grants do not cover it")
 	default:
-		w.Header().Set("WWW-Authenticate", `Bearer realm="autodoc"`)
-		status = refuseNow(w, http.StatusUnauthorized, "unauthorized", "an operator's bearer token is required")
+		return h.refuseNoToken(w, r) // counted for the log's summary, with no line of its own
 	}
 	logger.Info(h.log, fmt.Sprintf("metrics: %s: %d, in %v", name, status, time.Since(start).Round(time.Millisecond)))
 	return status

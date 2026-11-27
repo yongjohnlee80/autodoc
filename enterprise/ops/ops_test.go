@@ -482,3 +482,50 @@ func TestHealthPolledHardPingsOneAtATime(t *testing.T) {
 		t.Errorf("fifty callers at once: %d pings in flight at most, %d in all; want 1 and 1", m, p)
 	}
 }
+
+// The API's refused requests are in the status and the metrics when the server has an API
+// (Options.Refused), read at each snapshot, never cached with the database's part; with no API
+// they are absent, never three zeros.
+func TestTheRefusedRequestsAreTheAPIsAndAbsentWithoutOne(t *testing.T) {
+	f := newFixture()
+	snap := f.c.Snapshot(context.Background())
+	if snap.Server.HTTP != nil {
+		t.Errorf("a server with no API has http in its status: %+v", snap.Server.HTTP)
+	}
+	var b strings.Builder
+	if err := WriteMetrics(&b, snap, nil); err != nil || strings.Contains(b.String(), "autodoc_http_refused_total") {
+		t.Errorf("a server with no API has the refused series: %v\n%s", err, b.String())
+	}
+
+	var n atomic.Uint64
+	c := New(Options{
+		Provider: func() embedder.Health { return embedder.Health{State: embedder.ProviderUp, Model: "m1"} },
+		Now:      func(context.Context) (time.Time, error) { return dbNow, nil },
+		Clock:    func() time.Time { return dbNow },
+		Refused:  func() Refused { return Refused{InFlight: n.Add(1), Rate: 20, Unauthorized: 300} },
+	})
+	for want := uint64(1); want <= 2; want++ { // read again within the cache's time
+		snap = c.Snapshot(context.Background())
+		if snap.Server.HTTP == nil || snap.Server.HTTP.Refused != (Refused{InFlight: want, Rate: 20, Unauthorized: 300}) {
+			t.Fatalf("snapshot %d: http %+v", want, snap.Server.HTTP)
+		}
+	}
+	js, err := json.Marshal(snap.Server)
+	if err != nil || !strings.Contains(string(js), `"http":{"refused":{"in_flight":2,"rate":20,"unauthorized":300}}`) {
+		t.Errorf("the status's server part: %v %s", err, js)
+	}
+	b.Reset()
+	if err := WriteMetrics(&b, snap, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"# TYPE autodoc_http_refused_total counter",
+		`autodoc_http_refused_total{reason="in_flight"} 2`,
+		`autodoc_http_refused_total{reason="rate"} 20`,
+		`autodoc_http_refused_total{reason="unauthorized"} 300`,
+	} {
+		if !strings.Contains(b.String(), want) {
+			t.Errorf("the metrics lack %q:\n%s", want, b.String())
+		}
+	}
+}

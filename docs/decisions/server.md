@@ -179,7 +179,7 @@ In the code: `core/pgstore/gin.go`, `enterprise/ingest/ingest.go`
 A request may name several tenants, each with its own scope and filter, sharing the query, mode,
 limit and grouping. Every tenant's grants and request are checked before any search runs, and one
 refusal refuses all. The tenants are searched concurrently, each in its own snapshot under its own
-access predicate (at most 4 at once per request, and `max_tenant_searches` across requests), and
+access predicate (at most 4 at once per request, and `max_searches` across requests), and
 the query is embedded once per model. The hits are merged by golib's fixed-scale relevance (the
 RRF of each tenant's own retrievers) times an optional weight, every hit naming its tenant.
 
@@ -230,6 +230,56 @@ TLS, or an explicit `proxy = true` behind the operator's proxy.
 
 In the code: `enterprise/api/api.go`, `enterprise/config/config.go`
 
+## A limit per client
+
+On a port other machines reach, one client's flood of searches took what everything else needs:
+the store's connections (every other search, and the ingesters behind them), every embedding slot
+(the worker embedded nothing while it lasted), and the provider's and the ranker's bill. Four
+bounds, each for one of those:
+
+- **Per client, its searches in flight** (`max_in_flight`, 4 by default) and **its rate** (`rate`
+  and `burst`, off by default). A request past either is refused at once with 429
+  (`too_many_in_flight`, `too_many_requests`) and `Retry-After`, once its token is matched and
+  before its body is read. The rate is checked first, so what it refuses takes no place in flight.
+- **Refused, not queued.** A queue holds a connection and a handler for each request waiting, and
+  the time it waits comes out of the searches behind it. A refusal is cheap, and the application
+  can act on it.
+- **Server-wide, the searches in flight** (`max_searches`): a single tenant's search takes one of
+  the slots the searches across tenants already shared, and waits for it within its request's
+  budget. With the default, the pool's size less two, two connections are always the server's own.
+- **The queries never hold every embedding slot:** all but one at most, so the worker always has
+  one. Queries still go ahead of every batch.
+
+Fair queueing across clients (the next free slot to the client with the fewest in flight) would
+suit many clients of similar weight; a cap per client gives most of it for a fraction of the code.
+A cap on connections would refuse health checks along with the flood. A limit per access value is
+the application's knowledge, so it belongs there.
+
+**Requests without a valid token** are counted by address (an IPv6 address by its /64): 20 at
+once, then 5 a second, and past that answered 429 in place of 401. The token is compared first, and
+a valid one is never refused for its address. Refusing an address before any token is compared was
+considered and not chosen: it would let anyone who shares an address with a client (an office, a
+cloud's shared egress, one service that lost its token) shut the client out, silently on the
+client's side, and what it saves is one hash beside the handshake the request already cost. The
+tokens are too long to guess, so it is no defence against guessing either. Behind a proxy the
+address is the proxy's for everyone, so none is kept.
+
+**What is refused unread is summarised, not logged one by one:** a line a request is a line anyone
+can write. Once a minute the log says how many requests had no valid token and from how many
+addresses, and, for each client, how many of its requests were refused and why. The counts since
+the start are in the status and the metrics by reason, never by client.
+
+**A refused request's body is not read by the handler.** Over HTTP/1.1, Go's server then reads
+what the client announced of one before it answers, to use the connection again: at most 256 KiB
+(a larger one is not read, and the connection closes) and no longer than the request's body
+deadline. So a client that announces a body and withholds it is answered at that deadline. The
+connection is kept on purpose: closing it on each refusal would answer that client at once, and
+cost a handshake for every refused request of a client that sent its body, which a flooding
+client would turn into the server's work.
+
+In the code: `enterprise/api/limit.go`, `enterprise/api/refused.go`, `enterprise/search/global.go`,
+`enterprise/embedder/limiter.go`
+
 ## Operator health, status and metrics
 
 - `GET /v1/health` is public and minimal: ok, degraded or unavailable, with no tenant names or
@@ -239,7 +289,8 @@ In the code: `enterprise/api/api.go`, `enterprise/config/config.go`
   tenants: cursor and lag, passes and refreshes, quarantine, documents, models, lock and provider
   state. A search token is refused there, and one token in both roles is refused at load.
 - Failures over HTTP are a closed set of codes; the text stays in the log. Metrics are logfmt lines
-  in the log at a set interval, with no secrets, query text or client names.
+  in the log at a set interval, with no secrets, query text or client names. The requests refused
+  unread are counted by reason there and in the status ([a limit per client](#a-limit-per-client)).
 - `autodoc --server --health` probes the server's own address, and `deploy/` has a systemd unit and
   a container example.
 

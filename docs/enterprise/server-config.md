@@ -187,7 +187,7 @@ worker.
 | `base_url` | `https://api.openai.com/v1` for openai, `http://127.0.0.1:11434` for ollama, the location's Google host for vertex | The provider's endpoint. For openai, the API's root or its `/v1`: either way the server asks `<root>/v1/embeddings`. | not an `http` or `https` URL with a host |
 | `model` | (required) | The model's name. | missing or blank; `--check`: an Ollama server without it |
 | `key_env` | none | The name of the environment variable holding the provider's API key, sent as a bearer token. Not for vertex, which authenticates with Application Default Credentials. | given, and the variable is not set or is empty; given for vertex; `--check`: the provider refuses the key |
-| `slots` | `4` | How many embedding requests may be in flight at once, across every tenant. | below 1 or above 64 |
+| `slots` | `4` | How many embedding requests may be in flight at once, across every tenant. A search's query is embedded in them too, ahead of the worker's batches, in all but one: that one is the worker's ([a client's limits](#a-clients-limits)). | below 1 or above 64 |
 | `batch` | `64`; `1` for vertex | How many texts one embedding request carries, at most. Vertex embeds one text a request, so `slots` sets its throughput. | below 1 or above 256; other than 1 for vertex |
 | `call_timeout` | `"2m"` | How long one embedding request may take before it is given up. | below `1s` or above `30m` |
 | `project` | (required for vertex) | vertex only: the Google Cloud project the calls are made in and billed to. | missing for vertex; given for another provider; `--check`: Google refuses the credentials, or the API isn't enabled in it |
@@ -321,7 +321,7 @@ through the library ([web-integration](web-integration.md)). With it, the server
 | Field | Default | Meaning | Refused when |
 |---|---|---|---|
 | `listen` | `127.0.0.1:8730` | The address the API listens on. | not `host:port`; not loopback with neither TLS nor `proxy` |
-| `max_tenant_searches` | the store pool's size less two | How many tenants' searches the requests naming several tenants run at once, across every request; beyond it a tenant waits its turn under its request's deadline. | outside 1 to 1000 |
+| `max_searches` | the store pool's size less two | How many searches run at once across every request and every client: one for a search of a single tenant, and one for each tenant of a search across several. Beyond it a search waits its turn under its request's deadline. The default leaves two of the pool's connections to the ingesters, the embedding worker's writes and an index build, whatever the clients ask for. `max_tenant_searches`, its name when only the searches across tenants were counted, is still read, with a warning. | outside 1 to 1000; given under both names |
 | `tls_cert`, `tls_key` | none | The certificate and key files, relative to this file: to listen beyond loopback over HTTPS. They are read again when either changes, so a renewed certificate is served within 10 seconds, without a restart ([operations](operations.md#renewing-the-certificate)). | only one given; a file can't be read |
 | `proxy` | `false` | `true`: a proxy in front terminates TLS, so the API may listen beyond loopback over plain HTTP. `--check` warns that requests cross the network between the two in clear text: keep it private ([operations](operations.md#behind-a-proxy)). | given with `tls_cert` |
 
@@ -334,6 +334,9 @@ be at least one.
 | `token_sha256` | The lowercase hex SHA-256 of the client's bearer token. The token itself is never in the file. | not 64 hex digits (a token pasted here by mistake is refused without being echoed) |
 | `token_env` | Instead: the name of the environment variable holding the token. | the variable is not set or is empty; its value is shorter than 32 bytes and the API is reached beyond this host |
 | `grants.<tenant>.<field>` | The values of each access field the client may ask for, in that tenant. `["*"]` allows any value, which a request must still name. | see below |
+| `max_in_flight` | How many of the client's searches may be in flight at once: `4` unless set. One more is refused at once ([a client's limits](#a-clients-limits)). | outside 1 to 256 |
+| `rate` | The client's searches a second, a decimal: `0.5` is one every two seconds. `0`, the default, is no rate. | below 0 or above 10000 |
+| `burst` | How many of the client's searches may come at once before the rate holds them: the rate rounded up, and at least 1, unless set. | outside 1 to 100000; given without a `rate` |
 
 Exactly one of `token_sha256` and `token_env` is given. The grants are refused, naming the client
 and the field, when:
@@ -353,10 +356,61 @@ token=$(openssl rand -hex 32)
 printf %s "$token" | sha256sum | cut -d' ' -f1    # → token_sha256
 ```
 
-A hash protects where the token is stored, not a token short enough to guess, and the server
-doesn't limit a caller's tries. So a `token_env` value shorter than 32 bytes is refused when the API
-is reached beyond this host (`listen` off loopback, or `proxy = true`). On loopback, `--check`
-warns about it. A `token_sha256` can't be checked this way: make its token as above.
+A hash protects where the token is stored, not a token short enough to guess, and the server only
+slows a caller's tries ([below](#a-clients-limits)): it doesn't stop them. So a `token_env` value
+shorter than 32 bytes is refused when the API is reached beyond this host (`listen` off loopback, or
+`proxy = true`). On loopback, `--check` warns about it. A `token_sha256` can't be checked this way:
+make its token as above.
+
+### A client's limits
+
+One client's flood of searches must not take what the others, and the server's own work, need. Each
+client has two limits of its own, and the server has two beside them.
+
+- **`max_in_flight`: the client's searches in flight,** counted from its token matched to its
+  answer written. One more is refused at once: `429`, code `too_many_in_flight`, `Retry-After: 1`.
+  The default is 4, the embedding provider's default slots: more of one client's searches at once
+  only wait inside the server, for what every other client's search needs too.
+- **`rate` and `burst`: how often the client may search.** Over them a request is refused: `429`,
+  code `too_many_requests`, with `Retry-After` the whole seconds until a search is allowed again.
+  The default is no rate: you know your application's traffic, the server doesn't. A rate bounds
+  what a runaway client costs at your embedding provider and your ranker, which a cap on the
+  searches in flight doesn't.
+- **Refused, never queued,** before the body is read and before any search runs. The rate is
+  checked first, so a request it refuses takes no place among those in flight. A queue would hold
+  a connection for every request waiting, and its wait would come out of the time of the searches
+  behind it. Your application retries after `Retry-After`, or says search is busy.
+- **A request refused for the searches in flight has drawn on the rate too:** the rate counts
+  every request the client sends with its token, answered or not. A client held at its cap that
+  keeps sending spends its `burst` on refusals, and is then told of its rate.
+- **`max_searches`, the server's own bound,** is every client's together: a search past it waits
+  its turn, within its request's 25 s, and is answered `503 unavailable` if that runs out.
+- **A search's query never takes the last embedding slot.** Queries are embedded ahead of the
+  worker's batches, in all of `[embedding] slots` but one, so the worker embeds new and edited
+  documents through any flood of searches. With one slot there is none to keep.
+- **Requests without a valid token are counted by address:** 20 at once, then 5 a second. Past
+  that, the next one is answered `429 too_many_requests`, with `Retry-After`, in place of 401,
+  until a try is back. **A valid token is never refused for it:** the token is compared first, so
+  whoever shares an address with a client (an office, a cloud's egress, a service that lost its
+  token) can't have the client refused. Only a request without a valid token takes a try. An IPv6
+  address is counted by its /64. With `proxy = true` every request comes from the proxy's
+  address, so no count is kept: limit them at the proxy.
+- **`/v1/health`, `/v1/status` and `/v1/metrics` aren't counted** against any client's limits.
+- **Over HTTP/1.1 the connection is kept** after a refusal. The server reads nothing of a refused
+  request's body itself; Go's HTTP server then reads what the client announced of one, so the
+  connection can carry the next request: at most 256 KiB (a body announced larger isn't read, and
+  the connection is closed), and no longer than the request's 5 s for its body. A client that
+  announces a body and withholds it is therefore answered when those 5 s end.
+
+**Size them together.** `max_searches` is small on a small machine: the store's pool is 4
+connections on four CPUs or fewer unless the DSN sets `pool_max_conns`, so two searches run at
+once and the rest take turns. If your clients' `max_in_flight` add up to more than `max_searches`,
+the difference waits inside the server: raise `pool_max_conns` (and the database role's connection
+limit with it) rather than the caps. A search also holds its slot while its query is embedded, so
+a slow embedding provider lowers what `max_searches` lets through.
+
+What was refused shows in the status and the metrics by reason, and in the log once a minute
+([operations](operations.md#refused-requests)).
 
 ## `[[http.operator]]`: who reads the status
 

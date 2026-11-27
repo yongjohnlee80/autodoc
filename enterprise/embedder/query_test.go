@@ -3,8 +3,10 @@ package embedder_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -239,4 +241,67 @@ func TestQueriesAcrossTheWorkersLifeAreCoherent(t *testing.T) {
 	if _, _, err := w.QueryEmbedder("t")(context.Background(), "q"); !errors.Is(err, search.ErrEmbedFailed) {
 		t.Errorf("after the worker stopped: %v", err)
 	}
+}
+
+// The worker embeds while queries fill every slot they may. With three slots and five queries
+// asked at once, none answered: two reach the provider and three wait. A document written then is
+// the provider's next call, on the slot the queries may not take, with both queries still held.
+// Once the provider answers, every query is answered and the document is ready. The mutant, named
+// here: the queries allowed every slot (a third query is the next call, and the document waits for
+// as long as queries keep coming).
+func TestTheWorkerEmbedsABatchWhileQueriesFillTheOtherSlots(t *testing.T) {
+	st := newStore()
+	st.put("first.md", "text of first")
+	g := &gated{provider: newProvider("m"), tokens: make(chan struct{}, 100), arrived: make(chan string, 100)}
+	w := embedder.New(func(context.Context) (embed.Provider, error) { return g, nil },
+		[]embedder.Tenant{{Name: "t", Store: st}}, embedder.WithBatch(1), embedder.WithSlots(3))
+	run(t, w)
+	next := func(what string) string {
+		t.Helper()
+		select {
+		case text := <-g.arrived:
+			return text
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s: no call reached the provider", what)
+			return ""
+		}
+	}
+	// the first document embedded: the provider is set up, and the tenant's model is its own
+	g.tokens <- struct{}{}
+	if text := next("the first document"); text != "text of first" {
+		t.Fatalf("the first call carried %q", text)
+	}
+	waitFor(t, "the first document ready", func() bool { return st.isReady("first.md") })
+
+	answered := make(chan error, 5)
+	for i := range 5 {
+		go func() {
+			_, _, err := w.QueryEmbedder("t")(context.Background(), fmt.Sprintf("question %d", i))
+			answered <- err
+		}()
+	}
+	for range 2 {
+		if text := next("a query"); !strings.HasPrefix(text, "question ") {
+			t.Fatalf("a call carried %q, want a query", text)
+		}
+	}
+	st.put("second.md", "text of second")
+	w.Wake()
+	if text := next("the document written while the queries are held"); text != "text of second" {
+		t.Fatalf("with two queries held and three waiting, the next call carried %q: want the worker's batch, on the slot the queries may not take", text)
+	}
+	for range 20 {
+		g.tokens <- struct{}{}
+	}
+	for range 5 {
+		select {
+		case err := <-answered:
+			if err != nil {
+				t.Errorf("a query: %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("a query was not answered once the provider answered")
+		}
+	}
+	waitFor(t, "the second document ready", func() bool { return st.isReady("second.md") })
 }

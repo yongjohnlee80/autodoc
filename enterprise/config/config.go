@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"math"
 	"net"
 	"net/url"
 	"os"
@@ -195,9 +196,10 @@ type HTTP struct {
 	Proxy     bool
 	Clients   []Client
 	Operators []Operator
-	// MaxTenantSearches is how many tenants' searches the requests naming several tenants run at
-	// once, across every request; 0 is the store pool's size less two (the server's choice).
-	MaxTenantSearches int
+	// MaxSearches is how many searches run at once across every request: one for a search of a
+	// single tenant, one for each tenant of a search across several. 0 is the store pool's size
+	// less two (the server's choice).
+	MaxSearches int
 }
 
 // Client is one caller of the HTTP API and what it may search.
@@ -210,7 +212,25 @@ type Client struct {
 	// Grants are, by tenant, the values of each of the tenant's access fields the client may ask
 	// for: ["*"] for any value, which a request must still name.
 	Grants map[string]map[string][]string
+	// MaxInFlight is how many of the client's searches may be in flight at once: one more is
+	// refused at once (DefaultMaxInFlight unless set).
+	MaxInFlight int
+	// Rate is the client's searches a second, and Burst how many may come at once (the rate
+	// rounded up, at least 1, unless set). Rate 0, the default, is no rate.
+	Rate  float64
+	Burst int
 }
+
+// A client's limits and their bounds.
+const (
+	// DefaultMaxInFlight is a client's searches in flight at most unless it says otherwise: the
+	// embedding provider's default slots. More of one client's searches than that only wait
+	// inside the server, for a slot every other client's search needs too.
+	DefaultMaxInFlight = 4
+	MaxMaxInFlight     = 256
+	MaxRate            = 10000 // searches a second
+	MaxBurst           = 100000
+)
 
 // Metrics is [metrics]. Enabled serves GET /v1/metrics, behind the operators' tokens, so it needs
 // an [http] table with at least one operator; off by default.
@@ -348,13 +368,18 @@ type file struct {
 		TLSCert string `toml:"tls_cert"`
 		TLSKey  string `toml:"tls_key"`
 		Proxy   bool   `toml:"proxy"`
-		// a search across tenants' searches in flight at once, across every request
+		// the searches in flight at once, across every request; max_tenant_searches is its name
+		// from when only the searches across tenants were counted
+		MaxSearches       *int `toml:"max_searches"`
 		MaxTenantSearches *int `toml:"max_tenant_searches"`
 		Clients           []struct {
 			Name        string                         `toml:"name"`
 			TokenSHA256 string                         `toml:"token_sha256"`
 			TokenEnv    string                         `toml:"token_env"`
 			Grants      map[string]map[string][]string `toml:"grants"`
+			MaxInFlight *int                           `toml:"max_in_flight"`
+			Rate        *float64                       `toml:"rate"`
+			Burst       *int                           `toml:"burst"`
 		} `toml:"client"`
 		Operators []struct {
 			Name        string   `toml:"name"`
@@ -805,11 +830,20 @@ func (v *validator) http(f file, sources []Source) *HTTP {
 		return nil
 	}
 	h := &HTTP{Listen: f.HTTP.Listen, TLSCert: f.HTTP.TLSCert, TLSKey: f.HTTP.TLSKey, Proxy: f.HTTP.Proxy}
-	if n := f.HTTP.MaxTenantSearches; n != nil {
+	switch n, old := f.HTTP.MaxSearches, f.HTTP.MaxTenantSearches; {
+	case n != nil && old != nil:
+		v.refuse("http.max_tenant_searches", "is max_searches' old name: give max_searches alone")
+	case n != nil:
 		if *n < 1 || *n > 1000 {
-			v.refuse("http.max_tenant_searches", "%d: 1 to 1000 searches", *n)
+			v.refuse("http.max_searches", "%d: 1 to 1000 searches", *n)
 		}
-		h.MaxTenantSearches = *n
+		h.MaxSearches = *n
+	case old != nil:
+		if *old < 1 || *old > 1000 {
+			v.refuse("http.max_tenant_searches", "%d: 1 to 1000 searches", *old)
+		}
+		h.MaxSearches = *old
+		v.warnings = append(v.warnings, "http.max_tenant_searches is now max_searches, and counts the searches of a single tenant too: the old name is read for now, so rename it")
 	}
 	if h.Listen == "" {
 		h.Listen = DefaultListen
@@ -853,9 +887,33 @@ func (v *validator) http(f file, sources []Source) *HTTP {
 	tokens := map[string]string{} // a token's identity → the client that holds it
 	for i, raw := range f.HTTP.Clients {
 		at := func(k string) string { return fmt.Sprintf("http.client[%d].%s", i, k) }
-		c := Client{Name: raw.Name, TokenSHA256: strings.ToLower(raw.TokenSHA256), TokenEnv: raw.TokenEnv, Grants: raw.Grants}
+		c := Client{Name: raw.Name, TokenSHA256: strings.ToLower(raw.TokenSHA256), TokenEnv: raw.TokenEnv, Grants: raw.Grants,
+			MaxInFlight: DefaultMaxInFlight}
 		if c.Name != "" {
 			at = func(k string) string { return fmt.Sprintf("http.client[%d] (%s).%s", i, c.Name, k) }
+		}
+		if n := raw.MaxInFlight; n != nil {
+			if *n < 1 || *n > MaxMaxInFlight {
+				v.refuse(at("max_in_flight"), "%d: 1 to %d searches in flight", *n, MaxMaxInFlight)
+			}
+			c.MaxInFlight = *n
+		}
+		if r := raw.Rate; r != nil {
+			if math.IsNaN(*r) || *r < 0 || *r > MaxRate {
+				v.refuse(at("rate"), "%v: 0 (no rate) to %d searches a second", *r, MaxRate)
+			} else {
+				c.Rate = *r
+			}
+		}
+		switch b := raw.Burst; {
+		case b != nil && c.Rate == 0:
+			v.refuse(at("burst"), "burst is the rate's: give rate too, or leave burst out")
+		case b != nil && (*b < 1 || *b > MaxBurst):
+			v.refuse(at("burst"), "%d: 1 to %d searches at once", *b, MaxBurst)
+		case b != nil:
+			c.Burst = *b
+		case c.Rate > 0:
+			c.Burst = max(int(math.Ceil(c.Rate)), 1)
 		}
 		switch {
 		case c.Name == "":
