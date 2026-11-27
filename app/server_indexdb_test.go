@@ -346,3 +346,33 @@ tenants   = ["music"]
 		t.Errorf("the start warns of temporary tables with the grant made: %s", stderr)
 	}
 }
+
+// A view whose table the source's role may not read: --check says what PostgreSQL said, naming the
+// source. The role may read the schema and not the view's table, which is the grant most easily
+// forgotten. Exit 1, "permission denied for table track", and nothing about the shape of a result:
+// before, the refusal was reported as "process must return one JSON column: … returns 0 columns".
+// The mutant, named here: the view's query run through a view package that judges a refused
+// query's shape before it asks for its error (golib before v0.8.66).
+func TestTheServerCheckSaysWhichTableTheSourceRoleMayNotRead(t *testing.T) {
+	f := newServerFixture(t, serverView)
+	ro := readOnlySource(t, f)
+	indexDatabase(t, f)
+	u, err := url.Parse(ro)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.exec(`REVOKE SELECT ON track FROM ` + u.User.Username())
+	var stdout, stderr bytes.Buffer
+	code := run(f.ctx, []string{"--server", "--check", f.path}, testOptions, &stdout, &stderr)
+	said := stdout.String() + stderr.String()
+	if code != 1 || !strings.Contains(stderr.String(), "source[0] (music)") || !strings.Contains(stderr.String(), "permission denied for table track") {
+		t.Fatalf("--check with the view's table not granted: exit %d, said %q", code, said)
+	}
+	if strings.Contains(said, "one JSON column") || strings.Contains(said, "returns 0 columns") {
+		t.Errorf("--check calls the database's refusal a result of the wrong shape: %q", said)
+	}
+	pw, _ := u.User.Password()
+	if strings.Contains(said, pw) || strings.Contains(said, ro) {
+		t.Errorf("--check shows the source's DSN or its password: %q", said)
+	}
+}
