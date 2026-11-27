@@ -264,7 +264,8 @@ The server needs, on your database:
 
 - `SELECT` on the tables its views read, and `USAGE` on their schema;
 - its own schema, to keep the index in;
-- the `vector` extension, installed once by a superuser or the database's owner.
+- the `vector` extension, installed once by a superuser or the database's owner;
+- to create temporary tables there, which every role may unless it was revoked (below).
 
 The least privilege: a DBA creates the role, its schema and the extension, and the role creates
 nothing outside its schema:
@@ -287,12 +288,13 @@ split these: the role of `dsn_env` gets `CONNECT` and the read-only grants on yo
 nothing else; in the index's database, its role gets its schema and pgvector (the index's half,
 above). They may be one role or two.
 
-The index's role also creates temporary tables in its database: an index build uses one.
+**Temporary tables.** The role that keeps the index creates temporary tables in the index's
+database, which is your database unless the index has one of its own: an index build uses one.
 PostgreSQL grants that to every role by default. Where it was revoked (`REVOKE TEMPORARY ON
 DATABASE … FROM PUBLIC`), grant it back to the role: `GRANT TEMPORARY ON DATABASE … TO
 autodoc_search`. Without it the server runs, and the approximate search's index fails to build
 (`ann-failed` for the model in the status's `ann`, with PostgreSQL's reason, and one warning in
-the log at each start). `--check` of an index's own database refuses a role without it.
+the log at each start). `--check` refuses a role without it, with one database as with two.
 
 The server then finds its schema, creates its tables there, and never writes anywhere else. To let
 the server create the schema itself instead, also `GRANT CREATE ON DATABASE app TO autodoc_search`.
