@@ -255,10 +255,14 @@ suit many clients of similar weight; a cap per client gives most of it for a fra
 A cap on connections would refuse health checks along with the flood. A limit per access value is
 the application's knowledge, so it belongs there.
 
-**Requests without a valid token** are counted by address: 20 at once, then 5 a second, and past
-that refused with 429 before any token is compared (comparing one hashes it against every
-client's and operator's, which was free to ask for). Behind a proxy the address is the proxy's
-for everyone, so none is kept.
+**Requests without a valid token** are counted by address (an IPv6 address by its /64): 20 at
+once, then 5 a second, and past that answered 429 in place of 401. The token is compared first, and
+a valid one is never refused for its address. Refusing an address before any token is compared was
+considered and not chosen: it would let anyone who shares an address with a client (an office, a
+cloud's shared egress, one service that lost its token) shut the client out, silently on the
+client's side, and what it saves is one hash beside the handshake the request already cost. The
+tokens are too long to guess, so it is no defence against guessing either. Behind a proxy the
+address is the proxy's for everyone, so none is kept.
 
 **What is refused unread is summarised, not logged one by one:** a line a request is a line anyone
 can write. Once a minute the log says how many requests had no valid token and from how many

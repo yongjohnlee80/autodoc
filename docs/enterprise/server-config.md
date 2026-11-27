@@ -380,15 +380,21 @@ client has two limits of its own, and the server has two beside them.
   checked first, so a request it refuses takes no place among those in flight. A queue would hold
   a connection for every request waiting, and its wait would come out of the time of the searches
   behind it. Your application retries after `Retry-After`, or says search is busy.
+- **A request refused for the searches in flight has drawn on the rate too:** the rate counts
+  every request the client sends with its token, answered or not. A client held at its cap that
+  keeps sending spends its `burst` on refusals, and is then told of its rate.
 - **`max_searches`, the server's own bound,** is every client's together: a search past it waits
   its turn, within its request's 25 s, and is answered `503 unavailable` if that runs out.
 - **A search's query never takes the last embedding slot.** Queries are embedded ahead of the
   worker's batches, in all of `[embedding] slots` but one, so the worker embeds new and edited
   documents through any flood of searches. With one slot there is none to keep.
-- **Requests without a valid token are slowed by address:** 20 at once, then 5 a second. An
-  address past that is refused `429 too_many_requests` before any token is compared, until a try
-  is back. Only a request without a valid token takes a try. With `proxy = true` every request
-  comes from the proxy's address, so no count is kept: limit them at the proxy.
+- **Requests without a valid token are counted by address:** 20 at once, then 5 a second. Past
+  that, the next one is answered `429 too_many_requests`, with `Retry-After`, in place of 401,
+  until a try is back. **A valid token is never refused for it:** the token is compared first, so
+  whoever shares an address with a client (an office, a cloud's egress, a service that lost its
+  token) can't have the client refused. Only a request without a valid token takes a try. An IPv6
+  address is counted by its /64. With `proxy = true` every request comes from the proxy's
+  address, so no count is kept: limit them at the proxy.
 - **`/v1/health`, `/v1/status` and `/v1/metrics` aren't counted** against any client's limits.
 - **Over HTTP/1.1 the connection is kept** after a refusal. The server reads nothing of a refused
   request's body itself; Go's HTTP server then reads what the client announced of one, so the

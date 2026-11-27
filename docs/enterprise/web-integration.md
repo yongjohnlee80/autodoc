@@ -266,8 +266,8 @@ caller without a valid token learns nothing about tenants or bodies:
 |---|---|---|
 | 404 | `not_found` | Any path but `/v1/search`, `/v1/health` or `/v1/status`. |
 | 405 | `method_not_allowed` | A method other than POST for `/v1/search` (`Allow: POST`), or GET for `/v1/health` and `/v1/status` (`Allow: GET`). |
-| 429 | `too_many_requests` | The address has sent too many requests without a valid token (20 at once, then 5 a second): refused before any token is compared, with `Retry-After`. Not kept behind a proxy. |
 | 401 | `unauthorized` | No `Authorization: Bearer …`, or no client has that token (`WWW-Authenticate: Bearer`). |
+| 429 | `too_many_requests` | No valid token, and the address has sent too many requests without one (20 at once, then 5 a second): answered in place of 401, with `Retry-After`. A request with a valid token is never refused for it. Not kept behind a proxy. |
 | 429 | `too_many_requests` | The client is over its `rate` ([server-config](server-config.md#a-clients-limits)). `Retry-After` is the whole seconds until a search is allowed again. |
 | 429 | `too_many_in_flight` | The client has `max_in_flight` searches in flight already. `Retry-After: 1`. |
 | 415 | `unsupported_media_type` | The body isn't `application/json`. |

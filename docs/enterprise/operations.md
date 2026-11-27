@@ -121,11 +121,11 @@ A request refused before it is read has no log line of its own: a line a request
 
 ```
 search: client web-app: 37 refused in 1m0s: 30 over its searches in flight (too_many_in_flight), 7 over its rate (too_many_requests)
-http: 120 unauthorized requests in 1m0s, from 3 addresses; 95 of them refused unread, their address over its tries
+http: 120 unauthorized requests in 1m0s, from 3 addresses; 95 of them answered 429, their address out of tries
 ```
 
 - **A client's line** is for the limits you gave it ([server-config](server-config.md#a-clients-limits)). A client that reads it every minute needs a higher `max_in_flight` or `rate`, or sends more than you meant it to.
-- **The unauthorized line** counts requests with no valid token, on any path that takes one. "Refused unread" are the requests of an address that had no try left, refused before their token was compared. Behind a proxy the line names no address.
+- **The unauthorized line** counts requests with no valid token, on any path that takes one. "Answered 429" are those whose address had no try left ([server-config](server-config.md#a-clients-limits)). An IPv6 address is counted by its /64. Behind a proxy the line names no address.
 - **A server stopping says what it had counted and not yet said.**
 - **They're logged at `Info`,** as the requests' own lines are.
 - **The counts since the start** are the status's `server.http.refused` and the metrics' `autodoc_http_refused_total{reason}`.
