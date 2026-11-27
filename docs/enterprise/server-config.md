@@ -19,7 +19,11 @@ and checked too ([Writing a `.view` source](views.md)).
 - A file that can't be read is exit 1.
 - `autodoc --server --check server.toml` checks the file and the views the same way, then runs each
   view against your database, read-only, to confirm its order, asks the embedding provider to embed
-  one probe text, and exits 0 saying what it checked. It also prints the warnings below.
+  one probe text, and exits 0 saying what it checked. It also prints the warnings below. It
+  refuses, naming `postgres.dsn_env`, a role that can't create temporary tables in the database,
+  which an index build needs ([views](views.md#the-grants)); with the index in a database of its
+  own, that is checked there, with the rest of what the index needs
+  ([below](#the-index-in-a-database-of-its-own)).
 
 **No secret is ever written in the file.** The DSN and the embedding key are read from environment
 variables the file names. An HTTP client's token is kept as its SHA-256, or read from the
