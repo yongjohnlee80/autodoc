@@ -248,6 +248,20 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: ask Windows for a dump of a ./tui test binary that crashes
+        if: ${{ !inputs.discover }}
+        shell: pwsh
+        run: |
+          # Windows Error Reporting writes a minidump of tui.test.exe to the runner's temp folder
+          # when it ends by a fail-fast or an unhandled exception, its own or a system DLL's. Go
+          # turns Windows Error Reporting off for its programs unless GOTRACEBACK=wer, which the
+          # next step sets for that binary alone.
+          $key = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\tui.test.exe'
+          New-Item -Path $key -Force | Out-Null
+          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\tui-dumps" | Out-Null
+          Set-ItemProperty -Path $key -Name DumpFolder -Value "$env:RUNNER_TEMP\tui-dumps" -Type ExpandString
+          Set-ItemProperty -Path $key -Name DumpType -Value 1 -Type DWord
+          Set-ItemProperty -Path $key -Name DumpCount -Value 2 -Type DWord
       - name: the module vets, the ported packages build and pass
         if: ${{ !inputs.discover }}
         run: |
@@ -327,7 +341,7 @@ jobs:
             set +e
             go test -c -o "$t/tui.test.exe" ./tui > "$t/tui.build" 2>&1 || exit 1
             cd tui
-            "$t/exitcode.exe" "$t/tui.code" "$t/tui.raw" "$t/tui.test.exe" -test.paniconexit0 -test.v=test2json -test.count=1 -test.timeout=20m \
+            GOTRACEBACK=wer "$t/exitcode.exe" "$t/tui.code" "$t/tui.raw" "$t/tui.test.exe" -test.paniconexit0 -test.v=test2json -test.count=1 -test.timeout=20m \
               | go tool test2json -t -p github.com/yongjohnlee80/autodoc/tui > "$t/tui.json" 2> "$t/tui.err"
             st=("${PIPESTATUS[@]}")
             echo "${st[1]}" > "$t/tui.t2j"
@@ -427,6 +441,10 @@ jobs:
           $reports = @(Get-ChildItem $dirs -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt $since })
           if ($reports.Count -eq 0) { Write-Output "(none)" }
           foreach ($r in $reports) { Write-Output $r.FullName }
+          Write-Output "== the ./tui test binary's dumps (in the job's artifact)"
+          $dumps = @(Get-ChildItem "$env:RUNNER_TEMP\tui-dumps" -ErrorAction SilentlyContinue)
+          if ($dumps.Count -eq 0) { Write-Output "(none)" }
+          foreach ($d in $dumps) { Write-Output ("{0} {1} bytes" -f $d.Name, $d.Length) }
           exit 0
       - name: keep ./tui's -json when the job fails
         if: ${{ failure() && !inputs.discover }}
@@ -441,6 +459,7 @@ jobs:
             ${{ runner.temp }}/tui.raw
             ${{ runner.temp }}/tui-from-raw.json
             ${{ runner.temp }}/tui.build
+            ${{ runner.temp }}/tui-dumps
           retention-days: 14
           if-no-files-found: ignore
       - name: discover which packages pass on Windows
