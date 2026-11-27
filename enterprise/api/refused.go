@@ -6,6 +6,7 @@ import (
 	"maps"
 	"math"
 	"net"
+	"net/netip"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -50,7 +51,7 @@ type refusals struct {
 	// since the last summary
 	clients map[string]*clientRefusals
 	unauth  int                 // unauthorized requests
-	unread  int                 // of them, refused before any token was compared (tries)
+	spent   int                 // of them, answered 429: their address had no try left (tries)
 	addrs   map[string]struct{} // the addresses they came from, summaryAddrs at most
 	more    bool                // more addresses than addrs holds
 }
@@ -94,15 +95,15 @@ func (r *refusals) limited(client string, rate bool) {
 }
 
 // unauthorizedFrom counts a request with no valid token from addr ("" when the address says
-// nothing: behind a proxy). unread is one refused before its token was compared, its address over
+// nothing: behind a proxy). spent is one answered 429 in place of 401, its address out of
 // its tries.
-func (r *refusals) unauthorizedFrom(addr string, unread bool) {
+func (r *refusals) unauthorizedFrom(addr string, spent bool) {
 	r.unauthorized.Add(1)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.unauth++
-	if unread {
-		r.unread++
+	if spent {
+		r.spent++
 	}
 	if addr != "" {
 		if r.addrs == nil {
@@ -130,8 +131,8 @@ func (r *refusals) arm() {
 // The timer's goroutine calls it, and close.
 func (r *refusals) summarise() {
 	r.mu.Lock()
-	clients, unauth, unread, addrs, more := r.clients, r.unauth, r.unread, len(r.addrs), r.more
-	r.clients, r.unauth, r.unread, r.addrs, r.more, r.stop = nil, 0, 0, nil, false, nil
+	clients, unauth, spent, addrs, more := r.clients, r.unauth, r.spent, len(r.addrs), r.more
+	r.clients, r.unauth, r.spent, r.addrs, r.more, r.stop = nil, 0, 0, nil, false, nil
 	r.mu.Unlock()
 	for _, name := range slices.Sorted(maps.Keys(clients)) {
 		c := clients[name]
@@ -148,8 +149,8 @@ func (r *refusals) summarise() {
 		case addrs > 1:
 			line += fmt.Sprintf(", from %d addresses", addrs)
 		}
-		if unread > 0 {
-			line += fmt.Sprintf("; %d of them refused unread, their address over its tries", unread)
+		if spent > 0 {
+			line += fmt.Sprintf("; %d of them answered 429, their address out of tries", spent)
 		}
 		logger.Info(r.log, line)
 	}
@@ -173,13 +174,20 @@ func (r *refusals) totals() ops.Refused {
 	return ops.Refused{InFlight: r.inFlight.Load(), Rate: r.rate.Load(), Unauthorized: r.unauthorized.Load()}
 }
 
-// THE TRIES OF AN ADDRESS. A token is checked by comparing its hash with every client's and every
-// operator's, which anyone may ask for, as often as they like. Each unauthorized request takes one
-// try from its address: 20 at once, 5 a second after. An address with none left is refused 429
-// too_many_requests before any hash is compared, until a try is back.
+// THE TRIES OF AN ADDRESS. Anyone may send requests without a valid token, as often as they like.
+// Each one takes a try from its address: 20 at once, 5 a second after. An address with none left
+// is answered 429 too_many_requests, with when a try is back, in place of 401.
 //
-// The address is the connection's own. Behind a proxy it is the proxy's, for every caller, so the
-// tries are not kept there (WithoutAddressTries): the proxy has its own limit.
+// The token is compared first, and a valid one is never refused for its address: an office, a
+// cloud's shared egress or one misconfigured service behind the same address as a client can spend
+// that address's tries, and must not be able to shut the client out by it. So the tries save the
+// server nothing (a comparison is one hash, beside the handshake the request already cost): they
+// tell the caller that keeps failing to slow down, and the log's summary says how many were told.
+//
+// The address is the connection's own, and an IPv6 address is counted by its /64, the network one
+// host has to itself: by whole addresses a host would have twenty fresh tries at each of them.
+// Behind a proxy the address is the proxy's, for every caller, so the tries are not kept there
+// (WithoutAddressTries): the proxy has its own limit.
 
 // The tries of an address, and how many addresses are remembered: the one longest unseen goes
 // first.
@@ -257,10 +265,23 @@ func (a *tried) fill(now time.Time) {
 	}
 }
 
-// addressOf is the address a request came from, without its port; "" when it says none.
+// addressOf is what a request's tries are counted by: the address it came from, without its port;
+// for IPv6, its /64. An IPv4 address written as IPv6 (::ffff:a.b.c.d) is the IPv4 address. What
+// doesn't read as an address is counted as it is.
 func addressOf(remote string) string {
-	if host, _, err := net.SplitHostPort(remote); err == nil {
+	host := remote
+	if h, _, err := net.SplitHostPort(remote); err == nil {
+		host = h
+	}
+	addr, err := netip.ParseAddr(host)
+	if err != nil {
 		return host
 	}
-	return remote
+	addr = addr.Unmap()
+	if addr.Is6() {
+		if network, err := addr.WithZone("").Prefix(64); err == nil {
+			return network.String()
+		}
+	}
+	return addr.String()
 }

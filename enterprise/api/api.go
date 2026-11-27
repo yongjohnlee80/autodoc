@@ -4,8 +4,9 @@
 //
 //  1. the method and the path (405, 404);
 //  2. the bearer token, its SHA-256 compared with every client's in constant time (401), so a
-//     caller without a valid token learns nothing of tenants or bodies; an address that has sent
-//     too many requests without one is refused first, no token compared (429, refused.go);
+//     caller without a valid token learns nothing of tenants or bodies; once its address has sent
+//     too many such requests it is answered 429 in place of 401 (refused.go). A valid token is
+//     never refused for what its address has sent;
 //  3. the client's limits, its rate and then its searches in flight (429, limit.go), refused at
 //     once, before the body is read;
 //  4. the body: JSON of at most 64 KiB, no unknown field, a query of at most 1 KiB (400, 413, 415);
@@ -502,15 +503,9 @@ func (h *Handler) answer(ctx context.Context, w http.ResponseWriter, r *http.Req
 		w.Header().Set("Allow", http.MethodPost)
 		return refuse(http.StatusMethodNotAllowed, "method_not_allowed", Path+" takes POST"), response{}
 	}
-	if a, spent := h.outOfTries(r); spent {
-		return a, response{}
-	}
 	c := h.client(r.Header.Get("Authorization"))
 	if c == nil {
-		h.noToken(r)
-		a := refuse(http.StatusUnauthorized, "unauthorized", "a valid bearer token is required")
-		a.quiet = true
-		return a, response{}
+		return h.noToken(r, "a valid bearer token is required"), response{}
 	}
 	if a, over := h.limited(c, leave); over {
 		return a, response{}
@@ -583,31 +578,39 @@ func (h *Handler) limited(c *Client, leave *func()) (a answer, over bool) {
 	return answer{}, false
 }
 
-// outOfTries refuses a request whose address has no try left (tries): 429 with when to come again,
-// before any token is compared. It is counted with the unauthorized requests.
-func (h *Handler) outOfTries(r *http.Request) (a answer, spent bool) {
-	if h.tries == nil {
-		return answer{}, false
-	}
-	addr := addressOf(r.RemoteAddr)
-	wait, spent := h.tries.spent(addr, h.now.Now())
-	if !spent {
-		return answer{}, false
-	}
-	h.refused.unauthorizedFrom(addr, true)
-	a = refuse(http.StatusTooManyRequests, "too_many_requests", fmt.Sprintf("too many requests without a valid token from this address: again in %d s", retryAfter(wait)))
-	a.retry, a.quiet = retryAfter(wait), true
-	return a, true
-}
-
-// noToken counts a request that bore no valid token, and takes a try from its address.
-func (h *Handler) noToken(r *http.Request) {
+// noToken answers a request whose token no client or operator holds, and counts it: 401 with
+// message, taking a try from its address; or, its address having none left, 429 with when one is
+// back (tries). The token was compared first: a request with a valid one never comes here,
+// whatever its address has sent, so no one who shares an address with a client can have it
+// refused. The answer has no log line of its own.
+func (h *Handler) noToken(r *http.Request, message string) answer {
 	addr := ""
 	if h.tries != nil {
 		addr = addressOf(r.RemoteAddr)
-		h.tries.take(addr, h.now.Now())
+		now := h.now.Now()
+		if wait, spent := h.tries.spent(addr, now); spent {
+			h.refused.unauthorizedFrom(addr, true)
+			a := refuse(http.StatusTooManyRequests, "too_many_requests", fmt.Sprintf("too many requests without a valid token from this address: again in %d s", retryAfter(wait)))
+			a.retry, a.quiet = retryAfter(wait), true
+			return a
+		}
+		h.tries.take(addr, now)
 	}
 	h.refused.unauthorizedFrom(addr, false)
+	a := refuse(http.StatusUnauthorized, "unauthorized", message)
+	a.quiet = true
+	return a
+}
+
+// refuseNoToken writes noToken's answer on the status and metrics paths, and returns its status.
+func (h *Handler) refuseNoToken(w http.ResponseWriter, r *http.Request) int {
+	a := h.noToken(r, "an operator's bearer token is required")
+	if a.retry > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(a.retry))
+	} else {
+		w.Header().Set("WWW-Authenticate", `Bearer realm="autodoc"`)
+	}
+	return refuseNow(w, a.status, a.code, a.message)
 }
 
 // answerTenants answers a search across tenants (the request's tenants): each tenant is checked as
@@ -796,10 +799,6 @@ func (h *Handler) serveStatus(ctx context.Context, w http.ResponseWriter, r *htt
 		w.Header().Set("Allow", http.MethodGet)
 		return refuseNow(w, http.StatusMethodNotAllowed, "method_not_allowed", StatusPath+" takes GET")
 	}
-	if a, spent := h.outOfTries(r); spent {
-		w.Header().Set("Retry-After", strconv.Itoa(a.retry))
-		return refuseNow(w, a.status, a.code, a.message)
-	}
 	client, op := h.holder(r.Header.Get("Authorization"))
 	name, status := "-", http.StatusOK
 	switch {
@@ -810,9 +809,7 @@ func (h *Handler) serveStatus(ctx context.Context, w http.ResponseWriter, r *htt
 	case client != nil:
 		name, status = client.Name, refuseNow(w, http.StatusForbidden, "forbidden", "status is for an operator's token: a search client's grants do not cover it")
 	default:
-		h.noToken(r) // counted for the log's summary, with no line of its own
-		w.Header().Set("WWW-Authenticate", `Bearer realm="autodoc"`)
-		return refuseNow(w, http.StatusUnauthorized, "unauthorized", "an operator's bearer token is required")
+		return h.refuseNoToken(w, r) // counted for the log's summary, with no line of its own
 	}
 	logger.Info(h.log, fmt.Sprintf("status: %s: %d, in %v", name, status, time.Since(start).Round(time.Millisecond)))
 	return status
@@ -825,10 +822,6 @@ func (h *Handler) serveMetrics(ctx context.Context, w http.ResponseWriter, r *ht
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
 		return refuseNow(w, http.StatusMethodNotAllowed, "method_not_allowed", MetricsPath+" takes GET")
-	}
-	if a, spent := h.outOfTries(r); spent {
-		w.Header().Set("Retry-After", strconv.Itoa(a.retry))
-		return refuseNow(w, a.status, a.code, a.message)
 	}
 	client, op := h.holder(r.Header.Get("Authorization"))
 	name, status := "-", http.StatusOK
@@ -846,9 +839,7 @@ func (h *Handler) serveMetrics(ctx context.Context, w http.ResponseWriter, r *ht
 	case client != nil:
 		name, status = client.Name, refuseNow(w, http.StatusForbidden, "forbidden", "metrics are for an operator's token: a search client's grants do not cover it")
 	default:
-		h.noToken(r) // counted for the log's summary, with no line of its own
-		w.Header().Set("WWW-Authenticate", `Bearer realm="autodoc"`)
-		return refuseNow(w, http.StatusUnauthorized, "unauthorized", "an operator's bearer token is required")
+		return h.refuseNoToken(w, r) // counted for the log's summary, with no line of its own
 	}
 	logger.Info(h.log, fmt.Sprintf("metrics: %s: %d, in %v", name, status, time.Since(start).Round(time.Millisecond)))
 	return status

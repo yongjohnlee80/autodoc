@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -66,7 +67,7 @@ func (s *summaries) count() (armed, stopped int) {
 // from is one request to the handler itself, as from the address given.
 func from(h *Handler, addr, method, path, tok, body string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
-	req.RemoteAddr = addr + ":40000"
+	req.RemoteAddr = net.JoinHostPort(addr, "40000")
 	if tok != "" {
 		req.Header.Set("Authorization", "Bearer "+tok)
 	}
@@ -151,69 +152,132 @@ func TestUnauthorizedRequestsAreSaidOnceAMinuteNotOneByOne(t *testing.T) {
 	}
 }
 
-// An address that has sent too many requests without a valid token is refused before its token is
-// compared. Twenty are answered 401; the twenty-first is 429 too_many_requests with Retry-After 1,
-// and so is a request bearing a valid token, which shows no token was compared. Another address is
-// answered meanwhile. A fifth of a second later one try is back: the valid token is let in, as
-// often as it comes, since only a request without a token takes a try; one more without takes it,
-// and the next is refused again. After four seconds with none, every try is back. The summary says
-// how many were refused unread. The mutants, named here: the tries not kept (the twenty-first is
-// 401); the token compared first (the valid token is let in with no try left).
-func TestAnAddressOutOfTriesIsRefusedBeforeItsTokenIsCompared(t *testing.T) {
+// An address that has sent too many requests without a valid token is answered 429 for the next,
+// and a valid token is never refused for what its address has sent. Twenty are answered 401; the
+// twenty-first is 429 too_many_requests with Retry-After 1. A search client's and an operator's
+// valid tokens, from that same address, are answered meanwhile, as often as they come, and spend
+// nothing: whoever shares an address with a client can't have it refused. Another address is its
+// own. A fifth of a second later one try is back: one more request without a token is 401, the
+// next 429 again. After four seconds with none, every try is back. The summary says how many were
+// answered 429. The mutants, named here: the tries not kept (the twenty-first is 401); the tries
+// read before the token is compared (the valid token is refused with its address).
+func TestAnAddressOutOfTriesIsAnswered429AndAValidTokenNeverIs(t *testing.T) {
 	clk := &testClock{now: time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC)}
-	_, h, log := limited(t, &fake{}, &fake{}, Client{}, WithClock(clk.Now))
+	c := ops.New(ops.Options{
+		Provider: func() embedder.Health { return embedder.Health{State: embedder.ProviderUp, Model: "m1"} },
+		Now:      func(context.Context) (time.Time, error) { return time.Now(), nil },
+	})
+	_, h, log := limited(t, &fake{}, &fake{}, Client{}, WithClock(clk.Now), WithOps(c),
+		WithOperators([]Operator{{Name: "ops", Token: sha256.Sum256([]byte(opsToken)), Tenants: []string{"*"}}}))
 	var sum summaries
 	sum.hold(h)
 	const knocker, neighbour = "203.0.113.7", "203.0.113.8"
+	const noOnes = "no-token-of-anyones"
 	for i := range triesBurst {
-		if r := from(h, knocker, http.MethodPost, Path, "no-token-of-anyones", quickBody); r.Code != http.StatusUnauthorized {
+		if r := from(h, knocker, http.MethodPost, Path, noOnes, quickBody); r.Code != http.StatusUnauthorized {
 			t.Fatalf("unauthorized request %d: %d %s", i+1, r.Code, codeOf(r))
 		}
 	}
-	r := from(h, knocker, http.MethodPost, Path, "no-token-of-anyones", quickBody)
+	r := from(h, knocker, http.MethodPost, Path, noOnes, quickBody)
 	if r.Code != http.StatusTooManyRequests || codeOf(r) != "too_many_requests" || r.Header().Get("Retry-After") != "1" {
 		t.Fatalf("the twenty-first: %d %s, Retry-After %q", r.Code, codeOf(r), r.Header().Get("Retry-After"))
 	}
-	if r := from(h, knocker, http.MethodPost, Path, otherToken, quickBody); r.Code != http.StatusTooManyRequests {
-		t.Errorf("a valid token from the address out of tries: %d %s (want 429: no token is compared)", r.Code, codeOf(r))
+	if r := from(h, knocker, http.MethodGet, StatusPath, noOnes, ""); r.Code != http.StatusTooManyRequests || r.Header().Get("Retry-After") != "1" {
+		t.Errorf("the status path without a token, the address out of tries: %d %s, Retry-After %q", r.Code, codeOf(r), r.Header().Get("Retry-After"))
 	}
-	if r := from(h, knocker, http.MethodGet, StatusPath, "no-token-of-anyones", ""); r.Code != http.StatusNotFound {
-		// this handler has no ops: the path is not one that takes a token
-		t.Errorf("the status path with no ops: %d", r.Code)
+	for i := range 5 {
+		if r := from(h, knocker, http.MethodPost, Path, otherToken, quickBody); r.Code != http.StatusOK {
+			t.Fatalf("a client's valid token from the address out of tries, time %d: %d %s (want it answered: a valid token is never refused for its address)", i+1, r.Code, codeOf(r))
+		}
+		if r := from(h, knocker, http.MethodGet, StatusPath, opsToken, ""); r.Code != http.StatusOK {
+			t.Fatalf("an operator's valid token from the address out of tries, time %d: %d %s", i+1, r.Code, codeOf(r))
+		}
 	}
-	if r := from(h, neighbour, http.MethodPost, Path, otherToken, quickBody); r.Code != http.StatusOK {
-		t.Errorf("another address meanwhile: %d %s", r.Code, codeOf(r))
+	if r := from(h, knocker, http.MethodPost, Path, noOnes, quickBody); r.Code != http.StatusTooManyRequests {
+		t.Errorf("without a token, after the valid ones: %d %s (want 429 still: they gave no try back and took none)", r.Code, codeOf(r))
 	}
-	if r := from(h, neighbour, http.MethodPost, Path, "no-token-of-anyones", quickBody); r.Code != http.StatusUnauthorized {
+	if r := from(h, neighbour, http.MethodPost, Path, noOnes, quickBody); r.Code != http.StatusUnauthorized {
 		t.Errorf("another address without a token: %d %s (want its own 401)", r.Code, codeOf(r))
 	}
 
 	clk.advance(250 * time.Millisecond) // one try back, and a quarter of the next
-	for range 3 {
-		if r := from(h, knocker, http.MethodPost, Path, otherToken, quickBody); r.Code != http.StatusOK {
-			t.Fatalf("a valid token with a try back: %d %s", r.Code, codeOf(r))
-		}
-	}
-	if r := from(h, knocker, http.MethodPost, Path, "no-token-of-anyones", quickBody); r.Code != http.StatusUnauthorized {
+	if r := from(h, knocker, http.MethodPost, Path, noOnes, quickBody); r.Code != http.StatusUnauthorized {
 		t.Errorf("without a token, a try back: %d %s", r.Code, codeOf(r))
 	}
-	if r := from(h, knocker, http.MethodPost, Path, otherToken, quickBody); r.Code != http.StatusTooManyRequests {
+	if r := from(h, knocker, http.MethodPost, Path, noOnes, quickBody); r.Code != http.StatusTooManyRequests {
 		t.Errorf("after the try was taken: %d %s", r.Code, codeOf(r))
 	}
 	clk.advance(4 * time.Second)
 	for i := range triesBurst {
-		if r := from(h, knocker, http.MethodPost, Path, "no-token-of-anyones", quickBody); r.Code != http.StatusUnauthorized {
+		if r := from(h, knocker, http.MethodPost, Path, noOnes, quickBody); r.Code != http.StatusUnauthorized {
 			t.Fatalf("four seconds later, unauthorized request %d: %d %s (want every try back)", i+1, r.Code, codeOf(r))
 		}
 	}
 
 	sum.say()
-	want := fmt.Sprintf("http: %d unauthorized requests in 1m0s, from 2 addresses; 3 of them refused unread, their address over its tries", 2*triesBurst+1+1+3)
+	// the knocker's 20, then 3 answered 429 (two on search, one on status), the neighbour's 1, the
+	// knocker's 1 with a try back and 1 more answered 429, then its 20 again
+	all, spent := 2*triesBurst+3+1+1+1, 4
+	want := fmt.Sprintf("http: %d unauthorized requests in 1m0s, from 2 addresses; %d of them answered 429, their address out of tries", all, spent)
 	if got := lines(log, "unauthorized requests"); len(got) != 1 || !strings.Contains(got[0], want) {
 		t.Errorf("the summary: %q, want %q", got, want)
 	}
-	if got := h.Refused().Unauthorized; got != uint64(2*triesBurst+1+1+3) {
-		t.Errorf("%d unauthorized since the start", got)
+	if got := h.Refused().Unauthorized; got != uint64(all) {
+		t.Errorf("%d unauthorized since the start, want %d", got, all)
+	}
+}
+
+// An IPv6 address is counted by its /64, the network one host has to itself: by whole addresses a
+// host would have twenty fresh tries at each of the addresses it may take. Twenty requests without
+// a token from twenty addresses of one /64 spend its tries, and another address of that /64 is
+// answered 429; an address of another /64 is its own. An IPv4 address written as IPv6 is that IPv4
+// address. The summary counts a /64 once. The mutant, named here: an IPv6 address counted whole
+// (the twenty-first address of the /64 is answered 401).
+func TestAnIPv6AddressIsCountedByItsNetwork(t *testing.T) {
+	for remote, want := range map[string]string{
+		"[2001:db8:1:2::1]:443":                 "2001:db8:1:2::/64",
+		"[2001:db8:1:2:ffff:ffff:ffff:ffff]:80": "2001:db8:1:2::/64",
+		"[2001:db8:1:3::1]:443":                 "2001:db8:1:3::/64",
+		"[fe80::1%eth0]:1":                      "fe80::/64",
+		"203.0.113.7:40000":                     "203.0.113.7",
+		"[::ffff:203.0.113.7]:40000":            "203.0.113.7",
+		"203.0.113.7":                           "203.0.113.7",
+		"not an address":                        "not an address",
+		"":                                      "",
+	} {
+		if got := addressOf(remote); got != want {
+			t.Errorf("addressOf(%q) = %q, want %q", remote, got, want)
+		}
+	}
+
+	clk := &testClock{now: time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC)}
+	_, h, log := limited(t, &fake{}, &fake{}, Client{}, WithClock(clk.Now))
+	var sum summaries
+	sum.hold(h)
+	const noOnes = "no-token-of-anyones"
+	for i := range triesBurst {
+		if r := from(h, fmt.Sprintf("2001:db8:1:2::%x", i+1), http.MethodPost, Path, noOnes, quickBody); r.Code != http.StatusUnauthorized {
+			t.Fatalf("address %d of the /64: %d %s", i+1, r.Code, codeOf(r))
+		}
+	}
+	if r := from(h, "2001:db8:1:2:ffff:ffff:ffff:ffff", http.MethodPost, Path, noOnes, quickBody); r.Code != http.StatusTooManyRequests {
+		t.Errorf("another address of the /64, its tries spent: %d %s (want 429)", r.Code, codeOf(r))
+	}
+	if r := from(h, "2001:db8:1:3::1", http.MethodPost, Path, noOnes, quickBody); r.Code != http.StatusUnauthorized {
+		t.Errorf("an address of another /64: %d %s (want its own 401)", r.Code, codeOf(r))
+	}
+	for i := range triesBurst {
+		if r := from(h, "203.0.113.7", http.MethodPost, Path, noOnes, quickBody); r.Code != http.StatusUnauthorized {
+			t.Fatalf("the IPv4 address, request %d: %d %s", i+1, r.Code, codeOf(r))
+		}
+	}
+	if r := from(h, "::ffff:203.0.113.7", http.MethodPost, Path, noOnes, quickBody); r.Code != http.StatusTooManyRequests {
+		t.Errorf("the IPv4 address written as IPv6, its tries spent: %d %s (want 429)", r.Code, codeOf(r))
+	}
+	sum.say()
+	want := fmt.Sprintf("http: %d unauthorized requests in 1m0s, from 3 addresses; 2 of them answered 429, their address out of tries", 2*triesBurst+3)
+	if got := lines(log, "unauthorized requests"); len(got) != 1 || !strings.Contains(got[0], want) {
+		t.Errorf("the summary: %q, want %q", got, want)
 	}
 }
 
