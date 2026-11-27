@@ -429,7 +429,10 @@ func (pl *plugins) managePlugins() {
 }
 
 // loadManaged lists the installed plugins in the manager, each with its source, read off the loop.
+// Only the latest listing's answer is shown: the manager's opening one, reading git in every
+// plugin's folder, can land after a removal's and list the removed plugin again.
 func (pl *plugins) loadManaged() {
+	tk := pl.c.Ticket(&pl.managedSeq, feature.TicketLocal)
 	pl.c.Set("App.pluginsHelp", pl.c.Trf("autodoc.text.plugininstall.add_from_a_git_url_update_or_remove_the_one_unde", pl.pluginOpt.Dir))
 	entries, env, readGit, folders := discoverPlugins(pl.pluginOpt.Dir), pl.seams.env, pl.pluginGit(), &pl.folders
 	feature.CoreDo(pl.c, func(ctx context.Context) feature.AnswerOf[[]managedPlugin] {
@@ -448,6 +451,9 @@ func (pl *plugins) loadManaged() {
 		}
 		return feature.Answered(out, nil)
 	}, func(a feature.AnswerOf[[]managedPlugin]) {
+		if !tk.Current() {
+			return
+		}
 		if a.Err() != nil {
 			pl.c.Failed(pl.c.Tr("autodoc.notice.plugininstall.the_installed_plugins"), a.Err()) // it panicked: an empty list, said
 		}

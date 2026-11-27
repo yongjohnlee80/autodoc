@@ -7,9 +7,12 @@ import (
 	"image/color"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/yongjohnlee80/autodoc/tui/relations"
 
@@ -149,5 +152,91 @@ func TestTheViewsGroupsAreTheWorkspacesGraphFile(t *testing.T) {
 	}
 	if got := onLoop(r, func() []string { return queries(m.Snapshot().Groups) }); !slices.Equal(got, []string{"type:note", "type:adr", "path:notes/"}) {
 		t.Errorf("the Mindmap's groups %q", got)
+	}
+}
+
+// heldGraphReads are the graph files' reads, each held while hold names a gate: arrived is closed as the
+// read begins, and it goes on once release is.
+type heldGraphReads struct {
+	relations.AbsoluteFiles
+	hold *atomic.Pointer[graphReadGate]
+}
+
+type graphReadGate struct{ arrived, release chan struct{} }
+
+func (f heldGraphReads) ReadAbsolute(ctx context.Context, path string) ([]byte, string, error) {
+	if g := f.hold.Swap(nil); g != nil {
+		close(g.arrived)
+		<-g.release
+	}
+	return f.AbsoluteFiles.ReadAbsolute(ctx, path)
+}
+
+// A read of the graph file that the GlobeMap's settings edit during is older than the edit: the
+// view keeps the edit, which the file holds once the read is done. The read here is a load's after
+// a save conflict (the file changed on disk), held until the edit is made. The mutant, named here:
+// the read's groups listed whatever was edited since.
+func TestTheGlobeMapKeepsAnEditMadeWhileItsGroupsWereRead(t *testing.T) {
+	kb := fileDir(t, "schema.yaml", "version: 2\ndiscriminator: type\ncommon:\n  type: {type: string, enum: [note, adr]}\ntypes:\n  note: {}\n  adr: {}\n",
+		"a.md", "---\ntype: adr\n---\n[[b]]\n")
+	if err := os.MkdirAll(filepath.Join(kb, "notes"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(kb, "notes", "c.md"), []byte("ccc\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var hold atomic.Pointer[graphReadGate]
+	tune(t).graphFiles = func(f relations.AbsoluteFiles) relations.AbsoluteFiles { return heldGraphReads{f, &hold} }
+	d := startManaged(t, map[string]string{"kb": kb})
+	r := runTUI(t, NewSession(d.sock, nil), Options{GUI: true})
+	r.waitAttached(t, "kb")
+	r.waitListed(t, 3)
+	if _, err := (core{r.h}).Call(context.Background(), "workspace.set_schema", "kb", "schema.yaml"); err != nil {
+		t.Fatal(err)
+	}
+	var g *relations.GlobeMap
+	onLoop(r, func() bool {
+		g = r.h.relationViews[0].(*relations.GlobeMap)
+		core{r.h}.TogglePanel(relations.GlobeMapPanelID)
+		return true
+	})
+	path := filepath.Join(kb, ".autodoc", "graph.toml")
+	file := func() string { b, _ := os.ReadFile(path); return string(b) }
+	r.s.WaitFor(t, "the graph file written", func(string) bool { return strings.Contains(file(), `query = "path:notes/"`) })
+	r.s.WaitFor(t, "the GlobeMap's groups", func(string) bool { return onLoop(r, func() bool { return len(g.Snapshot().Groups) == 3 }) })
+
+	// changed on disk, type:adr's colour with it: the next save meets a conflict, and the file is
+	// read again before another
+	n := 0
+	disk := regexp.MustCompile(`colour = "#[0-9a-fA-F]{6}"`).ReplaceAllStringFunc(file(), func(s string) string {
+		if n++; n == 2 {
+			return `colour = "#abcdef"`
+		}
+		return s
+	}) + "\n# edited on disk\n"
+	if err := os.WriteFile(path, []byte(disk), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	onLoop(r, func() bool { g.EditGroups().Moved(1); g.EditGroups().SetColour("#111111"); return true })
+	// the refusal is said in the turn that has the store read the file again before another save
+	r.waitWithin(t, "the save refused over the disk's change", daemonWait, func() bool { return r.noticed("save the graph groups") })
+	if strings.Contains(file(), `colour = "#111111"`) {
+		t.Fatal("the save went over the disk's change")
+	}
+
+	gate := &graphReadGate{arrived: make(chan struct{}), release: make(chan struct{})}
+	hold.Store(gate)
+	onLoop(r, func() bool { g.Load(); return true }) // a load: it reads the groups again
+	select {
+	case <-gate.arrived:
+	case <-time.After(daemonWait):
+		t.Fatal("the load never read the graph file again")
+	}
+	onLoop(r, func() bool { g.EditGroups().SetColour("#222222"); return true }) // while the read is held
+	close(gate.release)
+	// the read's groups are handed back before the edit's save, which waited on the read, is written
+	r.s.WaitFor(t, "the edit written", func(string) bool { return strings.Contains(file(), `colour = "#222222"`) })
+	if c := onLoop(r, func() color.NRGBA { return g.Snapshot().Groups[1].Colour }); c != rgb(0x222222) {
+		t.Fatalf("the view shows type:adr as %v, the file as read before the edit; the file holds the edit #222222", c)
 	}
 }

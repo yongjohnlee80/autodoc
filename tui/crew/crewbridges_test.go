@@ -3,6 +3,7 @@ package crew
 import (
 	"context"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -29,6 +30,10 @@ type bridgesWindow struct {
 	asked     []feature.Question
 	notices   []string
 	copied    string
+	// hold keeps each answer, worked out at the call, in held until the cell delivers it: a call in
+	// flight
+	hold bool
+	held []func()
 }
 
 func (w *bridgesWindow) Call(_ context.Context, verb string, p ...any) (any, error) {
@@ -46,7 +51,12 @@ func (w *bridgesWindow) Call(_ context.Context, verb string, p ...any) (any, err
 	return nil, errors.New("unknown method: " + verb)
 }
 func (w *bridgesWindow) Go(fn func(context.Context) any, then func(any)) {
-	then(fn(context.Background()))
+	v := fn(context.Background())
+	if w.hold {
+		w.held = append(w.held, func() { then(v) })
+		return
+	}
+	then(v)
 }
 func (w *bridgesWindow) After(_ time.Duration, fn func()) { w.timers = append(w.timers, fn) }
 func (w *bridgesWindow) Set(name string, v any)           { w.state[name] = v }
@@ -228,5 +238,41 @@ func TestCrewBridgesSayWhatTheKillsLeftRunning(t *testing.T) {
 	b.kill(0)
 	if last := w.notices[len(w.notices)-1]; last != "agy-bridge 101: 2 of its processes still ran after it was killed" {
 		t.Fatalf("an incomplete kill's notice %q", last)
+	}
+}
+
+// A refresh in flight when a kill's relist lands, answering after it, is dropped: the killed
+// helper is not listed again. The refresh is answered as the helpers stood, and held until the
+// relist has been shown. The mutant, named here: no per-listing order (the killed helper back
+// until the next refresh).
+func TestCrewBridgesARefreshAnsweringAfterAKillsRelistIsDropped(t *testing.T) {
+	w := &bridgesWindow{outcome: "kill", rows: []any{
+		bridgeWire("agy-bridge", 101, "orphan", "", "session ended", 0), bridgeWire("agy-bridge", 102, "orphan", "", "session ended", 0)}}
+	b, _ := newBridgesCell(t, w)
+	b.open()
+	pids := func() []int64 {
+		var out []int64
+		for _, r := range b.rows.All() {
+			out = append(out, r.pid)
+		}
+		return out
+	}
+	if got := pids(); len(got) != 2 {
+		t.Fatalf("listed %v, want the two helpers", got)
+	}
+	w.hold = true
+	w.fire() // the periodic refresh: both helpers still run as it reads
+	w.hold = false
+	at := slices.Index(pids(), 101)
+	w.rows = w.rows[1:] // 101 killed: the daemon lists 102 alone from now on
+	b.kill(at)          // an orphan's Kill goes at once, and its answer lists again
+	if len(w.kills) != 1 || !slices.Equal(pids(), []int64{102}) {
+		t.Fatalf("after the kill: sent %v, listed %v; want 101 killed and 102 listed", w.kills, pids())
+	}
+	for _, f := range w.held { // the refresh lands last
+		f()
+	}
+	if got := pids(); !slices.Equal(got, []int64{102}) {
+		t.Fatalf("the refresh, answering after the kill's relist, listed %v again; want [102]", got)
 	}
 }

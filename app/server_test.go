@@ -9,12 +9,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -259,6 +262,114 @@ func (f *serverFixture) waitFor(what string, cond func() bool) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+}
+
+// waitServing waits for cond as waitFor does, on a server serve started: a server that exits
+// instead says so with its log, and a timeout says what the server said and what each of the
+// database's other sessions was doing, so a wait that ran out tells a slow server from a stuck one.
+func (f *serverFixture) waitServing(done <-chan int, stderr *syncBuffer, what string, cond func() bool) {
+	f.t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	for !cond() {
+		select {
+		case code := <-done:
+			f.t.Fatalf("waiting for %s, the server exited %d: %s", what, code, stderr)
+		default:
+		}
+		if time.Now().After(deadline) {
+			f.t.Fatalf("%s: not within 15 s; the database's sessions: %s; the server said: %s", what, f.sessions(), stderr)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// storePool makes the server's DSN open its store's pool with n connections.
+func (f *serverFixture) storePool(n int) {
+	f.t.Helper()
+	f.t.Setenv("AUTODOC_TEST_SERVER_DSN", withPool(f.t, os.Getenv("AUTODOC_TEST_SERVER_DSN"), n))
+}
+
+// withPool is the URL dsn with its pool_max_conns n.
+func withPool(t *testing.T, dsn string, n int) string {
+	t.Helper()
+	u, err := url.Parse(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := u.Query()
+	q.Set("pool_max_conns", strconv.Itoa(n))
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+// quickBuilder has the server's index builder look for work every 100 ms, so a cell that holds the
+// store's pool (holdStore) can wait for the model's index to be built first.
+func quickBuilder(t *testing.T) {
+	tick := annTick
+	annTick = 100 * time.Millisecond
+	t.Cleanup(func() { annTick = tick })
+}
+
+// holdStore holds every connection of the store's pool, which storePool(minIndexConns) makes the
+// fewest the server takes: with rag_document and rag_chunk locked, the ingester's write of a new
+// row waits on the lock on one connection and a search through addr's API on the other. It first
+// waits for both rows embedded and the model's index built (quickBuilder), so that neither the
+// worker nor the index builder, which pins a session for its DDL, holds a connection the two
+// don't account for. It returns once both wait, with release, which lets the lock go, and the
+// search's status, sent once it is answered.
+func (f *serverFixture) holdStore(done <-chan int, stderr *syncBuffer, addr string) (release func(), searched <-chan int) {
+	f.t.Helper()
+	const model = "openai|fake-model||4"
+	f.waitServing(done, stderr, "both rows embedded and the model's index built", func() bool {
+		return f.embedded(model) && f.scalar(`SELECT coalesce((SELECT state = 'ready' FROM `+f.schema+`.rag_ann_index
+			WHERE model = '`+model+`'), false)::text`) == "true"
+	})
+	tx, err := f.plain.Begin(f.ctx)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	f.t.Cleanup(func() { _ = tx.Rollback() })
+	if _, err := tx.ExecContext(f.ctx, `LOCK TABLE `+f.schema+`.rag_document, `+f.schema+`.rag_chunk IN ACCESS EXCLUSIVE MODE`); err != nil {
+		f.t.Fatal(err)
+	}
+	f.exec(`INSERT INTO track VALUES (3, 'A', 'wren song', now())`)
+	status := make(chan int, 1)
+	go func() {
+		req, err := http.NewRequest(http.MethodPost, "http://"+addr+"/v1/search",
+			strings.NewReader(`{"tenant": "music", "query": "kestrel", "scope": {"label_id": ["A"]}}`))
+		if err != nil {
+			status <- -1
+			return
+		}
+		req.Header.Set("Authorization", "Bearer "+httpToken)
+		req.Header.Set("Content-Type", "application/json")
+		res, err := (&http.Client{Timeout: time.Minute}).Do(req)
+		if err != nil {
+			status <- -1
+			return
+		}
+		_, _ = io.Copy(io.Discard, res.Body)
+		res.Body.Close()
+		status <- res.StatusCode
+	}()
+	f.waitServing(done, stderr, "every store connection waiting on the lock", func() bool {
+		return f.scalar(`SELECT count(*)::text FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'
+			AND (query ILIKE '%rag_document%' OR query ILIKE '%rag_chunk%')`) == strconv.Itoa(minIndexConns)
+	})
+	return func() {
+		f.t.Helper()
+		if err := tx.Rollback(); err != nil {
+			f.t.Fatal(err)
+		}
+	}, status
+}
+
+// sessions is what each session on the fixture's database other than the test's own is doing:
+// its state, what it waits on, how long its transaction has been open, and its statement.
+func (f *serverFixture) sessions() string {
+	return f.scalar(`SELECT coalesce(string_agg(format('[%s %s/%s xact %s] %s', state, wait_event_type, wait_event,
+		date_trunc('millisecond', clock_timestamp() - xact_start), left(regexp_replace(query, '\s+', ' ', 'g'), 160)), ' | '), 'none')
+		FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid() AND backend_type = 'client backend'`)
 }
 
 // syncBuffer is a buffer the server writes from its goroutines while the test reads it.

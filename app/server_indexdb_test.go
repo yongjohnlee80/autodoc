@@ -7,6 +7,8 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
@@ -163,5 +165,270 @@ func TestTheServerChecksTheIndexDatabase(t *testing.T) {
 	pw, _ := r.User.Password()
 	if strings.Contains(said, pw) || strings.Contains(said, u.String()) {
 		t.Errorf("--check shows the index's DSN or its password: %q", said)
+	}
+}
+
+// hardenedIndexRole makes the index's database as a DBA who trusts no default does: pgvector
+// installed, a login role of the test's own that owns the index's schema there and nothing else,
+// and TEMPORARY revoked from PUBLIC. It points AUTODOC_TEST_INDEX_DSN at that role, and returns
+// the role, its password and the database's name; the role is dropped when the test ends.
+func hardenedIndexRole(t *testing.T, f *serverFixture, idx dao.DataConn) (role, password, database string) {
+	t.Helper()
+	b := make([]byte, 6)
+	if _, err := rand.Read(b); err != nil {
+		t.Fatal(err)
+	}
+	role = "autodoc_ix_" + hex.EncodeToString(b)
+	password = "ix-" + hex.EncodeToString(b) + "-password"
+	database = scalarOn(t, idx, `SELECT current_database()::text`)
+	f.exec(`CREATE ROLE ` + role + ` LOGIN PASSWORD '` + password + `'`)
+	t.Cleanup(func() {
+		ctx := context.Background()
+		_, _ = idx.ExecContext(ctx, `DROP OWNED BY `+role)
+		_, _ = f.plain.ExecContext(ctx, `DROP ROLE IF EXISTS `+role)
+	})
+	for _, q := range []string{
+		`CREATE EXTENSION IF NOT EXISTS vector`,
+		`REVOKE CONNECT, TEMPORARY ON DATABASE ` + database + ` FROM PUBLIC`,
+		`GRANT CONNECT ON DATABASE ` + database + ` TO ` + role,
+		`CREATE SCHEMA ` + f.schema + ` AUTHORIZATION ` + role,
+	} {
+		if _, err := idx.ExecContext(f.ctx, q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	u, err := url.Parse(os.Getenv("AUTODOC_TEST_INDEX_DSN"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	u.User = url.UserPassword(role, password)
+	t.Setenv("AUTODOC_TEST_INDEX_DSN", u.String())
+	return role, password, database
+}
+
+// An index role that can't create temporary tables is refused by --check, exit 2, naming
+// postgres.index_dsn_env and the grant: a database whose owner revoked TEMPORARY from PUBLIC, with
+// everything else the index needs in place (pgvector, a schema the role owns). An index build
+// makes a temporary table, so without the grant the server starts and searches, and the
+// approximate search's index fails to build once a tenant is large enough to want it, long after
+// the grants were made. With the grant, --check passes. The mutants, named here: the temporary
+// tables not checked (--check says ok); the database's CREATE read in place of TEMPORARY (the
+// grant made, --check still refuses).
+func TestTheServerChecksTheIndexRoleCanMakeTemporaryTables(t *testing.T) {
+	f := newServerFixture(t, serverView)
+	readOnlySource(t, f)
+	idx := indexDatabase(t, f)
+	role, password, database := hardenedIndexRole(t, f, idx)
+	check := func() (int, string, string) {
+		var stdout, stderr bytes.Buffer
+		code := run(f.ctx, []string{"--server", "--check", f.path}, testOptions, &stdout, &stderr)
+		return code, stdout.String(), stderr.String()
+	}
+	code, stdout, stderr := check()
+	if code != 2 || !strings.Contains(stderr, "postgres.index_dsn_env") || !strings.Contains(stderr, "temporary tables") ||
+		!strings.Contains(stderr, "GRANT TEMPORARY ON DATABASE") {
+		t.Fatalf("--check of an index role that can't make temporary tables: exit %d, said %q %q", code, stdout, stderr)
+	}
+	if said := stdout + stderr; strings.Contains(said, password) {
+		t.Errorf("--check shows the index role's password: %q", said)
+	}
+	if _, err := idx.ExecContext(f.ctx, `GRANT TEMPORARY ON DATABASE `+database+` TO `+role); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr = check()
+	if code != 0 || !strings.Contains(stdout, "index: a database of its own: vector") || !strings.Contains(stdout, "schema "+f.schema+"\n") ||
+		!strings.Contains(stdout, "order confirmed over 2 rows") {
+		t.Fatalf("--check with the grant made: exit %d, said %q %q", code, stdout, stderr)
+	}
+}
+
+// --check says which database didn't answer. With the index in a database of its own there are
+// two DSNs, and the driver's words (a user, an address) leave the reader to work out which
+// variable to mend: the index's was named, the source's wasn't. Exit 1, the source's database and
+// its field named, and neither the DSN nor a password in what it says. The mutant, named here:
+// the source's failure passed on as the driver gave it.
+func TestTheServerCheckNamesTheSourceDatabaseThatDoesNotAnswer(t *testing.T) {
+	f := newServerFixture(t, serverView)
+	ro := readOnlySource(t, f)
+	indexDatabase(t, f)
+	u, err := url.Parse(ro)
+	if err != nil {
+		t.Fatal(err)
+	}
+	right, _ := u.User.Password()
+	const wrong = "not-the-password-0123456789"
+	u.User = url.UserPassword(u.User.Username(), wrong)
+	t.Setenv("AUTODOC_TEST_SERVER_DSN", u.String())
+	var stdout, stderr bytes.Buffer
+	code := run(f.ctx, []string{"--server", "--check", f.path}, testOptions, &stdout, &stderr)
+	said := stdout.String() + stderr.String()
+	if code != 1 || !strings.Contains(stderr.String(), "the source's database (postgres.dsn_env)") {
+		t.Fatalf("--check with a source that refuses the password: exit %d, said %q", code, said)
+	}
+	if strings.Contains(said, wrong) || strings.Contains(said, right) || strings.Contains(said, u.String()) {
+		t.Errorf("--check shows the source's DSN or a password: %q", said)
+	}
+}
+
+// A server whose index role can't create temporary tables starts and serves, and says so once at
+// its start: the state --check now refuses, met by a deployment already running. Every index build
+// then fails, which the status reports for the model (ann-failed, with PostgreSQL's reason) while
+// the tenant, too small to want the index, reads exact. The line comes once, not at every try of
+// the builder. With the grant made before the start, it doesn't come. The mutant, named here: the
+// start saying nothing.
+func TestTheServerSaysAtItsStartThatTheIndexRoleCantMakeTemporaryTables(t *testing.T) {
+	f := newServerFixture(t, serverView)
+	t.Setenv("AUTODOC_TEST_HTTP_TOKEN", httpToken)
+	t.Setenv("AUTODOC_TEST_OPS_TOKEN", opsToken)
+	f.extra = httpBlock + `
+[[http.operator]]
+name      = "ops"
+token_env = "AUTODOC_TEST_OPS_TOKEN"
+tenants   = ["music"]
+`
+	quickBuilder(t)
+	readOnlySource(t, f)
+	idx := indexDatabase(t, f)
+	role, _, database := hardenedIndexRole(t, f, idx)
+
+	ctx, cancel := context.WithCancel(f.ctx)
+	done, stderr := f.serve(ctx)
+	f.waitServing(done, stderr, "the server serving", func() bool { return strings.Contains(stderr.String(), "serving enterprise search") })
+	m := listening.FindStringSubmatch(stderr.String())
+	if m == nil {
+		t.Fatalf("the server does not say where it listens: %s", stderr)
+	}
+	status := func() string {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodGet, "http://"+m[1]+"/v1/status", nil)
+		req.Header.Set("Authorization", "Bearer "+opsToken)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return string(b)
+	}
+	var body string
+	f.waitServing(done, stderr, "the model's index failed in status", func() bool {
+		body = status()
+		return strings.Contains(body, `"mode":"ann-failed"`)
+	})
+	if !strings.Contains(body, "permission denied to create temporary tables") {
+		t.Errorf("status's reason for the failed index is not PostgreSQL's: %s", body)
+	}
+	if !strings.Contains(body, `"search":"exact"`) {
+		t.Errorf("the tenant, under the threshold, does not read exact: %s", body)
+	}
+	// the start's own words, not the builder's (PostgreSQL's "permission denied to create …")
+	const startsLine = "ann: this role can't create temporary tables in the index's database"
+	if n := strings.Count(stderr.String(), startsLine); n != 1 {
+		t.Errorf("the start's line about temporary tables came %d times, want once: %s", n, stderr)
+	}
+	cancel()
+	if code := exitOf(t, done, stderr); code != 0 {
+		t.Fatalf("--server exited %d: %s", code, stderr)
+	}
+
+	// the grant made: a start says nothing of it
+	if _, err := idx.ExecContext(f.ctx, `GRANT TEMPORARY ON DATABASE `+database+` TO `+role); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel = context.WithCancel(f.ctx)
+	done, stderr = f.serve(ctx)
+	f.waitServing(done, stderr, "the server serving again", func() bool { return strings.Contains(stderr.String(), "serving enterprise search") })
+	cancel()
+	if code := exitOf(t, done, stderr); code != 0 {
+		t.Fatalf("--server exited %d: %s", code, stderr)
+	}
+	if strings.Contains(stderr.String(), startsLine) {
+		t.Errorf("the start warns of temporary tables with the grant made: %s", stderr)
+	}
+}
+
+// A view whose table the source's role may not read: --check says what PostgreSQL said, naming the
+// source. The role may read the schema and not the view's table, which is the grant most easily
+// forgotten. Exit 1, "permission denied for table track", and nothing about the shape of a result:
+// before, the refusal was reported as "process must return one JSON column: … returns 0 columns".
+// The mutant, named here: the view's query run through a view package that judges a refused
+// query's shape before it asks for its error (golib before v0.8.66).
+func TestTheServerCheckSaysWhichTableTheSourceRoleMayNotRead(t *testing.T) {
+	f := newServerFixture(t, serverView)
+	ro := readOnlySource(t, f)
+	indexDatabase(t, f)
+	u, err := url.Parse(ro)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.exec(`REVOKE SELECT ON track FROM ` + u.User.Username())
+	var stdout, stderr bytes.Buffer
+	code := run(f.ctx, []string{"--server", "--check", f.path}, testOptions, &stdout, &stderr)
+	said := stdout.String() + stderr.String()
+	if code != 1 || !strings.Contains(stderr.String(), "source[0] (music)") || !strings.Contains(stderr.String(), "permission denied for table track") {
+		t.Fatalf("--check with the view's table not granted: exit %d, said %q", code, said)
+	}
+	if strings.Contains(said, "one JSON column") || strings.Contains(said, "returns 0 columns") {
+		t.Errorf("--check calls the database's refusal a result of the wrong shape: %q", said)
+	}
+	pw, _ := u.User.Password()
+	if strings.Contains(said, pw) || strings.Contains(said, ro) {
+		t.Errorf("--check shows the source's DSN or its password: %q", said)
+	}
+}
+
+// With one database for the source and the index, --check reads the temporary tables there too:
+// its role is the one that builds the index. A role that owns the index's schema and may read the
+// view's table, in a database whose owner revoked TEMPORARY from PUBLIC, is refused, exit 2,
+// naming postgres.dsn_env and the grant; with the grant made, --check passes. The mutant, named
+// here: the one database not read (--check says ok).
+func TestTheServerChecksTheOneDatabasesRoleCanMakeTemporaryTables(t *testing.T) {
+	f := newServerFixture(t, serverView)
+	b := make([]byte, 6)
+	if _, err := rand.Read(b); err != nil {
+		t.Fatal(err)
+	}
+	role := "autodoc_one_" + hex.EncodeToString(b)
+	password := "one-" + hex.EncodeToString(b) + "-password"
+	database := f.scalar(`SELECT current_database()::text`)
+	f.exec(`CREATE ROLE ` + role + ` LOGIN PASSWORD '` + password + `'`)
+	t.Cleanup(func() {
+		ctx := context.Background()
+		_, _ = f.plain.ExecContext(ctx, `DROP OWNED BY `+role)
+		_, _ = f.plain.ExecContext(ctx, `DROP ROLE IF EXISTS `+role)
+	})
+	for _, q := range []string{
+		`CREATE EXTENSION IF NOT EXISTS vector`,
+		`REVOKE CONNECT, TEMPORARY ON DATABASE ` + database + ` FROM PUBLIC`,
+		`GRANT CONNECT ON DATABASE ` + database + ` TO ` + role,
+		`GRANT USAGE ON SCHEMA public TO ` + role,
+		`GRANT SELECT ON track TO ` + role,
+		`CREATE SCHEMA IF NOT EXISTS ` + f.schema + ` AUTHORIZATION ` + role,
+	} {
+		f.exec(q)
+	}
+	u, err := url.Parse(os.Getenv("AUTODOC_TEST_SERVER_DSN"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	u.User = url.UserPassword(role, password)
+	t.Setenv("AUTODOC_TEST_SERVER_DSN", u.String())
+	check := func() (int, string, string) {
+		var stdout, stderr bytes.Buffer
+		code := run(f.ctx, []string{"--server", "--check", f.path}, testOptions, &stdout, &stderr)
+		return code, stdout.String(), stderr.String()
+	}
+	code, stdout, stderr := check()
+	if code != 2 || !strings.Contains(stderr, "postgres.dsn_env") || !strings.Contains(stderr, "can't create temporary tables in the database") ||
+		!strings.Contains(stderr, "GRANT TEMPORARY ON DATABASE") {
+		t.Fatalf("--check of a role that can't make temporary tables: exit %d, said %q %q", code, stdout, stderr)
+	}
+	if said := stdout + stderr; strings.Contains(said, password) {
+		t.Errorf("--check shows the role's password: %q", said)
+	}
+	f.exec(`GRANT TEMPORARY ON DATABASE ` + database + ` TO ` + role)
+	code, stdout, stderr = check()
+	if code != 0 || !strings.Contains(stdout, "order confirmed over 2 rows") {
+		t.Fatalf("--check with the grant made: exit %d, said %q %q", code, stdout, stderr)
 	}
 }

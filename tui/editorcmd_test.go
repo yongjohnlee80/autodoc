@@ -28,7 +28,7 @@ func TestTheCommandLineSavesAndQuits(t *testing.T) {
 	r.waitFile(t, "a.md")
 	r.typeInEditor(t, "X")
 	r.command(t, "w")
-	r.s.WaitForText(t, "saved a.md")
+	r.waitSaveAnswer(t, "saved a.md")
 	if got := d.read(t, "kb", "a.md"); got != "Xaaa\n" {
 		t.Fatalf("on disk after :w: %q", got)
 	}
@@ -36,7 +36,7 @@ func TestTheCommandLineSavesAndQuits(t *testing.T) {
 	r.command(t, "wq")
 	select {
 	case <-r.s.Quit():
-	case <-time.After(3 * time.Second):
+	case <-time.After(daemonWait): // the save is the daemon's work (waitSave)
 		t.Fatal(":wq did not quit")
 	}
 	if got := d.read(t, "kb", "a.md"); got != "YXaaa\n" {
@@ -118,7 +118,7 @@ func TestCtrlSemicolonOpensTheCommandLineInTheTextMode(t *testing.T) {
 	r.s.WaitForText(t, "VIM Commands")
 	r.keys(t, decltest.Type("w")...)
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyEnter})
-	r.s.WaitForText(t, "saved a.md")
+	r.waitSaveAnswer(t, "saved a.md")
 	if got := d.read(t, "kb", "a.md"); got != "Xaaa\n" {
 		t.Fatalf("on disk after Ctrl+; w: %q", got)
 	}

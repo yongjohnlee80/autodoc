@@ -19,7 +19,11 @@ and checked too ([Writing a `.view` source](views.md)).
 - A file that can't be read is exit 1.
 - `autodoc --server --check server.toml` checks the file and the views the same way, then runs each
   view against your database, read-only, to confirm its order, asks the embedding provider to embed
-  one probe text, and exits 0 saying what it checked. It also prints the warnings below.
+  one probe text, and exits 0 saying what it checked. It also prints the warnings below. It
+  refuses, naming `postgres.dsn_env`, a role that can't create temporary tables in the database,
+  which an index build needs ([views](views.md#the-grants)); with the index in a database of its
+  own, that is checked there, with the rest of what the index needs
+  ([below](#the-index-in-a-database-of-its-own)).
 
 **No secret is ever written in the file.** The DSN and the embedding key are read from environment
 variables the file names. An HTTP client's token is kept as its SHA-256, or read from the
@@ -97,13 +101,20 @@ The server opens three connection pools:
 - the index's, on `index_dsn_env`'s DSN when it is set, else on `dsn_env`'s. Every connection's
   `search_path` is `schema, public` (pgvector is usually installed in `public`). Searches,
   ingestion and embedding share it. Its connections end a transaction left idle for a minute, so a
-  hung writer never keeps a standby from its tenant;
+  hung writer never keeps a standby from its tenant. Its `pool_max_conns`, when the DSN sets one,
+  must be 2 or more: an index build holds two connections at once, and the server refuses fewer at
+  its start and in `--check`;
 - the writer leases', two connections on the same DSN with the same `search_path`, where each
   tenant's writer lease is a row of `rag_writer_lease`. The leases are renewed there, never behind
   the searches, so a flood of searches can't make the server lose its tenants. Count these two
   when you size the index role's or the database's connection limit;
 - the one your views run on, on `dsn_env`'s DSN, with the role's own `search_path`, so a view runs
   as it does in `psql`.
+
+**Give each DSN a `connect_timeout`** (`…?connect_timeout=10`, in seconds). Without one, a
+database whose address drops packets (a firewall, an allow-list that doesn't hold this machine)
+holds `--check` and the server's start for about two minutes before they say so, and a supervisor
+that starts the server again waits that long at each try.
 
 ### The index in a database of its own
 
@@ -123,16 +134,21 @@ What each connection's role needs:
   nothing else. A read-only user is enough, and pgvector isn't needed there;
 - **the index** (`index_dsn_env`): pgvector installed in its database, once, by a superuser or the
   database's owner (`CREATE EXTENSION vector`), and the schema: one the role owns, or `CREATE` on
-  the database to let the server create it. [views](views.md#the-grants) has the statements; run the
-  index's half in the index's database.
+  the database to let the server create it. It also creates temporary tables there, which
+  PostgreSQL lets every role do unless the database's owner revoked `TEMPORARY` from `PUBLIC`: an
+  index build uses one. [views](views.md#the-grants) has the statements; run the index's half in
+  the index's database.
 
 `--check` checks each, reading only:
 
-- the index's database: it answers, pgvector is installed there or the role can install it, and the
-  role can create the index's tables in the schema, or the schema. It says
-  `index: a database of its own: vector 0.8.1, schema autodoc_search`, or refuses naming
-  `postgres.index_dsn_env` and saying what's missing;
+- the index's database: it answers, pgvector is installed there or the role can install it, the
+  role can create the index's tables in the schema, or the schema, and it can create temporary
+  tables. It says `index: a database of its own: vector 0.8.1, schema autodoc_search`, or refuses
+  naming `postgres.index_dsn_env` and saying what's missing;
 - the source: each view's order, as without it.
+
+A database that doesn't answer is exit 1, and the message says which: `the index's database`, or
+`the source's database (postgres.dsn_env)`.
 
 Both may be databases on one PostgreSQL server, or on one managed instance (AlloyDB, Cloud SQL):
 the two connections are independent. A pass reads a page of the source, then writes it to the
@@ -306,7 +322,7 @@ through the library ([web-integration](web-integration.md)). With it, the server
 |---|---|---|---|
 | `listen` | `127.0.0.1:8730` | The address the API listens on. | not `host:port`; not loopback with neither TLS nor `proxy` |
 | `max_tenant_searches` | the store pool's size less two | How many tenants' searches the requests naming several tenants run at once, across every request; beyond it a tenant waits its turn under its request's deadline. | outside 1 to 1000 |
-| `tls_cert`, `tls_key` | none | The certificate and key files, relative to this file: to listen beyond loopback over HTTPS. | only one given; a file can't be read |
+| `tls_cert`, `tls_key` | none | The certificate and key files, relative to this file: to listen beyond loopback over HTTPS. They are read again when either changes, so a renewed certificate is served within 10 seconds, without a restart ([operations](operations.md#renewing-the-certificate)). | only one given; a file can't be read |
 | `proxy` | `false` | `true`: a proxy in front terminates TLS, so the API may listen beyond loopback over plain HTTP. `--check` warns that requests cross the network between the two in clear text: keep it private ([operations](operations.md#behind-a-proxy)). | given with `tls_cert` |
 
 Each `[[http.client]]` is one caller of the API, with its token and what it may search. There must

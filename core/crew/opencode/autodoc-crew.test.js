@@ -83,7 +83,9 @@ beforeEach(() => {
     join(fake, "autodoc"),
     `#!/bin/sh
 d=$(dirname "$0"); id="$4"
-if [ "$2" = attention ]; then echo "$3 $4 $5" >> "$d/attention"
+if [ "$2" = attention ]; then
+  if [ "$3" = alive ] && [ -e "$d/alive-slow" ]; then sleep 0.2; fi
+  echo "$3 $4 $5" >> "$d/attention"
   if [ -e "$d/attention-fail" ]; then echo "crew attention takes raise <permission|blocked> [text], or clear" >&2; exit 2; fi
   exit 0
 fi
@@ -189,6 +191,21 @@ test("a session stored while the agent moved on stays the one woken when the nex
   await until(() => runs().some((l) => l.startsWith("end ses_a")));
   expect(endpoint()).toBe("ses_b");
   expect(await woken("ses_b")).toBe(true); // the daemon's endpoint is B's, and the plugin's session too
+});
+
+test("a switch back to the registered session while another registers turns the registration back to it", async () => {
+  await start();
+  await chat("ses_a");
+  go("ses_a");
+  expect(await woken("ses_a")).toBe(true);
+  await chat("ses_b"); // the agent moves on: B registers, held
+  await until(() => runs().some((l) => l.startsWith("start ses_b ")));
+  await chat("ses_a"); // and comes back to A while B's registration runs
+  go("ses_b");
+  await until(() => runs().filter((l) => l.startsWith("start ses_a ")).length === 2); // A again, after B
+  await until(() => endpoint() === "ses_a");
+  expect(await woken("ses_a")).toBe(true);
+  expect(await wake('{"session":"ses_b"}\n')).toBe('{"ok":false,"refused":"not this plugin\'s session"}');
 });
 
 test("a failed registration of an older session still leaves the latest registered", async () => {
@@ -403,6 +420,22 @@ test("the plugin says it is alive while it runs, and stops once disposed", async
   expect(alive()).toBe(after);
 });
 
+test("dispose waits for a heartbeat in flight, and none starts after it", async () => {
+  writeFileSync(join(fake, "alive-slow"), ""); // each heartbeat's run says alive 0.2 s after it starts
+  await start({ heartbeatMs: 30 });
+  const alive = () => attentions().filter((l) => l.trimEnd() === "alive").length;
+  await until(() => alive() >= 1); // one run has said alive; the next is running, more wait their turn
+  const before = alive();
+  await plugin.dispose();
+  plugin = null;
+  const after = alive();
+  // dispose waited for the run in flight, which may say alive (one more if it ended just as dispose
+  // began); the runs waiting their turn, five or so, said nothing
+  expect(after - before).toBeLessThanOrEqual(2);
+  await Bun.sleep(500);
+  expect(alive()).toBe(after);
+});
+
 test("a failing heartbeat is logged once, and again only if it fails anew after one went through", async () => {
   writeFileSync(join(fake, "attention-fail"), "");
   await start({ heartbeatMs: 30 });
@@ -468,6 +501,28 @@ const settled = async (sessionID) => {
   await plugin.event({ event: { type: "permission.asked", properties: { id: "per_settled", sessionID, permission: "settled" } } });
   await until(() => attentions().some((l) => l.startsWith("raise permission") && l.includes("settled")));
 };
+
+test("a woken turn its model refuses before the wake's answer comes still raises the session's attention", async () => {
+  await start({ argv: ["opencode", "--model", "opencode/big-pickle"] });
+  await chat("ses_r");
+  go("ses_r");
+  expect(await woken("ses_r")).toBe(true);
+  await plugin.event({ event: { type: "message.updated", properties: { info: { sessionID: "ses_r", role: "assistant", time: { completed: 1 } } } } }); // that wake's turn done
+  let answer;
+  const held = new Promise((r) => (answer = r));
+  client.session.promptAsync = (req) => {
+    client.prompts.push(req);
+    return held; // the turn is asked for; its answer is held
+  };
+  const n = client.prompts.length;
+  const replied = wake('{"session":"ses_r"}\n');
+  await until(() => client.prompts.length > n);
+  // the model refuses the turn at once: its error comes before promptAsync answers
+  await plugin.event({ event: { type: "session.error", properties: { sessionID: "ses_r", error: { name: "APIError", data: { message: "no such model" } } } } });
+  answer({ data: {} });
+  expect(await replied).toBe('{"ok":true}');
+  await until(() => attentions().some((l) => l.startsWith("raise blocked") && l.includes("no such model")));
+});
 
 test("a woken turn the user stops raises nothing, and an error after it is not the wake's", async () => {
   await start({ argv: ["opencode", "--model", "opencode/big-pickle"] });

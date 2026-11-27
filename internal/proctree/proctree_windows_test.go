@@ -3,15 +3,19 @@
 package proctree
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 
@@ -167,5 +171,67 @@ func TestAProgramGivesUpItsConsoleOnlyWhenAlone(t *testing.T) {
 				t.Errorf("%s: %s, want %s", c.name, got, c.want)
 			}
 		})
+	}
+}
+
+// Replace outlives a console's Ctrl+Break, which reaches every process in the group: the program
+// answers it, and whoever waits on the process that replaced itself sees the program's exit code.
+// Ctrl+C reaches Go as the same os.Interrupt, but Windows sends it only to every process on the
+// console (group 0), this test's own among them, so the Break is the one sent here. The helpers are
+// this test binary run again, in a process group of their own, which the Break is sent to.
+func TestReplaceOutlivesAConsoleBreak(t *testing.T) {
+	const run = "-test.run=^TestReplaceOutlivesAConsoleBreak$"
+	switch os.Getenv("PROCTREE_BREAK") {
+	case "first":
+		err := Replace(os.Args[0], []string{os.Args[0], run}, procenv.Env(os.Environ()).With("PROCTREE_BREAK=second"))
+		os.Stdout.WriteString("Replace returned: " + err.Error() + "\n")
+		os.Exit(9)
+	case "second":
+		heard := make(chan os.Signal, 1)
+		signal.Notify(heard, os.Interrupt)
+		os.Stdout.WriteString("the program waits\n")
+		select {
+		case <-heard:
+			os.Stdout.WriteString("the program heard the break\n")
+			os.Exit(37)
+		case <-time.After(20 * time.Second):
+			os.Stdout.WriteString("the program heard nothing\n")
+			os.Exit(8)
+		}
+	}
+	var pids [1]uint32
+	if n, _, _ := getConsoleProcessList.Call(uintptr(unsafe.Pointer(&pids[0])), uintptr(len(pids))); n == 0 {
+		t.Skip("this test process has no console to send a Ctrl+Break on")
+	}
+	cmd := exec.Command(os.Args[0], run)
+	cmd.Env = append(os.Environ(), "PROCTREE_BREAK=first")
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_PROCESS_GROUP}
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	r := bufio.NewReader(out)
+	// the program runs, so the process that replaced itself is waiting on it, its interrupts taken
+	if line, err := r.ReadString('\n'); line != "the program waits\n" {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		t.Fatalf("the program did not start: %q, %v", line, err)
+	}
+	if err := windows.GenerateConsoleCtrlEvent(windows.CTRL_BREAK_EVENT, uint32(cmd.Process.Pid)); err != nil {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		t.Fatalf("GenerateConsoleCtrlEvent: %v", err)
+	}
+	rest, _ := io.ReadAll(r)
+	err = cmd.Wait()
+	if !strings.Contains(string(rest), "the program heard the break") {
+		t.Errorf("the Break never reached the program: %q", rest)
+	}
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() != 37 {
+		t.Errorf("the process that replaced itself ended with %v (%#x); want the program's exit code, 37", err, uint32(cmd.ProcessState.ExitCode()))
 	}
 }

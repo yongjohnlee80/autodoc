@@ -36,7 +36,7 @@ func TestAnOutsideSaveTheSystemRefusesSaysWhy(t *testing.T) {
 	r.typeInEditor(t, "more ")
 	armed.Store(true)
 	r.keys(t, decltest.Ctrl('s'))
-	r.waitStatus(t, why)
+	r.waitSaveStatus(t, why)
 	if s := onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.status"); return v.Raw }); strings.Contains(s, "remote") {
 		t.Fatalf("the status says %q: a file the system refused read as a remote daemon", s)
 	}

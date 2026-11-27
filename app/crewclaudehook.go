@@ -69,8 +69,11 @@ func claudePromptsDir(dir, session string) string {
 }
 
 // claudeReported names the file of what the daemon was last told: "raised" or "cleared"; absent,
-// nothing yet.
+// nothing yet; claudeUnknown after a raise that failed.
 const claudeReported = "reported"
+
+// claudeUnknown is claudeReported after a raise that failed: it may have been applied or not.
+const claudeUnknown = "unknown"
 
 // claudeNotified is the open prompt a permission Notification stands for, when no PermissionRequest
 // named one (a Claude that sends none): only UserPromptSubmit or Stop close it.
@@ -217,7 +220,10 @@ func reportPrompts(ctx context.Context, c sessionContext, dir, asks string, call
 			asks = p.Asks
 		}
 		if _, err := call(ctx, c, "crew.attention", []any{c.Credential, "raise", crew.AttentionPermission, asks}); err != nil {
-			_ = os.Remove(filepath.Join(dir, claudeReported)) // unknown now: the next hook raises again
+			// unknown now: it may have been applied, its answer lost to the bound after the daemon
+			// committed it. Neither "raised" nor "cleared", so the next hook says again what is open,
+			// a clear too: removed, the next hook with none open would take it for never raised
+			_ = os.WriteFile(filepath.Join(dir, claudeReported), []byte(claudeUnknown), 0o600)
 			return err
 		}
 	} else if _, err := call(ctx, c, "crew.attention", []any{c.Credential, "clear"}); err != nil {

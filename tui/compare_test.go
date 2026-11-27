@@ -237,7 +237,7 @@ func TestTheSaveConflictOffersCompare(t *testing.T) {
 	rewrite(t, root, "a.md", "other\n")
 	r.s.WaitFor(t, "a.md badged", func(string) bool { return diskOf(r, "a.md") == diskChanged })
 	r.keys(t, decltest.Ctrl('s'))
-	r.s.WaitForText(t, "changed on disk since you opened it")
+	r.waitSaveAnswer(t, "changed on disk since you opened it")
 	r.s.WaitForText(t, "Compare")
 }
 
@@ -327,7 +327,7 @@ func TestAnApplyAfterTheDiskMovedAgainKeepsItsBadge(t *testing.T) {
 	}
 	r.compareGone(t)
 	r.keys(t, decltest.Ctrl('s'))
-	r.s.WaitForText(t, "changed on disk since you opened it")
+	r.waitSaveAnswer(t, "changed on disk since you opened it")
 }
 
 // TestCompareMergesACRLFFile: a file with CRLF line breaks, one line changed on disk and another in
@@ -360,7 +360,7 @@ func TestCompareMergesACRLFFile(t *testing.T) {
 	r.compareGone(t)
 	r.keys(t, decltest.Ctrl('s'))
 	want := "ONE\r\ntwo\r\nTHREE mine\r\n"
-	r.s.WaitFor(t, "the save on disk", func(string) bool {
+	r.waitSave(t, "the save on disk", func() bool {
 		b, _ := os.ReadFile(filepath.Join(root, "a.md"))
 		return string(b) == want
 	})

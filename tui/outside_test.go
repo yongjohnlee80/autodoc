@@ -111,7 +111,7 @@ func TestAFileOutsideEveryWorkspaceOpensEditsAndSaves(t *testing.T) {
 	}
 	r.typeInEditor(t, "x")
 	r.keys(t, decltest.Ctrl('s'))
-	r.s.WaitForText(t, "changed on disk since you opened it")
+	r.waitSaveAnswer(t, "changed on disk since you opened it")
 	if b, _ := os.ReadFile(abs); string(b) != "# Changed elsewhere\n" {
 		t.Errorf("a stale save wrote: %q", b)
 	}

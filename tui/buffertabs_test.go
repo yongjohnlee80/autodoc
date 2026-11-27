@@ -112,7 +112,7 @@ func TestABufferTabsMenu(t *testing.T) {
 	runTabRow(t, r, a, "buffer.tabs.goto."+tabID(a))
 	r.waitBuffer(t, "a.md")
 	runTabRow(t, r, b, "buffer.tabs.save")
-	r.s.WaitForText(t, "saved b.md")
+	r.waitSaveAnswer(t, "saved b.md")
 	if got := d.read(t, "kb", "b.md"); got != "Xbbb\n" || r.file().path != "b.md" {
 		t.Fatalf("Save from b.md's tab: disk %q, shown %s", got, r.file().path)
 	}

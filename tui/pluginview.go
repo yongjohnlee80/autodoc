@@ -210,6 +210,7 @@ func (v *pluginView) attach(r *pluginRun) {
 	}
 	v.run, r.view = r, v
 	v.sentW, v.sentH = 0, 0
+	v.lastSurface = surfaceGeometry{} // r's surface has been told no geometry: its first paint tells it
 	v.MarkDirty()
 }
 

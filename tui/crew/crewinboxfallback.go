@@ -16,11 +16,16 @@ import (
 func fallbackToast(job string) string { return "crew-fallback:" + job }
 
 // readFallback reads job (inbox.fallback), named by a feed change of kind, while gen is the
-// connection's, and shows what it says.
+// connection's, and shows what it says: the latest read of the job only. The daemon answers each
+// call on its own goroutine, so an earlier read (the job open, its host away) can land after a
+// later one (delivered) and put the wait back up.
 func (x *Inbox) readFallback(gen uint64, job, kind string) {
 	if job == "" {
 		return
 	}
+	x.asked++
+	ask := x.asked
+	x.reading[job] = ask
 	x.c.Go(func(ctx context.Context) any {
 		v, err := x.c.Call(ctx, "inbox.fallback", job)
 		if err != nil {
@@ -28,6 +33,10 @@ func (x *Inbox) readFallback(gen uint64, job, kind string) {
 		}
 		return v
 	}, func(v any) {
+		if x.reading[job] != ask {
+			return
+		}
+		delete(x.reading, job)
 		if gen != x.gen {
 			return
 		}

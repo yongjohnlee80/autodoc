@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -340,5 +341,51 @@ func TestAReadNeverStartsInAnOwnedFolder(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("the read ended, the removal still waited")
+	}
+}
+
+// TestAManagerListingReadBeforeARemovalNeverListsItAgain: the manager's opening listing reads git
+// in each plugin's folder in turn; held at alpha's, beta is removed and the removal's own listing
+// shows alpha alone. The opening listing, released, answers last: it is dropped, and beta is not
+// listed again. The mutant, named here: loadManaged with no ticket (beta back until the next
+// listing).
+func TestAManagerListingReadBeforeARemovalNeverListsItAgain(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	h := holdReads(t, filepath.Join(dir, "alpha"))
+	r, _ := pluginTUI(t, dir)
+	for _, name := range []string{"alpha", "beta"} {
+		repo := t.TempDir()
+		runGit(t, repo, "init", "-q", "-b", "main")
+		commitPluginNamed(t, repo, name, "Echo "+name, "true")
+		r.h.p.Post(func() { r.h.plugins.addPlugin("file://" + repo) })
+		r.question(t)
+		r.keys(t, key('y'))
+		r.waitNotice(t, "added "+name+" at")
+	}
+	listed := func() []string {
+		return onLoop(r, func() []string {
+			var out []string
+			for _, m := range r.h.plugins.managedPlugins.All() {
+				out = append(out, filepath.Base(m.e.dir))
+			}
+			return out
+		})
+	}
+	h.arm()
+	r.h.p.Post(r.h.plugins.loadManaged) // the opening listing: held at alpha's git, beta still to read
+	h.waitStarted(t)
+	onLoop(r, func() bool { r.h.plugins.removePluginConfirmed(filepath.Join(dir, "beta")); return true })
+	r.waitNotice(t, "removed beta")
+	r.waitWithin(t, "the removal's listing, without beta", 20*time.Second, func() bool { return slices.Equal(listed(), []string{"alpha"}) })
+	h.free()
+	// the held listing goes on to beta's folder, finds no git there, and answers at once: within the
+	// window it would have listed beta again
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if got := listed(); !slices.Equal(got, []string{"alpha"}) {
+			t.Fatalf("the opening listing, answering after the removal's, listed %v; want [alpha]", got)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

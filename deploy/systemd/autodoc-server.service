@@ -1,7 +1,7 @@
 # autodoc --server as a systemd service: docs/enterprise/operations.md.
 #
 #   useradd --system --no-create-home --shell /usr/sbin/nologin autodoc
-#   install -m 0755 autodoc /usr/local/bin/autodoc
+#   install -m 0755 autodoc-<version>-linux-<arch>-server /usr/local/bin/autodoc   # the release archive's one file
 #   install -d -m 0750 -g autodoc /etc/autodoc && install -m 0640 -g autodoc server.toml /etc/autodoc/   (+ views/, TLS files)
 #   install -m 0600 server.env /etc/autodoc/server.env      # read by systemd, as root: AUTODOC_SERVER_DSN=…, WEB_APP_TOKEN=…
 #   cp autodoc-server.service /etc/systemd/system/ && systemctl enable --now autodoc-server

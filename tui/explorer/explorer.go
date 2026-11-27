@@ -90,10 +90,13 @@ type Explorer struct {
 	Paths map[string][]string // by workspace: its files, once listed
 	At    []string            // the row under the cursor, by its keys (FindPane reads it)
 	gen   uint64              // the workspace's files last taken from Core.Files, by their Gen
+	// fetchSeq numbers each workspace row's own listings (fetch): only the latest lands, so one
+	// asked before the top level was rebuilt never lands over the one asked after
+	fetchSeq map[string]uint64
 }
 
 func NewExplorer(c feature.Core) *Explorer {
-	e := &Explorer{c: c, Model: tuidecl.NewTreeListModel("key", "label"), Paths: map[string][]string{}}
+	e := &Explorer{c: c, Model: tuidecl.NewTreeListModel("key", "label"), Paths: map[string][]string{}, fetchSeq: map[string]uint64{}}
 	e.Model.OnFetch = e.fetch
 	return e
 }
@@ -205,13 +208,15 @@ func (e *Explorer) fetch(ix tuidecl.Index) {
 		return
 	}
 	tk := e.c.Ticket(nil, feature.TicketSession)
+	e.fetchSeq[ws]++
+	n, hostGen := e.fetchSeq[ws], e.c.Files().Gen
 	e.c.Go(func(ctx context.Context) any {
 		paths, err := ListAll(ctx, e.c.Call, ws)
 		return feature.Answered(paths, err)
 	}, func(v any) {
 		a := v.(feature.AnswerOf[[]string])
-		if !tk.Current() {
-			return
+		if !tk.Current() || e.fetchSeq[ws] != n {
+			return // another connection, or a later listing of this row asked since
 		}
 		if a.Err() != nil {
 			e.c.Failed("the files of "+ws, a.Err())
@@ -222,8 +227,17 @@ func (e *Explorer) fetch(ix tuidecl.Index) {
 		if e.Model.Key(ix) != key {
 			return
 		}
-		e.Paths[ws] = a.Value
-		e.Model.SetChildren(&ix, childrenOf(ws, "", a.Value))
+		paths := a.Value
+		// relist takes no host listing for a row not listed yet (the explorer lists a workspace's
+		// files only once its row is opened), and that holds while this listing is in flight too.
+		// So a listing the host made of the workspace in use meanwhile, the one that follows a file
+		// made or removed, would be lost under this answer, which may have been read before it: it
+		// is put instead. A later change is the host's to list again, as relist then takes.
+		if f := e.c.Files(); ws == e.c.Workspace() && f.Loaded && f.Gen != hostGen {
+			paths, e.gen = f.Paths, f.Gen
+		}
+		e.Paths[ws] = paths
+		e.Model.SetChildren(&ix, childrenOf(ws, "", paths))
 	})
 }
 

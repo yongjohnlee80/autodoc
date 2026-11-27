@@ -181,9 +181,11 @@ func TestACellsServersEndWithIt(t *testing.T) {
 			t.Fatal(err)
 		}
 		socket = instance.State().Setup.ServerSocket
-		pids := liveProcessesNaming(socket)
+		// the server's children are not counted: one forked before its exec, or the touch making
+		// the socket, names it too (serversNaming)
+		pids := serversNaming(socket)
 		if len(pids) != 1 {
-			t.Fatalf("fixture: %d processes name the agent's socket %q, want its server", len(pids), socket)
+			t.Fatalf("fixture: %d servers name the agent's socket %q (%v naming it in all), want one", len(pids), socket, liveProcessesNaming(socket))
 		}
 		pgid, _ = strconv.Atoi(pids[0])
 	})

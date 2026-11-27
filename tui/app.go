@@ -109,6 +109,11 @@ type Host struct {
 	wsProviders         *tuidecl.ListModel
 	kbTypes             *tuidecl.ListModel       // the add dialog's KB type field (kbtype.go)
 	vectors             *feature.Rows[vectorRow] // the workspace's models (vectors.go)
+	// vectorsSeq numbers the vectors listings (loadVectors): only the latest is shown, so an open's
+	// listing answering after a purge's never shows the purged model again; vectorsLoading counts
+	// those in flight, a stale one too until its answer is dropped
+	vectorsSeq     uint64
+	vectorsLoading int
 
 	// the pickers (feature/pick.go): the search's, File › Open's and the draft's name (the outline's is
 	// outline.go's); the search's own state, and its words
@@ -191,6 +196,12 @@ type Host struct {
 	// none), and the stages the boxes last asked for
 	stageRankerID, stageRanker string
 	stagesSent                 string
+	// stageRankerSeq numbers the ranker's reads (loadStageRanker): only the latest is shown, so one
+	// read before a ranker change never names the old ranker after it; stageRankerLoading counts
+	// those in flight; stageRankerRefresh is a search again owed by any of them, the latest's to do
+	stageRankerSeq     uint64
+	stageRankerLoading int
+	stageRankerRefresh bool
 
 	// the workspace in use, and the epoch: moved by a switch and a reconnect, so an answer asked
 	// under another workspace or connection is dropped (workspace.go)
@@ -205,11 +216,18 @@ type Host struct {
 	cands *candidates
 	// registryNow is the registry's list as last loaded (registry.go); nil before any list opened
 	registryNow *registryList
+	// registrySeq numbers the registry's fetches for that list (registryLoad): the latest begun is kept
+	registrySeq uint64
 	kbStaged    *stagedKBType
 	kbStage     func(context.Context, string) stagedKBType // a test's stager; nil is stageKBType's clone
 	kbResume    *kbResume                                  // a partial add's type, kept for its Save to finish (kbtype.go)
 	// dialogSeq numbers the manager dialogs' opens (withCurrent): only the latest shows
 	dialogSeq uint64
+	// wsListSeq numbers the workspace listings (loadWorkspaces): only the latest is shown, so one
+	// read before a rename and answering after it never puts the old name back; wsListing counts
+	// those in flight, a stale one too until its answer is dropped
+	wsListSeq uint64
+	wsListing int
 	// the open file's frontmatter check (frontmatter.go): fmGen numbers the checks, the latest wins
 	fmGen         uint64
 	fmDiagnostics []fmDiagnostic

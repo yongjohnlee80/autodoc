@@ -397,6 +397,7 @@ function M.new(profile)
   local load_tree, follow_editor -- forward
 
   local function load_workspaces()
+    local ticket = session().workspaces_ticket()
     request("workspaces", "workspace.list", {}, function(list, err)
       if err then
         st.ws_err = err.message
@@ -404,7 +405,7 @@ function M.new(profile)
       end
       st.ws_err = nil
       st.workspaces = list or {}
-      session().remember_workspaces(st.workspaces)
+      session().remember_workspaces(st.workspaces, ticket)
       if not st.rel.ref and not st.rel.why then follow_editor() end -- the KBs are known now
       local names = {}
       for _, w in ipairs(st.workspaces) do
@@ -518,6 +519,8 @@ function M.new(profile)
     local tree = { docs = {}, loading = true }
     st.trees[name] = tree
     st.seq["changes:" .. name] = (st.seq["changes:" .. name] or 0) + 1 -- a pull in flight is stale now
+    local status_seq = (st.seq["status:" .. name] or 0) + 1
+    st.seq["status:" .. name] = status_seq -- its count is the newest asked: an older one in flight is stale
     request("tree:" .. name, "index.status", { name }, function(stat, err)
       if st.trees[name] ~= tree then return end
       if err then
@@ -525,7 +528,7 @@ function M.new(profile)
         return rerender()
       end
       tree.cursor = stat.cursor
-      st.status[name] = stat
+      if st.seq["status:" .. name] == status_seq then st.status[name] = stat end
       local function page(after)
         request("tree:" .. name, "index.documents", { name, { sort = "path", limit = M.PAGE, after = after } },
           function(res, e)
@@ -576,6 +579,15 @@ function M.new(profile)
     end)
   end
 
+  ---move_ws carries an expanded KB's fold and tree over to its new name, re-listing the tree. The
+  ---rename's reply and the daemon's workspace.renamed event both move it, in either order: the
+  ---second finds nothing under the old name and leaves the new one as the first set it.
+  local function move_ws(old, new)
+    if not st.expanded[old] then return end
+    st.expanded[new], st.expanded[old], st.trees[old] = true, nil, nil
+    load_tree(new)
+  end
+
   ---apply_events refreshes what a configuration event touched; a rename or removal also moves or
   ---drops the drawer's own state for that workspace.
   local function apply_events(evs)
@@ -585,9 +597,7 @@ function M.new(profile)
       if vim.startswith(kind, "workspace.") then
         ws = true
         if kind == "workspace.renamed" and e.workspace and e.detail and e.detail ~= "" then
-          st.expanded[e.detail], st.trees[e.detail] = st.expanded[e.workspace], st.trees[e.workspace]
-          st.expanded[e.workspace], st.trees[e.workspace] = nil, nil
-          if st.trees[e.detail] then load_tree(e.detail) end
+          move_ws(e.workspace, e.detail)
         elseif kind == "workspace.removed" and e.workspace then
           st.expanded[e.workspace], st.trees[e.workspace] = nil, nil
         end
@@ -1050,8 +1060,7 @@ function M.new(profile)
         if not a or a.name == old then return end
         session().request("workspace.rename", { old, a.name }, function(_, err)
           if err then return failed("rename " .. old, err) end
-          st.expanded[a.name], st.trees[a.name] = st.expanded[old], nil
-          st.expanded[old], st.trees[old] = nil, nil
+          move_ws(old, a.name)
           local p = primary()
           if p and p.workspace == old then
             notify("autodoc: renamed " .. old .. " to " .. a.name .. "; the primary KB still names " .. old .. ": P on it updates that", WARN)

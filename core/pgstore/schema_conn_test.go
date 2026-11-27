@@ -134,15 +134,19 @@ func TestWithSchemaPutsEveryTableInItOnEveryConnection(t *testing.T) {
 	}
 }
 
-// A schema name that is not a plain identifier is refused before any I/O by EnsureSchema, and
-// fails every connect of a pool opened WithSchema. The mutant, named here: EnsureSchema without
-// its check — a name with a quote or a capital then reaches PostgreSQL.
+// A schema name that is not a plain identifier is refused before any I/O by EnsureSchema and
+// ReadIndexDatabase, and fails every connect of a pool opened WithSchema. The mutants, named here:
+// EnsureSchema without its check — a name with a quote or a capital then reaches PostgreSQL — and
+// ReadIndexDatabase without it (the nil connection is used).
 func TestASchemaNameIsAPlainIdentifier(t *testing.T) {
 	ctx := context.Background()
 	for _, bad := range []string{"", "Search", "1abc", "a-b", `x"; DROP SCHEMA public; --`, "pg_mine", "a b",
 		strings.Repeat("a", 64)} {
 		if err := EnsureSchema(ctx, nil, bad); !errors.Is(err, ErrSchemaName) {
 			t.Errorf("EnsureSchema(%q): %v, want ErrSchemaName", bad, err)
+		}
+		if _, err := ReadIndexDatabase(ctx, nil, bad); !errors.Is(err, ErrSchemaName) {
+			t.Errorf("ReadIndexDatabase(%q): %v, want ErrSchemaName", bad, err)
 		}
 	}
 	for _, good := range []string{"autodoc_search", "_x", "s1", strings.Repeat("a", 63)} {

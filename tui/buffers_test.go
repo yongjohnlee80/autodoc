@@ -154,7 +154,7 @@ func TestASaveLandsInItsBufferAfterASwitch(t *testing.T) {
 	onLoop(r, func() bool { r.h.activate(r.h.bufferOf(feature.FileRef{WS: "kb", Path: "b.md"})); return true })
 	hold.Store(false)
 	close(release)
-	r.s.WaitFor(t, "a.md saved in its buffer", func(string) bool {
+	r.waitSave(t, "a.md saved in its buffer", func() bool {
 		return onLoop(r, func() bool {
 			b := r.h.bufferOf(feature.FileRef{WS: "kb", Path: "a.md"})
 			return b != nil && !b.file.dirty && !b.buf.Modified()

@@ -39,6 +39,12 @@ const (
 	pageSize = 500
 )
 
+// editsDocs is the most edited documents a round's read of the edits looks through (a variable, so
+// a test can take smaller steps). Edited documents whose texts are all set aside yield nothing and
+// stay edited: the read passes them editsDocs at a time from its own cursor, never all of them in
+// every round.
+var editsDocs = 128
+
 // Store is a tenant's index as the worker reads and writes it: a *pgstore.Store.
 type Store interface {
 	Models(ctx context.Context) (active, target string, err error)
@@ -134,8 +140,10 @@ type Worker struct {
 	// qs is what the queries read: published by Run's goroutine whenever the provider or a
 	// tenant's switch changes, nil before the provider is set up and after Run returns.
 	qs atomic.Pointer[queryState]
-	// health is the provider's state for an operator (Health), published by Run's goroutine
-	health atomic.Pointer[Health]
+	// health is the provider's state for an operator (Health), as the latest provider call to
+	// begin left it (answered); calls numbers the calls as they begin
+	health atomic.Pointer[published]
+	calls  atomic.Uint64
 	// pace is the batch size and the calls in flight the worker sends now
 	pace *pace
 }
@@ -154,6 +162,9 @@ type tenant struct {
 	// fill reads the tenant once, not once a round. The zero key is the start. Run's goroutine
 	// alone uses it.
 	cursor pgstore.PendingKey
+	// edits is where the read of the edited documents resumes: the start, unless the last round's
+	// stopped at editsDocs documents. Run's goroutine alone uses it.
+	edits pgstore.PendingKey
 
 	mu sync.Mutex // guards refused: a round's batches set texts aside concurrently
 	// refused are the texts the provider rejected, by hash, and when each may be tried again.
@@ -252,19 +263,20 @@ func (w *Worker) setUp(ctx context.Context) bool {
 	wait := w.o.retry
 	for {
 		sctx, cancel := context.WithTimeout(ctx, setupTimeout)
+		call := w.calls.Add(1)
 		p, err := w.build(sctx)
 		cancel()
 		if err == nil {
 			w.p, w.fp, w.dims = p, p.Model().Fingerprint(), p.Model().Dims
 			w.publish()
-			w.answered(w.fp, nil)
+			w.answered(w.fp, call, nil)
 			logger.Info(w.o.log, fmt.Sprintf("embedding with %s: %d dimensions, %d slots", w.fp, w.dims, w.o.slots))
 			return true
 		}
 		if ctx.Err() != nil {
 			return false
 		}
-		w.answered("", err)
+		w.answered("", call, err)
 		logger.Warning(w.o.log, err, fmt.Sprintf("embedding: the provider is not set up, so searches answer by words; trying again in %v", wait))
 		// NOTE: a provider that cannot be set up (down, or refusing the key or the model) is
 		// asked again after a wait that doubles to the longest, so an outage at start costs
@@ -324,7 +336,7 @@ func (w *Worker) round(ctx context.Context, t *tenant) (bool, error) {
 	skip, expired := t.skip(w.o.clock.Now())
 	if expired {
 		// the set-aside texts are behind the cursor: the scan begins again
-		t.waiting, t.cursor = map[string]int64{}, pgstore.PendingKey{}
+		t.waiting, t.cursor, t.edits = map[string]int64{}, pgstore.PendingKey{}, pgstore.PendingKey{}
 	}
 	if !t.switching && !expired {
 		// a tenant whose documents are all ready has nothing pending: Pending is not asked
@@ -335,12 +347,37 @@ func (w *Worker) round(ctx context.Context, t *tenant) (bool, error) {
 	}
 	// Under the active model only unready documents can hold a pending text, so the scan reads
 	// those alone; a switch's target is missing from ready documents too.
-	from := t.cursor
+	from, editsFrom := t.cursor, t.edits
 	batch, inFlight := w.pace.now()
+	limit := batch * inFlight * roundBatches
+	// the edited documents' texts first, up to a batch: an edit behind the cursor would otherwise
+	// wait for the scan to reach the end of a backlog and start again. The read resumes where the
+	// last stopped, and looks through at most editsDocs documents
+	var edits []pgstore.Text
+	if !t.switching {
+		var err error
+		if edits, t.edits, err = t.Store.Pending(ctx, pgstore.PendingQuery{Model: w.fp, Edits: true, After: t.edits,
+			MaxDocs: editsDocs, Skip: skip, Limit: batch}); err != nil {
+			return false, err
+		}
+		if len(edits) > 0 {
+			taken := make(map[[32]byte]bool, len(skip)+len(edits))
+			for h := range skip {
+				taken[h] = true
+			}
+			for _, e := range edits {
+				taken[e.TextHash] = true
+			}
+			skip, limit = taken, limit-len(edits)
+		}
+	}
 	texts, next, err := t.Store.Pending(ctx, pgstore.PendingQuery{Model: w.fp, After: from, Unready: !t.switching,
-		Skip: skip, Limit: batch * inFlight * roundBatches})
+		Skip: skip, Limit: limit})
 	if err != nil {
 		return false, err
+	}
+	if len(edits) > 0 {
+		texts = append(edits, texts...)
 	}
 	t.cursor = next
 	if len(texts) == 0 {
@@ -358,7 +395,7 @@ func (w *Worker) round(ctx context.Context, t *tenant) (bool, error) {
 	if err != nil {
 		// a batch that failed is read again: its texts have no vector, and the next round
 		// resumes where this one began
-		t.cursor = from
+		t.cursor, t.edits = from, editsFrom
 	}
 	if steppedDownOnly(err) {
 		// calls ran out of their time, and the pace stepped down: the next round sends smaller
@@ -424,7 +461,7 @@ func (w *Worker) prepare(ctx context.Context, t *tenant) error {
 	if err := w.reclaim(ctx, t); err != nil {
 		return err
 	}
-	t.waiting, t.cursor = map[string]int64{}, pgstore.PendingKey{}
+	t.waiting, t.cursor, t.edits = map[string]int64{}, pgstore.PendingKey{}, pgstore.PendingKey{}
 	t.prepared = true
 	w.publish()
 	return nil
@@ -456,7 +493,7 @@ func (w *Worker) flip(ctx context.Context, t *tenant) error {
 	if err := t.Store.SetModels(ctx, w.fp, ""); err != nil {
 		return err
 	}
-	t.switching, t.cursor = false, pgstore.PendingKey{}
+	t.switching, t.cursor, t.edits = false, pgstore.PendingKey{}, pgstore.PendingKey{}
 	w.publish()
 	logger.Notice(w.o.log, fmt.Sprintf("tenant %s: %s is active: every text is embedded", t.Name, w.fp))
 	return w.reclaim(ctx, t)
@@ -639,6 +676,7 @@ func (w *Worker) embedBatch(ctx context.Context, t *tenant, batch []pgstore.Text
 		in[i] = x.Text
 	}
 	start := time.Now() // the call's own time, whatever clock the worker schedules by
+	call := w.calls.Add(1)
 	vecs, rejected, err := embed.Bisect(ctx, w.p, in, w.dims, w.o.callTimeout)
 	took := time.Since(start)
 	if ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
@@ -656,7 +694,7 @@ func (w *Worker) embedBatch(ctx context.Context, t *tenant, batch []pgstore.Text
 	}
 	if ctx.Err() == nil {
 		// the provider answered, or failed on its own: a texts' rejection is an answer, per text
-		w.answered(w.fp, err)
+		w.answered(w.fp, call, err)
 	}
 	if err != nil {
 		return nil, err

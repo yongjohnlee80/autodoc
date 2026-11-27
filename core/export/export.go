@@ -166,6 +166,9 @@ type Options struct {
 	// page's policy lets it load images and media from its own site. nil: a page on its own, every
 	// image inlined and every video its alt text.
 	Media func(file string) (url string, ok bool)
+
+	// markCuts is Fragment's: a table that is cut says so with a class (tableFit.marked).
+	markCuts bool
 }
 
 // Chrome is a site page's frame, drawn by the page in its palette: the site's title, the
@@ -207,117 +210,16 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 		if !ok {
 			return nil, fmt.Errorf("export: no theme %q (the themes are %s)", theme, strings.Join(Themes(), ", "))
 		}
-		// each heading's anchor, as GitHub gives it, taken before the walk below changes any node,
-		// so a link to #section written for GitHub lands on the section in the page too
-		headingIDs := outline.HeadingIDs(document.Root, source)
-		base := options.Base
-		if base != "" {
-			var err error
-			if base, err = filepath.Abs(base); err != nil {
-				return nil, err
-			}
-		}
-		// the renderer writes a file: URL empty (only http, https, mailto, ftp and tel are written,
-		// unless every raw HTML block is written too), so a resolved link is rendered as a
-		// placeholder and its URL written in its place. The placeholder holds the source's digest,
-		// which the source cannot hold, so no text of its own is taken for one.
-		digest := sha256.Sum256(source)
-		placeholder := fmt.Sprintf("autodoc-link-%x-", digest)
-		var resolved []string
-		var charts chartsOn // a chart drawn, whose sizing the page then carries, or captioned
-		chart := chartIn(options.Chart, theme, &charts)
-		embedder := newEmbedder(options.Document, tableFit{rows: options.TableRows, width: options.TableWidth})
+		embedder := newEmbedder(options.Document, tableFit{rows: options.TableRows, width: options.TableWidth, marked: options.markCuts})
 		if embedder != nil {
-			embedder.chart, embedder.media = chart, options.Media
+			embedder.media = options.Media
 			defer embedder.close()
 		}
-		mapLink := options.Links
-		if base != "" {
-			mapLink = func(dest string) (string, bool) { return fileURL(base, []byte(dest)) }
-		}
-		drawn := embeds{placeholder: fmt.Sprintf("autodoc-embed-%x-", digest)}
-		diagrams := false
-		forEach(document.Root, func(node *markdown.Node) {
-			switch node.Kind {
-			case markdown.KindImage:
-				if embedder != nil {
-					parent := node.Parent
-					alone := parent != nil && parent.Kind == markdown.KindParagraph && parent.FirstChild == node && parent.LastChild == node
-					var alt bytes.Buffer
-					for child := node.FirstChild; child != nil; child = child.Next {
-						writeText(&alt, child, document.Source)
-					}
-					if html, block, diagram, ok := embedder.embed(node.Dest(), alt.String(), alone); ok {
-						diagrams = diagrams || diagram
-						node.Kind, node.Literal = markdown.KindText, []byte(drawn.add(html, block))
-						node.FirstChild, node.LastChild = nil, nil
-						return
-					}
-				}
-				node.Kind = markdown.KindEmph
-			case markdown.KindCodeBlock:
-				// a lab note's cell: its outputs, files beside the note
-				// (docs/decisions/plugins.md#lab-notes), drawn right after its fence, in name
-				// order; a fence no run wrote for draws none
-				if embedder == nil || node.Fence() == 0 || !lab.Is(options.Document) {
-					return
-				}
-				dir, key := lab.OutDir(options.Document), lab.CellKey(lab.FenceLang(string(node.Info())), string(node.Literal))
-				after := node
-				for _, f := range embedder.outputs(dir, key) {
-					if html, ok := embedder.output(f); ok {
-						after = insertAfter(after, drawn.add(html, true))
-					}
-				}
-			case markdown.KindLink:
-				if mapLink == nil {
-					return
-				}
-				if target, ok := mapLink(string(node.Dest())); ok {
-					id := placeholder + strconv.Itoa(len(resolved)/2)
-					node.SetDest([]byte(id))
-					resolved = append(resolved, `href="`+id+`"`, `href="`+stdhtml.EscapeString(target)+`"`)
-				}
-			}
-		})
-		var body bytes.Buffer
-		var renderOpts []markdownhtml.Option
-		if options.SourceSpans {
-			renderOpts = append(renderOpts, markdownhtml.WithSourceSpans())
-		}
-		if err := markdownhtml.Render(&body, document, renderOpts...); err != nil {
+		b, err := renderBody(document, source, theme, options, embedder)
+		if err != nil {
 			return nil, err
 		}
-		withIDs(&body, headingIDs)
-		rendered := drawn.place(strings.NewReplacer(resolved...).Replace(body.String()))
-		rendered = mermaidBlock.ReplaceAllStringFunc(rendered, func(block string) string {
-			diagrams = true
-			// the source stays escaped: mermaid reads the element's text. The pre keeps its
-			// attributes: a pane that follows the cursor finds the diagram by its data-src
-			m := mermaidBlock.FindStringSubmatch(block)
-			return `<pre class="mermaid"` + m[1] + `>` + m[2] + `</pre>`
-		})
-		rendered = chartBlock.ReplaceAllStringFunc(rendered, func(block string) string {
-			m := chartBlock.FindStringSubmatch(block)
-			if chart != nil {
-				svg, err := chart([]byte(stdhtml.UnescapeString(m[2])))
-				if err == nil {
-					return `<div class="embed chart"` + m[1] + `>` + svg + `</div>`
-				}
-				return chartFallback(err, m[1], m[2])
-			}
-			return `<pre class="vega-lite"` + m[1] + `>` + m[2] + `</pre>`
-		})
-		fit := tableFit{rows: options.TableRows, width: options.TableWidth}
-		rendered = csvBlock.ReplaceAllStringFunc(rendered, func(block string) string {
-			m := csvBlock.FindStringSubmatch(block)
-			table, ok := csvTable([]byte(stdhtml.UnescapeString(m[2])), fit)
-			if !ok {
-				return block
-			}
-			return `<div class="embed"` + m[1] + `>` + table + `</div>`
-		})
-		return page(colors, rendered, diagrams, false, charts, options.Chrome, options.Media != nil), nil
+		return page(colors, b.html, b.diagrams, false, b.charts, options.Chrome, options.Media != nil), nil
 	case Text:
 		var output bytes.Buffer
 		writeText(&output, document.Root, document.Source)
@@ -325,6 +227,130 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 	default:
 		return nil, fmt.Errorf("export: format %q must be html or text", format)
 	}
+}
+
+// rendering is a Markdown document's body rendered as HTML, before a page is put around it: what
+// RenderWith's page and Fragment both hold. diagrams says it has a Mermaid diagram; charts, what
+// its charts drew.
+type rendering struct {
+	html     string
+	diagrams bool
+	charts   chartsOn
+}
+
+// renderBody renders document's body in theme (a palette's name, already checked), its embeds
+// drawn by embedder (nil: each drawn as its alt text), as RenderWith's options say. It is the one
+// body path: RenderWith wraps it in a page, Fragment hands it over with its links mapped last.
+func renderBody(document *markdown.Document, source []byte, theme string, options Options, embedder *embedder) (rendering, error) {
+	// each heading's anchor, as GitHub gives it, taken before the walk below changes any node,
+	// so a link to #section written for GitHub lands on the section in the page too
+	headingIDs := outline.HeadingIDs(document.Root, source)
+	base := options.Base
+	if base != "" {
+		var err error
+		if base, err = filepath.Abs(base); err != nil {
+			return rendering{}, err
+		}
+	}
+	// the renderer writes a file: URL empty (only http, https, mailto, ftp and tel are written,
+	// unless every raw HTML block is written too), so a resolved link is rendered as a
+	// placeholder and its URL written in its place. The placeholder holds the source's digest,
+	// which the source cannot hold, so no text of its own is taken for one.
+	digest := sha256.Sum256(source)
+	placeholder := fmt.Sprintf("autodoc-link-%x-", digest)
+	var resolved []string
+	var charts chartsOn // a chart drawn, whose sizing the page then carries, or captioned
+	chart := chartIn(options.Chart, theme, &charts)
+	if embedder != nil {
+		embedder.chart = chart
+	}
+	mapLink := options.Links
+	if base != "" {
+		mapLink = func(dest string) (string, bool) { return fileURL(base, []byte(dest)) }
+	}
+	drawn := embeds{placeholder: fmt.Sprintf("autodoc-embed-%x-", digest)}
+	diagrams := false
+	forEach(document.Root, func(node *markdown.Node) {
+		switch node.Kind {
+		case markdown.KindImage:
+			if embedder != nil {
+				parent := node.Parent
+				alone := parent != nil && parent.Kind == markdown.KindParagraph && parent.FirstChild == node && parent.LastChild == node
+				var alt bytes.Buffer
+				for child := node.FirstChild; child != nil; child = child.Next {
+					writeText(&alt, child, document.Source)
+				}
+				if html, block, diagram, ok := embedder.embed(node.Dest(), alt.String(), alone); ok {
+					diagrams = diagrams || diagram
+					node.Kind, node.Literal = markdown.KindText, []byte(drawn.add(html, block))
+					node.FirstChild, node.LastChild = nil, nil
+					return
+				}
+			}
+			node.Kind = markdown.KindEmph
+		case markdown.KindCodeBlock:
+			// a lab note's cell: its outputs, files beside the note
+			// (docs/decisions/plugins.md#lab-notes), drawn right after its fence, in name
+			// order; a fence no run wrote for draws none
+			if embedder == nil || node.Fence() == 0 || !lab.Is(options.Document) {
+				return
+			}
+			dir, key := lab.OutDir(options.Document), lab.CellKey(lab.FenceLang(string(node.Info())), string(node.Literal))
+			after := node
+			for _, f := range embedder.outputs(dir, key) {
+				if html, ok := embedder.output(f); ok {
+					after = insertAfter(after, drawn.add(html, true))
+				}
+			}
+		case markdown.KindLink:
+			if mapLink == nil {
+				return
+			}
+			if target, ok := mapLink(string(node.Dest())); ok {
+				id := placeholder + strconv.Itoa(len(resolved)/2)
+				node.SetDest([]byte(id))
+				resolved = append(resolved, `href="`+id+`"`, `href="`+stdhtml.EscapeString(target)+`"`)
+			}
+		}
+	})
+	var body bytes.Buffer
+	var renderOpts []markdownhtml.Option
+	if options.SourceSpans {
+		renderOpts = append(renderOpts, markdownhtml.WithSourceSpans())
+	}
+	if err := markdownhtml.Render(&body, document, renderOpts...); err != nil {
+		return rendering{}, err
+	}
+	withIDs(&body, headingIDs)
+	rendered := drawn.place(strings.NewReplacer(resolved...).Replace(body.String()))
+	rendered = mermaidBlock.ReplaceAllStringFunc(rendered, func(block string) string {
+		diagrams = true
+		// the source stays escaped: mermaid reads the element's text. The pre keeps its
+		// attributes: a pane that follows the cursor finds the diagram by its data-src
+		m := mermaidBlock.FindStringSubmatch(block)
+		return `<pre class="mermaid"` + m[1] + `>` + m[2] + `</pre>`
+	})
+	rendered = chartBlock.ReplaceAllStringFunc(rendered, func(block string) string {
+		m := chartBlock.FindStringSubmatch(block)
+		if chart != nil {
+			svg, err := chart([]byte(stdhtml.UnescapeString(m[2])))
+			if err == nil {
+				return `<div class="embed chart"` + m[1] + `>` + svg + `</div>`
+			}
+			return chartFallback(err, m[1], m[2])
+		}
+		return `<pre class="vega-lite"` + m[1] + `>` + m[2] + `</pre>`
+	})
+	fit := tableFit{rows: options.TableRows, width: options.TableWidth, marked: options.markCuts}
+	rendered = csvBlock.ReplaceAllStringFunc(rendered, func(block string) string {
+		m := csvBlock.FindStringSubmatch(block)
+		table, ok := csvTable([]byte(stdhtml.UnescapeString(m[2])), fit)
+		if !ok {
+			return block
+		}
+		return `<div class="embed"` + m[1] + `>` + table + `</div>`
+	})
+	return rendering{html: rendered, diagrams: diagrams, charts: charts}, nil
 }
 
 // page is a whole HTML document of body in colors, with the diagrams' script when it has any, the

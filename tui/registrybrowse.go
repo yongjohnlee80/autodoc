@@ -66,10 +66,10 @@ func (b *registryBrowse) Picks() map[string]feature.Picker {
 func (b *registryBrowse) browse() {
 	h := b.h
 	h.notifyOngoing("registry", h.tr("autodoc.notice.registrybrowse.reading_the_registry"))
-	src := h.seams.registry
+	src, loaded := h.seams.registry, h.registryLoad()
 	do(h, func(ctx context.Context) registryList { return src.fetch(ctx, time.Now()) }, func(l registryList) {
 		l = l.usable()
-		h.registryLoaded(l)
+		loaded(l)
 		var entries []regindex.IndexEntry
 		for _, e := range l.ix.Entries {
 			if e.Kind == regindex.KindPlugin || e.Kind == regindex.KindLua {

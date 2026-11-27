@@ -1,6 +1,7 @@
 package crew
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -164,5 +165,33 @@ func TestAWaitEndsSayingHowItsJobEnded(t *testing.T) {
 		if got := w.ended[fallbackToast("j1")]; !strings.Contains(got, c.want) || !strings.Contains(got, "gold") {
 			t.Errorf("%s/%s: the wait ended with %q, want it to say %q", c.state, c.outcome, got, c.want)
 		}
+	}
+}
+
+// Two changes for one job read it twice. The daemon answers each call on its own goroutine, so the
+// earlier read (the job open, its host away) can land after the later one (done, delivered): the
+// later read's answer is what shows, and the wait stays ended. Here the first read is answered as
+// the job stood, and held until the second has been shown. The mutant, named here: no per-job
+// order (the toast back up, waiting for its host until a reconnect).
+func TestAnEarlierReadOfAJobAnsweringLastPutsNoWaitBack(t *testing.T) {
+	w := newInboxWindow()
+	w.jobs = map[string]map[string]any{"j1": fbJob("open", false)}
+	w.answers = []any{snapshot(5, "", nil, nil), fbChange(6, "fallback", "j1"), fbChange(7, "fallback_done", "j1")}
+	x := newCrewInbox(w, w.raise, nil)
+	x.Connected()
+	w.step(t) // the snapshot
+	w.step(t) // the fallback change: its job read, then the next watch, in flight
+	first := w.pending[0]
+	w.pending = w.pending[1:]
+	answer := first.fn(context.Background()) // the job as it stood: open, its host away
+	w.jobs["j1"] = fbJob("done", true)
+	w.step(t) // the fallback_done change
+	w.step(t) // its job read: done
+	if _, open := w.shown[fallbackToast("j1")]; open {
+		t.Fatalf("after the later read: toasts %v, want no wait for j1", w.shown)
+	}
+	first.then(answer) // the earlier read lands last
+	if text, open := w.shown[fallbackToast("j1")]; open {
+		t.Fatalf("the earlier read, answering last, put the wait back up: %q", text)
 	}
 }

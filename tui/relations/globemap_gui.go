@@ -136,6 +136,7 @@ type globeDots struct {
 	look   *globeLook
 	groups *relGroups
 	bucket int
+	fit    float32     // the map's fit when they were made: a dot's size reads it (dotRadius)
 	fills  []globeFill // one per colour, in the order the documents first wear it
 	rings  *gui.Path   // a ring round each superseded document
 }
@@ -152,14 +153,14 @@ func zoomBucket(z float32) int {
 }
 
 // dotsAt is gl's dots and rings at zoom z in look l and groups gs, the map fitted at fit: d itself
-// when it is already for that frame, step, look and groups.
+// when it is already for that frame, step, fit, look and groups.
 func dotsAt(d globeDots, gl *globe, l *globeLook, gs *relGroups, z, fit float32) globeDots {
 	b := zoomBucket(z)
-	if d.of == gl && d.look == l && d.groups == gs && d.bucket == b {
+	if d.of == gl && d.look == l && d.groups == gs && d.bucket == b && d.fit == fit {
 		return d
 	}
 	bz := float32(math.Pow(globeZoomStep, float64(b))) // the step's zoom: the dots are its size until the next
-	d = globeDots{of: gl, look: l, groups: gs, bucket: b, rings: &gui.Path{}}
+	d = globeDots{of: gl, look: l, groups: gs, bucket: b, fit: fit, rings: &gui.Path{}}
 	fill := map[color.NRGBA]int{}
 	for i, n := range gl.m.Nodes {
 		c := l.colourOf(n, gs)
@@ -499,13 +500,16 @@ func newGlobeMap(c feature.Core, present func() globePublisher, page int) *Globe
 }
 
 // readGroups takes ws's groups from the store, as its map is read: its graph file's, or its first,
-// made of types and the workspace's folders. The frame on screen draws in them at once.
+// made of types and the workspace's folders. The frame on screen draws in them at once. A read the
+// settings edited during is dropped: it began before the edit (the file read again after a save
+// conflict, say), so it holds the groups as they were, and the edit, written after it, is newer.
 func (g *GlobeMap) readGroups(ws string, types []string) {
 	if g.store == nil {
 		return
 	}
+	since := g.editor.edits
 	g.store.Groups(ws, viewGlobeMap, types, g.currentLook().pal.background, func(list []Group) {
-		if ws == g.c.Workspace() {
+		if ws == g.c.Workspace() && g.editor.edits == since {
 			g.editor.listed(ws, types, list)
 			g.groupsEdited(list)
 		}

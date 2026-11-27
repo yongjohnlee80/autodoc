@@ -22,6 +22,7 @@ local _opts = {} -- setup's: bin, config, offer_restart, offer_link
 local _client, _epoch = nil, 0
 local _waiting = nil -- callbacks queued behind a connect in flight
 local _workspaces = nil -- the last workspace.list, by name
+local _ws_asked, _ws_kept = 0, 0 -- workspace.list tickets: the last taken, and the one _workspaces is from
 local _kb_refreshed = {} -- KB roots whose managed files this session already brought up to date
 local _selected = nil -- the workspace selected for searching, by name
 local _mismatch = nil -- the last probe that refused this plugin's protocol
@@ -180,11 +181,26 @@ function M.refresh_kbs(list)
   end
 end
 
+---workspaces_ticket is taken when a workspace.list is SENT, and handed to remember_workspaces with its
+---answer. The daemon answers each request on its own goroutine, so a listing sent before a rename can
+---land after one sent since: its ticket is older than the kept listing's, and it is dropped.
+---@return integer
+function M.workspaces_ticket()
+  _ws_asked = _ws_asked + 1
+  return _ws_asked
+end
+
 ---remember keeps a workspace.list answer for the save hook and the views, and says so. Each listed KB's
 ---managed files are brought up to date on the way (refresh_kbs), and a primary KB with no workspace
----named is offered one (opts.offer_link).
+---named is offered one (opts.offer_link). ticket is the one taken when the list was sent (nil: just
+---now); an answer older than the kept listing's changes nothing and returns false.
 ---@param list table[]
-function M.remember_workspaces(list)
+---@param ticket integer|nil
+---@return boolean
+function M.remember_workspaces(list, ticket)
+  ticket = ticket or M.workspaces_ticket()
+  if ticket < _ws_kept then return false end
+  _ws_kept = ticket
   M.refresh_kbs(list)
   -- a primary KB auto-core knows by its root alone is offered a workspace (autodoc.kb.link)
   if _opts.offer_link then
@@ -197,6 +213,7 @@ function M.remember_workspaces(list)
     names[#names + 1] = w.name
   end
   publish(M.TOPIC_WORKSPACES, { names = names })
+  return true
 end
 
 ---workspace is the last listed workspace named name, or nil.
@@ -217,9 +234,10 @@ end
 ---workspaces lists the daemon's workspaces, and keeps them for the save hook.
 ---@param cb fun(list: table[]|nil, err: table|nil)
 function M.workspaces(cb)
+  local ticket = M.workspaces_ticket()
   M.call("workspace.list", {}, function(list, err)
     if err then return cb(nil, err) end
-    M.remember_workspaces(list)
+    M.remember_workspaces(list, ticket)
     cb(list, nil)
   end)
 end

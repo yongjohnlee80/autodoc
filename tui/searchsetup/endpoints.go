@@ -70,6 +70,10 @@ type endpoints struct {
 	Active string // the one in use
 	cursor int    // the row under the list's cursor: the one the dialog's shared buttons act on
 	seq    uint64 // numbers the detail's reads
+	// loadSeq numbers the list's reads and checkSeq the form's Checks: only the latest of each is
+	// shown, so a list read before a save, a use or a removal, or a Check of a base URL since
+	// edited, answering after the later one, is dropped
+	loadSeq, checkSeq uint64
 	// the form: the entry it edits ("" a new one), the kind chosen, and whether the entry it edits
 	// has a key sealed
 	editing string
@@ -110,9 +114,11 @@ func (e *endpoints) kindIndex(kind string) int {
 
 func (e *endpoints) At(i int) (EndpointRow, bool) { return e.Rows.At(i) }
 
-// load lists the entries, the one in use, and why the one chosen is not in use, if it is not.
+// load lists the entries, the one in use, and why the one chosen is not in use, if it is not. The
+// latest list wins: one read as the dialog opens and answering after the list a save, a use or a
+// removal reads again is dropped, never shown over it.
 func (e *endpoints) load() {
-	tk := e.c.Ticket(nil, feature.TicketSession)
+	tk := e.c.Ticket(&e.loadSeq, feature.TicketSession)
 	type answer struct {
 		rows []EndpointRow
 		m    map[string]any
@@ -353,7 +359,7 @@ func (e *endpoints) check(base, key string) {
 		args = []any{e.editing, spec} // its stored key, opened by the daemon
 	}
 	e.c.Set(e.src("ModelsStatus"), "asking the "+e.spec.noun+"…")
-	tk := e.c.Ticket(nil, feature.TicketSession)
+	tk := e.c.Ticket(&e.checkSeq, feature.TicketSession) // the latest Check's answer is the form's
 	e.c.Go(func(ctx context.Context) any {
 		res, err := e.c.Call(ctx, e.spec.verb+".models", args...)
 		if err != nil {

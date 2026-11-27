@@ -73,7 +73,6 @@ curl -s http://127.0.0.1:8730/v1/status -H "Authorization: Bearer $AUTODOC_OPS_T
 | `server.embedding` | the provider's `state` (`starting`, `up`, `down`) and its `error` code; the texts one request carries now (`batch`) and the requests in flight (`in_flight`), which are `[embedding] batch` and `slots` unless requests ran out of `call_timeout` and the pace stepped down ([server-config](server-config.md#how-the-server-embeds)); the last request's time (`last_call_ms`), and how many requests ran out of their time since the server started (`timeouts`, absent while none). A `batch` below yours that stays there means the provider is too slow for it. |
 | `server.ranker` | with a `[ranker]` only: its `kind` and `model`, its `state` (`starting`, `up`, `down`) and a down state's `error` code, the configured `window`, and since the server started the searches it reranked (`ranked`), answered in recall order by why (`unranked`: the codes of a search's `rank.error`), and skipped for `"rerank": false` (`skipped`). A `timeout` or `busy` count that grows means the ranker is too slow for `timeout` or `slots` ([server-config](server-config.md#how-the-server-reranks)). |
 | `lock` | `held`; `waiting` (another server holds the tenant: a standby); `none` |
-| `lock_wait` | why a `waiting` lock waits when it isn't for another server of this release: `older_server`, a server of v0.3.15 or before holding the tenant by its advisory lock ([upgrading from v0.3.15](#upgrading-from-v0315)). Stop that server. Absent otherwise. |
 | `cursor.lag_seconds` | how far the index is behind your data, on your (the source) database's clock: now, less the bound the last pass that completed read to (the database's now less `lag` when it ran). On a quiet source it stays at most `lag` plus `interval`; it grows only while passes fail or can't keep up. Alert on it. It's absent on a standby (only the server holding the tenant's lease measures it) and before that server's first complete pass, so make absence an alarm of its own: absent on every server of a tenant for longer than an `interval` means no server is completing passes. `cursor.updated_at` and `id` are the last row read, which stays put while nothing changes. |
 | `last_pass`, `last_refresh` | when each last ran, what it read and wrote, and its error code. `complete` is false for a refresh that couldn't read every row (it deletes nothing then; see [views](views.md)). |
 | `deletes` | a source with a deletes view: its cursor (`updated_at` is the last tombstone's `deleted_at`), its `lag_seconds` measured as the rows' is (from the bound its last deletes pass that succeeded read to), and its last pass's `error` (`view`, `order`, or none). A deletes view that fails holds only the deletes; its lag grows while it does. |
@@ -233,6 +232,21 @@ the server calls Vertex AI and the Ranking API as the VM's service account.
   check the index is built (`ann` in the status) before relying on it. Install the extension in the
   index's database once, as the database's owner, and `--check` says what it found.
 
+## Renewing the certificate
+
+With `tls_cert` and `tls_key`, the server reads the two files again when either changes: their
+modification times and sizes, followed through symlinks, are looked at by a TLS handshake at most
+once every 10 seconds. A renewal tool that writes the files, or repoints links to them, needs no
+restart and no reload hook.
+
+- **The log** says `http: the TLS certificate's files changed: serving the new certificate`, with
+  its names and when it expires.
+- **Files that change and don't load** (a key not yet written beside its new certificate, a broken
+  file) keep the previous certificate served. The server logs one error saying so, then nothing
+  more until the files change again; a key written a moment later is read at the next check.
+- **At the start** a pair that doesn't load stops the server, as before: there is no previous
+  certificate to keep.
+
 ## Behind a proxy
 
 The server listens on loopback by default. To serve beyond it, either give it a certificate (`tls_cert`, `tls_key`), or put a proxy that terminates TLS in front and say so:
@@ -251,11 +265,13 @@ proxy  = true
 
 [`deploy/systemd/autodoc-server.service`](../../deploy/systemd/autodoc-server.service). The binary is
 the server build (a `linux-<arch>-server` release archive, or `make build-server`); any other build
-refuses `--server`:
+refuses `--server`. A release archive holds one file, named as the archive is
+(`autodoc-<version>-linux-<arch>-server`); `make build-server` writes `bin/autodoc`. Install it as
+`autodoc`:
 
 ```sh
 useradd --system --no-create-home --shell /usr/sbin/nologin autodoc
-install -m 0755 autodoc /usr/local/bin/autodoc
+install -m 0755 autodoc-<version>-linux-<arch>-server /usr/local/bin/autodoc
 install -d -m 0750 -g autodoc /etc/autodoc
 install -m 0640 -g autodoc server.toml /etc/autodoc/   # and views/, and the TLS certificate and key
 install -m 0600 server.env /etc/autodoc/server.env     # AUTODOC_SERVER_DSN=…, the key, the tokens
@@ -270,6 +286,8 @@ journalctl -u autodoc-server -f
   0640, group `autodoc`, in a directory of the same: the service reads them through its group, and
   can write none of them.
 - **A refused configuration (exit 2) isn't restarted,** because restarting can't mend it. Exit 1 (the database lost, a writer lease lost) is restarted after 5 seconds.
+- **A database that drops packets holds each start for about two minutes** unless its DSN has a `connect_timeout` ([server-config](server-config.md#postgres-where-the-index-lives)): put `?connect_timeout=10` in each DSN in `server.env`.
+- **`systemctl start` and `enable --now` return at once,** before the server has read its configuration: a refused one shows in `systemctl status autodoc-server` (`failed`, status 2) and in the journal, not in the command's exit code. Run `--check` first.
 - **On stop:** SIGTERM drains the API's requests (35s at most), then releases the writer leases, so a standby takes them at its next poll. The stop timeout is 60s.
 - **The unit runs as the `autodoc` system user,** with the system read-only to it.
 
@@ -304,18 +322,19 @@ SELECT scope, holder, holder_info, epoch, lease_until FROM <schema>.rag_writer_l
 
 ### Upgrading from v0.3.15
 
-**Stop every v0.3.15 server of a store before you start a v0.3.16 one.** A v0.3.15 server held each
-tenant by a PostgreSQL advisory lock, which the lease knows nothing of, so the two would write at once.
+**Upgrade to v0.3.17 first, and stop every v0.3.15 server of a store before you start a newer one.**
+A v0.3.15 server held each tenant by a PostgreSQL advisory lock, which the lease knows nothing of,
+so the two would write at once.
 
 - A v0.3.15 server refuses to start on a store a newer release has migrated: it says the
   database has a newer schema. So only one already running when the store was migrated can meet
   a newer server.
-- A v0.3.16 server looks for that lock before it takes a tenant's lease, and again at every renew.
-  - While a v0.3.15 server holds the tenant, it waits and logs that an older server holds it, and
-    the status shows `"lock": "waiting"` with `"lock_wait": "older_server"`.
-  - If an older server takes the lock while this one holds the lease (a v0.3.15 standby, already
-    waiting when you upgraded), this one stops writing and exits 1, and its supervisor restarts it
-    to wait.
+- v0.3.16 and v0.3.17 look for that lock before they take a tenant's lease, and again at every
+  renew. While a v0.3.15 server holds the tenant, they wait and log that an older server holds it;
+  if one takes it while they hold the lease (a v0.3.15 standby, already waiting when you upgraded),
+  they stop writing and exit 1.
+- v0.3.18 and later don't look. A v0.3.15 server still running beside one writes the tenant too:
+  the lease's fence stops only servers that take the lease, and v0.3.15 never reads it.
 - From v0.3.16 on, upgrades are rolling: every server takes the same lease, and a standby of the
   new release takes over as the old one stops.
 

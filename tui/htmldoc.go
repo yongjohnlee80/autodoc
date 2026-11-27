@@ -62,14 +62,7 @@ func (h *Host) pageView() (*htmlview.HTMLView, bool) {
 // changes.
 func (h *Host) documentFor(ws, p string, raw bool) {
 	h.refusedNoted = false // another document: what its page refuses is said again
-	if h.noteFile != nil {
-		// before its text arrives: the Rendered view lays the note's embeds out from its folder
-		note := ""
-		if p != "" && !raw && h.resolver().Of(p) == kind.Markdown {
-			note = h.pathOnDisk(ws, p)
-		}
-		h.noteFile(note)
-	}
+	h.tellNoteFile(ws, p, raw)
 	page := raw && h.native()
 	var table *widgettable.TableDocument
 	if comma := tableComma(p); comma != 0 && !raw && h.active != nil && p != "" {
@@ -90,6 +83,21 @@ func (h *Host) documentFor(ws, p string, raw bool) {
 		h.pageDir = root + "\x00" + base
 		v.SetImageResolver(htmlview.DirResources(root, base))
 	}
+}
+
+// tellNoteFile tells the window the open note's file (Options.NoteFile) before its text reaches
+// the editor: the Rendered view lays the note's embeds out from its folder. A buffer switch tells it
+// before the editor takes the buffer, since the editor lays the visible blocks of a buffer it has
+// shown before at once, and nothing lays them again when the note changes after.
+func (h *Host) tellNoteFile(ws, p string, raw bool) {
+	if h.noteFile == nil {
+		return
+	}
+	note := ""
+	if p != "" && !raw && h.resolver().Of(p) == kind.Markdown {
+		note = h.pathOnDisk(ws, p)
+	}
+	h.noteFile(note)
 }
 
 // resourcesFor is where a page's stylesheets and images are read from

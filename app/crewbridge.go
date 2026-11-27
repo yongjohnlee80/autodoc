@@ -421,13 +421,11 @@ func (b *agyBridge) watchPrompts(ctx context.Context, tick <-chan time.Time, log
 		failing, offset = false, next
 		switch {
 		case p.Showing && p.Asks != raised:
-			if _, err := b.call(lctx, "crew.attention", b.c.Credential, "raise", crew.AttentionPermission, p.Asks); err == nil {
-				raised, unknown = p.Asks, false
-			}
+			_, err := b.call(lctx, "crew.attention", b.c.Credential, "raise", crew.AttentionPermission, p.Asks)
+			raised, unknown = attentionTold(p.Asks, err)
 		case !p.Showing && (raised != "" || unknown):
-			if _, err := b.call(lctx, "crew.attention", b.c.Credential, "clear"); err == nil {
-				raised, unknown = "", false
-			}
+			_, err := b.call(lctx, "crew.attention", b.c.Credential, "clear")
+			raised, unknown = attentionTold("", err)
 		}
 		// the look read the language server: the prompts are reported (crew.list's prompts_reported)
 		_, err = b.call(lctx, "crew.attention", b.c.Credential, "alive")
@@ -436,6 +434,18 @@ func (b *agyBridge) watchPrompts(ctx context.Context, tick <-chan time.Time, log
 			return fmt.Errorf("the session's credential is refused: %w", err)
 		}
 	}
+}
+
+// attentionTold is what a bridge knows of the session's permission attention after it raised asks ("" for a
+// clear) and the daemon answered err: asks itself once it said so; after any failure, nothing, and
+// unknown, so the next look says again what it sees. A call that failed may still have been applied
+// (its answer lost to the deadline after the daemon committed it): kept as it stood before, a lost
+// clear would leave the next same prompt unraised, and a lost raise would never be cleared.
+func attentionTold(asks string, err error) (raised string, unknown bool) {
+	if err != nil {
+		return "", true
+	}
+	return asks, false
 }
 
 // ended reports whether err is the daemon refusing the session's credential (the session ended, or

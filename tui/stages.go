@@ -160,9 +160,14 @@ func (h *Host) toggleSearchStage(stage string) {
 
 // loadStageRanker learns the ranker in use, for the Rerank box: its model, or its name while the
 // model is not known (a TEI server names its own, which a ranked answer then says). refresh
-// searches again whatever changed; otherwise only a change of the stages asked for does.
+// searches again whatever changed; otherwise only a change of the stages asked for does. The
+// latest read wins: one started as the search opens and answering after the read a ranker change
+// starts is dropped, never naming the ranker that was. A search again asked by a read since dropped
+// is the latest's to do.
 func (h *Host) loadStageRanker(refresh bool) {
-	tk := h.ticket(nil, feature.TicketSession)
+	tk := h.ticket(&h.stageRankerSeq, feature.TicketSession)
+	h.stageRankerLoading++
+	h.stageRankerRefresh = h.stageRankerRefresh || refresh
 	type answer struct {
 		id, label string
 		err       error
@@ -175,9 +180,12 @@ func (h *Host) loadStageRanker(refresh bool) {
 		id, label := rankerInUse(feature.AsMap(res))
 		return answer{id: id, label: label}
 	}, func(a answer) {
+		h.stageRankerLoading--
 		if !tk.Current() {
 			return
 		}
+		refresh := h.stageRankerRefresh
+		h.stageRankerRefresh = false
 		if a.err != nil {
 			a.id, a.label = "", "" // a daemon that cannot say ranks nothing this TUI can name
 		}

@@ -180,12 +180,17 @@ export const AutodocCrew = async ({ client }, options = {}) => {
         if (!session || req?.session !== session) return reply(s, { ok: false, refused: "not this plugin's session" });
         show(session); // the turn the notice starts is the one the user sees
         const body = { parts: [{ type: "text", text: notice }], ...(model ? { model } : {}) };
+        // the wake's time is taken before the turn is asked for: a model that refuses it at once
+        // can say so (session.error) before promptAsync's answer comes, and must still be the wake's
+        const at = Date.now();
+        wokeAt = at;
+        const failed = () => {
+          if (wokeAt === at) wokeAt = 0; // no turn started: no error of its to wait for
+          reply(s, { ok: false, error: "promptAsync failed" });
+        };
         client.session.promptAsync({ path: { id: session }, body }).then(
-          (r) => {
-            if (!r.error) wokeAt = Date.now();
-            reply(s, r.error ? { ok: false, error: "promptAsync failed" } : { ok: true });
-          },
-          () => reply(s, { ok: false, error: "promptAsync failed" }),
+          (r) => (r.error ? failed() : reply(s, { ok: true })),
+          failed,
         );
       },
       error() {},
@@ -216,6 +221,8 @@ export const AutodocCrew = async ({ client }, options = {}) => {
     const run = attentionRuns.then(
       () =>
         new Promise((done) => {
+          // a heartbeat still waiting its turn when dispose came says nothing: the plugin has gone
+          if (disposed && args[0] === "alive") return done(null);
           let p;
           try {
             p = Bun.spawn(["autodoc", "crew", "attention", ...args], {
@@ -395,7 +402,10 @@ export const AutodocCrew = async ({ client }, options = {}) => {
   return {
     "chat.message": async (input) => {
       const id = input.sessionID;
-      if (disposed || !id || id === session || (worker && id === desired)) return; // coalesced into the running one
+      if (disposed || !id) return;
+      // the session the registration heads for: the running one's while one runs (a switch back to
+      // the registered session must still turn it back), else the one registered
+      if (id === (worker ? desired : session)) return;
       want(id); // in the background: the message never waits on AutoDoc
     },
     event: async ({ event }) => {
@@ -411,6 +421,10 @@ export const AutodocCrew = async ({ client }, options = {}) => {
       if (heartbeat) clearInterval(heartbeat);
       attemptAbort?.abort();
       await worker;
+      // the attention running now (a heartbeat among them) ends before dispose returns, so nothing
+      // says this session is alive once it has gone; those waiting their turn still run, but for
+      // a heartbeat. Each run is bounded (registerMs), so this wait is too.
+      await attentionRuns;
       server.stop(true);
       remove();
     },

@@ -224,6 +224,18 @@ func kindNoun(kind string) string {
 	return "plugin"
 }
 
+// registryLoad begins a fetch of the registry's list: what it returns keeps the fetched list
+// (registryLoaded) while no later fetch has begun. A fetch that fails late (the cache, or the
+// built-ins, said offline) never replaces a list a later one read.
+func (h *Host) registryLoad() func(registryList) {
+	tk := h.ticket(&h.registrySeq, feature.TicketLocal)
+	return func(l registryList) {
+		if tk.Current() {
+			h.registryLoaded(l)
+		}
+	}
+}
+
 // registryLoaded keeps the list last loaded and shows its KB types in the field, the type chosen
 // kept chosen at its new row. An offline list says so while None is chosen.
 func (h *Host) registryLoaded(l registryList) {
@@ -263,6 +275,6 @@ func (h *Host) kbTypeChoices() []kbTypeChoice {
 
 // loadKBTypes fetches the registry as the add dialog's KB type list opens.
 func (h *Host) loadKBTypes() {
-	src := h.seams.registry
-	do(h, func(ctx context.Context) registryList { return src.fetch(ctx, time.Now()) }, h.registryLoaded)
+	src, loaded := h.seams.registry, h.registryLoad()
+	do(h, func(ctx context.Context) registryList { return src.fetch(ctx, time.Now()) }, loaded)
 }

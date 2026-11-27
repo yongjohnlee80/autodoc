@@ -16,8 +16,14 @@ type SurfaceBuffer struct {
 	ID, Gen     int
 	W, H, Pitch int
 	Format      string
+	Kind        string
 	Pix         []byte
 }
+
+func (*Surface) AddBuffer(context.Context, SurfaceDMABuf) (*SurfaceBuffer, error) {
+	return nil, errNoSurface
+}
+func (*Surface) AddedBuffer(context.Context) (*SurfaceBuffer, error) { return nil, errNoSurface }
 
 var errNoSurface = errors.New("plugin: pixel surfaces are Linux's first")
 

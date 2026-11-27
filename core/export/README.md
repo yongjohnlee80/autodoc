@@ -12,6 +12,8 @@ page without a diagram has no script.
 | `Options` | what a render reads besides the source: `Base`, the directory relative links are resolved from (each becomes a `file:` URL; `""` keeps links as written); `SourceSpans`, which puts each block's source byte range on it (`data-src`); `Document`, the source's file, whose embeds are drawn (below); and `TableRows` and `TableWidth`, which fit its tables to a narrower view |
 | `Render(source, format, theme)` | `RenderWith` with no options |
 | `RenderWith(source, format, theme, options)` | the page or text; an unknown theme (for HTML) or format is an error |
+| `Fragment(source, options)` | the body alone, for a caller that lays out its own page (below), and a `FragmentInfo` of it |
+| `MermaidStart()` | the script that draws a page's diagrams after the vendored mermaid.js, for a page that serves both as files |
 | `DiagramPage(source, theme)` | a page of one Mermaid diagram at its own size on the theme's background |
 | `Themes()` | the theme names, sorted: `dark`, `light`, `mono`, `retro`, `sepia` |
 | `ThemeOf(tuiTheme)` | the export theme for a TUI theme: its own where there is one, else `dark` |
@@ -48,6 +50,32 @@ kind is shown as its alt text.
 
 A page on its own (no `Options.Media`) is unchanged: its images are `data:` URIs, and a video is its
 alt text.
+
+**A fragment** (`Fragment`) is the body `RenderWith`'s page holds, drawn by the same path, with no
+`<html>`, `<head>`, stylesheet, script or style attribute:
+- `FragmentOptions`: `Theme` (a chart's palette), `Chart` (as `Options.Chart`), `Embeds` (the one
+  directory embeds are read from; `""` reads none), `Link` (the caller's rule for every URL in
+  the body), `MaxDiagrams` (how many diagrams and charts a document may ask for; past it the
+  render is refused with `ErrTooManyDiagrams`; 0 is no limit) and `MaxDiagramSource` (how many
+  bytes one Mermaid diagram's source, a fence's or a `.mmd` embed's, may hold; past it the render
+  is refused with `ErrDiagramTooLarge`; 0 is no limit);
+- the bounds: a table is cut at 1000 rows, 64 columns and 20,000 cells, as in a page, and its last
+  row, `<tr class="table-cut">`, says how many rows and columns are not shown; embeds don't nest; a chart spec's size is the caller's `Chart`'s to bound, and the body's size the caller's
+  to check on what `Fragment` returns;
+- raw HTML stays escaped; there is no option to let it through;
+- an embed is read in `Embeds` and nowhere else: a path out, an absolute path, a URL and a symlink
+  out are its alt text. An image there is linked by its path in `Embeds`, each segment escaped,
+  `./` first when its first segment holds a colon, never inlined; a video alone in its paragraph
+  is a `<video>` of its path;
+- `Link` is applied last, to every URL attribute of the finished body (links, wikilinks, tags,
+  embeds' generated paths, a chart's SVG): the URL it answers is written, and one it refuses is
+  dropped (a link keeps its text, an image its alt). A body holding a raw-text element (a chart's
+  `<title>`, `<style>`, `<script>`…), whose content a browser reads as markup inside `<svg>`, is
+  refused;
+- `FragmentInfo`: the title (the frontmatter's, else the first heading's), the headings with the
+  IDs their tags carry, whether the body has a Mermaid diagram, Mermaid's theme for the page's
+  `data-mermaid` attribute, and the class names the body uses. A page with a diagram adds
+  `mermaid.Script()` (version `mermaid.Version`) and `MermaidStart()` itself.
 
 Text drops frontmatter, link reference definitions and raw
 HTML, keeps code blocks as written, and ignores the theme.

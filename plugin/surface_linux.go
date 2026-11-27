@@ -24,6 +24,11 @@ type Surface struct {
 	pending map[int][]*SurfaceBuffer // buffers whose plugin.surface is not here yet
 	cur     int                      // the generation drawn for: both its halves here
 	free    map[int]*SurfaceBuffer
+	adds    map[int]*surfaceAdd    // the plugin's registrations the host hasn't answered, by id
+	added   map[int]*SurfaceBuffer // the current generation's registered buffers, by id
+	addID   int                    // the last registration's id + 1: odd ids, rising
+	lost    int                    // abandoned registrations the host accepted, this generation
+	turn    chan struct{}          // closed, and replaced, when the registered buffers change
 	wake    chan struct{}
 	acked   int
 	acks    sync.WaitGroup // the acks in flight: Close waits for them before the fd goes
@@ -43,8 +48,10 @@ type SurfaceBuffer struct {
 	ID, Gen     int
 	W, H, Pitch int
 	Format      string
-	Pix         []byte
-	drawing     bool // handed out by Buffer and not yet presented: its mapping stays until Present (under mu)
+	Kind        string // "memory", or "dmabuf" for one the plugin registered (AddBuffer)
+	Pix         []byte // nil for a registered buffer: its pixels are the plugin's own
+	drawing     bool   // handed out by Buffer and not yet presented: its mapping stays until Present (under mu)
+	state       int    // a registered buffer's (under mu)
 }
 
 // RGBA is the buffer as an image (RGBA8 buffers only).
@@ -54,7 +61,7 @@ func (b *SurfaceBuffer) RGBA() *image.RGBA {
 
 func newSurface(conn *SurfaceConn) *Surface {
 	s := &Surface{conn: conn, gens: map[int][]*SurfaceBuffer{}, pending: map[int][]*SurfaceBuffer{},
-		free: map[int]*SurfaceBuffer{}, wake: make(chan struct{}, 1), done: make(chan SurfaceFrameDone, 64),
+		free: map[int]*SurfaceBuffer{}, adds: map[int]*surfaceAdd{}, added: map[int]*SurfaceBuffer{}, turn: make(chan struct{}), wake: make(chan struct{}, 1), done: make(chan SurfaceFrameDone, 64),
 		inputTs: map[uint64]int64{},
 		gone:    make(chan struct{})}
 	go s.read()
@@ -110,12 +117,14 @@ func (s *Surface) reclaim() {
 	clear(s.gens)
 	clear(s.pending)
 	clear(s.free)
+	s.dropAdds(ErrSurfaceClosed)
 }
 
 // setInfo is plugin.surface: the generation's geometry, matched with its buffers by gen.
 func (s *Surface) setInfo(i SurfaceInfo) {
 	s.mu.Lock()
 	s.info = i
+	s.turned()
 	if bufs, ok := s.pending[i.Gen]; ok {
 		delete(s.pending, i.Gen)
 		s.install(i.Gen, bufs)
@@ -152,6 +161,7 @@ func (s *Surface) install(gen int, bufs []*SurfaceBuffer) {
 			delete(s.gens, g)
 		}
 	}
+	s.dropAdds(ErrSurfaceRetired) // the plugin's buffers were the old generation's: the host drops its own
 	s.cur = gen
 	s.gens[gen] = bufs
 	for _, b := range bufs {
@@ -213,6 +223,9 @@ func (s *Surface) Present(b *SurfaceBuffer, dirty image.Rectangle, inputT int64)
 	// b is given up before the send: once sent, its credit may hand it to another caller at once,
 	// so nothing after the send touches it
 	b.drawing = false
+	if b.state == addedDrawing {
+		b.state = addedPresented
+	}
 	if (b.Gen < s.cur || s.closed) && b.Pix != nil { // its generation, or the surface, ended while it was drawn
 		unix.Munmap(b.Pix)
 		b.Pix = nil
@@ -266,7 +279,7 @@ func (s *Surface) read() {
 				if err != nil {
 					continue
 				}
-				bufs = append(bufs, &SurfaceBuffer{ID: sp.ID, Gen: gen, W: sp.W, H: sp.H, Pitch: sp.Pitch, Format: sp.Format, Pix: pix})
+				bufs = append(bufs, &SurfaceBuffer{ID: sp.ID, Gen: gen, W: sp.W, H: sp.H, Pitch: sp.Pitch, Format: sp.Format, Kind: "memory", Pix: pix})
 			}
 			g.CloseAll()
 			s.mu.Lock()
@@ -312,6 +325,15 @@ func (s *Surface) read() {
 				continue
 			}
 			s.mu.Lock()
+			// A registration's first buffer.free is its acceptance; after it, a credit is taken only
+			// for a frame presented. So a duplicate acceptance, or one for an id never registered,
+			// refused, or given up, changes nothing.
+			if b := s.added[id]; b != nil && b.state == addedPresented {
+				b.state = addedFree
+				s.turned()
+			} else {
+				s.answerAdd(id, nil)
+			}
 			for gen, bufs := range s.gens {
 				for _, b := range bufs {
 					if b.ID == id && gen == s.cur {
@@ -321,10 +343,25 @@ func (s *Surface) read() {
 			}
 			s.mu.Unlock()
 			s.poke()
+		case OpBufferRefused:
+			g.CloseAll()
+			if id, reason, err := ReadBufferRefusedMsg(m); err == nil {
+				s.mu.Lock()
+				s.answerAdd(id, &SurfaceRefused{Reason: reason})
+				s.mu.Unlock()
+			}
 		default:
 			g.CloseAll()
 		}
 	}
+}
+
+// NewSurface is the plugin's end of a pixel surface on conn, with the function that takes each
+// plugin.surface for it. Serve makes a plugin's own from its environment; this one is for a host's
+// tests, which run the SDK against their own end.
+func NewSurface(conn *SurfaceConn) (*Surface, func(SurfaceInfo)) {
+	s := newSurface(conn)
+	return s, s.setInfo
 }
 
 // openSurface is the side channel from the environment, close-on-exec at once; nil without one.
@@ -335,3 +372,213 @@ func openSurface() *Surface {
 	}
 	return newSurface(conn)
 }
+
+// A PLUGIN'S OWN BUFFERS (protocol 10, Linux; docs/decisions/plugins.md#surface-buffers-and-generations).
+// A plugin that renders on a GPU may register DMA-BUFs it exported, where the window offers the
+// "dmabuf" kind, and present those: the frame never crosses memory. The host answers each
+// registration once: it accepts the buffer, or refuses it. Until it accepts, the buffer can't be
+// presented; refused, the plugin draws into the host's memory buffers, which Buffer always grants.
+
+// surfaceAdd is a registration the host hasn't answered: its buffer is unavailable until it does.
+type surfaceAdd struct {
+	buf *SurfaceBuffer
+	ans chan error // one answer: nil accepted, *SurfaceRefused, ErrSurfaceRetired or ErrSurfaceClosed
+	// abandoned: its caller stopped waiting (under mu). It is never granted, since the caller
+	// never learned which of its buffers the id names; the host may still accept it, so it stays
+	// counted against MaxAddedBuffers until its generation ends.
+	abandoned bool
+}
+
+// AddBuffer registers d with the host and waits for its answer. Accepted, the buffer is returned
+// (Pix is nil: its pixels are the plugin's own) and AddedBuffer grants it from then on. Refused, the
+// error is a *SurfaceRefused, and a retry is a new registration. The fd stays the caller's on
+// every path: the host has its own once the registration is sent, so the caller may close its
+// own whenever it no longer needs it.
+//
+// If ctx ends before the answer, the registration is abandoned: it is never granted, whatever the
+// host answers, and it counts against MaxAddedBuffers until the generation ends (the host may
+// have taken it). So give AddBuffer a ctx that ends with the surface, not a short deadline.
+func (s *Surface) AddBuffer(ctx context.Context, d SurfaceDMABuf) (*SurfaceBuffer, error) {
+	a, err := s.startAdd(ctx, d)
+	if err != nil {
+		return nil, err
+	}
+	msg := map[string]any{"op": OpBufferAdd, "gen": d.Gen, "id": a.buf.ID, "kind": "dmabuf", "format": d.Format,
+		"w": d.W, "h": d.H, "modifier": d.Modifier, "planes": []any{map[string]any{"offset": 0, "pitch": d.Pitch}}}
+	if err := s.conn.Send(msg, d.FD); err != nil {
+		s.mu.Lock()
+		delete(s.adds, a.buf.ID) // never sent: no answer can come for it
+		s.mu.Unlock()
+		return nil, err
+	}
+	if addSent != nil {
+		addSent(a.buf.ID)
+	}
+	select {
+	case err := <-a.ans:
+		if err != nil {
+			return nil, err
+		}
+		return a.buf, nil
+	case <-ctx.Done():
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		select {
+		case err := <-a.ans: // answered as the caller gave up: the answer stands
+			if err != nil {
+				return nil, err
+			}
+			return a.buf, nil
+		default:
+		}
+		a.abandoned = true
+		s.turned() // an AddedBuffer waiting on this registration alone has nothing to wait for
+		return nil, ctx.Err()
+	}
+}
+
+// startAdd waits for d's generation, checks d against what the window offers, and records the
+// registration as unanswered, before it is sent: the answer may come at once.
+func (s *Surface) startAdd(ctx context.Context, d SurfaceDMABuf) (*surfaceAdd, error) {
+	for {
+		s.mu.Lock()
+		switch {
+		case s.closed:
+			s.mu.Unlock()
+			return nil, ErrSurfaceClosed
+		case d.Gen < s.cur || d.Gen < s.info.Gen:
+			s.mu.Unlock()
+			return nil, ErrSurfaceRetired
+		case d.Gen == s.cur:
+			defer s.mu.Unlock()
+			if !offersDMABuf(s.info.Kinds, d) {
+				return nil, ErrSurfaceKind
+			}
+			if len(s.adds)+len(s.added)+s.lost >= MaxAddedBuffers {
+				return nil, ErrSurfaceBuffers
+			}
+			// ids are the plugin's odd ones, rising for the surface's lifetime: one is never used
+			// twice, so an answer can only be for the registration it names
+			s.addID += 2
+			a := &surfaceAdd{ans: make(chan error, 1),
+				buf: &SurfaceBuffer{ID: s.addID - 1, Gen: d.Gen, W: d.W, H: d.H, Pitch: d.Pitch, Format: d.Format, Kind: "dmabuf"}}
+			s.adds[a.buf.ID] = a
+			return a, nil
+		}
+		turn := s.turn
+		s.mu.Unlock() // its plugin.surface came, its buffers haven't: the generation isn't current yet
+		select {
+		case <-turn:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-s.gone:
+			return nil, ErrSurfaceClosed
+		}
+	}
+}
+
+func offersDMABuf(kinds []SurfaceKind, d SurfaceDMABuf) bool {
+	if d.W <= 0 || d.H <= 0 || d.Pitch < d.W*4 {
+		return false
+	}
+	for _, k := range kinds {
+		if k.Kind == "dmabuf" && k.Format == d.Format && k.Modifier == d.Modifier &&
+			(k.MaxW == 0 || d.W <= k.MaxW) && (k.MaxH == 0 || d.H <= k.MaxH) {
+			return true
+		}
+	}
+	return false
+}
+
+// AddedBuffer is a free buffer of those the plugin registered for the current generation, waiting
+// for one; ErrSurfaceBuffers when none is registered or waiting for the host's answer (after a
+// resize, the new generation has none until the plugin registers them).
+func (s *Surface) AddedBuffer(ctx context.Context) (*SurfaceBuffer, error) {
+	for {
+		s.mu.Lock()
+		if s.closed {
+			s.mu.Unlock()
+			return nil, ErrSurfaceClosed
+		}
+		waiting := 0
+		for _, a := range s.adds {
+			if !a.abandoned {
+				waiting++
+			}
+		}
+		if waiting+len(s.added) == 0 {
+			s.mu.Unlock()
+			return nil, ErrSurfaceBuffers
+		}
+		for _, b := range s.added {
+			if b.state == addedFree && s.cur >= s.info.Gen {
+				b.state = addedDrawing
+				s.mu.Unlock()
+				return b, nil
+			}
+		}
+		turn := s.turn
+		s.mu.Unlock()
+		select {
+		case <-turn:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-s.gone:
+			return nil, ErrSurfaceClosed
+		}
+	}
+}
+
+// A registered buffer's state (under mu). Only a presented one takes a credit.
+const (
+	addedFree = iota + 1
+	addedDrawing
+	addedPresented
+)
+
+// answerAdd is the host's answer to a registration (under mu): err nil is its acceptance, the
+// first buffer.free naming it. false when id names no unanswered registration: a duplicate, a
+// forged one, or one for a registration already given up.
+func (s *Surface) answerAdd(id int, err error) bool {
+	a, ok := s.adds[id]
+	if !ok {
+		return false
+	}
+	delete(s.adds, id)
+	switch {
+	case a.abandoned:
+		if err == nil {
+			s.lost++ // the host holds it: it keeps its place in the generation's count
+		}
+		return true
+	case err == nil:
+		a.buf.state = addedFree
+		s.added[id] = a.buf
+	}
+	a.ans <- err
+	s.turned()
+	return true
+}
+
+// dropAdds is the end of every registration (under mu): a new generation's start, or the
+// surface's end. An unanswered one is answered err; an answer the host sends later names an id
+// no longer held, and changes nothing.
+func (s *Surface) dropAdds(err error) {
+	for id, a := range s.adds {
+		delete(s.adds, id)
+		a.ans <- err
+	}
+	clear(s.added)
+	s.lost = 0
+	s.turned()
+}
+
+// turned wakes everyone waiting on the registered buffers (under mu): a waiter takes s.turn under
+// mu with the state it read, so no change between its read and its wait is missed.
+func (s *Surface) turned() {
+	close(s.turn)
+	s.turn = make(chan struct{})
+}
+
+// addSent is a test's pause between a registration's send and its wait: nil but in tests.
+var addSent func(id int)

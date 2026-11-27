@@ -666,3 +666,62 @@ func TestTheBridgeSaysWhyItsLookEndedIt(t *testing.T) {
 		t.Errorf("agy gone: %v after %d reads, want the bridge ended at the next tick, reading nothing", err, reads)
 	}
 }
+
+// TestABridgeCallThatFailsLeavesTheAttentionUnknown: an agy bridge's raise or clear whose answer is
+// lost (the daemon applied it, then the call failed, as one does at its deadline) is taken for
+// unknown, so the next look says again what it sees: none showing after a lost raise is cleared,
+// and the same prompt showing after a lost clear is raised again (the mutant: a failed call leaves
+// what the bridge knew as it stood).
+func TestABridgeCallThatFailsLeavesTheAttentionUnknown(t *testing.T) {
+	none, asks := crew.AgyPrompt{}, crew.AgyPrompt{Showing: true, Asks: "command: touch x"}
+	raise := "raise" + crew.AttentionPermission + "command: touch x"
+	for _, c := range []struct {
+		name   string
+		lose   int // the attention call (counting from 1, heartbeats aside) whose answer is lost
+		script []crew.AgyPrompt
+		want   []string
+	}{
+		{"none showing after a lost raise", 2, []crew.AgyPrompt{none, asks, none}, []string{"clear", raise, "clear"}},
+		{"the same prompt after a lost clear", 3, []crew.AgyPrompt{none, asks, none, asks}, []string{"clear", raise, "clear", raise}},
+	} {
+		f := newFakeBridge()
+		var mu sync.Mutex
+		var told []string
+		i := 0
+		f.prompt = func(context.Context, int) (crew.AgyPrompt, int, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			p := c.script[i]
+			i++
+			return p, i, nil
+		}
+		call := f.call
+		f.call = func(ctx context.Context, method string, params ...any) (any, error) {
+			v, err := call(ctx, method, params...) // applied, whatever the bridge hears
+			if method == "crew.attention" && fmt.Sprint(params[1]) != "alive" {
+				mu.Lock()
+				told = append(told, fmt.Sprint(params[1:]...))
+				n := len(told)
+				mu.Unlock()
+				if n == c.lose {
+					return nil, context.DeadlineExceeded
+				}
+			}
+			return v, err
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		tick := make(chan time.Time)
+		done := make(chan struct{})
+		go func() { defer close(done); f.watchPrompts(ctx, tick, &bytes.Buffer{}) }()
+		for range c.script {
+			tick <- time.Now()
+		}
+		cancel()
+		<-done
+		mu.Lock()
+		if strings.Join(told, "|") != strings.Join(c.want, "|") {
+			t.Errorf("%s: the attention calls %q, want %q", c.name, told, c.want)
+		}
+		mu.Unlock()
+	}
+}

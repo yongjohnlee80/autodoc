@@ -126,9 +126,13 @@ func (t *Todos) assign() {
 	}
 	own := Assignable(t.c.AgentEntries())
 	tk := t.c.Ticket(nil, feature.TicketWorkspace) // taken before the crew is asked: its answer may come late
+	// the latest A opens the picker: an earlier one whose crew answers after it (another task's,
+	// with a picker or an Instructions: line open for this one) is dropped, never put over it. tk
+	// alone stays the assignment's: a later A must not make a confirmed one look undelivered.
+	latest := t.c.Ticket(&t.assignSeq, feature.TicketWorkspace)
 	open := func(agents []feature.AgentEntry) {
-		if !tk.Current() {
-			return // the workspace changed while the crew answered: this task's picker is stale
+		if !latest.Current() {
+			return // the workspace changed, or A was pressed again, while the crew answered
 		}
 		if len(agents) == 0 {
 			t.c.Notify(t.c.Tr("autodoc.notice.todos_assign.todos_no_autodoc_agent_to_assign_to_add_one_in_t"))

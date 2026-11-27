@@ -10,11 +10,13 @@
 // page without a diagram has no script. Options.Base makes the source's relative links file: URLs
 // of the files they name, so the page's links reach them wherever it is written. Plain text drops
 // frontmatter, link reference definitions and raw HTML, and keeps code blocks as written.
+// Fragment is a page's body alone, for a caller that lays out its own page: embeds read in one
+// directory, and every URL passed through the caller's rule last (fragment.go).
 //
 // Concurrency: every exported function may be called from any number of goroutines. Each call
 // parses its own tree from the source and does not change the source; the package's shared state
 // is read-only after init (the themes, the mermaid regexp) or built once under a sync.Once (the
 // vendored script and its digest). The package reads the disk only for Options.Document's embeds,
-// inside the document's folder; RenderWith reads the process's working directory when
-// Options.Base or Options.Document is relative.
+// inside the document's folder, and FragmentOptions.Embeds's, inside that directory; RenderWith
+// reads the process's working directory when Options.Base or Options.Document is relative.
 package export

@@ -313,9 +313,12 @@ metrics_interval = "10s"
 		_, body := get("/v1/status", opsToken)
 		return strings.Contains(body, `"last_pass":{`) && strings.Contains(body, `"error":"view"`)
 	})
-	// the failure's own words (golib's view: "track returns 0 columns") are the log's alone
-	f.waitFor("the view's failure in the log", func() bool { return strings.Contains(stderr.String(), "returns 0 columns") })
-	if _, body := get("/v1/status", opsToken); strings.Contains(body, "returns 0 columns") || strings.Contains(body, "process must") {
+	// the failure's own words (PostgreSQL's: relation "track" does not exist) are the log's alone
+	f.waitFor("the view's failure in the log", func() bool { return strings.Contains(stderr.String(), "does not exist") })
+	if said := stderr.String(); strings.Contains(said, "returns 0 columns") || strings.Contains(said, "must return one JSON column") {
+		t.Errorf("the log calls the database's refusal a result of the wrong shape: %s", said)
+	}
+	if _, body := get("/v1/status", opsToken); strings.Contains(body, "does not exist") || strings.Contains(body, "relation") {
 		t.Errorf("the failure's words are in status: %s", body)
 	}
 	f.exec(`ALTER TABLE track_away RENAME TO track`)

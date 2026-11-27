@@ -98,6 +98,11 @@ type IndexDatabase struct {
 	CanInstallVector bool   // the role may install it: a superuser, or a trusted extension and CREATE on the database
 	SchemaExists     bool   // the index's schema is there
 	CanCreate        bool   // the role may create tables in the schema or, when it is missing, create it
+	// CanTemp is whether the role may create temporary tables in the database. PostgreSQL grants
+	// that to every role unless the database's owner revoked it from PUBLIC. An index build makes
+	// one: it builds the index it wants on an empty temporary copy of the table, to compare the
+	// catalog's description of it with the index that is there.
+	CanTemp bool
 }
 
 // indexDatabaseQuery reads an IndexDatabase, read-only; $1 is the schema.
@@ -110,11 +115,13 @@ const indexDatabaseQuery = `SELECT
 	EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = $1),
 	CASE WHEN EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = $1)
 		THEN has_schema_privilege($1, 'CREATE')
-		ELSE has_database_privilege(current_database(), 'CREATE') END`
+		ELSE has_database_privilege(current_database(), 'CREATE') END,
+	has_database_privilege(current_database(), 'TEMPORARY')`
 
 // ReadIndexDatabase reads, without writing anything, whether conn's database can hold an index in
-// schema: pgvector installed or installable by the role, and the schema's tables, or the schema,
-// creatable by it. A server's --check asks it of an index's database of its own.
+// schema: pgvector installed or installable by the role, the schema's tables, or the schema,
+// creatable by it, and temporary tables too. A server's --check asks it of an index's database of
+// its own.
 func ReadIndexDatabase(ctx context.Context, conn dao.DataConn, schema string) (IndexDatabase, error) {
 	var d IndexDatabase
 	if err := CheckSchema(schema); err != nil {
@@ -124,7 +131,7 @@ func ReadIndexDatabase(ctx context.Context, conn dao.DataConn, schema string) (I
 	if err != nil {
 		return d, fmt.Errorf("pgstore: read the index's database: %w", err)
 	}
-	if err := scanRows(rows, &d.Vector, &d.VectorAvailable, &d.CanInstallVector, &d.SchemaExists, &d.CanCreate); err != nil {
+	if err := scanRows(rows, &d.Vector, &d.VectorAvailable, &d.CanInstallVector, &d.SchemaExists, &d.CanCreate, &d.CanTemp); err != nil {
 		return d, fmt.Errorf("pgstore: read the index's database: %w", err)
 	}
 	return d, nil

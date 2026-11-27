@@ -1,8 +1,8 @@
 -- The kb drawer against a real daemon built from this checkout, in autodoc's own panel (no
 -- auto-finder): the sections and their counts, the primary and selected marks, a KB's documents as
 -- a folder tree, opening one, selecting, the primary with and without confirmation, adding,
--- renaming and removing a location, the model sections' dialogs, the live tree through
--- index.changes, nothing pulled while hidden, and a stale reply dropped.
+-- renaming (an open KB staying open) and removing a location, the model sections' dialogs, the
+-- live tree through index.changes, nothing pulled while hidden, and a stale reply dropped.
 --
 -- Runs against either auto-core: with auto-core.kb (feat/kb-primary) P sets the primary; without
 -- it (main) the drawer shows no ★ and P says auto-core.kb is unavailable.
@@ -296,6 +296,40 @@ t.section("a stale reply is dropped", function()
     "a real listing replaces the fake")
 end)
 
+-- Opening a KB reads its index.status for the tree, and the poll reads it for the count: a tree's
+-- read answered after a newer poll's must not put its older count back. The tree's read is held
+-- until a poll's has painted; the counts are marked so each answer is told apart.
+t.section("an opening tree's older count never paints over a newer poll's", function()
+  view._dispatch("<CR>", (ws_row("kb1"))) -- fold
+  t.ok(view._st.expanded["kb1"] == nil, "kb1 is folded")
+  local live = session.client()
+  local real = live.call
+  local taken, held, at_release = false, nil, nil
+  live.call = function(self, method, params, cb, opts)
+    if method ~= "index.status" or params[1] ~= "kb1" then return real(self, method, params, cb, opts) end
+    local first = not taken -- the first kb1 read after this is installed: the tree's, sent below
+    taken = true
+    return real(self, method, params, function(res, err)
+      if type(res) == "table" then res = vim.tbl_extend("force", res, { docs = first and 111 or 222 }) end
+      if not first then return cb(res, err) end
+      held = function()
+        cb(res, err)
+        vim.schedule(function() at_release = view._st.status["kb1"] and view._st.status["kb1"].docs end) -- after cb's apply
+      end
+    end, opts)
+  end
+  view._dispatch("<CR>", (ws_row("kb1"))) -- open, in the same tick: load_tree reads index.status first
+  t.ok(t.wait(5000, function() return held ~= nil end), "the tree's read is answered, and held")
+  t.ok(t.wait(5000, function() return view._st.status["kb1"] and view._st.status["kb1"].docs == 222 end),
+    "a poll's newer read paints its count")
+  held()
+  t.ok(t.wait(5000, function() return at_release ~= nil end), "the tree's read lands after it")
+  t.eq(at_release, 222, "the newer count is kept")
+  live.call = real
+  t.ok(t.wait(5000, function() local tr = view._st.trees["kb1"]; return tr and not tr.loading and doc_row("kb1", "README.md") ~= nil end),
+    "and the tree is listed all the same")
+end)
+
 t.section("A adds a location, creating its folder", function()
   local function titled(word) return function(o) return o.title:find(word, 1, true) and true or nil end end
   local function offered(word, from)
@@ -364,11 +398,84 @@ t.section("A adds a location, creating its folder", function()
   package.loaded["autodoc.kb.scaffold"] = nil
 end)
 
-t.section("r renames", function()
+-- The rename's reply and the daemon's workspace.renamed event both move an expanded KB's state to
+-- its new name. Each order is forced: the events poll held until the reply has been applied, then
+-- the reply held until the event has. An open KB stays open, with its tree, either way.
+t.section("r renames, and an open KB stays open whichever of its reply and its event comes first", function()
   t.ok(t.wait(5000, function() return ws_row("kb4") ~= nil end), "kb4 is listed")
-  inputs = { "kb4-renamed" }
+  -- a folded KB stays folded: reply and event, in whatever order they come
+  local cursor0 = view._st.events_cursor
+  inputs = { "kb4-folded" }
   view._dispatch("r", (ws_row("kb4")))
-  t.ok(t.wait(5000, function() return ws_row("kb4-renamed") ~= nil and ws_row("kb4") == nil end), "the renamed workspace is listed", notes[#notes])
+  t.ok(t.wait(5000, function() return noted("renamed kb4 to kb4-folded") and view._st.events_cursor ~= cursor0 end),
+    "a folded KB is renamed: reply and event both applied", notes[#notes])
+  vim.wait(drawer.POLL_MS * 4)
+  t.ok(view._st.expanded["kb4-folded"] == nil and view._st.trees["kb4-folded"] == nil, "and it stays folded",
+    vim.inspect(view._st.expanded))
+  t.ok(t.wait(5000, function() return ws_row("kb4-folded") ~= nil end), "kb4-folded is listed")
+  view._dispatch("<CR>", (ws_row("kb4-folded")))
+  t.ok(t.wait(5000, function() local tr = view._st.trees["kb4-folded"]; return tr and not tr.loading end),
+    "kb4-folded is opened, its tree listed")
+
+  local live = session.client()
+  local real = live.call
+  local hold_events, held_events = false, {}
+  local hold_reply, held_reply = false, nil
+  live.call = function(self, method, params, cb, opts)
+    if method == "sys.events" and hold_events then
+      held_events[#held_events + 1] = function() return real(self, method, params, cb, opts) end
+      return 0
+    end
+    if method == "workspace.rename" and hold_reply then
+      return real(self, method, params, function(res, err) held_reply = function() cb(res, err) end end, opts)
+    end
+    return real(self, method, params, cb, opts)
+  end
+  -- the events cursor moves only when a pulled page is applied: the rename's event is the next one
+  local function event_applied(at) return function() return view._st.events_cursor ~= at end end
+  local function settled(name)
+    vim.wait(drawer.POLL_MS * 4) -- the event's relist and any move after it have run
+    local tr = view._st.trees[name]
+    return view._st.expanded[name] == true and tr ~= nil
+  end
+
+  -- the reply first: no events are pulled until it has been applied
+  hold_events = true
+  local at = view._st.events_cursor
+  inputs = { "kb4-moved" }
+  view._dispatch("r", (ws_row("kb4-folded")))
+  t.ok(t.wait(5000, function() return noted("renamed kb4-folded to kb4-moved") end), "the reply is applied first", notes[#notes])
+  hold_events = false
+  -- a poll held meanwhile is sent now, the newest only (older replies are dropped as stale anyway);
+  -- none held, the next tick pulls the event
+  if #held_events > 0 then held_events[#held_events]() end
+  held_events = {}
+  t.ok(t.wait(5000, event_applied(at)), "then the event")
+  t.ok(settled("kb4-moved"), "kb4-moved is still open, its tree kept", vim.inspect(view._st.expanded))
+  t.ok(view._st.expanded["kb4-folded"] == nil, "and nothing is left under kb4-folded")
+
+  -- the event first: the reply is held until the event has been applied. Open to begin with (a
+  -- drawer that folded it above is opened again, so this order is shown on its own)
+  if not view._st.expanded["kb4-moved"] then view._dispatch("<CR>", (ws_row("kb4-moved"))) end
+  t.ok(t.wait(5000, function() local tr = view._st.trees["kb4-moved"]; return tr and not tr.loading end),
+    "kb4-moved is open, its tree listed")
+  hold_reply = true
+  inputs = { "kb4-renamed" }
+  view._dispatch("r", (ws_row("kb4-moved")))
+  t.ok(t.wait(5000, function() return held_reply ~= nil end), "the reply is held")
+  t.ok(t.wait(5000, function() return view._st.expanded["kb4-renamed"] == true end),
+    "the event is applied first: it moved kb4-moved's state")
+  hold_reply = false
+  held_reply()
+  t.ok(t.wait(5000, function() return noted("renamed kb4-moved to kb4-renamed") end), "then the reply", notes[#notes])
+  t.ok(settled("kb4-renamed"), "kb4-renamed is still open, its tree kept", vim.inspect(view._st.expanded))
+  live.call = real
+
+  t.ok(t.wait(5000, function()
+    return ws_row("kb4-renamed") ~= nil and ws_row("kb4") == nil and ws_row("kb4-folded") == nil and ws_row("kb4-moved") == nil
+  end),
+    "the renamed workspace is listed", notes[#notes])
+  view._dispatch("<CR>", (ws_row("kb4-renamed"))) -- folded again, as the cells after it found it
 end)
 
 t.section("e edits a KB's settings", function()

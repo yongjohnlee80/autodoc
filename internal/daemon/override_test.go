@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -256,5 +257,41 @@ func TestSchemaOnAnUnservedWorkspace(t *testing.T) {
 	ws, _ := db.Workspaces(context.Background())
 	if ws[0].SchemaPath == nil || *ws[0].SchemaPath != "s.yaml" {
 		t.Fatal("not stored")
+	}
+}
+
+// A provider's build that an edit of the provider overtakes is never kept: it set the provider up
+// as the store said before the edit, and kept, every workspace naming it would embed with that
+// until its next edit. The next ask builds it as it is now. The mutant, named here: every build
+// kept.
+func TestAProviderBuildItsEditOvertookIsNotKept(t *testing.T) {
+	m, _ := open(t)
+	var spec atomic.Value
+	spec.Store("v1")
+	var builds atomic.Int32
+	building, hold := make(chan struct{}), make(chan struct{})
+	m.SetProviderBuilder(func(_ context.Context, name string) (embed.Provider, error) {
+		p := namedProvider{name: name + "-" + spec.Load().(string)} // the store's row as read now
+		if builds.Add(1) == 1 {
+			close(building)
+			<-hold
+		}
+		return p, nil
+	})
+	done := make(chan error, 1)
+	go func() { _, err := m.override(context.Background(), "x"); done <- err }()
+	<-building
+	spec.Store("v2")
+	m.providerChanged("x") // the provider edited while the first build runs
+	close(hold)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	p, err := m.override(context.Background(), "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := p.Model().Name; got != "x-v2" {
+		t.Fatalf("after the edit the provider is %s, want x-v2: the build the edit overtook was kept", got)
 	}
 }

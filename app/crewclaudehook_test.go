@@ -245,3 +245,48 @@ func TestClaudeAsksSaysWhatThePromptAsks(t *testing.T) {
 		t.Fatalf("a long command: %d bytes, want %d", len(long), claudeAsksMax)
 	}
 }
+
+// TestAClaudeHookTakesALostRaiseForUnknown: a raise whose answer is lost (the daemon applied it, then
+// the call failed, as one does at the hook's bound) is neither "raised" nor "never raised": the next
+// hook says again what is open, so once the prompt is approved its attention is cleared (the
+// mutant: the failed raise forgets it was asked, and the approval, with nothing open, clears
+// nothing).
+func TestAClaudeHookTakesALostRaiseForUnknown(t *testing.T) {
+	d := newCrewDaemon(t)
+	path := d.agent("cl", "i1", "store-1")
+	lose := false
+	call := func(ctx context.Context, c sessionContext, method string, params []any) (any, error) {
+		v, err := crewCall(ctx, c, method, params) // applied, whatever the hook hears
+		if lose && err == nil {
+			return nil, context.DeadlineExceeded
+		}
+		return v, err
+	}
+	run := func(input string) error { return claudeHook(d.ctx, strings.NewReader(input), path, call) }
+	attention := func() []string {
+		t.Helper()
+		w, err := d.deps.inbox.Watch(d.ctx, 0, 0, "")
+		if err != nil || w.Snapshot == nil {
+			t.Fatalf("the inbox: %v", err)
+		}
+		var out []string
+		for _, a := range w.Snapshot.Attention {
+			out = append(out, a.Kind+" "+a.Text)
+		}
+		return out
+	}
+	lose = true
+	if err := run(`{"hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"make"}}`); err == nil {
+		t.Fatal("a raise whose answer was lost was taken for done")
+	}
+	lose = false
+	if got := attention(); len(got) != 1 {
+		t.Fatalf("the lost raise: attention %q, want it applied (the daemon took it; only its answer was lost)", got)
+	}
+	if err := run(`{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"make"}}`); err != nil {
+		t.Fatal(err)
+	}
+	if got := attention(); len(got) != 0 {
+		t.Fatalf("the prompt approved after a lost raise: attention %q, want it cleared", got)
+	}
+}

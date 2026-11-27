@@ -49,7 +49,7 @@ func openAndSave(t *testing.T, r *running, kb, name, text string) string {
 		r.h.save()
 	})
 	var got string
-	r.s.WaitFor(t, name+" saved", func(string) bool {
+	r.waitSave(t, name+" saved", func() bool {
 		b, _ := os.ReadFile(filepath.Join(kb, name))
 		got = string(b)
 		return !onLoop(r, func() bool { return r.h.file.dirty }) && strings.Contains(got, "edited")

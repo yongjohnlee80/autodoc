@@ -630,9 +630,18 @@ func (r *running) waitFile(t *testing.T, p string) {
 // elides a long one at its width (a path under Windows' temporary folder is longer than one line).
 func (r *running) waitStatus(t *testing.T, text string) {
 	t.Helper()
-	r.s.WaitFor(t, "the status "+text, func(string) bool {
-		return strings.Contains(onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.status"); return v.Raw }), text)
-	})
+	r.s.WaitFor(t, "the status "+text, func(string) bool { return r.statusHolds(text) })
+}
+
+// waitSaveStatus waits, as waitSave, for the status line to hold text (waitStatus's reading).
+func (r *running) waitSaveStatus(t *testing.T, text string) {
+	t.Helper()
+	r.waitSave(t, "the status "+text, func() bool { return r.statusHolds(text) })
+}
+
+// statusHolds reports whether the status line, read whole from App.status, holds text.
+func (r *running) statusHolds(text string) bool {
+	return strings.Contains(onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.status"); return v.Raw }), text)
 }
 
 func TestEveryQMLFileIsSound(t *testing.T) {
@@ -669,7 +678,7 @@ func TestSearchesOpensEditsSaves(t *testing.T) {
 	r.typeInEditor(t, "EDITED ")
 	r.s.WaitFor(t, "unsaved mark", func(sc string) bool { return strings.Contains(sc, "a.md [+]") })
 	r.keys(t, decltest.Ctrl('s'))
-	r.s.WaitForText(t, "saved a.md")
+	r.waitSaveAnswer(t, "saved a.md")
 	if got := d.read(t, "kb", "a.md"); !strings.Contains(got, "EDITED ") || !strings.Contains(got, "kestrel notes") {
 		t.Errorf("the file after the save: %q", got)
 	}
@@ -706,7 +715,7 @@ func TestAConflictAsks(t *testing.T) {
 	conflict := func() {
 		t.Helper()
 		r.keys(t, decltest.Ctrl('s'))
-		r.s.WaitForText(t, "file changed on disk")
+		r.waitSaveAnswer(t, "file changed on disk")
 	}
 	// keep: the edits stay, unsaved, and the disk is untouched
 	d.write(t, "kb", "a.md", "theirs\n")
@@ -720,7 +729,7 @@ func TestAConflictAsks(t *testing.T) {
 	// overwrite: the disk gets mine
 	conflict()
 	r.keys(t, key('o'))
-	r.s.WaitForText(t, "saved a.md")
+	r.waitSaveAnswer(t, "saved a.md")
 	if got := d.read(t, "kb", "a.md"); got != "mine one\n" {
 		t.Fatalf("after overwrite: disk %q", got)
 	}
@@ -768,7 +777,7 @@ func TestUnsavedWorkIsNeverLostQuietly(t *testing.T) {
 	r.s.WaitFor(t, "still a.md, unsaved", func(sc string) bool { return strings.Contains(sc, "a.md [+]") && !strings.Contains(sc, "unsaved file") })
 	closeShown()
 	r.keys(t, key('s'))
-	r.waitBuffer(t, "b.md") // a.md written and closed: b.md, open already, is shown
+	r.waitSave(t, "b.md shown", func() bool { n := r.file(); return n.open && n.path == "b.md" }) // a.md written and closed: b.md, open already, is shown
 	if got := d.read(t, "kb", "a.md"); got != "Xaaa\n" {
 		t.Errorf("save, then close: a.md %q", got)
 	}
@@ -818,7 +827,7 @@ func TestQuitOverUnsavedCanSaveFirst(t *testing.T) {
 	r.keys(t, key('s'))
 	select {
 	case <-r.s.Quit():
-	case <-time.After(3 * time.Second):
+	case <-time.After(daemonWait): // the save is the daemon's work (waitSave)
 		t.Fatal("did not quit after the save")
 	}
 	if got := d.read(t, "kb", "a.md"); got != "Xaaa\n" {
@@ -836,14 +845,14 @@ func TestCommittedIsReadBack(t *testing.T) {
 	r.waitFile(t, "a.md")
 	r.typeInEditor(t, "two ")
 	r.keys(t, decltest.Ctrl('s'))
-	r.s.WaitForText(t, "saved a.md")
+	r.waitSaveAnswer(t, "saved a.md")
 	if r.file().dirty || d.read(t, "kb", "a.md") != "two one\n" {
 		t.Fatalf("dirty %v, disk %q", r.file().dirty, d.read(t, "kb", "a.md"))
 	}
 	// the adopted version is the disk's: the next save is not a conflict
 	r.typeInEditor(t, "three ")
 	r.keys(t, decltest.Ctrl('s'))
-	r.s.WaitFor(t, "the second save", func(sc string) bool { return strings.Contains(d.read(t, "kb", "a.md"), "three") })
+	r.waitSave(t, "the second save", func() bool { return strings.Contains(d.read(t, "kb", "a.md"), "three") })
 	if strings.Contains(r.s.String(), "file changed on disk") {
 		t.Error("the adopted version conflicted")
 	}
@@ -1046,7 +1055,7 @@ func TestCommittedThenOverwrittenIsAConflict(t *testing.T) {
 	r.waitFile(t, "a.md")
 	r.typeInEditor(t, "mine ")
 	r.keys(t, decltest.Ctrl('s'))
-	r.s.WaitForText(t, "file changed on disk")
+	r.waitSaveAnswer(t, "file changed on disk")
 	if !r.file().dirty {
 		t.Error("the note reads as saved")
 	}
@@ -1100,12 +1109,12 @@ func TestASaveNeverDropsANewerEdit(t *testing.T) {
 	})
 	holding.Store(false)
 	close(release)
-	r.s.WaitForText(t, "changed again while it was saved")
+	r.waitSaveAnswer(t, "changed again while it was saved")
 	if n := r.file(); n.path != "a.md" || !n.dirty || !strings.Contains(r.editorText(), "Y") {
 		t.Fatalf("after the save: %s, dirty %v, text %q", n.path, n.dirty, r.editorText())
 	}
 	r.keys(t, key('s')) // save the newer edit too; then the close goes ahead
-	r.s.WaitFor(t, "a.md closed", func(string) bool {
+	r.waitSave(t, "a.md closed", func() bool {
 		return onLoop(r, func() bool { return r.h.bufferOf(feature.FileRef{WS: "kb", Path: "a.md"}) == nil })
 	})
 	if got := d.read(t, "kb", "a.md"); !strings.Contains(got, "Y") || !strings.Contains(got, "X") {
@@ -1125,7 +1134,7 @@ func TestAFailedReloadKeepsTheEditsUnsaved(t *testing.T) {
 	d.write(t, "kb", "a.md", "theirs\n")
 	r.typeInEditor(t, "mine ")
 	r.keys(t, decltest.Ctrl('s'))
-	r.s.WaitForText(t, "file changed on disk")
+	r.waitSaveAnswer(t, "file changed on disk")
 	if err := d.fs["kb"].Remove(context.Background(), "a.md"); err != nil {
 		t.Fatal(err)
 	}

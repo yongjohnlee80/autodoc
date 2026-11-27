@@ -47,6 +47,9 @@ func runServer(ctx context.Context, path string, check bool, level logger.Severi
 	if err != nil {
 		return err
 	}
+	if err := refuseSmallIndexPool(path, cfg.Postgres); err != nil {
+		return err
+	}
 	if check {
 		return checkServer(ctx, path, cfg, sources, stdout)
 	}
@@ -120,8 +123,8 @@ var serverSteps = []struct {
 	{"http", (*server).startHTTP},
 }
 
-// leaseConns is the leases' pool's size: a lease's acquire, renew and the older-server probe are
-// one short statement each, a renew every few seconds per tenant.
+// leaseConns is the leases' pool's size: a lease's acquire and renew and the health check's ping
+// are one short statement each, a renew every few seconds per tenant.
 //
 // NOTE: a pool of their own, never the store's. A renew waiting for one of the store's connections
 // behind a flood of searches (each holding one up to its budget) went silent past the lease's
@@ -168,19 +171,30 @@ func (s *server) migrate() error {
 	return redact(pgstore.Migrate(s.ctx, s.store), s.cfg.Postgres.IndexDSN())
 }
 
-// annTick is how often the ANN builder looks for an index to build, recover or retire.
-const annTick = 30 * time.Second
+// annTick is how often the ANN builder looks for an index to build, recover or retire: 30 s, which
+// a cell shortens.
+var annTick = 30 * time.Second
+
+// noTempWarning is the start's one line for an index role that can't create temporary tables.
+const noTempWarning = "ann: this role can't create temporary tables in the index's database, so the approximate search's index can't be built and searches by meaning stay exact: GRANT TEMPORARY ON DATABASE to the role (PostgreSQL grants it to every role unless it was revoked from PUBLIC)"
 
 // startANN makes the approximate search every tenant's store shares, and runs its builder until
 // the server stops: the per-model HNSW indexes, one built at a time across every server on the
 // database. A builder's error is logged and retried at the next tick; searches stay exact
-// meanwhile.
+// meanwhile. A role that can't create temporary tables, so can build no index, is warned of once.
 func (s *server) startANN() error {
 	var run [8]byte
 	if _, err := rand.Read(run[:]); err != nil {
 		return err
 	}
 	s.ann = pgstore.NewANN(s.store, s.cfg.Postgres.ANN, hex.EncodeToString(run[:]))
+	// One line at the start when the index's role can't create temporary tables, which every index
+	// build needs. The server runs all the same: a deployment in that state searches exactly today,
+	// and must not stop at an upgrade. But the builder's own warnings come a minute apart, then
+	// less often, then stop, and a tenant too small to want the index reads "exact" either way.
+	if db, err := pgstore.ReadIndexDatabase(s.ctx, s.store, s.cfg.Postgres.Schema); err == nil && !db.CanTemp {
+		logger.Warning(s.log, nil, noTempWarning)
+	}
 	ctx, cancel := context.WithCancel(s.ctx)
 	done := make(chan struct{})
 	s.stops.push(func() {
@@ -230,8 +244,7 @@ func (s *server) startIngesters() error {
 			return err
 		}
 		in := ingest.New(st, src.Tenant, s.sources[i], s.business, s.leases, ingest.Options{LeaseTTL: leaseTTL,
-			Refresh: src.Refresh, RefreshRetry: src.RefreshRetry, Interval: src.Interval, Lag: lagOf(src.Lag), Log: s.log, Committed: s.wakeEmbedder, Locked: s.wakeEmbedder,
-			OlderSchema: s.cfg.Postgres.Schema})
+			Refresh: src.Refresh, RefreshRetry: src.RefreshRetry, Interval: src.Interval, Lag: lagOf(src.Lag), Log: s.log, Committed: s.wakeEmbedder, Locked: s.wakeEmbedder})
 		s.ingesters = append(s.ingesters, in)
 		wg.Add(1)
 		go func() {
@@ -313,6 +326,27 @@ func loadSources(path string, cfg *config.Server) ([]*ingest.Source, error) {
 	return out, nil
 }
 
+// minIndexConns is the fewest connections the index's pool may have: an index build holds two at
+// once, the session it pins for the DDL and a transaction beside it that renews the build's lease
+// while the DDL runs. With one, the first build waits for its second connection for good, and every
+// search, write and embedding waits behind it.
+const minIndexConns = 2
+
+// refuseSmallIndexPool refuses an index DSN whose pool_max_conns is under minIndexConns, naming the
+// field whose variable holds it. The start and --check both ask it, before anything is opened.
+func refuseSmallIndexPool(path string, p config.Postgres) error {
+	n := poolSize(p.IndexDSN())
+	if n >= minIndexConns {
+		return nil
+	}
+	field := "postgres.dsn_env"
+	if p.SeparateIndex() {
+		field = "postgres.index_dsn_env"
+	}
+	return config.Refuse(path, field, fmt.Sprintf("its DSN sets pool_max_conns=%d: the index's pool needs at least %d, since an index build holds two connections at once; set pool_max_conns=%d or more, or leave it out",
+		n, minIndexConns, minIndexConns))
+}
+
 // checkServer is --server --check, after the configuration and the views loaded: each view's order
 // is confirmed against the live source, read-only, up to now − its lag, and the embedding provider
 // is asked to embed a probe. It writes what it checked, and the configuration's warnings, to out.
@@ -326,14 +360,32 @@ func checkServer(ctx context.Context, path string, cfg *config.Server, sources [
 		}
 	}
 	dsn := cfg.Postgres.DSN()
+	// which database didn't answer is said, as the index's is: with two DSNs, the driver's words
+	// (a user, an address) leave the reader to work out which variable to mend
+	source := "the source's database"
+	if !cfg.Postgres.SeparateIndex() {
+		source = "the database"
+	}
 	business, err := postgres.OpenNamed(ctx, "autodoc-server", dsn)
 	if err != nil {
-		return redact(err, dsn)
+		return fmt.Errorf("%s (postgres.dsn_env): %w", source, redact(err, dsn))
 	}
 	defer business.Close()
+	if !cfg.Postgres.SeparateIndex() {
+		// one database for both: its role is the index's too, and builds the index there. Only
+		// the temporary tables are read here: the rest of what an index's own database is
+		// checked for (checkIndex), the start itself meets in this one, at its first step.
+		db, err := pgstore.ReadIndexDatabase(ctx, business, cfg.Postgres.Schema)
+		if err != nil {
+			return fmt.Errorf("%s (postgres.dsn_env): %w", source, redact(err, dsn))
+		}
+		if !db.CanTemp {
+			return config.Refuse(path, "postgres.dsn_env", noTempRefusal("the database"))
+		}
+	}
 	now, err := pgstore.Now(ctx, business)
 	if err != nil {
-		return redact(err, dsn)
+		return fmt.Errorf("%s (postgres.dsn_env): %w", source, redact(err, dsn))
 	}
 	for i, src := range cfg.Sources {
 		rep, err := sources[i].CheckOrder(ctx, business, now.Add(-src.Lag))
@@ -367,8 +419,9 @@ func checkServer(ctx context.Context, path string, cfg *config.Server, sources [
 }
 
 // checkIndex is --check of the index's own database ([postgres] index_dsn_env): it answers, the
-// vector extension is installed or the role can install it, and the role can create the index's
-// tables in its schema, or the schema. It reads only, and writes one line saying what it found.
+// vector extension is installed or the role can install it, the role can create the index's
+// tables in its schema, or the schema, and it can create temporary tables, which an index build
+// uses. It reads only, and writes one line saying what it found.
 func checkIndex(ctx context.Context, path string, p config.Postgres, out io.Writer) error {
 	dsn := p.IndexDSN()
 	conn, err := postgres.OpenNamed(ctx, "autodoc-server", dsn)
@@ -391,6 +444,11 @@ func checkIndex(ctx context.Context, path string, p config.Postgres, out io.Writ
 		return config.Refuse(path, field, fmt.Sprintf("this role can't create tables in schema %s of the index's database: GRANT CREATE ON SCHEMA %s, or make the role its owner", p.Schema, p.Schema))
 	case !canCreate:
 		return config.Refuse(path, field, fmt.Sprintf("schema %s is not in the index's database, and this role can't create it: CREATE SCHEMA %s AUTHORIZATION the role, or GRANT CREATE ON DATABASE", p.Schema, p.Schema))
+	case !db.CanTemp:
+		// Without it the server starts and searches exactly, and the approximate search's index
+		// fails to build once a tenant is large enough to want it (the status says ann-failed):
+		// long after the grants were made. So it is refused here, where they are being made.
+		return config.Refuse(path, field, noTempRefusal("the index's database"))
 	}
 	vector := "vector " + version
 	if version == "" {
@@ -402,6 +460,12 @@ func checkIndex(ctx context.Context, path string, p config.Postgres, out io.Writ
 	}
 	fmt.Fprintf(out, "index: a database of its own: %s, %s\n", vector, schema)
 	return nil
+}
+
+// noTempRefusal is --check's refusal of a role that can't create temporary tables in database, as
+// the sentence names it.
+func noTempRefusal(database string) string {
+	return "this role can't create temporary tables in " + database + ", which building the approximate search's index needs: GRANT TEMPORARY ON DATABASE to the role (PostgreSQL grants it to every role unless it was revoked from PUBLIC)"
 }
 
 // redact is err with every appearance of each DSN given, and of its password, replaced: a driver's
