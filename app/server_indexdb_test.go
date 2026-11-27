@@ -376,3 +376,59 @@ func TestTheServerCheckSaysWhichTableTheSourceRoleMayNotRead(t *testing.T) {
 		t.Errorf("--check shows the source's DSN or its password: %q", said)
 	}
 }
+
+// With one database for the source and the index, --check reads the temporary tables there too:
+// its role is the one that builds the index. A role that owns the index's schema and may read the
+// view's table, in a database whose owner revoked TEMPORARY from PUBLIC, is refused, exit 2,
+// naming postgres.dsn_env and the grant; with the grant made, --check passes. The mutant, named
+// here: the one database not read (--check says ok).
+func TestTheServerChecksTheOneDatabasesRoleCanMakeTemporaryTables(t *testing.T) {
+	f := newServerFixture(t, serverView)
+	b := make([]byte, 6)
+	if _, err := rand.Read(b); err != nil {
+		t.Fatal(err)
+	}
+	role := "autodoc_one_" + hex.EncodeToString(b)
+	password := "one-" + hex.EncodeToString(b) + "-password"
+	database := f.scalar(`SELECT current_database()::text`)
+	f.exec(`CREATE ROLE ` + role + ` LOGIN PASSWORD '` + password + `'`)
+	t.Cleanup(func() {
+		ctx := context.Background()
+		_, _ = f.plain.ExecContext(ctx, `DROP OWNED BY `+role)
+		_, _ = f.plain.ExecContext(ctx, `DROP ROLE IF EXISTS `+role)
+	})
+	for _, q := range []string{
+		`CREATE EXTENSION IF NOT EXISTS vector`,
+		`REVOKE CONNECT, TEMPORARY ON DATABASE ` + database + ` FROM PUBLIC`,
+		`GRANT CONNECT ON DATABASE ` + database + ` TO ` + role,
+		`GRANT USAGE ON SCHEMA public TO ` + role,
+		`GRANT SELECT ON track TO ` + role,
+		`CREATE SCHEMA IF NOT EXISTS ` + f.schema + ` AUTHORIZATION ` + role,
+	} {
+		f.exec(q)
+	}
+	u, err := url.Parse(os.Getenv("AUTODOC_TEST_SERVER_DSN"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	u.User = url.UserPassword(role, password)
+	t.Setenv("AUTODOC_TEST_SERVER_DSN", u.String())
+	check := func() (int, string, string) {
+		var stdout, stderr bytes.Buffer
+		code := run(f.ctx, []string{"--server", "--check", f.path}, testOptions, &stdout, &stderr)
+		return code, stdout.String(), stderr.String()
+	}
+	code, stdout, stderr := check()
+	if code != 2 || !strings.Contains(stderr, "postgres.dsn_env") || !strings.Contains(stderr, "can't create temporary tables in the database") ||
+		!strings.Contains(stderr, "GRANT TEMPORARY ON DATABASE") {
+		t.Fatalf("--check of a role that can't make temporary tables: exit %d, said %q %q", code, stdout, stderr)
+	}
+	if said := stdout + stderr; strings.Contains(said, password) {
+		t.Errorf("--check shows the role's password: %q", said)
+	}
+	f.exec(`GRANT TEMPORARY ON DATABASE ` + database + ` TO ` + role)
+	code, stdout, stderr = check()
+	if code != 0 || !strings.Contains(stdout, "order confirmed over 2 rows") {
+		t.Fatalf("--check with the grant made: exit %d, said %q %q", code, stdout, stderr)
+	}
+}
